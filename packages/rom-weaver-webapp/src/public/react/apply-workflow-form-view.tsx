@@ -900,7 +900,7 @@ const resolveRomCardState = (
 };
 
 const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomRowDeps): WorkflowRomInputStepItem => {
-  const { localizer, romInputs, verificationStates, ui } = deps;
+  const { localizer, verificationStates, ui } = deps;
   const identification = resolveRomIdentification(romInput, deps.identificationStates.get(romInput.id));
   const identificationLookup = romInput.info.identification || buildPatchIdentificationLookup(identification);
   const database = identifyRecordChecks(romInput.info.identification);
@@ -939,10 +939,7 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
         staging,
         statusId: `rom-weaver-progress-${stagingPhase}-${index}`,
       }),
-      onRemove: () => {
-        if (romInputs.length === 1 && ui.clearRomInput) ui.clearRomInput();
-        else ui.removeRomInput?.(romInput.id);
-      },
+      onRemove: () => ui.clearRomInput?.(),
       panels: {
         ...(identificationLookup ? { identification: identificationLookup } : {}),
         identifyPending: staging,
@@ -965,7 +962,7 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
         },
         ...(hasDiscSheet && romInput.cueText ? { cue: { cueText: romInput.cueText } } : {}),
       },
-      removeLabel: localizer.message(romInputs.length > 1 ? "ui.apply.removeRom" : "ui.apply.clearRom"),
+      removeLabel: localizer.message("ui.apply.clearRom"),
       stageBar: stageBarValue(staging, percent),
       state,
     },

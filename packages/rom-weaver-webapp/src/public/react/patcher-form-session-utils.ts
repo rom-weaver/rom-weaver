@@ -3,7 +3,6 @@ import { getFileNameExtension as getSharedFileNameExtension, hasFileNameExtensio
 import { getErrorCode } from "../../presentation/errors.ts";
 import { formatPercentFixed } from "../../presentation/workflow-presentation.ts";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
-import type { RomInputRowState } from "./patcher-ui-state.ts";
 
 const getPublicOutputSize = (output: { size?: number }) => output.size || 0;
 
@@ -57,26 +56,6 @@ const resolvePendingDownloadFileName = ({
   );
 };
 
-const getLogicalRomInputCount = (rows: RomInputRowState[]) => {
-  const groupIds = new Set<string>();
-  let ungroupedCount = 0;
-  for (const row of rows) {
-    const groupId = String(row.groupId || "").trim();
-    if (groupId) groupIds.add(groupId);
-    else ungroupedCount += 1;
-  }
-  return groupIds.size + ungroupedCount;
-};
-
-const getMultiInputOutputError = (compression: string, logicalInputCount: number) => {
-  if (logicalInputCount <= 1) return "";
-  if (compression === "7z" || compression === "zip") return "";
-  if (compression === "none") {
-    return "output.compression: 'none' cannot be used for multi-file output; use output.compression: 'zip' with zipCodec: 'store'";
-  }
-  return `output.compression: '${compression}' cannot be used for multi-file output; use output.compression: 'zip' or '7z'`;
-};
-
 const formatElapsedTiming = (elapsedMs: number | null) => {
   if (typeof elapsedMs !== "number" || !Number.isFinite(elapsedMs) || elapsedMs < 0) return "";
   return formatTiming(createTiming(elapsedMs));
@@ -103,8 +82,6 @@ const formatDownloadCompressionRatio = (inputBytes: number | null, outputBytes: 
 export {
   formatDownloadCompressionRatio,
   formatElapsedTiming,
-  getLogicalRomInputCount,
-  getMultiInputOutputError,
   getPublicOutputSize,
   getRequestedOutputName,
   isWorkflowDisposedError,

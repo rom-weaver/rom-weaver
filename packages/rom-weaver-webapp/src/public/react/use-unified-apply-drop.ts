@@ -3,6 +3,7 @@ import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.t
 import { loadLocalBundleSession } from "../../lib/bundle/local-bundle-session.ts";
 import { listDroppedArchiveEntryNames } from "../../lib/input/input-preparation-archive.ts";
 import { createLogger } from "../../lib/logging.ts";
+import type { SelectFile, SelectionCandidate } from "../../types/selection.ts";
 import { classifyDroppedFiles, isArchiveFileName, isPatchFileName, isRomFileName } from "./file-classification.ts";
 
 /**
@@ -101,6 +102,7 @@ const routeUnifiedDrop = async (
   onPendingUpdate?: (file: File, update: PendingDropUpdate) => void,
   signal?: AbortSignal,
   lifecycle?: DropRouteLifecycle,
+  selectFile?: SelectFile,
 ): Promise<void> => {
   if (signal?.aborted || isCancelled?.()) return;
   const { archives, inputs, patches } = classifyDroppedFiles(files);
@@ -221,8 +223,42 @@ const routeUnifiedDrop = async (
     romArchiveCount: romArchives.length,
     romInputCount: romInputs.length,
   });
-  if (romInputs.length) controller.provideRomInputFiles?.(romInputs);
+  const chosenRom = await chooseSingleRom(romInputs, selectFile);
+  if (chosenRom) controller.provideRomInputFiles?.([chosenRom]);
   if (patchInputs.length) controller.providePatchInputFiles?.(patchInputs);
+};
+
+/**
+ * A run patches exactly one ROM, so a drop that carries several MUST ask which
+ * one to keep rather than staging them all. The prompt reuses the host's file
+ * selector; a cancelled prompt keeps the current ROM by returning nothing.
+ */
+const chooseSingleRom = async (romInputs: readonly File[], selectFile?: SelectFile): Promise<File | undefined> => {
+  if (romInputs.length <= 1) return romInputs[0];
+  if (!selectFile) return romInputs[0];
+  const candidates: SelectionCandidate[] = romInputs.map((file, index) => ({
+    fileName: file.name,
+    id: `dropped-rom-${index}`,
+    kind: "rom",
+    selectable: true,
+    size: file.size,
+    type: "file",
+  }));
+  try {
+    const choice = await selectFile({
+      candidates,
+      role: "input",
+      // Empty so the dialog uses its own "More than one ROM was dropped" heading
+      // rather than naming one of the files the user has not chosen yet.
+      sourceName: "",
+      warnings: [],
+    });
+    const index = candidates.findIndex((candidate) => candidate.id === choice?.id);
+    return index >= 0 ? romInputs[index] : undefined;
+  } catch (error) {
+    logger.debug("multi-ROM drop prompt was cancelled", { error: String(error) });
+    return undefined;
+  }
 };
 
 const normalizeArchivePath = (name: string) => name.replaceAll("\\", "/").replace(/^\.\//, "").replace(/^\//, "");
@@ -231,6 +267,7 @@ const useUnifiedApplyDrop = (
   controller: UnifiedDropController,
   onBundleSession?: (session: BundleApplySession) => void,
   onError?: (error: Error) => void,
+  selectFile?: SelectFile,
 ): UnifiedApplyDrop => {
   const [pendingDrops, setPendingDrops] = useState<PendingDrop[]>([]);
   const nextIdRef = useRef(0);
@@ -360,11 +397,20 @@ const useUnifiedApplyDrop = (
         activeDropsRef.current.set(dropController, "bundle");
       };
       const runRoute = () =>
-        routeUnifiedDrop(files, controller, onBundleSession, isCancelled, updatePending, dropController.signal, {
-          ...(mayContainBundle ? { beforeNonBundleDelivery: () => previousRoute } : {}),
-          rememberBundleSourceCleanup,
-          onBundleDetected: promoteToBundle,
-        });
+        routeUnifiedDrop(
+          files,
+          controller,
+          onBundleSession,
+          isCancelled,
+          updatePending,
+          dropController.signal,
+          {
+            ...(mayContainBundle ? { beforeNonBundleDelivery: () => previousRoute } : {}),
+            rememberBundleSourceCleanup,
+            onBundleDetected: promoteToBundle,
+          },
+          selectFile,
+        );
       // Input callbacks mutate ordered ROM/patch stacks. Serialize delivery so a small later patch cannot
       // overtake an earlier archive/bundle that is still being identified or downloaded. Potential
       // bundles identify concurrently; a real bundle supersedes prior routes, while an ordinary
@@ -386,7 +432,7 @@ const useUnifiedApplyDrop = (
           clearPending();
         });
     },
-    [controller, onError, onBundleSession, rememberBundleSourceCleanup],
+    [controller, onError, onBundleSession, rememberBundleSourceCleanup, selectFile],
   );
 
   return { onDrop, pendingDrops };

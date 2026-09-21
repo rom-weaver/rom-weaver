@@ -66,11 +66,11 @@ describe("useInputUiController", () => {
     act(() => controller.providePatchInputFiles(null));
     expect(actions.updatePatches).toHaveBeenLastCalledWith([]);
     act(() => controller.provideRomInputFile(input));
-    expect(actions.updateInputs).toHaveBeenLastCalledWith([input, expect.any(File), input]);
+    expect(actions.updateInputs).toHaveBeenLastCalledWith([input]);
     act(() => controller.provideRomInputFile(null));
     expect(actions.updateInputs).toHaveBeenLastCalledWith([]);
     act(() => controller.provideRomInputFiles([input]));
-    expect(actions.updateInputs).toHaveBeenLastCalledWith([input, expect.any(File), input]);
+    expect(actions.updateInputs).toHaveBeenLastCalledWith([input]);
     expect(actions.emitSessionTrace).toHaveBeenCalledWith(
       "provideRomInputFiles requested",
       expect.objectContaining({ existingCount: 2, providedCount: 1 }),

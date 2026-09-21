@@ -121,12 +121,14 @@ const useInputUiController = (context: InputUiControllerContext) => {
           actions.updateInputs([]);
           return;
         }
-        actions.updateInputs([...state.effectiveInputs, file]);
+        actions.updateInputs([file]);
       },
       provideRomInputFiles: (fileList: FileList | BinarySource[] | null) => {
         const { actions, state } = contextRef.current;
         const providedInputs = Array.from(fileList || []) as BinarySource[];
-        const nextInputs = [...state.effectiveInputs, ...providedInputs];
+        // A run patches exactly one ROM, so a new drop replaces the staged one
+        // instead of adding a second input the workflow cannot apply.
+        const nextInputs = providedInputs.length ? providedInputs : state.effectiveInputs;
         actions.emitSessionTrace("provideRomInputFiles requested", {
           existingCount: state.effectiveInputs.length,
           nextCount: nextInputs.length,

@@ -36,8 +36,6 @@ import { buildCheatOutputBaseName } from "../../lib/output/output-name-compositi
 import type { ApplyPatchFormSettings, BinarySource, NoticeController } from "./patcher-form.ts";
 import {
   formatElapsedTiming,
-  getLogicalRomInputCount,
-  getMultiInputOutputError,
   getRequestedOutputName,
   isWorkflowDisposedError,
   resolvePendingDownloadFileName,
@@ -303,10 +301,9 @@ const useLocalApplyPatchFormSession = ({
   ]);
   const { getKey: getInputKey } = useStableSourceKeys(effectiveInputs, "input");
   const { getKey: getPatchKey } = useStableSourceKeys(activePatches, "patch");
-  // Only a single-ROM apply has one title to name the output after; a multi-ROM
-  // run has no single answer.
-  const identifiedTitle =
-    getLogicalRomInputCount(romInputs) === 1 ? identifiedOutputBaseName(romInputs[0]?.info.identification) : null;
+  // A run stages one ROM input (a disc's tracks share it), so its identified
+  // title names the output.
+  const identifiedTitle = identifiedOutputBaseName(romInputs[0]?.info.identification);
   const identifiedOutputBase = activeSettings.output?.identifiedName === false ? null : identifiedTitle;
   const generatedOutputName = getGeneratedOutputName(
     effectiveInputs[0],
@@ -391,11 +388,10 @@ const useLocalApplyPatchFormSession = ({
   const hasStrictInputChecksumMismatch =
     strictInputChecksumValidation && stagedPatchInfos.some((info) => info.checksumPreflightMismatch === true);
   const strictInputChecksumBlocked = hasStrictInputChecksumMismatch && !checksumOverrideChecked;
-  const multiInputOutputError = getMultiInputOutputError(displayedCompression, getLogicalRomInputCount(romInputs));
   const inputNoticeMessage = failurePlacement === "input" ? failureMessage : "";
   const patchNoticeMessage = failurePlacement === "patch" ? failureMessage : "";
   const outputRuntimeNoticeMessage = outputErrorMessage || (failurePlacement === "output" ? failureMessage : "");
-  const effectiveOutputNoticeMessage = outputRuntimeNoticeMessage || multiInputOutputError;
+  const effectiveOutputNoticeMessage = outputRuntimeNoticeMessage;
   // Deferred patch validation has no staging progress, but its verdict still controls whether the
   // next run is safe. Keep a queued Apply behind that silent pass.
   const applyPreparationPending =
@@ -410,7 +406,7 @@ const useLocalApplyPatchFormSession = ({
   );
   const applyQueueBlocked =
     !!failureMessage || !!outputErrorMessage || strictInputChecksumBlocked || patchValidationBlocked;
-  const canQueueApply = !!effectiveInputs.length && !multiInputOutputError;
+  const canQueueApply = !!effectiveInputs.length;
   const canStartApply = canQueueApply && applyReady && !applyQueueBlocked && !applyPreparationPending;
   const disposeActiveOutput = useCallback(() => {
     clearPendingDownload();

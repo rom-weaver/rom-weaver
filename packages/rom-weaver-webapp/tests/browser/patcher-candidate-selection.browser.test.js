@@ -106,6 +106,44 @@ test("cancelling the multi-ROM prompt clears the pending ROM input", async () =>
   await expect.poll(() => !(getCandidateSelectionList() || getInputStackRows().length), { timeout: 30000 }).toBe(true);
 });
 
+test("the multi-ROM prompt names the ROM choice, not the patch stack", async () => {
+  await clearOpfsInputDirectory();
+  mount(createElement(ApplyPatchForm));
+
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+
+  selectFileInputs(document.getElementById("rom-weaver-input-file-unified"), [
+    await makeNamedRom("alpha.bin", 0x11),
+    await makeNamedRom("beta.bin", 0x22),
+  ]);
+
+  await expect.poll(() => !!getCandidateSelectionList(), { timeout: 30000 }).toBe(true);
+  const dialogText = document.body.textContent || "";
+  expect(dialogText).toContain("More than one ROM was dropped");
+  expect(dialogText).toContain("Select the ROM to use");
+  expect(dialogText).not.toContain("Multiple candidates found");
+
+  await clickCandidateSelectionOption("alpha.bin");
+  await waitForInputStackFileName();
+});
+
+test("a later single-ROM drop replaces the staged ROM instead of adding a row", async () => {
+  await clearOpfsInputDirectory();
+  mount(createElement(ApplyPatchForm));
+
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+  const input = document.getElementById("rom-weaver-input-file-unified");
+
+  selectFileInput(input, await makeNamedRom("alpha.bin", 0x11));
+  await waitForInputStackFileName();
+  expect(getInputStackRows()).toHaveLength(1);
+
+  selectFileInput(input, await makeNamedRom("beta.bin", 0x22));
+  // Replacing restages the input, so the row swaps only once the new ROM resolves.
+  await expect.poll(() => getInputStackRows()[0]?.textContent || "", { timeout: 30000 }).toContain("beta.bin");
+  expect(getInputStackRows()).toHaveLength(1);
+});
+
 test("candidate selection resolves multi-entry archive inputs", async () => {
   mount(createElement(ApplyPatchForm));
 

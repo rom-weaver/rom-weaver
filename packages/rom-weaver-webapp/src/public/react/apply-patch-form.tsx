@@ -1830,6 +1830,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     resolvedUiController,
     setLocalBundleSession,
     props.onError,
+    selectFile,
   );
 
   // Forward a page-level drop (dragging anywhere on the page) to the same unified
@@ -1850,13 +1851,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     }
     if (request.role !== "input") return;
     const romInputs = resolvedUiController.getState().romInputs;
-    // A "which one?" prompt over several separately-provided ROMs spans every pending row, so
-    // cancelling it abandons the whole pending input. Clear them all - removing a single row would
-    // leave the other ROM(s) to auto-stage as if one had been chosen.
-    if (romInputs.length > 1) {
-      resolvedUiController.provideRomInputFile?.(null);
-      return;
-    }
     const matchingInput = romInputs.find((entry) =>
       [entry.info.fileName, entry.info.archiveName].some(
         (value) => value.trim().toLowerCase() === normalizedSourceName,
