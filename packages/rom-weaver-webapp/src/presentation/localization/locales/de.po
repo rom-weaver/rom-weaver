@@ -415,11 +415,6 @@ msgstr "Anwenden und herunterladen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.related.applyAPatch"
-msgstr "Ein Patch anwenden"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis"
 msgstr "Dein ROM-Arbeitsablauf. Ein Werkzeugkasten."
 
@@ -452,11 +447,6 @@ msgstr "Patches anwenden"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.applyPatchCta"
 msgstr "Patches anwenden"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.applyThisPatch"
-msgstr "Diesen Patch anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1627,11 +1617,6 @@ msgstr "Per Prüfsumme oder Spielnamen identifizieren"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.identifyData"
 msgstr "Identifikationsdaten"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.identifyFile"
-msgstr "Diese Datei identifizieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3157,11 +3142,6 @@ msgstr "Test"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.flowTest"
 msgstr "ROM testen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.testRom"
-msgstr "Dieses ROM testen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

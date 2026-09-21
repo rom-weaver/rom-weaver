@@ -28,10 +28,6 @@ type RelatedEntry = {
  * `docs/` or is exactly `docs`.
  */
 const RELATED_LINKS: Record<string, RelatedEntry> = {
-  creator: {
-    guide: { slug: "docs/create-rom-patches" },
-    tools: [{ labelId: "ui.related.applyThisPatch", view: "patcher" }],
-  },
   "docs/apply-rom-patches": {
     tools: [{ labelId: "ui.related.applyTool", view: "patcher" }],
   },
@@ -65,17 +61,6 @@ const RELATED_LINKS: Record<string, RelatedEntry> = {
         view: "patcher",
       },
     ],
-  },
-  patcher: {
-    guide: { slug: "docs/fix-checksum-errors" },
-    tools: [
-      { labelId: "ui.related.testRom", view: "test" },
-      { labelId: "ui.related.identifyFile", view: "identify" },
-    ],
-  },
-  trim: {
-    guide: { slug: "docs/cli-trim" },
-    tools: [{ labelId: "ui.related.applyAPatch", view: "patcher" }],
   },
 };
 

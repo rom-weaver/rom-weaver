@@ -415,11 +415,6 @@ msgstr "Apply & download"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.related.applyAPatch"
-msgstr "Apply a patch"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis"
 msgstr "Your ROM workflow. One toolkit."
 
@@ -452,11 +447,6 @@ msgstr "Apply Patches"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.applyPatchCta"
 msgstr "Apply Patches"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.applyThisPatch"
-msgstr "Apply this patch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1627,11 +1617,6 @@ msgstr "Identify by checksum or game name"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.identifyData"
 msgstr "identify data"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.identifyFile"
-msgstr "Identify this file"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3157,11 +3142,6 @@ msgstr "Test"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.flowTest"
 msgstr "Test ROM"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.testRom"
-msgstr "Test this ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

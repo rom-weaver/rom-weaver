@@ -415,11 +415,6 @@ msgstr "Aplicar y descargar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.related.applyAPatch"
-msgstr "Aplicar un parche"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis"
 msgstr "Tu flujo de trabajo para ROM. Un solo kit de herramientas."
 
@@ -452,11 +447,6 @@ msgstr "Aplicar parches"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.applyPatchCta"
 msgstr "Aplicar parches"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.applyThisPatch"
-msgstr "Aplicar este parche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1627,11 +1617,6 @@ msgstr "Identificar por suma de verificación o nombre del juego"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.identifyData"
 msgstr "datos de identificación"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.identifyFile"
-msgstr "Identificar este archivo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3157,11 +3142,6 @@ msgstr "Prueba"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.flowTest"
 msgstr "Probar ROM"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.related.testRom"
-msgstr "Probar esta ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
