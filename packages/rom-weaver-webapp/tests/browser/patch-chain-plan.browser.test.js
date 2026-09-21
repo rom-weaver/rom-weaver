@@ -66,7 +66,12 @@ test("a true BPS chain defers the dependent patch instead of failing it", async 
   await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Checks during apply: chain-step-a.bps");
   const basisSelect = await getPatchInputSelect(1);
   expect(basisSelect.options[0]?.textContent).toBe("auto (Previous patch output)");
-  expect(basisSelect.getAttribute("aria-describedby")).toBe("rom-weaver-patch-checks-help-1");
+  expect(document.getElementById("rom-weaver-patch-execution-input-0")?.querySelector("option")?.textContent).toBe(
+    "Original ROM",
+  );
+  expect(document.getElementById("rom-weaver-patch-execution-input-1")?.querySelector("option")?.textContent).toBe(
+    "Output of preceding patches",
+  );
   expect(patchCheckHeadings(0)).toEqual([
     "Authored input checks: Original ROM (automatic)",
     "Embedded output checks: Standalone patch result",
@@ -78,9 +83,7 @@ test("a true BPS chain defers the dependent patch instead of failing it", async 
     "Embedded output checks: Standalone patch result",
     "Stack output checks: Combined result",
   ]);
-  expect(document.querySelector(`#rom-weaver-patch-checks-help-1`)?.textContent).toContain(
-    "Authored input checks describe a patch source.",
-  );
+  expect(document.querySelector("#rom-weaver-patch-checks-help-1")).toBeNull();
   await page.viewport(390, 844);
   const chainChip = document.getElementById("rom-weaver-patch-chain-chip-1");
   expect(getComputedStyle(chainChip?.closest(".rb") || document.body).flexShrink).toBe("1");

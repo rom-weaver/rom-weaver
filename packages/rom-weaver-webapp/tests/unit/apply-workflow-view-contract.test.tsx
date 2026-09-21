@@ -777,7 +777,7 @@ describe("apply workflow view - staged bench", () => {
 
     const addOnCard = container.querySelectorAll("#rom-weaver-list-patch-stack .card.patch")[1];
     expect(addOnCard?.textContent).toContain("Authored input checks: Original ROM");
-    expect(addOnCard?.textContent).toContain("Apply to: Output of Base patch");
+    expect(addOnCard?.textContent).toContain("Apply to");
     expect(addOnCard?.textContent).toContain("Target ROM: game.sfc / program.rom");
     expect(addOnCard?.textContent).toContain("Embedded output checks: Standalone patch result");
     expect(addOnCard?.textContent).toContain("Stack output checks: Combined result");
@@ -786,6 +786,7 @@ describe("apply workflow view - staged bench", () => {
     expect(addOnCard?.textContent).not.toContain("Verified: game.sfc / program.rom");
 
     const executionInput = addOnCard?.querySelector("#rom-weaver-patch-execution-input-1") as HTMLSelectElement;
+    expect(executionInput.options[0]?.textContent).toBe("Output of preceding patches");
     fireEvent.change(executionInput, { target: { value: "rom" } });
     expect(onBundleMetaChange).toHaveBeenCalledWith("patch-b", { input: { rom: true } });
   });

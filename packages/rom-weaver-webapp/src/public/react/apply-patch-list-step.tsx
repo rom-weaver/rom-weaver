@@ -417,7 +417,6 @@ const PatchInputBasisSelect = ({
         Authored for patch {index + 1}
       </label>
       <select
-        aria-describedby={`rom-weaver-patch-checks-help-${index}`}
         className="meta-target-select mono ptgt-sel"
         disabled={disabled || item.optionsDisabled}
         id={`rom-weaver-patch-basis-${index}`}
@@ -448,7 +447,9 @@ const executionInputLabel = (
   predecessors: readonly { id?: string; label: string }[],
   localizer: Localizer,
 ) => {
-  if (!input) return localizer.message("ui.patchChecks.currentStackInput");
+  if (!input) {
+    return localizer.message(predecessors.length ? "ui.patchChecks.precedingPatchOutput" : "ui.patchInputs.original");
+  }
   if ("rom" in input) {
     return localizer.message("ui.patchChecks.originalRom", {
       member: input.member ? ` / ${input.member}` : "",
@@ -509,7 +510,9 @@ const PatchExecutionInputSelect = ({
         title="Choose the stack state this patch runs on."
         value={currentValue}
       >
-        <option value="current">{localizer.message("ui.patchChecks.currentStackInput")}</option>
+        <option value="current">
+          {localizer.message(predecessors.length ? "ui.patchChecks.precedingPatchOutput" : "ui.patchInputs.original")}
+        </option>
         <option value="rom">
           {localizer.message("ui.patchChecks.originalRom", {
             member: rememberedMember.current ? ` / ${rememberedMember.current}` : "",
@@ -801,13 +804,17 @@ const EditableCheckRow = ({
  * identity verdicts. */
 const chainChipText = (
   item: PatchStackItemState,
+  index: number,
   enabledIndexes: readonly number[],
   localizer: Localizer,
   patchLabels: readonly string[],
 ): { text: string; warn?: boolean } | null => {
   const verdict = item.chainVerdict;
   const targetLabel = item.targetOptions?.find((option) => option.value === item.targetValue)?.label;
-  const checkedTarget = targetLabel || localizer.message("ui.patchChecks.currentStackInput");
+  const hasEnabledPredecessor = enabledIndexes.some((enabledIndex) => enabledIndex < index);
+  const checkedTarget =
+    targetLabel ||
+    localizer.message(hasEnabledPredecessor ? "ui.patchChecks.precedingPatchOutput" : "ui.patchInputs.original");
   if (!verdict) {
     if (item.validationState === "deferred") {
       return { text: localizer.message("ui.patchChecks.deferred", { input: checkedTarget }) };
@@ -1044,13 +1051,10 @@ const PatchChecksDrawer = ({
       timing={disabled ? undefined : CHECKSUM_TIMING_LABEL(item.checksumTiming, localizer.message("ui.patch.checks"))}
       verifying={verifying}
     >
-      <p className="patch-checks-explanation" id={`rom-weaver-patch-checks-help-${index}`}>
-        {localizer.message("ui.patchChecks.explanation")}
-      </p>
       <div className="patch-checks-context">
         <div className="patch-checks-context-row">
           <p className="patch-checks-execution" id={`rom-weaver-patch-execution-input-label-${index}`}>
-            {localizer.message("ui.patchChecks.execution", { input: executionInput })}
+            {localizer.message("ui.patchChecks.execution")}
           </p>
           <PatchExecutionInputSelect
             disabled={disabled || item.optionsDisabled}
@@ -2187,6 +2191,7 @@ const ApplyPatchListStep = ({
               canReorder={canReorder}
               chainChip={chainChipText(
                 item,
+                index,
                 enabledIndexes,
                 localizer,
                 patches.map((patch, patchIndex) => bundleMeta?.[patchIndex]?.name || patch.fileName),

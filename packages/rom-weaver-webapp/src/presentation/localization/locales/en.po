@@ -165,6 +165,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.explanation"
+#~ msgstr "Authored input checks describe a patch source. Every patch runs on the current stack input."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.currentStackInput"
+#~ msgstr "Current stack input"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", an output extension. The format selector adds the extension; remove it to avoid a doubled name."
 
@@ -445,13 +455,13 @@ msgstr "Apply Patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.applyToAll"
-msgstr "Apply to all"
+msgid "ui.patchChecks.execution"
+msgstr "Apply to"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.execution"
-msgstr "Apply to: {input}"
+msgid "ui.patch.applyToAll"
+msgstr "Apply to all"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -492,11 +502,6 @@ msgstr "Archives are decompressed; we find the ROM or let you choose."
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.author"
 msgstr "Author"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.explanation"
-msgstr "Authored input checks describe a patch source. Every patch runs on the current stack input."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1047,11 +1052,6 @@ msgstr "Create tool"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.n64CurrentOrder"
 msgstr "current order"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.currentStackInput"
-msgstr "Current stack input"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2362,6 +2362,11 @@ msgstr "Output Header"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.patchOutput"
 msgstr "Output of {patch}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.precedingPatchOutput"
+msgstr "Output of preceding patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

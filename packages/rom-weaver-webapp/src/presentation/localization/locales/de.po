@@ -165,6 +165,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.explanation"
+#~ msgstr "Erstellte Eingabeprüfungen beschreiben die Patch-Quelle. Jeder Patch läuft auf der aktuellen Stapel-Eingabe."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.currentStackInput"
+#~ msgstr "Aktuelle Stapel-Eingabe"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", eine Ausgabe-Endung. Die Formatauswahl fügt die Endung hinzu; entferne sie, um einen doppelten Namen zu vermeiden."
 
@@ -445,13 +455,13 @@ msgstr "Patches anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.applyToAll"
-msgstr "Auf alle anwenden"
+msgid "ui.patchChecks.execution"
+msgstr "Anwenden auf"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.execution"
-msgstr "Anwenden auf: {input}"
+msgid "ui.patch.applyToAll"
+msgstr "Auf alle anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -492,11 +502,6 @@ msgstr "Archive werden dekomprimiert; wir finden das ROM oder lassen dich wähle
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.author"
 msgstr "Autor"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.explanation"
-msgstr "Erstellte Eingabeprüfungen beschreiben die Patch-Quelle. Jeder Patch läuft auf der aktuellen Stapel-Eingabe."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1047,11 +1052,6 @@ msgstr "Erstellen-Tool"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.n64CurrentOrder"
 msgstr "aktuelle Reihenfolge"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.currentStackInput"
-msgstr "Aktuelle Stapel-Eingabe"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2362,6 +2362,11 @@ msgstr "Ausgabe-Header"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.patchOutput"
 msgstr "Ausgabe von {patch}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.precedingPatchOutput"
+msgstr "Ausgabe vorheriger Patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

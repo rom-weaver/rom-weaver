@@ -469,14 +469,6 @@
   font-size: 0.72rem;
   color: var(--ink-3);
 }
-.rw-app .patch-checks-explanation {
-  grid-column: 1 / -1;
-  padding-inline: 9px;
-  margin: 6px 0 2px;
-  font-size: 0.68rem;
-  line-height: 1.35;
-  color: var(--ink-4);
-}
 .rw-app .patch-checks-context {
   display: grid;
   grid-column: 1 / -1;

@@ -903,17 +903,12 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.patchInputs.previous": msg({ id: "ui.patchInputs.previous", message: "Previous patch output" }),
   "ui.patchChecks.identified": msg({ id: "ui.patchChecks.identified", message: "{title}: {platform}" }),
   "ui.patchChecks.input": msg({ id: "ui.patchChecks.input", message: "Authored input checks: {basis}" }),
-  "ui.patchChecks.explanation": msg({
-    id: "ui.patchChecks.explanation",
-    message: "Authored input checks describe a patch source. Every patch runs on the current stack input.",
-  }),
-  "ui.patchChecks.currentStackInput": msg({ id: "ui.patchChecks.currentStackInput", message: "Current stack input" }),
   "ui.patchChecks.deferred": msg({ id: "ui.patchChecks.deferred", message: "Checks during apply: {input}" }),
   "ui.patchChecks.embeddedOutput": msg({
     id: "ui.patchChecks.embeddedOutput",
     message: "Embedded output checks: Standalone patch result",
   }),
-  "ui.patchChecks.execution": msg({ id: "ui.patchChecks.execution", message: "Apply to: {input}" }),
+  "ui.patchChecks.execution": msg({ id: "ui.patchChecks.execution", message: "Apply to" }),
   "ui.patchChecks.executionMember": msg({ id: "ui.patchChecks.executionMember", message: "Member path" }),
   "ui.patchChecks.executionMemberTitle": msg({
     id: "ui.patchChecks.executionMemberTitle",
@@ -922,6 +917,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.patchChecks.expects": msg({ id: "ui.patchChecks.expects", message: "Requires {patch} first" }),
   "ui.patchChecks.originalRom": msg({ id: "ui.patchChecks.originalRom", message: "Original ROM{member}" }),
   "ui.patchChecks.patchOutput": msg({ id: "ui.patchChecks.patchOutput", message: "Output of {patch}" }),
+  "ui.patchChecks.precedingPatchOutput": msg({
+    id: "ui.patchChecks.precedingPatchOutput",
+    message: "Output of preceding patches",
+  }),
   "ui.patchChecks.sharedInput": msg({ id: "ui.patchChecks.sharedInput", message: "Shared input checks: {input}" }),
   "ui.patchChecks.stackOutput": msg({
     id: "ui.patchChecks.stackOutput",

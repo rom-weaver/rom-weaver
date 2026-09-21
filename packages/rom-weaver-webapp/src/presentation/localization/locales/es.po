@@ -165,6 +165,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.explanation"
+#~ msgstr "Las comprobaciones de entrada creadas describen una fuente del parche. Cada parche se ejecuta sobre la entrada actual de la pila."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.currentStackInput"
+#~ msgstr "Entrada actual de la pila"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", una extensión de salida. El selector de formato agrega la extensión; elimínala para evitar un nombre duplicado."
 
@@ -445,13 +455,13 @@ msgstr "Aplicar parches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.applyToAll"
-msgstr "Aplicar a todos"
+msgid "ui.patchChecks.execution"
+msgstr "Aplicar a"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.execution"
-msgstr "Aplicar a: {input}"
+msgid "ui.patch.applyToAll"
+msgstr "Aplicar a todos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -492,11 +502,6 @@ msgstr "Los archivos se descomprimen; encontramos la ROM o te dejamos elegir."
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.author"
 msgstr "Autor"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.explanation"
-msgstr "Las comprobaciones de entrada creadas describen una fuente del parche. Cada parche se ejecuta sobre la entrada actual de la pila."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1047,11 +1052,6 @@ msgstr "Herramienta Crear"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.n64CurrentOrder"
 msgstr "orden actual"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.currentStackInput"
-msgstr "Entrada actual de la pila"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2362,6 +2362,11 @@ msgstr "Encabezado de salida"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.patchOutput"
 msgstr "Salida de {patch}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.precedingPatchOutput"
+msgstr "Salida de parches anteriores"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
