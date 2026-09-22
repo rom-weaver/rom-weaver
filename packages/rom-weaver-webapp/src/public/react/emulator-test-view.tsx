@@ -254,7 +254,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
       : undefined;
   let saveLoadMessage = "Waiting for EmulatorJS to load the save bytes.";
   if (saveLoadStatus === "loaded") {
-    saveLoadMessage = "Save bytes loaded into EmulatorJS. Check the game's Continue menu.";
+    saveLoadMessage = "Save loaded and game restarted. Check the game's Continue menu.";
   } else if (saveLoadStatus === "failed") {
     saveLoadMessage = "EmulatorJS could not load the save bytes. Try a save made by this game.";
   }

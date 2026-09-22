@@ -98,6 +98,45 @@ describe("createEmulatorDocument", () => {
     );
   });
 
+  it("restarts the game after importing SRAM before reporting success", () => {
+    const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.gba", "gba");
+    const source = document.indexOf('const source = "rom-weaver-emulator"');
+    const script = document.slice(document.lastIndexOf("(() => {", source), document.indexOf("})();", source) + 5);
+    const calls: string[] = [];
+    let onMessage: ((event: { source: unknown; data: unknown }) => void) | undefined;
+    const parent = { postMessage: (message: { kind: string }) => calls.push(message.kind) };
+    const manager = {
+      FS: {
+        analyzePath: (path: string) => ({ exists: path === "/data" || path === "/data/saves" }),
+        mkdir: () => calls.push("mkdir"),
+        writeFile: () => calls.push("write"),
+      },
+      getSaveFilePath: () => "/data/saves/game.srm",
+      loadSaveFiles: () => calls.push("load"),
+      restart: () => calls.push("restart"),
+    };
+    const window = {
+      EJS_emulator: { gameManager: manager },
+      addEventListener: (_kind: string, listener: typeof onMessage) => {
+        onMessage = listener;
+      },
+      parent,
+    };
+
+    runInNewContext(script, { window });
+    onMessage?.({
+      source: parent,
+      data: {
+        data: new Uint8Array([1, 2, 3]),
+        gameId: "game.gba",
+        kind: "load-sram",
+        source: "rom-weaver-emulator",
+      },
+    });
+
+    expect(calls).toEqual(["write", "load", "restart", "sram-loaded"]);
+  });
+
   it("neutralizes the EmulatorJS version check before the loader runs", () => {
     const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.nes", "nes");
     const start = document.indexOf("Object.defineProperty(window, 'EmulatorJS'");

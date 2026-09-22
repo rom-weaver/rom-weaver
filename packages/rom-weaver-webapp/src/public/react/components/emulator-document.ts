@@ -180,6 +180,8 @@ const createEmulatorBridgeScript = (gameName: string, gameLabel: string) => `
               if (emulator.gameManager.FS.analyzePath(path).exists) emulator.gameManager.FS.unlink(path);
               emulator.gameManager.FS.writeFile(path, bytes);
               emulator.gameManager.loadSaveFiles();
+              // EmulatorJS starts the core before it asks us for SRAM. The game MUST reset so its boot menu reads the imported save.
+              emulator.gameManager.restart();
               request("sram-loaded");
             } catch (error) {
               console.error("Could not load SRAM into EmulatorJS", error);

@@ -152,7 +152,7 @@ describe("EmulatorTestView", () => {
       );
     });
     view.rerender(withSettings(<EmulatorTestView />));
-    expect(screen.getByText("Save bytes loaded into EmulatorJS. Check the game's Continue menu.")).toBeTruthy();
+    expect(screen.getByText("Save loaded and game restarted. Check the game's Continue menu.")).toBeTruthy();
     expect(screen.queryByText(/zelda.srm is ready to test/)).toBeNull();
   });
   it("keeps a staged save when the uploaded ROM uses another system", async () => {
