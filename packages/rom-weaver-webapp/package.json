@@ -1,6 +1,6 @@
 {
   "name": "@rom-weaver/webapp",
-  "version": "0.16.0",
+  "version": "0.16.1",
   "description": "A browser ROM toolkit: patch, compress, extract, convert, identify, bake in cheat codes, and edit supported game saves. Works offline after setup. Play supported games with EmulatorJS. No uploads or telemetry.",
   "keywords": [
     "rom",
@@ -125,7 +125,7 @@
     "@lingui/format-po": "6.7.0",
     "@mdn/browser-compat-data": "8.1.2",
     "@testing-library/react": "16.3.3",
-    "@types/node": "26.6.1",
+    "@types/node": "26.6.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",
@@ -136,9 +136,9 @@
     "browserslist": "4.29.0",
     "cross-env": "10.1.0",
     "happy-dom": "20.14.5",
-    "jscpd": "5.2.1",
+    "jscpd": "5.3.0",
     "knip": "6.37.0",
-    "lighthouse": "13.4.1",
+    "lighthouse": "13.5.0",
     "marked": "18.0.13",
     "npm-run-all2": "9.0.3",
     "oxfmt": "0.68.0",
