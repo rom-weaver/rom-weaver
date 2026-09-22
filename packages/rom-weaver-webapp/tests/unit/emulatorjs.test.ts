@@ -91,6 +91,8 @@ describe("createEmulatorDocument", () => {
     );
 
     expect(gameStart).toContain('request("request-load-sram");');
+    expect(document).toContain('request("sram-loaded");');
+    expect(document).toContain('request("sram-load-failed");');
     expect(document).toContain(
       "if (emulator.gameManager.FS.analyzePath(path).exists) emulator.gameManager.FS.unlink(path);",
     );

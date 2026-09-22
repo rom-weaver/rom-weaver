@@ -126,6 +126,11 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleTutorialActive, setSampleTutorialActive] = useState(false);
   const [pendingSave, setPendingSave] = useState<PendingTestSave>();
+  const [saveLoadResult, setSaveLoadResult] = useState<{
+    gameName: string;
+    revision: number;
+    status: "loaded" | "failed";
+  }>();
   const [fullscreen, setFullscreen] = useState(false);
   const [pseudoFullscreen, setPseudoFullscreen] = useState(false);
   const currentGame = entries.find((entry) => entry.id === currentGameId) || null;
@@ -225,6 +230,34 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   // second play.
   const currentBlob = currentGame?.blob || null;
   const savePreviewRevision = currentGame?.savePreviewRevision ?? 0;
+  useEffect(() => {
+    if (!currentIdentity) return undefined;
+    if (!savePreviewRevision) return undefined;
+    const handleSaveLoad = (event: MessageEvent<unknown>) => {
+      if (event.source !== iframeRef.current?.contentWindow) return;
+      if (!event.data || typeof event.data !== "object") return;
+      const message = event.data as { source?: unknown; gameId?: unknown; kind?: unknown };
+      if (message.source !== "rom-weaver-emulator" || message.gameId !== currentIdentity.gameName) return;
+      if (message.kind !== "sram-loaded" && message.kind !== "sram-load-failed") return;
+      setSaveLoadResult({
+        gameName: currentIdentity.gameName,
+        revision: savePreviewRevision,
+        status: message.kind === "sram-loaded" ? "loaded" : "failed",
+      });
+    };
+    window.addEventListener("message", handleSaveLoad);
+    return () => window.removeEventListener("message", handleSaveLoad);
+  }, [currentIdentity, savePreviewRevision]);
+  const saveLoadStatus =
+    saveLoadResult?.gameName === currentIdentity?.gameName && saveLoadResult?.revision === savePreviewRevision
+      ? saveLoadResult.status
+      : undefined;
+  let saveLoadMessage = "Waiting for EmulatorJS to load the save bytes.";
+  if (saveLoadStatus === "loaded") {
+    saveLoadMessage = "Save bytes loaded into EmulatorJS. Check the game's Continue menu.";
+  } else if (saveLoadStatus === "failed") {
+    saveLoadMessage = "EmulatorJS could not load the save bytes. Try a save made by this game.";
+  }
   const [gameUrlState, setGameUrlState] = useState<{ url: string; revision: number } | null>(null);
   useEffect(() => {
     if (!currentBlob || typeof URL === "undefined" || typeof URL.createObjectURL !== "function") {
@@ -666,7 +699,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
               ) : null}
               {currentGame?.savePreviewRevision ? (
                 <p className="body" role="status">
-                  This ROM is running with the save from Save Editor.
+                  {saveLoadMessage}
                 </p>
               ) : null}
               {currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked ? (

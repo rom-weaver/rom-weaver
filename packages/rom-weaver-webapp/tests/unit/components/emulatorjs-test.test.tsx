@@ -132,14 +132,27 @@ describe("EmulatorTestView", () => {
       platform: "snes",
     }));
 
-    render(withSettings(<EmulatorTestView />));
+    const view = render(withSettings(<EmulatorTestView />));
     expect(await screen.findByText(/zelda.srm is ready to test/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
       target: { files: [new File(["rom"], "zelda.sfc")] },
     });
 
     await waitFor(() => expect(pendingSaveMocks.clearPendingTestSave).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText("This ROM is running with the save from Save Editor.")).toBeTruthy();
+    expect(await screen.findByText("Waiting for EmulatorJS to load the save bytes.")).toBeTruthy();
+    const iframe = document.querySelector("iframe");
+    expect(iframe?.contentWindow).toBeTruthy();
+    view.rerender(withSettings(<EmulatorTestView active={false} />));
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { gameId: "b".repeat(40), kind: "sram-loaded", source: "rom-weaver-emulator" },
+          source: iframe?.contentWindow,
+        }),
+      );
+    });
+    view.rerender(withSettings(<EmulatorTestView />));
+    expect(screen.getByText("Save bytes loaded into EmulatorJS. Check the game's Continue menu.")).toBeTruthy();
     expect(screen.queryByText(/zelda.srm is ready to test/)).toBeNull();
   });
   it("keeps a staged save when the uploaded ROM uses another system", async () => {
@@ -278,7 +291,7 @@ describe("EmulatorTestView", () => {
 
     await waitFor(() => expect(createObjectUrl).toHaveBeenCalledTimes(2));
     expect(revokeObjectUrl).toHaveBeenCalledWith("blob:first");
-    expect(screen.getByText("This ROM is running with the save from Save Editor.")).toBeTruthy();
+    expect(screen.getByText("Waiting for EmulatorJS to load the save bytes.")).toBeTruthy();
   });
 
   it("cancels a sample fetch when the guide exits", async () => {
