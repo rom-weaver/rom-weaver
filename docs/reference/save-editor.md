@@ -10,6 +10,7 @@ The Save Editor changes persistent game data. It does not change emulator save s
 - [Read-only fields](#read-only-fields)
 - [Recognition](#recognition)
 - [Integrity rules](#integrity-rules)
+- [Save generation](#save-generation)
 - [Save containers](#save-containers)
 - [Physical save formats](#physical-save-formats)
 - [Unsupported data](#unsupported-data)
@@ -20,6 +21,9 @@ The Save Editor changes persistent game data. It does not change emulator save s
 
 | Game | Platform | Input | Recognition limit |
 | --- | --- | --- | --- |
+| Pokémon Red | Game Boy | Raw 32 KiB SRAM | Shares its layout with Blue |
+| Pokémon Blue | Game Boy | Raw 32 KiB SRAM | Shares its layout with Red |
+| Pokémon Yellow | Game Boy | Raw 32 KiB SRAM | Uses the stored starter marker |
 | Pokémon Gold | Game Boy Color | Raw 32 KiB SRAM | Shares its layout with Silver |
 | Pokémon Silver | Game Boy Color | Raw 32 KiB SRAM | Shares its layout with Gold |
 | Pokémon Crystal | Game Boy Color | Raw 32 KiB SRAM | English retail layout |
@@ -28,6 +32,9 @@ The Save Editor changes persistent game data. It does not change emulator save s
 | Pokémon Emerald | Game Boy Advance | Raw 128 KiB Flash | English retail layout |
 | Pokémon FireRed | Game Boy Advance | Raw 128 KiB Flash | Shares its layout with LeafGreen |
 | Pokémon LeafGreen | Game Boy Advance | Raw 128 KiB Flash | Shares its layout with FireRed |
+| Pokémon Diamond | Nintendo DS | Raw 512 KiB save | Uses the Diamond/Pearl block layout and profile version |
+| Pokémon Pearl | Nintendo DS | Raw 512 KiB save | Uses the Diamond/Pearl block layout and profile version |
+| Pokémon Platinum | Nintendo DS | Raw 512 KiB save | Uses the Platinum block layout and profile version |
 | Pokémon HeartGold | Nintendo DS | Raw 512 KiB save | The profile version selects the title |
 | Pokémon SoulSilver | Nintendo DS | Raw 512 KiB save | The profile version selects the title |
 | The Legend of Zelda: A Link to the Past | Super Nintendo | Raw 8 KiB SRAM | Needs a valid file marker and checksum |
@@ -38,38 +45,54 @@ The Pokémon handlers cover the English layouts named above. A matching file siz
 
 | Family | Fields |
 | --- | --- |
-| Pokémon Generation II | Money and 16 badge flags |
-| Pokémon Generation III | Trainer name, gender, money, and badge flags |
-| Pokémon HeartGold and SoulSilver | Gender, money, and 16 badge flags |
-| Zelda: A Link to the Past | Resources, health, equipment, selected inventory items, pendants, and crystals for each file |
+| Pokémon Generation I | Trainer ID, money, coins, play time, text speed, battle options, eight badges, and all 151 Pokédex owned/seen flags; Yellow adds Pikachu friendship, Pikachu Beach score, sound, and printer brightness |
+| Pokémon Generation II | Money, stored money, coins, play time, options, and 16 badge flags |
+| Pokémon Generation III | Trainer name, gender, money, coins, play time, options, inventory quantities, and eight badges; Emerald adds Battle Points |
+| Pokémon Generation IV | Gender, money, coins, play time, Battle Points, and badges (eight in Diamond/Pearl/Platinum, 16 in HeartGold/SoulSilver) |
+| Zelda: A Link to the Past | Player name, resources, health, equipment, inventory, bottles, magic, capacity upgrades, dungeon maps/compasses/keys, and progression for each file |
 
 The Zelda resource fields cover rupees, bombs, and arrows. Its equipment fields cover swords, shields, armor, and gloves.
+
+Generation III inventory fields change quantities in existing occupied slots. They do not add items or change item IDs. The supported slot capacities are 166 for Ruby/Sapphire, 196 for Emerald, and 186 for FireRed/LeafGreen.
+
+Zelda dungeon fields cover all 14 dungeon entries. Progression includes the game state, map icon, spawn point, saved world, and named story flags. A file name contains at most six supported ASCII characters.
 
 ## Read-only fields
 
 | Family | Fields |
 | --- | --- |
-| Pokémon Generation II | Trainer name, Trainer ID, and play time; Crystal also shows its Secret ID |
+| Pokémon Generation I | Trainer name, rival name, and current PC box |
+| Pokémon Generation II | Trainer name, Trainer ID, and the formatted play-time summary; Crystal also shows its Secret ID |
 | Pokémon Generation III | Trainer IDs, play time, and the security key |
-| Pokémon HeartGold and SoulSilver | Trainer IDs and play time |
-| Zelda: A Link to the Past | Player name for each file |
+| Pokémon Generation IV | Trainer IDs and the formatted play-time summary |
 
 ## Recognition
 
 Recognition returns `recognized`, `ambiguous`, or `unsupported`. An ambiguous result needs an explicit game choice.
 
-Gold and Silver remain ambiguous without a selected game. The same rule applies to Ruby/Sapphire and FireRed/LeafGreen.
+Red and Blue remain ambiguous without a selected game. The same rule applies to Gold/Silver, Ruby/Sapphire, and FireRed/LeafGreen.
 
-HeartGold and SoulSilver use the stored game version after both save-block checks pass. Zelda uses its file marker and checksum.
+Generation IV uses the block layout and stored game version after both save-block checks pass. Zelda uses its file marker and checksum.
 
 ## Integrity rules
 
+- Generation I checks its complemented byte checksum, packed-decimal values, and inventory markers. Edits preserve the box storage and other bytes outside the edited fields and checksum.
 - Generation II checks primary and backup additive checksums. Edits need both copies to pass.
 - Generation III checks all 14 sections. It changes only the active slot and each affected section checksum.
-- HeartGold and SoulSilver check both redundant copies, block footers, counters, signatures, sizes, and CRC-16 values.
+- Generation IV checks redundant copies, block footers, counters, signatures, sizes, and CRC-16 values.
 - Zelda checks three primary files and their duplicate copies. It rewrites both copies only for an edited file.
 
 Every write starts from a copy. The handler reparses the result before it returns the edited bytes.
+
+## Save generation
+
+Fresh generation is available for every game in the supported games table. The generated images pass each handler's structure and checksum checks. In-game behavior for the Pokémon images has not been checked. The Zelda image contains one file named `LINK`, three hearts, no acquired equipment, a valid backup, and two empty file slots. Its bytes follow the original game's file initialization. The browser shows only editable properties for a fresh save; the full document retains its read-only metadata.
+
+Template generation supports every editable game above. It validates an existing save, applies optional field assignments, and writes a separate file. Without assignments, the output is byte-identical to the template. Container wrappers are retained. A template cannot be the output path.
+
+`save list-games` reports the game definitions and the IDs that support fresh generation. `save create` requires an output path unless it runs with `--dry-run`.
+
+Procedures: [Create saves in the browser](../how-to/create-game-saves-browser.md) and [Create saves with the CLI](../how-to/create-game-saves-cli.md).
 
 ## Save containers
 
@@ -108,6 +131,6 @@ The Mupen64Plus combined save is the libretro core's `.srm`: EEPROM, four Contro
 
 ## Unsupported data
 
-Diamond, Pearl, Platinum, other Pokémon generations, and other Zelda games remain unsupported. The editor does not change party Pokémon or boxes.
+Pokémon generations after IV and other Zelda games remain unsupported. The editor does not change party Pokémon or box contents.
 
 A physical format match or a removed container does not make a save editable. Only the games in [Supported games](#supported-games) have an editor. Emulator save states are rejected.

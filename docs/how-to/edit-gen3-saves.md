@@ -1,6 +1,6 @@
 # Edit a Generation III save
 
-Use the Save Editor to inspect and change an English retail Pokémon Ruby, Sapphire, Emerald, FireRed, or LeafGreen game save. The editor changes the trainer name, gender, money, and badges. It does not change inventory or Pokémon data.
+Use the Save Editor to inspect and change an English retail Pokémon Ruby, Sapphire, Emerald, FireRed, or LeafGreen game save. It changes trainer details, money, coins, play time, options, badges, and quantities in occupied inventory slots. Emerald also supports Battle Points. It does not change Pokémon data or item IDs.
 
 The [Save Editor development guide](../development/save-editor.md) describes the handler design and contributor flow.
 
@@ -26,7 +26,7 @@ An emulator save state stores CPU, memory, and emulator state. It is not a game 
 
 GameShark SP exports also work. The Save Editor reads a SharkPortSave file (`.sps`, `.xps`) and a GameShark SP snapshot (`.gsv`). It edits the game save inside the wrapper. The output keeps the wrapper metadata and recomputes the SharkPortSave checksum. The `.gsv` wrapper has no checksum. [Save containers](../reference/save-editor.md#save-containers) lists every wrapper the editor removes.
 
-For Generation III, the editor supports these English retail layouts:
+This guide covers these English retail layouts:
 
 - Pokémon Ruby;
 - Pokémon Sapphire;
@@ -45,8 +45,13 @@ It does not claim support for Japanese, European, Australian, Korean, or other r
 5. Change only the fields that the page marks as editable.
 6. Review the change summary.
 7. Download the new save file.
+8. To test it here, upload the same game's ROM on the Test page. Return to Save Editor and select **Test save in ROM**. The Test page reloads the ROM with the edited save.
 
 The browser keeps the input file unchanged. It downloads an edited copy after the checks pass. Keep the input file until the edited save works in the target emulator or cartridge hardware.
+
+The Test button is available when the loaded ROM has the same platform as the save. A platform match does not prove that the ROM is the same game. Check the game title before you test.
+
+Use **Find a property** to filter by name, group, or description. Hidden fields keep their pending changes. For a fresh save, see [Create saves in the browser](create-game-saves-browser.md).
 
 ## Use the CLI
 
@@ -76,17 +81,20 @@ The editor does not repair a damaged section. Keep the original and restore it f
 
 ## Supported and unsupported data
 
-The editable fields are:
+The editable field groups include:
 
 - trainer name, in the game's original character encoding;
 - trainer gender;
-- money;
+- money and coins;
+- play time and options;
+- quantities in occupied inventory slots;
+- Battle Points in Emerald;
 - gym badge flags.
 
 These fields are read-only:
 
 - trainer IDs;
-- play time;
+- the formatted play-time summary;
 - the Emerald or FireRed/LeafGreen security key.
 
 The editor does not edit inventory, item quantities, item IDs, party Pokémon, boxed Pokémon, or other save sections. It also does not edit emulator save states, regional layouts, or partially corrupt saves.

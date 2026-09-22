@@ -46,6 +46,7 @@ Procedures for specific tasks.
 - [Test a ROM in the browser](how-to/test-roms-in-browser.md)
 - [Fix a checksum error](how-to/fix-checksum-errors.md)
 - [Edit a Generation III save](how-to/edit-gen3-saves.md): inspect and safely edit an English retail Pokémon Ruby, Sapphire, Emerald, FireRed, or LeafGreen game save in the browser.
+- [Create game saves in the browser](how-to/create-game-saves-browser.md)
 
 ### From the terminal
 
@@ -57,6 +58,7 @@ Procedures for specific tasks.
 - [Identify and hash files](how-to/identify-and-hash-files.md)
 - [Bake cheat codes into a ROM](how-to/bake-cheat-codes.md)
 - [Edit a game save from the CLI](how-to/cli-save.md)
+- [Create game saves with the CLI](how-to/create-game-saves-cli.md)
 - [Trim a ROM from the CLI](how-to/cli-trim.md)
 - [Extract, convert, and compress archives](how-to/work-with-archives.md)
 - [Fix a permission error](how-to/fix-permission-errors.md)

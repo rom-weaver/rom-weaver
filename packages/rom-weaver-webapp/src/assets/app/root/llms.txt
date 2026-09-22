@@ -38,6 +38,8 @@
 - [Self-hosting](https://rom-weaver.com/docs/self-hosting): Deploy and configure the static webapp.
 - [Architecture](https://rom-weaver.com/docs/architecture): Understand the Rust command core, browser workers, and TypeScript boundary.
 - [Edit Generation III saves](https://rom-weaver.com/docs/edit-gen3-saves): Inspect and safely edit supported English retail Pokémon Ruby, Sapphire, Emerald, FireRed, and LeafGreen game saves in the browser.
+- [Create game saves in the browser](https://rom-weaver.com/docs/create-game-saves-browser): Generate fresh Zelda saves and edit their properties before download.
+- [Create game saves with the CLI](https://rom-weaver.com/docs/create-game-saves-cli): Generate fresh saves or validated copies from existing save templates.
 - [Save Editor development](https://rom-weaver.com/docs/game-save-development): Shared save handler architecture, integrity boundary, and contributor flow.
 
 ## Documentation
