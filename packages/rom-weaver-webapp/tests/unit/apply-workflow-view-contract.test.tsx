@@ -913,7 +913,12 @@ describe("apply workflow view - staged bench", () => {
   it.each([false, undefined])("shows cheats when beta tools are %s", (betaToolsEnabled) => {
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const { container } = renderView({ settings: { betaToolsEnabled }, ui });
-    expect(container.querySelector("[data-testid=cheats-step]")).toBeTruthy();
+    const patchStep = container.querySelector("#rom-weaver-row-patch-stack");
+    const drop = patchStep?.querySelector(".needs-input");
+    const cheats = patchStep?.querySelector("[data-testid=cheats-step]");
+    expect(drop).toBeTruthy();
+    expect(cheats).toBeTruthy();
+    expect(drop?.compareDocumentPosition(cheats as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("uses a matched title on the ROM card and keeps it out of Checks", () => {

@@ -133,11 +133,12 @@ describe("CheatDatabaseSection", () => {
     );
   });
 
-  it("keeps the data-quality notices in the picker", async () => {
+  it("keeps the picker footer focused on the cheat list", async () => {
     const view = render(<CheatDatabaseSection {...props} />);
     await openDialog(view);
-    expect(view.getByText(/Community cheat data can contain errors/u)).toBeTruthy();
-    expect(view.getByText(/does not upload ROM data or checksums/u)).toBeTruthy();
+    const dialog = view.getByRole("dialog");
+    expect(dialog.querySelector(".cheat-notices")).toBeNull();
+    expect(dialog.textContent).not.toContain("Community cheat data can contain errors");
   });
 
   it("shows the conflict message and the baked ROM cheat summary", async () => {
@@ -159,16 +160,17 @@ describe("CheatDatabaseSection", () => {
     expect(view.queryByRole("checkbox", { name: "Use cheats" })).toBeNull();
   });
 
-  it("keeps the patch card body visible while the card is switched off", async () => {
+  it("puts the switch at the top right and collapses the card when off", async () => {
     const view = render(<CheatDatabaseSection {...props} />);
     await openDialog(view);
     fireEvent.click(addButton(view, "Infinite lives"));
     fireEvent.click(view.getByRole("button", { name: "Close" }));
     expect(view.getByText("1 cheat")).toBeTruthy();
+    expect(view.container.querySelector(".cheat-database-card > .card-top > .card-actions .patch-enable")).toBeTruthy();
 
     fireEvent.click(view.getByRole("checkbox", { name: "Use cheats" }));
     expect(view.container.querySelector(".card.cheat-database-card.is-off")).toBeTruthy();
-    expect(view.container.querySelector(".cheat-card-body")?.hasAttribute("inert")).toBe(true);
+    expect(view.container.querySelector(".cheat-card-body")?.hasAttribute("hidden")).toBe(true);
     expect(view.getByText("0 cheats")).toBeTruthy();
   });
 
@@ -185,7 +187,7 @@ describe("CheatDatabaseSection", () => {
     expect((view.getByRole("checkbox", { name: "Use cheats" }) as HTMLInputElement).checked).toBe(true);
   });
 
-  it("switching the step off publishes an empty selection and keeps the cards", async () => {
+  it("switching the step off publishes an empty selection and restores the cards when on", async () => {
     const onSelectionChange = vi.fn();
     const view = render(<CheatDatabaseSection {...props} onSelectionChange={onSelectionChange} />);
     await openDialog(view);
@@ -198,22 +200,16 @@ describe("CheatDatabaseSection", () => {
     fireEvent.click(view.getByRole("checkbox", { name: "Use cheats" }));
     expect(onSelectionChange.mock.lastCall?.[0]).toEqual([]);
     expect(view.container.querySelector(".card.cheat-database-card.is-off")).toBeTruthy();
-    expect(view.container.querySelector(".cheat-card-body")?.hasAttribute("inert")).toBe(true);
-    expect(view.container.querySelector("#rom-weaver-list-cheat-stack .card")).toBeTruthy();
+    expect(view.container.querySelector(".cheat-card-body")?.hasAttribute("hidden")).toBe(true);
     expect(view.getByText("0 cheats")).toBeTruthy();
     expect(view.getByText("1 off")).toBeTruthy();
-
-    // A card switch flipped while the step is Off must not publish anything.
-    onSelectionChange.mockClear();
-    fireEvent.click(view.getByRole("checkbox", { name: "Include Infinite lives" }));
-    fireEvent.click(view.getByRole("checkbox", { name: "Include Infinite lives" }));
-    expect(onSelectionChange).not.toHaveBeenCalled();
 
     fireEvent.click(view.getByRole("checkbox", { name: "Use cheats" }));
     expect(onSelectionChange.mock.lastCall?.[0].map(({ record }: ClassifiedCheatRecord) => record.id)).toEqual([
       "cheat-1",
     ]);
     expect(view.container.querySelector(".card.cheat-database-card.is-off")).toBeNull();
+    expect(view.container.querySelector("#rom-weaver-list-cheat-stack .card")).toBeTruthy();
   });
 
   it("searches the picker by description and by raw code", async () => {

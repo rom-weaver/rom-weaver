@@ -97,7 +97,6 @@ const CreateCheatCodesPanel = ({
   reportSystem.current = onSystemChange;
 
   const {
-    activeIndex,
     classificationError,
     entry: databaseEntry,
     game,
@@ -262,16 +261,6 @@ const CreateCheatCodesPanel = ({
       <AddCheatsDialog
         addedIds={addedIds}
         gamePicker={gamePicker}
-        notices={
-          <aside className="cheat-notices">
-            <p>Community cheat data can contain errors. A checksum match does not prove that each cheat works.</p>
-            {activeIndex ? (
-              <p>
-                Database: {activeIndex.sourceUrl} at {activeIndex.sourceRevision} · {activeIndex.license}
-              </p>
-            ) : null}
-          </aside>
-        }
         onAdd={(record) => onValueChange(appendCodes(value, recordCodes(record, manualSystem), manualSystem))}
         onClose={() => setDialogOpen(false)}
         onRemove={(record) => {

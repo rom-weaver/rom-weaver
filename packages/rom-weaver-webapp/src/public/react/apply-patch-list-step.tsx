@@ -2124,6 +2124,7 @@ const ApplyPatchListStep = ({
           />
         ))}
       </div>
+      {total === 0 ? emptyState : null}
       {afterItems ? <div className="workflow-step-after-items">{afterItems}</div> : null}
       {(() => {
         // One list-level order warning: the first enabled patch whose input matches a patch it
@@ -2155,7 +2156,6 @@ const ApplyPatchListStep = ({
           </p>
         );
       })()}
-      {total === 0 ? emptyState : null}
       {notice}
     </StepSection>
   );

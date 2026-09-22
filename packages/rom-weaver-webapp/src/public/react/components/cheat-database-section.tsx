@@ -328,7 +328,6 @@ type AddCheatsDialogProps = {
   status?: { text: string; error?: boolean };
   gamePicker?: ReactNode;
   extras?: ReactNode;
-  notices?: ReactNode;
 };
 
 /**
@@ -348,7 +347,6 @@ export const AddCheatsDialog = ({
   status,
   gamePicker,
   extras,
-  notices,
 }: AddCheatsDialogProps) => {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const [query, setQuery] = useState("");
@@ -469,7 +467,6 @@ export const AddCheatsDialog = ({
               </span>
             </div>
             {extras}
-            {notices}
           </div>
         </div>
       ) : null}
@@ -756,6 +753,7 @@ export const CheatDatabaseSection = ({
             No games match this search.
           </p>
         )}
+        {match.kind === "title" || match.kind === "manual" ? <p className="cheat-pick-empty">{copy.detail}</p> : null}
       </div>
     ) : null;
 
@@ -777,15 +775,17 @@ export const CheatDatabaseSection = ({
     <div className="cheat-card-row" id="rom-weaver-row-cheat-stack">
       <FileCard
         className={enabled ? "cheat-database-card" : "cheat-database-card is-off"}
+        menu={
+          <label className="patch-enable">
+            <input aria-label="Use cheats" checked={enabled} onChange={toggleEnabled} type="checkbox" />
+            <span aria-hidden="true" className="switch-state">
+              <b className="on">On</b>
+              <b className="off">Off</b>
+            </span>
+          </label>
+        }
         meta={
           <>
-            <label className="patch-enable">
-              <input aria-label="Use cheats" checked={enabled} onChange={toggleEnabled} type="checkbox" />
-              <span aria-hidden="true" className="switch-state">
-                <b className="on">On</b>
-                <b className="off">Off</b>
-              </span>
-            </label>
             {cards.length ? <span className="rb mono">{countLabel(publishedCount, "cheat")}</span> : null}
             {offCount ? <span className="rb mono muted">{`${offCount} off`}</span> : null}
           </>
@@ -806,7 +806,7 @@ export const CheatDatabaseSection = ({
         }
         patch
       >
-        <div className="cheat-card-body" inert={!enabled || undefined}>
+        <div className="cheat-card-body" hidden={!enabled}>
           {cards.length ? (
             <div className="cards patch-cards workflow-file-list" id="rom-weaver-list-cheat-stack">
               {cards.map((entry, index) => (
@@ -920,20 +920,6 @@ export const CheatDatabaseSection = ({
               ) : null
             }
             gamePicker={gamePicker}
-            notices={
-              <aside className="cheat-notices">
-                <p>{manualOnlyCopy || copy.detail}</p>
-                <p>Community cheat data can contain errors. A checksum match does not prove that each cheat works.</p>
-                <p>ROMWeaver does not upload ROM data or checksums.</p>
-                {activeIndex ? (
-                  <p>
-                    Database: {sourceName(activeIndex.sourceUrl)} at {activeIndex.sourceRevision} ·{" "}
-                    {activeIndex.license}
-                  </p>
-                ) : null}
-                <p>Each system becomes available offline after it loads once.</p>
-              </aside>
-            }
             onAdd={addRecord}
             onClose={() => setDialogOpen(false)}
             onRemove={dropRecord}

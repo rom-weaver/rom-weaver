@@ -7,6 +7,11 @@
     display: flow-root;
   }
 
+  .rw-app .cheat-card-row > .cheat-database-card > .card-top .card-actions {
+    float: right;
+    margin-inline-start: var(--sp-m);
+  }
+
   .rw-app .cheat-card-row > .cheat-database-card > .card-top .card-name {
     display: block;
     min-width: 0;
@@ -23,6 +28,10 @@
     grid-template-columns: minmax(0, 1fr);
     gap: var(--sp-s);
     min-width: 0;
+  }
+
+  .rw-app .cheat-card-body[hidden] {
+    display: none;
   }
 
   .rw-app .cheat-card-body > .workflow-file-list {
@@ -304,7 +313,6 @@
     opacity: 0.5;
   }
 
-  .rw-app .cheat-notices,
   .rw-app .manual-cheat-result {
     display: grid;
     gap: 0.25rem;
@@ -313,11 +321,6 @@
     border: 1px solid var(--seam, currentColor);
   }
 
-  .rw-app .cheat-notices {
-    font-size: 0.88rem;
-  }
-
-  .rw-app .cheat-notices p,
   .rw-app .manual-cheat-result p {
     margin: 0;
   }
