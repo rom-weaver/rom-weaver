@@ -1305,11 +1305,6 @@ msgstr "Enable beta tools (Trim, PPF undo, Save Editor, and cheats)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "settings.cheatsEnabled"
-msgstr "Enable Cheats as a Patch"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.identify.hashInvalid"
 msgstr "Enter 8 (CRC32), 32 (MD5), or 40 (SHA-1) hex characters, or a game name."
 

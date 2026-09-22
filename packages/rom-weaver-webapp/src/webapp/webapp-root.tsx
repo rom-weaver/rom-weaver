@@ -931,7 +931,6 @@ function WebappRoot({
                   <ApplyPatchRoute
                     bundleSession={bundleSession}
                     onBundlePackageChange={actions.onPatcherBundlePackageChange}
-                    onCheatsEnabledChange={actions.onPatcherCheatsEnabledChange}
                     onInputsChange={actions.onPatcherInputsChange}
                     onPatchesChange={actions.onPatcherPatchesChange}
                     onSelectTab={handleSelectTab}
@@ -948,7 +947,6 @@ function WebappRoot({
                     mode="bundle"
                     bundleSession={bundleSession}
                     onBundlePackageChange={actions.onPatcherBundlePackageChange}
-                    onCheatsEnabledChange={actions.onPatcherCheatsEnabledChange}
                     onInputsChange={actions.onPatcherInputsChange}
                     onPatchesChange={actions.onPatcherPatchesChange}
                     onSelectTab={handleSelectTab}

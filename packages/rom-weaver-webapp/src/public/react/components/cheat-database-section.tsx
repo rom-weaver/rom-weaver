@@ -1,4 +1,4 @@
-import { Check, Download, Plus, Search, WandSparkles, X } from "lucide-react";
+import { Check, ChevronRight, Download, Plus, Search, WandSparkles, X } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { IdentifyCatalog } from "../../../lib/identify/identify-catalog.ts";
 import {
@@ -19,24 +19,16 @@ import {
 } from "../../../lib/cheats/index.ts";
 import { getCheatPatchStatus } from "../cheat-patch-export-model.ts";
 import { matchGame, useCheatDatabaseRecords } from "./use-cheat-database-records.ts";
-import { Drawer, DrawerReadout } from "./ds/drawer.tsx";
+import { Drawer } from "./ds/drawer.tsx";
 import { Notice } from "./ds/feedback.tsx";
 import { FileCard } from "./ds/file-card.tsx";
-import { InfoPopover } from "./ds/layout.tsx";
 import { reorder, useListReorder } from "./ds/use-list-reorder.ts";
 import "./cheat-database-section.css";
 
 type SystemOption = { value: CheatManualSystem; label: string };
 
-/**
- * Systems with no cheat database, where the step still offers manual entry.
- * Each states what its own code scheme delivers.
- */
-const MANUAL_ONLY_SYSTEMS: Record<CheatManualOnlySystem, { label: string; copy: string }> = {
+const MANUAL_ONLY_SYSTEMS: Record<CheatManualOnlySystem, { label: string }> = {
   playstation: {
-    copy:
-      "No cheat database for PlayStation. You can still add Xploder codes by hand; " +
-      "their ROM writes bake into the PS-X EXE.",
     label: "PlayStation",
   },
 };
@@ -48,6 +40,12 @@ const deliveryCopy = (record: ClassifiedCheatRecord): { badge: string; short: st
   cheatDelivery(record) === "rom"
     ? { badge: "ROM cheat", short: "ROM", text: "Baked into output" }
     : { badge: "Unsupported", short: "N/A", text: "Cannot be baked into the ROM" };
+
+const CHEAT_KIND_LABELS: Record<NonNullable<ClassifiedCheatRecord["detectedKind"]>, string> = {
+  "game-genie": "Game Genie",
+  "pro-action-replay": "Action Replay / GameShark",
+  xploder: "Xploder",
+};
 
 export const gameLabel = (game: NonNullable<ReturnType<typeof matchGame>>): string =>
   [game.title, game.regions.join(" / "), game.revisions.join(" / ")].filter(Boolean).join(" · ");
@@ -71,7 +69,6 @@ type CheatOrderEntry = { id: string; position: number };
 export type CheatStackRenderState = {
   cards: ClassifiedCheatRecord[];
   controls: ReactNode;
-  enabled: boolean;
   onOrderChange: (order: CheatOrderEntry[]) => void;
   renderCard: (
     entry: ClassifiedCheatRecord,
@@ -97,6 +94,7 @@ const CheatCard = ({
   const delivery = deliveryCopy(record);
   const source = record.record;
   const selectable = isSelectableCheat(record);
+  const kind = record.detectedKind ?? source.codeKind;
   return (
     <FileCard
       className={`cheat-card ${rowProps.className || ""}`}
@@ -163,12 +161,13 @@ const CheatCard = ({
       removeLabel={`Remove ${source.description} from the cheat stack`}
       state="ok"
     >
-      <Drawer
-        className="cheat-details"
-        label="Cheat details"
-        labelIcon={<WandSparkles aria-hidden="true" />}
-        readouts={record.detectedKind ? <DrawerReadout>{record.detectedKind}</DrawerReadout> : undefined}
-      >
+      <Drawer className="cheat-details" label="Cheat details" labelIcon={<WandSparkles aria-hidden="true" />}>
+        {kind ? (
+          <div className="ck">
+            <span className="ck-k">Type</span>
+            <span className="ck-v">{CHEAT_KIND_LABELS[kind]}</span>
+          </div>
+        ) : null}
         {source.rawCode ? (
           <div className="ck mono">
             <span className="ck-k">Code</span>
@@ -176,16 +175,8 @@ const CheatCard = ({
           </div>
         ) : null}
         <div className="ck">
-          <span className="ck-k">Delivery</span>
-          <span className="ck-v">
-            {record.resolution.type === "unsupported" ? record.resolution.reason : "baked into output"}
-          </span>
-        </div>
-        <div className="ck">
           <span className="ck-k">Source</span>
-          <span className="ck-v">
-            {source.sourceFile} at {source.sourceRevision}
-          </span>
+          <span className="ck-v">{source.sourceFile === "manual" ? "Manual entry" : "Libretro database"}</span>
         </div>
       </Drawer>
     </FileCard>
@@ -546,12 +537,8 @@ export type CheatDatabaseSectionProps = {
    * the ROM to, so the caller does not resolve it a second time.
    */
   onSaveAsPatch?: (records: ClassifiedCheatRecord[], system: CheatManualSystem | undefined) => Promise<string>;
-  configuredEnabled?: boolean;
-  onEnabledChange?: (enabled: boolean) => void;
   outputSummary?: { rom: number };
   validationMessage?: string;
-  /** Localized card heading. */
-  title: ReactNode;
   positionOffset?: number;
   renderStack?: (stack: CheatStackRenderState) => ReactNode;
 };
@@ -566,16 +553,12 @@ export const CheatDatabaseSection = ({
   classifyDatabaseCheats,
   onSelectionChange,
   onSaveAsPatch,
-  configuredEnabled,
-  onEnabledChange,
   outputSummary,
   validationMessage,
-  title,
   positionOffset = 0,
   renderStack,
 }: CheatDatabaseSectionProps) => {
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [enabled, setEnabled] = useState(configuredEnabled ?? false);
   const [savingPatchId, setSavingPatchId] = useState("");
   const savingPatchRef = useRef(false);
   const [patchStatus, setPatchStatus] = useState("");
@@ -589,7 +572,6 @@ export const CheatDatabaseSection = ({
   const [manualRecords, setManualRecords] = useState<ClassifiedCheatRecord[]>([]);
   const positionsRef = useRef(new Map<string, number>());
   const selectionCallback = useRef(onSelectionChange);
-  const previousEnabled = useRef(enabled);
   const previousGameId = useRef<string | undefined>(undefined);
   selectionCallback.current = onSelectionChange;
   const emitSelection = (entries: ClassifiedCheatRecord[]) => {
@@ -602,11 +584,6 @@ export const CheatDatabaseSection = ({
     }
     selectionCallback.current?.(entries);
   };
-  const emitSelectionRef = useRef(emitSelection);
-  emitSelectionRef.current = emitSelection;
-  useEffect(() => {
-    if (configuredEnabled !== undefined) setEnabled(configuredEnabled);
-  }, [configuredEnabled]);
 
   const {
     activeIndex,
@@ -632,7 +609,6 @@ export const CheatDatabaseSection = ({
     rom,
     ...(suppliedShard ? { shard: suppliedShard } : {}),
   });
-  const manualOnlyCopy = manualOnlySystem ? MANUAL_ONLY_SYSTEMS[manualOnlySystem].copy : "";
   const identityKey = rom?.key;
   useEffect(() => {
     if (identityKey === "") return;
@@ -669,36 +645,21 @@ export const CheatDatabaseSection = ({
       }),
     [addedIds, records],
   );
-  const selectedRecords = useMemo(() => cards.filter(({ record }) => selectedIds.has(record.id)), [cards, selectedIds]);
   const reorderList = useListReorder({
     count: cards.length,
-    disabled: !enabled || cards.length < 2,
+    disabled: cards.length < 2,
     onReorder: (from, to) => {
       const nextIds = reorder([...addedIds], from, to);
       setAddedIds(new Set(nextIds));
-      if (enabled)
-        emitSelection(nextIds.flatMap((id) => cards.filter(({ record }) => record.id === id && selectedIds.has(id))));
+      emitSelection(nextIds.flatMap((id) => cards.filter(({ record }) => record.id === id && selectedIds.has(id))));
     },
   });
-  useEffect(() => {
-    if (previousEnabled.current === enabled) return;
-    previousEnabled.current = enabled;
-    emitSelectionRef.current(enabled ? selectedRecords : []);
-  }, [enabled, selectedRecords]);
 
   const publish = (nextSelected: Set<string>, source = records, nextAdded = addedIds) => {
     setSelectedIds(nextSelected);
-    if (enabled)
-      emitSelection(
-        [...nextAdded].flatMap((id) => source.filter(({ record }) => record.id === id && nextSelected.has(id))),
-      );
-  };
-
-  const toggleEnabled = () => {
-    const nextEnabled = !enabled;
-    if (!nextEnabled) setDialogOpen(false);
-    setEnabled(nextEnabled);
-    onEnabledChange?.(nextEnabled);
+    emitSelection(
+      [...nextAdded].flatMap((id) => source.filter(({ record }) => record.id === id && nextSelected.has(id))),
+    );
   };
 
   const addRecord = (record: ClassifiedCheatRecord) => {
@@ -739,7 +700,6 @@ export const CheatDatabaseSection = ({
     publish(nextSelected, [...classifiedRecords, ...nextRecords], nextAdded);
   };
 
-  const gameTitle = game?.title || rom?.title || "";
   const pickerStatus = loadError
     ? { error: true, text: `The cheat database is unavailable. ${loadError}` }
     : classificationError
@@ -855,9 +815,6 @@ export const CheatDatabaseSection = ({
       </div>
     ) : null;
 
-  // The chips report what the run will bake, so Off counts every card as off.
-  const publishedCount = enabled ? selectedRecords.length : 0;
-  const offCount = cards.length - publishedCount;
   const status = loading
     ? "Loading this system's cheat database…"
     : classifying
@@ -912,136 +869,102 @@ export const CheatDatabaseSection = ({
         ? current
         : new Set(ids);
     });
-    if (enabled)
-      emitSelection(ids.flatMap((id) => cards.filter(({ record }) => record.id === id && selectedIds.has(id))));
+    emitSelection(ids.flatMap((id) => cards.filter(({ record }) => record.id === id && selectedIds.has(id))));
   };
   const controls = (
-    <div className={enabled ? "cheat-section" : "cheat-section is-disabled"} id="rom-weaver-row-cheat-stack">
-      <div className="cheat-subhead">
-        <div className="cheat-subhead-title">
-          <span>{title}</span>
-          <label className="patch-enable">
-            <input aria-label="Use cheats" checked={enabled} onChange={toggleEnabled} type="checkbox" />
-            <span aria-hidden="true" className="switch-state">
-              <b className="on">On</b>
-              <b className="off">Off</b>
-            </span>
-          </label>
-        </div>
-        <div className="cheat-subhead-meta">
-          {cards.length ? <span className="rb mono">{countLabel(publishedCount, "cheat")}</span> : null}
-          {offCount ? <span className="rb mono muted">{`${offCount} off`}</span> : null}
-          <InfoPopover title={typeof title === "string" ? title : undefined}>
-            <strong>Cheats</strong>
-            <ul className="info-list">
-              <li>Optional. Cheats that are On are baked into the output ROM in the order shown with patches.</li>
-              <li>Only ROM cheats can be baked; codes that target runtime memory stay unsupported.</li>
-              <li>Community cheat data can contain errors. A checksum match does not prove that each cheat works.</li>
-              <li>ROMWeaver does not upload ROM data or checksums. Each system works offline after it loads once.</li>
-            </ul>
-          </InfoPopover>
-        </div>
-      </div>
-      {enabled ? (
-        <div className="cheat-card-body">
-          {cards.length && !renderStack ? (
-            <div
-              className="cards patch-cards workflow-file-list"
-              id="rom-weaver-list-cheat-stack"
-              ref={reorderList.containerRef}
-            >
-              {cards.map((entry, index) =>
-                renderCard(
-                  entry,
-                  positionOffset + reorderList.displayIndex(index) + 1,
-                  cards.length > 1,
-                  reorderList.handleProps(index),
-                  reorderList.rowProps(index),
-                ),
-              )}
-            </div>
-          ) : null}
-
-          {patchStatus ? <p role="status">{patchStatus}</p> : null}
-
-          <button className="needs-input cheat-add" onClick={() => setDialogOpen(true)} type="button">
-            {manualOnlyCopy ? <Plus aria-hidden="true" /> : <Search aria-hidden="true" />}
-            <span>
-              {manualOnlyCopy ? (
-                "Add cheat codes"
-              ) : gameTitle ? (
-                <>
-                  Search the cheat database for <b className="hexref mono">{gameTitle}</b>
-                </>
-              ) : (
-                "Search the cheat database"
-              )}
-            </span>
-          </button>
-
-          {status ? (
-            <p aria-live="polite" className="cheat-status">
-              {status}
-            </p>
-          ) : null}
-          {patchError ? (
-            <Notice id="rom-weaver-cheat-patch-error" level="error" onDismiss={() => setPatchError("")}>
-              {patchError}
-            </Notice>
-          ) : null}
-          {classificationError ? (
-            <Notice id="rom-weaver-cheat-classify-error" level="error">
-              {classificationError}
-            </Notice>
-          ) : null}
-          {validationMessage ? (
-            <Notice id="rom-weaver-cheat-notice-message" level="warn">
-              {validationMessage}
-            </Notice>
-          ) : null}
-          {loadErrorMessage ? (
-            <Notice id="rom-weaver-cheat-load-error" level="error">
-              {loadErrorMessage}
-            </Notice>
-          ) : null}
-
-          {outputSummary?.rom ? (
-            <div className="cheat-output-summary" role="status">
-              <p>ROM output: Contains patches and {countLabel(outputSummary.rom, "baked ROM cheat")}.</p>
-            </div>
-          ) : null}
-
-          <AddCheatsDialog
-            addedIds={addedIds}
-            emptyPrompt={databasePicker ? "Choose a system above." : gamePicker ? "Choose a game above." : undefined}
-            extras={
-              manualSystem ? (
-                <ManualCodeForm
-                  classifier={classifyManualCode}
-                  defaultSystem={manualSystem}
-                  onAdd={addManualRecord}
-                  systems={systems}
-                />
-              ) : null
-            }
-            gamePicker={
-              <>
-                {databasePicker}
-                {gamePicker}
-              </>
-            }
-            onAdd={addRecord}
-            onClose={() => setDialogOpen(false)}
-            onRemove={dropRecord}
-            open={dialogOpen}
-            records={records}
-            stackCount={cards.length}
-            status={pickerStatus}
-            title={gameTitle && !manualOnlyCopy ? `Add cheats · ${gameTitle}` : "Add cheats"}
-          />
+    <div className="cheat-card-body" id="rom-weaver-row-cheat-stack">
+      {cards.length && !renderStack ? (
+        <div
+          className="cards patch-cards workflow-file-list"
+          id="rom-weaver-list-cheat-stack"
+          ref={reorderList.containerRef}
+        >
+          {cards.map((entry, index) =>
+            renderCard(
+              entry,
+              positionOffset + reorderList.displayIndex(index) + 1,
+              cards.length > 1,
+              reorderList.handleProps(index),
+              reorderList.rowProps(index),
+            ),
+          )}
         </div>
       ) : null}
+
+      {patchStatus ? <p role="status">{patchStatus}</p> : null}
+
+      <button className="needs-input cheat-add" onClick={() => setDialogOpen(true)} type="button">
+        <span aria-hidden="true" className="cheat-add-mark">
+          <Plus />
+        </span>
+        <span className="cheat-add-copy">
+          <strong>Add cheats to the patch order</strong>
+          <small>Choose codes to bake into the ROM at their place in the list.</small>
+        </span>
+        <ChevronRight aria-hidden="true" className="cheat-add-arrow" />
+      </button>
+
+      {status ? (
+        <p aria-live="polite" className="cheat-status">
+          {status}
+        </p>
+      ) : null}
+      {patchError ? (
+        <Notice id="rom-weaver-cheat-patch-error" level="error" onDismiss={() => setPatchError("")}>
+          {patchError}
+        </Notice>
+      ) : null}
+      {classificationError ? (
+        <Notice id="rom-weaver-cheat-classify-error" level="error">
+          {classificationError}
+        </Notice>
+      ) : null}
+      {validationMessage ? (
+        <Notice id="rom-weaver-cheat-notice-message" level="warn">
+          {validationMessage}
+        </Notice>
+      ) : null}
+      {loadErrorMessage ? (
+        <Notice id="rom-weaver-cheat-load-error" level="error">
+          {loadErrorMessage}
+        </Notice>
+      ) : null}
+
+      {outputSummary?.rom ? (
+        <div className="cheat-output-summary" role="status">
+          <p>ROM output: Contains patches and {countLabel(outputSummary.rom, "baked ROM cheat")}.</p>
+        </div>
+      ) : null}
+
+      <AddCheatsDialog
+        addedIds={addedIds}
+        emptyPrompt={databasePicker ? "Choose a system above." : gamePicker ? "Choose a game above." : undefined}
+        extras={
+          manualSystem ? (
+            <ManualCodeForm
+              classifier={classifyManualCode}
+              defaultSystem={manualSystem}
+              onAdd={addManualRecord}
+              systems={systems}
+            />
+          ) : null
+        }
+        gamePicker={
+          <>
+            {databasePicker}
+            {gamePicker}
+          </>
+        }
+        onAdd={addRecord}
+        onClose={() => setDialogOpen(false)}
+        onRemove={dropRecord}
+        open={dialogOpen}
+        records={records}
+        stackCount={cards.length}
+        status={pickerStatus}
+        title="Add cheats"
+      />
     </div>
   );
-  return renderStack ? renderStack({ cards, controls, enabled, onOrderChange, renderCard }) : controls;
+  return renderStack ? renderStack({ cards, controls, onOrderChange, renderCard }) : controls;
 };

@@ -40,7 +40,6 @@ type LoggingSettings = {
 
 type CommonSettings = {
   betaToolsEnabled?: boolean;
-  cheatsEnabled?: boolean;
   byteUnits?: ByteUnitSystem;
   defaultCompression?: DefaultCompression;
   emulatorSaveStorageEnabled?: boolean;

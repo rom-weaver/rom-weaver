@@ -60,7 +60,6 @@ import {
   getDefaultCompressionMode,
   useApplySettings,
   useRomWeaverAssetBaseUrl,
-  useRomWeaverSettings,
   useUiLocalizer,
 } from "./settings-context.tsx";
 import { getEmulatorJsCore } from "./components/emulatorjs.ts";
@@ -222,7 +221,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const { onApplyComplete, onInputsChange, onPatchesChange, onProgress: onProgressChange, threads } = props;
   const mode = props.mode ?? "apply";
   const providerSettings = useApplySettings();
-  const savedSettings = useRomWeaverSettings();
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
   const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;
   const { startup } = props;
@@ -1879,11 +1877,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             classifyManualCode={classifyManualCode}
             onSaveAsPatch={saveCheatsAsPatch}
             onSelectionChange={handleCheatSelection}
-            configuredEnabled={savedSettings.cheatsEnabled}
-            onEnabledChange={props.onCheatsEnabledChange}
             outputSummary={completedCheats}
             rom={cheatRom}
-            title={localizer.message("ui.step.cheats")}
             renderStack={renderStack}
             validationMessage={cheatConflictMessage || headerStripConflict}
           />

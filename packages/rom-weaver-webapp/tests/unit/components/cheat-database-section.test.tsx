@@ -108,14 +108,11 @@ const props = {
   shard,
   classifyDatabaseCheats,
   classifyManualCode,
-  title: "Cheats as a Patch",
 } as const;
 
 /** Open the picker and wait for its rows. */
 const openDialog = async (view: ReturnType<typeof render>) => {
-  const toggle = view.getByRole("checkbox", { name: "Use cheats" }) as HTMLInputElement;
-  if (!toggle.checked) fireEvent.click(toggle);
-  fireEvent.click(view.getByRole("button", { name: /Search the cheat database/u }));
+  fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
   await view.findByText("Infinite lives");
 };
 
@@ -123,13 +120,15 @@ const addButton = (view: ReturnType<typeof render>, description: string) =>
   view.getByRole("button", { name: `Add ${description}` });
 
 describe("CheatDatabaseSection", () => {
-  it("renders the heading and switch together without the match line", async () => {
+  it("offers cheat patches without a second heading or switch", async () => {
     const view = render(<CheatDatabaseSection {...props} />);
-    await waitFor(() => expect(view.container.querySelector("#rom-weaver-row-cheat-stack.cheat-section")).toBeTruthy());
+    await waitFor(() => expect(view.container.querySelector("#rom-weaver-row-cheat-stack")).toBeTruthy());
     expect(view.container.querySelector(".step-num")).toBeNull();
-    expect((view.getByRole("checkbox", { name: "Use cheats" }) as HTMLInputElement).checked).toBe(false);
-    expect(view.getByText("Cheats as a Patch")).toBeTruthy();
-    expect(view.container.querySelector(".cheat-subhead-title > .patch-enable")).toBeTruthy();
+    expect(view.queryByRole("checkbox", { name: "Use cheats" })).toBeNull();
+    expect(view.queryByText("Cheats as a Patch")).toBeNull();
+    const addCheats = view.getByRole("button", { name: /Add cheats to the patch order/u });
+    expect(addCheats.textContent).toContain("bake into the ROM");
+    expect(addCheats.textContent).not.toContain("Super Mario World");
     expect(view.container.querySelector(".cheat-add-note")).toBeNull();
     expect(view.container.textContent).not.toContain("Exact checksum match");
     expect(view.container.textContent).not.toContain("libretro/libretro-database CC-BY-SA-4.0");
@@ -151,7 +150,6 @@ describe("CheatDatabaseSection", () => {
         validationMessage="Cheat conflict at ROM offset 0x2871."
       />,
     );
-    fireEvent.click(view.getByRole("checkbox", { name: "Use cheats" }));
     await waitFor(() => expect(view.getByText(/Cheat conflict at ROM offset 0x2871/u).closest(".notice")).toBeTruthy());
     expect(view.getByText(/Contains patches and 1 baked ROM cheat/u)).toBeTruthy();
   });
@@ -159,24 +157,20 @@ describe("CheatDatabaseSection", () => {
   it("waits for a ROM before it offers anything", () => {
     const view = render(<CheatDatabaseSection {...props} rom={null} />);
     expect(view.container.firstElementChild).toBeNull();
-    expect(view.queryByRole("button", { name: /Search the cheat database/u })).toBeNull();
+    expect(view.queryByRole("button", { name: /Add cheats to the patch order/u })).toBeNull();
     expect(view.queryByRole("checkbox", { name: "Use cheats" })).toBeNull();
   });
 
-  it("keeps the switch beside the heading and collapses the section when off", async () => {
+  it("keeps added cards and the add control visible", async () => {
     const view = render(<CheatDatabaseSection {...props} />);
     await openDialog(view);
     fireEvent.click(addButton(view, "Infinite lives"));
     fireEvent.click(view.getByRole("button", { name: "Close" }));
-    expect(view.getByText("1 cheat")).toBeTruthy();
-    expect(view.container.querySelector(".cheat-subhead-title > .patch-enable")).toBeTruthy();
-
-    fireEvent.click(view.getByRole("checkbox", { name: "Use cheats" }));
-    expect(view.container.querySelector(".cheat-section.is-disabled")).toBeTruthy();
-    expect(view.container.querySelector(".cheat-card-body")).toBeNull();
+    expect(view.container.querySelector("#rom-weaver-list-cheat-stack .card")).toBeTruthy();
+    expect(view.getByRole("button", { name: /Add cheats to the patch order/u })).toBeTruthy();
   });
 
-  it("keeps the section state when a new ROM loads", async () => {
+  it("offers cheats when a new ROM loads", async () => {
     const view = render(<CheatDatabaseSection {...props} />);
     await openDialog(view);
     fireEvent.click(view.getByRole("button", { name: "Close" }));
@@ -184,11 +178,10 @@ describe("CheatDatabaseSection", () => {
     expect(view.container.firstElementChild).toBeNull();
 
     view.rerender(<CheatDatabaseSection {...props} rom={{ ...props.rom, key: "rom-b" }} />);
-    expect(view.container.querySelector(".cheat-section.is-disabled")).toBeNull();
-    expect((view.getByRole("checkbox", { name: "Use cheats" }) as HTMLInputElement).checked).toBe(true);
+    expect(view.getByRole("button", { name: /Add cheats to the patch order/u })).toBeTruthy();
   });
 
-  it("switching the step off publishes an empty selection and restores the cards when on", async () => {
+  it("switching one cheat off excludes it without removing its card", async () => {
     const onSelectionChange = vi.fn();
     const view = render(<CheatDatabaseSection {...props} onSelectionChange={onSelectionChange} />);
     await openDialog(view);
@@ -198,16 +191,14 @@ describe("CheatDatabaseSection", () => {
       "cheat-1",
     ]);
 
-    fireEvent.click(view.getByRole("checkbox", { name: "Use cheats" }));
+    fireEvent.click(view.getByRole("checkbox", { name: "Include Infinite lives" }));
     expect(onSelectionChange.mock.lastCall?.[0]).toEqual([]);
-    expect(view.container.querySelector(".cheat-section.is-disabled")).toBeTruthy();
-    expect(view.container.querySelector(".cheat-card-body")).toBeNull();
+    expect(view.container.querySelector("#rom-weaver-list-cheat-stack .card")).toBeTruthy();
 
-    fireEvent.click(view.getByRole("checkbox", { name: "Use cheats" }));
+    fireEvent.click(view.getByRole("checkbox", { name: "Include Infinite lives" }));
     expect(onSelectionChange.mock.lastCall?.[0].map(({ record }: ClassifiedCheatRecord) => record.id)).toEqual([
       "cheat-1",
     ]);
-    expect(view.container.querySelector(".cheat-section.is-disabled")).toBeNull();
     expect(view.container.querySelector("#rom-weaver-list-cheat-stack .card")).toBeTruthy();
   });
 
@@ -261,7 +252,6 @@ describe("CheatDatabaseSection", () => {
       expect.objectContaining({ record: expect.objectContaining({ id: "cheat-1" }) }),
     ]);
     expect(view.container.querySelectorAll("#rom-weaver-list-cheat-stack > .card.file.patch")).toHaveLength(1);
-    expect(view.getByText("1 cheat")).toBeTruthy();
 
     fireEvent.click(view.getByRole("button", { name: "Remove Infinite lives" }));
     expect(onSelectionChange).toHaveBeenLastCalledWith([]);
@@ -304,12 +294,12 @@ describe("CheatDatabaseSection", () => {
     fireEvent.click(addButton(view, "Infinite lives"));
     fireEvent.click(view.getByRole("button", { name: "Close" }));
 
-    expect(view.getByText("game-genie")).toBeTruthy();
     expect(view.container.querySelector(".cheat-card .card-meta")?.textContent).not.toContain("C2B4-6D07");
-    fireEvent.click(view.getByRole("button", { name: "Cheat details game-genie" }));
+    fireEvent.click(view.getByRole("button", { name: "Cheat details" }));
+    expect(view.getByText("Game Genie")).toBeTruthy();
     expect(view.getByText("C2B4-6D07")).toBeTruthy();
-    expect(view.getByText("baked into output")).toBeTruthy();
-    expect(view.getByText("Super Mario World (USA).cht at abc123")).toBeTruthy();
+    expect(view.queryByText("baked into output")).toBeNull();
+    expect(view.getByText("Libretro database")).toBeTruthy();
   });
 
   it("reorders cheat cards and publishes their new bake order", async () => {
@@ -430,8 +420,7 @@ describe("CheatDatabaseSection", () => {
       });
     const view = render(<CheatDatabaseSection {...props} classifyDatabaseCheats={classifier} />);
     await waitFor(() => expect(finishClassification).toBeDefined());
-    fireEvent.click(view.getByRole("checkbox", { name: "Use cheats" }));
-    fireEvent.click(view.getByRole("button", { name: /Search the cheat database/u }));
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
     expect(view.getByRole("status").textContent).toContain("Checking cheat delivery types");
     expect(view.queryByText(/No cheats match this search/u)).toBeNull();
 
@@ -447,8 +436,7 @@ describe("CheatDatabaseSection", () => {
         rom={{ key: "unknown", platform: SNES, title: "Unknown game", checksums: { sha1: "no-match" } }}
       />,
     );
-    fireEvent.click(view.getByRole("checkbox", { name: "Use cheats" }));
-    fireEvent.click(view.getByRole("button", { name: /Search the cheat database/u }));
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
     expect(view.getByText(/Choose a game above/u)).toBeTruthy();
     expect(view.container.querySelector(".cheat-pick-foot")).toBeNull();
     fireEvent.change(view.getByLabelText(`Browse games for ${SNES}`), { target: { value: "smw-us" } });
@@ -465,8 +453,7 @@ describe("CheatDatabaseSection", () => {
       />,
     );
     expect(view.queryByPlaceholderText("Search cheat databases by system…")).toBeNull();
-    fireEvent.click(view.getByRole("checkbox", { name: "Use cheats" }));
-    fireEvent.click(view.getByRole("button", { name: /Search the cheat database/u }));
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
     const search = await view.findByPlaceholderText("Search cheat databases by system…");
     fireEvent.change(search, { target: { value: "Super Nintendo" } });
     const option = view.getByRole("button", { name: /Nintendo - Super Nintendo Entertainment System/u });
@@ -484,8 +471,7 @@ describe("CheatDatabaseSection platform resolution", () => {
       <CheatDatabaseSection {...props} rom={{ key: "n64", platform: "Nintendo - Nintendo 64", title: "Game" }} />,
     );
     expect(view.queryByPlaceholderText("Search cheat databases by system…")).toBeNull();
-    fireEvent.click(view.getByRole("checkbox", { name: "Use cheats" }));
-    fireEvent.click(view.getByRole("button", { name: /Search the cheat database/u }));
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
     expect(view.queryByRole("button", { name: "Add code manually" })).toBeNull();
   });
 
@@ -494,8 +480,7 @@ describe("CheatDatabaseSection platform resolution", () => {
       <CheatDatabaseSection {...props} rom={{ key: "psx", platform: "Sony - PlayStation", title: "Game" }} />,
     );
     expect(view.queryByPlaceholderText("Search cheat databases by system…")).toBeNull();
-    fireEvent.click(view.getByRole("checkbox", { name: "Use cheats" }));
-    fireEvent.click(view.getByRole("button", { name: /Add cheat codes/u }));
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
     fireEvent.click(view.getByRole("button", { name: "Add code manually" }));
     expect((view.getByLabelText("System") as HTMLSelectElement).value).toBe("playstation");
   });

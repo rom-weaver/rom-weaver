@@ -291,18 +291,6 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(controller.getState().settings.bundlePackage).toBe("rom");
   });
 
-  it("persists the cheat section switch immediately", () => {
-    const storage = createStorage();
-    const controller = createController(storage);
-    expect(controller.getState().settings.cheatsEnabled).toBe(false);
-    controller.setCheatsEnabled(true);
-    expect(controller.getState().settings.cheatsEnabled).toBe(true);
-    expect(controller.getState().draftSettings.cheatsEnabled).toBe(true);
-    expect(JSON.parse(storage.getItem("rom-weaver-settings") ?? "{}").common.cheatsEnabled).toBe(true);
-    controller.setCheatsEnabled(false);
-    expect(controller.getState().settings.cheatsEnabled).toBe(false);
-  });
-
   it("notifies subscribers on a state mutation and stops after unsubscribe", () => {
     const controller = createController();
     const listener = vi.fn();

@@ -6,53 +6,7 @@
     grid-template-columns: minmax(0, 1fr);
     gap: var(--sp-s);
     min-width: 0;
-  }
-
-  .rw-app .cheat-section {
-    min-width: 0;
-    margin-block-start: var(--sp-m);
-    border-block-start: 1px solid var(--seam);
-  }
-
-  .rw-app .cheat-subhead {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-xs) var(--sp-m);
-    align-items: center;
-    min-height: 3rem;
-    padding-block: var(--sp-s);
-  }
-
-  .rw-app .cheat-subhead-title,
-  .rw-app .cheat-subhead-meta {
-    display: inline-flex;
-    flex-wrap: wrap;
-    gap: var(--sp-s);
-    align-items: center;
-  }
-
-  .rw-app .cheat-subhead-title {
-    font-size: 0.9rem;
-    font-weight: 700;
-  }
-
-  .rw-app .cheat-subhead-meta {
-    margin-inline-start: auto;
-  }
-
-  .rw-app .cheat-subhead-meta .rb {
-    padding: 2px 8px;
-    font-size: var(--badge-fs);
-    font-stretch: 86%;
-    color: var(--weft);
-    white-space: nowrap;
-    background: var(--well);
-    border: 1px solid var(--seam-soft);
-    border-radius: var(--r-s);
-  }
-
-  .rw-app .cheat-subhead-meta .rb.muted {
-    color: var(--ink-3);
+    margin-block-start: var(--sp-s);
   }
 
   .rw-app .cheat-download-menu summary {
@@ -197,23 +151,71 @@
   }
 
   .rw-app .cheat-add {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-s);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: var(--sp-m);
     align-items: center;
-    justify-content: center;
     width: 100%;
+    min-height: 76px;
+    padding: var(--sp-m);
+    color: var(--ink);
+    text-align: start;
+    white-space: normal;
+    background: color-mix(in oklab, var(--thread) 4%, var(--plate-2));
+    border: 1px solid color-mix(in oklab, var(--thread) 26%, var(--seam));
+    border-radius: var(--r-m);
+    box-shadow: inset 3px 0 var(--thread);
   }
 
-  .rw-app .cheat-add > span {
+  .rw-app .cheat-add:active {
+    background: color-mix(in oklab, var(--thread) 13%, var(--plate-2));
+  }
+
+  @media (hover: hover) {
+    .rw-app .cheat-add:hover {
+      background: color-mix(in oklab, var(--thread) 9%, var(--plate-2));
+    }
+  }
+
+  .rw-app .cheat-add-mark {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    color: var(--thread-text);
+    background: color-mix(in oklab, var(--thread) 10%, var(--well));
+    border: 1px solid color-mix(in oklab, var(--thread) 30%, var(--seam));
+    border-radius: var(--r-s);
+  }
+
+  .rw-app .cheat-add-copy {
+    display: grid;
+    gap: 0.15rem;
     min-width: 0;
-    text-align: center;
     overflow-wrap: anywhere;
   }
 
-  .rw-app .cheat-add svg {
+  .rw-app .cheat-add-copy strong {
+    font-size: 0.92rem;
+  }
+
+  .rw-app .cheat-add-copy small {
+    font-size: 0.8rem;
+    font-weight: 400;
+    line-height: 1.35;
+    color: var(--ink-3);
+  }
+
+  .rw-app .cheat-add-mark svg {
     width: 1.05rem;
     height: 1.05rem;
+  }
+
+  .rw-app .cheat-add-arrow {
+    width: 1.1rem;
+    height: 1.1rem;
+    color: var(--thread-text);
   }
 
   .rw-app .cheat-output-summary p {

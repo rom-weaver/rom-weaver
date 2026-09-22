@@ -193,7 +193,6 @@ const renderView = ({
           renderStack({
             cards: [],
             controls: cheatsStep,
-            enabled: false,
             onOrderChange: () => undefined,
             renderCard: () => null,
           })

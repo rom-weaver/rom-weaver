@@ -1305,11 +1305,6 @@ msgstr "Activar herramientas beta (Recortar, Deshacer PPF, Editor de partidas y 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "settings.cheatsEnabled"
-msgstr "Activar Trucos como parche"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.identify.hashInvalid"
 msgstr "Introduzca 8 (CRC32), 32 (MD5) o 40 (SHA-1) caracteres hexadecimales, o el nombre de un juego."
 

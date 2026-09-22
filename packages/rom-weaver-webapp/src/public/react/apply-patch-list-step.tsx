@@ -2009,7 +2009,7 @@ const ApplyPatchListStep = ({
     }
     if (position < total) mixedEntries.push({ kind: "patch", index: position });
   }
-  const visibleEntries = cheats?.enabled ? mixedEntries : mixedEntries.filter((entry) => entry.kind === "patch");
+  const visibleEntries = mixedEntries;
   const canReorder = visibleEntries.length > 1 && patches.every((item) => item.progress || item.canRemove);
   const publishCheatOrder = (entries: typeof mixedEntries) => {
     let patchPosition = 0;
@@ -2027,7 +2027,7 @@ const ApplyPatchListStep = ({
     const next = reorder(visibleEntries, from, to);
     const moved = visibleEntries[from];
     if (!moved) return;
-    if (cheats?.enabled) {
+    if (cheats) {
       let patchPosition = 0;
       const nextOrder: Array<{ id: string; position: number }> = [];
       for (const entry of next) {
@@ -2048,18 +2048,18 @@ const ApplyPatchListStep = ({
   const cheatOrderCallbackRef = useRef(cheats?.onOrderChange);
   cheatOrderCallbackRef.current = cheats?.onOrderChange;
   const cheatOrderKey = JSON.stringify({
-    enabled: cheats?.enabled,
+    hasCheats: !!cheats,
     entries: mixedEntries,
     disabledFlags,
     patchKeys,
   });
   useEffect(() => {
     const snapshot = JSON.parse(cheatOrderKey) as {
-      enabled?: boolean;
+      hasCheats: boolean;
       entries: typeof mixedEntries;
       disabledFlags?: readonly boolean[];
     };
-    if (!snapshot.enabled) return;
+    if (!snapshot.hasCheats) return;
     let patchPosition = 0;
     const order: Array<{ id: string; position: number }> = [];
     for (const entry of snapshot.entries) {
@@ -2148,7 +2148,6 @@ const ApplyPatchListStep = ({
         />
       ) : null}
       {total === 0 ? emptyState : null}
-      {cheats?.controls}
       <div
         className="cards patch-cards workflow-file-list"
         id="rom-weaver-list-patch-stack"
@@ -2223,6 +2222,7 @@ const ApplyPatchListStep = ({
           );
         })}
       </div>
+      {cheats?.controls}
       {(() => {
         // One list-level order warning: the first enabled patch whose input matches a patch it
         // does not follow. Fixing one link re-plans the chain; any remaining break surfaces next.

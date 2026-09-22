@@ -491,7 +491,6 @@ const renderWebappRoot = (): undefined => {
       onOfflineCopyEnabledChange: (enabled) => webappController.setOfflineCopyEnabled(enabled),
       onOpenSettings: () => webappController.openSettings(),
       onPatcherBundlePackageChange: (value) => webappController.setBundlePackage(value),
-      onPatcherCheatsEnabledChange: (enabled) => webappController.setCheatsEnabled(enabled),
       onPatcherInputsChange: (inputs) => webappController.setPatcherInputState(inputs),
       onPatcherPatchesChange: (patches) => webappController.setPatcherPatchState(patches),
       onPatcherSettingsChange: (settings) => webappController.setPatcherSettingsState(settings),

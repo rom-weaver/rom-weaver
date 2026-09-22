@@ -852,7 +852,6 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "settings.betaToolsEnabled",
     message: "Enable beta tools (Trim, PPF undo, Save Editor, and cheats)",
   }),
-  "settings.cheatsEnabled": msg({ id: "settings.cheatsEnabled", message: "Enable Cheats as a Patch" }),
   "settings.byteUnits": msg({ id: "settings.byteUnits", message: "File size units" }),
   "settings.chdCreateCdCodecs": msg({ id: "settings.chdCreateCdCodecs", message: "CD Codecs" }),
   "settings.chdCreateDvdCodecs": msg({ id: "settings.chdCreateDvdCodecs", message: "DVD Codecs" }),

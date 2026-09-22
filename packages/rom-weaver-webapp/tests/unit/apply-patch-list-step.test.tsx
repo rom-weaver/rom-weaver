@@ -70,7 +70,6 @@ describe("ApplyPatchListStep", () => {
     const cheats: CheatStackRenderState = {
       cards: [cheat],
       controls: <p>Cheat controls</p>,
-      enabled: true,
       onOrderChange,
       renderCard: (entry, position, _canReorder, handleProps, rowProps) => (
         <div className="cheat-test-card" ref={rowProps.rootRef}>
@@ -88,6 +87,9 @@ describe("ApplyPatchListStep", () => {
       );
 
     expect(cardNames()).toEqual(["patch", "patch", "cheat"]);
+    const list = container.querySelector("#rom-weaver-list-patch-stack");
+    const controls = screen.getByText("Cheat controls");
+    expect(list?.compareDocumentPosition(controls) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.keyDown(screen.getByRole("button", { name: "Cheat 3" }), { key: "ArrowUp" });
     await waitFor(() => expect(cardNames()).toEqual(["patch", "cheat", "patch"]));
     expect(onOrderChange).toHaveBeenLastCalledWith([{ id: "cheat-one", position: 1 }]);
