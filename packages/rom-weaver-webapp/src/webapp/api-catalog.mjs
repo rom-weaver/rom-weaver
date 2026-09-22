@@ -7,7 +7,7 @@ import { SITE_ORIGIN } from "./docs-routing.mjs";
 // and at the guide that documents it for people.
 const API_CATALOG_PATH = "/.well-known/api-catalog";
 const OPENAPI_PATH = "/openapi.json";
-const WEBAPP_INTEGRATION_DOC_PATH = "/docs/webapp-integration";
+const WEBAPP_URL_SESSION_DOC_PATH = "/docs/webapp-integration#url-sessions";
 const API_CATALOG_PROFILE = "https://www.rfc-editor.org/info/rfc9727";
 const API_CATALOG_CONTENT_TYPE = `application/linkset+json; profile="${API_CATALOG_PROFILE}"`;
 
@@ -20,7 +20,7 @@ const OPENAPI_SOURCE = {
     description:
       "rom-weaver runs entirely in the browser and exposes no server-side data API. " +
       "These GET routes accept query parameters that the client reads once at startup to " +
-      `preload a session. See ${SITE_ORIGIN}${WEBAPP_INTEGRATION_DOC_PATH}.`,
+      `preload a session. See ${SITE_ORIGIN}${WEBAPP_URL_SESSION_DOC_PATH}.`,
     license: { identifier: "AGPL-3.0-or-later", name: "AGPL-3.0-or-later" },
   },
   servers: [{ url: SITE_ORIGIN }],
@@ -99,7 +99,7 @@ const createApiCatalogSource = () =>
         ...Object.keys(OPENAPI_SOURCE.paths).map((pathname) => ({
           anchor: `${SITE_ORIGIN}${pathname}`,
           "service-desc": [{ href: `${SITE_ORIGIN}${OPENAPI_PATH}`, type: "application/json" }],
-          "service-doc": [{ href: `${SITE_ORIGIN}${WEBAPP_INTEGRATION_DOC_PATH}`, type: "text/html" }],
+          "service-doc": [{ href: `${SITE_ORIGIN}${WEBAPP_URL_SESSION_DOC_PATH}`, type: "text/html" }],
         })),
       ],
     },
@@ -112,7 +112,7 @@ const createOpenApiSource = () => `${JSON.stringify(OPENAPI_SOURCE, null, 2)}\n`
 export {
   API_CATALOG_CONTENT_TYPE,
   API_CATALOG_PATH,
-  WEBAPP_INTEGRATION_DOC_PATH,
+  WEBAPP_URL_SESSION_DOC_PATH,
   createApiCatalogSource,
   createOpenApiSource,
   OPENAPI_PATH,

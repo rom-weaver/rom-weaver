@@ -6,7 +6,7 @@ import {
   API_CATALOG_CONTENT_TYPE,
   API_CATALOG_PATH,
   OPENAPI_PATH,
-  WEBAPP_INTEGRATION_DOC_PATH,
+  WEBAPP_URL_SESSION_DOC_PATH,
 } from "../src/webapp/api-catalog.mjs";
 import { isLegalDocRoute, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
@@ -151,8 +151,8 @@ for (const endpoint of expectedEndpoints) {
   if (entry["service-desc"]?.[0]?.href !== `${SITE_ORIGIN}${OPENAPI_PATH}`) {
     throw new Error(`API catalog service-desc for ${endpoint} MUST point at the OpenAPI document`);
   }
-  if (entry["service-doc"]?.[0]?.href !== `${SITE_ORIGIN}${WEBAPP_INTEGRATION_DOC_PATH}`) {
-    throw new Error(`API catalog service-doc for ${endpoint} MUST point at the integration guide`);
+  if (entry["service-doc"]?.[0]?.href !== `${SITE_ORIGIN}${WEBAPP_URL_SESSION_DOC_PATH}`) {
+    throw new Error(`API catalog service-doc for ${endpoint} MUST point at the URL session guide section`);
   }
 }
 assertIncludes(
