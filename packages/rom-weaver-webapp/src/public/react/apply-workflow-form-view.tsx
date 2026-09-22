@@ -2313,7 +2313,7 @@ function ApplyWorkflowFormView({
 
           <ApplyPatchListStep
             afterItems={
-              settings.betaToolsEnabled === true && romInputs.length === 1
+              romInputs.length === 1
                 ? cheats?.({
                     headerStripConflict: cheatHeaderStripConflict,
                   })

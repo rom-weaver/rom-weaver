@@ -60,7 +60,6 @@ import {
   getDefaultCompressionMode,
   useApplySettings,
   useRomWeaverAssetBaseUrl,
-  useRomWeaverSettings,
   useUiLocalizer,
 } from "./settings-context.tsx";
 import { getEmulatorJsCore } from "./components/emulatorjs.ts";
@@ -222,7 +221,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const { onApplyComplete, onInputsChange, onPatchesChange, onProgress: onProgressChange, threads } = props;
   const mode = props.mode ?? "apply";
   const providerSettings = useApplySettings();
-  const cheatsEnabled = useRomWeaverSettings().betaToolsEnabled === true;
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
   const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;
   const { startup } = props;
@@ -1739,10 +1737,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   );
 
   useEffect(() => {
-    if (cheatsEnabled && cheatUiState.romInputs.length === 1) return;
-    // Hidden cheats MUST be cleared so Apply cannot reuse their ROM writes.
+    if (cheatUiState.romInputs.length === 1) return;
+    // Cheats MUST be cleared without one ROM so Apply cannot reuse their ROM writes.
     handleCheatSelection([]);
-  }, [cheatUiState.romInputs.length, cheatsEnabled, handleCheatSelection]);
+  }, [cheatUiState.romInputs.length, handleCheatSelection]);
 
   // "Share this setup" (secondary job after the output card): snapshots the current
   // session's files + enablement into a rom-weaver-bundle.json (or everything-bundle .zip).
@@ -1850,22 +1848,18 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     <>
       <ApplyWorkflowFormView
         mode={mode}
-        cheats={
-          cheatsEnabled
-            ? ({ headerStripConflict }) => (
-                <CheatDatabaseSection
-                  classifyDatabaseCheats={classifyDatabaseCheats}
-                  classifyManualCode={classifyManualCode}
-                  onSaveAsPatch={saveCheatsAsPatch}
-                  onSelectionChange={handleCheatSelection}
-                  outputSummary={completedCheats}
-                  rom={cheatRom}
-                  title={localizer.message("ui.step.cheats")}
-                  validationMessage={cheatConflictMessage || headerStripConflict}
-                />
-              )
-            : undefined
-        }
+        cheats={({ headerStripConflict }) => (
+          <CheatDatabaseSection
+            classifyDatabaseCheats={classifyDatabaseCheats}
+            classifyManualCode={classifyManualCode}
+            onSaveAsPatch={saveCheatsAsPatch}
+            onSelectionChange={handleCheatSelection}
+            outputSummary={completedCheats}
+            rom={cheatRom}
+            title={localizer.message("ui.step.cheats")}
+            validationMessage={cheatConflictMessage || headerStripConflict}
+          />
+        )}
         cheatsOn={cheatsOn}
         emulatorOutput={completedOutput}
         bundleExport={bundleExport}

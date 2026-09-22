@@ -910,10 +910,10 @@ describe("apply workflow view - staged bench", () => {
     expect(container.querySelectorAll("button.needs-input").length).toBe(0);
   });
 
-  it.each([false, undefined])("hides cheats when beta tools are %s", (betaToolsEnabled) => {
+  it.each([false, undefined])("shows cheats when beta tools are %s", (betaToolsEnabled) => {
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const { container } = renderView({ settings: { betaToolsEnabled }, ui });
-    expect(container.querySelector("[data-testid=cheats-step]")).toBeNull();
+    expect(container.querySelector("[data-testid=cheats-step]")).toBeTruthy();
   });
 
   it("uses a matched title on the ROM card and keeps it out of Checks", () => {
