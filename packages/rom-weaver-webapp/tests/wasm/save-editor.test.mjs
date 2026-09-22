@@ -80,6 +80,21 @@ const alttpFixture = () => {
   return bytes;
 };
 
+const pokemonGen1Fixture = () => {
+  const bytes = new Uint8Array(0x8000);
+  bytes.set([0x80, 0x81, 0x82, 0x50], 0x2598);
+  bytes.set([0x86, 0x80, 0x93, 0x50], 0x25f6);
+  bytes.set([0x01, 0x23, 0x45], 0x25f3);
+  bytes.set([0x06, 0x78], 0x2850);
+  bytes[0x2601] = 3;
+  bytes[0x25ca] = 0xff;
+  bytes[0x7000] = 0xa5;
+  let sum = 0;
+  for (let offset = 0x2598; offset < 0x3523; offset += 1) sum = (sum + bytes[offset]) & 0xff;
+  bytes[0x3523] = ~sum & 0xff;
+  return bytes;
+};
+
 test("the real WASM command path identifies and edits an Emerald save", async () => {
   const original = emeraldFixture();
   await withTempFixture(
@@ -181,4 +196,94 @@ test("the real WASM command path edits a Zelda SRAM file", async () => {
     },
     { sourceContents: original, sourceFileName: "zelda.srm" },
   );
+});
+
+test("the real WASM command path identifies and edits an English Red save", async () => {
+  const original = pokemonGen1Fixture();
+  await withTempFixture(
+    async ({ opfsHandle, sourcePath, worker }) => {
+      const identify = await worker.runJson({
+        args: { args: { game: "pokemon-red", input: sourcePath }, type: "identify" },
+        type: "save",
+      });
+      const identifyEvent = assertRunJsonSucceeded(identify, { command: "save-identify" });
+      expect(identifyEvent.details.save_editor.document.identity.id).toBe("pokemon-red");
+
+      const outputPath = "/work/red-edited.sav";
+      const edit = await worker.runJson({
+        args: {
+          args: {
+            assignments: ["trainer.money=999999", "progress.badge_8=true"],
+            game: "pokemon-red",
+            input: sourcePath,
+            output: outputPath,
+          },
+          type: "set",
+        },
+        type: "save",
+      });
+      assertRunJsonSucceeded(edit, { command: "save-set" });
+      const edited = await readGuestFile(opfsHandle, outputPath);
+      expect(edited[0x7000]).toBe(0xa5);
+      let sum = 0;
+      for (let offset = 0x2598; offset < 0x3523; offset += 1) sum = (sum + edited[offset]) & 0xff;
+      expect(edited[0x3523]).toBe(~sum & 0xff);
+      const get = await worker.runJson({
+        args: {
+          args: { field: "trainer.money", game: "pokemon-red", input: outputPath },
+          type: "get",
+        },
+        type: "save",
+      });
+      const getEvent = assertRunJsonSucceeded(get, { command: "save-get" });
+      expect(getEvent.label).toBe("999999");
+    },
+    { sourceContents: original, sourceFileName: "red.sav" },
+  );
+});
+
+test("the real WASM command path creates and edits a fresh Zelda save", async () => {
+  await withTempFixture(async ({ opfsHandle, worker }) => {
+    const outputPath = "/work/operations/save-editor-test/zelda-created.srm";
+    const created = await worker.runJson({
+      args: {
+        args: { game: "zelda-a-link-to-the-past", output: outputPath },
+        type: "create",
+      },
+      type: "save",
+    });
+    const createdEvent = assertRunJsonSucceeded(created, { command: "save-create" });
+    expect(createdEvent.details.save_editor.result.document.identity.id).toBe("zelda-a-link-to-the-past");
+    expect((await readGuestFile(opfsHandle, outputPath)).byteLength).toBe(0x2000);
+
+    const editedPath = "/work/zelda-created-edited.srm";
+    const edited = await worker.runJson({
+      args: {
+        args: {
+          assignments: ["slot_1.resources.rupees=999"],
+          game: "zelda-a-link-to-the-past",
+          output: editedPath,
+        },
+        type: "create",
+      },
+      type: "save",
+    });
+    assertRunJsonSucceeded(edited, { command: "save-create" });
+    const dryPath = "/work/zelda-dry-run.srm";
+    const preview = await worker.runJson({
+      args: {
+        args: {
+          assignments: ["slot_1.resources.rupees=999"],
+          dry_run: true,
+          game: "zelda-a-link-to-the-past",
+          output: dryPath,
+        },
+        type: "create",
+      },
+      type: "save",
+    });
+    const previewEvent = assertRunJsonSucceeded(preview, { command: "save-create" });
+    expect(previewEvent.stage).toBe("preview");
+    expect(Array.from(await opfsHandle.keys())).not.toContain("zelda-dry-run.srm");
+  });
 });

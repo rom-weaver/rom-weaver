@@ -1230,14 +1230,14 @@ type RuntimeSaveSetInput = RuntimeSaveCommandInput & {
 };
 
 const runSaveCommand = async (
-  type: "identify" | "inspect" | "get" | "set" | "export-schema",
+  type: "identify" | "inspect" | "get" | "set" | "export-schema" | "create" | "list-games",
   args: Record<string, unknown>,
   input: RuntimeSaveCommandInput,
   outputPath?: string,
 ): Promise<{ parsed: SaveEditorResult; result: RomWeaverJsonResult; outputPath?: string }> => {
   const command = createRomWeaverCommand(`save-${type}`, {
     ...args,
-    ...(input.inputPath ? { input: input.inputPath } : {}),
+    ...(input.inputPath ? { [type === "create" ? "template" : "input"]: input.inputPath } : {}),
     ...(input.game ? { game: input.game } : {}),
     ...(input.romSha1 ? { rom_sha1: input.romSha1 } : {}),
     ...(outputPath ? { output: outputPath } : {}),
@@ -1261,13 +1261,20 @@ const runSaveCommand = async (
 
 const invokeRomWeaverSaveIdentifyWorker = (input: RuntimeSaveCommandInput) => runSaveCommand("identify", {}, input);
 const invokeRomWeaverSaveInspectWorker = (input: RuntimeSaveCommandInput) => runSaveCommand("inspect", {}, input);
-const invokeRomWeaverSaveSetWorker = async (input: RuntimeSaveSetInput) => {
+const invokeRomWeaverSaveListGamesWorker = (input: RuntimeSaveCommandInput) => runSaveCommand("list-games", {}, input);
+const invokeRomWeaverSaveCreateWorker = async (input: Omit<RuntimeSaveSetInput, "dryRun">) => {
+  const result = await runSaveWriteCommand("create", input);
+  if (!("filePath" in result)) throw new Error("Save generation did not return an output path");
+  return result;
+};
+const invokeRomWeaverSaveSetWorker = (input: RuntimeSaveSetInput) => runSaveWriteCommand("set", input);
+const runSaveWriteCommand = async (type: "create" | "set", input: RuntimeSaveSetInput) => {
   if (input.dryRun)
-    return (await runSaveCommand("set", { assignments: input.assignments, dry_run: true }, input)).parsed;
+    return (await runSaveCommand(type, { assignments: input.assignments, dry_run: true }, input)).parsed;
   const outputName = getPathBaseName(input.outputName, "edited-save.sav");
   return runWithRomWeaverOutputScope(input.inputPath || "", outputName, [input.inputPath || ""], async (outputPath) => {
     const execution = await runSaveCommand(
-      "set",
+      type,
       { assignments: input.assignments, dry_run: false, force: true },
       input,
       outputPath,
@@ -1784,6 +1791,8 @@ export {
   invokeRomWeaverPatchValidateWorker,
   invokeRomWeaverPpfUndoWorker,
   invokeRomWeaverSaveIdentifyWorker,
+  invokeRomWeaverSaveCreateWorker,
+  invokeRomWeaverSaveListGamesWorker,
   invokeRomWeaverSaveInspectWorker,
   invokeRomWeaverSaveSetWorker,
   invokeRomWeaverTrimWorker,

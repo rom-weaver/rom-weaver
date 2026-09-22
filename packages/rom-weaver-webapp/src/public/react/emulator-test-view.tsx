@@ -6,10 +6,23 @@ import {
   formatByteSize,
   type ProgressViewModel,
 } from "../../presentation/workflow-presentation.ts";
-import { configureEmulatorSaveStorage, ensureEmulatorSaveBridge } from "../../storage/browser/emulator-saves.ts";
+import {
+  clearPendingTestSave,
+  configureEmulatorSaveStorage,
+  ensureEmulatorSaveBridge,
+  readPendingTestSave,
+  setEmulatorSavePreview,
+  type PendingTestSave,
+} from "../../storage/browser/emulator-saves.ts";
 import { bumpOfflineWarmupPriority } from "../../webapp/pwa/offline-warmup-client.ts";
 import { resolveAssetUrl } from "./asset-url.ts";
-import { addEntry, disposeEntry, prepareEntry, useEmulatorSession } from "./emulator-session-store.ts";
+import {
+  addEntry,
+  disposeEntry,
+  prepareEntry,
+  restartCurrentGameWithSave,
+  useEmulatorSession,
+} from "./emulator-session-store.ts";
 import { createEmulatorDocument, createEmulatorGameIdentity } from "./components/emulator-document.ts";
 import { FileProgress, Notice } from "./components/ds/feedback.tsx";
 import { prefersReducedMotion } from "./components/ds/flat-transition.ts";
@@ -104,6 +117,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   const sampleAbortControllerRef = useRef<AbortController | null>(null);
   const playerFrameRef = useRef<HTMLDivElement>(null);
   const fullscreenDialogRef = useRef<HTMLDialogElement>(null);
+  const pendingReadRevisionRef = useRef(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<EmulatorError | null>(null);
   const [loadProgress, setLoadProgress] = useState<ProgressViewModel | null>(null);
@@ -111,6 +125,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   const [sampleError, setSampleError] = useState("");
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleTutorialActive, setSampleTutorialActive] = useState(false);
+  const [pendingSave, setPendingSave] = useState<PendingTestSave>();
   const [fullscreen, setFullscreen] = useState(false);
   const [pseudoFullscreen, setPseudoFullscreen] = useState(false);
   const currentGame = entries.find((entry) => entry.id === currentGameId) || null;
@@ -135,6 +150,27 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
     // this session.
     bumpOfflineWarmupPriority({ kind: "emulatorjs" });
   }, []);
+
+  useEffect(() => {
+    if (!active) return;
+    let current = true;
+    const revision = pendingReadRevisionRef.current;
+    void readPendingTestSave()
+      .then((save) => {
+        if (current && revision === pendingReadRevisionRef.current) setPendingSave(save);
+      })
+      .catch((reason) => {
+        if (current && revision === pendingReadRevisionRef.current) {
+          setError({
+            detail: errorDetail(reason, "The saved upload could not be read."),
+            summary: "Could not load the saved upload.",
+          });
+        }
+      });
+    return () => {
+      current = false;
+    };
+  }, [active]);
 
   useLayoutEffect(() => {
     configureEmulatorSaveStorage(settings.emulatorSaveStorageEnabled !== false);
@@ -188,19 +224,21 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   // handed after reading it, so a URL stored on the entry would be dead by the
   // second play.
   const currentBlob = currentGame?.blob || null;
-  const [gameUrl, setGameUrl] = useState<string | null>(null);
+  const savePreviewRevision = currentGame?.savePreviewRevision ?? 0;
+  const [gameUrlState, setGameUrlState] = useState<{ url: string; revision: number } | null>(null);
   useEffect(() => {
     if (!currentBlob || typeof URL === "undefined" || typeof URL.createObjectURL !== "function") {
-      setGameUrl(null);
+      setGameUrlState(null);
       return undefined;
     }
     const url = URL.createObjectURL(currentBlob);
-    setGameUrl(url);
+    setGameUrlState({ revision: savePreviewRevision, url });
     return () => {
-      setGameUrl(null);
+      setGameUrlState(null);
       URL.revokeObjectURL(url);
     };
-  }, [currentBlob]);
+  }, [currentBlob, savePreviewRevision]);
+  const gameUrl = gameUrlState?.revision === savePreviewRevision ? gameUrlState.url : null;
 
   useEffect(() => {
     if (!currentGame || currentGame.blob || !currentGame.artifact) return;
@@ -332,8 +370,28 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
           sizeBytes: loaded.blob.size,
           source: "local" as const,
         };
+        const staged = await readPendingTestSave();
+        pendingReadRevisionRef.current += 1;
+        setPendingSave(staged);
+        const stagedMatches =
+          !!staged &&
+          getEmulatorJsCore(staged.platform) === core &&
+          (!staged.romSha1 || staged.romSha1.toLowerCase() === loaded.checksum.toLowerCase());
+        if (stagedMatches) await clearPendingTestSave();
         if (prepareAudio) prepareEmulatorAudioContext(createEmulatorGameIdentity(entry).gameName);
         addEntry(entry);
+        if (staged && stagedMatches) {
+          setEmulatorSavePreview(loaded.checksum, staged.bytes);
+          restartCurrentGameWithSave(entry.id);
+          setPendingSave(undefined);
+        } else if (staged) {
+          setError({
+            detail: staged.romSha1
+              ? "Choose the ROM linked to the uploaded save."
+              : "Choose a ROM for the save's game system.",
+            summary: `${loaded.fileName} does not match ${staged.fileName}.`,
+          });
+        }
         return true;
       } catch (reason) {
         if (abortController.signal.aborted || loadAbortControllerRef.current !== abortController) return false;
@@ -468,6 +526,19 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
     setLoadProgress(null);
   };
 
+  const discardPendingSave = async () => {
+    try {
+      await clearPendingTestSave();
+      pendingReadRevisionRef.current += 1;
+      setPendingSave(undefined);
+    } catch (reason) {
+      setError({
+        detail: errorDetail(reason, "The saved upload could not be removed."),
+        summary: "Could not remove the saved upload.",
+      });
+    }
+  };
+
   return (
     <div className="emulator-test-view">
       {sampleTutorialActive ? (
@@ -506,14 +577,27 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
           ) : undefined
         }
         beforeDropZone={
-          error ? (
-            <Notice
-              id="emulator-test-error"
-              level="error"
-              onDismiss={error.blocksPlayer ? undefined : () => setError(null)}
-            >
-              <b>{error.summary}</b> {error.detail}
-            </Notice>
+          pendingSave || error ? (
+            <>
+              {pendingSave ? (
+                <Notice level="warn">
+                  <b>{pendingSave.fileName} is ready to test.</b> Choose the matching game ROM below. Another game on
+                  the same console may not read this save.{" "}
+                  <button className="btn slim ghost" onClick={() => void discardPendingSave()} type="button">
+                    Discard save
+                  </button>
+                </Notice>
+              ) : null}
+              {error ? (
+                <Notice
+                  id="emulator-test-error"
+                  level="error"
+                  onDismiss={error.blocksPlayer ? undefined : () => setError(null)}
+                >
+                  <b>{error.summary}</b> {error.detail}
+                </Notice>
+              ) : null}
+            </>
           ) : undefined
         }
         big={workflowEmpty}
@@ -580,6 +664,11 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                   </div>
                 </div>
               ) : null}
+              {currentGame?.savePreviewRevision ? (
+                <p className="body" role="status">
+                  This ROM is running with the save from Save Editor.
+                </p>
+              ) : null}
               {currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked ? (
                 <dialog className="emulator-fullscreen-dialog" ref={fullscreenDialogRef}>
                   <div
@@ -592,7 +681,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                     <iframe
                       allow="autoplay; fullscreen; gamepad"
                       allowFullScreen
-                      key={`${currentGame.id}:${gameUrl}`}
+                      key={`${currentGame.id}:${gameUrl}:${currentGame.savePreviewRevision ?? 0}`}
                       ref={iframeRef}
                       referrerPolicy="no-referrer"
                       srcDoc={createEmulatorDocument(dataUrl, gameUrl, currentIdentity.gameName, currentCore, {

@@ -115,6 +115,8 @@ export function createRomWeaverCommand<TType extends RomWeaverCommandLabel>(
     case "tools-ppf-undo":
       return { args: { args, type: "ppf-undo" }, type: "tools" } as RomWeaverCommand;
     case "save-identify":
+    case "save-create":
+    case "save-list-games":
     case "save-inspect":
     case "save-get":
     case "save-set":
@@ -282,7 +284,11 @@ export function collectRomWeaverRunInputPaths(
       pushPathValue(paths, command.args.args.patch);
       break;
     case "save":
-      pushPathValue(paths, command.args.args.input);
+      if (command.args.type === "create") {
+        pushPathValue(paths, command.args.args.template);
+      } else if (command.args.type !== "list-games") {
+        pushPathValue(paths, command.args.args.input);
+      }
       break;
     case "plan-extract-batch":
       // Pure planning over sizes passed in the args - no file inputs to reference.
@@ -463,7 +469,7 @@ function normalizeRomWeaverSaveCommand(saveCommand: RomWeaverSaveCommand): RomWe
     throw new TypeError("rom-weaver save command requires an object `args` payload");
   }
   const saveType = String(saveCommand.type || "");
-  if (!["identify", "inspect", "get", "set", "export-schema"].includes(saveType)) {
+  if (!["identify", "inspect", "get", "set", "export-schema", "create", "list-games"].includes(saveType)) {
     throw new TypeError(`unsupported save command: ${saveType}`);
   }
   const saveArgs = isObjectRecord(saveCommand.args) ? { ...saveCommand.args } : {};
@@ -472,6 +478,10 @@ function normalizeRomWeaverSaveCommand(saveCommand: RomWeaverSaveCommand): RomWe
 
 function readRomWeaverSaveCommandBranch(saveCommand: RomWeaverSaveCommand): RomWeaverSaveCommandBranch {
   switch (saveCommand.type) {
+    case "create":
+      return { args: saveCommand.args, type: "save-create" };
+    case "list-games":
+      return { args: saveCommand.args, type: "save-list-games" };
     case "identify":
       return { args: saveCommand.args, type: "save-identify" };
     case "inspect":

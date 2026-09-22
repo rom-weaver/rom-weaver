@@ -7,6 +7,13 @@ import {
 import { getEmulatorJsAspectRatio, getEmulatorJsCore } from "../../src/public/react/components/emulatorjs.ts";
 
 describe("getEmulatorJsCore", () => {
+  it("maps save editor platform ids to playable cores", () => {
+    expect(getEmulatorJsCore("game-boy")).toBe("gb");
+    expect(getEmulatorJsCore("game-boy-color")).toBe("gb");
+    expect(getEmulatorJsCore("gba")).toBe("gba");
+    expect(getEmulatorJsCore("nds")).toBe("nds");
+    expect(getEmulatorJsCore("snes")).toBe("snes");
+  });
   it("prefers the detected platform", () => {
     expect(getEmulatorJsCore("Nintendo Entertainment System", "game.sfc")).toBe("nes");
   });

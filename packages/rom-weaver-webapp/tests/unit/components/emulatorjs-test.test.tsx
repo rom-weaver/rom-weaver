@@ -4,7 +4,12 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkflowProgress } from "../../../src/platform/browser/browser-api.ts";
 import { EmulatorTestView } from "../../../src/public/react/emulator-test-view.tsx";
-import { addEntry, disposeEntry, getEmulatorSessionState } from "../../../src/public/react/emulator-session-store.ts";
+import {
+  addEntry,
+  disposeEntry,
+  getEmulatorSessionState,
+  restartCurrentGameWithSave,
+} from "../../../src/public/react/emulator-session-store.ts";
 import type { EmulatorSessionEntry } from "../../../src/public/react/emulator-session-store.ts";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { navigatorWith } from "../navigator-test-utils.ts";
@@ -19,9 +24,19 @@ const emulatorAudioMocks = vi.hoisted(() => ({
 vi.mock("../../../src/public/react/emulator-audio-context.ts", () => emulatorAudioMocks);
 
 const loadRomMock = vi.hoisted(() => vi.fn());
+const pendingSaveMocks = vi.hoisted(() => ({
+  clearPendingTestSave: vi.fn(),
+  readPendingTestSave: vi.fn(),
+}));
 
 vi.mock("../../../src/public/react/components/emulator-load-rom.ts", () => ({
   loadEmulatorRom: loadRomMock,
+}));
+
+vi.mock("../../../src/storage/browser/emulator-saves.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../src/storage/browser/emulator-saves.ts")>()),
+  clearPendingTestSave: pendingSaveMocks.clearPendingTestSave,
+  readPendingTestSave: pendingSaveMocks.readPendingTestSave,
 }));
 
 vi.mock("../../../src/public/react/components/emulator-document.ts", () => ({
@@ -60,6 +75,8 @@ const stubObjectUrls = () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  pendingSaveMocks.readPendingTestSave.mockResolvedValue(undefined);
+  pendingSaveMocks.clearPendingTestSave.mockResolvedValue(undefined);
   loadRomMock.mockReset();
   loadRomMock.mockImplementation(async (blob: Blob, fileName: string) => ({
     blob,
@@ -98,6 +115,94 @@ afterEach(() => {
 });
 
 describe("EmulatorTestView", () => {
+  it("opens a matching uploaded ROM with the saved upload", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    pendingSaveMocks.readPendingTestSave.mockResolvedValue({
+      bytes: new Uint8Array([1, 2, 3, 4]),
+      fileName: "zelda.srm",
+      gameId: "zelda-a-link-to-the-past",
+      platform: "snes",
+      updatedAt: 1,
+    });
+    loadRomMock.mockImplementation(async (blob: Blob) => ({
+      blob,
+      checksum: "b".repeat(40),
+      fileName: "zelda.sfc",
+      platform: "snes",
+    }));
+
+    render(withSettings(<EmulatorTestView />));
+    expect(await screen.findByText(/zelda.srm is ready to test/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
+      target: { files: [new File(["rom"], "zelda.sfc")] },
+    });
+
+    await waitFor(() => expect(pendingSaveMocks.clearPendingTestSave).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("This ROM is running with the save from Save Editor.")).toBeTruthy();
+    expect(screen.queryByText(/zelda.srm is ready to test/)).toBeNull();
+  });
+  it("keeps a staged save when the uploaded ROM uses another system", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    pendingSaveMocks.readPendingTestSave.mockResolvedValue({
+      bytes: new Uint8Array([1, 2, 3, 4]),
+      fileName: "ruby.sav",
+      gameId: "pokemon-ruby",
+      platform: "gba",
+      updatedAt: 1,
+    });
+    loadRomMock.mockImplementation(async (blob: Blob) => ({
+      blob,
+      checksum: "b".repeat(40),
+      fileName: "zelda.sfc",
+      platform: "snes",
+    }));
+
+    render(withSettings(<EmulatorTestView />));
+    expect(await screen.findByText(/ruby.sav is ready to test/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
+      target: { files: [new File(["rom"], "zelda.sfc")] },
+    });
+
+    expect(await screen.findByText(/zelda.sfc does not match ruby.sav/)).toBeTruthy();
+    expect(pendingSaveMocks.clearPendingTestSave).not.toHaveBeenCalled();
+    expect(getEmulatorSessionState().entries[0]?.savePreviewRevision).toBeUndefined();
+  });
+  it("does not restore a consumed save from an older storage read", async () => {
+    stubObjectUrls();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    const staged = {
+      bytes: new Uint8Array([1, 2, 3, 4]),
+      fileName: "zelda.srm",
+      gameId: "zelda-a-link-to-the-past",
+      platform: "snes",
+      updatedAt: 1,
+    };
+    let finishFirstRead: ((save: typeof staged) => void) | undefined;
+    pendingSaveMocks.readPendingTestSave.mockReset();
+    pendingSaveMocks.readPendingTestSave
+      .mockReturnValueOnce(
+        new Promise<typeof staged>((resolve) => {
+          finishFirstRead = resolve;
+        }),
+      )
+      .mockResolvedValueOnce(staged);
+    loadRomMock.mockImplementation(async (blob: Blob) => ({
+      blob,
+      checksum: "b".repeat(40),
+      fileName: "zelda.sfc",
+      platform: "snes",
+    }));
+
+    render(withSettings(<EmulatorTestView />));
+    fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
+      target: { files: [new File(["rom"], "zelda.sfc")] },
+    });
+    await waitFor(() => expect(pendingSaveMocks.clearPendingTestSave).toHaveBeenCalledTimes(1));
+    await act(async () => finishFirstRead?.(staged));
+    expect(screen.queryByText(/zelda.srm is ready to test/)).toBeNull();
+  });
   it("shows the hero drop state with ghost steps for an empty session", () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
@@ -159,6 +264,21 @@ describe("EmulatorTestView", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
     expect(writeText).toHaveBeenNthCalledWith(1, "hello-world.nes");
     expect(writeText).toHaveBeenNthCalledWith(2, "A".repeat(40));
+  });
+
+  it("creates a fresh ROM URL when the save editor restarts a game", async () => {
+    const { createObjectUrl, revokeObjectUrl } = stubObjectUrls();
+    createObjectUrl.mockReturnValueOnce("blob:first").mockReturnValueOnce("blob:second");
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
+    addEntry(entry());
+
+    render(withSettings(<EmulatorTestView />));
+    await waitFor(() => expect(createObjectUrl).toHaveBeenCalledTimes(1));
+    act(() => restartCurrentGameWithSave("game"));
+
+    await waitFor(() => expect(createObjectUrl).toHaveBeenCalledTimes(2));
+    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:first");
+    expect(screen.getByText("This ROM is running with the save from Save Editor.")).toBeTruthy();
   });
 
   it("cancels a sample fetch when the guide exits", async () => {

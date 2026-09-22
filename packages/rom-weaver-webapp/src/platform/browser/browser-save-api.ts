@@ -1,11 +1,14 @@
 import {
   invokeRomWeaverSaveIdentifyWorker,
+  invokeRomWeaverSaveCreateWorker,
+  invokeRomWeaverSaveListGamesWorker,
   invokeRomWeaverSaveInspectWorker,
   invokeRomWeaverSaveSetWorker,
 } from "../../lib/runtime/wasm-command-runtime.ts";
 import type { SaveEditorResult } from "../../lib/runtime/save-editor-result.ts";
 import type { BrowserSourceRef } from "../../types/source.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
+import { readRuntimeOutputBlob } from "../../storage/vfs/runtime-output.ts";
 
 const { browserRuntime } = await import("./workflow-runtime.ts");
 
@@ -16,7 +19,7 @@ type BrowserSaveInput = {
   signal?: AbortSignal;
   source: BrowserSourceRef | Uint8Array;
 };
-type BrowserSaveSetInput = BrowserSaveInput & { assignments: string[]; outputName: string };
+type BrowserSaveSetInput = BrowserSaveInput & { assignments: string[]; outputName: string; create?: boolean };
 
 const saveSourceSize = (source: BrowserSourceRef | Uint8Array): number | undefined => {
   if (source instanceof Uint8Array) return source.byteLength;
@@ -59,10 +62,32 @@ const inspectSave = (input: BrowserSaveInput) =>
     invokeRomWeaverSaveInspectWorker({ inputPath, game: input.game, romSha1: input.romSha1, signal: input.signal }),
   );
 
+const listSaveGames = async (signal?: AbortSignal) => (await invokeRomWeaverSaveListGamesWorker({ signal })).parsed;
+
+const createSave = async (input: { game: string; signal?: AbortSignal }) => {
+  const outputName = `${input.game}.sav`;
+  const result = await invokeRomWeaverSaveCreateWorker({
+    ...input,
+    assignments: [],
+    outputName,
+  });
+  const output = await browserRuntime.workerIo.createWorkerOutput(
+    result as typeof result & { filePath: string },
+    outputName,
+    "Save generation did not return a save",
+  );
+  try {
+    return new File([await readRuntimeOutputBlob(output)], outputName, { type: "application/octet-stream" });
+  } finally {
+    await output.dispose();
+  }
+};
+
 const setSaveFields = async (input: BrowserSaveSetInput) => {
   const staged = await stageSaveInput(input);
   try {
-    const result = await invokeRomWeaverSaveSetWorker({
+    const run = input.create ? invokeRomWeaverSaveCreateWorker : invokeRomWeaverSaveSetWorker;
+    const result = await run({
       assignments: input.assignments,
       game: input.game,
       inputPath: staged.filePath,
@@ -105,4 +130,4 @@ const previewSaveFields = async (input: BrowserSaveSetInput) => {
   }
 };
 
-export { identifySave, inspectSave, previewSaveFields, setSaveFields };
+export { createSave, listSaveGames, identifySave, inspectSave, previewSaveFields, setSaveFields };

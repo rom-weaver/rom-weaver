@@ -11,6 +11,10 @@ const mocks = vi.hoisted(() => ({
   listEmulatorSaves: vi.fn(),
   previewSaveFields: vi.fn(),
   replaceEmulatorSaveSram: vi.fn(),
+  setEmulatorSavePreview: vi.fn(),
+  clearPendingTestSave: vi.fn(),
+  stagePendingTestSave: vi.fn(),
+  clearEmulatorSavePreview: vi.fn(),
   setSaveFields: vi.fn(),
 }));
 
@@ -18,6 +22,10 @@ vi.mock("../../src/platform/browser/browser-save-api.ts", () => mocks);
 vi.mock("../../src/storage/browser/emulator-saves.ts", () => ({
   listEmulatorSaves: mocks.listEmulatorSaves,
   replaceEmulatorSaveSram: mocks.replaceEmulatorSaveSram,
+  setEmulatorSavePreview: mocks.setEmulatorSavePreview,
+  stagePendingTestSave: mocks.stagePendingTestSave,
+  clearEmulatorSavePreview: mocks.clearEmulatorSavePreview,
+  clearPendingTestSave: mocks.clearPendingTestSave,
 }));
 
 let root;
@@ -143,6 +151,22 @@ test("loads a recognized local save with generic grouped fields", async () => {
   await expect.element(page.getByRole("group", { name: "progress" })).toBeInTheDocument();
   await expect.element(page.getByLabelText("Money", { exact: true })).toHaveValue(5000);
   await expect.element(page.getByLabelText("Badge 1", { exact: true })).toHaveTextContent("1");
+});
+
+test("finds properties while retaining pending changes", async () => {
+  await uploadSave();
+  await page.getByLabelText("Money", { exact: true }).fill("12345");
+  const search = page.getByRole("searchbox", { name: "Find a property" });
+  await search.fill("name");
+  await expect.element(page.getByLabelText("Money", { exact: true })).not.toBeInTheDocument();
+  await expect.element(page.getByLabelText("Name", { exact: true })).toHaveValue("ASH");
+  await page.getByRole("button", { name: "Preview changes" }).click();
+  await expect.poll(() => mocks.previewSaveFields.mock.calls.length).toBe(1);
+  expect(mocks.previewSaveFields.mock.calls[0][0].assignments).toEqual(["trainer.money=12345"]);
+  await search.fill("missing property");
+  await expect.element(page.getByText("No properties match this search.")).toBeInTheDocument();
+  await search.fill("");
+  await expect.element(page.getByLabelText("Money", { exact: true })).toHaveValue(12345);
 });
 
 test("tracks edits, resets one or all fields, previews, and downloads", async () => {

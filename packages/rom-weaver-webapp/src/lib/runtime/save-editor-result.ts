@@ -5,6 +5,7 @@ import type {
   SaveField,
   SaveFieldKind,
   SaveGameCandidate,
+  SaveGameDefinition,
   SaveRecognition,
   SaveValue,
 } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
@@ -13,12 +14,15 @@ type SaveCandidate = SaveGameCandidate;
 type SaveFieldConstraints = SaveConstraint;
 type SavePreview = SaveChangePreview;
 type SaveEditorResult = {
+  games?: SaveGameDefinition[];
+  generationGames?: string[];
   recognition?: SaveRecognition;
   document?: SaveDocument;
   preview?: SavePreview;
   field?: SaveField;
   schema?: unknown;
   saveSize?: number;
+  rawOffset?: number;
   potentialFormat?: string;
   /** The wrapper around the raw save (GameShark SP, DeSmuME, DexDrive, VGS), when one was found. */
   containerName?: string;
@@ -118,6 +122,10 @@ const parseSaveEditorResult = (details: unknown): SaveEditorResult => {
   const field = readSaveField(value.field);
   const preview = isRecord(value.preview) ? (value.preview as unknown as SavePreview) : undefined;
   return {
+    ...(Array.isArray(value.games) ? { games: value.games as SaveGameDefinition[] } : {}),
+    ...(Array.isArray(value.generation_games)
+      ? { generationGames: value.generation_games.filter((id): id is string => typeof id === "string") }
+      : {}),
     ...(isRecord(value.recognition) ? { recognition: value.recognition as unknown as SaveRecognition } : {}),
     ...(resultDocument ? { document: resultDocument } : document ? { document } : {}),
     ...(result && isRecord(result.preview) ? { preview: result.preview as unknown as SavePreview } : {}),
@@ -125,6 +133,7 @@ const parseSaveEditorResult = (details: unknown): SaveEditorResult => {
     ...(field ? { field } : {}),
     ...(value.schema === undefined ? {} : { schema: value.schema }),
     ...(typeof value.save_size === "number" ? { saveSize: value.save_size } : {}),
+    ...(typeof value.raw_offset === "number" ? { rawOffset: value.raw_offset } : {}),
     ...(typeof value.potential_format === "string" ? { potentialFormat: value.potential_format } : {}),
     ...(isRecord(value.container) && typeof value.container.name === "string"
       ? { containerName: value.container.name }
