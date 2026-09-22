@@ -2,11 +2,19 @@
 
 ## [0.16.1](https://github.com/rom-weaver/rom-weaver/compare/v0.16.0...v0.16.1) (2026-09-22)
 
+### Highlights
+
+* Keep the active guide target stable during background updates, so guide highlights do not blink ([#867](https://github.com/rom-weaver/rom-weaver/issues/867)) ([#866](https://github.com/rom-weaver/rom-weaver/issues/866))
+* Show the full home bundle flow from CHD extraction through patching and recompression ([#865](https://github.com/rom-weaver/rom-weaver/issues/865))
+* Keep completed workflows focused by removing unrelated result links ([#857](https://github.com/rom-weaver/rom-weaver/issues/857))
+* Add spacing below the iOS status area in standalone PWA views ([#858](https://github.com/rom-weaver/rom-weaver/issues/858))
+
+<details>
+<summary>All changes</summary>
 
 ### Features
 
 * **webapp:** serve curl installer ([#831](https://github.com/rom-weaver/rom-weaver/issues/831)) ([e566403](https://github.com/rom-weaver/rom-weaver/commit/e566403737156f862362418ae0c0eec39e175118))
-
 
 ### Bug Fixes
 
@@ -17,23 +25,23 @@
 * **webapp:** remove result tool links ([#857](https://github.com/rom-weaver/rom-weaver/issues/857)) ([138627a](https://github.com/rom-weaver/rom-weaver/commit/138627ad9c0c47d5456287562295a2510e02ac19))
 * **webapp:** stop guide highlight blinking ([#866](https://github.com/rom-weaver/rom-weaver/issues/866)) ([31d3849](https://github.com/rom-weaver/rom-weaver/commit/31d3849612ce3afc88140e4b22f5f72796b4e73b))
 
-
 ### Reverts
 
 * remove Cloudflare Markdown negotiation ([#871](https://github.com/rom-weaver/rom-weaver/issues/871)) ([40e445f](https://github.com/rom-weaver/rom-weaver/commit/40e445f861996900547be38df66cc8b8128a6940))
-
 
 ### Documentation
 
 * **vendor:** update nod provenance ([#870](https://github.com/rom-weaver/rom-weaver/issues/870)) ([69a8793](https://github.com/rom-weaver/rom-weaver/commit/69a87935e55a2c2d8f659f8f017a068608b8746e))
 
-
-### Internal
+<details>
+<summary>Internal</summary>
 
 * **deps-dev:** bump the build-toolchain group in /packages/rom-weaver-webapp with 4 updates ([#861](https://github.com/rom-weaver/rom-weaver/issues/861)) ([e528785](https://github.com/rom-weaver/rom-weaver/commit/e5287852cc6f048d553960e77edd86f2b2f1f9a7))
 * **deps-dev:** bump the linting group in /packages/rom-weaver-webapp with 2 updates ([#862](https://github.com/rom-weaver/rom-weaver/issues/862)) ([33f7963](https://github.com/rom-weaver/rom-weaver/commit/33f7963a80ecb8f56768ffdffdbda602a8fd7a92))
 * **deps:** bump taiki-e/install-action from 2.87.13 to 2.87.15 in the actions group ([#864](https://github.com/rom-weaver/rom-weaver/issues/864)) ([fd6cdce](https://github.com/rom-weaver/rom-weaver/commit/fd6cdce79073dcc3d795ab2eebb63d78bbf5be27))
 * **deps:** bump the other-webapp group in /packages/rom-weaver-webapp with 5 updates ([#863](https://github.com/rom-weaver/rom-weaver/issues/863)) ([1665d69](https://github.com/rom-weaver/rom-weaver/commit/1665d69b1c9d371d71235b8a6d6f40057dd4ae6c))
+</details>
+</details>
 
 ## [0.16.0](https://github.com/rom-weaver/rom-weaver/compare/v0.15.1...v0.16.0) (2026-09-20)
 
