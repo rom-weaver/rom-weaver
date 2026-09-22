@@ -14,11 +14,18 @@ pub const GEN2_SAVE_SIZE: usize = GAME_BOY_SRAM_32K.supported_sizes[0];
 const CHECK_VALUE_1: u8 = 99;
 const CHECK_VALUE_2: u8 = 127;
 const MAX_MONEY: u32 = 999_999;
+const MAX_COINS: u32 = 9_999;
+const OPTIONS_PRIMARY: usize = 0x2000;
+const OPTIONS_BACKUP: usize = 0x1200;
 
 // These offsets are assembled from pret's linked layouts. The main save starts in
 // SRAM bank 1. Gold/Silver's backup spans banks 0, 1, and 3.
-// https://github.com/pret/pokegold/blob/master/layout.link
-// https://github.com/pret/pokecrystal/blob/master/layout.link
+// https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c5/layout.link
+// https://github.com/pret/pokecrystal/blob/7a7881d0d62e0ddbd82dcf10e7116807487ac651/layout.link
+// Money and options semantics are cross-checked against PKHeX SAV2 and the
+// pokecrystal options and money routines. Gen II money and coins are binary,
+// unlike Gen I's packed decimal values.
+// https://github.com/kwsch/PKHeX/blob/e0e63bc87837ad2d9c8f8fda4efdbf5f2933db08/PKHeX.Core/Saves/Substructures/Gen12/SAV2Offsets.cs
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Family {
     GoldSilver,
@@ -145,6 +152,14 @@ impl SaveGameHandler for PokemonGen2Handler {
         .into()
     }
 
+    fn supports_generation(&self, _game: &SaveGameIdentity) -> bool {
+        true
+    }
+
+    fn generate(&self, game: &SaveGameIdentity) -> Result<Vec<u8>> {
+        generate(family_for_game(game)?, game)
+    }
+
     fn recognize(&self, input: &SaveDetectionInput) -> SaveRecognition {
         if !GAME_BOY_SRAM_32K.accepts(&input.bytes) {
             return unsupported(SaveRecognitionReason::WrongSize);
@@ -244,6 +259,24 @@ impl SaveGameHandler for PokemonGen2Handler {
             document: reparsed,
         })
     }
+}
+
+fn generate(family: Family, game: &SaveGameIdentity) -> Result<Vec<u8>> {
+    let mut bytes = vec![0; GEN2_SAVE_SIZE];
+    bytes[OPTIONS_PRIMARY] = 3;
+    bytes[OPTIONS_BACKUP] = 3;
+
+    for layout in slot_layouts(family) {
+        bytes[layout.check_value_one] = CHECK_VALUE_1;
+        bytes[layout.check_value_two] = CHECK_VALUE_2;
+        read_mut(&mut bytes, layout.player_one, 2)[..7]
+            .copy_from_slice(&[0x8f, 0x8b, 0x80, 0x98, 0x84, 0x91, 0x50]);
+        repair_checksum(&mut bytes, layout);
+    }
+
+    let slots = parse_slots(&bytes, family)?;
+    build_document(&bytes, family, game, slots)?;
+    Ok(bytes)
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -399,6 +432,44 @@ fn build_document(
         step: Some(1),
         encoding: Some("big_endian_u24".into()),
     });
+    let coins = read_u16_be(bytes, layout.player_three, money_offset(family) + 7) as u32;
+    fields.push(SaveField {
+        id: "trainer.coins".into(),
+        label: "Coins".into(),
+        section_id: 0,
+        offset: (money_offset(family) + 7) as u16,
+        kind: SaveFieldKind::UnsignedInteger,
+        value: SaveValue::U32(coins),
+        editable: slots.main && slots.backup,
+        constraints: SaveConstraint {
+            min: Some(0),
+            max: Some(i64::from(MAX_COINS)),
+            ..Default::default()
+        },
+        description: "Coins carried by the player".into(),
+        warnings: edit_warning(slots),
+        step: Some(1),
+        encoding: Some("big_endian_u16".into()),
+    });
+    let stored_money = read_u24(bytes, layout.player_three, money_offset(family) + 3);
+    fields.push(SaveField {
+        id: "trainer.stored_money".into(),
+        label: "Stored money".into(),
+        section_id: 0,
+        offset: (money_offset(family) + 3) as u16,
+        kind: SaveFieldKind::UnsignedInteger,
+        value: SaveValue::U32(stored_money),
+        editable: slots.main && slots.backup,
+        constraints: SaveConstraint {
+            min: Some(0),
+            max: Some(i64::from(MAX_MONEY)),
+            ..Default::default()
+        },
+        description: "Money stored with the player's mother".into(),
+        warnings: edit_warning(slots),
+        step: Some(1),
+        encoding: Some("big_endian_u24".into()),
+    });
     fields.push(read_only_text(
         "trainer.play_time",
         "Play time",
@@ -406,6 +477,8 @@ fn build_document(
         format_play_time(bytes, layout.player_one, family),
         "Time played",
     ));
+    add_option_fields(&mut fields, bytes, slots);
+    add_play_time_fields(&mut fields, bytes, layout, family, slots);
     for index in 0..16usize {
         let offset = badge_offset(family) + index / 8;
         let value = read(bytes, layout.player_three, offset)[0] & (1 << (index % 8)) != 0;
@@ -493,6 +566,13 @@ fn apply_to_slot(
             ("trainer.money", SaveValue::U32(value)) => {
                 write_u24(bytes, layout.player_three, money_offset(family), *value)
             }
+            ("trainer.coins", SaveValue::U32(value)) => {
+                read_mut(bytes, layout.player_three, money_offset(family) + 7)[..2]
+                    .copy_from_slice(&(*value as u16).to_be_bytes())
+            }
+            ("trainer.stored_money", SaveValue::U32(value)) => {
+                write_u24(bytes, layout.player_three, money_offset(family) + 3, *value)
+            }
             (field, SaveValue::Bool(value)) if field.starts_with("progress.badge_") => {
                 let index = field[15..]
                     .parse::<usize>()
@@ -510,6 +590,72 @@ fn apply_to_slot(
                     *byte &= !(1 << (index % 8));
                 }
             }
+            ("options.text_speed", SaveValue::Enum(value)) => {
+                let encoded = match value.as_str() {
+                    "fast" => 1,
+                    "medium" => 3,
+                    "slow" => 5,
+                    _ => return Err(validation("save_value_choice", "unknown text speed")),
+                };
+                update_options(bytes, OPTIONS_PRIMARY, OPTIONS_BACKUP, |options| {
+                    (*options & !0x07) | encoded
+                });
+            }
+            ("options.battle_scene", SaveValue::Bool(value)) => {
+                update_options(bytes, OPTIONS_PRIMARY, OPTIONS_BACKUP, |options| {
+                    (*options & !0x80) | if *value { 0 } else { 0x80 }
+                });
+            }
+            ("options.battle_style", SaveValue::Bool(value)) => {
+                update_options(bytes, OPTIONS_PRIMARY, OPTIONS_BACKUP, |options| {
+                    (*options & !0x40) | if *value { 0 } else { 0x40 }
+                });
+            }
+            ("options.sound", SaveValue::Enum(value)) => {
+                let encoded = match value.as_str() {
+                    "mono" => 0,
+                    "stereo" => 2,
+                    _ => return Err(validation("save_value_choice", "unknown sound mode")),
+                };
+                update_options(bytes, OPTIONS_PRIMARY, OPTIONS_BACKUP, |options| {
+                    (*options & !0x20) | (encoded << 4)
+                });
+            }
+            ("options.text_box_frame", SaveValue::U32(value)) => {
+                update_option_byte(bytes, OPTIONS_PRIMARY, OPTIONS_BACKUP, 2, |byte| {
+                    (*byte & !0x07) | (*value as u8 & 0x07)
+                });
+            }
+            ("options.text_box_flags", SaveValue::U32(value)) => {
+                update_option_byte(bytes, OPTIONS_PRIMARY, OPTIONS_BACKUP, 3, |_| *value as u8);
+            }
+            ("options.printer_brightness", SaveValue::U32(value)) => {
+                update_option_byte(bytes, OPTIONS_PRIMARY, OPTIONS_BACKUP, 4, |_| *value as u8);
+            }
+            ("options.menu_account", SaveValue::Bool(value)) => {
+                update_option_byte(bytes, OPTIONS_PRIMARY, OPTIONS_BACKUP, 5, |_| {
+                    u8::from(*value)
+                });
+            }
+            ("trainer.play_time.hours", SaveValue::U32(value)) => {
+                let value = u16::try_from(*value).map_err(|_| {
+                    validation(
+                        "save_value_range",
+                        "play time hours exceed the layout limit",
+                    )
+                })?;
+                read_mut(bytes, layout.player_one, play_time_cap_offset(family) + 1)[..2]
+                    .copy_from_slice(&value.to_be_bytes());
+            }
+            ("trainer.play_time.minutes", SaveValue::U32(value)) => {
+                write_time_byte(bytes, layout, family, 2, *value)?;
+            }
+            ("trainer.play_time.seconds", SaveValue::U32(value)) => {
+                write_time_byte(bytes, layout, family, 3, *value)?;
+            }
+            ("trainer.play_time.frames", SaveValue::U32(value)) => {
+                write_time_byte(bytes, layout, family, 4, *value)?;
+            }
             _ => {
                 return Err(validation(
                     "save_value_kind",
@@ -517,6 +663,14 @@ fn apply_to_slot(
                 ));
             }
         }
+    }
+    if edits
+        .iter()
+        .any(|edit| edit.field.starts_with("trainer.play_time."))
+    {
+        let timer = read_mut(bytes, layout.player_one, play_time_cap_offset(family));
+        let capped = u16::from_be_bytes([timer[1], timer[2]]) == 999 && timer[3..6] == [59, 59, 0];
+        timer[0] = (timer[0] & !1) | u8::from(capped);
     }
     Ok(())
 }
@@ -526,6 +680,257 @@ fn money_offset(family: Family) -> usize {
         Family::GoldSilver => 2,
         Family::Crystal => 0x3D3,
     }
+}
+
+fn add_option_fields(fields: &mut Vec<SaveField>, bytes: &[u8], slots: Slots) {
+    let options = bytes[OPTIONS_PRIMARY];
+    let editable = slots.main && slots.backup;
+    let warnings = edit_warning(slots);
+    fields.push(option_enum(
+        "options.text_speed",
+        "Text speed",
+        0x2000,
+        match options & 0x07 {
+            1 => "fast",
+            3 => "medium",
+            5 => "slow",
+            _ => "unknown",
+        },
+        (
+            editable && matches!(options & 0x07, 1 | 3 | 5),
+            warnings.clone(),
+        ),
+        ["fast", "medium", "slow"],
+        "Frames between text characters",
+    ));
+    fields.push(option_bool(
+        "options.battle_scene",
+        "Battle scene",
+        0x2000,
+        options & 0x80 == 0,
+        editable,
+        warnings.clone(),
+        "Show battle animations",
+    ));
+    fields.push(option_bool(
+        "options.battle_style",
+        "Battle style",
+        0x2000,
+        options & 0x40 == 0,
+        editable,
+        warnings.clone(),
+        "Prompt before switching Pokémon",
+    ));
+    fields.push(option_enum(
+        "options.sound",
+        "Sound",
+        0x2000,
+        if options & 0x20 == 0 {
+            "mono"
+        } else {
+            "stereo"
+        },
+        (editable, warnings.clone()),
+        ["mono", "stereo"],
+        "Sound output mode",
+    ));
+    fields.push(option_integer(
+        "options.text_box_frame",
+        "Text box frame",
+        0x2002,
+        u32::from(bytes[OPTIONS_PRIMARY + 2] & 0x07),
+        (editable, warnings.clone()),
+        (0, 7),
+        "Text box border selection",
+    ));
+    fields.push(option_integer(
+        "options.text_box_flags",
+        "Text box flags",
+        0x2003,
+        u32::from(bytes[OPTIONS_PRIMARY + 3]),
+        (editable, warnings.clone()),
+        (0, 255),
+        "Text timing flags",
+    ));
+    fields.push(option_integer(
+        "options.printer_brightness",
+        "Printer brightness",
+        0x2004,
+        u32::from(bytes[OPTIONS_PRIMARY + 4]),
+        (editable, warnings.clone()),
+        (0, 127),
+        "Game Boy Printer brightness",
+    ));
+    fields.push(option_bool(
+        "options.menu_account",
+        "Menu account",
+        0x2005,
+        bytes[OPTIONS_PRIMARY + 5] == 1,
+        editable,
+        warnings,
+        "Menu account option",
+    ));
+}
+
+fn add_play_time_fields(
+    fields: &mut Vec<SaveField>,
+    bytes: &[u8],
+    layout: SlotLayout,
+    family: Family,
+    slots: Slots,
+) {
+    let offset = play_time_cap_offset(family) + 1;
+    let value = read(bytes, layout.player_one, offset);
+    let editable = slots.main && slots.backup;
+    let warnings = edit_warning(slots);
+    fields.push(option_integer(
+        "trainer.play_time.hours",
+        "Play time hours",
+        offset as u16,
+        u32::from(u16::from_be_bytes([value[0], value[1]])),
+        (editable, warnings.clone()),
+        (0, 999),
+        "Hours played",
+    ));
+    fields.push(option_integer(
+        "trainer.play_time.minutes",
+        "Play time minutes",
+        (offset + 2) as u16,
+        u32::from(value[2]),
+        (editable, warnings.clone()),
+        (0, 59),
+        "Minutes played",
+    ));
+    fields.push(option_integer(
+        "trainer.play_time.seconds",
+        "Play time seconds",
+        (offset + 3) as u16,
+        u32::from(value[3]),
+        (editable, warnings.clone()),
+        (0, 59),
+        "Seconds played",
+    ));
+    fields.push(option_integer(
+        "trainer.play_time.frames",
+        "Play time frames",
+        (offset + 4) as u16,
+        u32::from(value[4]),
+        (editable, warnings),
+        (0, 59),
+        "Frames played",
+    ));
+}
+
+fn option_integer(
+    id: &str,
+    label: &str,
+    offset: u16,
+    value: u32,
+    status: (bool, Vec<String>),
+    range: (i64, i64),
+    description: &str,
+) -> SaveField {
+    SaveField {
+        id: id.into(),
+        label: label.into(),
+        section_id: 0,
+        offset,
+        kind: SaveFieldKind::UnsignedInteger,
+        value: SaveValue::U32(value),
+        editable: status.0,
+        constraints: SaveConstraint {
+            min: Some(range.0),
+            max: Some(range.1),
+            ..Default::default()
+        },
+        description: description.into(),
+        warnings: status.1,
+        step: Some(1),
+        encoding: None,
+    }
+}
+
+fn option_bool(
+    id: &str,
+    label: &str,
+    offset: u16,
+    value: bool,
+    editable: bool,
+    warnings: Vec<String>,
+    description: &str,
+) -> SaveField {
+    SaveField {
+        id: id.into(),
+        label: label.into(),
+        section_id: 0,
+        offset,
+        kind: SaveFieldKind::Boolean,
+        value: SaveValue::Bool(value),
+        editable,
+        constraints: SaveConstraint::default(),
+        description: description.into(),
+        warnings,
+        step: None,
+        encoding: None,
+    }
+}
+
+fn option_enum<const N: usize>(
+    id: &str,
+    label: &str,
+    offset: u16,
+    value: &str,
+    status: (bool, Vec<String>),
+    choices: [&str; N],
+    description: &str,
+) -> SaveField {
+    SaveField {
+        id: id.into(),
+        label: label.into(),
+        section_id: 0,
+        offset,
+        kind: SaveFieldKind::Enum,
+        value: SaveValue::Enum(value.into()),
+        editable: status.0,
+        constraints: SaveConstraint {
+            choices: choices.into_iter().map(str::to_owned).collect(),
+            ..Default::default()
+        },
+        description: description.into(),
+        warnings: status.1,
+        step: None,
+        encoding: None,
+    }
+}
+
+fn update_options(bytes: &mut [u8], primary: usize, backup: usize, f: impl Fn(&u8) -> u8) {
+    update_option_byte(bytes, primary, backup, 0, f);
+}
+
+fn update_option_byte(
+    bytes: &mut [u8],
+    primary: usize,
+    backup: usize,
+    relative: usize,
+    f: impl Fn(&u8) -> u8,
+) {
+    for offset in [primary, backup] {
+        let byte = &mut bytes[offset + relative];
+        *byte = f(byte);
+    }
+}
+
+fn write_time_byte(
+    bytes: &mut [u8],
+    layout: SlotLayout,
+    family: Family,
+    relative: usize,
+    value: u32,
+) -> Result<()> {
+    let value = u8::try_from(value)
+        .map_err(|_| validation("save_value_range", "play time value exceeds one byte"))?;
+    read_mut(bytes, layout.player_one, play_time_cap_offset(family) + 1)[relative] = value;
+    Ok(())
 }
 
 /// Badge flag order follows the wJohtoBadges and wKantoBadges bit constants.
@@ -725,6 +1130,14 @@ mod tests {
                 money_offset(family),
                 12_345,
             );
+            write_u24(
+                &mut bytes,
+                layout.player_three,
+                money_offset(family) + 3,
+                6_789,
+            );
+            read_mut(&mut bytes, layout.player_three, money_offset(family) + 7)[..2]
+                .copy_from_slice(&678u16.to_be_bytes());
             read_mut(&mut bytes, layout.player_three, badge_offset(family))[0] = 0b0000_0101;
             read_mut(&mut bytes, layout.player_one, 2)[..4]
                 .copy_from_slice(&[0x80, 0x81, 0x82, 0x50]);
@@ -764,6 +1177,14 @@ mod tests {
         assert_eq!(
             field_value(&document, "trainer.money"),
             Some(&SaveValue::U32(12_345))
+        );
+        assert_eq!(
+            field_value(&document, "trainer.stored_money"),
+            Some(&SaveValue::U32(6_789))
+        );
+        assert_eq!(
+            field_value(&document, "trainer.coins"),
+            Some(&SaveValue::U32(678))
         );
         assert_eq!(
             field_value(&document, "trainer.play_time"),
@@ -926,5 +1347,122 @@ mod tests {
                 )
                 .is_err()
         );
+    }
+
+    #[test]
+    fn options_and_play_time_edit_both_save_copies() {
+        let input = SaveDetectionInput {
+            bytes: save(Family::GoldSilver),
+            selected_game: Some("pokemon-gold".into()),
+            rom_sha1: None,
+        };
+        let game = identity("pokemon-gold");
+        let result = PokemonGen2Handler
+            .apply(
+                &input,
+                &game,
+                &[
+                    SaveEdit {
+                        field: "trainer.coins".into(),
+                        value: SaveValue::U32(9_999),
+                    },
+                    SaveEdit {
+                        field: "trainer.stored_money".into(),
+                        value: SaveValue::U32(123),
+                    },
+                    SaveEdit {
+                        field: "options.battle_scene".into(),
+                        value: SaveValue::Bool(false),
+                    },
+                    SaveEdit {
+                        field: "trainer.play_time.hours".into(),
+                        value: SaveValue::U32(999),
+                    },
+                ],
+                false,
+            )
+            .unwrap();
+        let bytes = result.bytes.unwrap();
+        assert_eq!(read_u16_be(&bytes, GS_MAIN.player_three, 9), 9_999);
+        assert_eq!(read_u16_be(&bytes, GS_BACKUP.player_three, 9), 9_999);
+        assert_eq!(read_u24(&bytes, GS_MAIN.player_three, 5), 123);
+        assert_eq!(read_u24(&bytes, GS_BACKUP.player_three, 5), 123);
+        assert_eq!(bytes[OPTIONS_PRIMARY] & 0x80, 0x80);
+        assert_eq!(bytes[OPTIONS_BACKUP] & 0x80, 0x80);
+        assert_eq!(
+            read_u16_be(
+                &bytes,
+                GS_MAIN.player_one,
+                play_time_cap_offset(Family::GoldSilver) + 1
+            ),
+            999
+        );
+        assert!(valid_slot(&bytes, &GS_MAIN));
+        assert!(valid_slot(&bytes, &GS_BACKUP));
+    }
+
+    #[test]
+    fn invalid_coin_and_stored_money_values_are_rejected() {
+        let input = SaveDetectionInput {
+            bytes: save(Family::GoldSilver),
+            selected_game: Some("pokemon-gold".into()),
+            rom_sha1: None,
+        };
+        assert!(
+            PokemonGen2Handler
+                .apply(
+                    &input,
+                    &identity("pokemon-gold"),
+                    &[SaveEdit {
+                        field: "trainer.coins".into(),
+                        value: SaveValue::U32(10_000),
+                    }],
+                    false,
+                )
+                .is_err()
+        );
+        assert!(
+            PokemonGen2Handler
+                .apply(
+                    &input,
+                    &identity("pokemon-gold"),
+                    &[SaveEdit {
+                        field: "trainer.stored_money".into(),
+                        value: SaveValue::U32(1_000_000),
+                    }],
+                    false,
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn generated_saves_parse_and_validate_both_copies_for_every_gen2_game() {
+        let handler = PokemonGen2Handler;
+        for (id, family) in [
+            ("pokemon-gold", Family::GoldSilver),
+            ("pokemon-silver", Family::GoldSilver),
+            ("pokemon-crystal", Family::Crystal),
+        ] {
+            let game = identity(id);
+            let bytes = SaveGameHandler::generate(&handler, &game).unwrap();
+            assert_eq!(bytes.len(), GEN2_SAVE_SIZE);
+            for layout in slot_layouts(family) {
+                assert!(valid_slot(&bytes, &layout));
+            }
+
+            let input = SaveDetectionInput {
+                bytes,
+                selected_game: Some(id.into()),
+                rom_sha1: None,
+            };
+            let document = handler.parse(&input, &game).unwrap();
+            assert_eq!(document.identity.id, id);
+            assert_eq!(document.integrity.state, SaveIntegrityState::Valid);
+            assert!(matches!(
+                handler.recognize(&input).outcome,
+                SaveRecognitionOutcome::Recognized { ref candidate } if candidate.identity.id == id
+            ));
+        }
     }
 }

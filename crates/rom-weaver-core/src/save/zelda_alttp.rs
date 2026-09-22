@@ -19,8 +19,15 @@ const CHECKSUM_OFFSET: usize = 0x4FE;
 const CHECKSUM_TARGET: u16 = 0x5A5A;
 const FILE_MARKER_OFFSET: usize = 0x3E5;
 const FILE_MARKER: u16 = 0x55AA;
+const DIED_COUNTER_OFFSET: usize = 0x405;
 const NAME_OFFSET: usize = 0x3D9;
 const NAME_LENGTH: usize = 6;
+
+// The SRAM symbols and value tables come from the JP1.0 disassembly at
+// https://github.com/spannerisms/jpdasm/blob/d078addd79e888c0d048fe5250d2c665ccf61628/symbols_sram.asm.
+// The US reimplementation independently confirms the 0x340 save-RAM mapping
+// and duplicate-copy/checksum flow:
+// https://github.com/snesrev/zelda3/blob/fbbb3f967a51fafe642e6140d0753979e73b4090/src/select_file.c.
 
 const ITEM_FIELDS: &[(&str, &str, usize)] = &[
     ("hookshot", "Hookshot", 0x342),
@@ -39,6 +46,84 @@ const ITEM_FIELDS: &[(&str, &str, usize)] = &[
     ("pegasus_boots", "Pegasus Boots", 0x355),
     ("flippers", "Zora's Flippers", 0x356),
     ("moon_pearl", "Moon Pearl", 0x357),
+];
+
+const ITEM_ENUM_FIELDS: &[(&str, &str, usize, &[&str], &str)] = &[
+    (
+        "bow",
+        "Bow",
+        0x340,
+        &[
+            "none",
+            "bow",
+            "bow_and_arrows",
+            "silver_bow",
+            "silver_bow_and_arrows",
+        ],
+        "Bow and silver-arrow upgrade state",
+    ),
+    (
+        "boomerang",
+        "Boomerang",
+        0x341,
+        &["none", "blue", "red"],
+        "Boomerang upgrade state",
+    ),
+    (
+        "mushroom_powder",
+        "Mushroom or magic powder",
+        0x344,
+        &["none", "mushroom", "powder"],
+        "Mushroom and magic powder state",
+    ),
+    (
+        "flute",
+        "Flute",
+        0x34C,
+        &["none", "shovel", "inactive", "active"],
+        "Shovel and flute state",
+    ),
+    (
+        "mirror",
+        "Magic mirror",
+        0x353,
+        &["none", "letter", "mirror", "scrapped_triforce"],
+        "Magic mirror item state",
+    ),
+];
+
+const BOTTLE_CHOICES: &[&str] = &[
+    "none",
+    "mushroom",
+    "empty",
+    "red_potion",
+    "green_potion",
+    "blue_potion",
+    "fairy",
+    "bee",
+    "good_bee",
+];
+
+const DUNGEONS: &[(&str, &str)] = &[
+    ("sewers", "Sewers"),
+    ("hyrule_castle", "Hyrule Castle"),
+    ("eastern_palace", "Eastern Palace"),
+    ("desert_palace", "Desert Palace"),
+    ("agahnims_tower", "Agahnim's Tower"),
+    ("swamp_palace", "Swamp Palace"),
+    ("palace_of_darkness", "Palace of Darkness"),
+    ("misery_mire", "Misery Mire"),
+    ("skull_woods", "Skull Woods"),
+    ("ice_palace", "Ice Palace"),
+    ("tower_of_hera", "Tower of Hera"),
+    ("thieves_town", "Thieves' Town"),
+    ("turtle_rock", "Turtle Rock"),
+    ("ganons_tower", "Ganon's Tower"),
+];
+
+const DUNGEON_KEY_OFFSETS: &[usize] = &[
+    0x37C, 0x37D, 0x37E, 0x37F, 0x380, 0x381, 0x382, 0x383, 0x384, 0x385, 0x386, 0x387, 0x388,
+    0x389,
 ];
 
 #[derive(Clone, Debug)]
@@ -76,9 +161,40 @@ impl ParsedFile {
 /// Handles the original SNES battery SRAM for The Legend of Zelda: A Link to the Past.
 pub struct ZeldaAlttpHandler;
 
+impl ZeldaAlttpHandler {
+    /// Creates the exact fresh-file image initialized by the original naming screen.
+    pub fn generate() -> Result<Vec<u8>> {
+        let mut bytes = vec![0; ALTT_P_SRAM_SIZE];
+        let data = &mut bytes[..FILE_SIZE];
+        write_word(data, FILE_MARKER_OFFSET, FILE_MARKER);
+        write_word(data, 0x20C, 0xF000);
+        write_word(data, 0x20E, 0xF000);
+        write_word(data, DIED_COUNTER_OFFSET, 0xFFFF);
+        data[0x36C] = 0x18;
+        data[0x36D] = 0x18;
+        data[0x379] = 0xF8;
+        encode_name(data, "LINK")?;
+        repair_checksum(data);
+        let copy = data.to_vec();
+        bytes[BACKUP_OFFSET..BACKUP_OFFSET + FILE_SIZE].copy_from_slice(&copy);
+        let files = parse_files(&bytes)?;
+        build_document(&bytes, &definition().identity, &files)?;
+        Ok(bytes)
+    }
+}
+
 impl SaveGameHandler for ZeldaAlttpHandler {
     fn definitions(&self) -> Vec<SaveGameDefinition> {
         vec![definition()]
+    }
+
+    fn supports_generation(&self, _game: &SaveGameIdentity) -> bool {
+        true
+    }
+
+    fn generate(&self, game: &SaveGameIdentity) -> Result<Vec<u8>> {
+        check_game(game)?;
+        Self::generate()
     }
 
     fn recognize(&self, input: &SaveDetectionInput) -> SaveRecognition {
@@ -449,9 +565,9 @@ fn add_fields(fields: &mut Vec<SaveField>, slot: u8, data: &[u8]) {
         label: format!("File {} player name", slot + 1),
         section_id: slot,
         offset: NAME_OFFSET as u16,
-        kind: SaveFieldKind::ReadOnlyText,
+        kind: SaveFieldKind::Text,
         value: SaveValue::Text(decode_name(data)),
-        editable: false,
+        editable: true,
         constraints: SaveConstraint {
             max_length: Some(NAME_LENGTH as u8),
             ..Default::default()
@@ -461,6 +577,28 @@ fn add_fields(fields: &mut Vec<SaveField>, slot: u8, data: &[u8]) {
         step: None,
         encoding: Some("zelda_alttp_english_name".into()),
     });
+    for (name, label, offset, choices, description) in ITEM_ENUM_FIELDS {
+        fields.push(enum_field(
+            &format!("{prefix}.inventory.{name}"),
+            label,
+            slot,
+            *offset,
+            data[*offset],
+            choices,
+            description,
+        ));
+    }
+    for index in 0..4 {
+        fields.push(enum_field(
+            &format!("{prefix}.inventory.bottle_{}", index + 1),
+            &format!("Bottle {}", index + 1),
+            slot,
+            0x35C + index,
+            data[0x35C + index],
+            BOTTLE_CHOICES,
+            "Bottle contents",
+        ));
+    }
     fields.push(unsigned_field(
         &format!("{prefix}.resources.rupees"),
         "Rupees",
@@ -508,6 +646,51 @@ fn add_fields(fields: &mut Vec<SaveField>, slot: u8, data: &[u8]) {
         u32::from(data[0x36D]),
         160,
         "Current health. Eight units equal one heart.",
+    ));
+    fields.push(unsigned_field(
+        &format!("{prefix}.magic.current"),
+        "Current magic",
+        slot,
+        0x36E,
+        u32::from(data[0x36E]),
+        128,
+        "Current magic power. The original game caps this at 128.",
+    ));
+    fields.push(enum_field(
+        &format!("{prefix}.magic.consumption"),
+        "Magic consumption",
+        slot,
+        0x37B,
+        data[0x37B],
+        &["normal", "half", "quarter"],
+        "Magic consumption mode",
+    ));
+    fields.push(unsigned_field(
+        &format!("{prefix}.resources.bomb_capacity_upgrades"),
+        "Bomb capacity upgrades",
+        slot,
+        0x370,
+        u32::from(data[0x370]),
+        3,
+        "Number of bomb capacity upgrades received",
+    ));
+    fields.push(unsigned_field(
+        &format!("{prefix}.resources.arrow_capacity_upgrades"),
+        "Arrow capacity upgrades",
+        slot,
+        0x371,
+        u32::from(data[0x371]),
+        3,
+        "Number of arrow capacity upgrades received",
+    ));
+    fields.push(unsigned_field(
+        &format!("{prefix}.progress.heart_pieces"),
+        "Heart pieces toward next container",
+        slot,
+        0x36B,
+        u32::from(data[0x36B]),
+        3,
+        "Heart pieces collected toward the next container",
     ));
     fields.extend([
         sword_field(&format!("{prefix}.equipment.sword"), slot, data[0x359]),
@@ -567,6 +750,162 @@ fn add_fields(fields: &mut Vec<SaveField>, slot: u8, data: &[u8]) {
             0x37A,
             data[0x37A] & (1 << bit) != 0,
             "Progress bit from the crystal state byte",
+        ));
+    }
+    add_dungeon_fields(fields, slot, data);
+    add_progression_fields(fields, slot, data);
+}
+
+fn add_dungeon_fields(fields: &mut Vec<SaveField>, slot: u8, data: &[u8]) {
+    for (index, (name, label)) in DUNGEONS.iter().enumerate() {
+        let (byte_index, bit) = if index < 8 {
+            (0, 7 - index)
+        } else {
+            (1, 15 - index)
+        };
+        let compass_offset = 0x364 + byte_index;
+        let big_key_offset = 0x366 + byte_index;
+        let map_offset = 0x368 + byte_index;
+        fields.push(boolean_field(
+            &format!("slot_{}.progress.dungeons.{name}.compass", slot + 1),
+            &format!("{label} compass"),
+            slot,
+            compass_offset,
+            data[compass_offset] & (1 << bit) != 0,
+            "Dungeon compass ownership",
+        ));
+        fields.push(boolean_field(
+            &format!("slot_{}.progress.dungeons.{name}.big_key", slot + 1),
+            &format!("{label} big key"),
+            slot,
+            big_key_offset,
+            data[big_key_offset] & (1 << bit) != 0,
+            "Dungeon big key ownership",
+        ));
+        fields.push(boolean_field(
+            &format!("slot_{}.progress.dungeons.{name}.map", slot + 1),
+            &format!("{label} map"),
+            slot,
+            map_offset,
+            data[map_offset] & (1 << bit) != 0,
+            "Dungeon map ownership",
+        ));
+        fields.push(unsigned_field(
+            &format!("slot_{}.progress.dungeons.{name}.keys_earned", slot + 1),
+            &format!("{label} keys earned"),
+            slot,
+            DUNGEON_KEY_OFFSETS[index],
+            u32::from(data[DUNGEON_KEY_OFFSETS[index]]),
+            255,
+            "Number of keys earned in this dungeon",
+        ));
+    }
+}
+
+fn add_progression_fields(fields: &mut Vec<SaveField>, slot: u8, data: &[u8]) {
+    fields.push(enum_field(
+        &format!("slot_{}.progress.game_state", slot + 1),
+        "Game state",
+        slot,
+        0x3C5,
+        data[0x3C5],
+        &[
+            "start",
+            "uncle_reached",
+            "zelda_rescued",
+            "agahnim_defeated",
+        ],
+        "Main story state",
+    ));
+    fields.push(enum_field(
+        &format!("slot_{}.progress.map_icon", slot + 1),
+        "Map guidance icon",
+        slot,
+        0x3C7,
+        data[0x3C7],
+        &[
+            "castle",
+            "kakariko",
+            "eastern_palace",
+            "master_sword",
+            "master_sword_light_world",
+            "agahnim",
+            "palace_of_darkness",
+            "crystals",
+            "ganons_tower",
+        ],
+        "Map icon guidance state",
+    ));
+    fields.push(enum_field(
+        &format!("slot_{}.progress.spawn_point", slot + 1),
+        "Save spawn point",
+        slot,
+        0x3C8,
+        data[0x3C8],
+        &[
+            "links_house",
+            "sanctuary",
+            "prison",
+            "uncle",
+            "throne",
+            "old_man_cave",
+            "old_man_home",
+        ],
+        "Save and continue spawn point",
+    ));
+    fields.push(enum_field(
+        &format!("slot_{}.progress.save_world", slot + 1),
+        "Save world",
+        slot,
+        0x3CA,
+        data[0x3CA],
+        &["light", "dark"],
+        "World selected after loading the save",
+    ));
+    for (name, bit, description) in [
+        (
+            "uncle_secret_passage",
+            0,
+            "Uncle visited in the secret passage",
+        ),
+        ("sanctuary_priest", 1, "Priest visited in the sanctuary"),
+        ("zelda_sanctuary", 2, "Zelda brought to the sanctuary"),
+        ("uncle_left_house", 4, "Uncle left Link's house"),
+        ("book_progress", 5, "Book of Mudora progress"),
+        ("fortune_teller_variant", 6, "Fortune teller dialog variant"),
+    ] {
+        fields.push(boolean_field(
+            &format!("slot_{}.progress.early_story.{name}", slot + 1),
+            name,
+            slot,
+            0x3C6,
+            data[0x3C6] & (1 << bit) != 0,
+            description,
+        ));
+    }
+    for (name, bit, description) in [
+        (
+            "smith_tempering",
+            7,
+            "Smiths are currently tempering the sword",
+        ),
+        ("swordsmith_rescued", 5, "Swordsmith has been rescued"),
+        ("purple_chest_opened", 4, "Purple chest has been opened"),
+        ("stumpy_stumped", 3, "Stumpy has been stumped"),
+        (
+            "bottle_purchased",
+            1,
+            "Bottle was purchased from the vendor",
+        ),
+        ("hobo_bottle", 0, "Bottle was received from the hobo"),
+    ] {
+        fields.push(boolean_field(
+            &format!("slot_{}.progress.side_quests.{name}", slot + 1),
+            name,
+            slot,
+            0x3C9,
+            data[0x3C9] & (1 << bit) != 0,
+            description,
         ));
     }
 }
@@ -715,6 +1054,38 @@ fn decode_name(data: &[u8]) -> String {
     name
 }
 
+fn encode_name(data: &mut [u8], name: &str) -> Result<()> {
+    let characters = name.chars().collect::<Vec<_>>();
+    if characters.len() > NAME_LENGTH {
+        return Err(validation(
+            "save_name_length",
+            "the player name is longer than six characters",
+        ));
+    }
+    for index in 0..NAME_LENGTH {
+        let word = match characters.get(index).copied() {
+            None => 0x00A9,
+            Some('A'..='Z') => {
+                let code = characters[index] as u8 - b'A';
+                u16::from((code & 0x0F) | ((code & 0xF0) << 1))
+            }
+            Some('a'..='z') => {
+                let code = characters[index] as u8 - b'a' + 0x1A;
+                u16::from((code & 0x0F) | ((code & 0xF0) << 1))
+            }
+            Some(' ') => 0x00AF,
+            Some(_) => {
+                return Err(validation(
+                    "save_name_charset",
+                    "the player name contains a character outside the original keyboard",
+                ));
+            }
+        };
+        write_word(data, NAME_OFFSET + index * 2, word);
+    }
+    Ok(())
+}
+
 fn split_slot_field(field: &str) -> Result<(usize, &str)> {
     let (slot, field) = field
         .split_once('.')
@@ -730,6 +1101,35 @@ fn split_slot_field(field: &str) -> Result<(usize, &str)> {
 
 fn apply_edit(data: &mut [u8], field: &str, value: &SaveValue) -> Result<()> {
     match (field, value) {
+        ("player.name", SaveValue::Text(value)) => encode_name(data, value)?,
+        ("magic.current", SaveValue::U32(value)) => {
+            data[0x36E] = u8::try_from(*value)
+                .map_err(|_| validation("save_value_range", "the magic value is out of range"))?
+        }
+        ("magic.consumption", SaveValue::Enum(value)) => {
+            data[0x37B] = enum_index(value, &["normal", "half", "quarter"])?
+        }
+        ("resources.bomb_capacity_upgrades", SaveValue::U32(value)) => {
+            data[0x370] = u8::try_from(*value).map_err(|_| {
+                validation(
+                    "save_value_range",
+                    "the bomb capacity upgrade count is out of range",
+                )
+            })?
+        }
+        ("resources.arrow_capacity_upgrades", SaveValue::U32(value)) => {
+            data[0x371] = u8::try_from(*value).map_err(|_| {
+                validation(
+                    "save_value_range",
+                    "the arrow capacity upgrade count is out of range",
+                )
+            })?
+        }
+        ("progress.heart_pieces", SaveValue::U32(value)) => {
+            data[0x36B] = u8::try_from(*value).map_err(|_| {
+                validation("save_value_range", "the heart piece count is out of range")
+            })?
+        }
         ("resources.rupees", SaveValue::U32(value)) => {
             let value = u16::try_from(*value)
                 .map_err(|_| validation("save_value_range", "the rupee value is out of range"))?;
@@ -764,12 +1164,92 @@ fn apply_edit(data: &mut [u8], field: &str, value: &SaveValue) -> Result<()> {
         ("equipment.gloves", SaveValue::Enum(value)) => {
             data[0x354] = enum_index(value, &["none", "power", "titan"])?
         }
+        (field, SaveValue::Enum(value)) => {
+            if let Some(name) = field.strip_prefix("inventory.") {
+                if let Some((_, _, offset, choices, _)) =
+                    ITEM_ENUM_FIELDS.iter().find(|(item, ..)| *item == name)
+                {
+                    data[*offset] = enum_index(value, choices)?;
+                } else if let Some(index) = name
+                    .strip_prefix("bottle_")
+                    .and_then(|value| value.parse::<usize>().ok())
+                    .filter(|index| (1..=4).contains(index))
+                {
+                    data[0x35B + index] = enum_index(value, BOTTLE_CHOICES)?;
+                } else {
+                    return Err(validation(
+                        "save_field_unknown",
+                        "the requested save field is unknown",
+                    ));
+                }
+            } else if field == "progress.game_state" {
+                data[0x3C5] = enum_index(
+                    value,
+                    &[
+                        "start",
+                        "uncle_reached",
+                        "zelda_rescued",
+                        "agahnim_defeated",
+                    ],
+                )?;
+            } else if field == "progress.map_icon" {
+                data[0x3C7] = enum_index(
+                    value,
+                    &[
+                        "castle",
+                        "kakariko",
+                        "eastern_palace",
+                        "master_sword",
+                        "master_sword_light_world",
+                        "agahnim",
+                        "palace_of_darkness",
+                        "crystals",
+                        "ganons_tower",
+                    ],
+                )?;
+            } else if field == "progress.spawn_point" {
+                data[0x3C8] = enum_index(
+                    value,
+                    &[
+                        "links_house",
+                        "sanctuary",
+                        "prison",
+                        "uncle",
+                        "throne",
+                        "old_man_cave",
+                        "old_man_home",
+                    ],
+                )?;
+            } else if field == "progress.save_world" {
+                data[0x3CA] = enum_index(value, &["light", "dark"])?;
+            } else {
+                return Err(validation(
+                    "save_field_unknown",
+                    "the requested save field is unknown",
+                ));
+            }
+        }
+        (field, SaveValue::U32(value)) if field.starts_with("progress.dungeons.") => {
+            let dungeon = field
+                .strip_prefix("progress.dungeons.")
+                .and_then(|value| value.strip_suffix(".keys_earned"))
+                .and_then(|name| DUNGEONS.iter().position(|(id, _)| *id == name))
+                .ok_or_else(|| {
+                    validation("save_field_unknown", "the requested save field is unknown")
+                })?;
+            data[DUNGEON_KEY_OFFSETS[dungeon]] = u8::try_from(*value).map_err(|_| {
+                validation("save_value_range", "the dungeon key count is out of range")
+            })?;
+        }
         (field, SaveValue::Bool(value)) => {
             if let Some((_, _, offset)) = ITEM_FIELDS
                 .iter()
                 .find(|(name, _, _)| field == format!("inventory.{name}"))
             {
                 data[*offset] = u8::from(*value);
+            } else if let Some((dungeon, item)) = dungeon_item_field(field) {
+                let (offset, bit) = dungeon_item_offset(dungeon, item);
+                set_bit(&mut data[offset], bit, *value);
             } else if let Some(bit) = field
                 .strip_prefix("progress.pendant_")
                 .and_then(|value| value.parse::<u8>().ok())
@@ -784,6 +1264,37 @@ fn apply_edit(data: &mut [u8], field: &str, value: &SaveValue) -> Result<()> {
                 .filter(|bit| *bit < 7)
             {
                 set_bit(&mut data[0x37A], bit, *value);
+            } else if let Some(bit) = field
+                .strip_prefix("progress.early_story.")
+                .and_then(|name| {
+                    [
+                        ("uncle_secret_passage", 0),
+                        ("sanctuary_priest", 1),
+                        ("zelda_sanctuary", 2),
+                        ("uncle_left_house", 4),
+                        ("book_progress", 5),
+                        ("fortune_teller_variant", 6),
+                    ]
+                    .iter()
+                    .find(|(candidate, _)| *candidate == name)
+                    .map(|(_, bit)| *bit)
+                })
+            {
+                set_bit(&mut data[0x3C6], bit, *value);
+            } else if let Some(bit) = [
+                "smith_tempering",
+                "swordsmith_rescued",
+                "purple_chest_opened",
+                "stumpy_stumped",
+                "bottle_purchased",
+                "hobo_bottle",
+            ]
+            .iter()
+            .position(|candidate| {
+                *candidate == field.strip_prefix("progress.side_quests.").unwrap_or("")
+            }) {
+                let bit = [7, 5, 4, 3, 1, 0][bit];
+                set_bit(&mut data[0x3C9], bit, *value);
             } else {
                 return Err(validation(
                     "save_field_unknown",
@@ -807,6 +1318,31 @@ fn enum_index(value: &str, choices: &[&str]) -> Result<u8> {
         .position(|choice| *choice == value)
         .map(|index| index as u8)
         .ok_or_else(|| validation("save_value_choice", "the requested value is not allowed"))
+}
+
+fn dungeon_item_field(field: &str) -> Option<(usize, &str)> {
+    let value = field.strip_prefix("progress.dungeons.")?;
+    let (dungeon, item) = value.split_once('.')?;
+    if !matches!(item, "compass" | "big_key" | "map") {
+        return None;
+    }
+    let index = DUNGEONS.iter().position(|(id, _)| *id == dungeon)?;
+    Some((index, item))
+}
+
+fn dungeon_item_offset(dungeon: usize, item: &str) -> (usize, u8) {
+    let (byte_index, bit) = if dungeon < 8 {
+        (0, 7 - dungeon)
+    } else {
+        (1, 15 - dungeon)
+    };
+    let base = match item {
+        "compass" => 0x364,
+        "big_key" => 0x366,
+        "map" => 0x368,
+        _ => unreachable!("dungeon item names are checked by dungeon_item_field"),
+    };
+    (base + byte_index, bit as u8)
 }
 
 fn set_bit(byte: &mut u8, bit: u8, value: bool) {
@@ -834,6 +1370,57 @@ fn validate_file_values(data: &[u8]) -> Result<()> {
         return Err(validation(
             "save_arrows",
             "the arrow value is above the original game limit",
+        ));
+    }
+    if ITEM_ENUM_FIELDS
+        .iter()
+        .any(|(_, _, offset, choices, _)| usize::from(data[*offset]) >= choices.len())
+    {
+        return Err(validation(
+            "save_inventory",
+            "an inventory item value is outside the original game range",
+        ));
+    }
+    if (0x35C..=0x35F).any(|offset| usize::from(data[offset]) >= BOTTLE_CHOICES.len()) {
+        return Err(validation(
+            "save_inventory",
+            "a bottle value is outside the original game range",
+        ));
+    }
+    if data[0x36B] > 3 {
+        return Err(validation(
+            "save_heart_pieces",
+            "heart pieces must be from zero through three",
+        ));
+    }
+    if data[0x36E] > 128 {
+        return Err(validation(
+            "save_magic",
+            "magic power is above the original game limit",
+        ));
+    }
+    if data[0x370] > 3 || data[0x371] > 3 {
+        return Err(validation(
+            "save_capacity_upgrades",
+            "capacity upgrades are above the original game limit",
+        ));
+    }
+    if data[0x37B] > 2 {
+        return Err(validation(
+            "save_magic_consumption",
+            "magic consumption is outside the original game range",
+        ));
+    }
+    if data[0x3C5] > 3 || data[0x3C7] > 8 || data[0x3C8] > 6 || data[0x3CA] > 1 {
+        return Err(validation(
+            "save_progression",
+            "a progression value is outside the original game range",
+        ));
+    }
+    if data[0x3CB] != 0 {
+        return Err(validation(
+            "save_progression",
+            "the high byte of the save world must be zero",
         ));
     }
     if !(24..=160).contains(&data[0x36C]) || !data[0x36C].is_multiple_of(8) {
@@ -888,6 +1475,7 @@ fn validation(code: &'static str, message: &'static str) -> RomWeaverError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::save::SaveGameRegistry;
 
     fn fixture() -> Vec<u8> {
         let mut bytes = vec![0; ALTT_P_SRAM_SIZE];
@@ -942,6 +1530,206 @@ mod tests {
             field_value(&document, "slot_1.resources.rupees"),
             Some(&SaveValue::U32(123))
         );
+    }
+
+    #[test]
+    fn generates_the_original_fresh_file_initializer() {
+        let bytes = ZeldaAlttpHandler::generate().unwrap();
+        let identity = definition().identity;
+        let document = ZeldaAlttpHandler
+            .parse(&input(bytes.clone()), &identity)
+            .unwrap();
+        assert_eq!(bytes.len(), ALTT_P_SRAM_SIZE);
+        assert_eq!(document.integrity.state, SaveIntegrityState::Valid);
+        assert_eq!(document.sections.len(), 1);
+        assert_eq!(document.active_slot, 0);
+        assert_eq!(
+            field_value(&document, "slot_1.player.name"),
+            Some(&SaveValue::Text("LINK".into()))
+        );
+        assert_eq!(
+            field_value(&document, "slot_1.hearts.capacity_eighths"),
+            Some(&SaveValue::U32(24))
+        );
+        assert_eq!(
+            field_value(&document, "slot_1.hearts.current_eighths"),
+            Some(&SaveValue::U32(24))
+        );
+        assert_eq!(word_at(&bytes[..FILE_SIZE], 0x20C), 0xF000);
+        assert_eq!(word_at(&bytes[..FILE_SIZE], 0x20E), 0xF000);
+        assert_eq!(word_at(&bytes[..FILE_SIZE], DIED_COUNTER_OFFSET), 0xFFFF);
+        assert_eq!(
+            &bytes[..FILE_SIZE],
+            &bytes[BACKUP_OFFSET..BACKUP_OFFSET + FILE_SIZE]
+        );
+        assert!(is_valid_copy(&bytes[..FILE_SIZE]));
+        assert!(
+            bytes[FILE_SIZE..BACKUP_OFFSET]
+                .iter()
+                .all(|byte| *byte == 0)
+        );
+        assert!(
+            bytes[BACKUP_OFFSET + FILE_SIZE..]
+                .iter()
+                .all(|byte| *byte == 0)
+        );
+    }
+
+    #[test]
+    fn registry_generation_uses_the_checked_initializer() {
+        let input = SaveGameRegistry::default()
+            .generate("zelda-a-link-to-the-past")
+            .unwrap();
+        assert_eq!(
+            input.selected_game.as_deref(),
+            Some(definition().identity.id.as_str())
+        );
+        assert_eq!(input.bytes, ZeldaAlttpHandler::generate().unwrap());
+    }
+
+    #[test]
+    fn edits_verified_inventory_magic_dungeon_and_progression_fields() {
+        let original = fixture();
+        let result = ZeldaAlttpHandler
+            .apply(
+                &input(original.clone()),
+                &definition().identity,
+                &[
+                    SaveEdit {
+                        field: "slot_1.player.name".into(),
+                        value: SaveValue::Text("Zelda".into()),
+                    },
+                    SaveEdit {
+                        field: "slot_1.inventory.bow".into(),
+                        value: SaveValue::Enum("silver_bow_and_arrows".into()),
+                    },
+                    SaveEdit {
+                        field: "slot_1.inventory.bottle_1".into(),
+                        value: SaveValue::Enum("blue_potion".into()),
+                    },
+                    SaveEdit {
+                        field: "slot_1.magic.current".into(),
+                        value: SaveValue::U32(128),
+                    },
+                    SaveEdit {
+                        field: "slot_1.magic.consumption".into(),
+                        value: SaveValue::Enum("half".into()),
+                    },
+                    SaveEdit {
+                        field: "slot_1.progress.dungeons.sewers.compass".into(),
+                        value: SaveValue::Bool(true),
+                    },
+                    SaveEdit {
+                        field: "slot_1.progress.dungeons.ganons_tower.map".into(),
+                        value: SaveValue::Bool(true),
+                    },
+                    SaveEdit {
+                        field: "slot_1.progress.dungeons.eastern_palace.keys_earned".into(),
+                        value: SaveValue::U32(6),
+                    },
+                    SaveEdit {
+                        field: "slot_1.progress.game_state".into(),
+                        value: SaveValue::Enum("zelda_rescued".into()),
+                    },
+                    SaveEdit {
+                        field: "slot_1.progress.side_quests.purple_chest_opened".into(),
+                        value: SaveValue::Bool(true),
+                    },
+                ],
+                false,
+            )
+            .unwrap();
+        let bytes = result.bytes.unwrap();
+        let data = &bytes[..FILE_SIZE];
+        assert_eq!(decode_name(data), "Zelda");
+        assert_eq!(data[0x340], 4);
+        assert_eq!(data[0x35C], 5);
+        assert_eq!(data[0x36E], 128);
+        assert_eq!(data[0x37B], 1);
+        assert_eq!(data[0x364] & 0x80, 0x80);
+        assert_eq!(data[0x369] & 0x04, 0x04);
+        assert_eq!(data[0x37E], 6);
+        assert_eq!(data[0x3C5], 2);
+        assert_eq!(data[0x3C9] & 0x10, 0x10);
+        assert!(is_valid_copy(data));
+        assert_eq!(&bytes[BACKUP_OFFSET..BACKUP_OFFSET + FILE_SIZE], data);
+        assert_eq!(&bytes[0x500..0x520], &original[0x500..0x520]);
+        assert_eq!(&bytes[0xA00..0xA20], &original[0xA00..0xA20]);
+    }
+
+    #[test]
+    fn rejects_out_of_range_expanded_fields() {
+        for (field, value, code) in [
+            (
+                "slot_1.magic.current",
+                SaveValue::U32(129),
+                "save_value_range",
+            ),
+            (
+                "slot_1.progress.heart_pieces",
+                SaveValue::U32(4),
+                "save_value_range",
+            ),
+            (
+                "slot_1.inventory.bottle_1",
+                SaveValue::Enum("invalid".into()),
+                "save_value_choice",
+            ),
+        ] {
+            let error = ZeldaAlttpHandler
+                .apply(
+                    &input(fixture()),
+                    &definition().identity,
+                    &[SaveEdit {
+                        field: field.into(),
+                        value,
+                    }],
+                    false,
+                )
+                .unwrap_err();
+            match error {
+                RomWeaverError::ValidationCode(error) => assert_eq!(error.code(), code),
+                other => panic!("expected a validation error, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn writes_progress_bitfields_in_source_bit_order() {
+        let edits = [
+            "uncle_secret_passage",
+            "sanctuary_priest",
+            "zelda_sanctuary",
+            "uncle_left_house",
+            "book_progress",
+            "fortune_teller_variant",
+        ]
+        .into_iter()
+        .map(|name| SaveEdit {
+            field: format!("slot_1.progress.early_story.{name}"),
+            value: SaveValue::Bool(true),
+        })
+        .chain(
+            [
+                "swordsmith_rescued",
+                "purple_chest_opened",
+                "stumpy_stumped",
+                "bottle_purchased",
+                "hobo_bottle",
+            ]
+            .into_iter()
+            .map(|name| SaveEdit {
+                field: format!("slot_1.progress.side_quests.{name}"),
+                value: SaveValue::Bool(true),
+            }),
+        )
+        .collect::<Vec<_>>();
+        let result = ZeldaAlttpHandler
+            .apply(&input(fixture()), &definition().identity, &edits, false)
+            .unwrap();
+        let data = &result.bytes.unwrap()[..FILE_SIZE];
+        assert_eq!(data[0x3C6], 0x77);
+        assert_eq!(data[0x3C9], 0x3B);
     }
 
     #[test]

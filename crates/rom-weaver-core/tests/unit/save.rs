@@ -58,6 +58,8 @@ fn fixture(family: Family, counter_a: u32, counter_b: u32) -> Vec<u8> {
         };
         let money_offset = if family == Family::Frlg { 0x290 } else { 0x490 };
         put_u32(&mut bytes, logical_offset(slot, money_offset), 5_000 ^ key);
+        let coins_offset = logical_offset(slot, money_offset + 4);
+        bytes[coins_offset..coins_offset + 2].copy_from_slice(&(100u16 ^ key as u16).to_le_bytes());
 
         match family {
             Family::Rs => bytes[small + 0x900] = 0x41,
@@ -119,9 +121,15 @@ fn registry_lists_every_game_with_format_metadata() {
             "pokemon-emerald",
             "pokemon-firered",
             "pokemon-leafgreen",
+            "pokemon-diamond",
+            "pokemon-pearl",
+            "pokemon-platinum",
             "pokemon-heartgold",
             "pokemon-soulsilver",
             "zelda-a-link-to-the-past",
+            "pokemon-red",
+            "pokemon-blue",
+            "pokemon-yellow",
         ]
     );
     assert!(definitions[3..8].iter().all(|definition| {
@@ -135,14 +143,19 @@ fn registry_lists_every_game_with_format_metadata() {
             && definition.save_format == "game_boy_sram_32k"
             && definition.supported_save_sizes == [32_768]
     }));
-    assert!(definitions[8..10].iter().all(|definition| {
+    assert!(definitions[8..13].iter().all(|definition| {
         definition.platform == "nds"
             && definition.save_format == "nintendo_ds_512k"
             && definition.supported_save_sizes == [524_288]
     }));
-    assert_eq!(definitions[10].platform, "snes");
-    assert_eq!(definitions[10].save_format, "snes_sram_8k");
-    assert_eq!(definitions[10].supported_save_sizes, [8_192]);
+    assert_eq!(definitions[13].platform, "snes");
+    assert_eq!(definitions[13].save_format, "snes_sram_8k");
+    assert_eq!(definitions[13].supported_save_sizes, [8_192]);
+    assert!(definitions[14..].iter().all(|definition| {
+        definition.platform == "game-boy"
+            && definition.save_format == "game_boy_sram_32k"
+            && definition.supported_save_sizes == [32_768]
+    }));
 }
 
 #[test]

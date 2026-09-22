@@ -14,6 +14,9 @@ const SLOT_SIZE: usize = 14 * 0x1000;
 const SECTION_SIZE: usize = 0x1000;
 const SECTION_DATA_SIZE: usize = 0xF80;
 pub(crate) const SIGNATURE: u32 = 0x0801_2025;
+const MAX_COINS: u32 = 9_999;
+const MAX_BATTLE_POINTS: u32 = 9_999;
+const MAX_MONEY: u32 = 999_999;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Family {
@@ -135,6 +138,14 @@ impl SaveGameHandler for PokemonGen3Handler {
             .collect()
     }
 
+    fn supports_generation(&self, _game: &SaveGameIdentity) -> bool {
+        true
+    }
+
+    fn generate(&self, game: &SaveGameIdentity) -> Result<Vec<u8>> {
+        generate_save(family_for_game(game)?)
+    }
+
     fn recognize(&self, input: &SaveDetectionInput) -> SaveRecognition {
         let mut candidates = Vec::new();
         let mut reasons = Vec::new();
@@ -239,6 +250,40 @@ impl SaveGameHandler for PokemonGen3Handler {
             document: reparsed,
         })
     }
+}
+
+fn generate_save(family: Family) -> Result<Vec<u8>> {
+    let mut bytes = vec![0xFF; GEN3_SAVE_SIZE];
+    for (slot, counter) in [(0u8, 0u32), (1u8, 1u32)] {
+        let base = usize::from(slot) * SLOT_SIZE;
+        for id in 0..14u8 {
+            // The games rotate section positions on each save. Keeping the same
+            // rotation as the counter exercises the physical layout used on hardware.
+            let physical = (usize::from(id) + counter as usize) % 14;
+            let offset = base + physical * SECTION_SIZE;
+            let data = &mut bytes[offset..offset + SECTION_SIZE];
+            data[..0xFF4].fill(0);
+            if id == 0 {
+                data[..7].copy_from_slice(&encode_text("PLAYER")?);
+            }
+            let checksum_value = checksum(&data[..family.checksum_size(id)]);
+            data[0xFF4..0xFF6].copy_from_slice(&u16::from(id).to_le_bytes());
+            data[0xFF6..0xFF8].copy_from_slice(&checksum_value.to_le_bytes());
+            data[0xFF8..0xFFC].copy_from_slice(&SIGNATURE.to_le_bytes());
+            data[0xFFC..].copy_from_slice(&counter.to_le_bytes());
+        }
+    }
+
+    let active = parse_slot(&bytes, 1, family)?;
+    let identity = family.all_definitions().remove(0).identity;
+    build_document(
+        &bytes,
+        family,
+        &identity,
+        &active,
+        RedundancyState::Complete,
+    )?;
+    Ok(bytes)
 }
 
 impl PokemonGen3Handler {
@@ -509,12 +554,20 @@ fn build_document(
         large[money_offset + 3],
     ]);
     let money = money_raw ^ security_key.unwrap_or(0);
-    if money > 999_999 {
+    if money > MAX_MONEY {
         return Err(validation(
             "save_money",
             "the save has a money value above the game limit",
         ));
     }
+    let coin_offset = match family {
+        Family::Frlg => 0x294,
+        _ => 0x494,
+    };
+    let coins = u32::from(u16::from_le_bytes([
+        large[coin_offset],
+        large[coin_offset + 1],
+    ])) ^ security_key.unwrap_or(0) as u16 as u32;
     let badges = badge_offsets(family);
     let mut fields = vec![
         text_field(
@@ -581,7 +634,7 @@ fn build_document(
             editable,
             constraints: SaveConstraint {
                 min: Some(0),
-                max: Some(999_999),
+                max: Some(i64::from(MAX_MONEY)),
                 ..Default::default()
             },
             description: "Money carried by the player".into(),
@@ -589,6 +642,15 @@ fn build_document(
             step: Some(1),
             encoding: None,
         },
+        scalar_field(
+            "trainer.coins",
+            "Coins",
+            (1, coin_offset),
+            SaveValue::U32(coins),
+            editable,
+            (0, MAX_COINS),
+            "Game Corner coins",
+        ),
         SaveField {
             id: "trainer.play_time".into(),
             label: "Play time".into(),
@@ -610,6 +672,27 @@ fn build_document(
             encoding: None,
         },
     ];
+    append_play_time_fields(&mut fields, small, editable)?;
+    append_option_fields(&mut fields, small, editable)?;
+    append_inventory_fields(&mut fields, family, &large, security_key, editable)?;
+    if matches!(family, Family::Emerald) {
+        let battle_points = u16::from_le_bytes([small[0xEB8], small[0xEB9]]) as u32;
+        if battle_points > MAX_BATTLE_POINTS {
+            return Err(validation(
+                "save_battle_points",
+                "the save has battle points above the game limit",
+            ));
+        }
+        fields.push(scalar_field(
+            "progress.battle_points",
+            "Battle Points",
+            (0, 0xEB8),
+            SaveValue::U32(battle_points),
+            editable,
+            (0, MAX_BATTLE_POINTS),
+            "Battle Frontier points",
+        ));
+    }
     if let Some(key) = security_key {
         fields.push(SaveField {
             id: "trainer.security_key".into(),
@@ -842,6 +925,270 @@ fn field_value<'a>(document: &'a SaveDocument, id: &str) -> Option<&'a SaveValue
         .map(|field| &field.value)
 }
 
+fn scalar_field(
+    id: &str,
+    label: &str,
+    location: (u8, usize),
+    value: SaveValue,
+    editable: bool,
+    range: (u32, u32),
+    description: &str,
+) -> SaveField {
+    SaveField {
+        id: id.into(),
+        label: label.into(),
+        section_id: location.0,
+        offset: location.1 as u16,
+        kind: SaveFieldKind::UnsignedInteger,
+        value,
+        editable,
+        constraints: SaveConstraint {
+            min: Some(i64::from(range.0)),
+            max: Some(i64::from(range.1)),
+            ..Default::default()
+        },
+        description: description.into(),
+        warnings: Vec::new(),
+        step: Some(1),
+        encoding: None,
+    }
+}
+
+fn append_play_time_fields(
+    fields: &mut Vec<SaveField>,
+    small: &[u8],
+    editable: bool,
+) -> Result<()> {
+    let hours = u16::from_le_bytes([small[14], small[15]]) as u32;
+    let minutes = u32::from(small[16]);
+    let seconds = u32::from(small[17]);
+    if minutes > 59 || seconds > 59 {
+        return Err(validation(
+            "save_play_time",
+            "the save has an invalid play-time minute or second value",
+        ));
+    }
+    fields.push(scalar_field(
+        "trainer.play_time_hours",
+        "Play time hours",
+        (0, 14),
+        SaveValue::U32(hours),
+        editable,
+        (0, u32::from(u16::MAX)),
+        "Hours played",
+    ));
+    fields.push(scalar_field(
+        "trainer.play_time_minutes",
+        "Play time minutes",
+        (0, 16),
+        SaveValue::U32(minutes),
+        editable,
+        (0, 59),
+        "Minutes in the current hour",
+    ));
+    fields.push(scalar_field(
+        "trainer.play_time_seconds",
+        "Play time seconds",
+        (0, 17),
+        SaveValue::U32(seconds),
+        editable,
+        (0, 59),
+        "Seconds in the current minute",
+    ));
+    Ok(())
+}
+
+fn append_option_fields(fields: &mut Vec<SaveField>, small: &[u8], editable: bool) -> Result<()> {
+    let config = u16::from_le_bytes([small[0x14], small[0x15]]);
+    let text_speed = u32::from(config & 0x7);
+    let window_frame = u32::from((config >> 3) & 0x1f);
+    let sound = (config >> 8) & 1;
+    let battle_style = (config >> 9) & 1;
+    let battle_scene_off = (config >> 10) & 1;
+    let map_zoom = (config >> 11) & 1;
+    if text_speed > 2 || window_frame >= 20 || small[0x13] > 2 {
+        return Err(validation(
+            "save_options",
+            "the save has an invalid Generation III option value",
+        ));
+    }
+    fields.push(enum_field(
+        "options.button_mode",
+        "Button mode",
+        0x13,
+        match small[0x13] {
+            0 => "help",
+            1 => "lr",
+            _ => "l_equals_a",
+        },
+        editable,
+        &["help", "lr", "l_equals_a"],
+        "A-button and shoulder-button behavior",
+    ));
+    fields.push(scalar_field(
+        "options.text_speed",
+        "Text speed",
+        (0, 0x14),
+        SaveValue::U32(text_speed),
+        editable,
+        (0, 2),
+        "Text speed: 0 slow, 1 medium, 2 fast",
+    ));
+    fields.push(scalar_field(
+        "options.window_frame",
+        "Window frame",
+        (0, 0x14),
+        SaveValue::U32(window_frame),
+        editable,
+        (0, 19),
+        "Text window frame type",
+    ));
+    fields.push(enum_field(
+        "options.sound",
+        "Sound",
+        0x14,
+        if sound == 0 { "mono" } else { "stereo" },
+        editable,
+        &["mono", "stereo"],
+        "Sound output mode",
+    ));
+    fields.push(enum_field(
+        "options.battle_style",
+        "Battle style",
+        0x14,
+        if battle_style == 0 { "shift" } else { "set" },
+        editable,
+        &["shift", "set"],
+        "Whether the game offers a switch after a foe faints",
+    ));
+    fields.push(enum_field(
+        "options.battle_scene",
+        "Battle scene",
+        0x14,
+        if battle_scene_off == 0 { "on" } else { "off" },
+        editable,
+        &["on", "off"],
+        "Battle animation mode",
+    ));
+    fields.push(SaveField {
+        id: "options.region_map_zoom".into(),
+        label: "Region map zoom".into(),
+        section_id: 0,
+        offset: 0x14,
+        kind: SaveFieldKind::Boolean,
+        value: SaveValue::Bool(map_zoom != 0),
+        editable,
+        constraints: SaveConstraint::default(),
+        description: "Region map zoom state".into(),
+        warnings: Vec::new(),
+        step: None,
+        encoding: None,
+    });
+    Ok(())
+}
+
+fn enum_field(
+    id: &str,
+    label: &str,
+    offset: usize,
+    value: &str,
+    editable: bool,
+    choices: &[&str],
+    description: &str,
+) -> SaveField {
+    SaveField {
+        id: id.into(),
+        label: label.into(),
+        section_id: 0,
+        offset: offset as u16,
+        kind: SaveFieldKind::Enum,
+        value: SaveValue::Enum(value.into()),
+        editable,
+        constraints: SaveConstraint {
+            choices: choices.iter().map(|choice| (*choice).into()).collect(),
+            ..Default::default()
+        },
+        description: description.into(),
+        warnings: Vec::new(),
+        step: None,
+        encoding: None,
+    }
+}
+
+fn append_inventory_fields(
+    fields: &mut Vec<SaveField>,
+    family: Family,
+    large: &[u8],
+    security_key: Option<u32>,
+    editable: bool,
+) -> Result<()> {
+    let pockets = inventory_pockets(family);
+    let key = security_key.unwrap_or(0) as u16;
+    for (pocket, base, count, max) in pockets {
+        for index in 0..*count {
+            let offset = base + index * 4 + 2;
+            let item_id = u16::from_le_bytes([large[offset - 2], large[offset - 1]]);
+            if item_id == 0 {
+                continue;
+            }
+            let raw = u16::from_le_bytes([large[offset], large[offset + 1]]);
+            let quantity = u32::from(raw ^ key);
+            if quantity == 0 || quantity > *max {
+                return Err(validation(
+                    "save_inventory_quantity",
+                    "an occupied inventory slot has an invalid quantity",
+                ));
+            }
+            fields.push(scalar_field(
+                &format!("inventory.{pocket}_{}.quantity", index + 1),
+                &format!("{} slot {} quantity", pocket.replace('_', " "), index + 1),
+                (1, offset),
+                SaveValue::U32(quantity),
+                editable,
+                (1, *max),
+                &format!("Quantity of item ID {item_id}. The item ID stays unchanged."),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn inventory_pockets(family: Family) -> &'static [(&'static str, usize, usize, u32)] {
+    match family {
+        Family::Rs => &[
+            ("items", 0x560, 20, 99),
+            ("key_items", 0x5b0, 20, 1),
+            ("balls", 0x600, 16, 99),
+            ("tm_hm", 0x640, 64, 99),
+            ("berries", 0x740, 46, 999),
+        ],
+        Family::Emerald => &[
+            ("items", 0x560, 30, 99),
+            ("key_items", 0x5d8, 30, 1),
+            ("balls", 0x650, 16, 99),
+            ("tm_hm", 0x690, 64, 99),
+            ("berries", 0x790, 46, 999),
+        ],
+        Family::Frlg => &[
+            ("items", 0x310, 42, 999),
+            ("key_items", 0x3b8, 30, 1),
+            ("balls", 0x430, 13, 999),
+            ("tm_hm", 0x464, 58, 999),
+            ("berries", 0x54c, 43, 999),
+        ],
+    }
+}
+
+fn inventory_location(family: Family, field: &str) -> Option<(usize, u32)> {
+    let remainder = field.strip_prefix("inventory.")?;
+    let (pocket, slot) = remainder.rsplit_once("_")?;
+    let slot = slot.strip_suffix(".quantity")?.parse::<usize>().ok()?;
+    inventory_pockets(family)
+        .iter()
+        .find(|(name, _, count, _)| *name == pocket && (1..=*count).contains(&slot))
+        .map(|(_, base, _, max)| (base + (slot - 1) * 4 + 2, *max))
+}
+
 fn apply_to_active(
     bytes: &mut [u8],
     family: Family,
@@ -863,6 +1210,10 @@ fn apply_to_active(
         Family::Frlg => 0x290,
         _ => 0x490,
     };
+    let coin_offset = match family {
+        Family::Frlg => 0x294,
+        _ => 0x494,
+    };
     for edit in edits {
         match (edit.field.as_str(), &edit.value) {
             ("trainer.name", SaveValue::Text(value)) => {
@@ -883,6 +1234,99 @@ fn apply_to_active(
             ("trainer.money", SaveValue::U32(value)) => section_data_mut(bytes, active, 1)
                 [money_offset..money_offset + 4]
                 .copy_from_slice(&(*value ^ key).to_le_bytes()),
+            ("trainer.coins", SaveValue::U32(value)) => section_data_mut(bytes, active, 1)
+                [coin_offset..coin_offset + 2]
+                .copy_from_slice(&((*value as u16 ^ key as u16).to_le_bytes())),
+            ("trainer.play_time_hours", SaveValue::U32(value)) => {
+                section_data_mut(bytes, active, 0)[14..16]
+                    .copy_from_slice(&(*value as u16).to_le_bytes())
+            }
+            ("trainer.play_time_minutes", SaveValue::U32(value)) => {
+                section_data_mut(bytes, active, 0)[16] = *value as u8
+            }
+            ("trainer.play_time_seconds", SaveValue::U32(value)) => {
+                section_data_mut(bytes, active, 0)[17] = *value as u8
+            }
+            ("progress.battle_points", SaveValue::U32(value)) => section_data_mut(bytes, active, 0)
+                [0xEB8..0xEBA]
+                .copy_from_slice(&(*value as u16).to_le_bytes()),
+            ("options.button_mode", SaveValue::Enum(value)) => {
+                section_data_mut(bytes, active, 0)[0x13] = match value.as_str() {
+                    "help" => 0,
+                    "lr" => 1,
+                    "l_equals_a" => 2,
+                    _ => {
+                        return Err(validation(
+                            "save_value_choice",
+                            "the requested button mode is not allowed",
+                        ));
+                    }
+                }
+            }
+            ("options.text_speed", SaveValue::U32(value)) => {
+                update_options_config(section_data_mut(bytes, active, 0), 0x7, 0, *value)?
+            }
+            ("options.window_frame", SaveValue::U32(value)) => {
+                update_options_config(section_data_mut(bytes, active, 0), 0x1f, 3, *value)?
+            }
+            ("options.sound", SaveValue::Enum(value)) => {
+                let bit = match value.as_str() {
+                    "mono" => 0,
+                    "stereo" => 1,
+                    _ => {
+                        return Err(validation(
+                            "save_value_choice",
+                            "the requested sound mode is not allowed",
+                        ));
+                    }
+                };
+                update_options_config(section_data_mut(bytes, active, 0), 1, 8, bit)?;
+            }
+            ("options.battle_style", SaveValue::Enum(value)) => {
+                let bit = match value.as_str() {
+                    "shift" => 0,
+                    "set" => 1,
+                    _ => {
+                        return Err(validation(
+                            "save_value_choice",
+                            "the requested battle style is not allowed",
+                        ));
+                    }
+                };
+                update_options_config(section_data_mut(bytes, active, 0), 1, 9, bit)?;
+            }
+            ("options.battle_scene", SaveValue::Enum(value)) => {
+                let bit = match value.as_str() {
+                    "on" => 0,
+                    "off" => 1,
+                    _ => {
+                        return Err(validation(
+                            "save_value_choice",
+                            "the requested battle scene mode is not allowed",
+                        ));
+                    }
+                };
+                update_options_config(section_data_mut(bytes, active, 0), 1, 10, bit)?;
+            }
+            ("options.region_map_zoom", SaveValue::Bool(value)) => {
+                update_options_config(section_data_mut(bytes, active, 0), 1, 11, u32::from(*value))?
+            }
+            (field, SaveValue::U32(value)) if field.starts_with("inventory.") => {
+                let (offset, max) = inventory_location(family, field).ok_or_else(|| {
+                    validation(
+                        "save_field_unknown",
+                        "the requested inventory field is unknown",
+                    )
+                })?;
+                if *value > max {
+                    return Err(validation(
+                        "save_value_range",
+                        "the requested item quantity is outside its allowed range",
+                    ));
+                }
+                section_data_mut(bytes, active, 1)[offset..offset + 2]
+                    .copy_from_slice(&((*value as u16 ^ key as u16).to_le_bytes()));
+            }
             (field, SaveValue::Bool(value)) if field.starts_with("progress.badge_") => {
                 let index = field[15..]
                     .parse::<usize>()
@@ -915,6 +1359,302 @@ fn apply_to_active(
     Ok(())
 }
 
+fn update_options_config(data: &mut [u8], mask: u16, shift: u8, value: u32) -> Result<()> {
+    if value > u32::from(mask) {
+        return Err(validation(
+            "save_value_range",
+            "the requested option value is outside its allowed range",
+        ));
+    }
+    let mut config = u16::from_le_bytes([data[0x14], data[0x15]]);
+    config = (config & !(mask << shift)) | ((value as u16 & mask) << shift);
+    data[0x14..0x16].copy_from_slice(&config.to_le_bytes());
+    Ok(())
+}
+
 fn validation(code: &'static str, message: &'static str) -> RomWeaverError {
     RomWeaverError::ValidationCode(ValidationCodeError::new(code).with_message(message))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixture(family: Family) -> Vec<u8> {
+        let mut bytes = vec![0u8; GEN3_SAVE_SIZE];
+        for slot in 0..2u8 {
+            let base = usize::from(slot) * SLOT_SIZE;
+            for id in 0..14u8 {
+                let offset = base + usize::from(id) * SECTION_SIZE;
+                let data = &mut bytes[offset..offset + SECTION_SIZE];
+                data.fill(0);
+                if id == 0 {
+                    data[0x14..0x18].copy_from_slice(&0u32.to_le_bytes());
+                    if family == Family::Emerald {
+                        data[0xAC..0xB0].copy_from_slice(&0x1020_3040u32.to_le_bytes());
+                        data[0xEB8..0xEBA].copy_from_slice(&7u16.to_le_bytes());
+                    } else if family == Family::Frlg {
+                        data[0xF20..0xF24].copy_from_slice(&0x1020_3040u32.to_le_bytes());
+                    }
+                }
+                if id == 1 {
+                    let key = if family == Family::Rs {
+                        0u32
+                    } else {
+                        0x1020_3040u32
+                    };
+                    let money_offset = if family == Family::Frlg { 0x290 } else { 0x490 };
+                    data[money_offset..money_offset + 4]
+                        .copy_from_slice(&(100u32 ^ key).to_le_bytes());
+                    let coin_offset = if family == Family::Frlg { 0x294 } else { 0x494 };
+                    data[coin_offset..coin_offset + 2]
+                        .copy_from_slice(&(7u16 ^ key as u16).to_le_bytes());
+                    let item_offset = match family {
+                        Family::Rs | Family::Emerald => 0x560,
+                        Family::Frlg => 0x310,
+                    };
+                    data[item_offset..item_offset + 2].copy_from_slice(&13u16.to_le_bytes());
+                    data[item_offset + 2..item_offset + 4]
+                        .copy_from_slice(&(4u16 ^ key as u16).to_le_bytes());
+                }
+                let checksum_value = checksum(&data[..family.checksum_size(id)]);
+                data[0xFF4..0xFF6].copy_from_slice(&u16::from(id).to_le_bytes());
+                data[0xFF6..0xFF8].copy_from_slice(&checksum_value.to_le_bytes());
+                data[0xff8..0xffc].copy_from_slice(&SIGNATURE.to_le_bytes());
+                let counter: u32 = if slot == 0 { 10 } else { 11 };
+                data[0xffc..].copy_from_slice(&counter.to_le_bytes());
+            }
+        }
+        bytes
+    }
+
+    fn identity(family: Family) -> SaveGameIdentity {
+        match family {
+            Family::Rs => Family::Rs.identity("pokemon-ruby"),
+            Family::Emerald => Family::Emerald.identity("pokemon-emerald"),
+            Family::Frlg => Family::Frlg.identity("pokemon-firered"),
+        }
+    }
+
+    #[test]
+    fn generates_parseable_rotated_slots_for_every_registered_game() {
+        let handler = PokemonGen3Handler;
+
+        for definition in handler.definitions() {
+            assert!(handler.supports_generation(&definition.identity));
+            let family = family_for_game(&definition.identity).unwrap();
+            let bytes = handler.generate(&definition.identity).unwrap();
+            assert_eq!(bytes.len(), GEN3_SAVE_SIZE);
+            assert!(bytes[2 * SLOT_SIZE..].iter().all(|byte| *byte == 0xFF));
+
+            let first = parse_slot(&bytes, 0, family).unwrap();
+            let second = parse_slot(&bytes, 1, family).unwrap();
+            assert_eq!(first.counter, 0);
+            assert_eq!(second.counter, 1);
+            assert_eq!(first.positions[0], 0);
+            assert_eq!(second.positions[0], SLOT_SIZE + SECTION_SIZE);
+            assert_eq!(second.positions[13], SLOT_SIZE);
+
+            let input = SaveDetectionInput {
+                bytes,
+                selected_game: Some(definition.identity.id.clone()),
+                rom_sha1: None,
+            };
+            let document = handler.parse(&input, &definition.identity).unwrap();
+            assert_eq!(document.identity, definition.identity);
+            assert_eq!(document.active_slot, 1);
+            assert_eq!(document.counter, 1);
+            assert_eq!(document.integrity.state, SaveIntegrityState::Valid);
+            assert_eq!(
+                field_value(&document, "trainer.name"),
+                Some(&SaveValue::Text("PLAYER".into()))
+            );
+            assert!(matches!(
+                handler.recognize(&input).outcome,
+                SaveRecognitionOutcome::Recognized { .. }
+            ));
+        }
+    }
+
+    #[test]
+    fn rejects_generation_for_an_unregistered_game() {
+        let unknown = SaveGameIdentity {
+            id: "pokemon-platinum".into(),
+            name: "Pokémon Platinum".into(),
+            family: "pokemon-gen4".into(),
+        };
+        assert!(PokemonGen3Handler.generate(&unknown).is_err());
+    }
+
+    #[test]
+    fn edits_currency_options_time_and_inventory_without_touching_backup() {
+        for family in [Family::Rs, Family::Emerald, Family::Frlg] {
+            let input_bytes = fixture(family);
+            let input = SaveDetectionInput {
+                bytes: input_bytes.clone(),
+                selected_game: Some(identity(family).id.clone()),
+                rom_sha1: None,
+            };
+            let result = PokemonGen3Handler
+                .apply(
+                    &input,
+                    &identity(family),
+                    &[
+                        SaveEdit {
+                            field: "trainer.coins".into(),
+                            value: SaveValue::U32(9999),
+                        },
+                        SaveEdit {
+                            field: "trainer.play_time_hours".into(),
+                            value: SaveValue::U32(123),
+                        },
+                        SaveEdit {
+                            field: "options.text_speed".into(),
+                            value: SaveValue::U32(2),
+                        },
+                        SaveEdit {
+                            field: "options.sound".into(),
+                            value: SaveValue::Enum("stereo".into()),
+                        },
+                        SaveEdit {
+                            field: "inventory.items_1.quantity".into(),
+                            value: SaveValue::U32(9),
+                        },
+                    ],
+                    false,
+                )
+                .unwrap();
+            let output = result.bytes.unwrap();
+            assert_eq!(result.document.active_slot, 1);
+            assert_eq!(&output[..SLOT_SIZE], &input_bytes[..SLOT_SIZE]);
+            assert_eq!(output[SLOT_SIZE + 0x14] & 7, 2);
+            let inventory_offset = if family == Family::Frlg { 0x310 } else { 0x560 };
+            let inventory = SLOT_SIZE + SECTION_SIZE + inventory_offset;
+            assert_eq!(&output[inventory..inventory + 2], &13u16.to_le_bytes());
+            let expected_quantity = 9u16 ^ if family == Family::Rs { 0 } else { 0x3040 };
+            assert_eq!(
+                &output[inventory + 2..inventory + 4],
+                &expected_quantity.to_le_bytes()
+            );
+            assert_eq!(
+                &output[SLOT_SIZE + SECTION_SIZE..SLOT_SIZE + SECTION_SIZE + 0x290],
+                &input_bytes[SLOT_SIZE + SECTION_SIZE..SLOT_SIZE + SECTION_SIZE + 0x290]
+            );
+            let coin_offset = if family == Family::Frlg { 0x294 } else { 0x494 };
+            assert_ne!(
+                output[SLOT_SIZE + SECTION_SIZE + coin_offset],
+                input_bytes[SLOT_SIZE + SECTION_SIZE + coin_offset],
+                "coin byte did not change for {family:?}"
+            );
+            assert_eq!(
+                field_value(&result.document, "trainer.coins"),
+                Some(&SaveValue::U32(9999))
+            );
+            assert_eq!(
+                field_value(&result.document, "inventory.items_1.quantity"),
+                Some(&SaveValue::U32(9))
+            );
+        }
+    }
+
+    #[test]
+    fn emerald_battle_points_and_encrypted_values_reparse() {
+        let bytes = fixture(Family::Emerald);
+        let game = identity(Family::Emerald);
+        let input = SaveDetectionInput {
+            bytes,
+            selected_game: Some(game.id.clone()),
+            rom_sha1: None,
+        };
+        let result = PokemonGen3Handler
+            .apply(
+                &input,
+                &game,
+                &[SaveEdit {
+                    field: "progress.battle_points".into(),
+                    value: SaveValue::U32(9999),
+                }],
+                false,
+            )
+            .unwrap();
+        assert_eq!(
+            field_value(&result.document, "progress.battle_points"),
+            Some(&SaveValue::U32(9999))
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_option_and_quantity_values() {
+        let bytes = fixture(Family::Rs);
+        let game = identity(Family::Rs);
+        let input = SaveDetectionInput {
+            bytes,
+            selected_game: Some(game.id.clone()),
+            rom_sha1: None,
+        };
+        let error = PokemonGen3Handler.apply(
+            &input,
+            &game,
+            &[SaveEdit {
+                field: "options.text_speed".into(),
+                value: SaveValue::U32(3),
+            }],
+            false,
+        );
+        assert!(error.is_err());
+        let error = PokemonGen3Handler.apply(
+            &input,
+            &game,
+            &[SaveEdit {
+                field: "inventory.key_items_1.quantity".into(),
+                value: SaveValue::U32(2),
+            }],
+            false,
+        );
+        assert!(error.is_err());
+    }
+
+    #[test]
+    fn reads_out_of_range_coins_but_rejects_writing_them() {
+        let mut bytes = fixture(Family::Emerald);
+        let active_section = SLOT_SIZE + SECTION_SIZE;
+        bytes[active_section + 0x494..active_section + 0x496].copy_from_slice(&0u16.to_le_bytes());
+        recompute_checksum(&mut bytes, active_section, Family::Emerald.checksum_size(1));
+        let game = identity(Family::Emerald);
+        let input = SaveDetectionInput {
+            bytes,
+            selected_game: Some(game.id.clone()),
+            rom_sha1: None,
+        };
+
+        let document = PokemonGen3Handler.parse(&input, &game).unwrap();
+        assert_eq!(
+            field_value(&document, "trainer.coins"),
+            Some(&SaveValue::U32(0x3040))
+        );
+        PokemonGen3Handler
+            .apply(
+                &input,
+                &game,
+                &[SaveEdit {
+                    field: "trainer.money".into(),
+                    value: SaveValue::U32(500),
+                }],
+                true,
+            )
+            .unwrap();
+        assert!(
+            PokemonGen3Handler
+                .apply(
+                    &input,
+                    &game,
+                    &[SaveEdit {
+                        field: "trainer.coins".into(),
+                        value: SaveValue::U32(MAX_COINS + 1),
+                    }],
+                    true,
+                )
+                .is_err()
+        );
+    }
 }

@@ -15,34 +15,48 @@ const COPY_SIZE: usize = 0x40000;
 const FOOTER_SIZE: usize = 16;
 const FOOTER_MAGIC: u32 = 0x2006_0623;
 const MAIN_BLOCK_SIZE: usize = 0xF628;
-const MAIN_FOOTER_OFFSET: usize = MAIN_BLOCK_SIZE - FOOTER_SIZE;
 const PC_BLOCK_OFFSET: usize = 0xF700;
 const PC_BLOCK_SIZE: usize = 0x12310;
-const PC_FOOTER_OFFSET: usize = PC_BLOCK_OFFSET + PC_BLOCK_SIZE - FOOTER_SIZE;
 const SYS_INFO_SIZE: usize = 0x5c;
 const ARRAY_CRC_SIZE: usize = 4;
 const PLAYER_DATA_OFFSET: usize = SYS_INFO_SIZE + ARRAY_CRC_SIZE;
 const PROFILE_OFFSET: usize = PLAYER_DATA_OFFSET + 4;
-const PROFILE_ID_OFFSET: usize = PROFILE_OFFSET + 16;
-const PROFILE_MONEY_OFFSET: usize = PROFILE_OFFSET + 20;
-const PROFILE_GENDER_OFFSET: usize = PROFILE_OFFSET + 24;
-const PROFILE_JOHTO_BADGES_OFFSET: usize = PROFILE_OFFSET + 26;
-const PROFILE_VERSION_OFFSET: usize = PROFILE_OFFSET + 28;
-const PROFILE_KANTO_BADGES_OFFSET: usize = PROFILE_OFFSET + 31;
-const PLAY_TIME_OFFSET: usize = PROFILE_OFFSET + 0x22;
 const MAX_MONEY: u32 = 999_999;
+const MAX_COINS: u32 = 50_000;
+const MAX_BATTLE_POINTS: u32 = 9_999;
+
+#[derive(Clone, Copy, Debug)]
+struct Layout {
+    main_size: usize,
+    pc_offset: usize,
+    pc_size: usize,
+    trainer_offset: usize,
+    bp_offset: usize,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Title {
+    Diamond,
+    Pearl,
+    Platinum,
     HeartGold,
     SoulSilver,
 }
 
 impl Title {
-    const ALL: [Self; 2] = [Self::HeartGold, Self::SoulSilver];
+    const ALL: [Self; 5] = [
+        Self::Diamond,
+        Self::Pearl,
+        Self::Platinum,
+        Self::HeartGold,
+        Self::SoulSilver,
+    ];
 
     fn id(self) -> &'static str {
         match self {
+            Self::Diamond => "pokemon-diamond",
+            Self::Pearl => "pokemon-pearl",
+            Self::Platinum => "pokemon-platinum",
             Self::HeartGold => "pokemon-heartgold",
             Self::SoulSilver => "pokemon-soulsilver",
         }
@@ -50,6 +64,9 @@ impl Title {
 
     fn name(self) -> &'static str {
         match self {
+            Self::Diamond => "Pokémon Diamond",
+            Self::Pearl => "Pokémon Pearl",
+            Self::Platinum => "Pokémon Platinum",
             Self::HeartGold => "Pokémon HeartGold",
             Self::SoulSilver => "Pokémon SoulSilver",
         }
@@ -58,6 +75,7 @@ impl Title {
     fn version(self) -> u8 {
         // https://github.com/pret/pokeheartgold/blob/master/include/config.h
         match self {
+            Self::Diamond | Self::Pearl | Self::Platinum => 0,
             Self::HeartGold => 7,
             Self::SoulSilver => 8,
         }
@@ -67,7 +85,37 @@ impl Title {
         SaveGameIdentity {
             id: self.id().into(),
             name: self.name().into(),
-            family: "pokemon-gen4-hgss".into(),
+            family: match self {
+                Self::Diamond | Self::Pearl | Self::Platinum => "pokemon-gen4-dppt",
+                Self::HeartGold | Self::SoulSilver => "pokemon-gen4-hgss",
+            }
+            .into(),
+        }
+    }
+
+    fn layout(self) -> Layout {
+        match self {
+            Self::Diamond | Self::Pearl => Layout {
+                main_size: 0xC100,
+                pc_offset: 0xC100,
+                pc_size: 0x121E0,
+                trainer_offset: 0x64,
+                bp_offset: 0x65F8,
+            },
+            Self::Platinum => Layout {
+                main_size: 0xCF2C,
+                pc_offset: 0xCF2C,
+                pc_size: 0x121E4,
+                trainer_offset: 0x68,
+                bp_offset: 0x7234,
+            },
+            Self::HeartGold | Self::SoulSilver => Layout {
+                main_size: MAIN_BLOCK_SIZE,
+                pc_offset: PC_BLOCK_OFFSET,
+                pc_size: PC_BLOCK_SIZE,
+                trainer_offset: PROFILE_OFFSET,
+                bp_offset: 0x5BB8,
+            },
         }
     }
 
@@ -113,6 +161,21 @@ pub struct PokemonGen4Handler;
 impl SaveGameHandler for PokemonGen4Handler {
     fn definitions(&self) -> Vec<SaveGameDefinition> {
         Title::ALL.into_iter().map(Title::definition).collect()
+    }
+
+    fn supports_generation(&self, _game: &SaveGameIdentity) -> bool {
+        true
+    }
+
+    fn generate(&self, game: &SaveGameIdentity) -> Result<Vec<u8>> {
+        let title = title_for_game(game)?;
+        let mut bytes = vec![0xff; GEN4_SAVE_SIZE];
+        initialize_copy(&mut bytes, 0, 0, title);
+        initialize_copy(&mut bytes, 1, 1, title);
+
+        let (active, redundancy) = active_slot(&bytes, title)?;
+        build_document(&bytes, title, game, &active, redundancy)?;
+        Ok(bytes)
     }
 
     fn recognize(&self, input: &SaveDetectionInput) -> SaveRecognition {
@@ -205,8 +268,8 @@ impl SaveGameHandler for PokemonGen4Handler {
         }
 
         let mut bytes = input.bytes.clone();
-        apply_to_active(&mut bytes, &active, edits)?;
-        repair_main_crc(&mut bytes, &active);
+        apply_to_active(&mut bytes, title, &active, edits)?;
+        repair_main_crc(&mut bytes, title, &active);
 
         let (reparsed_active, reparsed_redundancy) = active_slot(&bytes, title)?;
         let reparsed = build_document(&bytes, title, game, &reparsed_active, reparsed_redundancy)?;
@@ -237,6 +300,42 @@ fn title_for_game(game: &SaveGameIdentity) -> Result<Title> {
             "the selected save game is unsupported",
         )
     })
+}
+
+fn initialize_copy(bytes: &mut [u8], slot: u8, count: u32, title: Title) {
+    let layout = title.layout();
+    let base = usize::from(slot) * COPY_SIZE;
+    let copy = &mut bytes[base..base + COPY_SIZE];
+    copy[..layout.pc_offset + layout.pc_size].fill(0);
+
+    let trainer = layout.trainer_offset;
+    copy[trainer + 0x18] = 0;
+    if matches!(title, Title::HeartGold | Title::SoulSilver) {
+        copy[trainer + 0x1C] = title.version();
+    }
+
+    initialize_footer(copy, layout.main_size, count, 0, 0);
+    initialize_footer(
+        copy,
+        layout.pc_offset + layout.pc_size,
+        count,
+        1,
+        layout.pc_offset,
+    );
+}
+
+fn initialize_footer(copy: &mut [u8], end: usize, count: u32, slot: u16, start: usize) {
+    let footer = end - FOOTER_SIZE;
+    copy[footer..footer + 4].copy_from_slice(&count.to_le_bytes());
+    copy[footer + 4..footer + 8].copy_from_slice(
+        &u32::try_from(end - start)
+            .expect("save block size fits u32")
+            .to_le_bytes(),
+    );
+    copy[footer + 8..footer + 12].copy_from_slice(&FOOTER_MAGIC.to_le_bytes());
+    copy[footer + 12..footer + 14].copy_from_slice(&slot.to_le_bytes());
+    let crc = crc16_ccitt(&copy[start..footer]);
+    copy[footer + 14..footer + 16].copy_from_slice(&crc.to_le_bytes());
 }
 
 fn active_slot(bytes: &[u8], title: Title) -> Result<(ParsedSlot, RedundancyState)> {
@@ -280,13 +379,16 @@ fn active_slot(bytes: &[u8], title: Title) -> Result<(ParsedSlot, RedundancyStat
 fn parse_slot(bytes: &[u8], slot: u8, title: Title) -> Result<ParsedSlot> {
     let base = usize::from(slot) * COPY_SIZE;
     let copy = &bytes[base..base + COPY_SIZE];
-    let main = parse_footer(copy, MAIN_FOOTER_OFFSET, 0, MAIN_BLOCK_SIZE, 0, "main")?;
+    let layout = title.layout();
+    let main_footer_offset = layout.main_size - FOOTER_SIZE;
+    let pc_footer_offset = layout.pc_offset + layout.pc_size - FOOTER_SIZE;
+    let main = parse_footer(copy, main_footer_offset, 0, layout.main_size, 0, "main")?;
     let pc = parse_footer(
         copy,
-        PC_FOOTER_OFFSET,
+        pc_footer_offset,
         1,
-        PC_BLOCK_SIZE,
-        PC_BLOCK_OFFSET,
+        layout.pc_size,
+        layout.pc_offset,
         "PC",
     )?;
     if main.count != pc.count {
@@ -350,22 +452,31 @@ fn parse_footer(
 }
 
 fn validate_profile(copy: &[u8], title: Title) -> Result<()> {
-    if copy[PROFILE_VERSION_OFFSET] != title.version() {
+    let trainer = title.layout().trainer_offset;
+    if !matches!(title, Title::Diamond | Title::Pearl | Title::Platinum)
+        && copy[trainer + 0x1C] != title.version()
+    {
         return Err(validation(
             "save_game_version",
             "the trainer profile does not match the selected game",
         ));
     }
-    if copy[PROFILE_GENDER_OFFSET] > 1 {
+    if copy[trainer + 0x18] > 1 {
         return Err(validation(
             "save_gender",
             "the save has an invalid player gender value",
         ));
     }
-    if read_u32(copy, PROFILE_MONEY_OFFSET) > MAX_MONEY {
+    if read_u32(copy, trainer + 0x14) > MAX_MONEY {
         return Err(validation(
             "save_money",
             "the save has a money value above the game limit",
+        ));
+    }
+    if copy[trainer + 0x24] > 59 || copy[trainer + 0x25] > 59 {
+        return Err(validation(
+            "save_play_time",
+            "the save has an invalid play-time minute or second value",
         ));
     }
     Ok(())
@@ -381,13 +492,36 @@ fn build_document(
     let copy = &bytes[active.base..active.base + COPY_SIZE];
     validate_profile(copy, title)?;
     let editable = redundancy == RedundancyState::Complete;
-    let trainer_id = read_u32(copy, PROFILE_ID_OFFSET);
+    let layout = title.layout();
+    let trainer = layout.trainer_offset;
+    let profile_id_offset = trainer + 0x10;
+    let profile_money_offset = trainer + 0x14;
+    let profile_gender_offset = trainer + 0x18;
+    let profile_johto_badges_offset = trainer + 0x1A;
+    let profile_kanto_badges_offset = trainer + 0x1F;
+    let play_time_offset = trainer + 0x22;
+    let coins_offset = trainer + 0x20;
+    let trainer_id = read_u32(copy, profile_id_offset);
+    let coins = u32::from(read_u16(copy, coins_offset));
+    let battle_points = u32::from(read_u16(copy, layout.bp_offset));
+    if coins > MAX_COINS {
+        return Err(validation(
+            "save_coins",
+            "the save has coins above the game limit",
+        ));
+    }
+    if battle_points > MAX_BATTLE_POINTS {
+        return Err(validation(
+            "save_battle_points",
+            "the save has battle points above the game limit",
+        ));
+    }
     let mut fields = vec![
         SaveField {
             id: "trainer.id".into(),
             label: "Trainer ID".into(),
             section_id: 0,
-            offset: PROFILE_ID_OFFSET as u16,
+            offset: profile_id_offset as u16,
             kind: SaveFieldKind::ReadOnlyInteger,
             value: SaveValue::U32(trainer_id & 0xffff),
             editable: false,
@@ -401,7 +535,7 @@ fn build_document(
             id: "trainer.secret_id".into(),
             label: "Secret ID".into(),
             section_id: 0,
-            offset: PROFILE_ID_OFFSET as u16,
+            offset: profile_id_offset as u16,
             kind: SaveFieldKind::ReadOnlyInteger,
             value: SaveValue::U32(trainer_id >> 16),
             editable: false,
@@ -415,10 +549,10 @@ fn build_document(
             id: "trainer.gender".into(),
             label: "Gender".into(),
             section_id: 0,
-            offset: PROFILE_GENDER_OFFSET as u16,
+            offset: profile_gender_offset as u16,
             kind: SaveFieldKind::Enum,
             value: SaveValue::Enum(
-                if copy[PROFILE_GENDER_OFFSET] == 0 {
+                if copy[profile_gender_offset] == 0 {
                     "male"
                 } else {
                     "female"
@@ -439,9 +573,9 @@ fn build_document(
             id: "trainer.money".into(),
             label: "Money".into(),
             section_id: 0,
-            offset: PROFILE_MONEY_OFFSET as u16,
+            offset: profile_money_offset as u16,
             kind: SaveFieldKind::UnsignedInteger,
-            value: SaveValue::U32(read_u32(copy, PROFILE_MONEY_OFFSET)),
+            value: SaveValue::U32(read_u32(copy, profile_money_offset)),
             editable,
             constraints: SaveConstraint {
                 min: Some(0),
@@ -457,13 +591,13 @@ fn build_document(
             id: "trainer.play_time".into(),
             label: "Play time".into(),
             section_id: 0,
-            offset: PLAY_TIME_OFFSET as u16,
+            offset: play_time_offset as u16,
             kind: SaveFieldKind::ReadOnlyText,
             value: SaveValue::Text(format!(
                 "{}:{:02}:{:02}",
-                read_u16(copy, PLAY_TIME_OFFSET),
-                copy[PLAY_TIME_OFFSET + 2],
-                copy[PLAY_TIME_OFFSET + 3]
+                read_u16(copy, play_time_offset),
+                copy[play_time_offset + 2],
+                copy[play_time_offset + 3]
             )),
             editable: false,
             constraints: SaveConstraint::default(),
@@ -473,11 +607,65 @@ fn build_document(
             encoding: None,
         },
     ];
-    for badge in 0..16u8 {
-        let (offset, bit) = badge_location(badge);
+    fields.push(scalar_field(
+        "trainer.coins",
+        "Coins",
+        coins_offset,
+        SaveValue::U32(coins),
+        editable,
+        (0, MAX_COINS),
+        "Game Corner coins",
+    ));
+    fields.push(scalar_field(
+        "trainer.play_time_hours",
+        "Play time hours",
+        play_time_offset,
+        SaveValue::U32(u32::from(read_u16(copy, play_time_offset))),
+        editable,
+        (0, u32::from(u16::MAX)),
+        "Hours played",
+    ));
+    fields.push(scalar_field(
+        "trainer.play_time_minutes",
+        "Play time minutes",
+        play_time_offset + 2,
+        SaveValue::U32(u32::from(copy[play_time_offset + 2])),
+        editable,
+        (0, 59),
+        "Minutes in the current hour",
+    ));
+    fields.push(scalar_field(
+        "trainer.play_time_seconds",
+        "Play time seconds",
+        play_time_offset + 3,
+        SaveValue::U32(u32::from(copy[play_time_offset + 3])),
+        editable,
+        (0, 59),
+        "Seconds in the current minute",
+    ));
+    fields.push(scalar_field(
+        "progress.battle_points",
+        "Battle Points",
+        layout.bp_offset,
+        SaveValue::U32(battle_points),
+        editable,
+        (0, MAX_BATTLE_POINTS),
+        "Battle Frontier points",
+    ));
+    let badge_count = if matches!(title, Title::Diamond | Title::Pearl | Title::Platinum) {
+        8
+    } else {
+        16
+    };
+    for badge in 0..badge_count {
+        let (offset, bit) = badge_location(
+            badge,
+            profile_johto_badges_offset,
+            profile_kanto_badges_offset,
+        );
         fields.push(SaveField {
             id: format!("progress.badge_{}", badge + 1),
-            label: badge_label(badge),
+            label: badge_label(title, badge),
             section_id: 0,
             offset: offset as u16,
             kind: SaveFieldKind::BitfieldBoolean,
@@ -515,10 +703,10 @@ fn build_document(
             },
             SaveSection {
                 id: 1,
-                physical_offset: (active.base + PC_BLOCK_OFFSET) as u32,
+                physical_offset: (active.base + layout.pc_offset) as u32,
                 checksum_expected: active.pc.crc,
                 checksum_actual: crc16_ccitt(
-                    &bytes[active.base + PC_BLOCK_OFFSET..active.base + active.pc.offset],
+                    &bytes[active.base + layout.pc_offset..active.base + active.pc.offset],
                 ),
                 signature: FOOTER_MAGIC,
                 counter: active.pc.count,
@@ -559,12 +747,19 @@ fn integrity_issues(redundancy: RedundancyState) -> Vec<SaveIntegrityIssue> {
     }
 }
 
-fn apply_to_active(bytes: &mut [u8], active: &ParsedSlot, edits: &[SaveEdit]) -> Result<()> {
+fn apply_to_active(
+    bytes: &mut [u8],
+    title: Title,
+    active: &ParsedSlot,
+    edits: &[SaveEdit],
+) -> Result<()> {
     let copy = &mut bytes[active.base..active.base + COPY_SIZE];
+    let layout = title.layout();
+    let trainer = layout.trainer_offset;
     for edit in edits {
         match (edit.field.as_str(), &edit.value) {
             ("trainer.gender", SaveValue::Enum(value)) => {
-                copy[PROFILE_GENDER_OFFSET] = match value.as_str() {
+                copy[trainer + 0x18] = match value.as_str() {
                     "male" => 0,
                     "female" => 1,
                     _ => {
@@ -576,8 +771,25 @@ fn apply_to_active(bytes: &mut [u8], active: &ParsedSlot, edits: &[SaveEdit]) ->
                 }
             }
             ("trainer.money", SaveValue::U32(value)) => {
-                copy[PROFILE_MONEY_OFFSET..PROFILE_MONEY_OFFSET + 4]
-                    .copy_from_slice(&value.to_le_bytes());
+                copy[trainer + 0x14..trainer + 0x14 + 4].copy_from_slice(&value.to_le_bytes());
+            }
+            ("trainer.coins", SaveValue::U32(value)) => {
+                copy[trainer + 0x20..trainer + 0x22]
+                    .copy_from_slice(&(*value as u16).to_le_bytes());
+            }
+            ("trainer.play_time_hours", SaveValue::U32(value)) => {
+                copy[trainer + 0x22..trainer + 0x24]
+                    .copy_from_slice(&(*value as u16).to_le_bytes());
+            }
+            ("trainer.play_time_minutes", SaveValue::U32(value)) => {
+                copy[trainer + 0x24] = *value as u8;
+            }
+            ("trainer.play_time_seconds", SaveValue::U32(value)) => {
+                copy[trainer + 0x25] = *value as u8;
+            }
+            ("progress.battle_points", SaveValue::U32(value)) => {
+                copy[layout.bp_offset..layout.bp_offset + 2]
+                    .copy_from_slice(&(*value as u16).to_le_bytes());
             }
             (field, SaveValue::Bool(value)) if field.starts_with("progress.badge_") => {
                 let badge = field[15..]
@@ -587,7 +799,7 @@ fn apply_to_active(bytes: &mut [u8], active: &ParsedSlot, edits: &[SaveEdit]) ->
                     .ok_or_else(|| {
                         validation("save_field_unknown", "the requested badge field is unknown")
                     })?;
-                let (offset, bit) = badge_location_checked(badge)?;
+                let (offset, bit) = badge_location_checked(badge, trainer + 0x1A, trainer + 0x1F)?;
                 if *value {
                     copy[offset] |= 1 << bit;
                 } else {
@@ -605,8 +817,9 @@ fn apply_to_active(bytes: &mut [u8], active: &ParsedSlot, edits: &[SaveEdit]) ->
     Ok(())
 }
 
-fn repair_main_crc(bytes: &mut [u8], active: &ParsedSlot) {
-    let crc = crc16_ccitt(&bytes[active.base..active.base + active.main.offset]);
+fn repair_main_crc(bytes: &mut [u8], title: Title, active: &ParsedSlot) {
+    let main_size = title.layout().main_size;
+    let crc = crc16_ccitt(&bytes[active.base..active.base + main_size - FOOTER_SIZE]);
     let footer = active.base + active.main.offset;
     bytes[footer + 14..footer + 16].copy_from_slice(&crc.to_le_bytes());
 }
@@ -618,21 +831,34 @@ const BADGE_NAMES: [&str; 16] = [
     "Cascade", "Thunder", "Rainbow", "Soul", "Marsh", "Volcano", "Earth",
 ];
 
-fn badge_label(badge: u8) -> String {
-    format!("{} Badge", BADGE_NAMES[usize::from(badge)])
+const SINNOH_BADGE_NAMES: [&str; 8] = [
+    "Coal", "Forest", "Cobble", "Fen", "Relic", "Mine", "Icicle", "Beacon",
+];
+
+fn badge_label(title: Title, badge: u8) -> String {
+    let names = if matches!(title, Title::Diamond | Title::Pearl | Title::Platinum) {
+        &SINNOH_BADGE_NAMES[..]
+    } else {
+        &BADGE_NAMES[..]
+    };
+    format!("{} Badge", names[usize::from(badge)])
 }
 
-fn badge_location(badge: u8) -> (usize, u8) {
+fn badge_location(badge: u8, johto_offset: usize, kanto_offset: usize) -> (usize, u8) {
     if badge < 8 {
-        (PROFILE_JOHTO_BADGES_OFFSET, badge)
+        (johto_offset, badge)
     } else {
-        (PROFILE_KANTO_BADGES_OFFSET, badge - 8)
+        (kanto_offset, badge - 8)
     }
 }
 
-fn badge_location_checked(badge: u8) -> Result<(usize, u8)> {
+fn badge_location_checked(
+    badge: u8,
+    johto_offset: usize,
+    kanto_offset: usize,
+) -> Result<(usize, u8)> {
     (badge < 16)
-        .then(|| badge_location(badge))
+        .then(|| badge_location(badge, johto_offset, kanto_offset))
         .ok_or_else(|| validation("save_field_unknown", "the requested badge field is unknown"))
 }
 
@@ -642,6 +868,35 @@ fn field_value<'a>(document: &'a SaveDocument, id: &str) -> Option<&'a SaveValue
         .iter()
         .find(|field| field.id == id)
         .map(|field| &field.value)
+}
+
+fn scalar_field(
+    id: &str,
+    label: &str,
+    offset: usize,
+    value: SaveValue,
+    editable: bool,
+    range: (u32, u32),
+    description: &str,
+) -> SaveField {
+    SaveField {
+        id: id.into(),
+        label: label.into(),
+        section_id: 0,
+        offset: offset as u16,
+        kind: SaveFieldKind::UnsignedInteger,
+        value,
+        editable,
+        constraints: SaveConstraint {
+            min: Some(i64::from(range.0)),
+            max: Some(i64::from(range.1)),
+            ..Default::default()
+        },
+        description: description.into(),
+        warnings: Vec::new(),
+        step: Some(1),
+        encoding: None,
+    }
 }
 
 fn copy_is_empty(bytes: &[u8], slot: u8) -> bool {
@@ -711,6 +966,7 @@ fn validation(code: &'static str, message: &'static str) -> RomWeaverError {
 mod tests {
     use super::*;
 
+    const MAIN_FOOTER_OFFSET: usize = MAIN_BLOCK_SIZE - FOOTER_SIZE;
     const FIXTURE_PROFILE_OFFSET: usize = 0x64;
     const FIXTURE_ID_OFFSET: usize = FIXTURE_PROFILE_OFFSET + 0x10;
     const FIXTURE_MONEY_OFFSET: usize = FIXTURE_PROFILE_OFFSET + 0x14;
@@ -757,6 +1013,47 @@ mod tests {
         );
     }
 
+    fn synthetic_variant(title: Title) -> Vec<u8> {
+        let mut bytes = vec![0xff; GEN4_SAVE_SIZE];
+        for slot in 0..2u8 {
+            let count = if slot == 0 { 10 } else { 11 };
+            write_variant_copy(&mut bytes, slot, count, title, 100, 0b0000_0011);
+        }
+        bytes
+    }
+
+    fn write_variant_copy(
+        bytes: &mut [u8],
+        slot: u8,
+        count: u32,
+        title: Title,
+        money: u32,
+        johto_badges: u8,
+    ) {
+        let layout = title.layout();
+        let base = usize::from(slot) * COPY_SIZE;
+        let copy = &mut bytes[base..base + COPY_SIZE];
+        copy[..layout.pc_offset + layout.pc_size].fill(0);
+        let trainer = layout.trainer_offset;
+        copy[trainer + 0x10..trainer + 0x14].copy_from_slice(&0x1234_5678u32.to_le_bytes());
+        copy[trainer + 0x14..trainer + 0x18].copy_from_slice(&money.to_le_bytes());
+        copy[trainer + 0x18] = 0;
+        copy[trainer + 0x1A] = johto_badges;
+        copy[trainer + 0x22..trainer + 0x24].copy_from_slice(&12u16.to_le_bytes());
+        copy[trainer + 0x24] = 34;
+        copy[trainer + 0x25] = 56;
+        copy[trainer + 0x20..trainer + 0x22].copy_from_slice(&77u16.to_le_bytes());
+        copy[layout.bp_offset..layout.bp_offset + 2].copy_from_slice(&88u16.to_le_bytes());
+        write_footer(copy, layout.main_size, count, 0, 0);
+        write_footer(
+            copy,
+            layout.pc_offset + layout.pc_size,
+            count,
+            1,
+            layout.pc_offset,
+        );
+    }
+
     fn write_footer(copy: &mut [u8], end: usize, count: u32, slot: u16, start: usize) {
         let footer = end - FOOTER_SIZE;
         copy[footer..footer + 4].copy_from_slice(&count.to_le_bytes());
@@ -770,6 +1067,135 @@ mod tests {
 
     fn game(title: Title) -> SaveGameIdentity {
         title.identity()
+    }
+
+    #[test]
+    fn generates_parseable_editable_saves_for_every_supported_title() {
+        let handler = PokemonGen4Handler;
+
+        for title in Title::ALL {
+            let identity = title.identity();
+            assert!(handler.supports_generation(&identity));
+            let bytes = handler.generate(&identity).unwrap();
+            assert_eq!(bytes.len(), GEN4_SAVE_SIZE, "{}", title.id());
+
+            let input = SaveDetectionInput {
+                bytes,
+                selected_game: Some(title.id().into()),
+                rom_sha1: None,
+            };
+            let document = handler.parse(&input, &identity).unwrap();
+            assert_eq!(document.active_slot, 1, "{}", title.id());
+            assert_eq!(document.counter, 1, "{}", title.id());
+            assert_eq!(document.integrity.state, SaveIntegrityState::Valid);
+            assert_eq!(
+                field_value(&document, "trainer.money"),
+                Some(&SaveValue::U32(0)),
+                "{}",
+                title.id()
+            );
+            assert!(
+                document
+                    .fields
+                    .iter()
+                    .filter(|field| field.kind != SaveFieldKind::ReadOnlyInteger
+                        && field.kind != SaveFieldKind::ReadOnlyText)
+                    .all(|field| field.editable),
+                "{}",
+                title.id()
+            );
+
+            let recognition = handler.recognize(&input);
+            assert!(
+                matches!(
+                    recognition.outcome,
+                    SaveRecognitionOutcome::Recognized { ref candidate }
+                        if candidate.identity.id == identity.id
+                ),
+                "{}",
+                title.id()
+            );
+
+            let edited = handler
+                .apply(
+                    &input,
+                    &identity,
+                    &[SaveEdit {
+                        field: "trainer.money".into(),
+                        value: SaveValue::U32(3_000),
+                    }],
+                    false,
+                )
+                .unwrap();
+            assert_eq!(
+                field_value(&edited.document, "trainer.money"),
+                Some(&SaveValue::U32(3_000)),
+                "{}",
+                title.id()
+            );
+        }
+    }
+
+    #[test]
+    fn generation_writes_both_layout_footers_and_checksums() {
+        let handler = PokemonGen4Handler;
+        for title in Title::ALL {
+            let bytes = handler.generate(&title.identity()).unwrap();
+            let layout = title.layout();
+            for slot in 0..2u8 {
+                let base = usize::from(slot) * COPY_SIZE;
+                let copy = &bytes[base..base + COPY_SIZE];
+                let expected_count = u32::from(slot);
+                let main = parse_footer(
+                    copy,
+                    layout.main_size - FOOTER_SIZE,
+                    0,
+                    layout.main_size,
+                    0,
+                    "main",
+                )
+                .unwrap();
+                let pc = parse_footer(
+                    copy,
+                    layout.pc_offset + layout.pc_size - FOOTER_SIZE,
+                    1,
+                    layout.pc_size,
+                    layout.pc_offset,
+                    "PC",
+                )
+                .unwrap();
+                assert_eq!(main.count, expected_count, "{}", title.id());
+                assert_eq!(pc.count, expected_count, "{}", title.id());
+            }
+        }
+    }
+
+    #[test]
+    fn generated_hgss_profile_identifies_the_selected_version() {
+        let handler = PokemonGen4Handler;
+        for title in [Title::HeartGold, Title::SoulSilver] {
+            let bytes = handler.generate(&title.identity()).unwrap();
+            let trainer = title.layout().trainer_offset;
+            assert_eq!(bytes[trainer + 0x1C], title.version());
+            assert_eq!(
+                bytes[COPY_SIZE + trainer + 0x1C],
+                title.version(),
+                "{}",
+                title.id()
+            );
+        }
+    }
+
+    #[test]
+    fn generation_rejects_an_identity_owned_by_another_handler() {
+        let error = PokemonGen4Handler
+            .generate(&SaveGameIdentity {
+                id: "not-pokemon-gen4".into(),
+                name: "Unsupported".into(),
+                family: "unsupported".into(),
+            })
+            .unwrap_err();
+        assert!(matches!(error, RomWeaverError::ValidationCode(_)));
     }
 
     #[test]
@@ -815,6 +1241,50 @@ mod tests {
             crc16_ccitt(&output[COPY_SIZE..COPY_SIZE + MAIN_FOOTER_OFFSET]),
             footer_crc(&output[COPY_SIZE..], MAIN_FOOTER_OFFSET)
         );
+    }
+
+    #[test]
+    fn supports_diamond_pearl_and_platinum_layouts() {
+        for title in [Title::Diamond, Title::Pearl, Title::Platinum] {
+            let bytes = synthetic_variant(title);
+            let input = SaveDetectionInput {
+                bytes: bytes.clone(),
+                selected_game: Some(title.id().into()),
+                rom_sha1: None,
+            };
+            let result = PokemonGen4Handler
+                .apply(
+                    &input,
+                    &title.identity(),
+                    &[
+                        SaveEdit {
+                            field: "trainer.coins".into(),
+                            value: SaveValue::U32(50_000),
+                        },
+                        SaveEdit {
+                            field: "progress.battle_points".into(),
+                            value: SaveValue::U32(9_999),
+                        },
+                        SaveEdit {
+                            field: "trainer.play_time_minutes".into(),
+                            value: SaveValue::U32(59),
+                        },
+                    ],
+                    false,
+                )
+                .unwrap();
+            let output = result.bytes.unwrap();
+            assert_eq!(result.document.active_slot, 1);
+            assert_eq!(
+                field_value(&result.document, "trainer.coins"),
+                Some(&SaveValue::U32(50_000))
+            );
+            assert_eq!(
+                field_value(&result.document, "progress.battle_points"),
+                Some(&SaveValue::U32(9_999))
+            );
+            assert_eq!(&output[..COPY_SIZE], &bytes[..COPY_SIZE]);
+        }
     }
 
     #[test]
@@ -934,7 +1404,7 @@ mod tests {
             Some(&SaveValue::U32(42))
         );
         assert_eq!(
-            read_u32(&input.bytes[COPY_SIZE..], PROFILE_MONEY_OFFSET),
+            read_u32(&input.bytes[COPY_SIZE..], FIXTURE_MONEY_OFFSET),
             200
         );
     }

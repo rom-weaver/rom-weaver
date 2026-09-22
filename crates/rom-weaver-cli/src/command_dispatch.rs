@@ -81,6 +81,10 @@ impl CliApp {
                 args.dry_run |= self.dry_run;
                 self.run_save_set(args)
             }
+            Commands::Save(SaveCommands::Create(mut args)) => {
+                args.dry_run |= self.dry_run;
+                self.run_save(SaveCommands::Create(args))
+            }
             Commands::Save(command) => self.run_save(command),
             Commands::Tools(command) => self.run_tools(command),
             Commands::PlanExtractBatch(args) => self.run_plan_extract_batch(args),
@@ -105,6 +109,8 @@ impl CliApp {
             Commands::Bundle(BundleCommands::Parse(_)) => "bundle-parse",
             Commands::Bundle(BundleCommands::Schema) => "bundle-schema",
             Commands::Save(SaveCommands::Identify(_)) => "save-identify",
+            Commands::Save(SaveCommands::ListGames(_)) => "save-list-games",
+            Commands::Save(SaveCommands::Create(_)) => "save-create",
             Commands::Save(SaveCommands::Inspect(_)) => "save-inspect",
             Commands::Save(SaveCommands::Get(_)) => "save-get",
             Commands::Save(SaveCommands::Set(_)) => "save-set",

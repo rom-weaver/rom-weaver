@@ -22,6 +22,7 @@ impl OutputSelection {
             Commands::Patch(PatchCommands::Apply(args)) => args.output.clone(),
             Commands::Patch(PatchCommands::Create(args)) => args.output.clone(),
             Commands::Bundle(BundleCommands::Create(args)) => Some(args.output.clone()),
+            Commands::Save(SaveCommands::Create(args)) => args.output.clone(),
             Commands::Save(SaveCommands::Set(args)) => args.output.clone(),
             Commands::Tools(ToolsCommands::PpfUndo(args)) => Some(args.output.clone()),
             Commands::Trim(args) => {
@@ -91,9 +92,9 @@ pub(super) fn render_success(
         "cheat" => render_cheat_list(surface, event),
         "save-identify" => render_save_identify(surface, event),
         "save-inspect" => render_save_inspect(surface, event),
-        "save-get" => label_line(surface, event),
-        "save-set" if is_save_preview(event) => render_save_result(surface, event),
-        "save-set" => render_emitted_files(surface, event, selection),
+        "save-get" | "save-list-games" => label_line(surface, event),
+        "save-set" | "save-create" if is_save_preview(event) => render_save_result(surface, event),
+        "save-set" | "save-create" => render_emitted_files(surface, event, selection),
         "save-export-schema" => render_save_schema(surface, event),
         _ => render_details_or_label(surface, event),
     }
