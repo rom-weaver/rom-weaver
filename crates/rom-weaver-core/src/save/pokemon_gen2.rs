@@ -152,10 +152,6 @@ impl SaveGameHandler for PokemonGen2Handler {
         .into()
     }
 
-    fn supports_generation(&self, _game: &SaveGameIdentity) -> bool {
-        true
-    }
-
     fn generate(&self, game: &SaveGameIdentity) -> Result<Vec<u8>> {
         generate(family_for_game(game)?, game)
     }

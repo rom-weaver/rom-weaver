@@ -537,7 +537,7 @@ fn save_gen1_identify_and_set_preserve_unknown_bytes_and_checksum() {
 }
 
 #[test]
-fn save_create_generates_zelda_and_pokemon_saves() {
+fn save_create_generates_zelda_and_requires_a_pokemon_template() {
     let temp = setup_temp_dir();
     let zelda = temp.child("zelda.srm");
     let created = run_single_json_event(
@@ -602,7 +602,7 @@ fn save_create_generates_zelda_and_pokemon_saves() {
     assert!(!dry_run.path().exists());
 
     let red = temp.child("red-fresh.sav");
-    let generated = run_single_json_event(
+    let rejected = run_single_json_event(
         &[
             "save",
             "create",
@@ -612,23 +612,14 @@ fn save_create_generates_zelda_and_pokemon_saves() {
             red.path().to_str().unwrap(),
             "--json",
         ],
-        0,
+        1,
     );
-    assert_eq!(generated["status"], "succeeded");
-    assert_eq!(fs::metadata(red.path()).unwrap().len(), 0x8000);
-    let get = run_single_json_event(
-        &[
-            "save",
-            "get",
-            red.path().to_str().unwrap(),
-            "trainer.money",
-            "--game",
-            "pokemon-red",
-            "--json",
-        ],
-        0,
+    assert_eq!(rejected["status"], "failed");
+    assert_eq!(
+        rejected["details"]["save_editor"]["error"]["code"],
+        "save_generation_unsupported"
     );
-    assert_eq!(get["label"], "0");
+    assert!(!red.path().exists());
 }
 
 #[test]

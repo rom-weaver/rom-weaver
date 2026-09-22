@@ -138,10 +138,6 @@ impl SaveGameHandler for PokemonGen3Handler {
             .collect()
     }
 
-    fn supports_generation(&self, _game: &SaveGameIdentity) -> bool {
-        true
-    }
-
     fn generate(&self, game: &SaveGameIdentity) -> Result<Vec<u8>> {
         generate_save(family_for_game(game)?)
     }
@@ -1441,7 +1437,7 @@ mod tests {
         let handler = PokemonGen3Handler;
 
         for definition in handler.definitions() {
-            assert!(handler.supports_generation(&definition.identity));
+            assert!(!handler.supports_generation(&definition.identity));
             let family = family_for_game(&definition.identity).unwrap();
             let bytes = handler.generate(&definition.identity).unwrap();
             assert_eq!(bytes.len(), GEN3_SAVE_SIZE);

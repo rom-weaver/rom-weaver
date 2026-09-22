@@ -159,6 +159,21 @@ fn registry_lists_every_game_with_format_metadata() {
 }
 
 #[test]
+fn registry_requires_a_game_made_template_for_pokemon_creation() {
+    let registry = SaveGameRegistry::default();
+    let fresh_ids = registry
+        .generation_definitions()
+        .into_iter()
+        .map(|definition| definition.identity.id)
+        .collect::<Vec<_>>();
+    assert_eq!(fresh_ids, ["zelda-a-link-to-the-past"]);
+    assert_eq!(
+        error_code(registry.generate("pokemon-emerald").unwrap_err()),
+        "save_generation_unsupported"
+    );
+}
+
+#[test]
 fn registry_accepts_new_handlers_without_generic_dispatch_changes() {
     let registry = SaveGameRegistry::default().with_handler(PokemonGen3Handler);
     let recognition = registry.detect(&input(fixture(Family::Emerald, 7, 6), None));

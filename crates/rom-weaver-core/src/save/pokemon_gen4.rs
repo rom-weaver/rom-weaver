@@ -163,10 +163,6 @@ impl SaveGameHandler for PokemonGen4Handler {
         Title::ALL.into_iter().map(Title::definition).collect()
     }
 
-    fn supports_generation(&self, _game: &SaveGameIdentity) -> bool {
-        true
-    }
-
     fn generate(&self, game: &SaveGameIdentity) -> Result<Vec<u8>> {
         let title = title_for_game(game)?;
         let mut bytes = vec![0xff; GEN4_SAVE_SIZE];
@@ -1075,7 +1071,7 @@ mod tests {
 
         for title in Title::ALL {
             let identity = title.identity();
-            assert!(handler.supports_generation(&identity));
+            assert!(!handler.supports_generation(&identity));
             let bytes = handler.generate(&identity).unwrap();
             assert_eq!(bytes.len(), GEN4_SAVE_SIZE, "{}", title.id());
 

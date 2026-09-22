@@ -42,7 +42,7 @@ export const SaveGenerator = ({
         <span className="save-editor-source-kicker mono">Start fresh</span>
         <div>
           <h3 id="save-generator-title">New game save</h3>
-          <p>Build a clean save, set its properties, then download it.</p>
+          <p>Build a save from a checked initializer. For Pokémon, upload a save made by the game.</p>
         </div>
       </div>
       {games ? (
