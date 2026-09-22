@@ -127,6 +127,8 @@ type PatchApplyUserOptions = {
 type PatchInput = {
   /** Selected records that Rust resolves as ordered ROM transformations. */
   cheatRecords?: CheatRecord[];
+  /** Number of normal patches before each aligned cheat record. */
+  cheatPositions?: number[];
   inputs: Array<SourceRef> | SourceRef;
   patches?: Array<SourceRef> | SourceRef;
   patchTargets?: Array<"auto" | string>;

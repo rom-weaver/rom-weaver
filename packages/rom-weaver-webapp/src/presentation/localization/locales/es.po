@@ -2490,6 +2490,11 @@ msgstr "Parches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.step.patchesCheats"
+msgstr "Parches y trucos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.patchesIgnored"
 msgstr "Los parches corresponden a Aplicar y se ignoraron."
 

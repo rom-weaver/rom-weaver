@@ -17,6 +17,7 @@ import { PendingIdentifyDrawer } from "../../webapp/components/identify-drawer.t
 import { RelatedStrip } from "../../webapp/components/related-strip.tsx";
 import { getCheatHeaderStripConflict } from "../../lib/cheats/header-guard.ts";
 import { ApplyPatchListStep, type RomCheckActuals } from "./apply-patch-list-step.tsx";
+import type { CheatStackRenderState } from "./components/cheat-database-section.tsx";
 import { DropdownSelect } from "./components/ds/dropdown-select.tsx";
 import { getEmulatorJsCore } from "./components/emulatorjs.ts";
 import {
@@ -1841,7 +1842,10 @@ function ApplyWorkflowFormView({
    * The optional cheat patch card attached to the ROM step. It receives the
    * header-strip guard the patch controls derive.
    */
-  cheats?: (state: { headerStripConflict: string }) => ReactNode;
+  cheats?: (state: {
+    headerStripConflict: string;
+    renderStack: (stack: CheatStackRenderState) => ReactNode;
+  }) => ReactNode;
   /** At least one cheat card's switch is On. */
   cheatsOn?: boolean;
   controllers: {
@@ -2234,16 +2238,16 @@ function ApplyWorkflowFormView({
         <GhostSteps
           steps={[
             { num: "0x02", title: localizer.message("ui.step.rom") },
-            { num: "0x03", title: localizer.message("ui.step.patches") },
+            {
+              num: "0x03",
+              title: localizer.message(bundlePage ? "ui.step.patches" : "ui.step.patchesCheats"),
+            },
             ...(bundlePage
               ? [
                   { num: "0x04", title: localizer.message("ui.bundleExport.shareTitle") },
                   { num: "0x05", title: localizer.message("ui.step.apply") },
                 ]
-              : [
-                  { num: "0x04", title: localizer.message("ui.step.cheats") },
-                  { num: "0x05", title: localizer.message("ui.step.apply") },
-                ]),
+              : [{ num: "0x04", title: localizer.message("ui.step.apply") }]),
           ]}
         />
       ) : (
@@ -2314,39 +2318,46 @@ function ApplyWorkflowFormView({
             woven={wovenSteps}
           />
 
-          <ApplyPatchListStep
-            bundleMeta={bundleMeta}
-            bundleOutputCheckHint={!!bundleTools?.hasOptionalEntries}
-            bundleSessionMatches={bundleSessionMatches}
-            disabledFlags={disabledPatchFlags}
-            emptyState={patchesNeedsInput}
-            fault={applyFailed}
-            onBundleMetaChange={(index, updates) => {
-              const id = patchIds[index];
-              if (id) onBundleMetaChange?.(id, updates);
-            }}
-            onBundleMetaBulkChange={(updates) => onBundleMetaBulkChange?.(patchIds, updates)}
-            onTogglePatch={patchEnablement?.onToggle}
-            overrideAvailable={uiState.checksumOverride.visible}
-            patches={patches}
-            patchStack={controllers.patchStack}
-            patchInputBasis={patchInputBasis}
-            patchInputBasisDisabled={bundleExport?.busy}
-            onPatchInputBasisChange={onPatchInputBasisChange}
-            romActualsById={romActualsById}
-            sharedRomChecks={singleRom ? expectedRomChecks : undefined}
-            stripDisabled={!!cheatsOn}
-            notice={
-              <SectionNotice
-                id="rom-weaver-patch-notice-message"
-                onDismiss={dismissSectionNotice("patchNotice")}
-                state={uiState.patchNotice}
+          {(() => {
+            const renderPatchStep = (stack?: CheatStackRenderState) => (
+              <ApplyPatchListStep
+                cheats={stack}
+                bundleMeta={bundleMeta}
+                bundleOutputCheckHint={!!bundleTools?.hasOptionalEntries}
+                bundleSessionMatches={bundleSessionMatches}
+                disabledFlags={disabledPatchFlags}
+                emptyState={patchesNeedsInput}
+                fault={applyFailed}
+                onBundleMetaChange={(index, updates) => {
+                  const id = patchIds[index];
+                  if (id) onBundleMetaChange?.(id, updates);
+                }}
+                onBundleMetaBulkChange={(updates) => onBundleMetaBulkChange?.(patchIds, updates)}
+                onTogglePatch={patchEnablement?.onToggle}
+                overrideAvailable={uiState.checksumOverride.visible}
+                patches={patches}
+                patchKeys={patchIds}
+                patchStack={controllers.patchStack}
+                patchInputBasis={patchInputBasis}
+                patchInputBasisDisabled={bundleExport?.busy}
+                onPatchInputBasisChange={onPatchInputBasisChange}
+                romActualsById={romActualsById}
+                sharedRomChecks={singleRom ? expectedRomChecks : undefined}
+                stripDisabled={!!cheatsOn}
+                notice={
+                  <SectionNotice
+                    id="rom-weaver-patch-notice-message"
+                    onDismiss={dismissSectionNotice("patchNotice")}
+                    state={uiState.patchNotice}
+                  />
+                }
+                woven={wovenSteps}
               />
-            }
-            woven={wovenSteps}
-          />
-
-          {!bundlePage && romInputs.length === 1 ? cheats?.({ headerStripConflict: cheatHeaderStripConflict }) : null}
+            );
+            return !bundlePage && romInputs.length === 1 && cheats
+              ? cheats({ headerStripConflict: cheatHeaderStripConflict, renderStack: renderPatchStep })
+              : renderPatchStep();
+          })()}
 
           {bundlePage ? bundleSecondaryJob : null}
 
@@ -2412,7 +2423,7 @@ function ApplyWorkflowFormView({
                 state={uiState.outputNotice}
               />
             }
-            num="0x05"
+            num={bundlePage ? "0x05" : "0x04"}
             onFileNameChange={(value) => controllers.output.setDisplayFileName(value)}
             onFormatChange={(value) => controllers.output.setOutputCompression(value)}
             secondary={bundlePage ? undefined : bundleSecondaryJob}

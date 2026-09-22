@@ -235,6 +235,7 @@ type RuntimePatchApplyOptions = Partial<Omit<PatchApplyCommand, "input" | "outpu
   addHeader?: boolean;
   appendOutputSuffix?: boolean;
   cheatRecords?: PatchApplyCommand["cheat_records"];
+  cheatPositions?: PatchApplyCommand["cheat_positions"];
   fixChecksum?: PatchApplyCommand["repair_checksum"];
   /** One mode per patch in chain order; a shorter list carries the last mode forward. */
   headerModes?: PatchApplyCommand["patch_header"];

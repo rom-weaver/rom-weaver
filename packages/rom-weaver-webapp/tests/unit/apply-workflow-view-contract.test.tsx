@@ -189,7 +189,15 @@ const renderView = ({
     <RomWeaverSettingsProvider settings={settings}>
       <ApplyWorkflowFormView
         bundleMetaById={bundleMetaById}
-        cheats={() => cheatsStep}
+        cheats={({ renderStack }) =>
+          renderStack({
+            cards: [],
+            controls: cheatsStep,
+            enabled: false,
+            onOrderChange: () => undefined,
+            renderCard: () => null,
+          })
+        }
         bundleExpectedRomChecks={bundleExpectedRomChecks}
         controllers={controllers}
         emulatorOutput={emulatorOutput as never}
@@ -302,7 +310,7 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector(".drop.hero")).toBeNull();
     expect(container.querySelector(".ghost-steps")).toBeNull();
     const numbers = Array.from(container.querySelectorAll(".step-num")).map((el) => el.textContent);
-    expect(numbers).toEqual(["0x01", "0x02", "0x03", "0x05"]);
+    expect(numbers).toEqual(["0x01", "0x02", "0x03", "0x04"]);
     expect(container.querySelector("#rom-weaver-bundle-rom-expectation")?.textContent).toContain(
       "Metroid Fusion (USA)",
     );
@@ -902,7 +910,7 @@ describe("apply workflow view - staged bench", () => {
     expect(patchPosition.textContent).toContain("1");
     expect(patchPosition.disabled).toBe(true);
     expect(patchPosition.getAttribute("aria-label")).toBe("Patch 1 of 1. Reordering unavailable.");
-    expect(container.querySelector("#rom-weaver-row-patch-stack [data-testid=cheats-step]")).toBeNull();
+    expect(container.querySelector("#rom-weaver-row-patch-stack [data-testid=cheats-step]")).toBeTruthy();
     expect(container.querySelector("[data-testid=cheats-step]")).toBeTruthy();
     expect(container.querySelector("#rom-weaver-row-file-rom [data-testid=cheats-step]")).toBeNull();
     // the patches step header counts staged files

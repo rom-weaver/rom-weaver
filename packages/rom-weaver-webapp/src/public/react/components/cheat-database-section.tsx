@@ -22,7 +22,8 @@ import { matchGame, useCheatDatabaseRecords } from "./use-cheat-database-records
 import { Drawer, DrawerReadout } from "./ds/drawer.tsx";
 import { Notice } from "./ds/feedback.tsx";
 import { FileCard } from "./ds/file-card.tsx";
-import { InfoPopover, StepSection } from "./ds/layout.tsx";
+import { InfoPopover } from "./ds/layout.tsx";
+import { reorder, useListReorder } from "./ds/use-list-reorder.ts";
 import "./cheat-database-section.css";
 
 type SystemOption = { value: CheatManualSystem; label: string };
@@ -61,25 +62,53 @@ type CheatCardProps = {
   onRemove: () => void;
   onSaveAsPatch?: () => void;
   savingPatch?: boolean;
+  canReorder: boolean;
+  handleProps: ReturnType<ReturnType<typeof useListReorder>["handleProps"]>;
+  rowProps: ReturnType<ReturnType<typeof useListReorder>["rowProps"]>;
 };
 
-/**
- * One added cheat, shaped like a patch card: the description as the name, an
- * On/Off switch that drives inclusion, the raw code and delivery badges on the
- * meta line, and a details drawer.
- */
-const CheatCard = ({ record, position, selected, onToggle, onRemove, onSaveAsPatch, savingPatch }: CheatCardProps) => {
+type CheatOrderEntry = { id: string; position: number };
+export type CheatStackRenderState = {
+  cards: ClassifiedCheatRecord[];
+  controls: ReactNode;
+  enabled: boolean;
+  onOrderChange: (order: CheatOrderEntry[]) => void;
+  renderCard: (
+    entry: ClassifiedCheatRecord,
+    position: number,
+    canReorder: boolean,
+    handleProps: CheatCardProps["handleProps"],
+    rowProps: CheatCardProps["rowProps"],
+  ) => ReactNode;
+};
+
+const CheatCard = ({
+  record,
+  position,
+  selected,
+  onToggle,
+  onRemove,
+  onSaveAsPatch,
+  savingPatch,
+  canReorder,
+  handleProps,
+  rowProps,
+}: CheatCardProps) => {
   const delivery = deliveryCopy(record);
   const source = record.record;
   const selectable = isSelectableCheat(record);
   return (
     <FileCard
+      className={`cheat-card ${rowProps.className || ""}`}
+      rootRef={rowProps.rootRef}
+      style={rowProps.style}
       handle={
         <button
-          aria-label={`Cheat ${position}`}
+          {...handleProps}
+          aria-label={canReorder ? `Cheat ${position}. Drag or use arrow keys to reorder.` : `Cheat ${position}`}
           className="handle phandle"
-          disabled
-          title="Cheat position"
+          disabled={!canReorder}
+          title={canReorder ? "Reorder cheat" : "Cheat position"}
           type="button"
         >
           <span aria-hidden="true" className="phandle-number mono">
@@ -102,7 +131,6 @@ const CheatCard = ({ record, position, selected, onToggle, onRemove, onSaveAsPat
               <b className="off">Off</b>
             </span>
           </label>
-          {source.rawCode ? <span className="rb mono">{source.rawCode}</span> : null}
           <span className="rb">{delivery.badge}</span>
         </>
       }
@@ -136,7 +164,8 @@ const CheatCard = ({ record, position, selected, onToggle, onRemove, onSaveAsPat
       state="ok"
     >
       <Drawer
-        label="Cheat"
+        className="cheat-details"
+        label="Cheat details"
         labelIcon={<WandSparkles aria-hidden="true" />}
         readouts={record.detectedKind ? <DrawerReadout>{record.detectedKind}</DrawerReadout> : undefined}
       >
@@ -509,7 +538,7 @@ export type CheatDatabaseSectionProps = {
   client?: CheatDatabaseClient;
   classifyManualCode: ManualCheatClassifier;
   classifyDatabaseCheats: DatabaseCheatClassifier;
-  onSelectionChange?: (records: ClassifiedCheatRecord[]) => void;
+  onSelectionChange?: (records: ClassifiedCheatRecord[], positions?: number[]) => void;
   /**
    * Bake the ROM cheats that are On into a standalone patch and download it.
    * Resolves with the created file name. Absent when the workflow cannot run
@@ -523,6 +552,8 @@ export type CheatDatabaseSectionProps = {
   validationMessage?: string;
   /** Localized card heading. */
   title: ReactNode;
+  positionOffset?: number;
+  renderStack?: (stack: CheatStackRenderState) => ReactNode;
 };
 
 export const CheatDatabaseSection = ({
@@ -540,10 +571,13 @@ export const CheatDatabaseSection = ({
   outputSummary,
   validationMessage,
   title,
+  positionOffset = 0,
+  renderStack,
 }: CheatDatabaseSectionProps) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [enabled, setEnabled] = useState(configuredEnabled ?? false);
   const [savingPatchId, setSavingPatchId] = useState("");
+  const savingPatchRef = useRef(false);
   const [patchStatus, setPatchStatus] = useState("");
   const [patchError, setPatchError] = useState("");
   const [databaseQuery, setDatabaseQuery] = useState("");
@@ -553,10 +587,23 @@ export const CheatDatabaseSection = ({
   const [addedIds, setAddedIds] = useState<Set<string>>(() => new Set());
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [manualRecords, setManualRecords] = useState<ClassifiedCheatRecord[]>([]);
+  const positionsRef = useRef(new Map<string, number>());
   const selectionCallback = useRef(onSelectionChange);
   const previousEnabled = useRef(enabled);
   const previousGameId = useRef<string | undefined>(undefined);
   selectionCallback.current = onSelectionChange;
+  const emitSelection = (entries: ClassifiedCheatRecord[]) => {
+    if (renderStack) {
+      selectionCallback.current?.(
+        entries,
+        entries.map(({ record }) => positionsRef.current.get(record.id) ?? positionOffset),
+      );
+      return;
+    }
+    selectionCallback.current?.(entries);
+  };
+  const emitSelectionRef = useRef(emitSelection);
+  emitSelectionRef.current = emitSelection;
   useEffect(() => {
     if (configuredEnabled !== undefined) setEnabled(configuredEnabled);
   }, [configuredEnabled]);
@@ -591,6 +638,7 @@ export const CheatDatabaseSection = ({
     if (identityKey === "") return;
     setSelectedIds(new Set());
     setAddedIds(new Set());
+    positionsRef.current.clear();
     setManualRecords([]);
     setManualGameId("");
     setManualEntrySlug("");
@@ -605,6 +653,7 @@ export const CheatDatabaseSection = ({
     if (previousGameId.current && previousGameId.current !== gameId) {
       setSelectedIds(new Set());
       setAddedIds(new Set());
+      positionsRef.current.clear();
       setManualRecords([]);
       selectionCallback.current?.([]);
     }
@@ -620,19 +669,29 @@ export const CheatDatabaseSection = ({
       }),
     [addedIds, records],
   );
-  const selectedRecords = useMemo(
-    () => records.filter(({ record }) => selectedIds.has(record.id)),
-    [records, selectedIds],
-  );
+  const selectedRecords = useMemo(() => cards.filter(({ record }) => selectedIds.has(record.id)), [cards, selectedIds]);
+  const reorderList = useListReorder({
+    count: cards.length,
+    disabled: !enabled || cards.length < 2,
+    onReorder: (from, to) => {
+      const nextIds = reorder([...addedIds], from, to);
+      setAddedIds(new Set(nextIds));
+      if (enabled)
+        emitSelection(nextIds.flatMap((id) => cards.filter(({ record }) => record.id === id && selectedIds.has(id))));
+    },
+  });
   useEffect(() => {
     if (previousEnabled.current === enabled) return;
     previousEnabled.current = enabled;
-    selectionCallback.current?.(enabled ? selectedRecords : []);
+    emitSelectionRef.current(enabled ? selectedRecords : []);
   }, [enabled, selectedRecords]);
 
-  const publish = (nextSelected: Set<string>, source = records) => {
+  const publish = (nextSelected: Set<string>, source = records, nextAdded = addedIds) => {
     setSelectedIds(nextSelected);
-    if (enabled) selectionCallback.current?.(source.filter(({ record }) => nextSelected.has(record.id)));
+    if (enabled)
+      emitSelection(
+        [...nextAdded].flatMap((id) => source.filter(({ record }) => record.id === id && nextSelected.has(id))),
+      );
   };
 
   const toggleEnabled = () => {
@@ -644,9 +703,10 @@ export const CheatDatabaseSection = ({
 
   const addRecord = (record: ClassifiedCheatRecord) => {
     const id = record.record.id;
-    setAddedIds(new Set(addedIds).add(id));
+    const nextAdded = new Set(addedIds).add(id);
+    setAddedIds(nextAdded);
     if (!isSelectableCheat(record)) return;
-    publish(new Set(selectedIds).add(id));
+    publish(new Set(selectedIds).add(id), records, nextAdded);
   };
 
   const dropRecord = (record: ClassifiedCheatRecord) => {
@@ -657,7 +717,7 @@ export const CheatDatabaseSection = ({
     if (!selectedIds.has(id)) return;
     const nextSelected = new Set(selectedIds);
     nextSelected.delete(id);
-    publish(nextSelected);
+    publish(nextSelected, records, nextAdded);
   };
 
   const toggleRecord = (record: ClassifiedCheatRecord) => {
@@ -672,10 +732,11 @@ export const CheatDatabaseSection = ({
     const id = result.record.record.id;
     const nextRecords = [...manualRecords.filter(({ record }) => record.id !== id), result.record];
     setManualRecords(nextRecords);
-    setAddedIds(new Set(addedIds).add(id));
+    const nextAdded = new Set(addedIds).add(id);
+    setAddedIds(nextAdded);
     const nextSelected = new Set(selectedIds);
     if (isSelectableCheat(result.record)) nextSelected.add(id);
-    publish(nextSelected, [...classifiedRecords, ...nextRecords]);
+    publish(nextSelected, [...classifiedRecords, ...nextRecords], nextAdded);
   };
 
   const gameTitle = game?.title || rom?.title || "";
@@ -808,19 +869,56 @@ export const CheatDatabaseSection = ({
 
   if (!rom) return null;
 
-  return (
-    <StepSection
-      className={enabled ? "cheat-section" : "cheat-section is-disabled"}
-      id="rom-weaver-row-cheat-stack"
-      num="0x04"
-      meta={
-        <>
-          {cards.length ? <span className="rb mono">{countLabel(publishedCount, "cheat")}</span> : null}
-          {offCount ? <span className="rb mono muted">{`${offCount} off`}</span> : null}
-        </>
+  const renderCard: CheatStackRenderState["renderCard"] = (entry, position, canReorder, handleProps, rowProps) => (
+    <CheatCard
+      canReorder={canReorder}
+      handleProps={handleProps}
+      key={entry.record.id}
+      onRemove={() => dropRecord(entry)}
+      onToggle={() => toggleRecord(entry)}
+      onSaveAsPatch={
+        onSaveAsPatch
+          ? () => {
+              if (savingPatchRef.current) return;
+              savingPatchRef.current = true;
+              setPatchError("");
+              setPatchStatus("");
+              setSavingPatchId(entry.record.id);
+              void onSaveAsPatch([entry], manualSystem)
+                .then((fileName) => setPatchStatus(getCheatPatchStatus(fileName, 1)))
+                .catch((reason: unknown) =>
+                  setPatchError(reason instanceof Error ? reason.message : "The cheat patch could not be created."),
+                )
+                .finally(() => {
+                  savingPatchRef.current = false;
+                  setSavingPatchId("");
+                });
+            }
+          : undefined
       }
-      title={
-        <span className="nmline">
+      position={position}
+      record={entry}
+      rowProps={rowProps}
+      savingPatch={!!savingPatchId}
+      selected={selectedIds.has(entry.record.id)}
+    />
+  );
+  const onOrderChange = (order: CheatOrderEntry[]) => {
+    positionsRef.current = new Map(order.map(({ id, position }) => [id, position]));
+    const ids = order.map(({ id }) => id);
+    setAddedIds((current) => {
+      const previous = [...current];
+      return previous.length === ids.length && previous.every((id, index) => id === ids[index])
+        ? current
+        : new Set(ids);
+    });
+    if (enabled)
+      emitSelection(ids.flatMap((id) => cards.filter(({ record }) => record.id === id && selectedIds.has(id))));
+  };
+  const controls = (
+    <div className={enabled ? "cheat-section" : "cheat-section is-disabled"} id="rom-weaver-row-cheat-stack">
+      <div className="cheat-subhead">
+        <div className="cheat-subhead-title">
           <span>{title}</span>
           <label className="patch-enable">
             <input aria-label="Use cheats" checked={enabled} onChange={toggleEnabled} type="checkbox" />
@@ -829,53 +927,38 @@ export const CheatDatabaseSection = ({
               <b className="off">Off</b>
             </span>
           </label>
-        </span>
-      }
-      info={
-        <InfoPopover title={typeof title === "string" ? title : undefined}>
-          <strong>Cheats</strong>
-          <ul className="info-list">
-            <li>Optional. Cheats that are On are baked into the output ROM after the patches apply.</li>
-            <li>Only ROM cheats can be baked; codes that target runtime memory stay unsupported.</li>
-            <li>Community cheat data can contain errors. A checksum match does not prove that each cheat works.</li>
-            <li>ROMWeaver does not upload ROM data or checksums. Each system works offline after it loads once.</li>
-          </ul>
-        </InfoPopover>
-      }
-    >
+        </div>
+        <div className="cheat-subhead-meta">
+          {cards.length ? <span className="rb mono">{countLabel(publishedCount, "cheat")}</span> : null}
+          {offCount ? <span className="rb mono muted">{`${offCount} off`}</span> : null}
+          <InfoPopover title={typeof title === "string" ? title : undefined}>
+            <strong>Cheats</strong>
+            <ul className="info-list">
+              <li>Optional. Cheats that are On are baked into the output ROM in the order shown with patches.</li>
+              <li>Only ROM cheats can be baked; codes that target runtime memory stay unsupported.</li>
+              <li>Community cheat data can contain errors. A checksum match does not prove that each cheat works.</li>
+              <li>ROMWeaver does not upload ROM data or checksums. Each system works offline after it loads once.</li>
+            </ul>
+          </InfoPopover>
+        </div>
+      </div>
       {enabled ? (
         <div className="cheat-card-body">
-          {cards.length ? (
-            <div className="cards patch-cards workflow-file-list" id="rom-weaver-list-cheat-stack">
-              {cards.map((entry, index) => (
-                <CheatCard
-                  key={entry.record.id}
-                  onRemove={() => dropRecord(entry)}
-                  onToggle={() => toggleRecord(entry)}
-                  onSaveAsPatch={
-                    onSaveAsPatch
-                      ? () => {
-                          if (savingPatchId) return;
-                          setPatchError("");
-                          setPatchStatus("");
-                          setSavingPatchId(entry.record.id);
-                          void onSaveAsPatch([entry], manualSystem)
-                            .then((fileName) => setPatchStatus(getCheatPatchStatus(fileName, 1)))
-                            .catch((reason: unknown) =>
-                              setPatchError(
-                                reason instanceof Error ? reason.message : "The cheat patch could not be created.",
-                              ),
-                            )
-                            .finally(() => setSavingPatchId(""));
-                        }
-                      : undefined
-                  }
-                  position={index + 1}
-                  record={entry}
-                  savingPatch={!!savingPatchId}
-                  selected={selectedIds.has(entry.record.id)}
-                />
-              ))}
+          {cards.length && !renderStack ? (
+            <div
+              className="cards patch-cards workflow-file-list"
+              id="rom-weaver-list-cheat-stack"
+              ref={reorderList.containerRef}
+            >
+              {cards.map((entry, index) =>
+                renderCard(
+                  entry,
+                  positionOffset + reorderList.displayIndex(index) + 1,
+                  cards.length > 1,
+                  reorderList.handleProps(index),
+                  reorderList.rowProps(index),
+                ),
+              )}
             </div>
           ) : null}
 
@@ -958,6 +1041,7 @@ export const CheatDatabaseSection = ({
           />
         </div>
       ) : null}
-    </StepSection>
+    </div>
   );
+  return renderStack ? renderStack({ cards, controls, enabled, onOrderChange, renderCard }) : controls;
 };

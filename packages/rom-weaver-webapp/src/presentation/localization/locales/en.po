@@ -2490,6 +2490,11 @@ msgstr "Patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.step.patchesCheats"
+msgstr "Patches & Cheats"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.patchesIgnored"
 msgstr "Patches belong in Apply and were ignored."
 

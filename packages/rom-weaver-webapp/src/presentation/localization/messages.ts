@@ -1249,6 +1249,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.step.original": msg({ id: "ui.step.original", message: "Original" }),
   "ui.step.output": msg({ id: "ui.step.output", message: "Output" }),
   "ui.step.patches": msg({ id: "ui.step.patches", message: "Patches" }),
+  "ui.step.patchesCheats": msg({ id: "ui.step.patchesCheats", message: "Patches & Cheats" }),
   "ui.step.rom": msg({ id: "ui.step.rom", message: "ROM" }),
   "ui.theme.toDark": msg({ id: "ui.theme.toDark", message: "Switch to dark theme" }),
   "ui.runtime.active": msg({ id: "ui.runtime.active", message: "Offline active" }),

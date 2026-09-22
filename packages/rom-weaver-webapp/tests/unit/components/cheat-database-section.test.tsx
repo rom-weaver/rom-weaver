@@ -125,11 +125,11 @@ const addButton = (view: ReturnType<typeof render>, description: string) =>
 describe("CheatDatabaseSection", () => {
   it("renders the heading and switch together without the match line", async () => {
     const view = render(<CheatDatabaseSection {...props} />);
-    await waitFor(() => expect(view.container.querySelector(".step.cheat-section")).toBeTruthy());
-    expect(view.container.querySelector(".step-num")?.textContent).toBe("0x04");
+    await waitFor(() => expect(view.container.querySelector("#rom-weaver-row-cheat-stack.cheat-section")).toBeTruthy());
+    expect(view.container.querySelector(".step-num")).toBeNull();
     expect((view.getByRole("checkbox", { name: "Use cheats" }) as HTMLInputElement).checked).toBe(false);
-    expect(view.getByRole("button", { name: "Cheats as a Patch" })).toBeTruthy();
-    expect(view.container.querySelector(".cheat-section .nmline > .patch-enable")).toBeTruthy();
+    expect(view.getByText("Cheats as a Patch")).toBeTruthy();
+    expect(view.container.querySelector(".cheat-subhead-title > .patch-enable")).toBeTruthy();
     expect(view.container.querySelector(".cheat-add-note")).toBeNull();
     expect(view.container.textContent).not.toContain("Exact checksum match");
     expect(view.container.textContent).not.toContain("libretro/libretro-database CC-BY-SA-4.0");
@@ -169,7 +169,7 @@ describe("CheatDatabaseSection", () => {
     fireEvent.click(addButton(view, "Infinite lives"));
     fireEvent.click(view.getByRole("button", { name: "Close" }));
     expect(view.getByText("1 cheat")).toBeTruthy();
-    expect(view.container.querySelector(".cheat-section .nmline > .patch-enable")).toBeTruthy();
+    expect(view.container.querySelector(".cheat-subhead-title > .patch-enable")).toBeTruthy();
 
     fireEvent.click(view.getByRole("checkbox", { name: "Use cheats" }));
     expect(view.container.querySelector(".cheat-section.is-disabled")).toBeTruthy();
@@ -305,9 +305,39 @@ describe("CheatDatabaseSection", () => {
     fireEvent.click(view.getByRole("button", { name: "Close" }));
 
     expect(view.getByText("game-genie")).toBeTruthy();
-    fireEvent.click(view.getByRole("button", { name: "Cheat game-genie" }));
+    expect(view.container.querySelector(".cheat-card .card-meta")?.textContent).not.toContain("C2B4-6D07");
+    fireEvent.click(view.getByRole("button", { name: "Cheat details game-genie" }));
+    expect(view.getByText("C2B4-6D07")).toBeTruthy();
     expect(view.getByText("baked into output")).toBeTruthy();
     expect(view.getByText("Super Mario World (USA).cht at abc123")).toBeTruthy();
+  });
+
+  it("reorders cheat cards and publishes their new bake order", async () => {
+    const bakeable = [records[0], pagedRecords[2]];
+    const onSelectionChange = vi.fn();
+    const view = render(
+      <CheatDatabaseSection
+        {...props}
+        classifyDatabaseCheats={makeClassifier(bakeable)}
+        onSelectionChange={onSelectionChange}
+        positionOffset={1}
+        shard={makeShard(bakeable)}
+      />,
+    );
+    await openDialog(view);
+    fireEvent.click(addButton(view, "Infinite lives"));
+    fireEvent.click(addButton(view, "Filler cheat 1"));
+    fireEvent.click(view.getByRole("button", { name: "Close" }));
+
+    fireEvent.keyDown(view.getByRole("button", { name: /Cheat 3\. Drag or use arrow keys/u }), { key: "ArrowUp" });
+    expect([...view.container.querySelectorAll(".cheat-card .nm")].map((node) => node.textContent)).toEqual([
+      "Filler cheat 1",
+      "Infinite lives",
+    ]);
+    expect(onSelectionChange.mock.lastCall?.[0].map(({ record }: ClassifiedCheatRecord) => record.id)).toEqual([
+      "filler-1",
+      "cheat-1",
+    ]);
   });
 
   it("clears cards and selections when the original ROM identity changes", async () => {

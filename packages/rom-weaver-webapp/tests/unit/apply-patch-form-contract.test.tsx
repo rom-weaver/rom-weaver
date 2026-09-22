@@ -229,7 +229,8 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
     });
     expect(container.querySelector("#rom-weaver-list-input-stack .card.file")).toBeTruthy();
     expect(container.querySelector("#rom-weaver-row-cheat-stack")).toBeTruthy();
-    expect(container.querySelector("#rom-weaver-row-cheat-stack .step-num")?.textContent).toBe("0x04");
+    expect(container.querySelector("#rom-weaver-row-patch-stack .step-num")?.textContent).toBe("0x03");
+    expect(container.querySelector("#rom-weaver-row-patch-stack #rom-weaver-row-cheat-stack")).toBeTruthy();
     expect(container.querySelector("button.cheat-add")).toBeNull();
   });
 

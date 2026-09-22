@@ -44,7 +44,7 @@ import { FileCard } from "./components/ds/file-card.tsx";
 import { InfoPopover, StepSection } from "./components/ds/layout.tsx";
 import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
 import { useExpectedRomIdentification } from "./use-expected-rom-identification.ts";
-import { useListReorder } from "./components/ds/use-list-reorder.ts";
+import { reorder, useListReorder } from "./components/ds/use-list-reorder.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept.ts";
 import type { PatcherStackController } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
@@ -52,6 +52,7 @@ import { formatHeaderAutoLabel } from "./patcher-view-models.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
 import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
 import type { PatchInputBasis } from "./patch-input-basis.ts";
+import type { CheatStackRenderState } from "./components/cheat-database-section.tsx";
 import { toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
 
 const TIMING_LABEL = (ms?: number) =>
@@ -1558,6 +1559,7 @@ const PatchCard = ({
   chainChip,
   handleProps,
   index,
+  orderIndex = index,
   isChainInput,
   isChainOutput,
   isDisabled,
@@ -1588,6 +1590,7 @@ const PatchCard = ({
   chainChip?: { text: string; warn?: boolean } | null;
   handleProps: ReorderHandleProps;
   index: number;
+  orderIndex?: number;
   isChainInput: boolean;
   isChainOutput: boolean;
   isDisabled: boolean;
@@ -1676,7 +1679,7 @@ const PatchCard = ({
         <PatchDragHandle
           disabled={!canReorder}
           handleProps={handleProps}
-          index={index}
+          index={orderIndex}
           onReorder={onReorder}
           position={position}
           total={total}
@@ -1752,12 +1755,12 @@ const PatchCard = ({
           <PatchMetaDoneButton index={index} onToggle={() => setMetaEditing(false)} />
         ) : (
           <PatchActionsMenu
-            canMoveDown={canReorder && index < total - 1 && !!item.canMoveDown}
-            canMoveUp={canReorder && index > 0 && !!item.canMoveUp}
+            canMoveDown={canReorder && orderIndex < total - 1}
+            canMoveUp={canReorder && orderIndex > 0}
             index={index}
             onEdit={onMetaChange ? () => setMetaEditing(true) : undefined}
-            onMoveDown={() => onReorder(index, index + 1)}
-            onMoveUp={() => onReorder(index, index - 1)}
+            onMoveDown={() => onReorder(orderIndex, orderIndex + 1)}
+            onMoveUp={() => onReorder(orderIndex, orderIndex - 1)}
             onOpenChange={setMenuOpen}
             onRemove={() => patchStack.removeItem(index)}
             onReplace={(file) => patchStack.replaceItem(index, file)}
@@ -1940,6 +1943,7 @@ const ApplyPatchListStep = ({
   notice,
   overrideAvailable,
   patches,
+  patchKeys,
   patchStack,
   patchInputBasis = "auto",
   patchInputBasisDisabled = false,
@@ -1947,6 +1951,7 @@ const ApplyPatchListStep = ({
   romActualsById,
   sharedRomChecks,
   stripDisabled,
+  cheats,
   woven,
 }: {
   /** The run has optional/skipped patches: hint on the chain-output card that its
@@ -1972,26 +1977,100 @@ const ApplyPatchListStep = ({
   /** Checks declared for the single selected ROM, repeated as card evidence. */
   sharedRomChecks?: ParsedBundleChecks;
   patches: PatchStackItemState[];
+  patchKeys?: readonly string[];
   patchStack: PatcherStackController;
   patchInputBasis?: PatchInputBasis;
   patchInputBasisDisabled?: boolean;
   onPatchInputBasisChange?: (index: number, basis: PatchInputBasis) => void;
   /** The cheat stack has a card switched On, so stripping is not on offer. */
   stripDisabled?: boolean;
+  cheats?: CheatStackRenderState;
   woven?: boolean;
 }) => {
   const [bulkEditing, setBulkEditing] = useState(false);
+  const [cheatOrder, setCheatOrder] = useState<Array<{ id: string; position: number }>>([]);
   const bulkEditButtonRef = useRef<HTMLButtonElement>(null);
   const closeBulkEditor = () => {
     setBulkEditing(false);
     queueMicrotask(() => bulkEditButtonRef.current?.focus());
   };
   const total = patches.length;
-  // Reordering only makes sense for a multi-patch stack. A patch may still be
-  // moved while it is staging; other busy/locked rows remain non-reorderable.
-  const reorderable = total > 1;
-  const canReorder = reorderable && patches.every((item) => item.progress || item.canRemove);
-  const reorderList = useListReorder({ count: total, disabled: !canReorder, onReorder: patchStack.reorder });
+  const cheatCards = cheats?.cards || [];
+  const currentCheatIds = new Set(cheatCards.map(({ record }) => record.id));
+  const orderedCheatIds = [
+    ...cheatOrder.filter(({ id }) => currentCheatIds.has(id)).map(({ id }) => id),
+    ...cheatCards.map(({ record }) => record.id).filter((id) => !cheatOrder.some((entry) => entry.id === id)),
+  ];
+  const cheatPositions = new Map(cheatOrder.map(({ id, position }) => [id, Math.min(position, total)]));
+  const mixedEntries: Array<{ kind: "patch"; index: number } | { kind: "cheat"; id: string }> = [];
+  for (let position = 0; position <= total; position += 1) {
+    for (const id of orderedCheatIds) {
+      if ((cheatPositions.get(id) ?? total) === position) mixedEntries.push({ kind: "cheat", id });
+    }
+    if (position < total) mixedEntries.push({ kind: "patch", index: position });
+  }
+  const visibleEntries = cheats?.enabled ? mixedEntries : mixedEntries.filter((entry) => entry.kind === "patch");
+  const canReorder = visibleEntries.length > 1 && patches.every((item) => item.progress || item.canRemove);
+  const publishCheatOrder = (entries: typeof mixedEntries) => {
+    let patchPosition = 0;
+    const nextOrder: Array<{ id: string; position: number }> = [];
+    for (const entry of entries) {
+      if (entry.kind === "patch") {
+        if (!disabledFlags?.[entry.index]) patchPosition += 1;
+      } else {
+        nextOrder.push({ id: entry.id, position: patchPosition });
+      }
+    }
+    cheats?.onOrderChange(nextOrder);
+  };
+  const reorderMixed = (from: number, to: number) => {
+    const next = reorder(visibleEntries, from, to);
+    const moved = visibleEntries[from];
+    if (!moved) return;
+    if (cheats?.enabled) {
+      let patchPosition = 0;
+      const nextOrder: Array<{ id: string; position: number }> = [];
+      for (const entry of next) {
+        if (entry.kind === "patch") patchPosition += 1;
+        else nextOrder.push({ id: entry.id, position: patchPosition });
+      }
+      setCheatOrder(nextOrder);
+      publishCheatOrder(next);
+    }
+    if (moved.kind === "patch") {
+      const nextIndex = next
+        .filter((entry) => entry.kind === "patch")
+        .findIndex((entry) => entry.index === moved.index);
+      if (nextIndex !== moved.index) patchStack.reorder(moved.index, nextIndex);
+    }
+  };
+  const reorderList = useListReorder({ count: visibleEntries.length, disabled: !canReorder, onReorder: reorderMixed });
+  const cheatOrderCallbackRef = useRef(cheats?.onOrderChange);
+  cheatOrderCallbackRef.current = cheats?.onOrderChange;
+  const cheatOrderKey = JSON.stringify({
+    enabled: cheats?.enabled,
+    entries: mixedEntries,
+    disabledFlags,
+    patchKeys,
+  });
+  useEffect(() => {
+    const snapshot = JSON.parse(cheatOrderKey) as {
+      enabled?: boolean;
+      entries: typeof mixedEntries;
+      disabledFlags?: readonly boolean[];
+    };
+    if (!snapshot.enabled) return;
+    let patchPosition = 0;
+    const order: Array<{ id: string; position: number }> = [];
+    for (const entry of snapshot.entries) {
+      if (entry.kind === "patch") {
+        if (!snapshot.disabledFlags?.[entry.index]) patchPosition += 1;
+      } else {
+        order.push({ id: entry.id, position: patchPosition });
+      }
+    }
+    cheatOrderCallbackRef.current?.(order);
+  }, [cheatOrderKey]);
   const disabledCount = (disabledFlags || []).filter(Boolean).length;
   const enabledBytes = patches.reduce(
     (sum, item, index) => (disabledFlags?.[index] ? sum : sum + (item.fileSize || 0)),
@@ -2049,7 +2128,7 @@ const ApplyPatchListStep = ({
         ) : undefined
       }
       num="0x03"
-      title={localizer.message("ui.step.patches")}
+      title={localizer.message(cheats ? "ui.step.patchesCheats" : "ui.step.patches")}
       woven={woven}
     >
       {bulkEditing && onBundleMetaBulkChange ? (
@@ -2068,61 +2147,82 @@ const ApplyPatchListStep = ({
           onCancel={closeBulkEditor}
         />
       ) : null}
+      {total === 0 ? emptyState : null}
+      {cheats?.controls}
       <div
         className="cards patch-cards workflow-file-list"
         id="rom-weaver-list-patch-stack"
         ref={reorderList.containerRef}
       >
-        {patches.map((item, index) => (
-          <PatchCard
-            basisChoice={
-              index === chainInputIndex && (bundleMeta?.[index]?.basis || patchInputBasis) === "previous"
-                ? "base"
-                : bundleMeta?.[index]?.basis || patchInputBasis
-            }
-            basisDisabled={patchInputBasisDisabled}
-            bundleSessionMatches={bundleSessionMatches}
-            canReorder={canReorder}
-            chainChip={chainChipText(
-              item,
-              enabledIndexes,
-              localizer,
-              patches.map((patch, patchIndex) => bundleMeta?.[patchIndex]?.name || patch.fileName),
-            )}
-            handleProps={reorderList.handleProps(index)}
-            index={index}
-            isChainInput={index === chainInputIndex}
-            isChainOutput={index === chainOutputIndex}
-            isDisabled={!!disabledFlags?.[index]}
-            item={item}
-            key={item.key ?? `${index}:${item.fileName}`}
-            meta={bundleMeta?.[index]}
-            onBasisChange={(basis) => onPatchInputBasisChange?.(index, basis)}
-            onMetaChange={onBundleMetaChange ? (updates) => onBundleMetaChange(index, updates) : undefined}
-            onReorder={patchStack.reorder}
-            onTogglePatch={onTogglePatch}
-            outputCheckHint={!!bundleOutputCheckHint && index === chainOutputIndex}
-            overrideAvailable={overrideAvailable}
-            patchStack={patchStack}
-            predecessors={patches.slice(0, index).map((predecessor, predecessorIndex) => {
-              const predecessorMeta = bundleMeta?.[predecessorIndex];
-              return {
-                id: predecessorMeta?.id,
-                label: predecessorMeta?.name || predecessor.fileName || `Patch ${predecessorIndex + 1}`,
-                outputChecks: predecessorMeta?.outputChecks,
-              };
-            })}
-            previousBasisAvailable={index !== chainInputIndex}
-            position={reorderList.displayIndex(index) + 1}
-            romActuals={item.targetValue ? romActualsById?.get(item.targetValue) : undefined}
-            rowProps={reorderList.rowProps(index)}
-            sharedRomChecks={sharedRomChecks}
-            stripDisabled={stripDisabled}
-            total={total}
-          />
-        ))}
+        {visibleEntries.map((entry, orderIndex) => {
+          if (entry.kind === "cheat") {
+            const cheat = cheatCards.find(({ record }) => record.id === entry.id);
+            return cheat ? (
+              <Fragment key={`cheat:${entry.id}`}>
+                {cheats?.renderCard(
+                  cheat,
+                  reorderList.displayIndex(orderIndex) + 1,
+                  canReorder,
+                  reorderList.handleProps(orderIndex),
+                  reorderList.rowProps(orderIndex),
+                )}
+              </Fragment>
+            ) : null;
+          }
+          const index = entry.index;
+          const item = patches[index];
+          if (!item) return null;
+          return (
+            <PatchCard
+              basisChoice={
+                index === chainInputIndex && (bundleMeta?.[index]?.basis || patchInputBasis) === "previous"
+                  ? "base"
+                  : bundleMeta?.[index]?.basis || patchInputBasis
+              }
+              basisDisabled={patchInputBasisDisabled}
+              bundleSessionMatches={bundleSessionMatches}
+              canReorder={canReorder}
+              chainChip={chainChipText(
+                item,
+                enabledIndexes,
+                localizer,
+                patches.map((patch, patchIndex) => bundleMeta?.[patchIndex]?.name || patch.fileName),
+              )}
+              handleProps={reorderList.handleProps(orderIndex)}
+              index={index}
+              orderIndex={orderIndex}
+              isChainInput={index === chainInputIndex}
+              isChainOutput={index === chainOutputIndex}
+              isDisabled={!!disabledFlags?.[index]}
+              item={item}
+              key={item.key ?? `${index}:${item.fileName}`}
+              meta={bundleMeta?.[index]}
+              onBasisChange={(basis) => onPatchInputBasisChange?.(index, basis)}
+              onMetaChange={onBundleMetaChange ? (updates) => onBundleMetaChange(index, updates) : undefined}
+              onReorder={reorderMixed}
+              onTogglePatch={onTogglePatch}
+              outputCheckHint={!!bundleOutputCheckHint && index === chainOutputIndex}
+              overrideAvailable={overrideAvailable}
+              patchStack={patchStack}
+              predecessors={patches.slice(0, index).map((predecessor, predecessorIndex) => {
+                const predecessorMeta = bundleMeta?.[predecessorIndex];
+                return {
+                  id: predecessorMeta?.id,
+                  label: predecessorMeta?.name || predecessor.fileName || `Patch ${predecessorIndex + 1}`,
+                  outputChecks: predecessorMeta?.outputChecks,
+                };
+              })}
+              previousBasisAvailable={index !== chainInputIndex}
+              position={reorderList.displayIndex(orderIndex) + 1}
+              romActuals={item.targetValue ? romActualsById?.get(item.targetValue) : undefined}
+              rowProps={reorderList.rowProps(orderIndex)}
+              sharedRomChecks={sharedRomChecks}
+              stripDisabled={stripDisabled}
+              total={visibleEntries.length}
+            />
+          );
+        })}
       </div>
-      {total === 0 ? emptyState : null}
       {(() => {
         // One list-level order warning: the first enabled patch whose input matches a patch it
         // does not follow. Fixing one link re-plans the chain; any remaining break surfaces next.

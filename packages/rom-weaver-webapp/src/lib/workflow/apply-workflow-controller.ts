@@ -122,6 +122,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private patches: Array<StagedSource<TSource>> = [];
   private inputs: TSource[] = [];
   private cheatRecords: CheatRecord[] = [];
+  private cheatPositions: number[] = [];
   /** Picks from an early sidecar dialog (opened off the streamed `patch-manifest` before the ROM
    * finished hashing), keyed by input stage id; `discoverImplicitPatches` applies them instead of
    * re-opening the dialog. Values are chosen file names in apply order; empty = user picked nothing. */
@@ -171,8 +172,9 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   }
 
   /** Set the ROM cheat records that the next run bakes into the output. */
-  setCheats(records: CheatRecord[]): void {
+  setCheats(records: CheatRecord[], cheatPositions: number[] = []): void {
     this.cheatRecords = records.map((record) => cloneValue(record));
+    this.cheatPositions = [...cheatPositions];
     this.recomputeOutputState();
   }
 
@@ -1610,6 +1612,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private createPatchInput(onProgress?: ApplyWorkflowOptions["onProgress"]): PatchInput {
     return {
       cheatRecords: this.cheatRecords.map((record) => cloneValue(record)),
+      ...(this.cheatPositions.length ? { cheatPositions: [...this.cheatPositions] } : {}),
       defaultPatchBasis: this.defaultPatchBasis,
       inputs: this.getEffectiveInputSources() as never,
       options: this.createExecutionOptions(onProgress),

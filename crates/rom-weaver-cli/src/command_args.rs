@@ -1677,6 +1677,13 @@ output is written back in the order the input arrived in."
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub cheat_records: Vec<crate::cheats::CheatRecord>,
+    /// Stage position for each structured cheat record. Each value is the
+    /// number of ordinary patches that run before the corresponding cheat.
+    /// An empty list keeps the compatibility behavior: all cheats run last.
+    #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub cheat_positions: Vec<usize>,
     /// Native cheat-database selection. `serde(skip)` keeps the wasm wire and
     /// the generated TypeScript unchanged; the webapp sends `cheat_records`.
     #[cfg_attr(not(target_arch = "wasm32"), command(flatten))]
