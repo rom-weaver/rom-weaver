@@ -8,6 +8,8 @@ import { SITE_ORIGIN } from "./docs-routing.mjs";
 const API_CATALOG_PATH = "/.well-known/api-catalog";
 const OPENAPI_PATH = "/openapi.json";
 const WEBAPP_INTEGRATION_DOC_PATH = "/docs/webapp-integration";
+const API_CATALOG_PROFILE = "https://www.rfc-editor.org/info/rfc9727";
+const API_CATALOG_CONTENT_TYPE = `application/linkset+json; profile="${API_CATALOG_PROFILE}"`;
 
 const OPENAPI_SOURCE = {
   openapi: "3.1.0",
@@ -33,18 +35,20 @@ const OPENAPI_SOURCE = {
           "the browser, so every remote host MUST allow the webapp origin through CORS.",
         parameters: [
           {
-            description: "URL of the source ROM to preload.",
+            description:
+              "HTTP(S) URL reference for the source ROM. Relative references resolve against the webapp base URL.",
             in: "query",
             name: "rom",
             required: false,
-            schema: { format: "uri", type: "string" },
+            schema: { format: "uri-reference", type: "string" },
           },
           {
-            description: "URL of a patch to preload. Repeat the parameter to preload several patches in order.",
+            description:
+              "HTTP(S) URL reference for a patch to preload. Repeat the parameter to preload several patches in order. Relative references resolve against the webapp base URL.",
             in: "query",
             name: "patch",
             required: false,
-            schema: { items: { format: "uri", type: "string" }, type: "array" },
+            schema: { items: { format: "uri-reference", type: "string" }, type: "array" },
           },
         ],
         responses: {
@@ -64,11 +68,12 @@ const OPENAPI_SOURCE = {
           "URL in the browser, so the remote host MUST allow the webapp origin through CORS.",
         parameters: [
           {
-            description: "URL of a rom-weaver bundle to preload.",
+            description:
+              "HTTP(S) URL reference for a rom-weaver bundle to preload. Relative references resolve against the webapp base URL.",
             in: "query",
             name: "bundle",
             required: false,
-            schema: { format: "uri", type: "string" },
+            schema: { format: "uri-reference", type: "string" },
           },
         ],
         responses: {
@@ -88,10 +93,14 @@ const createApiCatalogSource = () =>
     {
       linkset: [
         {
-          anchor: `${SITE_ORIGIN}/`,
+          anchor: `${SITE_ORIGIN}${API_CATALOG_PATH}`,
+          item: Object.keys(OPENAPI_SOURCE.paths).map((pathname) => ({ href: `${SITE_ORIGIN}${pathname}` })),
+        },
+        ...Object.keys(OPENAPI_SOURCE.paths).map((pathname) => ({
+          anchor: `${SITE_ORIGIN}${pathname}`,
           "service-desc": [{ href: `${SITE_ORIGIN}${OPENAPI_PATH}`, type: "application/json" }],
           "service-doc": [{ href: `${SITE_ORIGIN}${WEBAPP_INTEGRATION_DOC_PATH}`, type: "text/html" }],
-        },
+        })),
       ],
     },
     null,
@@ -100,4 +109,11 @@ const createApiCatalogSource = () =>
 
 const createOpenApiSource = () => `${JSON.stringify(OPENAPI_SOURCE, null, 2)}\n`;
 
-export { API_CATALOG_PATH, createApiCatalogSource, createOpenApiSource, OPENAPI_PATH };
+export {
+  API_CATALOG_CONTENT_TYPE,
+  API_CATALOG_PATH,
+  WEBAPP_INTEGRATION_DOC_PATH,
+  createApiCatalogSource,
+  createOpenApiSource,
+  OPENAPI_PATH,
+};

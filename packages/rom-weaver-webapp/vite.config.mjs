@@ -25,6 +25,7 @@ import { getBuildInfo, getChangelog, getVersionBranch } from "./scripts/version.
 import { createDocsRouteHtml, DOC_ROUTES, docSourcePath } from "./src/webapp/docs-pages.mjs";
 import { DOC_SOURCES, readDocsSlugFromPathname } from "./src/webapp/docs-routing.mjs";
 import {
+  API_CATALOG_CONTENT_TYPE,
   API_CATALOG_PATH,
   createApiCatalogSource,
   createOpenApiSource,
@@ -884,7 +885,7 @@ const writeCloudflareHeadersAsset = (channel) => {
       const installerContentType = "/install.sh\n  Content-Type: text/plain; charset=utf-8\n";
       // The catalog file has no extension, so Cloudflare would serve it as a
       // binary download. The Link header satisfies the RFC 9727 HEAD response.
-      const apiCatalogHeaders = `${API_CATALOG_PATH}\n  Content-Type: application/linkset+json\n  Link: <${API_CATALOG_PATH}>; rel="api-catalog"\n\n`;
+      const apiCatalogHeaders = `${API_CATALOG_PATH}\n  Content-Type: ${API_CATALOG_CONTENT_TYPE}\n  Link: <${API_CATALOG_PATH}>; rel="api-catalog"\n\n`;
       const markdownHeaders = DOC_SOURCES.map(
         ({ slug }) =>
           `/${slug}.md\n  Content-Type: text/markdown; charset=utf-8\n  Link: <https://rom-weaver.com/${slug}>; rel="canonical"\n`,

@@ -2,7 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { DOC_ROUTES } from "../src/webapp/docs-pages.mjs";
-import { API_CATALOG_PATH, OPENAPI_PATH } from "../src/webapp/api-catalog.mjs";
+import {
+  API_CATALOG_CONTENT_TYPE,
+  API_CATALOG_PATH,
+  OPENAPI_PATH,
+  WEBAPP_INTEGRATION_DOC_PATH,
+} from "../src/webapp/api-catalog.mjs";
 import { isLegalDocRoute, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
 import {
@@ -63,6 +68,7 @@ const createHtml = read("create-patch.html");
 const identifyHtml = read("identify-rom.html");
 const testHtml = read("test-rom.html");
 const headers = read("_headers");
+const swsConfig = fs.readFileSync(path.join(packageDir, "sws.toml"), "utf8");
 const installScript = read("install.sh");
 const redirects = read("_redirects");
 const llmsTxt = read("llms.txt");
@@ -108,29 +114,47 @@ for (const [index, line] of headerLines.entries()) {
 }
 assertIncludes(installScript, "#!/bin/sh", "curl installer");
 assertIncludes(headers, "/install.sh\n  Content-Type: text/plain; charset=utf-8", "curl installer content type");
-assertIncludes(headers, `${API_CATALOG_PATH}\n  Content-Type: application/linkset+json`, "API catalog content type");
+assertIncludes(headers, `${API_CATALOG_PATH}\n  Content-Type: ${API_CATALOG_CONTENT_TYPE}`, "API catalog content type");
 assertIncludes(headers, `Link: <${API_CATALOG_PATH}>; rel="api-catalog"`, "API catalog HEAD link relation");
+assertIncludes(swsConfig, `Content-Type = '${API_CATALOG_CONTENT_TYPE}'`, "Docker API catalog content type");
+assertIncludes(swsConfig, `Link = '<${API_CATALOG_PATH}>; rel="api-catalog"'`, "Docker API catalog HEAD link relation");
 const catalog = JSON.parse(read(API_CATALOG_PATH));
 if (!Array.isArray(catalog.linkset) || catalog.linkset.length === 0) {
   throw new Error("API catalog must contain a non-empty linkset array");
 }
-for (const [index, entry] of catalog.linkset.entries()) {
-  for (const relation of ["anchor", "service-desc", "service-doc"]) {
-    if (!entry[relation]) throw new Error(`API catalog entry ${index} is missing ${relation}`);
-  }
-  if (!entry.anchor.startsWith(SITE_ORIGIN)) throw new Error(`API catalog entry ${index} anchor is off-origin`);
-  for (const relation of ["service-desc", "service-doc"]) {
-    for (const link of entry[relation]) {
-      if (!link.href?.startsWith(SITE_ORIGIN)) throw new Error(`API catalog ${relation} href is off-origin`);
-    }
-  }
-  if (entry["service-desc"][0].href !== `${SITE_ORIGIN}${OPENAPI_PATH}`) {
-    throw new Error("API catalog service-desc MUST point at the OpenAPI document");
-  }
-}
 const openapi = JSON.parse(read(OPENAPI_PATH));
 if (!/^3\.1\.\d+$/u.test(openapi.openapi)) throw new Error("OpenAPI document MUST declare OpenAPI 3.1");
 if (!openapi.paths || Object.keys(openapi.paths).length === 0) throw new Error("OpenAPI document has no paths");
+const expectedEndpoints = Object.keys(openapi.paths).map((pathname) => `${SITE_ORIGIN}${pathname}`);
+const catalogItems = catalog.linkset.find((entry) => entry.anchor === `${SITE_ORIGIN}${API_CATALOG_PATH}`)?.item;
+if (!Array.isArray(catalogItems)) throw new Error("API catalog must link to its API endpoints with item relations");
+const actualEndpoints = catalogItems.map((item) => item.href);
+if (
+  actualEndpoints.length !== expectedEndpoints.length ||
+  expectedEndpoints.some((endpoint) => !actualEndpoints.includes(endpoint))
+) {
+  throw new Error("API catalog item links MUST match the OpenAPI paths");
+}
+for (const [index, entry] of catalog.linkset.entries()) {
+  if (typeof entry.anchor !== "string" || !entry.anchor.startsWith(SITE_ORIGIN)) {
+    throw new Error(`API catalog entry ${index} has a missing or off-origin anchor`);
+  }
+  for (const relation of ["service-desc", "service-doc"]) {
+    for (const link of entry[relation] ?? []) {
+      if (!link.href?.startsWith(SITE_ORIGIN)) throw new Error(`API catalog ${relation} href is off-origin`);
+    }
+  }
+}
+for (const endpoint of expectedEndpoints) {
+  const entry = catalog.linkset.find((candidate) => candidate.anchor === endpoint);
+  if (!entry) throw new Error(`API catalog is missing metadata for endpoint ${endpoint}`);
+  if (entry["service-desc"]?.[0]?.href !== `${SITE_ORIGIN}${OPENAPI_PATH}`) {
+    throw new Error(`API catalog service-desc for ${endpoint} MUST point at the OpenAPI document`);
+  }
+  if (entry["service-doc"]?.[0]?.href !== `${SITE_ORIGIN}${WEBAPP_INTEGRATION_DOC_PATH}`) {
+    throw new Error(`API catalog service-doc for ${endpoint} MUST point at the integration guide`);
+  }
+}
 assertIncludes(
   headers,
   "/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable",

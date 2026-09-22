@@ -208,5 +208,5 @@ Cross-Origin-Resource-Policy = "same-origin"
 source = "/.well-known/api-catalog"
 
 [advanced.headers.headers]
-Content-Type = "application/linkset+json"
+Content-Type = 'application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"'
 Link = '</.well-known/api-catalog>; rel="api-catalog"'
