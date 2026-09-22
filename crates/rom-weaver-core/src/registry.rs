@@ -262,6 +262,7 @@ impl ContainerExtractRequest {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContainerCreateRequest {
     pub inputs: Vec<PathBuf>,
+    pub archive_names: Option<Vec<String>>,
     pub output: PathBuf,
     pub format: String,
     pub codec: Option<String>,

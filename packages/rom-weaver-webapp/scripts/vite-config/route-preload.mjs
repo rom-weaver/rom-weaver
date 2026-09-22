@@ -16,6 +16,7 @@ const WORKFLOW_ROUTE_MODULES = {
   bundle: "src/public/react/apply-patch-form.tsx",
   creator: "src/public/react/create-patch-form.tsx",
   docs: "src/webapp/docs-page.tsx",
+  extract: "src/webapp/components/extract-form.tsx",
   identify: "src/webapp/components/identify-form.tsx",
   home: "src/webapp/components/home-page.tsx",
   patcher: "src/public/react/apply-patch-form.tsx",

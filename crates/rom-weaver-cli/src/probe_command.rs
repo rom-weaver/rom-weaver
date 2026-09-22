@@ -26,6 +26,7 @@ impl CliApp {
             filter: _,
             no_extract,
             no_ignore,
+            split_bin,
         } = args;
         let kind_filter = Self::archive_entry_kind_filter(rom_filter, patch_filter);
         trace!(
@@ -35,6 +36,7 @@ impl CliApp {
             patch_filter,
             no_extract,
             no_ignore,
+            split_bin,
             "starting probe command"
         );
         let context = self.context(ThreadBudget::Fixed(1));
@@ -89,6 +91,7 @@ impl CliApp {
             &context,
             kind_filter,
             no_ignore,
+            split_bin,
             probe_recommendation.as_ref(),
         );
         self.finish_probe(
@@ -155,6 +158,7 @@ impl CliApp {
         context: &OperationContext,
         kind_filter: ArchiveEntryKindFilter,
         no_ignore: bool,
+        split_bin: bool,
         probe_recommendation: Option<&CompressFormatRecommendation>,
     ) -> OperationReport {
         if let Some(handler) = self.containers.probe(probe_source) {
@@ -164,6 +168,7 @@ impl CliApp {
                 context,
                 kind_filter,
                 no_ignore,
+                split_bin,
                 probe_recommendation,
             );
         }
@@ -263,6 +268,7 @@ impl CliApp {
         context: &OperationContext,
         kind_filter: ArchiveEntryKindFilter,
         no_ignore: bool,
+        split_bin: bool,
         probe_recommendation: Option<&CompressFormatRecommendation>,
     ) -> OperationReport {
         self.emit_running(
@@ -278,7 +284,7 @@ impl CliApp {
         );
         let request = ContainerProbeRequest {
             source: probe_source.to_path_buf(),
-            split_bin: false,
+            split_bin,
         };
         let report = handler
             .probe_details(&request, context)

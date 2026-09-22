@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     fs, io,
     path::{Component, Path, PathBuf},
 };
@@ -77,6 +78,42 @@ pub(crate) fn collect_archive_inputs(inputs: &[PathBuf]) -> Result<Vec<ArchiveIn
         collect_archive_inputs_from_path(input, root, &mut entries)?;
     }
     Ok(entries)
+}
+
+pub(crate) fn collect_named_archive_inputs(
+    inputs: &[PathBuf],
+    names: &[String],
+) -> Result<Vec<ArchiveInputEntry>> {
+    if inputs.is_empty() || inputs.len() != names.len() {
+        return Err(RomWeaverError::Validation(
+            "named archive inputs require one safe name per input".into(),
+        ));
+    }
+    let mut seen = HashSet::new();
+    inputs
+        .iter()
+        .zip(names)
+        .map(|(source, name)| {
+            if !fs::metadata(source)?.is_file() {
+                return Err(RomWeaverError::Validation(format!(
+                    "named archive input is not a file: `{}`",
+                    source.display()
+                )));
+            }
+            let archive_name =
+                archive_path_to_name(&sanitize_archive_relative_path_from_str(name)?)?;
+            if !seen.insert(archive_name.clone()) {
+                return Err(RomWeaverError::Validation(format!(
+                    "duplicate archive entry name: `{archive_name}`"
+                )));
+            }
+            Ok(ArchiveInputEntry {
+                source: source.clone(),
+                archive_name,
+                is_dir: false,
+            })
+        })
+        .collect()
 }
 
 pub(crate) fn sum_input_file_bytes(entries: &[ArchiveInputEntry]) -> u64 {

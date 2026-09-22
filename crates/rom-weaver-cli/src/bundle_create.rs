@@ -773,6 +773,7 @@ impl CliApp {
             "creating bundle bundle archive"
         );
         let request = ContainerCreateRequest {
+            archive_names: None,
             inputs,
             output: bundle.to_path_buf(),
             format: handler.descriptor().name.to_string(),

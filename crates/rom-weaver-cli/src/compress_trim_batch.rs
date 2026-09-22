@@ -33,6 +33,7 @@ struct CompressPlan {
     handler: Arc<dyn ContainerHandler>,
     resolved_format: String,
     format_warning: Option<String>,
+    archive_names: Option<Vec<String>>,
     codec: Option<String>,
     level: Option<i32>,
     create_threads: Option<ThreadExecution>,
@@ -62,6 +63,7 @@ impl CliApp {
         );
         let CompressCommand {
             input,
+            entry_names,
             format,
             output,
             codec,
@@ -105,6 +107,8 @@ impl CliApp {
         let plan = match self.plan_compress(
             requested_format,
             &output,
+            input.len(),
+            entry_names,
             codec,
             level_profile,
             &context,
@@ -169,6 +173,8 @@ impl CliApp {
         &self,
         requested_format: Option<String>,
         output: &Path,
+        input_len: usize,
+        entry_names: Vec<String>,
         codec: Vec<String>,
         level_profile: CompressionLevelProfile,
         context: &OperationContext,
@@ -239,11 +245,22 @@ impl CliApp {
                 extract_only_create_validation_message(handler.descriptor().name),
             ));
         }
+        if !entry_names.is_empty()
+            && (!handler.descriptor().matches_name("zip") || entry_names.len() != input_len)
+        {
+            return Err(fail(
+                Some(resolved_format.clone()),
+                "validate",
+                "--entry-name requires ZIP format and one name per input".to_string(),
+            ));
+        }
+        let archive_names = (!entry_names.is_empty()).then_some(entry_names);
         let create_threads = Some(context.plan_threads(capabilities.create_threads.clone()));
         Ok(CompressPlan {
             handler,
             resolved_format,
             format_warning,
+            archive_names,
             codec,
             level,
             create_threads,
@@ -258,6 +275,7 @@ impl CliApp {
         context: &OperationContext,
     ) -> OperationReport {
         let request = ContainerCreateRequest {
+            archive_names: plan.archive_names.clone(),
             inputs: input.to_vec(),
             output: output.to_path_buf(),
             format: plan.resolved_format.clone(),
@@ -293,6 +311,7 @@ impl CliApp {
             handler,
             resolved_format,
             format_warning,
+            archive_names,
             codec,
             level,
             create_threads,
@@ -326,6 +345,7 @@ impl CliApp {
 
         let expected_output = output.clone();
         let request = ContainerCreateRequest {
+            archive_names: archive_names.clone(),
             inputs: input,
             output,
             format: resolved_format.clone(),

@@ -1,4 +1,4 @@
-type WorkflowView = "patcher" | "creator" | "identify" | "trim" | "ppf-undo" | "save-editor" | "test";
+type WorkflowView = "patcher" | "creator" | "extract" | "identify" | "trim" | "ppf-undo" | "save-editor" | "test";
 /** "home" is the apex landing route: a WebappView the shell renders, but not a workflow. */
 type WebappView = WorkflowView | "bundle" | "docs" | "home" | "whats-new";
 

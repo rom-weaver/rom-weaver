@@ -287,6 +287,7 @@ fn guard_probe_request() -> ContainerProbeRequest {
 
 fn guard_create_request() -> ContainerCreateRequest {
     ContainerCreateRequest {
+        archive_names: None,
         inputs: Vec::new(),
         output: PathBuf::from("out.guard"),
         format: "guard".to_string(),

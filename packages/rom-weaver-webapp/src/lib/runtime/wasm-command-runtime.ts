@@ -4,6 +4,7 @@ export { invokeRomWeaverBundleCreateWorker, invokeRomWeaverBundleParseWorker } f
 export { invokeRomWeaverCheatWorker } from "./wasm-cheat-commands.ts";
 export {
   invokeRomWeaverCompressionCreateWorker,
+  invokeRomWeaverExtractAllWorker,
   invokeRomWeaverExtractWorker,
   runRomWeaverProbeWorker,
 } from "./wasm-compression-commands.ts";

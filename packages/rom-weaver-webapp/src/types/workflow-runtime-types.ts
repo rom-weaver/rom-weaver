@@ -200,6 +200,9 @@ type PublicOutput = VfsOutputRef & {
   gdiText?: string;
   discGroupId?: string;
   trackNumber?: number;
+  /** Path below the extraction root. This preserves nested archive directories while `fileName`
+   * remains the leaf basename used by ordinary single-file downloads. */
+  relativePath?: string;
 };
 
 type CompressionEntryInfo = {
@@ -247,11 +250,15 @@ type CompressionExtractInput = {
    * per nested level via the interactive selection callback), ignoring `entries`. Returns the bottom
    * leaf output(s). Used by input discovery to avoid a separate `list` + per-entry extract. */
   descendSinglePayload?: boolean;
+  /** Recursively extract every leaf without selection or ROM/patch filtering. */
+  extractAll?: boolean;
 };
 
 type SevenZipZstdCompressionOptions = CompressionWorkflowOptions & {
   compression?: ArchiveCompressionFormat;
   outputName?: string;
+  /** Preserve each entry's relative filename when creating a ZIP. */
+  preservePaths?: boolean;
   compressionProfile?: CompressionProfile;
   zipCodec?: ZipCodec;
   zipLevel?: number | string;

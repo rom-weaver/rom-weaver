@@ -1024,6 +1024,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.nav.docs": msg({ id: "ui.nav.docs", message: "Docs" }),
   "ui.nav.groupDevice": msg({ id: "ui.nav.groupDevice", message: "This device" }),
   "ui.nav.groupPatches": msg({ id: "ui.nav.groupPatches", message: "Patches" }),
+  "ui.nav.groupGeneral": msg({ id: "ui.nav.groupGeneral", message: "General" }),
   "ui.nav.groupRoms": msg({ id: "ui.nav.groupRoms", message: "ROMs" }),
   "ui.nav.home": msg({ id: "ui.nav.home", message: "rom-weaver home" }),
   "ui.nav.homeShort": msg({ id: "ui.nav.homeShort", message: "Home" }),

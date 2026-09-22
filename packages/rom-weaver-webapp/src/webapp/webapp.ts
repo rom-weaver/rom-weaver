@@ -393,6 +393,7 @@ const PRERENDERED_VIEWS = new Set<WebappView>([
   "patcher",
   "ppf-undo",
   "save-editor",
+  "extract",
   "test",
   "trim",
   "whats-new",

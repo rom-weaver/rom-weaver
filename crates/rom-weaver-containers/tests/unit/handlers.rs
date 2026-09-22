@@ -407,6 +407,7 @@ mod tests {
         let error = handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![input_path],
                     output: temp_dir.join(format!("payload.{output_extension}")),
                     format: format.to_string(),
@@ -891,6 +892,7 @@ mod tests {
         let create_report = handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![source_path.clone()],
                     output: archive_path.clone(),
                     format: "chd".to_string(),
@@ -1013,6 +1015,7 @@ mod tests {
                 let archive_path =
                     temp_dir.join(format!("payload-{}.{}", format.replace('.', "-"), format));
                 let create_request = ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![input_dir.clone()],
                     output: archive_path.clone(),
                     format: format.to_string(),
@@ -1153,6 +1156,7 @@ mod tests {
             let create_report = handler
                 .create(
                     &ContainerCreateRequest {
+                        archive_names: None,
                         inputs: vec![input_path.clone()],
                         output: temp_dir.join(format!("payload-{level}.zip")),
                         format: "zip".to_string(),
@@ -1205,6 +1209,7 @@ mod tests {
         let report = handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![input_path],
                     output: temp_dir.join("payload.zip"),
                     format: "zip".to_string(),
@@ -1241,6 +1246,7 @@ mod tests {
             let error = handler
                 .create(
                     &ContainerCreateRequest {
+                        archive_names: None,
                         inputs: vec![input_path.clone()],
                         output: archive_path,
                         format: "zip".to_string(),
@@ -1498,6 +1504,7 @@ mod tests {
             let create_report = handler
                 .create(
                     &ContainerCreateRequest {
+                        archive_names: None,
                         inputs: vec![input_dir.clone()],
                         output: archive_path.clone(),
                         format: "zip".to_string(),
@@ -1574,6 +1581,7 @@ mod tests {
             let create_report = handler
                 .create(
                     &ContainerCreateRequest {
+                        archive_names: None,
                         inputs: vec![input_dir.clone()],
                         output: archive_path.clone(),
                         format: "zip".to_string(),
@@ -2151,6 +2159,7 @@ mod tests {
         let report = handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![input_path.clone()],
                     output: output_path.clone(),
                     format: "rvz".to_string(),
@@ -2262,6 +2271,7 @@ mod tests {
         let report = handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![input_path],
                     output: output_path.clone(),
                     format: "z3ds".to_string(),
@@ -2299,6 +2309,7 @@ mod tests {
         let report = handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![input_path],
                     output: output_path.clone(),
                     format: "z3ds".to_string(),
@@ -2348,6 +2359,7 @@ mod tests {
         let create_report = handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![input_path.clone()],
                     output: archive_path.clone(),
                     format: "z3ds".to_string(),
@@ -2415,6 +2427,7 @@ mod tests {
             let create_report = handler
                 .create(
                     &ContainerCreateRequest {
+                        archive_names: None,
                         inputs: vec![input_path.clone()],
                         output: archive_path.clone(),
                         format: "7z".to_string(),
@@ -2491,6 +2504,7 @@ mod tests {
             let create_report = handler
                 .create(
                     &ContainerCreateRequest {
+                        archive_names: None,
                         inputs: vec![input_path.clone()],
                         output: archive_path.clone(),
                         format: "7z".to_string(),
@@ -2552,6 +2566,7 @@ mod tests {
                 handler
                     .create(
                         &ContainerCreateRequest {
+                            archive_names: None,
                             inputs: vec![input_path.clone()],
                             output: archive_path.clone(),
                             format: "7z".to_string(),
@@ -2621,6 +2636,7 @@ mod tests {
             let create_report = handler
                 .create(
                     &ContainerCreateRequest {
+                        archive_names: None,
                         inputs: vec![input_path.clone()],
                         output: archive_path.clone(),
                         format: "7z".to_string(),
@@ -2871,6 +2887,7 @@ mod tests {
                 let create_report = handler
                     .create(
                         &ContainerCreateRequest {
+                            archive_names: None,
                             inputs: vec![input_path.clone()],
                             output: archive_path.clone(),
                             format: "7z".to_string(),
@@ -2988,6 +3005,7 @@ mod tests {
             let error = handler
                 .create(
                     &ContainerCreateRequest {
+                        archive_names: None,
                         inputs: vec![input_path.clone()],
                         output: archive_path,
                         format: "7z".to_string(),
@@ -3021,6 +3039,7 @@ mod tests {
             seven_z
                 .create(
                     &ContainerCreateRequest {
+                        archive_names: None,
                         inputs: vec![input_path],
                         output: path.clone(),
                         format: "7z".to_string(),
@@ -3650,6 +3669,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![source_path.clone()],
                     output: archive_path.clone(),
                     format: "chd".to_string(),
@@ -3703,6 +3723,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![source_path.clone()],
                     output: archive_path.clone(),
                     format: "chd".to_string(),
@@ -3817,6 +3838,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![source_path.clone()],
                     output: archive_path.clone(),
                     format: "chd".to_string(),
@@ -3874,6 +3896,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![source_path.clone()],
                     output: parent_chd.clone(),
                     format: "chd".to_string(),
@@ -3887,6 +3910,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![source_path.clone()],
                     output: child_chd.clone(),
                     format: "chd".to_string(),
@@ -4158,6 +4182,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![source_path.clone()],
                     output: archive_path.clone(),
                     format: "chd".to_string(),
@@ -4207,6 +4232,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![source_path],
                     output: archive_path.clone(),
                     format: "chd".to_string(),
@@ -4269,6 +4295,7 @@ mod tests {
             handler
                 .create(
                     &ContainerCreateRequest {
+                        archive_names: None,
                         inputs: vec![input.clone()],
                         output: archive_path.clone(),
                         format: (if label == "dvd" { "chd-dvd" } else { "chd" }).to_string(),
@@ -4333,6 +4360,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![source_cue.clone()],
                     output: archive_path.clone(),
                     format: "chd".to_string(),
@@ -4399,6 +4427,7 @@ mod tests {
             handler
                 .create(
                     &ContainerCreateRequest {
+                        archive_names: None,
                         inputs: vec![source_cue.clone()],
                         output: archive_path.clone(),
                         format: "chd".to_string(),
@@ -4451,6 +4480,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![source_iso.clone()],
                     output: archive_path.clone(),
                     format: "chd-dvd".to_string(),
@@ -4501,6 +4531,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![source_iso.clone()],
                     output: archive_path.clone(),
                     format: "chd".to_string(),
@@ -4560,6 +4591,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![source_cue.clone()],
                     output: archive_path.clone(),
                     format: "chd".to_string(),
@@ -4617,6 +4649,7 @@ mod tests {
         handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![source_cue.clone()],
                     output: archive_path.clone(),
                     format: "chd".to_string(),
@@ -4675,6 +4708,7 @@ mod tests {
             handler
                 .create(
                     &ContainerCreateRequest {
+                        archive_names: None,
                         inputs: vec![source_cue.clone()],
                         output: archive_path.clone(),
                         format: "chd".to_string(),
@@ -4901,6 +4935,7 @@ mod tests {
         let error = handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![input_path],
                     output: temp_dir.join("disc.z3ds"),
                     format: "z3ds".to_string(),
@@ -4930,6 +4965,7 @@ mod tests {
         let error = handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![input_path],
                     output: temp_dir.join("disc.z3ds"),
                     format: "z3ds".to_string(),
@@ -4961,6 +4997,7 @@ mod tests {
         let error = handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![first, second],
                     output: temp_dir.join("disc.z3ds"),
                     format: "z3ds".to_string(),
@@ -5012,6 +5049,7 @@ mod tests {
         let error = handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![input_path],
                     output: temp_dir.join("payload.cso"),
                     format: "cso".to_string(),
@@ -5166,6 +5204,7 @@ mod tests {
     fn nod_ensure_single_create_input_rejects_multiple_inputs() {
         let core = NodHandlerCore::new(&GCZ, NodFormat::Gcz);
         let request = ContainerCreateRequest {
+            archive_names: None,
             inputs: vec![PathBuf::from("a.iso"), PathBuf::from("b.iso")],
             output: PathBuf::from("out.rvz"),
             format: "gcz".to_string(),

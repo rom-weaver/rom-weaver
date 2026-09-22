@@ -106,6 +106,15 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         createWorkflowRouteHtml(creatorHtml, WORKFLOW_SEO_ROUTES.creator, channel, channelLabel),
         WORKFLOW_SEO_ROUTES.creator,
       );
+      const extractHtml = injectLdJson(
+        createWorkflowRouteHtml(
+          withRoutePreloadLinks(withShell("extract"), routePreloadLinks.get("extract")),
+          WORKFLOW_SEO_ROUTES.extract,
+          channel,
+          channelLabel,
+        ),
+        WORKFLOW_SEO_ROUTES.extract,
+      );
       const identifyHtml = injectLdJson(
         createWorkflowRouteHtml(
           withRoutePreloadLinks(withShell("identify"), routePreloadLinks.get("identify")),
@@ -153,6 +162,7 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         ["apply-patches", applyHtml],
         ["bundle-patches", bundleHtml],
         ["create-patch", createHtml],
+        ["extract", extractHtml],
         ["identify-rom", identifyHtml],
         ["test-rom", testHtml],
         ["trim-rom", trimHtml],

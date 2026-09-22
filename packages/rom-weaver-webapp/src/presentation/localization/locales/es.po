@@ -1530,6 +1530,11 @@ msgstr "Juego, sistema o suma de verificación"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.nav.groupGeneral"
+msgstr "General"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.get"
 msgstr "Obtienes"
 
