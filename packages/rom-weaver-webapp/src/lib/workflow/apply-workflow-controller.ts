@@ -173,6 +173,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   /** Set the ROM cheat records that the next run bakes into the output. */
   setCheats(records: CheatRecord[]): void {
     this.cheatRecords = records.map((record) => cloneValue(record));
+    this.recomputeOutputState();
   }
 
   /** Export the exact leaves staging prepared, so a bundle export right after apply needs no
@@ -1570,6 +1571,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       input: this.getInput(),
       inputSession: this.inputSession as InputSession<unknown> | undefined,
       patchOutputNames: this.patches.map((patch, index) => resolvePatchOutputName(patch, index)),
+      cheatNames: this.cheatRecords.map((record) => record.description),
     });
   }
 

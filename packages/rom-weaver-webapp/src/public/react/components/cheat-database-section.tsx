@@ -219,7 +219,12 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
 
   return (
     <div className="manual-cheat">
-      <button aria-expanded={open} className="manual-cheat-toggle" onClick={() => setOpen(!open)} type="button">
+      <button
+        aria-expanded={open}
+        className="btn ghost manual-cheat-toggle"
+        onClick={() => setOpen(!open)}
+        type="button"
+      >
         <Plus aria-hidden="true" />
         Add code manually
       </button>
@@ -228,6 +233,7 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
           <label>
             <span>Description</span>
             <input
+              className="input"
               maxLength={200}
               onChange={(event) => {
                 setDescription(event.target.value);
@@ -240,6 +246,7 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
             <span>Cheat code</span>
             <textarea
               autoCapitalize="characters"
+              className="input mono"
               maxLength={4096}
               onChange={(event) => {
                 setCode(event.target.value);
@@ -254,6 +261,7 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
             <label>
               <span>System</span>
               <select
+                className="select"
                 onChange={(event) => {
                   setSystem(event.target.value as CheatManualSystem);
                   clearClassification();
@@ -270,6 +278,7 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
             <label>
               <span>Code type</span>
               <select
+                className="select"
                 onChange={(event) => {
                   setKind(event.target.value as ManualCheatKindOverride);
                   clearClassification();
@@ -283,10 +292,16 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
               </select>
             </label>
           </div>
-          <button disabled={busy || !code.trim()} type="submit">
-            {busy ? "Checking code…" : "Check code"}
-          </button>
-          {error ? <p role="alert">{error}</p> : null}
+          <div className="manual-cheat-actions">
+            <button className="btn primary" disabled={busy || !code.trim()} type="submit">
+              {busy ? "Checking code…" : "Check code"}
+            </button>
+          </div>
+          {error ? (
+            <p className="manual-cheat-error" role="alert">
+              {error}
+            </p>
+          ) : null}
           {result ? (
             <div className="manual-cheat-result" role="status">
               <p>
@@ -294,7 +309,12 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
                 · {result.detectedType}
               </p>
               <p>{deliveryCopy(result.record).text}</p>
-              <button disabled={!isSelectableCheat(result.record)} onClick={() => onAdd(result)} type="button">
+              <button
+                className="btn primary"
+                disabled={!isSelectableCheat(result.record)}
+                onClick={() => onAdd(result)}
+                type="button"
+              >
                 Add this cheat
               </button>
             </div>
@@ -395,6 +415,7 @@ export const AddCheatsDialog = ({
               <span className="sr-only">Search cheats</span>
               <Search aria-hidden="true" />
               <input
+                className="input"
                 onChange={(event) => {
                   setQuery(event.target.value);
                   setPage(0);
@@ -425,7 +446,7 @@ export const AddCheatsDialog = ({
                       </span>
                       <button
                         aria-label={`${added ? "Remove" : "Add"} ${source.description}`}
-                        className={added ? "cheat-pick-btn is-added" : "cheat-pick-btn"}
+                        className={added ? "btn slim cheat-pick-btn is-added" : "btn slim cheat-pick-btn"}
                         disabled={!(added || isSelectableCheat(entry))}
                         onClick={() => (added ? onRemove(entry) : onAdd(entry))}
                         type="button"
@@ -449,13 +470,19 @@ export const AddCheatsDialog = ({
                   {visible.length} of {countLabel(records.length, "cheat")} · {stackCount} in the stack
                 </span>
                 <span className="cheat-pager">
-                  <button disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)} type="button">
+                  <button
+                    className="btn ghost slim"
+                    disabled={currentPage === 0}
+                    onClick={() => setPage(currentPage - 1)}
+                    type="button"
+                  >
                     Previous
                   </button>
                   <span className="mono">
                     {currentPage + 1} / {pageCount}
                   </span>
                   <button
+                    className="btn ghost slim"
                     disabled={currentPage >= pageCount - 1}
                     onClick={() => setPage(currentPage + 1)}
                     type="button"
@@ -743,6 +770,7 @@ export const CheatDatabaseSection = ({
         </label>
         <select
           aria-label={`Browse games for ${entry.platform}`}
+          className="select"
           onChange={(event) => setManualGameId(event.target.value)}
           value={manualGameId}
         >

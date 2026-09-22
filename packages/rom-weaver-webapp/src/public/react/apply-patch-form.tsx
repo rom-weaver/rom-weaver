@@ -262,6 +262,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const [cheatConflictMessage, setCheatConflictMessage] = useState("");
   // Mirrors the cheat card's On switches so the header controls in 0x03 and 0x04 can refuse a strip.
   const [cheatsOn, setCheatsOn] = useState(false);
+  const [cheatNames, setCheatNames] = useState<string[]>([]);
   const preparedWorkflowRef = useRef<ApplyWorkflow | null>(null);
   const bundleSourcesRef = useRef<ApplyWorkflowBundleSources | null>(null);
   const workflowSyncRef = useRef<ApplyWorkflowSyncState>({
@@ -1611,6 +1612,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       resolvedOutputCompression,
       resolvedOutputName,
       resolvedOutputNameKey,
+      cheatNames,
       setPatchOption,
       setPatchTarget,
       stageInput,
@@ -1707,10 +1709,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       selectedCheatsRef.current = records;
       // ROM cheat offsets refer to the staged bytes, so selected ROM writes
       // prevent header stripping during apply.
-      setCheatsOn(records.some((record) => cheatDelivery(record) === "rom"));
+      const romRecords = records.filter((record) => cheatDelivery(record) === "rom").map(({ record }) => record);
+      setCheatsOn(romRecords.length > 0);
+      setCheatNames(romRecords.map((record) => record.description));
       setCompletedOutput(null);
       setCompletedCheats(undefined);
-      const romRecords = records.filter((record) => cheatDelivery(record) === "rom").map(({ record }) => record);
       (preparedWorkflowRef.current || workflowHandle.peek())?.setCheats?.(romRecords);
       const sequence = ++preflightSequence.current;
       setCheatConflictMessage("");
