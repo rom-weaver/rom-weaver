@@ -1,6 +1,6 @@
 # Create game saves in the browser
 
-Create a game save, edit its properties, and download a copy. The generator lists every supported game. Fresh Pokémon saves pass the editor's structure checks, but their behavior inside the games has not been checked.
+Create a Zelda save, edit its properties, and download a copy. To edit a Pokémon save, start with a save made by the game. Earlier fresh Pokémon files passed editor checks but did not have a confirmed playable game state.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -13,7 +13,7 @@ Create a game save, edit its properties, and download a copy. The generator list
 ## Create a fresh save
 
 1. Open **Saves**. Enable beta tools in Settings if needed.
-2. Select **Create a fresh save**, then choose a game.
+2. Select **Create a fresh save**, then choose **The Legend of Zelda: A Link to the Past**.
 3. Select **Generate save**. The editor opens the new file.
 4. Change the properties you need. **Find a property** filters the fields. Fields outside the filter keep their pending edits.
 5. Select **Download edited copy**. The default save can also be downloaded without edits.
@@ -23,7 +23,7 @@ A new Zelda save has one file named `LINK`, three hearts, and two empty slots. C
 
 ## Start from an existing save
 
-1. Add the game's battery save or SRAM file to the Save Editor.
+1. Add the game's battery save or SRAM file to the Save Editor. Use this path for Pokémon games.
 2. Select the game if recognition needs a choice.
 3. Change the required properties and select **Preview changes**.
 4. Select **Download edited copy** after the preview passes.

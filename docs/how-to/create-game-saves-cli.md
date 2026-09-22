@@ -1,6 +1,6 @@
 # Create game saves with the CLI
 
-Use `save create` to write a fresh game save or a copy of an existing save template. The command validates the save before it writes the output.
+Use `save create` to write a fresh Zelda save or a copy of an existing save template. Use a game-made template for Pokémon. The command validates the save structure before it writes the output.
 
 <!-- START doctoc -->
 ## Table of contents

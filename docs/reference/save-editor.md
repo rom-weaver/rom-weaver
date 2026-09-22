@@ -86,7 +86,9 @@ Every write starts from a copy. The handler reparses the result before it return
 
 ## Save generation
 
-Fresh generation is available for every game in the supported games table. The generated images pass each handler's structure and checksum checks. In-game behavior for the Pokémon images has not been checked. The Zelda image contains one file named `LINK`, three hearts, no acquired equipment, a valid backup, and two empty file slots. Its bytes follow the original game's file initialization. The browser shows only editable properties for a fresh save; the full document retains its read-only metadata.
+Fresh generation is available for The Legend of Zelda: A Link to the Past. Its image contains one file named `LINK`, three hearts, no acquired equipment, a valid backup, and two empty file slots. Its bytes follow the original game's file initialization. The browser shows only editable properties for a fresh save; the full document retains its read-only metadata.
+
+Fresh Pokémon generation is unavailable because structure and checksum checks do not prove a playable game state. Earlier generated Pokémon files may pass those checks while missing game initialization data. Start with a save made by the matching game.
 
 Template generation supports every editable game above. It validates an existing save, applies optional field assignments, and writes a separate file. Without assignments, the output is byte-identical to the template. Container wrappers are retained. A template cannot be the output path.
 
