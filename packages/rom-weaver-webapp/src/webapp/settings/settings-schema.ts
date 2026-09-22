@@ -75,6 +75,7 @@ const isCodecSettingValue = (value: unknown): value is string | string[] | numbe
   (Array.isArray(value) && value.every((item) => typeof item === "string"));
 const BOOLEAN_SETTINGS_FIELDS = [
   "betaToolsEnabled",
+  "cheatsEnabled",
   "onboardingEnabled",
   "offlineCopyEnabled",
   "emulatorSaveStorageEnabled",
@@ -406,6 +407,7 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
   const validation = isRecord(applySettings.validation) ? applySettings.validation : {};
   return {
     betaToolsEnabled: commonSettings.betaToolsEnabled,
+    cheatsEnabled: commonSettings.cheatsEnabled,
     legacyApplyPlayButtonEnabled: commonSettings.applyPlayButtonEnabled,
     emulatorSaveStorageEnabled: commonSettings.emulatorSaveStorageEnabled,
     onboardingEnabled: commonSettings.onboardingEnabled,
@@ -531,6 +533,8 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
 
     const betaToolsEnabled = readStoredField(storedBooleanSchema, loadedSettings.betaToolsEnabled);
     if (betaToolsEnabled !== undefined) settings.betaToolsEnabled = betaToolsEnabled;
+    const cheatsEnabled = readStoredField(storedBooleanSchema, loadedSettings.cheatsEnabled);
+    if (cheatsEnabled !== undefined) settings.cheatsEnabled = cheatsEnabled;
 
     const identifiedOutputName = readStoredField(storedBooleanSchema, loadedSettings.identifiedOutputName);
     if (identifiedOutputName !== undefined) settings.identifiedOutputName = identifiedOutputName;
@@ -640,6 +644,7 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
     if (
       fieldKey === "accent" ||
       fieldKey === "betaToolsEnabled" ||
+      fieldKey === "cheatsEnabled" ||
       fieldKey === "emulatorSaveStorageEnabled" ||
       fieldKey === "onboardingEnabled" ||
       fieldKey === "offlineCopyEnabled" ||

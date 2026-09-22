@@ -501,6 +501,15 @@ const createWebappRootController = (options: ControllerOptions) => {
         draftSettings: { ...state.draftSettings, bundlePackage: value },
       });
     },
+    setCheatsEnabled(enabled: boolean) {
+      const state = store.getState();
+      if (state.settings.cheatsEnabled === enabled) return;
+      const nextSettings = { ...copySettings(state.settings), cheatsEnabled: enabled };
+      persistSettings(nextSettings);
+      applyCommittedSettings(nextSettings, {
+        draftSettings: { ...state.draftSettings, cheatsEnabled: enabled },
+      });
+    },
     setCreatorModifiedState(file: unknown) {
       updateCreatorSession({ modifiedFilePresent: !!file });
     },

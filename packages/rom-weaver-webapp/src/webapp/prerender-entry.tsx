@@ -39,6 +39,7 @@ const createPrerenderActions = (): WebappRootProps["actions"] => ({
   onOfflineCopyEnabledChange: noop,
   onOpenSettings: noop,
   onPatcherBundlePackageChange: noop,
+  onPatcherCheatsEnabledChange: noop,
   onPatcherInputsChange: noop,
   onPatcherPatchesChange: noop,
   onPatcherSettingsChange: noop,

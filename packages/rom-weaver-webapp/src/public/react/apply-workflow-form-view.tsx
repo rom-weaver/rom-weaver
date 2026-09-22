@@ -2240,7 +2240,10 @@ function ApplyWorkflowFormView({
                   { num: "0x04", title: localizer.message("ui.bundleExport.shareTitle") },
                   { num: "0x05", title: localizer.message("ui.step.apply") },
                 ]
-              : [{ num: "0x04", title: localizer.message("ui.step.apply") }]),
+              : [
+                  { num: "0x04", title: localizer.message("ui.step.cheats") },
+                  { num: "0x05", title: localizer.message("ui.step.apply") },
+                ]),
           ]}
         />
       ) : (
@@ -2312,13 +2315,6 @@ function ApplyWorkflowFormView({
           />
 
           <ApplyPatchListStep
-            afterItems={
-              romInputs.length === 1
-                ? cheats?.({
-                    headerStripConflict: cheatHeaderStripConflict,
-                  })
-                : null
-            }
             bundleMeta={bundleMeta}
             bundleOutputCheckHint={!!bundleTools?.hasOptionalEntries}
             bundleSessionMatches={bundleSessionMatches}
@@ -2349,6 +2345,8 @@ function ApplyWorkflowFormView({
             }
             woven={wovenSteps}
           />
+
+          {!bundlePage && romInputs.length === 1 ? cheats?.({ headerStripConflict: cheatHeaderStripConflict }) : null}
 
           {bundlePage ? bundleSecondaryJob : null}
 
@@ -2414,7 +2412,7 @@ function ApplyWorkflowFormView({
                 state={uiState.outputNotice}
               />
             }
-            num={bundlePage ? "0x05" : "0x04"}
+            num="0x05"
             onFileNameChange={(value) => controllers.output.setDisplayFileName(value)}
             onFormatChange={(value) => controllers.output.setOutputCompression(value)}
             secondary={bundlePage ? undefined : bundleSecondaryJob}

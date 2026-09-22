@@ -229,7 +229,8 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
     });
     expect(container.querySelector("#rom-weaver-list-input-stack .card.file")).toBeTruthy();
     expect(container.querySelector("#rom-weaver-row-cheat-stack")).toBeTruthy();
-    expect(container.querySelector("button.cheat-add")).toBeTruthy();
+    expect(container.querySelector("#rom-weaver-row-cheat-stack .step-num")?.textContent).toBe("0x04");
+    expect(container.querySelector("button.cheat-add")).toBeNull();
   });
 
   it("surfaces an apply error from the fake workflow's run()", async () => {

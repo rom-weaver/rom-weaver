@@ -1,28 +1,6 @@
 @layer style, foundation, drawers, controls, readouts, docs, overrides;
 
 @layer controls {
-  /* The database is an optional patch card attached to the patches step, so its
-     header follows the same float-and-wrap contract as patch cards. */
-  .rw-app .cheat-card-row > .cheat-database-card > .card-top {
-    display: flow-root;
-  }
-
-  .rw-app .cheat-card-row > .cheat-database-card > .card-top .card-actions {
-    float: right;
-    margin-inline-start: var(--sp-m);
-  }
-
-  .rw-app .cheat-card-row > .cheat-database-card > .card-top .card-name {
-    display: block;
-    min-width: 0;
-  }
-
-  .rw-app .cheat-card-row > .cheat-database-card > .card-top .card-name > .card-meta {
-    display: flex;
-    flex-wrap: wrap;
-    margin-block-start: var(--sp-xs);
-  }
-
   .rw-app .cheat-card-body {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -30,8 +8,40 @@
     min-width: 0;
   }
 
-  .rw-app .cheat-card-body[hidden] {
+  .rw-app .cheat-section .step-title .nmline {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: var(--sp-s);
+    align-items: center;
+  }
+
+  .rw-app .cheat-section.is-disabled .step-body {
     display: none;
+  }
+
+  .rw-app .cheat-download-menu summary {
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .rw-app .cheat-download-menu summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .rw-app #rom-weaver-list-cheat-stack > .card.patch:has(.cheat-download-menu[open]) {
+    z-index: 1;
+  }
+
+  .rw-app .cheat-download-menu[open] summary {
+    color: var(--thread-text);
+    border-color: color-mix(in oklab, var(--thread) 45%, transparent);
+  }
+
+  .rw-app .cheat-download-menu .patch-menu-list {
+    width: max-content;
+    min-width: 10rem;
   }
 
   .rw-app .cheat-card-body > .workflow-file-list {
@@ -43,29 +53,28 @@
     grid-template-columns: minmax(0, 1fr);
     gap: var(--sp-s);
     min-width: 0;
-    padding: var(--sp-s);
-    border: 1px solid var(--seam-soft);
-  }
-
-  .rw-app .cheat-database-options {
-    display: grid;
-    gap: 1px;
-    min-width: 0;
-    overflow: hidden;
+    padding: var(--sp-m);
+    background: var(--plate-2);
     border: 1px solid var(--seam);
     border-radius: var(--r-m);
   }
 
-  .rw-app .cheat-database-option {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-s);
-    align-items: center;
-    justify-content: space-between;
+  .rw-app .cheat-database-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-xs);
     min-width: 0;
-    padding: 0.65rem 0.75rem;
+  }
+
+  .rw-app .cheat-database-option {
+    display: grid;
+    gap: var(--sp-xs);
+    min-width: 0;
+    padding: var(--sp-s) var(--sp-m);
     text-align: start;
-    background: var(--plate-2);
+    background: var(--plate);
+    border: 1px solid var(--seam-soft);
+    border-radius: var(--r-s);
   }
 
   .rw-app .cheat-database-option > span {
@@ -74,11 +83,8 @@
   }
 
   .rw-app .cheat-database-option .rb {
+    width: fit-content;
     white-space: normal;
-  }
-
-  .rw-app .cheat-database-option + .cheat-database-option {
-    border-block-start: 1px solid var(--seam-soft);
   }
 
   .rw-app .cheat-database-option:active {
@@ -172,15 +178,6 @@
     height: 1.05rem;
   }
 
-  .rw-app .cheat-add-note {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-    margin: var(--sp-s) 0 0;
-    font-size: 0.82rem;
-    color: var(--ink-3);
-  }
-
   .rw-app .cheat-output-summary p {
     margin: 0;
   }
@@ -191,6 +188,18 @@
     display: grid;
     gap: 0.75rem;
     min-width: 0;
+    background: var(--chassis);
+  }
+
+  .rw-app .cheat-dlg .dlg-head {
+    justify-content: space-between;
+    background: var(--plate-2);
+    box-shadow: inset 0 4px var(--thread);
+  }
+
+  .rw-app .cheat-dlg .dlg-title {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .rw-app .cheat-search {
@@ -224,6 +233,7 @@
     padding: 0;
     margin: 0;
     list-style: none;
+    background: var(--plate);
     border: 1px solid var(--seam, currentColor);
     border-radius: var(--r-m, 6px);
   }
@@ -239,6 +249,10 @@
 
   .rw-app .cheat-pick + .cheat-pick {
     border-block-start: 1px solid var(--seam-soft, currentColor);
+  }
+
+  .rw-app .cheat-pick:nth-child(even) {
+    background: var(--plate-2);
   }
 
   .rw-app .cheat-pick-text {
@@ -334,6 +348,17 @@
     min-width: 0;
   }
 
+  .rw-app .cheat-game-picker {
+    padding: var(--sp-m);
+    background: var(--plate-2);
+    border: 1px solid var(--seam);
+    border-radius: var(--r-m);
+  }
+
+  .rw-app .cheat-game-picker > label > span {
+    font-weight: 650;
+  }
+
   .rw-app .cheat-game-picker > label {
     display: grid;
     gap: 0.35rem;
@@ -341,6 +366,7 @@
   }
 
   .rw-app .cheat-game-picker select,
+  .rw-app .cheat-game-picker input,
   .rw-app .manual-cheat input,
   .rw-app .manual-cheat textarea,
   .rw-app .manual-cheat select {
@@ -385,6 +411,10 @@
   }
 
   @media (max-width: 40rem) {
+    .rw-app .cheat-database-options {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
     .rw-app .cheat-pick {
       grid-template-columns: minmax(0, 1fr);
     }
@@ -392,22 +422,5 @@
     .rw-app .manual-cheat-options {
       grid-template-columns: minmax(0, 1fr);
     }
-  }
-}
-
-@layer controls {
-  /* "Save as patch": a side export of the ROM cheats that are On, so it sits
-     below the cards rather than competing with the run action. */
-  .rw-app .cheat-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-s);
-    align-items: center;
-    margin-block: var(--sp-s);
-  }
-
-  .rw-app .cheat-actions p {
-    margin: 0;
-    color: var(--ink-2);
   }
 }

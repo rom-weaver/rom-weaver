@@ -58,6 +58,7 @@ describe("getDefaultSettings", () => {
     expect(settings.postApplyTestBehavior).toBe("show");
     expect(settings.requireInputChecksumMatch).toBe(true);
     expect(settings.betaToolsEnabled).toBe(false);
+    expect(settings.cheatsEnabled).toBe(false);
     expect(settings.offlineCopyEnabled).toBe(true);
     expect(settings.threads).toBe("auto");
   });
@@ -285,6 +286,14 @@ describe("serializeSettingsForStorage", () => {
     const parsed = JSON.parse(json as string);
     expect(parsed.common.betaToolsEnabled).toBe(true);
     expect(loadSettings(makeStorage(json)).betaToolsEnabled).toBe(true);
+  });
+
+  it("serializes and loads the enabled Cheats as a Patch section", () => {
+    const settings = { ...getDefaultSettings(), cheatsEnabled: true };
+    const json = serializeSettingsForStorage(settings);
+    const parsed = JSON.parse(json as string);
+    expect(parsed.common.cheatsEnabled).toBe(true);
+    expect(loadSettings(makeStorage(json)).cheatsEnabled).toBe(true);
   });
 
   it("serializes and loads both post-apply behaviors under apply.output", () => {

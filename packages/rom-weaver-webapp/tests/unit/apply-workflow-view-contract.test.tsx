@@ -302,7 +302,7 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector(".drop.hero")).toBeNull();
     expect(container.querySelector(".ghost-steps")).toBeNull();
     const numbers = Array.from(container.querySelectorAll(".step-num")).map((el) => el.textContent);
-    expect(numbers).toEqual(["0x01", "0x02", "0x03", "0x04"]);
+    expect(numbers).toEqual(["0x01", "0x02", "0x03", "0x05"]);
     expect(container.querySelector("#rom-weaver-bundle-rom-expectation")?.textContent).toContain(
       "Metroid Fusion (USA)",
     );
@@ -902,7 +902,8 @@ describe("apply workflow view - staged bench", () => {
     expect(patchPosition.textContent).toContain("1");
     expect(patchPosition.disabled).toBe(true);
     expect(patchPosition.getAttribute("aria-label")).toBe("Patch 1 of 1. Reordering unavailable.");
-    expect(container.querySelector("#rom-weaver-row-patch-stack [data-testid=cheats-step]")).toBeTruthy();
+    expect(container.querySelector("#rom-weaver-row-patch-stack [data-testid=cheats-step]")).toBeNull();
+    expect(container.querySelector("[data-testid=cheats-step]")).toBeTruthy();
     expect(container.querySelector("#rom-weaver-row-file-rom [data-testid=cheats-step]")).toBeNull();
     // the patches step header counts staged files
     expect(container.querySelector("#rom-weaver-row-patch-stack .step-meta .rb")?.textContent).toContain("1 file");
@@ -915,7 +916,7 @@ describe("apply workflow view - staged bench", () => {
     const { container } = renderView({ settings: { betaToolsEnabled }, ui });
     const patchStep = container.querySelector("#rom-weaver-row-patch-stack");
     const drop = patchStep?.querySelector(".needs-input");
-    const cheats = patchStep?.querySelector("[data-testid=cheats-step]");
+    const cheats = container.querySelector("[data-testid=cheats-step]");
     expect(drop).toBeTruthy();
     expect(cheats).toBeTruthy();
     expect(drop?.compareDocumentPosition(cheats as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

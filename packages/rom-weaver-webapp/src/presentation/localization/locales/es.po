@@ -776,7 +776,7 @@ msgstr "Los archivos chd, rvz/wia/gcz y z3ds se descomprimen antes de aplicar pa
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.step.cheats"
-msgstr "Trucos"
+msgstr "Trucos como parche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1302,6 +1302,11 @@ msgstr "EmulatorJS: {name}"
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
 msgstr "Activar herramientas beta (Recortar, Deshacer PPF, Editor de partidas y trucos)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.cheatsEnabled"
+msgstr "Activar Trucos como parche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

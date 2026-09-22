@@ -45,6 +45,7 @@ type SettingsState = {
   postApplyDownloadBehavior: PostApplyActionBehavior;
   postApplyTestBehavior: PostApplyActionBehavior;
   betaToolsEnabled: boolean;
+  cheatsEnabled: boolean;
   emulatorSaveStorageEnabled: boolean;
   offlineCopyEnabled: boolean;
   onboardingEnabled: boolean;
@@ -163,6 +164,7 @@ const SETTINGS_FIELD_ORDER = [
   "byteUnits",
   "logLevel",
   "betaToolsEnabled",
+  "cheatsEnabled",
   "emulatorSaveStorageEnabled",
   "offlineCopyEnabled",
   "onboardingEnabled",
@@ -243,6 +245,7 @@ const SETTINGS_PANEL_SECTIONS: ReadonlyArray<{ fields: SettingsFieldKey[]; title
   {
     fields: [
       "bundlePackage",
+      "cheatsEnabled",
       "postApplyDownloadBehavior",
       "postApplyTestBehavior",
       "emulatorSaveStorageEnabled",
@@ -269,6 +272,15 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     label: getSettingsLabel("betaToolsEnabled"),
     labelDataLocalize: "Enable beta tools (Trim, PPF undo, Save Editor, and cheats)",
     layout: "large",
+  },
+  cheatsEnabled: {
+    defaultValue: false,
+    id: "settings-cheats-enabled",
+    key: "cheatsEnabled",
+    kind: "checkbox",
+    label: getSettingsLabel("cheatsEnabled"),
+    layout: "large",
+    suggestion: "Show the Cheats as a Patch section in Apply Patches by default.",
   },
   byteUnits: {
     defaultValue: "decimal",
