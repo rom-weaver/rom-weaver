@@ -1,6 +1,6 @@
 {
   "name": "@rom-weaver/webapp",
-  "version": "0.16.0",
+  "version": "0.16.1",
   "description": "A browser ROM toolkit: patch, compress, extract, convert, identify, bake in cheat codes, and edit supported game saves. Works offline after setup. Play supported games with EmulatorJS. No uploads or telemetry.",
   "keywords": [
     "rom",
