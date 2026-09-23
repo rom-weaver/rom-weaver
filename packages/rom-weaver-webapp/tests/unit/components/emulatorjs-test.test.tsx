@@ -155,6 +155,21 @@ describe("EmulatorTestView", () => {
     expect(screen.getByText("Save loaded and game restarted. Check the game's Continue menu.")).toBeTruthy();
     expect(screen.queryByText("zelda.srm")).toBeNull();
   });
+  it("discards a staged save from its tray", async () => {
+    pendingSaveMocks.readPendingTestSave.mockResolvedValue({
+      bytes: new Uint8Array([1, 2, 3, 4]),
+      fileName: "zelda.srm",
+      gameId: "zelda-a-link-to-the-past",
+      platform: "snes",
+      updatedAt: 1,
+    });
+    render(withSettings(<EmulatorTestView />));
+    expect(await screen.findByText("Save to load")).toBeTruthy();
+    expect(screen.getByText("Add the ROM of the game that made this save.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Discard save" }));
+    await waitFor(() => expect(pendingSaveMocks.clearPendingTestSave).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByText("zelda.srm")).toBeNull());
+  });
   it("keeps a staged save when the uploaded ROM uses another system", async () => {
     stubObjectUrls();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as WebGL2RenderingContext);
