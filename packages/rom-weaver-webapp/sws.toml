@@ -5,6 +5,11 @@ host = "0.0.0.0"
 port = 8080
 root = "/srv"
 
+# sws returns 404 for dotfiles unless this is set, and the RFC 9727 API catalog
+# lives at /.well-known/api-catalog. This also serves the build's
+# .vite/manifest.json, which the Pages deployment already publishes.
+include-hidden = true
+
 # Serve the Docker-generated *.br siblings directly instead of compressing live.
 compression-static = true
 
@@ -196,3 +201,12 @@ source = "**"
 Cross-Origin-Opener-Policy = "same-origin"
 Cross-Origin-Embedder-Policy = "require-corp"
 Cross-Origin-Resource-Policy = "same-origin"
+
+# The RFC 9727 API catalog has no file extension, so sws would send it as a
+# binary download. The Link header serves the RFC 9727 HEAD response.
+[[advanced.headers]]
+source = "/.well-known/api-catalog"
+
+[advanced.headers.headers]
+Content-Type = 'application/linkset+json; profile="https://www.rfc-editor.org/info/rfc9727"'
+Link = '</.well-known/api-catalog>; rel="api-catalog"'
