@@ -23,6 +23,7 @@ export const SaveGenerator = ({
     request.current?.abort();
     request.current = controller;
     setLoading(true);
+    onError("");
     try {
       const { listSaveGames } = await import("../../platform/browser/browser-save-api.ts");
       const result = await listSaveGames(controller.signal);

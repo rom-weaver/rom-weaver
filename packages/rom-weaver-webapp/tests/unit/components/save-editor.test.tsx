@@ -271,6 +271,15 @@ describe("SaveEditor", () => {
     await waitFor(() => expect(screen.getByText("Generation failed")).toBeTruthy());
     expect(screen.getByRole("button", { name: "Create save" })).toBeTruthy();
   });
+  it("clears a game-list error when the retry succeeds", async () => {
+    listSaveGames.mockRejectedValueOnce(new Error("List failed"));
+    render(<SaveEditor onSessionChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Choose a game" }));
+    await waitFor(() => expect(screen.getByText("List failed")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Choose a game" }));
+    await waitFor(() => expect(screen.getByLabelText("Game for the new save")).toBeTruthy());
+    expect(screen.queryByText("List failed")).toBeNull();
+  });
   it("renders generated text and integer controls", async () => {
     render(<SaveEditor onSessionChange={vi.fn()} />);
     await chooseFile();
