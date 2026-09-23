@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.17.0](https://github.com/rom-weaver/rom-weaver/compare/v0.16.1...v0.17.0) (2026-09-23)
+
+
+### Features
+
+* **webapp:** gate create cheat codes behind beta ([#884](https://github.com/rom-weaver/rom-weaver/issues/884)) ([873bbbd](https://github.com/rom-weaver/rom-weaver/commit/873bbbd379945d4a8f226d44f9da358c531f75d2))
+* **webapp:** publish RFC 9727 API catalog ([#869](https://github.com/rom-weaver/rom-weaver/issues/869)) ([052edf1](https://github.com/rom-weaver/rom-weaver/commit/052edf18e2fdaf6e3f3e5aba6d6b4a6ab275e98a))
+
+
+### Internal
+
+* **deps-dev:** bump the other-webapp group in /packages/rom-weaver-webapp with 3 updates ([#873](https://github.com/rom-weaver/rom-weaver/issues/873)) ([a1cf70f](https://github.com/rom-weaver/rom-weaver/commit/a1cf70ff514d58e770e112d60daffa774a6f7d01))
+* **deps-dev:** bump the root-npm group with 3 updates ([#881](https://github.com/rom-weaver/rom-weaver/issues/881)) ([d2d593d](https://github.com/rom-weaver/rom-weaver/commit/d2d593da7aacd8f0cdec18ccf14cf4bd36669d07))
+* **deps:** bump cc from 1.4.6 to 1.4.7 in the rust-dependencies group ([#874](https://github.com/rom-weaver/rom-weaver/issues/874)) ([f6724b6](https://github.com/rom-weaver/rom-weaver/commit/f6724b66812d5a704e55c5ac1267506ac697fbed))
+* **deps:** bump lzma-rust2 from 0.20.1 to 0.21.0 ([#875](https://github.com/rom-weaver/rom-weaver/issues/875)) ([180f446](https://github.com/rom-weaver/rom-weaver/commit/180f446fea41b84278bde41e45f03971a875b2ac))
+* **deps:** bump rand from 0.10.2 to 0.10.3 in the rust-dependencies group ([#882](https://github.com/rom-weaver/rom-weaver/issues/882)) ([7b0fb15](https://github.com/rom-weaver/rom-weaver/commit/7b0fb15823b339c55b5576eeb580cd18531da4e0))
+* **deps:** bump taiki-e/install-action from 2.87.15 to 2.87.16 in the actions group ([#876](https://github.com/rom-weaver/rom-weaver/issues/876)) ([149a4a2](https://github.com/rom-weaver/rom-weaver/commit/149a4a29691e4dc39d882497c99af4afc3dfc835))
+* **deps:** bump taiki-e/install-action from 2.87.16 to 2.87.17 in the actions group ([#883](https://github.com/rom-weaver/rom-weaver/issues/883)) ([05a2413](https://github.com/rom-weaver/rom-weaver/commit/05a2413c5c7c923c6964ce100e1ebbb75ffa409c))
+
 ## [0.16.1](https://github.com/rom-weaver/rom-weaver/compare/v0.16.0...v0.16.1) (2026-09-22)
 
 ### Highlights
