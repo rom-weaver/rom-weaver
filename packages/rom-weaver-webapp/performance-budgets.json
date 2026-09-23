@@ -59,14 +59,15 @@
         "maxBrotliBytes": 40100
       },
       {
+        "_comment": "Raised for the additional decoder paths in lzma-rust2 0.21.0.",
         "name": "WASM",
         "directory": "assets",
         "extension": ".wasm",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 7490000,
-        "maxRawBytes": 7760000,
-        "expectedBrotliBytes": 1975000,
-        "maxBrotliBytes": 2045000
+        "expectedRawBytes": 7770000,
+        "maxRawBytes": 8040000,
+        "expectedBrotliBytes": 2050000,
+        "maxBrotliBytes": 2120000
       }
     ]
   },
