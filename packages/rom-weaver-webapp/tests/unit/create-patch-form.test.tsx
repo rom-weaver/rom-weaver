@@ -123,9 +123,9 @@ class FakeCreateWorkflow {
   }
 }
 
-const renderForm = (props: Record<string, unknown> = {}) =>
+const renderForm = (props: Record<string, unknown> = {}, settings: { betaToolsEnabled?: boolean } = {}) =>
   render(
-    <RomWeaverSettingsProvider settings={{}}>
+    <RomWeaverSettingsProvider settings={settings}>
       <CreatePatchFormForTest {...props} />
     </RomWeaverSettingsProvider>,
   );
@@ -230,6 +230,67 @@ describe("CreatePatchForm", () => {
     await vi.waitFor(() => expect(latest?.output.saveAs).toHaveBeenCalled());
     expect(onComplete).toHaveBeenCalledOnce();
     expect(container.textContent).toContain("Patch .ips");
+  });
+
+  const stageOriginalOnly = async (settings: { betaToolsEnabled?: boolean }) => {
+    const original = new File(["original"], "original.nes", { type: "application/octet-stream" });
+    const view = renderForm(withSeams(), settings);
+    const input = view.container.querySelector("#patch-builder-input-file-unified") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(input, "files", { configurable: true, value: [original] });
+      fireEvent.change(input);
+    });
+    await vi.waitFor(() => expect(latest?.workflow.setOriginal).toHaveBeenCalled());
+    await vi.waitFor(() => expect(view.container.querySelectorAll(".step-num")).toHaveLength(4));
+    return view;
+  };
+  const findButton = (container: HTMLElement, text: string) =>
+    Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.trim() === text);
+
+  it("hides cheat codes mode and prompts for the modified ROM while beta tools are off", async () => {
+    const { container } = await stageOriginalOnly({});
+
+    expect(findButton(container, "Cheat codes")).toBeUndefined();
+    const prompt = container.querySelector(".needs-input") as HTMLButtonElement;
+    expect(prompt.textContent).toContain("Add your modified ROM");
+    const picker = container.querySelector("#patch-builder-input-file-unified") as HTMLInputElement;
+    const pickerClick = vi.spyOn(picker, "click");
+    fireEvent.click(prompt);
+    expect(pickerClick).toHaveBeenCalledOnce();
+  });
+
+  it("offers cheat codes mode when beta tools are on", async () => {
+    // The cheat panel loads the cheat database index; this test only checks the mode switch.
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 404 }));
+    const { container } = await stageOriginalOnly({ betaToolsEnabled: true });
+
+    const codes = findButton(container, "Cheat codes") as HTMLButtonElement;
+    expect(codes).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(codes);
+    });
+    expect(codes.getAttribute("aria-pressed")).toBe("true");
+    expect(container.textContent).not.toContain("Add your modified ROM");
+  });
+
+  it("returns to modified ROM mode when beta tools turn off", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 404 }));
+    const { container, rerender } = await stageOriginalOnly({ betaToolsEnabled: true });
+    await act(async () => {
+      fireEvent.click(findButton(container, "Cheat codes") as HTMLButtonElement);
+    });
+
+    const rerenderWithBeta = (betaToolsEnabled: boolean) =>
+      rerender(
+        <RomWeaverSettingsProvider settings={{ betaToolsEnabled }}>
+          <CreatePatchFormForTest {...withSeams()} />
+        </RomWeaverSettingsProvider>,
+      );
+    await act(async () => rerenderWithBeta(false));
+    expect(container.textContent).toContain("Add your modified ROM");
+
+    await act(async () => rerenderWithBeta(true));
+    expect(findButton(container, "Modified ROM")?.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("reports duplicate drops and allows the user to confirm them", async () => {

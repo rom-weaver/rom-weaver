@@ -350,6 +350,11 @@ msgstr "Add the ROM or patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.create.needsModified"
+msgstr "Add your modified ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.needsPatches"
 msgstr "Add your patch files"
 
@@ -357,11 +362,6 @@ msgstr "Add your patch files"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.openSourceDescription"
 msgstr "AGPL-3.0 licensed. Read the code, build it yourself, or host the webapp on your own domain."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.titleEmphasis"
-msgstr "One toolkit."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -415,11 +415,6 @@ msgstr "Apply & download"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis"
-msgstr "Your ROM workflow. One toolkit."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.validation.overrideChecksum"
 msgstr "Apply anyway despite patch and ROM check mismatch"
 
@@ -462,11 +457,6 @@ msgstr "Apply to: {input}"
 #: src/presentation/localization/messages.ts
 msgid "ui.related.applyTool"
 msgstr "Apply tool"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.lede"
-msgstr "Patch, compress, extract, convert, identify, use cheats, and edit game saves in your browser or terminal. Your files stay on your device."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -770,11 +760,6 @@ msgstr "CD Codecs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis2"
-msgstr "One toolkit."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.status.channel"
 msgstr "Channel"
 
@@ -937,6 +922,11 @@ msgstr "Compare original and modified ROMs, raw or in archives, to create BPS, I
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.components"
 msgstr "Components"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.loomCompress"
+msgstr "compress"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1311,7 +1301,7 @@ msgstr "EmulatorJS: {name}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Enable beta tools (Trim and PPF undo)"
+msgstr "Enable beta tools (Trim, PPF undo, Save Editor, and cheats)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1397,6 +1387,11 @@ msgstr "Exporting a recipe does not apply patches. Press Share bundle to check a
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.archive.summary"
 msgstr "Exports this session as a portable rom-weaver bundle defined by rom-weaver-bundle.json."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.loomExtract"
+msgstr "extract"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2200,6 +2195,16 @@ msgstr "One pass, no unpacking by hand, no intermediate files. Save it as a bund
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.titleEmphasis"
+msgstr "One toolkit."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.thesis2"
+msgstr "One toolkit."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.romDistributionWarning"
 msgstr "Only include a ROM if you have the right to distribute it. Sharing copyrighted ROMs may be illegal."
 
@@ -2292,6 +2297,11 @@ msgstr "Other games"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.fullInstallGuide"
 msgstr "Other install methods"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.loomOutput"
+msgstr "output"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2395,31 +2405,6 @@ msgstr "patch {n}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.loomCompress"
-msgstr "compress"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.loomExtract"
-msgstr "extract"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.loomOutput"
-msgstr "output"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.loomResult"
-msgstr "result"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.loomUnpack"
-msgstr "unpack"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.patchNumber"
 msgstr "Patch {n}"
 
@@ -2467,6 +2452,11 @@ msgstr "Patch position"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.applyDescription"
 msgstr "Patch ROMs and disc images with one or more patches, cheats, or a bundle. Open compressed files directly, then download the result or share a reusable bundle."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.lede"
+msgstr "Patch, compress, extract, convert, identify, use cheats, and edit game saves in your browser or terminal. Your files stay on your device."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2792,6 +2782,11 @@ msgstr "Reset"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.toolsDescription"
 msgstr "Restore the original ROM with a PPF3 patch that includes undo data."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.loomResult"
+msgstr "result"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3265,11 +3260,6 @@ msgstr "The name ends in"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.loomAriaLabel"
-msgstr "The patched result drawn as vertical threads, with three patches woven across it in order, one colored band per patch."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.header.extensionInfo"
 msgstr "The output extension follows the choice: {headeredExtension} with the header, {headerlessExtension} without."
 
@@ -3287,6 +3277,11 @@ msgstr "The patch checks did not match this ROM."
 #: src/presentation/localization/messages.ts
 msgid "error.PATCH_TARGET_MISMATCH"
 msgstr "The patch target did not match the selected input."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.loomAriaLabel"
+msgstr "The patched result drawn as vertical threads, with three patches woven across it in order, one colored band per patch."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3554,6 +3549,11 @@ msgstr "Unknown patch output ({patch})"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.loomUnpack"
+msgstr "unpack"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.headerUnsupported"
 msgstr "Unsupported"
 
@@ -3746,6 +3746,11 @@ msgstr "Your ROM and disc image toolkit"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.title"
 msgstr "Your ROM workflow."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.thesis"
+msgstr "Your ROM workflow. One toolkit."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

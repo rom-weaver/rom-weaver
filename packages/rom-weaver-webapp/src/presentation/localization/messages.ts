@@ -477,6 +477,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.itemCount": msg({ id: "ui.apply.itemCount", message: "{count, plural, one {# item} other {# items}}" }),
   "ui.apply.loadFailed": msg({ id: "ui.apply.loadFailed", message: "rom-weaver failed to load." }),
   "ui.apply.needsPatches": msg({ id: "ui.apply.needsPatches", message: "Add your patch files" }),
+  "ui.create.needsModified": msg({ id: "ui.create.needsModified", message: "Add your modified ROM" }),
   "ui.apply.needsRom": msg({ id: "ui.apply.needsRom", message: "Choose your original ROM" }),
   "ui.apply.outputFilename": msg({ id: "ui.apply.outputFilename", message: "Output filename (no extension)" }),
   "ui.apply.outputOptions.compression": msg({
@@ -849,7 +850,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "settings.betaToolsEnabled": msg({
     id: "settings.betaToolsEnabled",
-    message: "Enable beta tools (Trim and PPF undo)",
+    message: "Enable beta tools (Trim, PPF undo, Save Editor, and cheats)",
   }),
   "settings.byteUnits": msg({ id: "settings.byteUnits", message: "File size units" }),
   "settings.chdCreateCdCodecs": msg({ id: "settings.chdCreateCdCodecs", message: "CD Codecs" }),
