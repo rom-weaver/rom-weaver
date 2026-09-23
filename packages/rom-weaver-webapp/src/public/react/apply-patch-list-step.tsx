@@ -397,16 +397,22 @@ const PatchHeaderModeSelect = ({
  * one patchable track. The choice goes through `setPatchTarget`, which resolves
  * the row to its input asset and stores that asset's member locator; a row id or
  * file name is not a member path, so it MUST NOT be written to `input.member`.
+ * An imported ROM input member is dropped on a change, because every metadata
+ * sync re-resolves the target from that member and would undo the choice.
  */
 const PatchTrackSelect = ({
   disabled,
   index,
   item,
+  meta,
+  onMetaChange,
   patchStack,
 }: {
   disabled?: boolean;
   index: number;
   item: PatchStackItemState;
+  meta?: BundlePatchMeta;
+  onMetaChange?: (updates: Partial<BundlePatchMeta>) => void;
   patchStack: PatcherStackController;
 }) => {
   const localizer = useUiLocalizer();
@@ -421,7 +427,11 @@ const PatchTrackSelect = ({
         className="meta-target-select mono ptgt-sel"
         disabled={disabled || item.targetDisabled}
         id={`rom-weaver-patch-track-${index}`}
-        onChange={(event) => patchStack.setPatchTarget?.(index, event.currentTarget.value)}
+        onChange={(event) => {
+          const input = meta?.input;
+          if (input && "rom" in input && input.member) onMetaChange?.({ input: { rom: true } });
+          patchStack.setPatchTarget?.(index, event.currentTarget.value);
+        }}
         value={item.targetValue || ""}
       >
         <option disabled value="">
@@ -1642,7 +1652,14 @@ const PatchCard = ({
             />
           )}
           {showTrack ? (
-            <PatchTrackSelect disabled={!!item.optionsDisabled} index={index} item={item} patchStack={patchStack} />
+            <PatchTrackSelect
+              disabled={!!item.optionsDisabled}
+              index={index}
+              item={item}
+              meta={meta}
+              onMetaChange={onMetaChange}
+              patchStack={patchStack}
+            />
           ) : null}
           {staging || isDisabled ? null : (
             <PatchHeaderModeSelect index={index} item={item} patchStack={patchStack} stripDisabled={stripDisabled} />

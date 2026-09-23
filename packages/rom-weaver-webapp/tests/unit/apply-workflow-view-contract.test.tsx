@@ -934,6 +934,36 @@ describe("apply workflow view - staged bench", () => {
     expect(onBundleMetaChange).not.toHaveBeenCalled();
   });
 
+  it("drops an imported track member when the user picks another track", () => {
+    const onBundleMetaChange = vi.fn();
+    const setPatchTarget = vi.fn();
+    const patch = patchItem("track.ips");
+    patch.targetOptions = [
+      { label: "disc (Track 1).bin", value: "disc (Track 1).bin" },
+      { label: "disc (Track 2).bin", value: "disc (Track 2).bin" },
+    ];
+    patch.targetValue = "disc (Track 1).bin";
+    const { container } = renderView({
+      bundleMetaById: new Map([["patch-a", { input: { member: "disc (Track 1).bin", rom: true } }]]),
+      onBundleMetaChange,
+      patchEnablement: {
+        disabledIds: new Set(),
+        getPatchIds: () => ["patch-a"],
+        onToggle: () => undefined,
+      },
+      patches: [patch],
+      setPatchTarget,
+      ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("disc (Track 1).bin")] },
+    });
+
+    fireEvent.change(container.querySelector("#rom-weaver-patch-track-0") as HTMLSelectElement, {
+      target: { value: "disc (Track 2).bin" },
+    });
+    // The stale member would re-resolve the old track on the next metadata sync.
+    expect(onBundleMetaChange).toHaveBeenCalledWith("patch-a", { input: { rom: true } });
+    expect(setPatchTarget).toHaveBeenCalledWith(0, "disc (Track 2).bin");
+  });
+
   it("hides original-ROM tracks for a patch-output source", () => {
     const onBundleMetaChange = vi.fn();
     const first = patchItem("first.ips");
