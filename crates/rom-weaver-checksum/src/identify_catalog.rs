@@ -14,6 +14,51 @@ use tracing::trace;
 
 const CATALOG_FORMAT: &str = "rom-weaver-identify-catalog-v1";
 
+#[derive(Deserialize)]
+struct PlatformNames {
+    aliases: HashMap<String, Vec<String>>,
+    #[serde(rename = "importAliases")]
+    import_aliases: HashMap<String, Vec<String>>,
+}
+
+/// Curated names shared with the identify builder, native imports, and browser labels.
+pub fn platform_aliases(name: &str) -> Vec<String> {
+    static ALIASES: LazyLock<HashMap<String, Vec<String>>> = LazyLock::new(|| {
+        let names: PlatformNames = serde_json::from_str(include_str!("platform-names.json"))
+            .expect("shared platform names are valid");
+        let mut aliases: HashMap<String, Vec<String>> = HashMap::new();
+        for (name, values) in names.aliases {
+            let entry = aliases.entry(normalize_platform_name(&name)).or_default();
+            for value in values {
+                if !entry.contains(&value) {
+                    entry.push(value);
+                }
+            }
+        }
+        for values in aliases.values_mut() {
+            values.sort();
+        }
+        aliases
+    });
+    ALIASES
+        .get(&normalize_platform_name(name))
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// Exact alias order used when the native CLI imports a DAT.
+pub fn import_platform_aliases(name: &str) -> Vec<String> {
+    static ALIASES: LazyLock<HashMap<String, Vec<String>>> = LazyLock::new(|| {
+        let names: PlatformNames = serde_json::from_str(include_str!("platform-names.json"))
+            .expect("shared platform names are valid");
+        names.import_aliases
+    });
+    ALIASES
+        .get(&normalize_platform_name(name))
+        .cloned()
+        .unwrap_or_default()
+}
+
 /// The primary metadata source for a platform pack.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -151,10 +196,10 @@ impl IdentifyCatalog {
 /// endpoint names because network access is native-only.
 #[allow(dead_code)]
 fn redump_entries() -> Vec<IdentifyPlatformCatalogEntry> {
-    fn entry(canonical: &str, aliases: &[&str]) -> IdentifyPlatformCatalogEntry {
+    fn entry(canonical: &str) -> IdentifyPlatformCatalogEntry {
         IdentifyPlatformCatalogEntry {
             canonical_platform: canonical.to_string(),
-            aliases: aliases.iter().map(|alias| alias.to_string()).collect(),
+            aliases: platform_aliases(canonical),
             source: IdentifySource::Redump,
             media_profiles: vec!["redump-disc-track-v1".to_string()],
             pack_slug: normalize_platform_name(canonical).replace(' ', "-"),
@@ -164,95 +209,62 @@ fn redump_entries() -> Vec<IdentifyPlatformCatalogEntry> {
         }
     }
     vec![
-        entry("Acorn Archimedes", &["archimedes"]),
-        entry("Apple Macintosh", &["macintosh", "mac"]),
-        entry(
-            "Atari Jaguar CD Interactive Multimedia System",
-            &["atari jaguar cd", "jaguar cd", "ajcd"],
-        ),
-        entry("Bandai Pippin", &["pippin"]),
-        entry("Bandai Playdia Quick Interactive System", &["playdia"]),
-        entry("Commodore Amiga CD", &["amiga cd"]),
-        entry("Commodore Amiga CD32", &["amiga cd32", "cd32"]),
-        entry("Commodore Amiga CDTV", &["amiga cdtv", "cdtv"]),
-        entry("Fujitsu FM Towns series", &["fm towns"]),
-        entry("funworld Photo Play", &["photo play"]),
-        entry("IBM PC compatible", &["ibm pc", "pc"]),
-        entry("Incredible Technologies Eagle", &["eagle"]),
-        entry("Konami e-Amusement", &["e-amusement"]),
-        entry("Konami FireBeat", &["firebeat"]),
-        entry("Konami System 573", &["system 573"]),
-        entry("Konami System GV", &["system gv"]),
-        entry("Mattel Fisher-Price iXL", &["ixl"]),
-        entry("Mattel HyperScan", &["hyperscan"]),
-        entry("Memorex Visual Information System", &["vis"]),
-        entry("Microsoft Xbox", &["xbox"]),
-        entry("Microsoft Xbox 360", &["xbox 360", "xbox360"]),
-        entry("Namco - Sega - Nintendo Triforce", &["triforce"]),
-        entry("Namco System 246", &["system 246"]),
-        entry(
-            "NEC PC Engine CD & TurboGrafx CD",
-            &[
-                "pc engine cd",
-                "pcenginecd",
-                "pcecd",
-                "turbografx cd",
-                "tg-cd",
-                "pce cd",
-            ],
-        ),
-        entry("NEC PC-88 series", &["pc-88", "pc88"]),
-        entry("NEC PC-98 series", &["pc-98", "pc98"]),
-        entry("NEC PC-FX & PC-FXGA", &["pc-fx", "pcfx"]),
-        entry("Neo Geo CD", &["neo geo cd", "ngcd", "neogeocd", "neocd"]),
-        entry("Nintendo GameCube", &["gamecube", "gc", "ngc"]),
-        entry("Nintendo Wii", &["wii"]),
-        entry("Palm OS", &["palm"]),
-        entry("Panasonic 3DO Interactive Multiplayer", &["3do"]),
-        entry("Philips CD-i", &["cd-i", "cdi"]),
-        entry("Photo CD", &["photo cd"]),
-        entry(
-            "PlayStation GameShark Updates",
-            &["playstation gameshark", "psxgs"],
-        ),
-        entry("Pocket PC", &["ppc"]),
-        entry("Sega Chihiro", &["chihiro"]),
-        entry("Sega Dreamcast", &["dreamcast", "dc"]),
-        entry("Sega Lindbergh", &["lindbergh"]),
-        entry(
-            "Sega Mega CD & Sega CD",
-            &[
-                "mega cd", "megacd", "megacdjp", "sega cd", "segacd", "mcd", "scd",
-            ],
-        ),
-        entry("Sega Naomi", &["naomi"]),
-        entry("Sega Naomi 2", &["naomi 2", "naomi2"]),
-        entry(
-            "Sega Prologue 21 Multimedia Karaoke System",
-            &["prologue 21"],
-        ),
-        entry("Sega RingEdge", &["ringedge"]),
-        entry("Sega RingEdge 2", &["ringedge 2"]),
-        entry("Sega Saturn", &["saturn", "saturnjp", "ss"]),
-        entry("Sharp X68000", &["x68000"]),
-        entry("Sony PlayStation", &["playstation", "psx", "ps1", "ps"]),
-        entry(
-            "Sony PlayStation 2",
-            &["playstation 2", "play station 2", "ps2"],
-        ),
-        entry("Sony PlayStation 3", &["playstation 3", "ps3"]),
-        entry(
-            "Sony PlayStation Portable",
-            &["playstation portable", "psp"],
-        ),
-        entry("TAB-Austria Quizard", &["quizard"]),
-        entry("Tomy Kiss-Site", &["kiss-site"]),
-        entry("VM Labs NUON", &["nuon"]),
-        entry("VTech V.Flash & V.Smile Pro", &["v.flash", "v.smile pro"]),
-        entry(
-            "ZAPiT Games Game Wave Family Entertainment System",
-            &["game wave", "gamewave"],
-        ),
+        entry("Acorn Archimedes"),
+        entry("Apple Macintosh"),
+        entry("Atari Jaguar CD Interactive Multimedia System"),
+        entry("Bandai Pippin"),
+        entry("Bandai Playdia Quick Interactive System"),
+        entry("Commodore Amiga CD"),
+        entry("Commodore Amiga CD32"),
+        entry("Commodore Amiga CDTV"),
+        entry("Fujitsu FM Towns series"),
+        entry("funworld Photo Play"),
+        entry("IBM PC compatible"),
+        entry("Incredible Technologies Eagle"),
+        entry("Konami e-Amusement"),
+        entry("Konami FireBeat"),
+        entry("Konami System 573"),
+        entry("Konami System GV"),
+        entry("Mattel Fisher-Price iXL"),
+        entry("Mattel HyperScan"),
+        entry("Memorex Visual Information System"),
+        entry("Microsoft Xbox"),
+        entry("Microsoft Xbox 360"),
+        entry("Namco - Sega - Nintendo Triforce"),
+        entry("Namco System 246"),
+        entry("NEC PC Engine CD & TurboGrafx CD"),
+        entry("NEC PC-88 series"),
+        entry("NEC PC-98 series"),
+        entry("NEC PC-FX & PC-FXGA"),
+        entry("Neo Geo CD"),
+        entry("Nintendo GameCube"),
+        entry("Nintendo Wii"),
+        entry("Palm OS"),
+        entry("Panasonic 3DO Interactive Multiplayer"),
+        entry("Philips CD-i"),
+        entry("Photo CD"),
+        entry("PlayStation GameShark Updates"),
+        entry("Pocket PC"),
+        entry("Sega Chihiro"),
+        entry("Sega Dreamcast"),
+        entry("Sega Lindbergh"),
+        entry("Sega Mega CD & Sega CD"),
+        entry("Sega Naomi"),
+        entry("Sega Naomi 2"),
+        entry("Sega Prologue 21 Multimedia Karaoke System"),
+        entry("Sega RingEdge"),
+        entry("Sega RingEdge 2"),
+        entry("Sega Saturn"),
+        entry("Sharp X68000"),
+        entry("Sony PlayStation"),
+        entry("Sony PlayStation 2"),
+        entry("Sony PlayStation 3"),
+        entry("Sony PlayStation Portable"),
+        entry("TAB-Austria Quizard"),
+        entry("Tomy Kiss-Site"),
+        entry("VM Labs NUON"),
+        entry("VTech V.Flash & V.Smile Pro"),
+        entry("ZAPiT Games Game Wave Family Entertainment System"),
     ]
 }
 
@@ -277,10 +289,10 @@ pub fn normalize_platform_name(name: &str) -> String {
 
 /// The compiled OpenGood platforms with curated aliases.
 fn builtin_entries() -> Vec<IdentifyPlatformCatalogEntry> {
-    fn entry(canonical: &str, aliases: &[&str], slug: &str) -> IdentifyPlatformCatalogEntry {
+    fn entry(canonical: &str, slug: &str) -> IdentifyPlatformCatalogEntry {
         IdentifyPlatformCatalogEntry {
             canonical_platform: canonical.to_string(),
-            aliases: aliases.iter().map(|alias| alias.to_string()).collect(),
+            aliases: platform_aliases(canonical),
             source: IdentifySource::OpenGood,
             media_profiles: vec!["opengood-cartridge-v1".to_string()],
             pack_slug: slug.to_string(),
@@ -290,104 +302,29 @@ fn builtin_entries() -> Vec<IdentifyPlatformCatalogEntry> {
         }
     }
     vec![
-        entry(
-            "Atari 2600",
-            &["2600", "atari vcs", "vcs", "atari2600"],
-            "atari-2600",
-        ),
-        entry("Atari 5200", &["5200", "atari5200"], "atari-5200"),
-        entry("Atari 7800", &["7800", "atari7800"], "atari-7800"),
-        entry("Atari Lynx", &["lynx", "atarilynx"], "atari-lynx"),
-        entry("Neo Geo Pocket", &["ngp"], "neo-geo-pocket"),
-        entry(
-            "Neo Geo Pocket Color",
-            &["ngpc", "neo geo pocket color", "neo geo pocket colour"],
-            "neo-geo-pocket-color",
-        ),
-        entry("Nintendo 64", &["n64", "n64dd", "64dd"], "nintendo-64"),
+        entry("Atari 2600", "atari-2600"),
+        entry("Atari 5200", "atari-5200"),
+        entry("Atari 7800", "atari-7800"),
+        entry("Atari Lynx", "atari-lynx"),
+        entry("Neo Geo Pocket", "neo-geo-pocket"),
+        entry("Neo Geo Pocket Color", "neo-geo-pocket-color"),
+        entry("Nintendo 64", "nintendo-64"),
         entry(
             "Nintendo Entertainment System",
-            &["nes", "famicom", "nintendo famicom", "fc"],
             "nintendo-entertainment-system",
         ),
-        entry(
-            "Nintendo Game Boy",
-            &["gb", "gameboy", "sgb"],
-            "nintendo-game-boy",
-        ),
-        entry(
-            "Nintendo Game Boy Advance",
-            &["gba", "gameboy advance", "ereader"],
-            "nintendo-game-boy-advance",
-        ),
-        entry(
-            "Nintendo Game Boy Color",
-            &["gbc", "gameboy color"],
-            "nintendo-game-boy-color",
-        ),
+        entry("Nintendo Game Boy", "nintendo-game-boy"),
+        entry("Nintendo Game Boy Advance", "nintendo-game-boy-advance"),
+        entry("Nintendo Game Boy Color", "nintendo-game-boy-color"),
         entry(
             "Nintendo Super Nintendo Entertainment System",
-            &[
-                "snes",
-                "sfc",
-                "sfam",
-                "satellaview",
-                "super nintendo",
-                "super nes",
-                "super famicom",
-                "sufami",
-                "sufami turbo",
-            ],
             "nintendo-super-nintendo-entertainment-system",
         ),
-        entry(
-            "Sega 32X",
-            &[
-                "32x",
-                "megadrive 32x",
-                "sega32",
-                "sega32x",
-                "sega32xjp",
-                "sega32xna",
-            ],
-            "sega-32x",
-        ),
-        entry(
-            "Sega Game Gear",
-            &["gg", "game gear", "gamegear"],
-            "sega-game-gear",
-        ),
-        entry(
-            "Sega Master System",
-            &["sms", "master system", "mastersystem", "mark3", "ms"],
-            "sega-master-system",
-        ),
-        entry(
-            "Sega Mega Drive _ Genesis",
-            &[
-                "genesis",
-                "mega drive",
-                "megadrive",
-                "megadrivejp",
-                "md",
-                "smd",
-                "sega genesis",
-            ],
-            "sega-mega-drive-genesis",
-        ),
-        entry(
-            "TurboGrafx-16_PC Engine",
-            &[
-                "tg16",
-                "turbografx",
-                "turbografx 16",
-                "pc engine",
-                "pcengine",
-                "pce",
-                "supergrafx",
-            ],
-            "turbografx-16-pc-engine",
-        ),
+        entry("Sega 32X", "sega-32x"),
+        entry("Sega Game Gear", "sega-game-gear"),
+        entry("Sega Master System", "sega-master-system"),
+        entry("Sega Mega Drive _ Genesis", "sega-mega-drive-genesis"),
+        entry("TurboGrafx-16_PC Engine", "turbografx-16-pc-engine"),
     ]
 }
 
