@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { act, fireEvent, render } from "@testing-library/react";
+import { Profiler } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -38,6 +39,7 @@ const createFakeApplyWorkflow = () => {
   let runError: Error | null = null;
   let saveError: Error | null = null;
   let disposed = false;
+  let busy = false;
 
   const workflow = {
     abort: vi.fn(),
@@ -65,7 +67,7 @@ const createFakeApplyWorkflow = () => {
     getPatches: vi.fn(() => patches.slice()),
     getPatchSources: vi.fn(() => [] as unknown[]),
     getSnapshot: vi.fn(() => ({
-      busy: false,
+      busy,
       id: "fake-apply-workflow",
       input,
       output: {
@@ -85,6 +87,11 @@ const createFakeApplyWorkflow = () => {
     on: vi.fn((event: string, listener: (payload: unknown) => void) => {
       if (!listeners[event]) listeners[event] = new Set();
       listeners[event].add(listener);
+    }),
+    subscribe: vi.fn((listener: () => void) => {
+      if (!listeners.change) listeners.change = new Set();
+      listeners.change.add(listener);
+      return () => listeners.change?.delete(listener);
     }),
     replacePatchAt: vi.fn(async () => undefined),
     run: vi.fn(async () => {
@@ -148,6 +155,13 @@ const createFakeApplyWorkflow = () => {
     },
     __setSaveError: (error: Error | null) => {
       saveError = error;
+    },
+    __setBusy: (value: boolean) => {
+      busy = value;
+      for (const listener of listeners.change || []) listener(undefined);
+    },
+    __emitProgress: () => {
+      for (const listener of listeners.progress || []) listener(undefined);
     },
   };
 };
@@ -228,6 +242,35 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
       expect(container.querySelector("section.step.is-input.is-empty")).toBeNull();
     });
     expect(container.querySelector("#rom-weaver-list-input-stack .card.file")).toBeTruthy();
+  });
+
+  it("does not re-render for progress or snapshot changes outside readiness and output", async () => {
+    const onRender = vi.fn();
+    const rendered = render(
+      <Profiler id="apply-form" onRender={onRender}>
+        <RomWeaverSettingsProvider settings={{}}>
+          <ApplyPatchForm />
+        </RomWeaverSettingsProvider>
+      </Profiler>,
+    );
+    const fileInput = rendered.container.querySelector("#rom-weaver-input-file-unified") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(fileInput, "files", {
+        configurable: true,
+        value: [new File(["rom-bytes"], "game.bin", { type: "application/octet-stream" })],
+      });
+      fireEvent.change(fileInput);
+    });
+    await vi.waitFor(() => {
+      expect((rendered.container.querySelector("#rom-weaver-button-apply") as HTMLButtonElement)?.disabled).toBe(false);
+    });
+
+    const commitsAfterStaging = onRender.mock.calls.length;
+    await act(async () => latestFakeWorkflow?.__setBusy(true));
+    expect(onRender).toHaveBeenCalledTimes(commitsAfterStaging);
+
+    await act(async () => latestFakeWorkflow?.__emitProgress());
+    expect(onRender).toHaveBeenCalledTimes(commitsAfterStaging);
   });
 
   it("surfaces an apply error from the fake workflow's run()", async () => {
