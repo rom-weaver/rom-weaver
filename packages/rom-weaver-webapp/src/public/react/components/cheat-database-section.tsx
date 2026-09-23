@@ -1,4 +1,4 @@
-import { Check, ChevronRight, Download, Plus, Search, WandSparkles, X } from "lucide-react";
+import { Download, Plus, Search, WandSparkles, X } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { IdentifyCatalog } from "../../../lib/identify/identify-catalog.ts";
 import {
@@ -20,6 +20,7 @@ import {
 import { getCheatPatchStatus } from "../cheat-patch-export-model.ts";
 import { matchGame, useCheatDatabaseRecords } from "./use-cheat-database-records.ts";
 import { Drawer } from "./ds/drawer.tsx";
+import { DropdownSelect } from "./ds/dropdown-select.tsx";
 import { Notice } from "./ds/feedback.tsx";
 import { FileCard } from "./ds/file-card.tsx";
 import { reorder, useListReorder } from "./ds/use-list-reorder.ts";
@@ -278,10 +279,11 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
             />
           </label>
           <div className="manual-cheat-options">
-            <label>
+            <label htmlFor="rom-weaver-manual-cheat-system">
               <span>System</span>
-              <select
+              <DropdownSelect
                 className="select"
+                id="rom-weaver-manual-cheat-system"
                 onChange={(event) => {
                   setSystem(event.target.value as CheatManualSystem);
                   clearClassification();
@@ -293,12 +295,13 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
                     {label}
                   </option>
                 ))}
-              </select>
+              </DropdownSelect>
             </label>
-            <label>
+            <label htmlFor="rom-weaver-manual-cheat-kind">
               <span>Code type</span>
-              <select
+              <DropdownSelect
                 className="select"
+                id="rom-weaver-manual-cheat-kind"
                 onChange={(event) => {
                   setKind(event.target.value as ManualCheatKindOverride);
                   clearClassification();
@@ -309,7 +312,7 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
                 <option value="game-genie">Game Genie</option>
                 <option value="pro-action-replay">Action Replay / GameShark</option>
                 <option value="xploder">Xploder</option>
-              </select>
+              </DropdownSelect>
             </label>
           </div>
           <div className="manual-cheat-actions">
@@ -326,7 +329,7 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
             <div className="manual-cheat-result" role="status">
               <p>
                 Detected {systems.find(({ value }) => value === result.detectedSystem)?.label ?? result.detectedSystem}{" "}
-                · {result.detectedType}
+                · {result.record.detectedKind ? CHEAT_KIND_LABELS[result.record.detectedKind] : result.detectedType}
               </p>
               <p>{deliveryCopy(result.record).text}</p>
               <button
@@ -456,7 +459,7 @@ export const AddCheatsDialog = ({
                   const delivery = deliveryCopy(entry);
                   const added = addedIds.has(source.id);
                   return (
-                    <li className="cheat-pick" key={source.id}>
+                    <li className={added ? "cheat-pick is-added" : "cheat-pick"} key={source.id}>
                       <span className="cheat-pick-text">
                         <span className="cheat-pick-name">{source.description}</span>
                         <span className="cheat-pick-badges">
@@ -471,7 +474,7 @@ export const AddCheatsDialog = ({
                         onClick={() => (added ? onRemove(entry) : onAdd(entry))}
                         type="button"
                       >
-                        {added ? <Check aria-hidden="true" /> : <Plus aria-hidden="true" />}
+                        {added ? <X aria-hidden="true" /> : <Plus aria-hidden="true" />}
                         {added ? "Remove" : "Add"}
                       </button>
                     </li>
@@ -744,6 +747,7 @@ export const CheatDatabaseSection = ({
           <Search aria-hidden="true" />
           <span className="sr-only">Search cheat databases</span>
           <input
+            className="input"
             onChange={(event) => setDatabaseQuery(event.target.value)}
             placeholder="Search cheat databases by system…"
             type="search"
@@ -783,13 +787,14 @@ export const CheatDatabaseSection = ({
         <label>
           <span>Search games in {entry.platform}</span>
           <input
+            className="input"
             onChange={(event) => setGameQuery(event.target.value)}
             placeholder="Search by game title…"
             type="search"
             value={gameQuery}
           />
         </label>
-        <select
+        <DropdownSelect
           aria-label={`Browse games for ${entry.platform}`}
           className="select"
           onChange={(event) => setManualGameId(event.target.value)}
@@ -801,7 +806,7 @@ export const CheatDatabaseSection = ({
               {gameLabel(candidate)}
             </option>
           ))}
-        </select>
+        </DropdownSelect>
         {gameOptions.length ? null : (
           <p className="cheat-pick-empty" role="status">
             No games match this search.
@@ -894,14 +899,13 @@ export const CheatDatabaseSection = ({
       {patchStatus ? <p role="status">{patchStatus}</p> : null}
 
       <button className="needs-input cheat-add" onClick={() => setDialogOpen(true)} type="button">
-        <span aria-hidden="true" className="cheat-add-mark">
-          <Plus />
-        </span>
         <span className="cheat-add-copy">
-          <strong>Add cheats to the patch order</strong>
+          <span className="cheat-add-label">
+            <WandSparkles aria-hidden="true" />
+            Add cheats to the patch order
+          </span>
           <small>Choose codes to bake into the ROM at their place in the list.</small>
         </span>
-        <ChevronRight aria-hidden="true" className="cheat-add-arrow" />
       </button>
 
       {status ? (
