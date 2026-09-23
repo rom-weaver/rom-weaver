@@ -16,42 +16,11 @@ impl CliApp {
         )
     }
 
-    pub(super) fn known_header_candidates_for_path(path: &Path) -> Vec<KnownRomHeader> {
-        let mut candidates = Vec::with_capacity(KnownRomHeader::ALL.len());
-        let extension_with_dot = path
-            .extension()
-            .and_then(|value| value.to_str())
-            .map(|value| format!(".{value}"));
-
-        if let Some(extension_with_dot) = extension_with_dot.as_deref() {
-            for header in KnownRomHeader::ALL {
-                if header.matches_extension(extension_with_dot) {
-                    candidates.push(header);
-                }
-            }
-        }
-
-        for header in KnownRomHeader::ALL {
-            if !candidates.contains(&header) {
-                candidates.push(header);
-            }
-        }
-        candidates
-    }
-
     pub(super) fn detect_known_rom_header_from_prefix(
         path: &Path,
         prefix: &[u8],
     ) -> Option<KnownRomHeaderMatch> {
-        for header in Self::known_header_candidates_for_path(path) {
-            if header.signature_matches(prefix) {
-                return Some(KnownRomHeaderMatch {
-                    header,
-                    stripped_bytes: header.data_offset_bytes(),
-                });
-            }
-        }
-        None
+        detect_known_header_from_prefix(prefix, Self::header_extension(path).as_deref())
     }
 
     pub(super) fn detect_known_rom_header(path: &Path) -> Result<Option<KnownRomHeaderMatch>> {
@@ -62,71 +31,10 @@ impl CliApp {
         Ok(Self::detect_known_rom_header_from_prefix(path, &prefix))
     }
 
-    pub(super) fn has_extension(path: &Path, expected: &[&str]) -> bool {
-        let Some(extension) = path.extension().and_then(|value| value.to_str()) else {
-            return false;
-        };
-        expected
-            .iter()
-            .any(|candidate| extension.eq_ignore_ascii_case(candidate))
-    }
-
-    /// Whether the 512 bytes a size match points at are really copier padding.
-    ///
-    /// A Super Magic Drive (`.smd`) dump is `512 % 1024` bytes long just like a
-    /// copier-headered SNES ROM, and `512 % 8192` like a PCE one, so size alone
-    /// claims every misnamed Genesis dump. Its 512 bytes head up 16 KiB blocks
-    /// holding each block's odd bytes first and its even bytes second: removing
-    /// them leaves interleaved data rather than a shorter ROM, so there is no
-    /// removable header here at all.
-    ///
-    /// Bytes this cannot read stay copier padding, which is the answer the size
-    /// test gave before this check existed.
-    fn size_based_header_is_copier_padding(path: &Path) -> bool {
-        let Ok(mut file) = File::open(path) else {
-            return true;
-        };
-        let mut prefix = [0_u8; ROM_HEADER_BYTES];
-        if file.read_exact(&mut prefix).is_err() {
-            return true;
-        }
-        if header_declares_smd_interleave(&prefix) {
-            debug!(
-                input = %path.display(),
-                "size matches a copier header but the bytes declare a Super Magic Drive interleave; nothing here is removable"
-            );
-            return false;
-        }
-        true
-    }
-
-    pub(super) fn detect_size_based_copier_header(
-        path: &Path,
-        input_len: u64,
-    ) -> Option<KnownRomHeaderMatch> {
-        if input_len <= ROM_HEADER_BYTES as u64 {
-            return None;
-        }
-        let header = if Self::has_extension(path, &["smc", "sfc"])
-            && input_len % SNES_COPIER_HEADER_MODULUS == ROM_HEADER_BYTES as u64
-        {
-            KnownRomHeader::SnesCopier
-        } else if Self::has_extension(path, &["pce", "tg16"])
-            && input_len % PCE_COPIER_HEADER_MODULUS == ROM_HEADER_BYTES as u64
-        {
-            KnownRomHeader::PceCopier
-        } else {
-            return None;
-        };
-        // Only now is it worth reading the file: the size and the name already
-        // agree, and this is the check that can still take the verdict away.
-        if !Self::size_based_header_is_copier_padding(path) {
-            return None;
-        }
-        Some(KnownRomHeaderMatch {
-            header,
-            stripped_bytes: Some(ROM_HEADER_BYTES),
-        })
+    fn header_extension(path: &Path) -> Option<String> {
+        path.extension()
+            .and_then(|value| value.to_str())
+            .map(|value| format!(".{value}"))
     }
 
     pub(super) fn detect_strippable_rom_header(path: &Path) -> Result<KnownRomHeaderMatch> {
@@ -136,13 +44,11 @@ impl CliApp {
             ROM_HEADER_SCAN_BYTES.min(usize::try_from(input_len).unwrap_or(ROM_HEADER_SCAN_BYTES));
         let mut probe_bytes = vec![0_u8; probe_len];
         source.read_exact(&mut probe_bytes)?;
-        let mut matched_header = Self::detect_known_rom_header_from_prefix(path, &probe_bytes);
-        if matched_header
-            .and_then(|value| value.stripped_bytes())
-            .is_none()
-        {
-            matched_header = Self::detect_size_based_copier_header(path, input_len);
-        }
+        let matched_header = detect_strippable_rom_header_from_prefix(
+            &probe_bytes,
+            input_len,
+            Self::header_extension(path).as_deref(),
+        );
         let Some(header_match) = matched_header else {
             return Err(RomWeaverError::Validation(format!(
                 "could not detect a supported removable ROM header for `{}`",

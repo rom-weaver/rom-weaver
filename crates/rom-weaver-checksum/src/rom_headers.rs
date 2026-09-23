@@ -294,6 +294,88 @@ pub fn header_declares_smd_interleave(prefix: &[u8]) -> bool {
     prefix.get(SWC_ID_OFFSET..SWC_ID_OFFSET + SMD_ID_MAGIC.len()) == Some(SMD_ID_MAGIC.as_slice())
 }
 
+fn known_header_candidates(extension: Option<&str>) -> Vec<KnownRomHeader> {
+    let mut candidates = Vec::with_capacity(KnownRomHeader::ALL.len());
+    if let Some(extension) = extension {
+        for header in KnownRomHeader::ALL {
+            if header.matches_extension(extension) {
+                candidates.push(header);
+            }
+        }
+    }
+    for header in KnownRomHeader::ALL {
+        if !candidates.contains(&header) {
+            candidates.push(header);
+        }
+    }
+    candidates
+}
+
+pub fn detect_known_rom_header_from_prefix(
+    prefix: &[u8],
+    extension: Option<&str>,
+) -> Option<KnownRomHeaderMatch> {
+    for header in known_header_candidates(extension) {
+        if header.signature_matches(prefix) {
+            return Some(KnownRomHeaderMatch {
+                header,
+                stripped_bytes: header.data_offset_bytes(),
+            });
+        }
+    }
+    None
+}
+
+/// Both streaming checksums and file-backed stripping MUST use the same header
+/// rules. Callers keep their own short-file error handling.
+pub fn detect_strippable_rom_header_from_prefix(
+    prefix: &[u8],
+    total_len: u64,
+    extension: Option<&str>,
+) -> Option<KnownRomHeaderMatch> {
+    let mut matched = detect_known_rom_header_from_prefix(prefix, extension);
+    if matched
+        .and_then(KnownRomHeaderMatch::stripped_bytes)
+        .is_none()
+    {
+        matched = detect_size_based_copier_header(prefix, extension, total_len);
+    }
+    matched
+}
+
+fn detect_size_based_copier_header(
+    prefix: &[u8],
+    extension: Option<&str>,
+    total_len: u64,
+) -> Option<KnownRomHeaderMatch> {
+    if total_len <= ROM_HEADER_BYTES as u64 {
+        return None;
+    }
+    let extension = extension?;
+    let header = if [".smc", ".sfc"]
+        .iter()
+        .any(|candidate| extension.eq_ignore_ascii_case(candidate))
+        && total_len % SNES_COPIER_HEADER_MODULUS == ROM_HEADER_BYTES as u64
+    {
+        KnownRomHeader::SnesCopier
+    } else if [".pce", ".tg16"]
+        .iter()
+        .any(|candidate| extension.eq_ignore_ascii_case(candidate))
+        && total_len % PCE_COPIER_HEADER_MODULUS == ROM_HEADER_BYTES as u64
+    {
+        KnownRomHeader::PceCopier
+    } else {
+        return None;
+    };
+    if header_declares_smd_interleave(prefix) {
+        return None;
+    }
+    Some(KnownRomHeaderMatch {
+        header,
+        stripped_bytes: Some(ROM_HEADER_BYTES),
+    })
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct KnownRomHeaderMatch {
     pub header: KnownRomHeader,
@@ -353,5 +435,58 @@ mod tests {
         let mut header = vec![0_u8; ROM_HEADER_BYTES];
         header[SWC_ID_OFFSET..SWC_ID_OFFSET + SWC_ID_MAGIC.len()].copy_from_slice(&SWC_ID_MAGIC);
         assert!(!header_declares_smd_interleave(&header));
+    }
+
+    #[test]
+    fn shared_header_detection_keeps_extension_order_and_signatures() {
+        assert_eq!(
+            known_header_candidates(Some(".smc"))[..4],
+            [
+                KnownRomHeader::SnesCopier,
+                KnownRomHeader::SmcZero,
+                KnownRomHeader::SmcGameDoctor1,
+                KnownRomHeader::SmcGameDoctor2,
+            ]
+        );
+
+        let mut super_wild_card = vec![0_u8; ROM_HEADER_BYTES];
+        super_wild_card[SWC_ID_OFFSET..SWC_ID_OFFSET + SWC_ID_MAGIC.len()]
+            .copy_from_slice(&SWC_ID_MAGIC);
+        let detected =
+            detect_strippable_rom_header_from_prefix(&super_wild_card, 32 * 1024, Some(".smc"))
+                .expect("signature copier header");
+        assert_eq!(detected.header, KnownRomHeader::SnesCopier);
+        assert_eq!(detected.stripped_bytes(), Some(ROM_HEADER_BYTES));
+
+        let mut ines = vec![0_u8; 16];
+        ines[..INES_HEADER_MAGIC.len()].copy_from_slice(&INES_HEADER_MAGIC);
+        let detected = detect_strippable_rom_header_from_prefix(&ines, 16, Some(".bin"))
+            .expect("iNES signature header");
+        assert_eq!(detected.header, KnownRomHeader::Nes);
+        assert_eq!(detected.stripped_bytes(), Some(16));
+    }
+
+    #[test]
+    fn shared_header_detection_uses_copier_size_rules_but_keeps_smd_interleave() {
+        let mut plain_copier_header = vec![0x55; ROM_HEADER_BYTES];
+        plain_copier_header[SWC_ID_OFFSET..SWC_ID_OFFSET + SMD_ID_MAGIC.len()]
+            .copy_from_slice(&[0xAA, 0xBB, 0x05]);
+        let total_len = 32 * 1024 + ROM_HEADER_BYTES as u64;
+        let detected =
+            detect_strippable_rom_header_from_prefix(&plain_copier_header, total_len, Some(".smc"))
+                .expect("size-based SNES copier header");
+        assert_eq!(detected.header, KnownRomHeader::SnesCopier);
+        assert_eq!(detected.stripped_bytes(), Some(ROM_HEADER_BYTES));
+
+        let mut smd_header = vec![0x55; ROM_HEADER_BYTES];
+        smd_header[SWC_ID_OFFSET..SWC_ID_OFFSET + SMD_ID_MAGIC.len()]
+            .copy_from_slice(&SMD_ID_MAGIC);
+        for extension in [".smc", ".sfc"] {
+            assert_eq!(
+                detect_strippable_rom_header_from_prefix(&smd_header, total_len, Some(extension)),
+                None,
+                "SMD data must not be interpreted as a {extension} copier header"
+            );
+        }
     }
 }
