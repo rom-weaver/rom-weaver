@@ -582,14 +582,18 @@ export function buildCheatShard({ cheatSystem, files, releases, sourceRevision }
       }
       record.id = stableCheatId(cheatSystem, gameId, record);
       if (game.cheats.has(record.id)) continue;
+      // One record per content and code kind; a kindless record yields to any
+      // kinded one, since the kind is the only thing it lacks.
       const contentKey = cheatContentKey(record);
-      const existing = game.cheats.get(game.cheatsByContent.get(contentKey));
-      const conflicting = existing?.codeKind && record.codeKind && existing.codeKind !== record.codeKind;
-      if (existing && !conflicting) {
-        if (existing.codeKind || !record.codeKind) continue;
-        game.cheats.delete(existing.id);
+      const kinds = game.cheatsByContent.get(contentKey) ?? new Map();
+      game.cheatsByContent.set(contentKey, kinds);
+      const kind = record.codeKind ?? "";
+      if (kinds.has(kind) || (!kind && kinds.size)) continue;
+      if (kinds.has("")) {
+        game.cheats.delete(kinds.get(""));
+        kinds.delete("");
       }
-      if (!conflicting) game.cheatsByContent.set(contentKey, record.id);
+      kinds.set(kind, record.id);
       game.cheats.set(record.id, record);
     }
   }

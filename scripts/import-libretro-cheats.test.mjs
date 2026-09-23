@@ -491,6 +491,32 @@ test("buildCheatShard collapses a code repeated across device files, keeping its
   assert.equal(byDescription["infinite lives"].codeKind, "game-genie");
 });
 
+test("buildCheatShard keeps one record per code kind when device files disagree", () => {
+  const cheat = (desc) => `cheat0_desc = "${desc}"\ncheat0_code = "808000EA"\n`;
+  const shard = buildCheatShard({
+    cheatSystem: "snes",
+    files: [
+      {
+        sourcePath: "cht/Nintendo - Super Nintendo Entertainment System/Kinds (USA) (Game Genie).cht",
+        text: cheat("Lives"),
+      },
+      {
+        sourcePath: "cht/Nintendo - Super Nintendo Entertainment System/Kinds (USA) (Pro Action Replay).cht",
+        text: cheat("Lives"),
+      },
+      {
+        sourcePath: "cht/Nintendo - Super Nintendo Entertainment System/Kinds (USA) (Action Replay).cht",
+        text: cheat("lives "),
+      },
+      { sourcePath: "cht/Nintendo - Super Nintendo Entertainment System/Kinds (USA).cht", text: cheat("LIVES") },
+    ],
+    releases: [],
+    sourceRevision: REVISION,
+  });
+  const [game] = shard.games;
+  assert.deepEqual(game.cheats.map((entry) => entry.codeKind).sort(), ["game-genie", "pro-action-replay"]);
+});
+
 test("a game left with only dropped records disappears from the shard", () => {
   const shard = buildCheatShard({
     cheatSystem: "mastersystem",
