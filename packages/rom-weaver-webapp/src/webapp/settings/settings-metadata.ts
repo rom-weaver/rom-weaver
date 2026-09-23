@@ -267,7 +267,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     key: "betaToolsEnabled",
     kind: "checkbox",
     label: getSettingsLabel("betaToolsEnabled"),
-    labelDataLocalize: "Enable beta tools (Trim and Tools)",
+    labelDataLocalize: "Enable beta tools (Trim, PPF undo, Save Editor, and cheats)",
     layout: "large",
   },
   byteUnits: {

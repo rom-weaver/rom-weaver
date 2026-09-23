@@ -2,6 +2,8 @@
 
 Use the Apply Patches page to bake cheats into a ROM.
 
+Cheats are a beta tool, so turn on beta tools in Settings first.
+
 1. Add the original ROM to the Apply Patches page.
 2. Open the Cheats section after rom-weaver identifies the system.
 3. Check the game title, region, revision, and match label.

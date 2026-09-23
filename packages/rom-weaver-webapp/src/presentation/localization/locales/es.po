@@ -350,6 +350,11 @@ msgstr "Agrega la ROM o los parches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.create.needsModified"
+msgstr "Añade tu ROM modificada"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.needsPatches"
 msgstr "Agrega tus archivos de parches"
 
@@ -357,11 +362,6 @@ msgstr "Agrega tus archivos de parches"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.openSourceDescription"
 msgstr "Con licencia AGPL-3.0. Lee el código, compílalo tú mismo u hospeda la aplicación web en tu propio dominio."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.titleEmphasis"
-msgstr "Un solo kit de herramientas."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -415,11 +415,6 @@ msgstr "Aplicar y descargar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis"
-msgstr "Tu flujo de trabajo para ROM. Un solo kit de herramientas."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.validation.overrideChecksum"
 msgstr "Aplicar de todos modos pese a la discrepancia de comprobación del parche y la ROM"
 
@@ -462,11 +457,6 @@ msgstr "Aplicar a: {input}"
 #: src/presentation/localization/messages.ts
 msgid "ui.related.applyTool"
 msgstr "Herramienta Aplicar"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.lede"
-msgstr "Aplica parches, comprime, extrae, convierte, identifica, usa trucos y edita partidas guardadas en tu navegador o terminal. Tus archivos permanecen en tu dispositivo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -770,11 +760,6 @@ msgstr "Códecs CD"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis2"
-msgstr "Un solo kit de herramientas."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.status.channel"
 msgstr "Canal"
 
@@ -937,6 +922,11 @@ msgstr "Compara ROMs originales y modificadas, sin comprimir o en archivos, para
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.components"
 msgstr "Componentes"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.loomCompress"
+msgstr "comprimir"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1311,7 +1301,7 @@ msgstr "EmulatorJS: {name}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Activar herramientas beta (Recortar y Deshacer PPF)"
+msgstr "Activar herramientas beta (Recortar, Deshacer PPF, Editor de partidas y trucos)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1397,6 +1387,11 @@ msgstr "Exportar una receta no aplica parches. Pulsa Compartir paquete para comp
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.archive.summary"
 msgstr "Exporta esta sesión como un paquete portátil de rom-weaver definido por rom-weaver-bundle.json."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.loomExtract"
+msgstr "extraer"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2200,6 +2195,16 @@ msgstr "Una sola pasada, sin descomprimir a mano ni archivos intermedios. Guárd
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.titleEmphasis"
+msgstr "Un solo kit de herramientas."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.thesis2"
+msgstr "Un solo kit de herramientas."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.romDistributionWarning"
 msgstr "Incluye una ROM solo si tienes derecho a distribuirla. Compartir ROMs con derechos de autor puede ser ilegal."
 
@@ -2292,6 +2297,11 @@ msgstr "Otros juegos"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.fullInstallGuide"
 msgstr "Otros métodos de instalación"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.loomOutput"
+msgstr "salida"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2395,31 +2405,6 @@ msgstr "parche {n}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.loomCompress"
-msgstr "comprimir"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.loomExtract"
-msgstr "extraer"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.loomOutput"
-msgstr "salida"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.loomResult"
-msgstr "resultado"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.loomUnpack"
-msgstr "descomprimir"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.patchNumber"
 msgstr "Parche {n}"
 
@@ -2467,6 +2452,11 @@ msgstr "Posición del parche"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.applyDescription"
 msgstr "Aplica uno o varios parches, trucos o un paquete a ROMs e imágenes de disco. Abre archivos comprimidos directamente y descarga el resultado o comparte un paquete reutilizable."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.lede"
+msgstr "Aplica parches, comprime, extrae, convierte, identifica, usa trucos y edita partidas guardadas en tu navegador o terminal. Tus archivos permanecen en tu dispositivo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2792,6 +2782,11 @@ msgstr "Restablecer"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.toolsDescription"
 msgstr "Restaura la ROM original con un parche PPF3 que incluya datos para deshacer los cambios."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.loomResult"
+msgstr "resultado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3265,11 +3260,6 @@ msgstr "El nombre termina en"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.loomAriaLabel"
-msgstr "El resultado parcheado se muestra como hilos verticales, con tres parches tejidos sobre él en orden y una banda de color por parche."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.header.extensionInfo"
 msgstr "La extensión de salida sigue la opción: {headeredExtension} con encabezado, {headerlessExtension} sin él."
 
@@ -3287,6 +3277,11 @@ msgstr "Las comprobaciones del parche no coinciden con esta ROM."
 #: src/presentation/localization/messages.ts
 msgid "error.PATCH_TARGET_MISMATCH"
 msgstr "El destino del parche no coincide con la entrada seleccionada."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.loomAriaLabel"
+msgstr "El resultado parcheado se muestra como hilos verticales, con tres parches tejidos sobre él en orden y una banda de color por parche."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3554,6 +3549,11 @@ msgstr "Salida de parche desconocida ({patch})"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.home.loomUnpack"
+msgstr "descomprimir"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.headerUnsupported"
 msgstr "No compatible"
 
@@ -3746,6 +3746,11 @@ msgstr "Tu kit de herramientas para ROM e imágenes de disco"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.title"
 msgstr "Tu flujo de trabajo para ROM."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.thesis"
+msgstr "Tu flujo de trabajo para ROM. Un solo kit de herramientas."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

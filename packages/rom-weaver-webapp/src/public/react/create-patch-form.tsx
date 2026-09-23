@@ -17,7 +17,7 @@ import { useCandidateSelection } from "./candidate-selection.tsx";
 import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./components/ds/compress-panel.tsx";
 import { Notice } from "./components/ds/feedback.tsx";
 import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
-import { InfoPopover } from "./components/ds/layout.tsx";
+import { InfoPopover, NeedsInput } from "./components/ds/layout.tsx";
 import { ConfirmDialog } from "./components/ds/modal.tsx";
 import {
   SampleTutorial,
@@ -62,6 +62,7 @@ import {
   toCreateWorkflowSettings,
   useCreateSettings,
   useRomWeaverAssetBaseUrl,
+  useRomWeaverSettings,
   useUiLocalizer,
 } from "./settings-context.tsx";
 import {
@@ -390,6 +391,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     [createPatchFormatCandidatesOverride],
   );
   const providerSettings = useCreateSettings();
+  const cheatsEnabled = useRomWeaverSettings().betaToolsEnabled === true;
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
   const localizer = useUiLocalizer();
   const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;
@@ -484,7 +486,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   });
   const uploadDisabled = !!props.disabled || busy;
   const outputDisabled = !!props.disabled || busy;
-  const codesMode = modifiedMode === "codes";
+  // Cheat codes are a beta tool; turning beta tools off falls back to the ROM input.
+  const codesMode = cheatsEnabled && modifiedMode === "codes";
   const cheatCodes = useMemo(
     () => (codesMode ? splitCheatCodes(cheatCodesText, cheatSystem) : []),
     [cheatCodesText, cheatSystem, codesMode],
@@ -1311,7 +1314,16 @@ function CreatePatchForm(props: CreatePatchFormProps) {
             ),
           }
         : {}),
-      headerExtra: (
+      ...(codesMode
+        ? {}
+        : {
+            emptyState: (
+              <NeedsInput onClick={() => document.getElementById("patch-builder-input-file-unified")?.click()}>
+                {localizer.message("ui.create.needsModified")}
+              </NeedsInput>
+            ),
+          }),
+      headerExtra: cheatsEnabled ? (
         <fieldset className="seg">
           <legend className="sr-only">How the modification is supplied</legend>
           {(["rom", "codes"] as const).map((mode) => (
@@ -1331,7 +1343,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
             </button>
           ))}
         </fieldset>
-      ),
+      ) : undefined,
     },
     originalStep: renderSourceStep({
       checksumProgress: getSourceChecksumProgress("original"),
