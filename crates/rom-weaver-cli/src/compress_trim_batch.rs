@@ -19,6 +19,7 @@ struct TrimBatchState {
     already_trimmed_count: usize,
     failed_count: usize,
     first_error: Option<String>,
+    first_error_kind: Option<rom_weaver_core::RomWeaverErrorKind>,
     mode_counts: BTreeMap<&'static str, usize>,
     single_detail: Option<String>,
     irreversible_xiso: bool,
@@ -79,6 +80,15 @@ impl CliApp {
                 probe_threads.clone(),
             )
         };
+        let fail_error = |format: Option<String>, stage: &str, error: RomWeaverError| {
+            OperationReport::failed_with_error(
+                OperationFamily::Container,
+                format,
+                stage,
+                error,
+                probe_threads.clone(),
+            )
+        };
         for input in &input {
             if let Some(report) = self.require_readable_path(
                 "compress",
@@ -104,7 +114,7 @@ impl CliApp {
         if !dry_run && let Err(error) = ensure_output_available(&output, force) {
             return self.finish(
                 "compress",
-                fail(requested_format.clone(), "validate", error.to_string()),
+                fail_error(requested_format.clone(), "validate", error),
             );
         }
         // The output format is derived from the output filename's extension; an explicit --format
@@ -120,7 +130,7 @@ impl CliApp {
             Err(error) => {
                 return self.finish(
                     "compress",
-                    fail(requested_format.clone(), "validate", error.to_string()),
+                    fail_error(requested_format.clone(), "validate", error),
                 );
             }
         };
@@ -139,7 +149,7 @@ impl CliApp {
             Err(error) => {
                 return self.finish(
                     "compress",
-                    fail(Some(resolved_format.clone()), "validate", error.to_string()),
+                    fail_error(Some(resolved_format.clone()), "validate", error),
                 );
             }
         };
@@ -244,11 +254,11 @@ impl CliApp {
             parent: None,
         };
         let mut report = handler.create(&request, &context).unwrap_or_else(|error| {
-            OperationReport::failed(
+            OperationReport::failed_with_error(
                 OperationFamily::Container,
                 Some(handler.descriptor().name.to_string()),
                 "create",
-                error.to_string(),
+                error,
                 context.single_thread_execution(),
             )
         });
@@ -388,12 +398,21 @@ impl CliApp {
                 thread_execution.clone(),
             )
         };
+        let fail_error = |stage: &str, error: RomWeaverError| {
+            OperationReport::failed_with_error(
+                OperationFamily::Command,
+                None,
+                stage,
+                error,
+                thread_execution.clone(),
+            )
+        };
         let extension = extension
             .unwrap_or_else(|| Self::default_trim_extension_pattern(operation).to_string());
         let extension = match Self::normalize_trim_extension(&extension) {
             Ok(value) => value,
             Err(error) => {
-                return self.finish("trim", fail("validate", error.to_string()));
+                return self.finish("trim", fail_error("validate", error));
             }
         };
 
@@ -415,7 +434,7 @@ impl CliApp {
             Ok(paths) => paths,
             Err(error) => {
                 Self::cleanup_temp_paths(&cleanup_paths);
-                return self.finish("trim", fail("validate", error.to_string()));
+                return self.finish("trim", fail_error("validate", error));
             }
         };
 
@@ -504,6 +523,7 @@ impl CliApp {
 
         if state.failed_count > 0 {
             Self::cleanup_temp_paths(&cleanup_paths);
+            let first_error_kind = state.first_error_kind;
             let mut report = OperationReport::failed(
                 OperationFamily::Command,
                 Some(report_format.clone()),
@@ -530,6 +550,7 @@ impl CliApp {
                 ),
                 thread_execution.clone(),
             );
+            report.error_kind = first_error_kind;
             report.details = Some(json!({
                 "processed": trim_sources.len(),
                 "changed": state.trimmed_count,
@@ -643,7 +664,7 @@ impl CliApp {
             && !config.dry_run
             && let Err(error) = ensure_output_available(&output_path, config.force)
         {
-            Self::record_trim_failure(state, error.to_string());
+            Self::record_trim_failure_with_kind(state, error.to_string(), Some(error.kind()));
             return;
         }
         let output_label = if let Some(archive) = trim_source
@@ -719,9 +740,11 @@ impl CliApp {
                 }
                 Self::record_trim_outcome(outcome, config, state);
             }
-            Err(error) => {
-                Self::record_trim_failure(state, format!("{}: {error}", trim_source.path.display()))
-            }
+            Err(error) => Self::record_trim_failure_with_kind(
+                state,
+                format!("{}: {error}", trim_source.path.display()),
+                Some(error.kind()),
+            ),
         }
     }
 
@@ -757,7 +780,7 @@ impl CliApp {
                 false
             }
             Err(error) => {
-                Self::record_trim_failure(state, error.to_string());
+                Self::record_trim_failure_with_kind(state, error.to_string(), Some(error.kind()));
                 self.emit_running(
                     OperationLabel {
                         command: "trim",
@@ -775,9 +798,18 @@ impl CliApp {
     }
 
     fn record_trim_failure(state: &mut TrimBatchState, message: String) {
+        Self::record_trim_failure_with_kind(state, message, None);
+    }
+
+    fn record_trim_failure_with_kind(
+        state: &mut TrimBatchState,
+        message: String,
+        error_kind: Option<rom_weaver_core::RomWeaverErrorKind>,
+    ) {
         state.failed_count = state.failed_count.saturating_add(1);
         if state.first_error.is_none() {
             state.first_error = Some(message);
+            state.first_error_kind = error_kind;
         }
     }
 

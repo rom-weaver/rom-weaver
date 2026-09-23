@@ -131,7 +131,7 @@ impl CliApp {
                 format.clone(),
                 "validate",
                 label,
-                thread_execution,
+                thread_execution.clone(),
             ))
         };
         match check_readable(path) {
@@ -139,7 +139,13 @@ impl CliApp {
             Err(PathAccessError::Missing) => {
                 failure(format!("input path does not exist: `{}`", path.display()))
             }
-            Err(PathAccessError::Denied(error)) => failure(error.to_string()),
+            Err(PathAccessError::Denied(error)) => Some(OperationReport::failed_with_error(
+                family,
+                format,
+                "validate",
+                error,
+                thread_execution,
+            )),
         }
     }
 
@@ -160,13 +166,7 @@ impl CliApp {
             return None;
         }
         check_writable_dir(directory).err().map(|error| {
-            OperationReport::failed(
-                family,
-                format,
-                "validate",
-                error.to_string(),
-                thread_execution,
-            )
+            OperationReport::failed_with_error(family, format, "validate", error, thread_execution)
         })
     }
 

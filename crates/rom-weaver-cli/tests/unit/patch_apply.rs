@@ -21,6 +21,34 @@ fn test_context(temp_root: PathBuf) -> OperationContext {
     )
 }
 
+#[test]
+fn patch_create_input_inspection_preserves_contextual_io_kinds() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    let present = temp.path().join("present.bin");
+    let missing = temp.path().join("missing.bin");
+    fs::write(&present, [0_u8]).expect("input fixture");
+    for (original, modified, role) in [
+        (&missing, &present, "original"),
+        (&present, &missing, "modified"),
+    ] {
+        let report = app()
+            .inspect_patch_create_input_sizes("patch-create", None, original, modified, None)
+            .expect_err("missing input fails inspection");
+        let event = report.into_event("patch-create");
+        assert_eq!(
+            event.error_kind,
+            Some(rom_weaver_core::RomWeaverErrorKind::Io)
+        );
+        assert!(
+            event
+                .label
+                .starts_with(&format!("failed to inspect patch-create {role} input")),
+            "{}",
+            event.label
+        );
+    }
+}
+
 /// A minimal IPS patch: `PATCH`, one literal record per entry, `EOF`.
 fn ips_patch(records: &[(u32, &[u8])]) -> Vec<u8> {
     let mut bytes = b"PATCH".to_vec();
@@ -1758,6 +1786,10 @@ fn a_container_that_cannot_be_written_fails_the_compress_stage() {
 
     assert_eq!(failure.status, OperationStatus::Failed);
     assert_eq!(failure.stage, "compress");
+    assert_eq!(
+        failure.error_kind,
+        Some(rom_weaver_core::RomWeaverErrorKind::Io)
+    );
     assert!(
         failure.label.contains("patch output compression failed"),
         "{}",

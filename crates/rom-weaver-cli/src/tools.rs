@@ -43,11 +43,11 @@ impl CliApp {
                 Some(100.0),
                 execution,
             ),
-            Err(error) => OperationReport::failed(
+            Err(error) => OperationReport::failed_with_error(
                 OperationFamily::Patch,
                 Some("PPF".to_string()),
                 "undo",
-                error.to_string(),
+                error,
                 execution,
             ),
         };

@@ -13,7 +13,8 @@ impl CliApp {
                         "read",
                         format!("failed to read stdin input: {error}"),
                         None,
-                    ),
+                    )
+                    .with_error_kind(error.kind()),
                 );
             }
         };
@@ -79,11 +80,11 @@ impl CliApp {
             Err(error) => {
                 return self.finish(
                     "probe",
-                    OperationReport::failed(
+                    OperationReport::failed_with_error(
                         OperationFamily::Command,
                         None,
                         "prepare",
-                        error.to_string(),
+                        error,
                         context.single_thread_execution(),
                     ),
                 );
@@ -122,11 +123,11 @@ impl CliApp {
             let mut report = handler
                 .probe_details(&request, &context)
                 .unwrap_or_else(|error| {
-                    OperationReport::failed(
+                    OperationReport::failed_with_error(
                         OperationFamily::Container,
                         Some(handler.descriptor().name.to_string()),
                         "probe",
-                        error.to_string(),
+                        error,
                         None,
                     )
                 });
@@ -188,11 +189,11 @@ impl CliApp {
             let mut report = handler
                 .parse(&probe_source, &context)
                 .unwrap_or_else(|error| {
-                    OperationReport::failed(
+                    OperationReport::failed_with_error(
                         OperationFamily::Patch,
                         Some(handler.descriptor().name.to_string()),
                         "probe",
-                        error.to_string(),
+                        error,
                         None,
                     )
                 });

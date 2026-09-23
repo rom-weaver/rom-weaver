@@ -259,11 +259,11 @@ impl CliApp {
             Err(error) => {
                 return self.finish(
                     "ingest",
-                    OperationReport::failed(
+                    OperationReport::failed_with_error(
                         OperationFamily::Command,
                         Some("ingest".to_string()),
                         "identify",
-                        error.to_string(),
+                        error,
                         None,
                     ),
                 );
@@ -344,19 +344,19 @@ impl CliApp {
                 identify_database.as_ref(),
             ) {
                 Ok(report) => report,
-                Err(error) => OperationReport::failed(
+                Err(error) => OperationReport::failed_with_error(
                     OperationFamily::Command,
                     Some("ingest".to_string()),
                     "identify",
-                    error.to_string(),
+                    error,
                     thread_execution,
                 ),
             },
-            Err(error) => OperationReport::failed(
+            Err(error) => OperationReport::failed_with_error(
                 OperationFamily::Command,
                 Some("ingest".to_string()),
                 "ingest",
-                error.to_string(),
+                error,
                 thread_execution,
             ),
         };

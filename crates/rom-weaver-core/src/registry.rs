@@ -68,6 +68,8 @@ pub struct OperationReport {
     pub details: Option<Value>,
     pub percent: Option<f32>,
     pub thread_execution: Option<ThreadExecution>,
+    /// Canonical kind of the source error, when this report represents a failure.
+    pub error_kind: Option<crate::RomWeaverErrorKind>,
     pub status: OperationStatus,
 }
 
@@ -89,6 +91,7 @@ impl OperationReport {
             details: None,
             percent,
             thread_execution,
+            error_kind: None,
             status,
         }
     }
@@ -123,6 +126,37 @@ impl OperationReport {
         report
     }
 
+    /// Build a failed report without reducing its source error to a message.
+    pub fn failed_with_error(
+        family: OperationFamily,
+        format: Option<String>,
+        stage: impl Into<String>,
+        error: RomWeaverError,
+        thread_execution: Option<ThreadExecution>,
+    ) -> Self {
+        let error_kind = error.kind();
+        Self::failed(family, format, stage, error.to_string(), thread_execution)
+            .with_error_kind(error_kind)
+    }
+
+    /// Attach the source error kind when the report label adds context.
+    pub fn with_error_kind(mut self, error_kind: crate::RomWeaverErrorKind) -> Self {
+        self.error_kind = Some(error_kind);
+        self
+    }
+
+    /// Return the explicit kind when present, then classify legacy failure labels.
+    pub fn resolved_error_kind(&self) -> Option<crate::RomWeaverErrorKind> {
+        self.error_kind.or_else(|| match self.status {
+            OperationStatus::Failed => crate::RomWeaverErrorKind::classify_message(&self.label),
+            OperationStatus::Pending
+            | OperationStatus::Running
+            | OperationStatus::Succeeded
+            | OperationStatus::Unsupported
+            | OperationStatus::Cancelled => None,
+        })
+    }
+
     pub fn succeeded(
         family: OperationFamily,
         format: Option<String>,
@@ -144,14 +178,13 @@ impl OperationReport {
 
     pub fn into_event(self, command: impl Into<String>) -> crate::ProgressEvent {
         let thread_execution = self.thread_execution.as_ref();
-        // Terminal failures carry a typed error kind derived once here, from the
-        // single point every command finalizes through (`CliApp::finish`), so the
-        // webapp keys off the generated `RomWeaverErrorKind` instead of pattern
-        // matching `label`. Messages wrapped in extra context classify to `None`
-        // and fall back to JS-side inference, exactly as before.
         let error_kind = match self.status {
-            OperationStatus::Failed => crate::RomWeaverErrorKind::classify_message(&self.label),
-            _ => None,
+            OperationStatus::Failed => self.resolved_error_kind(),
+            OperationStatus::Pending
+            | OperationStatus::Running
+            | OperationStatus::Succeeded
+            | OperationStatus::Unsupported
+            | OperationStatus::Cancelled => None,
         };
         crate::ProgressEvent {
             command: command.into(),

@@ -17,11 +17,9 @@ export type JsonValue = number | string | boolean | Array<JsonValue> | { [key in
 
 export type ProgressEvent = { command: string, family: OperationFamily, format: string | null, stage: string, label: string, details: JsonValue | null, percent: number | null, requested_threads: number | null, effective_threads: number | null, thread_mode: ThreadMode | null, used_parallelism: boolean | null, thread_fallback: boolean | null, thread_fallback_reason?: string | null, elapsed_ms?: number | null,
 /**
- * Typed error classification for a `Failed` event, derived from the failure
- * message via [`crate::RomWeaverErrorKind::classify_message`]. Lets the
- * webapp read the generated `RomWeaverErrorKind` directly instead of
- * re-inferring it from `label`; `None` (and omitted) for non-failure events
- * and for failures whose message is not a bare `RomWeaverError` rendering.
+ * Typed error classification for a `Failed` event. Reports prefer the
+ * source error kind, then classify legacy bare labels. `None` (and omitted)
+ * for other event statuses and unclassified legacy messages.
  */
 error_kind?: RomWeaverErrorKind | null, status: OperationStatus, };
 

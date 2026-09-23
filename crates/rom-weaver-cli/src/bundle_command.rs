@@ -144,11 +144,11 @@ impl CliApp {
                     ),
                 }
             }
-            Err(error) => OperationReport::failed(
+            Err(error) => OperationReport::failed_with_error(
                 OperationFamily::Command,
                 Some("bundle-parse".to_string()),
                 "bundle-parse",
-                error.to_string(),
+                error,
                 thread_execution,
             ),
         };

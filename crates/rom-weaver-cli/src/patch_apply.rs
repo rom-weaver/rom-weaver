@@ -256,7 +256,8 @@ fn validate_resolved_patch_apply_step_metadata(
     bundle_step_metadata_selected: bool,
     direct_has_step_selectors: bool,
     direct_selectors_align: bool,
-) -> std::result::Result<(), (&'static str, String)> {
+    thread_execution: &Option<ThreadExecution>,
+) -> std::result::Result<(), Box<OperationReport>> {
     let has_step_selectors = if bundle_step_metadata_selected {
         !steps.is_empty()
     } else {
@@ -268,12 +269,23 @@ fn validate_resolved_patch_apply_step_metadata(
     if steps.len() != resolved_patch_count
         || (!bundle_step_metadata_selected && !direct_selectors_align)
     {
-        return Err((
+        return Err(Box::new(OperationReport::failed(
+            OperationFamily::Patch,
+            None,
             "prepare",
-            "bundle patch targets require one resolved file per selected patch".to_string(),
-        ));
+            "bundle patch targets require one resolved file per selected patch",
+            thread_execution.clone(),
+        )));
     }
-    validate_patch_step_selectors(steps).map_err(|error| ("validate", error.to_string()))
+    validate_patch_step_selectors(steps).map_err(|error| {
+        Box::new(OperationReport::failed_with_error(
+            OperationFamily::Patch,
+            None,
+            "validate",
+            error,
+            thread_execution.clone(),
+        ))
+    })
 }
 
 /// Direct JSON/WASM selectors bypass bundle parsing, so normalize their member
@@ -597,11 +609,11 @@ impl CliApp {
                 let thread_execution = bundle_context.single_thread_execution();
                 return self.finish(
                     "patch-apply",
-                    OperationReport::failed(
+                    OperationReport::failed_with_error(
                         OperationFamily::Patch,
                         None,
                         "validate",
-                        error.to_string(),
+                        error,
                         thread_execution,
                     ),
                 );
@@ -936,6 +948,15 @@ impl CliApp {
                 probe_threads.clone(),
             )
         };
+        let fail_error = |stage: &str, error: RomWeaverError| {
+            OperationReport::failed_with_error(
+                OperationFamily::Patch,
+                None,
+                stage,
+                error,
+                probe_threads.clone(),
+            )
+        };
         // Per-patch header modes: a missing entry inherits the last given mode;
         // an empty list means all-auto. N64 byte-order rewrites and cheat codes
         // pin offsets to the original bytes, so those runs degrade auto to keep.
@@ -966,7 +987,7 @@ impl CliApp {
         ) {
             Ok(parsed) => parsed,
             Err(error) => {
-                return fail("validate", error.to_string());
+                return fail_error("validate", error);
             }
         };
         if let Some(report) = self.require_readable_path(
@@ -1018,7 +1039,7 @@ impl CliApp {
             &context,
         ) {
             Ok(discovered) => discovered,
-            Err(error) => return fail("prepare", error.to_string()),
+            Err(error) => return fail_error("prepare", error),
         };
         if patches.is_empty() {
             patches = discovered_sidecars.patches.clone();
@@ -1074,7 +1095,7 @@ impl CliApp {
                 ) {
                     Ok(resolved) => resolved,
                     Err(error) => {
-                        return fail("prepare", error.to_string());
+                        return fail_error("prepare", error);
                     }
                 };
                 let ResolvedChecksumSource {
@@ -1098,7 +1119,7 @@ impl CliApp {
             compress_format.as_deref(),
         ) {
             Ok(resolved) => resolved,
-            Err(error) => return fail("validate", error.to_string()),
+            Err(error) => return fail_error("validate", error),
         };
         if let Some(message) = Self::patch_apply_output_alias_message(
             &input,
@@ -1118,12 +1139,12 @@ impl CliApp {
             &resolved_input,
         ) {
             Ok(options) => options,
-            Err(error) => return fail("validate", error.to_string()),
+            Err(error) => return fail_error("validate", error),
         };
         // Compressing can append an extension; the compression step re-checks
         // that resolved path after patch validation.
         if let Err(error) = ensure_output_available(&output, force) {
-            return fail("validate", error.to_string());
+            return fail_error("validate", error);
         }
         if let Some(report) =
             self.validate_patch_apply_access(&patches, &output, probe_threads.clone())
@@ -1158,7 +1179,7 @@ impl CliApp {
                         continue;
                     }
                     Err(error) => {
-                        return fail("prepare", error.to_string());
+                        return fail_error("prepare", error);
                     }
                 }
             }
@@ -1186,7 +1207,7 @@ impl CliApp {
             ) {
                 Ok(resolved) => resolved,
                 Err(error) => {
-                    return fail("prepare", error.to_string());
+                    return fail_error("prepare", error);
                 }
             };
             if resolved.extracted_archives == 0 {
@@ -1224,18 +1245,19 @@ impl CliApp {
         ) {
             Ok(resolved) => resolved,
             Err(error) => {
-                return fail("prepare", error.to_string());
+                return fail_error("prepare", error);
             }
         };
-        if let Err((stage, error)) = validate_resolved_patch_apply_step_metadata(
+        if let Err(report) = validate_resolved_patch_apply_step_metadata(
             &patch_step_metadata,
             resolved_patches.len(),
             bundle_step_metadata_selected,
             direct_has_step_selectors,
             direct_selectors_align,
+            &probe_threads,
         ) {
             Self::cleanup_temp_paths(&temp_paths);
-            return fail(stage, error);
+            return *report;
         }
 
         // Resolve the bundle's recorded cheats and `--cheat` against the
@@ -1256,7 +1278,7 @@ impl CliApp {
             }
             Err(error) => {
                 Self::cleanup_temp_paths(&temp_paths);
-                return fail("prepare", error.to_string());
+                return fail_error("prepare", error);
             }
         };
         // Now that the selection is resolved, the record list - not the flags -
@@ -1288,7 +1310,7 @@ impl CliApp {
                 }
                 Err(error) => {
                     Self::cleanup_temp_paths(&temp_paths);
-                    return fail("prepare", error.to_string());
+                    return fail_error("prepare", error);
                 }
             }
         }
@@ -1414,11 +1436,11 @@ impl CliApp {
                 ) {
                     Ok(path) => path,
                     Err(error) => {
-                        return OperationReport::failed(
+                        return OperationReport::failed_with_error(
                             OperationFamily::Patch,
                             None,
                             "prepare",
-                            error.to_string(),
+                            error,
                             context.single_thread_execution(),
                         );
                     }
@@ -1435,11 +1457,11 @@ impl CliApp {
                         .len()
                         .saturating_sub(usize::from(!codes.is_empty())),
                 ) {
-                    return OperationReport::failed(
+                    return OperationReport::failed_with_error(
                         OperationFamily::Patch,
                         None,
                         "validate",
-                        error.to_string(),
+                        error,
                         context.single_thread_execution(),
                     );
                 }
@@ -1477,11 +1499,11 @@ impl CliApp {
                         },
                         &context,
                     ) {
-                        return OperationReport::failed(
+                        return OperationReport::failed_with_error(
                             OperationFamily::Patch,
                             None,
                             "validate",
-                            error.to_string(),
+                            error,
                             context.single_thread_execution(),
                         );
                     }
@@ -1583,11 +1605,11 @@ impl CliApp {
                             ) {
                                 Ok(path) => path,
                                 Err(error) => {
-                                    return OperationReport::failed(
+                                    return OperationReport::failed_with_error(
                                         OperationFamily::Patch,
                                         report.format.clone(),
                                         "prepare",
-                                        error.to_string(),
+                                        error,
                                         context.single_thread_execution(),
                                     );
                                 }
@@ -1615,11 +1637,11 @@ impl CliApp {
                             Self::append_patch_apply_repair_notes(&mut report, finalized);
                         }
                         Err(error) => {
-                            return OperationReport::failed(
+                            return OperationReport::failed_with_error(
                                 OperationFamily::Patch,
                                 report.format.clone(),
                                 "compat",
-                                error.to_string(),
+                                error,
                                 context.single_thread_execution(),
                             );
                         }
@@ -1643,11 +1665,11 @@ impl CliApp {
                         match self.disc_track_overrides(disc, &disc_track_replacements) {
                             Ok(track_overrides) => disc_track_overrides = track_overrides,
                             Err(error) => {
-                                return OperationReport::failed(
+                                return OperationReport::failed_with_error(
                                     OperationFamily::Patch,
                                     report.format.clone(),
                                     "prepare",
-                                    error.to_string(),
+                                    error,
                                     context.single_thread_execution(),
                                 );
                             }
@@ -1662,11 +1684,11 @@ impl CliApp {
                         ) {
                             Ok(path) => path,
                             Err(error) => {
-                                return OperationReport::failed(
+                                return OperationReport::failed_with_error(
                                     OperationFamily::Patch,
                                     report.format.clone(),
                                     "prepare",
-                                    error.to_string(),
+                                    error,
                                     context.single_thread_execution(),
                                 );
                             }
@@ -1679,11 +1701,11 @@ impl CliApp {
                         match self.write_disc_output(disc, &staged_sheet, disc_output) {
                             Ok(note) => report.label = format!("{}; {}", report.label, note),
                             Err(error) => {
-                                return OperationReport::failed(
+                                return OperationReport::failed_with_error(
                                     OperationFamily::Patch,
                                     report.format.clone(),
                                     "compat",
-                                    error.to_string(),
+                                    error,
                                     context.single_thread_execution(),
                                 );
                             }
@@ -1754,11 +1776,11 @@ impl CliApp {
                     &mut terminal_output_path,
                     &input,
                 ) {
-                    return OperationReport::failed(
+                    return OperationReport::failed_with_error(
                         OperationFamily::Patch,
                         report.format.clone(),
                         "publish",
-                        error.to_string(),
+                        error,
                         context.single_thread_execution(),
                     );
                 }
@@ -2179,11 +2201,11 @@ impl CliApp {
         Self::ensure_inferred_output_available(output_was_inferred, output, input)
             .err()
             .map(|error| {
-                OperationReport::failed(
+                OperationReport::failed_with_error(
                     OperationFamily::Patch,
                     None,
                     "validate",
-                    error.to_string(),
+                    error,
                     thread_execution,
                 )
             })
@@ -2360,11 +2382,11 @@ impl CliApp {
         ) {
             Ok(plan) => plan,
             Err(error) => {
-                return Some(OperationReport::failed(
+                return Some(OperationReport::failed_with_error(
                     OperationFamily::Patch,
                     report.format.clone(),
                     "compress",
-                    error.to_string(),
+                    error,
                     context.single_thread_execution(),
                 ));
             }
@@ -2389,11 +2411,11 @@ impl CliApp {
             match Self::stage_patch_apply_archive_input(raw_ready_output, output, resolved_input) {
                 Ok(path) => path,
                 Err(error) => {
-                    return Some(OperationReport::failed(
+                    return Some(OperationReport::failed_with_error(
                         OperationFamily::Patch,
                         report.format.clone(),
                         "compress",
-                        error.to_string(),
+                        error,
                         context.single_thread_execution(),
                     ));
                 }
@@ -2413,23 +2435,28 @@ impl CliApp {
         ) {
             Ok(result) => result,
             Err(error) => {
-                return Some(OperationReport::failed(
+                return Some(OperationReport::failed_with_error(
                     OperationFamily::Patch,
                     report.format.clone(),
                     "compress",
-                    error.to_string(),
+                    error,
                     context.single_thread_execution(),
                 ));
             }
         };
         if compress_report.status != OperationStatus::Succeeded {
-            return Some(OperationReport::failed(
+            let error_kind = compress_report.resolved_error_kind();
+            let mut failure = OperationReport::failed(
                 OperationFamily::Patch,
                 report.format.clone(),
                 "compress",
                 format!("patch output compression failed: {}", compress_report.label),
                 compress_report.thread_execution,
-            ));
+            );
+            if let Some(error_kind) = error_kind {
+                failure = failure.with_error_kind(error_kind);
+            }
+            return Some(failure);
         }
         let extension_note = if compression_plan.extension_appended {
             "; output extension appended to match container format"
@@ -2545,11 +2572,11 @@ impl CliApp {
                 temp_paths,
             })
             .map_err(|error| {
-                Box::new(OperationReport::failed(
+                Box::new(OperationReport::failed_with_error(
                     OperationFamily::Patch,
                     None,
                     "compat",
-                    error.to_string(),
+                    error,
                     context.single_thread_execution(),
                 ))
             })?;
@@ -2561,11 +2588,11 @@ impl CliApp {
         if let Some(expected_size) = expected_input_size {
             let label = Self::validate_patch_input_size(&apply_input, Some(expected_size), None)
                 .map_err(|error| {
-                    Box::new(OperationReport::failed(
+                    Box::new(OperationReport::failed_with_error(
                         OperationFamily::Patch,
                         None,
                         "validate",
-                        error.to_string(),
+                        error,
                         context.single_thread_execution(),
                     ))
                 })?;
@@ -2600,11 +2627,11 @@ impl CliApp {
                 context,
             )
             .map_err(|error| {
-                Box::new(OperationReport::failed(
+                Box::new(OperationReport::failed_with_error(
                     OperationFamily::Patch,
                     None,
                     "validate",
-                    error.to_string(),
+                    error,
                     context.single_thread_execution(),
                 ))
             })?;
@@ -2646,11 +2673,11 @@ impl CliApp {
                 inputs.context,
             )
             .map_err(|error| {
-                Box::new(OperationReport::failed(
+                Box::new(OperationReport::failed_with_error(
                     OperationFamily::Patch,
                     None,
                     "prepare",
-                    error.to_string(),
+                    error,
                     inputs.context.single_thread_execution(),
                 ))
             })?;
@@ -2808,11 +2835,11 @@ impl CliApp {
                 decoration.context,
             )
             .map_err(|error| {
-                Box::new(OperationReport::failed(
+                Box::new(OperationReport::failed_with_error(
                     OperationFamily::Patch,
                     report.format.clone(),
                     "validate",
-                    error.to_string(),
+                    error,
                     decoration.context.single_thread_execution(),
                 ))
             })?;
@@ -3957,11 +3984,11 @@ impl CliApp {
                     context,
                 })
                 .map_err(|error| {
-                    Box::new(OperationReport::failed(
+                    Box::new(OperationReport::failed_with_error(
                         OperationFamily::Patch,
                         None,
                         "validate",
-                        error.to_string(),
+                        error,
                         context.single_thread_execution(),
                     ))
                 })?;
@@ -3994,18 +4021,21 @@ impl CliApp {
                     temp_paths,
                 )
             {
-                return Err(Box::new(OperationReport::failed(
-                    OperationFamily::Patch,
-                    Some(handler.descriptor().name.to_string()),
-                    "prepare",
-                    format!(
-                        "patch {}/{} (`{}`): header transition failed: {error}",
-                        index + 1,
-                        patch_count,
-                        patch_path.display()
-                    ),
-                    context.single_thread_execution(),
-                )));
+                return Err(Box::new(
+                    OperationReport::failed(
+                        OperationFamily::Patch,
+                        Some(handler.descriptor().name.to_string()),
+                        "prepare",
+                        format!(
+                            "patch {}/{} (`{}`): header transition failed: {error}",
+                            index + 1,
+                            patch_count,
+                            patch_path.display()
+                        ),
+                        context.single_thread_execution(),
+                    )
+                    .with_error_kind(error.kind()),
+                ));
             }
             if lane_position > 0
                 && let Err(error) = self.transition_n64_byte_order(
@@ -4021,18 +4051,21 @@ impl CliApp {
                     temp_paths,
                 )
             {
-                return Err(Box::new(OperationReport::failed(
-                    OperationFamily::Patch,
-                    Some(handler.descriptor().name.to_string()),
-                    "prepare",
-                    format!(
-                        "patch {}/{} (`{}`): N64 byte-order transition failed: {error}",
-                        index + 1,
-                        patch_count,
-                        patch_path.display()
-                    ),
-                    context.single_thread_execution(),
-                )));
+                return Err(Box::new(
+                    OperationReport::failed(
+                        OperationFamily::Patch,
+                        Some(handler.descriptor().name.to_string()),
+                        "prepare",
+                        format!(
+                            "patch {}/{} (`{}`): N64 byte-order transition failed: {error}",
+                            index + 1,
+                            patch_count,
+                            patch_path.display()
+                        ),
+                        context.single_thread_execution(),
+                    )
+                    .with_error_kind(error.kind()),
+                ));
             }
 
             let is_last = index + 1 == patch_count;
@@ -4049,16 +4082,19 @@ impl CliApp {
                 && !parent.exists()
                 && let Err(error) = fs::create_dir_all(parent)
             {
-                return Err(Box::new(OperationReport::failed(
-                    OperationFamily::Patch,
-                    Some(handler.descriptor().name.to_string()),
-                    "prepare",
-                    format!(
-                        "failed to prepare output path `{}`: {error}",
-                        apply_output.display()
-                    ),
-                    context.single_thread_execution(),
-                )));
+                return Err(Box::new(
+                    OperationReport::failed(
+                        OperationFamily::Patch,
+                        Some(handler.descriptor().name.to_string()),
+                        "prepare",
+                        format!(
+                            "failed to prepare output path `{}`: {error}",
+                            apply_output.display()
+                        ),
+                        context.single_thread_execution(),
+                    )
+                    .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Io),
+                ));
             }
 
             self.emit_running(
@@ -4122,11 +4158,11 @@ impl CliApp {
                     declared.size,
                     &mut coded,
                 );
-                return Err(Box::new(OperationReport::failed(
+                return Err(Box::new(OperationReport::failed_with_error(
                     OperationFamily::Patch,
                     Some(handler.descriptor().name.to_string()),
                     "validate",
-                    RomWeaverError::ValidationCode(coded).to_string(),
+                    RomWeaverError::ValidationCode(coded),
                     context.single_thread_execution(),
                 )));
             }
@@ -4194,11 +4230,11 @@ impl CliApp {
                     op.to_string(),
                     context.single_thread_execution(),
                 ),
-                Err(error) => OperationReport::failed(
+                Err(error) => OperationReport::failed_with_error(
                     OperationFamily::Patch,
                     Some(handler.descriptor().name.to_string()),
                     "apply",
-                    error.to_string(),
+                    error,
                     context.single_thread_execution(),
                 ),
             };
@@ -4279,11 +4315,11 @@ impl CliApp {
                         &mut coded,
                     );
                 }
-                Box::new(OperationReport::failed(
+                Box::new(OperationReport::failed_with_error(
                     OperationFamily::Patch,
                     Some(handler.descriptor().name.to_string()),
                     "validate",
-                    RomWeaverError::ValidationCode(coded).to_string(),
+                    RomWeaverError::ValidationCode(coded),
                     context.single_thread_execution(),
                 ))
             })?;
@@ -4302,11 +4338,11 @@ impl CliApp {
             if let Some(disc) = disc
                 && let Some(source_track) =
                     self.disc_target_path(disc, target).map_err(|error| {
-                        Box::new(OperationReport::failed(
+                        Box::new(OperationReport::failed_with_error(
                             OperationFamily::Patch,
                             None,
                             "prepare",
-                            error.to_string(),
+                            error,
                             context.single_thread_execution(),
                         ))
                     })?
@@ -4331,42 +4367,48 @@ impl CliApp {
                 None,
             );
             let mut rom = fs::read(&current_input).map_err(|error| {
-                Box::new(OperationReport::failed(
-                    OperationFamily::Patch,
-                    Some("cheat".to_string()),
-                    "apply",
-                    error.to_string(),
-                    context.single_thread_execution(),
-                ))
+                Box::new(
+                    OperationReport::failed(
+                        OperationFamily::Patch,
+                        Some("cheat".to_string()),
+                        "apply",
+                        error.to_string(),
+                        context.single_thread_execution(),
+                    )
+                    .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Io),
+                )
             })?;
             let (writes, summary) =
                 Self::resolve_database_cheat_writes(&rom, cheat_records, allow_cheat_conflicts)
                     .map_err(|error| {
-                        Box::new(OperationReport::failed(
+                        Box::new(OperationReport::failed_with_error(
                             OperationFamily::Patch,
                             Some("cheat".to_string()),
                             "validate",
-                            error.to_string(),
+                            error,
                             context.single_thread_execution(),
                         ))
                     })?;
             cheats::apply_writes(&mut rom, summary.system, &writes).map_err(|error| {
-                Box::new(OperationReport::failed(
+                Box::new(OperationReport::failed_with_error(
                     OperationFamily::Patch,
                     Some("cheat".to_string()),
                     "apply",
-                    error.to_string(),
+                    error,
                     context.single_thread_execution(),
                 ))
             })?;
             fs::write(staged_output, rom).map_err(|error| {
-                Box::new(OperationReport::failed(
-                    OperationFamily::Patch,
-                    Some("cheat".to_string()),
-                    "apply",
-                    error.to_string(),
-                    context.single_thread_execution(),
-                ))
+                Box::new(
+                    OperationReport::failed(
+                        OperationFamily::Patch,
+                        Some("cheat".to_string()),
+                        "apply",
+                        error.to_string(),
+                        context.single_thread_execution(),
+                    )
+                    .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Io),
+                )
             })?;
             if steps.is_empty() {
                 report = OperationReport::succeeded(
@@ -4476,8 +4518,8 @@ impl CliApp {
             context,
             temp_paths,
         } = sources;
-        let failed = |stage: &'static str, error: String| {
-            Box::new(OperationReport::failed(
+        let failed = |stage: &'static str, error: RomWeaverError| {
+            Box::new(OperationReport::failed_with_error(
                 OperationFamily::Patch,
                 None,
                 stage,
@@ -4495,12 +4537,11 @@ impl CliApp {
                                 ValidationCodeError::new(role.rom_member_code())
                                     .with_message(role.rom_member_message())
                                     .with_field("member", member.clone()),
-                            )
-                            .to_string(),
+                            ),
                         )
                     })?;
                     self.produced_patch_output_for_source(path)
-                        .map_err(|error| failed("prepare", error.to_string()))
+                        .map_err(|error| failed("prepare", error))
                 }
                 None => Ok(initial.clone()),
             },
@@ -4512,8 +4553,7 @@ impl CliApp {
                             ValidationCodeError::new(role.patch_code())
                                 .with_message(role.patch_message())
                                 .with_field("patch", patch.clone()),
-                        )
-                        .to_string(),
+                        ),
                     )
                 })?;
                 match member {
@@ -4525,7 +4565,7 @@ impl CliApp {
                             context,
                             temp_paths,
                         )
-                        .map_err(|error| failed("prepare", error.to_string())),
+                        .map_err(|error| failed("prepare", error)),
                     None => Ok(producer.clone()),
                 }
             }
@@ -4905,11 +4945,11 @@ impl CliApp {
         context: &OperationContext,
     ) -> std::result::Result<PatchApplyCompressionPlan, Box<OperationReport>> {
         let fail = |error: RomWeaverError| {
-            Box::new(OperationReport::failed(
+            Box::new(OperationReport::failed_with_error(
                 OperationFamily::Patch,
                 report_format.clone(),
                 "compress",
-                error.to_string(),
+                error,
                 context.single_thread_execution(),
             ))
         };
@@ -4985,11 +5025,11 @@ impl CliApp {
             match self.resolve_patch_apply_compression_plan(output, input, compression_options) {
                 Ok(plan) => Some(plan),
                 Err(error) => {
-                    return OperationReport::failed(
+                    return OperationReport::failed_with_error(
                         OperationFamily::Patch,
                         None,
                         "validate",
-                        error.to_string(),
+                        error,
                         thread_execution,
                     );
                 }
@@ -5107,11 +5147,11 @@ impl CliApp {
         let compress_report = handler
             .create_with_input_overrides(&request, overrides, context)
             .unwrap_or_else(|error| {
-                OperationReport::failed(
+                OperationReport::failed_with_error(
                     OperationFamily::Container,
                     Some(handler.descriptor().name.to_string()),
                     "create",
-                    error.to_string(),
+                    error,
                     context.single_thread_execution(),
                 )
             });

@@ -14,7 +14,8 @@ impl CliApp {
                         "read",
                         format!("failed to read stdin input: {error}"),
                         None,
-                    ),
+                    )
+                    .with_error_kind(error.kind()),
                 );
             }
         };
@@ -122,11 +123,11 @@ impl CliApp {
             Ok(Some(report)) => return report,
             Ok(None) => {}
             Err(error) => {
-                return OperationReport::failed(
+                return OperationReport::failed_with_error(
                     OperationFamily::Checksum,
                     Some(self.checksum.name().to_string()),
                     "checksum",
-                    error.to_string(),
+                    error,
                     thread_execution.clone(),
                 );
             }
@@ -135,11 +136,11 @@ impl CliApp {
         let chd_raw_sha1 = match self.try_get_chd_raw_sha1(&source, &checksum_options, &context) {
             Ok(raw_sha1) => raw_sha1,
             Err(error) => {
-                return OperationReport::failed(
+                return OperationReport::failed_with_error(
                     OperationFamily::Checksum,
                     Some(self.checksum.name().to_string()),
                     "checksum",
-                    error.to_string(),
+                    error,
                     thread_execution.clone(),
                 );
             }
@@ -155,11 +156,11 @@ impl CliApp {
                 Ok(Some(report)) => return report,
                 Ok(None) => {}
                 Err(error) => {
-                    return OperationReport::failed(
+                    return OperationReport::failed_with_error(
                         OperationFamily::Checksum,
                         Some(self.checksum.name().to_string()),
                         "checksum",
-                        error.to_string(),
+                        error,
                         thread_execution.clone(),
                     );
                 }
@@ -179,11 +180,11 @@ impl CliApp {
                     thread_execution.clone(),
                 )
                 .unwrap_or_else(|error| {
-                    OperationReport::failed(
+                    OperationReport::failed_with_error(
                         OperationFamily::Checksum,
                         Some(self.checksum.name().to_string()),
                         "checksum",
-                        error.to_string(),
+                        error,
                         thread_execution.clone(),
                     )
                 });
@@ -209,11 +210,11 @@ impl CliApp {
         ) {
             Ok(resolved) => resolved,
             Err(error) => {
-                return OperationReport::failed(
+                return OperationReport::failed_with_error(
                     OperationFamily::Checksum,
                     Some(self.checksum.name().to_string()),
                     "prepare",
-                    error.to_string(),
+                    error,
                     thread_execution,
                 );
             }
@@ -317,11 +318,11 @@ impl CliApp {
             )
         }
         .unwrap_or_else(|error| {
-            OperationReport::failed(
+            OperationReport::failed_with_error(
                 OperationFamily::Checksum,
                 Some(self.checksum.name().to_string()),
                 "checksum",
-                error.to_string(),
+                error,
                 Some(
                     context
                         .plan_threads(ThreadCapability::parallel(Some(request.algorithms.len()))),

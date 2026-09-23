@@ -53,11 +53,11 @@ impl CliApp {
         if let Err(error) = self.apply_bundle_create_spec(&mut args) {
             return self.finish(
                 "bundle-create",
-                OperationReport::failed(
+                OperationReport::failed_with_error(
                     OperationFamily::Command,
                     Some("bundle-create".to_string()),
                     "bundle-create",
-                    error.to_string(),
+                    error,
                     thread_execution,
                 ),
             );
@@ -117,11 +117,11 @@ impl CliApp {
                     ),
                 }
             }
-            Err(error) => OperationReport::failed(
+            Err(error) => OperationReport::failed_with_error(
                 OperationFamily::Command,
                 Some("bundle-create".to_string()),
                 "bundle-create",
-                error.to_string(),
+                error,
                 thread_execution,
             ),
         };

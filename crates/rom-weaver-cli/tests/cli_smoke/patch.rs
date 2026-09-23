@@ -1,6 +1,58 @@
 use super::shared::*;
 
 #[test]
+fn patch_apply_chain_transition_preserves_contextual_error_kind() {
+    let temp = setup_temp_dir();
+    let input = temp.child("base.z64");
+    let mut bytes = vec![0_u8; 64];
+    bytes[..4].copy_from_slice(&[0x80, 0x37, 0x12, 0x40]);
+    fs::write(input.path(), bytes).expect("N64 fixture");
+    let first = temp.child("first.ips");
+    let second = temp.child("second.ips");
+    for (patch, offset, data) in [(&first, 0, vec![0; 4]), (&second, 8, vec![1])] {
+        fs::write(
+            patch.path(),
+            build_ips_patch(vec![TestIpsRecord::Literal { offset, data }], None),
+        )
+        .expect("patch fixture");
+    }
+    let output = temp.child("output.z64");
+    let event = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("input path"),
+            "--patch",
+            first.path().to_str().expect("first patch path"),
+            "--patch",
+            second.path().to_str().expect("second patch path"),
+            "--patch-header",
+            "keep",
+            "--n64-byte-order",
+            "keep",
+            "--n64-byte-order",
+            "byte-swapped",
+            "--output",
+            output.path().to_str().expect("output path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        1,
+    );
+    assert_eq!(event["stage"], "prepare");
+    assert_eq!(event["error_kind"], "validation");
+    assert!(
+        event["label"]
+            .as_str()
+            .expect("failure label")
+            .contains("N64 byte-order transition failed: validation failed:"),
+        "{event}"
+    );
+    assert!(!output.path().exists());
+}
+
+#[test]
 fn patch_apply_dry_run_does_not_emit_bundle_or_create_output_directory() {
     let temp = setup_temp_dir();
     let source = temp.child("source.sfc");
@@ -1777,6 +1829,40 @@ fn patch_apply_rejects_invalid_codec_before_patching() {
             .contains("unsupported zip codec")
     );
     assert!(!output.path().exists());
+}
+
+#[test]
+fn patch_apply_compression_failure_keeps_error_kind_in_contextual_label() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+    let output = temp.child("blocked.zip");
+    fs::create_dir(output.path()).expect("block output path with directory");
+
+    let apply_json = parse_single_json_line(&command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--force",
+            "--jsonl",
+        ],
+        1,
+    ));
+
+    assert_eq!(apply_json["status"], "failed");
+    assert_eq!(apply_json["stage"], "compress");
+    assert_eq!(apply_json["error_kind"], "io");
+    let label = apply_json["label"].as_str().expect("failure label");
+    assert!(label.contains("patch output compression failed"), "{label}");
+    assert!(label.contains("i/o error:"), "{label}");
+    assert!(output.path().is_dir());
 }
 
 #[test]

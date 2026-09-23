@@ -28,18 +28,19 @@ impl CliApp {
     /// The JSON/WASM boundary's behaviour: classify the supplied records.
     fn run_cheat_classify(&self, args: CheatCommand) -> AppRunOutcome {
         let context = self.context(ThreadBudget::default());
-        let fail = |message: String| {
+        let fail_io = |error: std::io::Error| {
             OperationReport::failed(
                 OperationFamily::Patch,
                 Some("cheat".to_string()),
                 "classify",
-                message,
+                error.to_string(),
                 context.single_thread_execution(),
             )
+            .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Io)
         };
         let rom = match fs::read(&args.input) {
             Ok(rom) => rom,
-            Err(error) => return self.finish("cheat", fail(error.to_string())),
+            Err(error) => return self.finish("cheat", fail_io(error)),
         };
         let classified = args
             .records
@@ -101,18 +102,18 @@ pub(crate) struct CheatListDetails {
 impl CliApp {
     fn run_cheat_list(&self, args: CheatCommand) -> AppRunOutcome {
         let context = self.context(ThreadBudget::default());
-        let fail = |message: String| {
-            OperationReport::failed(
+        let fail_error = |error: RomWeaverError| {
+            OperationReport::failed_with_error(
                 OperationFamily::Patch,
                 Some("cheat".to_string()),
                 "list",
-                message,
+                error,
                 context.single_thread_execution(),
             )
         };
         let resolved = match self.resolve_cheat_selection(&args.input, &args.selection, &context) {
             Ok(resolved) => resolved,
-            Err(error) => return self.finish("cheat", fail(error.to_string())),
+            Err(error) => return self.finish("cheat", fail_error(error)),
         };
         let entries = resolved
             .available
