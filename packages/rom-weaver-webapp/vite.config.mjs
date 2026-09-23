@@ -24,6 +24,13 @@ import { initialPrecacheUrls } from "./scripts/offline-downloads.mjs";
 import { getBuildInfo, getChangelog, getVersionBranch } from "./scripts/version.mjs";
 import { createDocsRouteHtml, DOC_ROUTES, docSourcePath } from "./src/webapp/docs-pages.mjs";
 import { DOC_SOURCES, readDocsSlugFromPathname } from "./src/webapp/docs-routing.mjs";
+import {
+  API_CATALOG_CONTENT_TYPE,
+  API_CATALOG_PATH,
+  createApiCatalogSource,
+  createOpenApiSource,
+  OPENAPI_PATH,
+} from "./src/webapp/api-catalog.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "./src/webapp/workflow-seo.mjs";
 
 const rootDir = process.cwd();
@@ -798,6 +805,13 @@ const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells, route
         );
       }
       if (channel === "prod") fs.writeFileSync(path.join(distDir, "sitemap.xml"), createSitemapSource());
+      // Every channel serves the catalog. Its links use the canonical production
+      // origin, matching the canonical URLs and Markdown headers; only the
+      // sitemap stays production-only. This also lets a PR preview verify the
+      // catalog on Cloudflare Pages before merge.
+      fs.mkdirSync(path.join(distDir, path.dirname(API_CATALOG_PATH)), { recursive: true });
+      fs.writeFileSync(path.join(distDir, API_CATALOG_PATH), createApiCatalogSource());
+      fs.writeFileSync(path.join(distDir, OPENAPI_PATH), createOpenApiSource());
       const thirdPartyDir = path.join(distDir, "third_party");
       fs.cpSync(path.join(rootDir, "src", "wasm", "third_party"), thirdPartyDir, {
         recursive: true,
@@ -869,13 +883,16 @@ const writeCloudflareHeadersAsset = (channel) => {
       const licenseContentType =
         "/third_party/licenses/*\n  Content-Type: text/plain; charset=utf-8\n\n/NOTICE\n  Content-Type: text/plain; charset=utf-8\n\n/WEBAPP_NOTICE\n  Content-Type: text/plain; charset=utf-8\n";
       const installerContentType = "/install.sh\n  Content-Type: text/plain; charset=utf-8\n";
+      // The catalog file has no extension, so Cloudflare would serve it as a
+      // binary download. The Link header satisfies the RFC 9727 HEAD response.
+      const apiCatalogHeaders = `${API_CATALOG_PATH}\n  Content-Type: ${API_CATALOG_CONTENT_TYPE}\n  Link: <${API_CATALOG_PATH}>; rel="api-catalog"\n\n`;
       const markdownHeaders = DOC_SOURCES.map(
         ({ slug }) =>
           `/${slug}.md\n  Content-Type: text/markdown; charset=utf-8\n  Link: <https://rom-weaver.com/${slug}>; rel="canonical"\n`,
       ).join("\n");
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${installerContentType}\n${markdownHeaders}`,
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${installerContentType}\n${apiCatalogHeaders}${markdownHeaders}`,
       );
     },
     configResolved(config) {
