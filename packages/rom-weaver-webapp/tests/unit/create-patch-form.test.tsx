@@ -273,6 +273,26 @@ describe("CreatePatchForm", () => {
     expect(container.textContent).not.toContain("Add your modified ROM");
   });
 
+  it("returns to modified ROM mode when beta tools turn off", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 404 }));
+    const { container, rerender } = await stageOriginalOnly({ betaToolsEnabled: true });
+    await act(async () => {
+      fireEvent.click(findButton(container, "Cheat codes") as HTMLButtonElement);
+    });
+
+    const rerenderWithBeta = (betaToolsEnabled: boolean) =>
+      rerender(
+        <RomWeaverSettingsProvider settings={{ betaToolsEnabled }}>
+          <CreatePatchFormForTest {...withSeams()} />
+        </RomWeaverSettingsProvider>,
+      );
+    await act(async () => rerenderWithBeta(false));
+    expect(container.textContent).toContain("Add your modified ROM");
+
+    await act(async () => rerenderWithBeta(true));
+    expect(findButton(container, "Modified ROM")?.getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("reports duplicate drops and allows the user to confirm them", async () => {
     const file = new File(["same"], "same.nes", { type: "application/octet-stream" });
     const { container } = renderForm(withSeams());

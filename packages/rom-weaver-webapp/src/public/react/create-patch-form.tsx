@@ -574,6 +574,12 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     setProgress,
     setQueued: setCreateQueued,
   });
+  // A patch built from cheat codes MUST NOT stay on screen once beta tools turn off.
+  useEffect(() => {
+    if (cheatsEnabled || modifiedMode !== "codes") return;
+    setModifiedMode("rom");
+    resetWorkflowOutput();
+  }, [cheatsEnabled, modifiedMode, resetWorkflowOutput]);
   const setWorkflowMessage = useCallback(
     (placement: CreateMessagePlacement, error: Error) => {
       const code = getErrorCode(error);
