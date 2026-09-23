@@ -764,11 +764,9 @@
   gap: var(--sp-s);
   margin-block-start: var(--sp-m);
 }
+/* `.btn` sits in a later layer and owns height and padding; min-height is the one size it leaves free. */
 .rw-app .save-editor-test {
-  height: auto;
   min-height: 46px;
-  padding-inline: 18px;
-  font-size: 0.86rem;
 }
 .rw-app .save-status {
   display: inline-flex;

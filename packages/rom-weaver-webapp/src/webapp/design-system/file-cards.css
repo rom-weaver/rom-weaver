@@ -656,7 +656,7 @@
 }
 /* The hero MUST reserve space for its attached tray, as it does for the checksum form. */
 .rw-app .step.is-input.is-empty:has(> .step-body > .drop-tray) {
-  --hero-extra-h: 110px;
+  --hero-extra-h: 120px;
 }
 /* The same attached footer, holding one or more labelled rows: the save
    editor's emulator saves and new-save generator, or Test's staged save. */
