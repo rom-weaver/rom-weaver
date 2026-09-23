@@ -14,39 +14,33 @@ use tracing::trace;
 
 const CATALOG_FORMAT: &str = "rom-weaver-identify-catalog-v1";
 
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Deserialize)]
 struct PlatformNames {
-    aliases: HashMap<String, Vec<String>>,
     #[serde(rename = "importAliases")]
     import_aliases: HashMap<String, Vec<String>>,
 }
 
+include!(concat!(env!("OUT_DIR"), "/platform_aliases.rs"));
+
 /// Curated names shared with the identify builder, native imports, and browser labels.
 pub fn platform_aliases(name: &str) -> Vec<String> {
-    static ALIASES: LazyLock<HashMap<String, Vec<String>>> = LazyLock::new(|| {
-        let names: PlatformNames = serde_json::from_str(include_str!("platform-names.json"))
-            .expect("shared platform names are valid");
-        let mut aliases: HashMap<String, Vec<String>> = HashMap::new();
-        for (name, values) in names.aliases {
-            let entry = aliases.entry(normalize_platform_name(&name)).or_default();
-            for value in values {
-                if !entry.contains(&value) {
-                    entry.push(value);
-                }
-            }
-        }
-        for values in aliases.values_mut() {
-            values.sort();
-        }
-        aliases
-    });
-    ALIASES
-        .get(&normalize_platform_name(name))
-        .cloned()
+    let key = normalize_platform_name(name);
+    PLATFORM_ALIASES
+        .binary_search_by_key(&key.as_str(), |(name, _)| name)
+        .ok()
+        .map(|index| {
+            PLATFORM_ALIASES[index]
+                .1
+                .iter()
+                .map(|alias| (*alias).to_string())
+                .collect()
+        })
         .unwrap_or_default()
 }
 
 /// Exact alias order used when the native CLI imports a DAT.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn import_platform_aliases(name: &str) -> Vec<String> {
     static ALIASES: LazyLock<HashMap<String, Vec<String>>> = LazyLock::new(|| {
         let names: PlatformNames = serde_json::from_str(include_str!("platform-names.json"))
@@ -449,6 +443,26 @@ mod tests {
             assert_eq!(entry.canonical_platform, canonical);
         }
         assert!(catalog.resolve_platform("commodore 64").is_none());
+    }
+
+    #[test]
+    fn generated_aliases_cover_the_shared_registry() {
+        let registry: serde_json::Value =
+            serde_json::from_str(include_str!("platform-names.json")).unwrap();
+        let mut expected: HashMap<String, Vec<String>> = HashMap::new();
+        for (name, values) in registry["aliases"].as_object().unwrap() {
+            let aliases = expected.entry(normalize_platform_name(name)).or_default();
+            for value in values.as_array().unwrap() {
+                let value = value.as_str().unwrap().to_string();
+                if !aliases.contains(&value) {
+                    aliases.push(value);
+                }
+            }
+        }
+        for (name, mut aliases) in expected {
+            aliases.sort();
+            assert_eq!(platform_aliases(&name), aliases, "{name}");
+        }
     }
 
     #[test]
