@@ -237,7 +237,7 @@
     gap: var(--sp-m);
     align-items: center;
     min-width: 0;
-    padding: var(--sp-s) var(--sp-m);
+    padding: var(--sp-xs) var(--sp-m);
   }
 
   .rw-app .cheat-pick + .cheat-pick {
@@ -255,7 +255,7 @@
 
   .rw-app .cheat-pick-text {
     display: grid;
-    gap: 0.3rem;
+    gap: var(--sp-2xs);
     min-width: 0;
   }
 
@@ -320,6 +320,7 @@
 
   .rw-app .cheat-pick-empty {
     margin: 0;
+    font-size: 0.82rem;
     color: var(--ink-3);
   }
 
@@ -469,8 +470,42 @@
       grid-template-columns: minmax(0, 1fr);
     }
 
+    /* Phones keep the button beside the text, as an icon-only square, so a
+       row costs one name line plus its badges instead of a stacked button. */
     .rw-app .cheat-pick {
-      grid-template-columns: minmax(0, 1fr);
+      gap: var(--sp-s);
+      padding: var(--sp-xs) var(--sp-s);
+    }
+
+    .rw-app .btn.cheat-pick-btn {
+      width: var(--ctrl-h);
+      min-width: 0;
+      padding: 0;
+    }
+
+    .rw-app .cheat-pick-btn-label {
+      display: none;
+    }
+
+    .rw-app .cheat-pick-name {
+      font-size: 0.9rem;
+      line-height: 1.3;
+    }
+
+    .rw-app .cheat-pick-badges .rb {
+      padding-inline: 6px;
+    }
+
+    .rw-app .cheat-dlg .dlg-body {
+      gap: var(--sp-s);
+    }
+
+    .rw-app .cheat-game-picker {
+      padding: var(--sp-s);
+    }
+
+    .rw-app .cheat-game-picker > label > span {
+      font-size: 0.85rem;
     }
 
     .rw-app .manual-cheat-options {

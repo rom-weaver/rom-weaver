@@ -1,7 +1,10 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { CheatDatabaseSection } from "../../../src/public/react/components/cheat-database-section.tsx";
+import {
+  CheatDatabaseSection,
+  DIALOG_PAGE_SIZE,
+} from "../../../src/public/react/components/cheat-database-section.tsx";
 import type {
   CheatDatabaseIndex,
   CheatRecord,
@@ -36,10 +39,11 @@ const records: ClassifiedCheatRecord[] = [
   },
 ];
 
-// The dialog pages 8 rows at a time; the extra filler makes a second page.
+// One filler past a full page makes a second page that holds only the last filler.
+const fillerCount = DIALOG_PAGE_SIZE - records.length + 1;
 const pagedRecords: ClassifiedCheatRecord[] = [
   ...records,
-  ...Array.from({ length: 7 }, (_unused, index) => ({
+  ...Array.from({ length: fillerCount }, (_unused, index) => ({
     record: cheatRecord(`filler-${index + 1}`, `Filler cheat ${index + 1}`, `F00D000${index + 1}`),
     resolution: { type: "romBakeable" as const, writes: [] },
     detectedKind: "game-genie",
@@ -218,7 +222,7 @@ describe("CheatDatabaseSection", () => {
     expect(view.getByText("Infinite health")).toBeTruthy();
   });
 
-  it("pages the picker eight rows at a time", async () => {
+  it("pages the picker one full page of rows at a time", async () => {
     const view = render(
       <CheatDatabaseSection
         {...props}
@@ -229,12 +233,12 @@ describe("CheatDatabaseSection", () => {
     await openDialog(view);
 
     expect(view.getByText("1 / 2")).toBeTruthy();
-    expect(view.queryByText("Filler cheat 7")).toBeNull();
+    expect(view.queryByText(`Filler cheat ${fillerCount}`)).toBeNull();
     expect((view.getByRole("button", { name: "Previous" }) as HTMLButtonElement).disabled).toBe(true);
 
     fireEvent.click(view.getByRole("button", { name: "Next" }));
     expect(view.getByText("2 / 2")).toBeTruthy();
-    expect(view.getByText("Filler cheat 7")).toBeTruthy();
+    expect(view.getByText(`Filler cheat ${fillerCount}`)).toBeTruthy();
     expect(view.queryByText("Infinite lives")).toBeNull();
     expect((view.getByRole("button", { name: "Next" }) as HTMLButtonElement).disabled).toBe(true);
 

@@ -124,6 +124,22 @@
 .rw-app .cheat-dlg {
   max-width: min(44rem, calc(100vw - 32px));
 }
+
+/* Phones give the add-cheats list the height: a slimmer frame header and body
+   inset fit roughly two more rows on screen. */
+@media (max-width: 40rem) {
+  .rw-app .cheat-dlg .dlg-head {
+    padding: var(--sp-s) var(--sp-m);
+  }
+
+  .rw-app .cheat-dlg .dlg-title {
+    font-size: 1.15rem;
+  }
+
+  .rw-app .cheat-dlg .dlg-body {
+    padding: var(--sp-s) var(--sp-m) var(--sp-m);
+  }
+}
 /* Log dialog */
 .rw-app .log-dlg {
   max-width: min(1280px, calc(100vw - 32px));

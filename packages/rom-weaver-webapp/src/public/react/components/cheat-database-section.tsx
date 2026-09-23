@@ -35,7 +35,7 @@ const MANUAL_ONLY_SYSTEMS: Record<CheatManualOnlySystem, { label: string }> = {
 };
 
 /** Rows per page in the add-cheats dialog list. */
-const DIALOG_PAGE_SIZE = 8;
+export const DIALOG_PAGE_SIZE = 20;
 
 const deliveryCopy = (record: ClassifiedCheatRecord): { badge: string; short: string; text: string } =>
   cheatDelivery(record) === "rom"
@@ -48,7 +48,7 @@ const CHEAT_KIND_LABELS: Record<NonNullable<ClassifiedCheatRecord["detectedKind"
   xploder: "Xploder",
 };
 
-export const gameLabel = (game: NonNullable<ReturnType<typeof matchGame>>): string =>
+const gameLabel = (game: NonNullable<ReturnType<typeof matchGame>>): string =>
   [game.title, game.regions.join(" / "), game.revisions.join(" / ")].filter(Boolean).join(" · ");
 
 const countLabel = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
@@ -348,6 +348,62 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
   );
 };
 
+type CheatGamePickerProps = {
+  platform: string;
+  games: CheatSystemShard["games"];
+  value: string;
+  onChange: (gameId: string) => void;
+  /** The chosen game matched by title or by hand, not by checksum. */
+  unverified?: boolean;
+};
+
+/** Searchable game list for a ROM the cheat database did not match by checksum. */
+export const CheatGamePicker = ({ platform, games, value, onChange, unverified }: CheatGamePickerProps) => {
+  const [query, setQuery] = useState("");
+  const options = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase("en-US");
+    if (!needle) return games;
+    return games.filter((candidate) => gameLabel(candidate).toLocaleLowerCase("en-US").includes(needle));
+  }, [games, query]);
+  return (
+    <div className="cheat-game-picker">
+      <label>
+        <span>Search games in {platform}</span>
+        <input
+          className="input"
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search by game title…"
+          type="search"
+          value={query}
+        />
+      </label>
+      <DropdownSelect
+        aria-label={`Browse games for ${platform}`}
+        className="select"
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      >
+        <option value="">Use automatic match</option>
+        {options.map((candidate) => (
+          <option key={candidate.id} value={candidate.id}>
+            {gameLabel(candidate)}
+          </option>
+        ))}
+      </DropdownSelect>
+      {options.length ? null : (
+        <p className="cheat-pick-empty" role="status">
+          No games match this search.
+        </p>
+      )}
+      {unverified ? (
+        <p className="cheat-pick-empty">
+          This ROM revision is unverified. These cheats may target different addresses.
+        </p>
+      ) : null}
+    </div>
+  );
+};
+
 type AddCheatsDialogProps = {
   open: boolean;
   onClose: () => void;
@@ -475,7 +531,7 @@ export const AddCheatsDialog = ({
                         type="button"
                       >
                         {added ? <X aria-hidden="true" /> : <Plus aria-hidden="true" />}
-                        {added ? "Remove" : "Add"}
+                        <span className="cheat-pick-btn-label">{added ? "Remove" : "Add"}</span>
                       </button>
                     </li>
                   );
@@ -567,7 +623,6 @@ export const CheatDatabaseSection = ({
   const [patchStatus, setPatchStatus] = useState("");
   const [patchError, setPatchError] = useState("");
   const [databaseQuery, setDatabaseQuery] = useState("");
-  const [gameQuery, setGameQuery] = useState("");
   // Cards on show. Selection is the subset whose switch is On, so a card can
   // stay in the stack while excluded from the run.
   const [addedIds, setAddedIds] = useState<Set<string>>(() => new Set());
@@ -622,7 +677,6 @@ export const CheatDatabaseSection = ({
     setManualGameId("");
     setManualEntrySlug("");
     setDatabaseQuery("");
-    setGameQuery("");
     selectionCallback.current?.([]);
   }, [identityKey, setManualEntrySlug, setManualGameId]);
 
@@ -723,13 +777,6 @@ export const CheatDatabaseSection = ({
     })),
   ];
 
-  const gameOptions = useMemo(() => {
-    if (!shard) return [];
-    const query = gameQuery.trim().toLocaleLowerCase("en-US");
-    if (!query) return shard.games;
-    return shard.games.filter((candidate) => gameLabel(candidate).toLocaleLowerCase("en-US").includes(query));
-  }, [gameQuery, shard]);
-
   const databaseOptions = useMemo(() => {
     if (!activeIndex) return [];
     const query = databaseQuery.trim().toLocaleLowerCase("en-US");
@@ -760,10 +807,7 @@ export const CheatDatabaseSection = ({
               <button
                 className="cheat-database-option"
                 key={candidate.slug}
-                onClick={() => {
-                  setManualEntrySlug(candidate.slug);
-                  setGameQuery("");
-                }}
+                onClick={() => setManualEntrySlug(candidate.slug)}
                 type="button"
               >
                 <span>{candidate.platform}</span>
@@ -783,41 +827,13 @@ export const CheatDatabaseSection = ({
 
   const gamePicker =
     rom && entry && shard && match.kind !== "exact" ? (
-      <div className="cheat-game-picker">
-        <label>
-          <span>Search games in {entry.platform}</span>
-          <input
-            className="input"
-            onChange={(event) => setGameQuery(event.target.value)}
-            placeholder="Search by game title…"
-            type="search"
-            value={gameQuery}
-          />
-        </label>
-        <DropdownSelect
-          aria-label={`Browse games for ${entry.platform}`}
-          className="select"
-          onChange={(event) => setManualGameId(event.target.value)}
-          value={manualGameId}
-        >
-          <option value="">Use automatic match</option>
-          {gameOptions.map((candidate) => (
-            <option key={candidate.id} value={candidate.id}>
-              {gameLabel(candidate)}
-            </option>
-          ))}
-        </DropdownSelect>
-        {gameOptions.length ? null : (
-          <p className="cheat-pick-empty" role="status">
-            No games match this search.
-          </p>
-        )}
-        {match.kind === "title" || match.kind === "manual" ? (
-          <p className="cheat-pick-empty">
-            This ROM revision is unverified. These cheats may target different addresses.
-          </p>
-        ) : null}
-      </div>
+      <CheatGamePicker
+        games={shard.games}
+        onChange={setManualGameId}
+        platform={entry.platform}
+        unverified={match.kind === "title" || match.kind === "manual"}
+        value={manualGameId}
+      />
     ) : null;
 
   const status = loading
