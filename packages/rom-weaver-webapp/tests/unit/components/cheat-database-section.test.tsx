@@ -232,6 +232,7 @@ describe("CheatDatabaseSection", () => {
     );
     await openDialog(view);
 
+    expect(DIALOG_PAGE_SIZE).toBe(20);
     expect(view.getByText("1 / 2")).toBeTruthy();
     expect(view.queryByText(`Filler cheat ${fillerCount}`)).toBeNull();
     expect((view.getByRole("button", { name: "Previous" }) as HTMLButtonElement).disabled).toBe(true);

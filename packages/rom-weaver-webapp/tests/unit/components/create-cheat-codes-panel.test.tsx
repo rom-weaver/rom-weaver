@@ -147,6 +147,13 @@ describe("CreateCheatCodesPanel", () => {
     });
   });
 
+  it("removes only the clicked card's code when the same code is typed twice", async () => {
+    const { onValueChange, view } = renderPanel("SXIOPO\n7E0DBE3F\nSXIOPO");
+    await waitFor(() => expect(view.getAllByRole("button", { name: "Remove code SXIOPO" })).toHaveLength(2));
+    fireEvent.click(view.getAllByRole("button", { name: "Remove code SXIOPO" })[1] as HTMLElement);
+    expect(onValueChange).toHaveBeenCalledWith("SXIOPO\n7E0DBE3F");
+  });
+
   it("disables the unbakeable row in the picker", async () => {
     const { view } = renderPanel("");
     fireEvent.click(view.getByRole("button", { name: /Pick from the cheat database/u }));

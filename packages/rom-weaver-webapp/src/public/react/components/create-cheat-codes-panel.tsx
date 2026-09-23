@@ -199,11 +199,12 @@ const CreateCheatCodesPanel = ({
       />
     ) : null;
 
-  const removeCode = (code: string) => {
-    const dropped = code.toUpperCase();
+  // Entries mirror the split codes one to one, so the position picks out the
+  // card's own code even when the same code is typed twice.
+  const removeCode = (position: number) => {
     onValueChange(
       splitCheatCodes(value, manualSystem)
-        .filter((candidate) => candidate.toUpperCase() !== dropped)
+        .filter((_code, index) => index !== position)
         .join("\n"),
     );
   };
@@ -217,7 +218,7 @@ const CreateCheatCodesPanel = ({
       ) : null}
       {entries.length ? (
         <div className="cards workflow-file-list create-cheat-codes-list">
-          {entries.map((entry) => {
+          {entries.map((entry, position) => {
             const writes = getCheatCodeWrites(entry.record);
             const blocked =
               entry.error || (entry.record?.resolution.type === "unsupported" ? entry.record.resolution.reason : "");
@@ -250,7 +251,7 @@ const CreateCheatCodesPanel = ({
                   </>
                 }
                 name={<span className={entry.description ? "nm" : "nm mono"}>{entry.description || entry.code}</span>}
-                onRemove={disabled ? undefined : () => removeCode(entry.code)}
+                onRemove={disabled ? undefined : () => removeCode(position)}
                 removeLabel={`Remove code ${entry.code}`}
                 {...(writes.length ? { state: "ok" as const } : blocked ? { state: "warn" as const } : {})}
               />
