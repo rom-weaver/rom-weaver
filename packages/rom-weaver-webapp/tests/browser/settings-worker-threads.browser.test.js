@@ -39,7 +39,12 @@ const mountSettingsPanel = () => {
 test("browser auto thread default uses hardware concurrency with a four thread floor", () => {
   expect(getDefaultThreadCount({ navigator: { hardwareConcurrency: 2 } })).toBe(4);
   expect(getDefaultThreadCount({ navigator: { hardwareConcurrency: 12 } })).toBe(12);
+  expect(getDefaultThreadCount({ navigator: { hardwareConcurrency: 7.9 } })).toBe(7);
+  expect(getDefaultThreadCount({ navigator: { hardwareConcurrency: 128 } })).toBe(64);
   expect(getDefaultThreadCount({ navigator: { hardwareConcurrency: undefined } })).toBe(4);
+  expect(getDefaultThreadCount({ navigator: { hardwareConcurrency: Number.NaN } })).toBe(4);
+  expect(getDefaultThreadCount({ navigator: { hardwareConcurrency: Number.POSITIVE_INFINITY } })).toBe(4);
+  expect(getDefaultThreadCount({ navigator: { hardwareConcurrency: "12" } })).toBe(4);
 });
 
 test("browser auto thread default still falls back to one when threaded wasm is unavailable", () => {
