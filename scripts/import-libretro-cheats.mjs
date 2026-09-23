@@ -382,7 +382,8 @@ export function parseCht(source, options = {}) {
     if (!fields.has(fieldName) && fields.size >= MAX_FIELDS_PER_RECORD) {
       fail(`${sourceFile}:cheat${sourceIndex} has more than ${MAX_FIELDS_PER_RECORD} fields.`);
     }
-    const parsedValue = parseValue(line.slice(equals + 1), `${sourceFile}:${lineIndex + 1}`);
+    // Warnings are stored in the shard, which does not record the source file.
+    const parsedValue = parseValue(line.slice(equals + 1), `Line ${lineIndex + 1}`);
     const fieldValue = parsedValue.value;
     if (parsedValue.warning) {
       if (!warnings.has(sourceIndex)) warnings.set(sourceIndex, []);
@@ -430,6 +431,25 @@ const codeKindForTitle = (title, cheatSystem) => {
   if (annotations.some((annotation) => ["action replay", "gameshark", "pro action replay"].includes(annotation))) {
     return "pro-action-replay";
   }
+  return codeKindForFileName(title, cheatSystem);
+};
+
+const ACTION_REPLAY_WORDS = ["action replay", "action-replay", "gameshark", "game shark"];
+const XPLODER_WORDS = ["xploder", "xplorer", "codebreaker", "code breaker"];
+
+// Shards do not store the file name, so the kind the Rust classifier used to
+// read from it at load time (`record_kind_hint` in
+// crates/rom-weaver-cli/src/cheats/mod.rs) MUST be resolved here with the same
+// words and precedence. Game Boy "(Xploder)" files depend on it.
+const codeKindForFileName = (fileName, cheatSystem) => {
+  const name = fileName.toLowerCase();
+  const has = (words) => words.some((word) => name.includes(word));
+  if ((cheatSystem === "gameboyadvance" || cheatSystem === "playstation") && has([...ACTION_REPLAY_WORDS, ...XPLODER_WORDS])) {
+    return "xploder";
+  }
+  if (has(["game genie", "game-genie"])) return "game-genie";
+  if (has(ACTION_REPLAY_WORDS)) return "pro-action-replay";
+  if (has(XPLODER_WORDS)) return "xploder";
   return null;
 };
 
@@ -560,12 +580,10 @@ export function buildCheatShard({ cheatSystem, files, releases, sourceRevision }
         normalizedTitle,
         regions: new Set(metadata.regions),
         revisions: new Set(metadata.revisions),
-        sourceFiles: new Set(),
         title: metadata.title,
       });
     }
     const game = games.get(gameId);
-    game.sourceFiles.add(sourceFile);
     for (const release of matched) {
       if (release.region) game.regions.add(release.region);
       const metadata = titleMetadata(release.name, release.region);
@@ -602,17 +620,15 @@ export function buildCheatShard({ cheatSystem, files, releases, sourceRevision }
 
   const serializedGames = [...games.values()]
     .map((game) => {
-      const sourceFiles = [...game.sourceFiles].sort(compare);
       return {
         checksums: [...game.checksums.values()].sort((left, right) => compare(checksumKey(left), checksumKey(right))),
         cheats: [...game.cheats.values()]
           .sort((left, right) => compare(left.sourceFile, right.sourceFile) || left.sourceIndex - right.sourceIndex)
-          .map((record) => storeCheat(record, sourceFiles)),
+          .map(storeCheat),
         id: game.id,
         normalizedTitle: game.normalizedTitle,
         regions: [...game.regions].sort(compare),
         revisions: [...game.revisions].sort(compare),
-        sourceFiles,
         title: game.title,
       };
     })

@@ -51,11 +51,10 @@ const shard: CheatSystemShard = {
       normalizedTitle: "super mario bros",
       regions: ["USA"],
       revisions: [],
-      sourceFiles: ["Super Mario Bros (USA).cht"],
       title: "Super Mario Bros",
     },
   ],
-  schemaVersion: 1,
+  schemaVersion: 2,
   system: "nes",
 };
 

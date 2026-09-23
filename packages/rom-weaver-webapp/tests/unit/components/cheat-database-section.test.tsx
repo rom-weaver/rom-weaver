@@ -51,7 +51,7 @@ const pagedRecords: ClassifiedCheatRecord[] = [
 ];
 
 const makeShard = (entries: ClassifiedCheatRecord[]): CheatSystemShard => ({
-  schemaVersion: 1,
+  schemaVersion: 2,
   system: "snes",
   games: [
     {
@@ -60,7 +60,6 @@ const makeShard = (entries: ClassifiedCheatRecord[]): CheatSystemShard => ({
       normalizedTitle: "super mario world",
       regions: ["USA"],
       revisions: ["Rev 1"],
-      sourceFiles: ["Super Mario World (USA).cht"],
       checksums: [{ sha1: "AA11" }],
       cheats: entries.map(({ record }) => record),
     },

@@ -108,7 +108,7 @@ The hosted app requests shards only from its own origin. It makes no runtime req
 
 ## Shard file
 
-A shard is one JSON document: `schemaVersion`, `system`, `sourceRevision`, and `games`. Each game carries its `id`, `title`, `normalizedTitle`, `regions`, `revisions`, `sourceFiles`, `checksums`, and `cheats`.
+A shard is one JSON document: `schemaVersion` (currently `2`), `system`, `sourceRevision`, and `games`. Each game carries its `id`, `title`, `normalizedTitle`, `regions`, `revisions`, `checksums`, and `cheats`. A shard does not record which Libretro `.cht` file a cheat came from.
 
 The file stores each cheat record without the values a reader derives. The CLI and the browser worker restore them the same way:
 
@@ -117,7 +117,8 @@ The file stores each cheat record without the values a reader derives. The CLI a
 | `system` | the shard's `system` |
 | `gameId` | the game's `id` |
 | `sourceRevision` | the shard's `sourceRevision` |
-| `sourceFile` | `sourceFiles[sourceFile]` of the game (the file stores an index) |
+| `sourceFile` | always `libretro-database` |
+| `codeKind` | stored when the Libretro file name names a device (`Game Genie`, `Action Replay`, `GameShark`, `Code Breaker`, `Xploder`) |
 | `description` | stored when the source record has a `desc` field, else `Cheat <sourceIndex + 1>` |
 | `rawFields.desc`, `rawFields.code` | `description` and `rawCode` |
 | `rawFields.enable` | stored only when it is not `false` |
@@ -127,7 +128,7 @@ Record IDs do not depend on the file layout, so a bundle written against an earl
 
 ## Preserved source fields
 
-Each imported record keeps the original code, every `cheatN_*` value, unknown fields, source file, source index, and source revision. A source record without a `cheatN_enable` line reads as `enable = false`.
+Each imported record keeps the original code, every `cheatN_*` value, unknown fields, source index, and source revision. A source record without a `cheatN_enable` line reads as `enable = false`.
 
 rom-weaver does not synthesize RetroArch memory handlers. It only decodes the native code fields the source record already carries.
 

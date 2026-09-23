@@ -39,7 +39,7 @@ const DEFAULT_CACHE_DIR = path.join(os.tmpdir(), "rom-weaver-identify-dats");
 const DEFAULT_OUT = path.join(ROOT_DIR, "target/identify");
 
 const PACK_MAGIC_V1 = Buffer.from("RWFP1\0\0\0", "binary");
-export const IDENTIFY_DATA_POLICY_VERSION = 4;
+export const IDENTIFY_DATA_POLICY_VERSION = 5;
 const ROW_CACHE_FORMAT = "rom-weaver-identify-rows-v4";
 const GAME_CACHE_FORMAT = "rom-weaver-identify-games-v1";
 export const INDEX_FORMAT = "rom-weaver-identify-system-pack-v1";
