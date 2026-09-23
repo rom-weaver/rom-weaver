@@ -86,7 +86,7 @@ An extension is still only a clue. Use the checksum in the ROM card to identify 
 
 By default, several patches modify one accumulated result. Each patch can be authored for the clean ROM or for an earlier patch's output. A bundle can also select a particular track or an earlier result.
 
-In **0x03 Patches**, put the patches in the author's order. Check each patch's authored input setting and **Checks**. A dependent patch must follow the result it expects. A patch authored for **Original ROM** checks the original state even when it modifies an accumulated result.
+In **0x03 Patches**, put the patches in the author's order. Check each patch's input selector and **Checks**. A dependent patch must follow the result it expects. A patch set to **Original ROM** runs on the original ROM, not on the result above it.
 
 Do not turn off a required base patch to get past a warning. Optional switches are safe only for combinations the release author tested.
 
