@@ -290,7 +290,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message:
       "IPS, IPS32, SOLID, BPS, UPS, VCDIFF/xdelta, GDIFF, HDiffPatch, APS, APSGBA, RUP, PPF, EBP, BSDIFF, and more.",
   }),
-  "ui.patch.target": msg({ id: "ui.patch.target", message: "Target" }),
+  "ui.patch.runsOn": msg({ id: "ui.patch.runsOn", message: "Patch {n} runs on" }),
   "ui.patch.track": msg({ id: "ui.patch.track", message: "Track" }),
   "ui.patch.selectTrack": msg({ id: "ui.patch.selectTrack", message: "Select track" }),
   "ui.select.multipleCandidates": msg({
@@ -920,6 +920,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Stack output checks: Combined result",
   }),
   "ui.patchChecks.unknown": msg({ id: "ui.patchChecks.unknown", message: "Not checked yet: {input}" }),
+  "ui.patchChecks.patchOutput": msg({ id: "ui.patchChecks.patchOutput", message: "Output of {patch}" }),
   "ui.patchChecks.unknownPatchOutput": msg({
     id: "ui.patchChecks.unknownPatchOutput",
     message: "Unknown patch output ({patch})",

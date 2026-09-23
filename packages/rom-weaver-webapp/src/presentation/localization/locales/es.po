@@ -190,11 +190,6 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-#~ msgid "ui.patchChecks.patchOutput"
-#~ msgstr "Salida de {patch}"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 #~ msgid "ui.patch.selectTarget"
 #~ msgstr "Seleccionar destino"
 
@@ -207,6 +202,11 @@ msgstr ""
 #: src/presentation/localization/messages.ts
 #~ msgid "ui.patchChecks.executionMemberTitle"
 #~ msgstr "Usa la ruta exacta del archivo interno de la ROM o del resultado del parche seleccionado."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patch.target"
+#~ msgstr "Destino"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2375,6 +2375,11 @@ msgstr "Encabezado de salida"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.patchOutput"
+msgstr "Salida de {patch}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.outputOptions.title"
 msgstr "Opciones de salida"
 
@@ -2432,6 +2437,11 @@ msgstr "parche {n}"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.patchNumber"
 msgstr "Parche {n}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.runsOn"
+msgstr "El parche {n} se aplica a"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3192,11 +3202,6 @@ msgstr "Toca para agregar ROM, parches, paquetes o archivos"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.tap"
 msgstr "Toca para elegir archivos"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patch.target"
-msgstr "Destino"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

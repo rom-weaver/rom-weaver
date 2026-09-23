@@ -190,11 +190,6 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-#~ msgid "ui.patchChecks.patchOutput"
-#~ msgstr "Output of {patch}"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 #~ msgid "ui.patch.selectTarget"
 #~ msgstr "Select target"
 
@@ -207,6 +202,11 @@ msgstr ""
 #: src/presentation/localization/messages.ts
 #~ msgid "ui.patchChecks.executionMemberTitle"
 #~ msgstr "Use the exact member path from the selected ROM or patch output."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patch.target"
+#~ msgstr "Target"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2375,6 +2375,11 @@ msgstr "Output Header"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.patchOutput"
+msgstr "Output of {patch}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.outputOptions.title"
 msgstr "Output options"
 
@@ -2432,6 +2437,11 @@ msgstr "patch {n}"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.patchNumber"
 msgstr "Patch {n}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.runsOn"
+msgstr "Patch {n} runs on"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3192,11 +3202,6 @@ msgstr "Tap to add ROMs, patches, bundles, or archives"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.tap"
 msgstr "Tap to choose files"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patch.target"
-msgstr "Target"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

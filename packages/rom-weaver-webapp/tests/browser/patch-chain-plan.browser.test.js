@@ -46,7 +46,7 @@ const dropFixtures = async (paths) => {
 };
 
 const getPatchInputSelect = async (index) => {
-  const findSelect = () => document.getElementById(`rom-weaver-patch-basis-${index}`);
+  const findSelect = () => document.getElementById(`rom-weaver-select-patch-target-${index}`);
   await expect.poll(findSelect).toBeInstanceOf(HTMLSelectElement);
   return findSelect();
 };
@@ -64,15 +64,12 @@ test("a true BPS chain defers the dependent patch instead of failing it", async 
   // with its link named - never dry-run against the wrong bytes.
   await expect.poll(() => chipText(0), { timeout: 60000 }).toBe("Verified");
   await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Checks during apply: chain-step-a.bps");
-  const basisSelect = await getPatchInputSelect(1);
-  expect(basisSelect.options[0]?.textContent).toBe("auto (Previous patch output)");
-  // The target select names the automatic source; patch 2's is the chain head's output.
-  const target0 = /** @type {HTMLSelectElement} */ (document.getElementById("rom-weaver-select-patch-target-0"));
-  const target1 = /** @type {HTMLSelectElement} */ (document.getElementById("rom-weaver-select-patch-target-1"));
-  expect(target0.options[0]?.textContent).toBe("Original ROM");
-  expect(target0.value).toBe("auto");
-  expect(target1.options[0]?.textContent).toBe("Previous patch output");
-  expect(target1.value).toBe("auto");
+  // One "runs on" select per patch; patch 2's automatic choice names the chain head's output.
+  const runsOn0 = await getPatchInputSelect(0);
+  expect(runsOn0.options[0]?.textContent).toBe("auto (Original ROM)");
+  const runsOn1 = await getPatchInputSelect(1);
+  expect(runsOn1.options[0]?.textContent).toBe("auto (Previous patch output)");
+  expect(runsOn1.value).toBe("auto");
   // A single target lane has nothing to choose between, so the track select is hidden.
   expect(document.getElementById("rom-weaver-patch-track-0")).toBeNull();
   expect(patchCheckHeadings(0)).toEqual([
@@ -90,7 +87,7 @@ test("a true BPS chain defers the dependent patch instead of failing it", async 
   await page.viewport(390, 844);
   const chainChip = document.getElementById("rom-weaver-patch-chain-chip-1");
   expect(getComputedStyle(chainChip?.closest(".rb") || document.body).flexShrink).toBe("1");
-  const cardMeta = basisSelect.closest(".card-meta");
+  const cardMeta = runsOn1.closest(".card-meta");
   expect(cardMeta?.scrollWidth).toBeLessThanOrEqual(cardMeta?.clientWidth ?? 0);
   expect(document.querySelector("#rom-weaver-list-patch-stack .file.bad")).toBeNull();
   expect(document.getElementById("rom-weaver-patch-order-note")).toBeNull();
@@ -154,7 +151,7 @@ test("a patch input selector re-plans that patch", async () => {
   ]);
 
   // Return to automatic detection.
-  setFormControlValue(document.getElementById("rom-weaver-patch-basis-1"), "auto");
+  setFormControlValue(document.getElementById("rom-weaver-select-patch-target-1"), "auto");
   await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("Verified");
   expect(patchCheckHeadings(1)).toEqual([
     "Authored input checks: Original ROM (automatic)",
@@ -194,7 +191,7 @@ test("changing a patch input retires a completed output", async () => {
   await clickApplyButton();
   expect(await waitForApplyOutcome()).toEqual({ kind: "download" });
 
-  setFormControlValue(await getPatchInputSelect(1), "base");
+  setFormControlValue(await getPatchInputSelect(1), "rom");
   await expect
     .poll(() => document.getElementById("rom-weaver-button-apply")?.getAttribute("aria-label"), { timeout: 30000 })
     .toBeNull();

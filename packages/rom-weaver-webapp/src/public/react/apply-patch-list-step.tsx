@@ -3,7 +3,6 @@ import {
   ArrowLeftRight,
   ArrowUp,
   Check,
-  Crosshair,
   Disc3,
   EllipsisVertical,
   GitBranch,
@@ -393,76 +392,25 @@ const PatchHeaderModeSelect = ({
   );
 };
 
-const PatchInputBasisSelect = ({
-  basis,
-  disabled,
-  index,
-  item,
-  onChange,
-  patchStack,
-  previousBasisAvailable,
-}: {
-  basis: PatchInputBasis;
-  disabled?: boolean;
-  index: number;
-  item: PatchStackItemState;
-  onChange?: (basis: PatchInputBasis) => void;
-  patchStack: PatcherStackController;
-  previousBasisAvailable: boolean;
-}) => {
-  const localizer = useUiLocalizer();
-  return (
-    <span className="target-grp patch-basis-grp">
-      <GitBranch aria-hidden="true" />
-      <label className="sr-only" htmlFor={`rom-weaver-patch-basis-${index}`}>
-        Authored for patch {index + 1}
-      </label>
-      <select
-        className="meta-target-select mono ptgt-sel"
-        disabled={disabled || item.optionsDisabled}
-        id={`rom-weaver-patch-basis-${index}`}
-        onChange={(event) => {
-          if (disabled || item.optionsDisabled) return;
-          const next = event.currentTarget.value as PatchInputBasis;
-          onChange?.(next);
-          void patchStack.setPatchOption?.(index, {
-            basis: next === "base" || next === "previous" ? next : undefined,
-            revalidate: true,
-          });
-        }}
-        title="Choose the state these checks describe. This does not change the stack input used when the patch runs."
-        value={basis}
-      >
-        <option value="auto">{resolvedBasisLabel("auto", localizer, item.chainVerdict?.basis)}</option>
-        <option value="base">{localizer.message("ui.patchInputs.original")}</option>
-        <option disabled={!previousBasisAvailable} value="previous">
-          {localizer.message("ui.patchInputs.previous")}
-        </option>
-      </select>
-    </span>
-  );
-};
 /**
- * The patch's patchable tracks, as a select. Shown only when the resolved
- * source offers a real choice, because a single track (or a plain ROM) needs no
- * decision; the value is the member locator the engine resolves the leaf by.
+ * The patch's ROM track, as a select. Shown only when the run offers more than
+ * one patchable track. The choice goes through `setPatchTarget`, which resolves
+ * the row to its input asset and stores that asset's member locator; a row id or
+ * file name is not a member path, so it MUST NOT be written to `input.member`.
  */
 const PatchTrackSelect = ({
   disabled,
   index,
-  meta,
-  onMetaChange,
-  sourceMembers,
+  item,
+  patchStack,
 }: {
   disabled?: boolean;
   index: number;
-  meta?: BundlePatchMeta;
-  onMetaChange?: (updates: Partial<BundlePatchMeta>) => void;
-  sourceMembers: readonly { value: string; label: string }[];
+  item: PatchStackItemState;
+  patchStack: PatcherStackController;
 }) => {
   const localizer = useUiLocalizer();
-  if (!onMetaChange || sourceMembers.length <= 1) return null;
-  const input = meta?.input;
+  if (!item.targetOptions || item.targetOptions.length <= 1) return null;
   return (
     <span className="target-grp patch-track-grp">
       <Disc3 aria-hidden="true" />
@@ -471,28 +419,17 @@ const PatchTrackSelect = ({
       </label>
       <DropdownSelect
         className="meta-target-select mono ptgt-sel"
-        disabled={disabled}
+        disabled={disabled || item.targetDisabled}
         id={`rom-weaver-patch-track-${index}`}
-        onChange={(event) => {
-          const member = event.currentTarget.value || undefined;
-          if (!input) {
-            onMetaChange({ input: member ? { member, rom: true } : undefined });
-            return;
-          }
-          if ("rom" in input) {
-            onMetaChange({ input: member ? { member, rom: true } : { rom: true } });
-            return;
-          }
-          onMetaChange({ input: member ? { member, patch: input.patch } : { patch: input.patch } });
-        }}
-        value={input?.member || ""}
+        onChange={(event) => patchStack.setPatchTarget?.(index, event.currentTarget.value)}
+        value={item.targetValue || ""}
       >
         <option disabled value="">
           {localizer.message("ui.patch.selectTrack")}
         </option>
-        {sourceMembers.map((member) => (
-          <option key={member.value} value={member.value}>
-            {member.label}
+        {item.targetOptions.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
           </option>
         ))}
       </DropdownSelect>
@@ -1212,80 +1149,104 @@ const PatchDragHandle = ({
 };
 
 /**
- * The patch's target on the meta line: the stack state it runs on. The stored
- * value is the explicit choice only, so an unset target keeps following the
- * checksum-resolved default (the ROM input, or the previous patch's output when
- * one is enabled ahead of this patch).
+ * The one "runs on" choice for a patch: the stack state it applies to. It writes
+ * the run input and the matching basis together, because the engine pairs a ROM
+ * input with the `base` basis and a patch-output input with `previous`; two
+ * separate selects let them disagree. Unset keeps the checksum-resolved default.
  */
-const PatchTarget = ({
+const PatchRunsOnSelect = ({
+  basis,
   disabled,
   hasImplicitPredecessor,
-  hasTarget,
   index,
+  item,
   meta,
+  onBasisChange,
   onMetaChange,
+  patchStack,
   predecessors,
+  previousBasisAvailable,
 }: {
+  basis: PatchInputBasis;
   disabled?: boolean;
   hasImplicitPredecessor: boolean;
-  /** False when the run has no patchable input at all, so there is nothing to target. */
-  hasTarget: boolean;
   index: number;
+  item: PatchStackItemState;
   meta?: BundlePatchMeta;
+  onBasisChange?: (basis: PatchInputBasis) => void;
   onMetaChange?: (updates: Partial<BundlePatchMeta>) => void;
+  patchStack: PatcherStackController;
   predecessors: readonly { id?: string; label: string }[];
+  previousBasisAvailable: boolean;
 }) => {
   const localizer = useUiLocalizer();
-  if (!(onMetaChange && hasTarget)) return null;
   const input = meta?.input;
-  const currentValue = input ? ("rom" in input ? "rom" : `patch:${input.patch}`) : "auto";
-  const knownReference = !!input && "patch" in input && predecessors.some((entry) => entry.id === input.patch);
+  const namedPredecessors = onMetaChange ? predecessors.filter((predecessor) => predecessor.id) : [];
+  let currentValue = "auto";
+  if (input) currentValue = "rom" in input ? "rom" : `patch:${input.patch}`;
+  else if (basis === "base") currentValue = "rom";
+  else if (basis === "previous") currentValue = "previous";
+  const knownReference = !!input && "patch" in input && namedPredecessors.some((entry) => entry.id === input.patch);
   // A member can select a leaf from either the ROM or a generated patch output.
   // Preserve it when the source changes so an imported bundle keeps its exact
   // source instead of silently broadening the reference.
   const member = input?.member;
-  const romReference = (): { rom: true; member?: string } => (member ? { member, rom: true } : { rom: true });
+  const setBasis = (next: PatchInputBasis) => {
+    onBasisChange?.(next);
+    void patchStack.setPatchOption?.(index, { basis: next === "auto" ? undefined : next, revalidate: true });
+  };
+  // Clearing an input that is already unset would revalidate every patch for nothing.
+  const setInput = (next: BundlePatchMeta["input"]) => {
+    if (onMetaChange && (next || input)) onMetaChange({ input: next });
+  };
+  const verdictBasis = item.chainVerdict?.basis ?? (hasImplicitPredecessor ? "previous" : "base");
   return (
     <span className="target-grp patch-target-grp">
-      <Crosshair aria-hidden="true" />
+      <GitBranch aria-hidden="true" />
       <label className="sr-only" htmlFor={`rom-weaver-select-patch-target-${index}`}>
-        {localizer.message("ui.patch.target")}
+        {localizer.message("ui.patch.runsOn", { n: index + 1 })}
       </label>
       <DropdownSelect
         className="meta-target-select mono ptgt-sel"
         disabled={disabled}
         id={`rom-weaver-select-patch-target-${index}`}
         onChange={(event) => {
+          if (disabled) return;
           const value = event.currentTarget.value;
           if (value === "auto") {
-            onMetaChange({ input: undefined });
+            setInput(undefined);
+            setBasis("auto");
             return;
           }
           if (value === "rom") {
-            onMetaChange({ input: romReference() });
+            setInput(member ? { member, rom: true } : { rom: true });
+            setBasis("base");
+            return;
+          }
+          if (value === "previous") {
+            setInput(undefined);
+            setBasis("previous");
             return;
           }
           const patch = value.slice("patch:".length);
-          onMetaChange({ input: member ? { member, patch } : { patch } });
+          setInput(member ? { member, patch } : { patch });
+          setBasis("previous");
         }}
         value={currentValue}
       >
-        <option value="auto">
-          {localizer.message(
-            hasImplicitPredecessor ? "ui.patchChecks.precedingPatchOutput" : "ui.patchInputs.original",
-          )}
-        </option>
+        <option value="auto">{resolvedBasisLabel("auto", localizer, verdictBasis)}</option>
         {/* The explicit option must stay for every state: a select whose value is
             `rom` renders the first option when no matching one exists, which would
             display the automatic label for a pinned ROM. */}
         <option value="rom">{localizer.message("ui.patchInputs.original")}</option>
-        {predecessors.map((predecessor) =>
-          predecessor.id ? (
-            <option key={predecessor.id} value={`patch:${predecessor.id}`}>
-              {localizer.message("ui.patchChecks.patchOutput", { patch: predecessor.label })}
-            </option>
-          ) : null,
-        )}
+        <option disabled={!previousBasisAvailable} value="previous">
+          {localizer.message("ui.patchInputs.previous")}
+        </option>
+        {namedPredecessors.map((predecessor) => (
+          <option key={predecessor.id} value={`patch:${predecessor.id}`}>
+            {localizer.message("ui.patchChecks.patchOutput", { patch: predecessor.label })}
+          </option>
+        ))}
         {input && "patch" in input && !knownReference ? (
           <option value={`patch:${input.patch}`}>
             {localizer.message("ui.patchChecks.unknownPatchOutput", { patch: input.patch })}
@@ -1590,6 +1551,8 @@ const PatchCard = ({
   const disabledClass = isDisabled ? "is-disabled" : undefined;
   const localizer = useUiLocalizer();
   const selectedInput = meta?.input;
+  // Tracks belong to the original ROM, so a patch-output source has none to pick.
+  const showTrack = !(staging || isDisabled || (selectedInput && "patch" in selectedInput));
   const sharedPredecessor =
     selectedInput && "patch" in selectedInput
       ? predecessors.find((predecessor) => predecessor.id === selectedInput.patch)
@@ -1664,36 +1627,23 @@ const PatchCard = ({
             </span>
           ) : null}
           {staging ? null : (
-            <PatchInputBasisSelect
+            <PatchRunsOnSelect
               basis={basisChoice}
-              disabled={basisDisabled}
+              disabled={basisDisabled || !!item.optionsDisabled}
+              hasImplicitPredecessor={hasImplicitPredecessor}
               index={index}
               item={item}
-              onChange={onBasisChange}
+              meta={meta}
+              onBasisChange={onBasisChange}
+              onMetaChange={onMetaChange}
               patchStack={patchStack}
+              predecessors={predecessors}
               previousBasisAvailable={previousBasisAvailable}
             />
           )}
-          {staging ? null : (
-            <PatchTarget
-              disabled={!!item.optionsDisabled}
-              hasImplicitPredecessor={hasImplicitPredecessor}
-              hasTarget={!!item.targetOptions?.length}
-              index={index}
-              meta={meta}
-              onMetaChange={onMetaChange}
-              predecessors={predecessors}
-            />
-          )}
-          {staging || isDisabled ? null : (
-            <PatchTrackSelect
-              disabled={!!item.optionsDisabled}
-              index={index}
-              meta={meta}
-              onMetaChange={onMetaChange}
-              sourceMembers={selectedInput && "patch" in selectedInput ? [] : item.targetOptions || []}
-            />
-          )}
+          {showTrack ? (
+            <PatchTrackSelect disabled={!!item.optionsDisabled} index={index} item={item} patchStack={patchStack} />
+          ) : null}
           {staging || isDisabled ? null : (
             <PatchHeaderModeSelect index={index} item={item} patchStack={patchStack} stripDisabled={stripDisabled} />
           )}
@@ -2057,6 +2007,14 @@ const ApplyPatchListStep = ({
     .filter((patchIndex) => !disabledFlags?.[patchIndex]);
   const chainInputIndex = enabledIndexes[0] ?? -1;
   const chainOutputIndex = enabledIndexes.at(-1) ?? -1;
+  // An earlier enabled patch on the same target lane feeds this patch implicitly.
+  const implicitPredecessors = patches.map(
+    (item, index) =>
+      !!item.targetValue &&
+      enabledIndexes.some(
+        (predecessorIndex) => predecessorIndex < index && patches[predecessorIndex]?.targetValue === item.targetValue,
+      ),
+  );
   const localizer = useUiLocalizer();
   return (
     <StepSection
@@ -2155,27 +2113,13 @@ const ApplyPatchListStep = ({
               canReorder={canReorder}
               chainChip={chainChipText(
                 item,
-                !!item.targetValue &&
-                  patches.some(
-                    (predecessor, predecessorIndex) =>
-                      predecessorIndex < index &&
-                      !disabledFlags?.[predecessorIndex] &&
-                      predecessor.targetValue === item.targetValue,
-                  ),
+                implicitPredecessors[index] ?? false,
                 enabledIndexes,
                 localizer,
                 patches.map((patch, patchIndex) => bundleMeta?.[patchIndex]?.name || patch.fileName),
               )}
               handleProps={reorderList.handleProps(orderIndex)}
-              hasImplicitPredecessor={
-                !!item.targetValue &&
-                patches.some(
-                  (predecessor, predecessorIndex) =>
-                    predecessorIndex < index &&
-                    !disabledFlags?.[predecessorIndex] &&
-                    predecessor.targetValue === item.targetValue,
-                )
-              }
+              hasImplicitPredecessor={implicitPredecessors[index] ?? false}
               index={index}
               orderIndex={orderIndex}
               isChainInput={index === chainInputIndex}

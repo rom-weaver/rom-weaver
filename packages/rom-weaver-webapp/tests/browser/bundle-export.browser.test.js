@@ -199,7 +199,7 @@ test("export bundle bundles the session from main-page options with a checks-onl
   }, 30000);
   expect(downloadButton.textContent).toContain("Download");
   const firstResult = exported;
-  setFormControlValue(await waitForState(() => document.getElementById("rom-weaver-patch-basis-0")), "base");
+  setFormControlValue(await waitForState(() => document.getElementById("rom-weaver-select-patch-target-0")), "rom");
   const shareButton = await waitForState(() => {
     const button = document.getElementById("rom-weaver-button-export-bundle");
     return button instanceof HTMLButtonElement && !button.disabled && button.textContent?.includes("Share")
