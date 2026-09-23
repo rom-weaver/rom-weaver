@@ -223,8 +223,9 @@ test("buildCheatShard uses stable IDs and exact checksum title associations", ()
   assert.deepEqual(matched.regions, ["USA"]);
   // cheat2 (placeholder "7E1234??") and cheat7 (structured address/value/handler
   // fields) are dropped by the prefilter; cheat9 and cheat11 share one stable
-  // ID, so 3 records remain of the original 6.
-  assert.equal(matched.cheats.length, 3);
+  // ID; cheat0 repeats the Game Genie file's cheat4 without a code kind, so 2
+  // records remain of the original 6.
+  assert.equal(matched.cheats.length, 2);
   // The file stores nothing a reader can derive: no per-record id, system,
   // gameId, or sourceRevision, and the source file is an index.
   assert.equal(first.sourceRevision, REVISION);
@@ -238,18 +239,15 @@ test("buildCheatShard uses stable IDs and exact checksum title associations", ()
       .filter((cheat) => fileOf(cheat).includes("Game Genie"))
       .every((cheat) => cheat.codeKind === "game-genie"),
   );
-  assert.ok(
-    matched.cheats.filter((cheat) => !fileOf(cheat).includes("Game Genie")).every((cheat) => !("codeKind" in cheat)),
-  );
   // desc, code, and a false enable are restored on read, so only the enabled
   // record and the unknown field reach the stored rawFields.
   assert.deepEqual(
     matched.cheats.map((cheat) => cheat.rawFields),
-    [{ enable: "true", unknown_field: "keep\\this" }, undefined, { unknown_field: "keep\\this" }],
+    [{ enable: "true", unknown_field: "keep\\this" }, undefined],
   );
   assert.deepEqual(
     matched.cheats.map((cheat) => cheat.description),
-    ['Infinite "Things"', "A distinct variant", 'Infinite "Things"'],
+    ['Infinite "Things"', "A distinct variant"],
   );
 
   const missing = first.games.find((game) => game.title === "Unknown Homebrew (World)");
@@ -272,7 +270,7 @@ test("expandCheatShard restores every derived field and the builder's stable IDs
   const expanded = await expandCheatShard(JSON.parse(encodeCheatShard(shard)), nodeSha256Hex);
   assert.deepEqual(Object.keys(expanded), ["schemaVersion", "system", "games"]);
   const [game] = expanded.games;
-  assert.equal(game.cheats.length, 3);
+  assert.equal(game.cheats.length, 2);
   for (const cheat of game.cheats) {
     assert.equal(cheat.system, "nes");
     assert.equal(cheat.gameId, game.id);
@@ -288,7 +286,7 @@ test("expandCheatShard restores every derived field and the builder's stable IDs
   assert.deepEqual(Object.keys(enabled.rawFields), ["desc", "code", "enable", "unknown_field"]);
   assert.equal(enabled.rawFields.unknown_field, "keep\\this");
   assert.equal(enabled.codeKind, "game-genie");
-  assert.equal(new Set(game.cheats.map((cheat) => cheat.id)).size, 3);
+  assert.equal(new Set(game.cheats.map((cheat) => cheat.id)).size, 2);
 });
 
 test("expandCheatShard defaults a record without desc and rejects a bad source file index", async () => {
@@ -466,6 +464,31 @@ test("isBakeableCandidate: mastersystem, gamegear, sg1000 drop RAM forms, keep G
     assert.equal(isBakeableCandidate(cheatSystem, record("C000:01")), false); // Fusion RAM code
     assert.equal(isBakeableCandidate(cheatSystem, record("1F2-3C4")), true); // Game Genie
   }
+});
+
+test("buildCheatShard collapses a code repeated across device files, keeping its code kind", () => {
+  const shard = buildCheatShard({
+    cheatSystem: "nes",
+    files: [
+      {
+        sourcePath: `${NES_DIRECTORY}/Repeat Game (USA).cht`,
+        text: 'cheat0_desc = "Infinite  Lives"\ncheat0_code = "sxiopo"\ncheat1_desc = "Start with 9 lives"\ncheat1_code = "PEUZUGAA"\n',
+      },
+      {
+        sourcePath: `${NES_DIRECTORY}/Repeat Game (USA) (Game Genie).cht`,
+        text: 'cheat0_desc = "infinite lives"\ncheat0_code = "SXIOPO"\ncheat1_desc = "Start with 10 lives"\ncheat1_code = "PEUZUGAA"\n',
+      },
+    ],
+    releases: [],
+    sourceRevision: REVISION,
+  });
+  const [game] = shard.games;
+  const byDescription = Object.fromEntries(game.cheats.map((cheat) => [cheat.description, cheat]));
+  // Same code and description differ only by case and spacing: one record, the
+  // one that names its code kind. The same code under a different description
+  // is a different cheat and stays.
+  assert.deepEqual(Object.keys(byDescription).sort(), ["Start with 10 lives", "Start with 9 lives", "infinite lives"]);
+  assert.equal(byDescription["infinite lives"].codeKind, "game-genie");
 });
 
 test("a game left with only dropped records disappears from the shard", () => {

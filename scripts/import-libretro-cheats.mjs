@@ -473,6 +473,17 @@ export const stableGameId = (cheatSystem, normalizedTitle) =>
 export const stableCheatId = (cheatSystem, gameId, record) =>
   cheatIdFromHex(sha256Hex(cheatIdSource(cheatSystem, gameId, record.codeKind, record.rawFields)));
 
+// Libretro often ships one game's codes twice: in the plain `.cht` and in the
+// device-annotated one (`(Game Genie)`), which differ only in the code kind and
+// in description case or spacing. Records with the same code and description
+// MUST collapse to one, keeping the record that names its code kind.
+const cheatContentKey = (record) =>
+  `${(record.rawCode ?? "").replace(/\s+/gu, "").toUpperCase()}\0${record.description
+    .normalize("NFKC")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .toLocaleLowerCase("en-US")}`;
+
 // Codepoint comparison, never localeCompare: ICU collation varies by machine
 // and would break the byte-identical rebuild promise the identify data makes.
 const compare = (left, right) => (left < right ? -1 : left > right ? 1 : 0);
@@ -543,6 +554,7 @@ export function buildCheatShard({ cheatSystem, files, releases, sourceRevision }
       const metadata = titleMetadata(canonicalTitle, matched[0]?.region);
       games.set(gameId, {
         cheats: new Map(),
+        cheatsByContent: new Map(),
         checksums: new Map(),
         id: gameId,
         normalizedTitle,
@@ -569,7 +581,16 @@ export function buildCheatShard({ cheatSystem, files, releases, sourceRevision }
         continue;
       }
       record.id = stableCheatId(cheatSystem, gameId, record);
-      if (!game.cheats.has(record.id)) game.cheats.set(record.id, record);
+      if (game.cheats.has(record.id)) continue;
+      const contentKey = cheatContentKey(record);
+      const existing = game.cheats.get(game.cheatsByContent.get(contentKey));
+      const conflicting = existing?.codeKind && record.codeKind && existing.codeKind !== record.codeKind;
+      if (existing && !conflicting) {
+        if (existing.codeKind || !record.codeKind) continue;
+        game.cheats.delete(existing.id);
+      }
+      if (!conflicting) game.cheatsByContent.set(contentKey, record.id);
+      game.cheats.set(record.id, record);
     }
   }
 
