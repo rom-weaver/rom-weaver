@@ -1,4 +1,4 @@
-import { ArrowLeft, Maximize, Minimize } from "lucide-react";
+import { ArrowLeft, Maximize, Minimize, Save, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   createProgressViewModel,
@@ -24,6 +24,7 @@ import {
   useEmulatorSession,
 } from "./emulator-session-store.ts";
 import { createEmulatorDocument, createEmulatorGameIdentity } from "./components/emulator-document.ts";
+import { join } from "./components/ds/cx.ts";
 import { FileProgress, Notice } from "./components/ds/feedback.tsx";
 import { prefersReducedMotion } from "./components/ds/flat-transition.ts";
 import { GhostSteps } from "./components/ds/ghost-steps.tsx";
@@ -586,51 +587,63 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
         accept={getFileInputAcceptAttributes().unifiedRom}
         addLabel="Choose another ROM"
         afterDropZone={
-          loadProgress ? (
-            <div aria-live="polite" className="emulator-load-progress">
-              <FileProgress
-                indeterminate={loadProgress.indeterminate}
-                label={loadProgress.label || "Preparing the ROM..."}
-                percent={loadProgress.visualPercent}
-                value={progressValue(loadProgress)}
+          <>
+            {pendingSave ? (
+              <div className="drop-tray emulator-pending-save">
+                <div className="drop-tray-row">
+                  <span className="drop-tray-label">
+                    <Save aria-hidden="true" /> Save to load
+                  </span>
+                  <div className="drop-tray-control">
+                    <span className="emulator-pending-file">
+                      <span className="mono">{pendingSave.fileName}</span>
+                      <button
+                        aria-label="Discard save"
+                        className="emulator-pending-discard"
+                        onClick={() => void discardPendingSave()}
+                        type="button"
+                      >
+                        <X aria-hidden="true" />
+                      </button>
+                    </span>
+                    <p className="save-status">Add the ROM of the game that made this save.</p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            {loadProgress ? (
+              <div aria-live="polite" className="emulator-load-progress">
+                <FileProgress
+                  indeterminate={loadProgress.indeterminate}
+                  label={loadProgress.label || "Preparing the ROM..."}
+                  percent={loadProgress.visualPercent}
+                  value={progressValue(loadProgress)}
+                />
+              </div>
+            ) : workflowEmpty ? (
+              <SampleTutorialStart
+                downloadHref={resolveAssetUrl(assetBaseUrl, TEST_SAMPLE_ASSET)}
+                downloadLabel="Download the sample ROM"
+                downloadName={TEST_SAMPLE_ASSET}
+                error={sampleError}
+                guideHref={resolveGuidedSampleHref(assetBaseUrl, "test")}
+                label="Start guided Test"
+                loading={sampleLoading}
+                onStart={startTestSample}
+                startAction="play"
               />
-            </div>
-          ) : workflowEmpty ? (
-            <SampleTutorialStart
-              downloadHref={resolveAssetUrl(assetBaseUrl, TEST_SAMPLE_ASSET)}
-              downloadLabel="Download the sample ROM"
-              downloadName={TEST_SAMPLE_ASSET}
-              error={sampleError}
-              guideHref={resolveGuidedSampleHref(assetBaseUrl, "test")}
-              label="Start guided Test"
-              loading={sampleLoading}
-              onStart={startTestSample}
-              startAction="play"
-            />
-          ) : undefined
+            ) : null}
+          </>
         }
         beforeDropZone={
-          pendingSave || error ? (
-            <>
-              {pendingSave ? (
-                <Notice level="warn">
-                  <b>{pendingSave.fileName} is ready to test.</b> Choose the matching game ROM below. Another game on
-                  the same console may not read this save.{" "}
-                  <button className="btn slim ghost" onClick={() => void discardPendingSave()} type="button">
-                    Discard save
-                  </button>
-                </Notice>
-              ) : null}
-              {error ? (
-                <Notice
-                  id="emulator-test-error"
-                  level="error"
-                  onDismiss={error.blocksPlayer ? undefined : () => setError(null)}
-                >
-                  <b>{error.summary}</b> {error.detail}
-                </Notice>
-              ) : null}
-            </>
+          error ? (
+            <Notice
+              id="emulator-test-error"
+              level="error"
+              onDismiss={error.blocksPlayer ? undefined : () => setError(null)}
+            >
+              <b>{error.summary}</b> {error.detail}
+            </Notice>
           ) : undefined
         }
         big={workflowEmpty}
@@ -698,7 +711,14 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                 </div>
               ) : null}
               {currentGame?.savePreviewRevision ? (
-                <p className="body" role="status">
+                <p
+                  className={join(
+                    "save-status emulator-save-status",
+                    saveLoadStatus === "loaded" && "is-ready",
+                    saveLoadStatus === "failed" && "is-failed",
+                  )}
+                  role="status"
+                >
                   {saveLoadMessage}
                 </p>
               ) : null}

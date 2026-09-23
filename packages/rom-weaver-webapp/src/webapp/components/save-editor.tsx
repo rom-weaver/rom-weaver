@@ -1,4 +1,4 @@
-import { Download, Gamepad2, RotateCcw, Undo2 } from "lucide-react";
+import { Download, Gamepad2, RotateCcw, Save, Search, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   clearPendingTestSave,
@@ -99,6 +99,8 @@ const titleFor = (segment: string) =>
   GROUP_TITLES[segment] ?? segment.charAt(0).toUpperCase() + segment.slice(1).replaceAll("_", " ");
 const isReadOnly = (field: SaveField) => !field.editable || field.kind.startsWith("read_only");
 const isToggle = (field: SaveField) => field.kind === "boolean" || field.kind === "bitfield_boolean";
+const groupCount = (editable: number, total: number) =>
+  total > editable ? `${editable} editable · ${total - editable} read-only` : `${editable} editable`;
 const formatNumber = (value: number) => value.toLocaleString("en-US");
 const displayValue = (value: SaveValue) => {
   const text = saveValueToText(value);
@@ -619,11 +621,11 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     getEmulatorJsCore(document.platform) === testCore &&
     (!sourceRomSha1 || sourceRomSha1 === testGame.checksum),
   );
-  let testDescription = "Choose a matching ROM on Test to run this save. The save stays on this device.";
+  let testStatus = "No ROM is loaded in Test. You choose one next.";
   if (testGame && canTest) {
-    testDescription = `Test uses ${testGame.fileName} from the Test page. Check that it is the same game as this save.`;
+    testStatus = `Tests with ${testGame.fileName}. Make sure it is the game that made this save.`;
   } else if (testGame) {
-    testDescription = "Choose another ROM on Test. The current ROM does not match this save's platform or linked ROM.";
+    testStatus = `${testGame.fileName} does not match this save. You choose another ROM next.`;
   }
   const slotName = (slot: FieldSlot) => {
     const name = slot.groups.flatMap((group) => group.fields).find((field) => field.id.endsWith(".player.name"));
@@ -716,9 +718,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
         <legend className="save-editor-group-head">
           <span className="save-editor-group-title">{group.title}</span>
           <span className="save-editor-group-count mono">
-            {toggles.length && !rows.length
-              ? `${on} / ${toggles.length}`
-              : `${editable} editable · ${group.fields.length - editable} read-only`}
+            {toggles.length && !rows.length ? `${on} / ${toggles.length}` : groupCount(editable, group.fields.length)}
           </span>
         </legend>
         {rows.length ? <div className="save-editor-rows">{rows.map(renderField)}</div> : null}
@@ -801,16 +801,12 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
   ) : null;
 
   const sramList = (
-    <section aria-labelledby="save-editor-emulator-title" className="save-editor-source-card save-editor-stash">
-      <div className="save-editor-source-head">
-        <span className="save-editor-source-kicker mono">Continue playing</span>
-        <div>
-          <h3 id="save-editor-emulator-title">Emulator saves</h3>
-          <p>Open SRAM saved from a game you played in Test.</p>
-        </div>
-      </div>
+    <div className="drop-tray-row save-editor-stash">
+      <span className="drop-tray-label" id="save-editor-emulator-title">
+        <Save aria-hidden="true" /> Emulator saves
+      </span>
       {sramSaves.length ? (
-        <div className="save-editor-emulator-list">
+        <fieldset aria-labelledby="save-editor-emulator-title" className="drop-tray-control save-editor-records">
           {sramSaves.map((record) => (
             <button
               className="save-editor-record"
@@ -823,11 +819,13 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
               <span className="mono">{formatByteSize(record.sram?.byteLength)}</span>
             </button>
           ))}
-        </div>
+        </fieldset>
       ) : (
-        <p className="save-editor-empty">No emulator saves yet. Save a game in Test to open its SRAM here.</p>
+        <div className="drop-tray-control">
+          <p className="drop-tray-note">No emulator saves yet. Save a game in Test to open its SRAM here.</p>
+        </div>
       )}
-    </section>
+    </div>
   );
 
   return (
@@ -839,19 +837,13 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
           source ? (
             fileCard
           ) : (
-            <div className="save-editor-sources">
-              {sramList}
-              <SaveGenerator disabled={busy} onGenerate={generateSave} />
-              <p className="save-editor-supported">
-                <span>Supported save files</span>
-                <span className="mono">.sav · .srm · .eep · .fla · .mpk · .mcr · .mcd · and emulator wrappers</span>
-              </p>
-              {error ? (
-                <div className="save-editor-source-error">
-                  <Notice level="error">{error}</Notice>
-                </div>
-              ) : null}
-            </div>
+            <>
+              <div className="drop-tray save-editor-sources">
+                {sramList}
+                <SaveGenerator disabled={busy} onError={setError} onGenerate={generateSave} />
+              </div>
+              {error ? <Notice level="error">{error}</Notice> : null}
+            </>
           )
         }
         big={!source}
@@ -860,7 +852,8 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
         heroLabelCoarse="Tap to add a game save"
         info={
           <p>
-            Editing runs locally and never changes the file you add. Use a raw game save, not an emulator save state.
+            Editing runs locally and never changes the file you add. Use a raw game save, not an emulator save state. A
+            new Pokémon save needs a save made by the game as its template.
           </p>
         }
         inputId="save-editor-input-picker"
@@ -885,32 +878,35 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
           >
             {document && activeSlot ? (
               <div className="save-editor-fields">
-                {hasSlotTabs ? (
-                  <div aria-label="Save files" className="save-editor-slots" role="tablist">
-                    {slots.map((slot) => (
-                      <button
-                        aria-selected={slot.id === activeSlot.id}
-                        className="save-editor-slot"
-                        key={slot.id}
-                        onClick={() => setSelectedSlot(slot.id)}
-                        role="tab"
-                        type="button"
-                      >
-                        {slotName(slot)}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-                <label className="save-editor-search">
-                  <span>Find a property</span>
-                  <input
-                    className="input"
-                    onChange={(event) => setFieldQuery(event.currentTarget.value)}
-                    placeholder="Name, group, or description"
-                    type="search"
-                    value={fieldQuery}
-                  />
-                </label>
+                <div className="save-editor-toolbar">
+                  {hasSlotTabs ? (
+                    <div aria-label="Save files" className="save-editor-slots" role="tablist">
+                      {slots.map((slot) => (
+                        <button
+                          aria-selected={slot.id === activeSlot.id}
+                          className="save-editor-slot"
+                          key={slot.id}
+                          onClick={() => setSelectedSlot(slot.id)}
+                          role="tab"
+                          type="button"
+                        >
+                          {slotName(slot)}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  <label className="save-editor-search">
+                    <Search aria-hidden="true" />
+                    <input
+                      aria-label="Find a property"
+                      className="input"
+                      onChange={(event) => setFieldQuery(event.currentTarget.value)}
+                      placeholder="Find a property"
+                      type="search"
+                      value={fieldQuery}
+                    />
+                  </label>
+                </div>
                 {visibleGroups.length ? (
                   visibleGroups.map(renderGroup)
                 ) : (
@@ -955,23 +951,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
                 {preview.touched_sections?.length ? ` · sections ${preview.touched_sections.join(", ")}` : ""}
               </div>
             ) : null}
-            <div className="save-editor-actions">
-              <button
-                className="btn slim ghost"
-                disabled={!pendingChanges.length || busy}
-                onClick={resetAll}
-                type="button"
-              >
-                Reset all
-              </button>
-              <button
-                className="btn slim ghost"
-                disabled={!pendingChanges.length || busy || hasErrors}
-                onClick={() => void previewChanges()}
-                type="button"
-              >
-                Preview changes
-              </button>
+            <div className="save-editor-run-row">
               {output ? (
                 <RunButton
                   disabled={busy}
@@ -989,16 +969,38 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
                   Download edited copy
                 </RunButton>
               )}
+              {onSelectTab ? (
+                <button
+                  className="btn save-editor-test"
+                  disabled={!document || busy || hasErrors}
+                  onClick={() => void testSave()}
+                  type="button"
+                >
+                  <Gamepad2 aria-hidden="true" /> {canTest ? "Test save in ROM" : "Choose ROM and test"}
+                </button>
+              ) : null}
+            </div>
+            <div className="save-editor-actions">
               <button
                 className="btn slim ghost"
-                disabled={!(onSelectTab && document) || busy || hasErrors}
-                onClick={() => void testSave()}
+                disabled={!pendingChanges.length || busy}
+                onClick={resetAll}
                 type="button"
               >
-                <Gamepad2 aria-hidden="true" /> {canTest ? "Test save in ROM" : "Choose ROM and test"}
+                Reset all
               </button>
+              <button
+                className="btn slim ghost"
+                disabled={!pendingChanges.length || busy || hasErrors}
+                onClick={() => void previewChanges()}
+                type="button"
+              >
+                Preview changes
+              </button>
+              {onSelectTab && document ? (
+                <p className={join("save-status", canTest ? "is-ready" : "is-waiting")}>{testStatus}</p>
+              ) : null}
             </div>
-            <p className="save-editor-empty">{testDescription}</p>
             {selectedSaveId && output ? (
               <div className="save-editor-replace">
                 <button

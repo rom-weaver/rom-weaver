@@ -133,7 +133,7 @@ describe("EmulatorTestView", () => {
     }));
 
     const view = render(withSettings(<EmulatorTestView />));
-    expect(await screen.findByText(/zelda.srm is ready to test/)).toBeTruthy();
+    expect(await screen.findByText("zelda.srm")).toBeTruthy();
     fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
       target: { files: [new File(["rom"], "zelda.sfc")] },
     });
@@ -153,7 +153,7 @@ describe("EmulatorTestView", () => {
     });
     view.rerender(withSettings(<EmulatorTestView />));
     expect(screen.getByText("Save loaded and game restarted. Check the game's Continue menu.")).toBeTruthy();
-    expect(screen.queryByText(/zelda.srm is ready to test/)).toBeNull();
+    expect(screen.queryByText("zelda.srm")).toBeNull();
   });
   it("keeps a staged save when the uploaded ROM uses another system", async () => {
     stubObjectUrls();
@@ -173,7 +173,7 @@ describe("EmulatorTestView", () => {
     }));
 
     render(withSettings(<EmulatorTestView />));
-    expect(await screen.findByText(/ruby.sav is ready to test/)).toBeTruthy();
+    expect(await screen.findByText("ruby.sav")).toBeTruthy();
     fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
       target: { files: [new File(["rom"], "zelda.sfc")] },
     });
@@ -214,7 +214,7 @@ describe("EmulatorTestView", () => {
     });
     await waitFor(() => expect(pendingSaveMocks.clearPendingTestSave).toHaveBeenCalledTimes(1));
     await act(async () => finishFirstRead?.(staged));
-    expect(screen.queryByText(/zelda.srm is ready to test/)).toBeNull();
+    expect(screen.queryByText("zelda.srm")).toBeNull();
   });
   it("shows the hero drop state with ghost steps for an empty session", () => {
     stubObjectUrls();

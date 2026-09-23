@@ -41,6 +41,10 @@
   top: 50%;
   translate: 0 -50%;
 }
+/* The save editor's property search draws a magnifier over the input's start edge. */
+.rw-app .save-editor-search .input {
+  padding-inline-start: 34px;
+}
 .rw-app .input:focus-visible,
 .rw-app .select:focus-visible {
   outline: none;

@@ -229,10 +229,10 @@ describe("SaveEditor", () => {
     });
     render(<SaveEditor onSessionChange={vi.fn()} />);
     expect(listSaveGames).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Create a fresh save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose a game" }));
     await waitFor(() => expect(screen.getByLabelText("Game for the new save")).toBeTruthy());
     expect(screen.queryByRole("option", { name: "Ruby" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Generate save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create save" }));
     await waitFor(() => expect(screen.getByLabelText("Name")).toBeTruthy());
     expect(createSave).toHaveBeenCalledWith(expect.objectContaining({ game: "zelda-a-link-to-the-past" }));
     fireEvent.click(screen.getByRole("button", { name: "Download edited copy" }));
@@ -254,9 +254,9 @@ describe("SaveEditor", () => {
       },
     });
     render(<SaveEditor onSessionChange={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Create a fresh save" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Generate save" })).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "Generate save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose a game" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Create save" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Create save" }));
     await waitFor(() => expect(screen.getByLabelText("Name")).toBeTruthy());
     expect(screen.queryByLabelText("Badge 1")).toBeNull();
     expect(screen.queryByRole("group", { name: "progress" })).toBeNull();
@@ -265,11 +265,11 @@ describe("SaveEditor", () => {
   it("shows generation errors without hiding the generator", async () => {
     createSave.mockRejectedValueOnce(new Error("Generation failed"));
     render(<SaveEditor onSessionChange={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Create a fresh save" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Generate save" })).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "Generate save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose a game" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Create save" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Create save" }));
     await waitFor(() => expect(screen.getByText("Generation failed")).toBeTruthy());
-    expect(screen.getByRole("button", { name: "Generate save" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Create save" })).toBeTruthy();
   });
   it("renders generated text and integer controls", async () => {
     render(<SaveEditor onSessionChange={vi.fn()} />);

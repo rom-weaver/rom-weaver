@@ -412,8 +412,7 @@
   font-size: 0.84rem;
   color: var(--ink-2);
 }
-.rw-app .save-editor-candidate-list,
-.rw-app .save-editor-emulator-list {
+.rw-app .save-editor-candidate-list {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-s);
@@ -449,92 +448,6 @@
 .rw-app .save-editor-record:disabled {
   opacity: 0.55;
 }
-.rw-app .save-editor-sources {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--sp-m);
-  margin-block-start: var(--sp-l);
-}
-.rw-app .save-editor-source-error {
-  grid-column: 1 / -1;
-}
-.rw-app .save-editor-supported {
-  display: flex;
-  flex-wrap: wrap;
-  grid-column: 1 / -1;
-  gap: var(--sp-xs) var(--sp-m);
-  align-items: baseline;
-  margin: 0;
-  font-size: 0.72rem;
-  color: var(--ink-3);
-}
-.rw-app .save-editor-supported > :first-child {
-  font-weight: 650;
-  color: var(--ink-2);
-}
-.rw-app .save-editor-source-card {
-  display: grid;
-  grid-template-rows: auto 1fr;
-  gap: var(--sp-m);
-  min-width: 0;
-  padding: clamp(14px, 2vw, 20px);
-  background:
-    linear-gradient(135deg, color-mix(in oklab, var(--thread) 7%, transparent), transparent 54%), var(--plate);
-  border: 1px solid var(--seam);
-  border-radius: var(--r-m);
-}
-.rw-app .save-editor-source-head {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--sp-m);
-  align-items: start;
-}
-.rw-app .save-editor-source-kicker {
-  padding: 3px 7px;
-  font-size: 0.66rem;
-  font-weight: 650;
-  color: var(--thread-text);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  background: color-mix(in oklab, var(--thread) 12%, transparent);
-  border-radius: var(--r-s);
-}
-.rw-app .save-editor-source-head h3 {
-  margin: 0;
-  font-size: 0.94rem;
-  font-weight: 650;
-  color: var(--ink);
-}
-.rw-app .save-editor-source-head p {
-  margin: 3px 0 0;
-  font-size: 0.78rem;
-  line-height: 1.45;
-  color: var(--ink-2);
-}
-.rw-app .save-editor-stash .save-editor-empty {
-  line-height: 1.5;
-  color: var(--ink-2);
-}
-.rw-app .save-generator-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--sp-s);
-  align-items: end;
-}
-.rw-app .save-generator-field {
-  display: grid;
-  gap: 5px;
-  min-width: 0;
-  font-size: 0.76rem;
-  font-weight: 600;
-  color: var(--ink-2);
-}
-.rw-app .save-generator-action {
-  justify-self: start;
-}
-.rw-app .save-generator-form .save-editor-empty {
-  grid-column: 1 / -1;
-}
 .rw-app .save-editor-empty,
 .rw-app .save-editor-description {
   margin: 0;
@@ -546,18 +459,31 @@
   gap: var(--sp-m);
   min-width: 0;
 }
+/* Slot tabs and the property search share one row; the search takes what the tabs leave. */
+.rw-app .save-editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-s);
+  align-items: stretch;
+  min-width: 0;
+}
+.rw-app .save-editor-toolbar .save-editor-slots {
+  flex: 1 1 auto;
+}
 .rw-app .save-editor-search {
-  display: grid;
-  grid-template-columns: minmax(110px, auto) minmax(180px, 1fr);
-  gap: var(--sp-m);
-  align-items: center;
-  padding: var(--sp-s) var(--sp-m);
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--ink-2);
-  background: var(--well);
-  border: 1px solid var(--seam-soft);
-  border-radius: var(--r-m);
+  position: relative;
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+.rw-app .save-editor-search svg {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 11px;
+  width: 15px;
+  height: 15px;
+  color: var(--ink-3);
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 .rw-app .save-editor-slots {
   display: flex;
@@ -602,9 +528,8 @@
   gap: var(--sp-m);
   align-items: baseline;
   width: 100%;
-  padding: 10px 14px;
-  background:
-    linear-gradient(90deg, color-mix(in oklab, var(--thread) 8%, transparent), transparent 42%), var(--plate-2);
+  padding: 9px 14px;
+  background: var(--plate-2);
   border-bottom: 1px solid var(--seam-soft);
 }
 .rw-app .save-editor-group-title {
@@ -832,6 +757,43 @@
   border: 1px solid color-mix(in oklab, var(--verified) 35%, var(--seam));
   border-radius: var(--r-s);
 }
+/* Testing is the second way to finish, so it sits beside the download at the same height. */
+.rw-app .save-editor-run-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sp-s);
+  margin-block-start: var(--sp-m);
+}
+.rw-app .save-editor-test {
+  height: auto;
+  min-height: 46px;
+  padding-inline: 18px;
+  font-size: 0.86rem;
+}
+.rw-app .save-status {
+  display: inline-flex;
+  flex: 1 1 16rem;
+  gap: var(--sp-s);
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--ink-2);
+}
+.rw-app .save-status::before {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  content: "";
+  background: var(--care);
+  border-radius: 50%;
+}
+.rw-app .save-status.is-ready::before {
+  background: var(--offline-active);
+}
+.rw-app .save-status.is-failed::before {
+  background: var(--fault);
+}
 .rw-app .save-editor-actions,
 .rw-app .save-editor-replace {
   display: flex;
@@ -842,15 +804,8 @@
   margin-block-start: var(--sp-m);
 }
 @media (max-width: 720px) {
-  .rw-app .save-editor-sources {
+  .rw-app .save-editor-run-row {
     grid-template-columns: minmax(0, 1fr);
-  }
-  .rw-app .save-generator-form {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .rw-app .save-editor-search {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--sp-xs);
   }
   .rw-app .save-editor-field {
     grid-template-columns: minmax(0, 1fr) auto;

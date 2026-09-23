@@ -1,18 +1,20 @@
+import { Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { SaveGameDefinition } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
-import { Notice } from "../../public/react/components/ds/feedback.tsx";
 
+/** The game list comes from the wasm worker, so it loads on request rather than when the page opens. */
 export const SaveGenerator = ({
   disabled,
+  onError,
   onGenerate,
 }: {
   disabled: boolean;
+  onError: (message: string) => void;
   onGenerate: (game: string) => Promise<void>;
 }) => {
   const [games, setGames] = useState<SaveGameDefinition[] | null>(null);
   const [game, setGame] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
   const request = useRef<AbortController | null>(null);
   useEffect(() => () => request.current?.abort(), []);
 
@@ -21,7 +23,6 @@ export const SaveGenerator = ({
     request.current?.abort();
     request.current = controller;
     setLoading(true);
-    setError("");
     try {
       const { listSaveGames } = await import("../../platform/browser/browser-save-api.ts");
       const result = await listSaveGames(controller.signal);
@@ -30,28 +31,25 @@ export const SaveGenerator = ({
       setGames(supported);
       setGame(supported[0]?.identity.id ?? "");
     } catch (cause) {
-      if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause));
+      if (!controller.signal.aborted) onError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
   };
 
   return (
-    <section aria-labelledby="save-generator-title" className="save-editor-source-card save-generator">
-      <div className="save-editor-source-head">
-        <span className="save-editor-source-kicker mono">Start fresh</span>
-        <div>
-          <h3 id="save-generator-title">New game save</h3>
-          <p>Build a save from a checked initializer. For Pokémon, upload a save made by the game.</p>
-        </div>
-      </div>
-      {games ? (
-        <div className="save-generator-form">
-          <label className="save-generator-field">
-            <span>Game for the new save</span>
+    <div className="drop-tray-row save-generator">
+      <label className="drop-tray-label" htmlFor={games?.length ? "save-generator-game" : undefined}>
+        <Sparkles aria-hidden="true" /> New save
+      </label>
+      <div className="drop-tray-control">
+        {games?.length ? (
+          <>
             <select
+              aria-label="Game for the new save"
               className="select"
-              disabled={disabled || loading}
+              disabled={disabled}
+              id="save-generator-game"
               onChange={(event) => setGame(event.currentTarget.value)}
               value={game}
             >
@@ -61,28 +59,18 @@ export const SaveGenerator = ({
                 </option>
               ))}
             </select>
-          </label>
-          <button
-            className="btn slim save-generator-action"
-            disabled={disabled || !game}
-            onClick={() => void onGenerate(game)}
-            type="button"
-          >
-            Generate save
+            <button className="btn" disabled={disabled || !game} onClick={() => void onGenerate(game)} type="button">
+              Create save
+            </button>
+          </>
+        ) : games ? (
+          <p className="drop-tray-note">No games can generate a fresh save yet.</p>
+        ) : (
+          <button className="btn ghost" disabled={disabled || loading} onClick={() => void loadGames()} type="button">
+            {loading ? "Loading games…" : "Choose a game"}
           </button>
-          {games.length ? null : <p className="save-editor-empty">No fresh save generators are available.</p>}
-        </div>
-      ) : (
-        <button
-          className="btn slim ghost save-generator-action"
-          disabled={disabled || loading}
-          onClick={() => void loadGames()}
-          type="button"
-        >
-          {loading ? "Loading games…" : "Create a fresh save"}
-        </button>
-      )}
-      {error ? <Notice level="error">{error}</Notice> : null}
-    </section>
+        )}
+      </div>
+    </div>
   );
 };
