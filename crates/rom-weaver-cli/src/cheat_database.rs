@@ -128,6 +128,10 @@ struct StoredCheat {
     raw_code: Option<String>,
     #[serde(default)]
     code_kind: Option<CheatKind>,
+    /// A kind read from other device words in the file name. It fills
+    /// `code_kind` on the record but stays out of the ID.
+    #[serde(default)]
+    kind_hint: Option<CheatKind>,
     /// Source fields other than `desc` and `code`; `enable` only when it is
     /// not `"false"`.
     #[serde(default)]
@@ -229,7 +233,7 @@ fn expand_shard(stored: StoredShard, path: &Path) -> Result<CheatShard> {
                 game_id: game.id.clone(),
                 description,
                 raw_code: cheat.raw_code,
-                code_kind: cheat.code_kind,
+                code_kind: cheat.code_kind.or(cheat.kind_hint),
                 raw_fields,
                 source_file: DATABASE_SOURCE_FILE.to_owned(),
                 source_index: cheat.source_index,

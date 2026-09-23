@@ -387,7 +387,7 @@ test("GBA device annotations use the Xploder decoder family", () => {
   assert.equal(shard.games[0].cheats[0].codeKind, "xploder");
 });
 
-test("Game Boy device file names resolve the kind the loader no longer reads from a path", () => {
+test("Game Boy device file names give a kind hint that leaves the cheat ID alone", async () => {
   const build = (fileName) =>
     buildCheatShard({
       cheatSystem: "gameboy",
@@ -399,11 +399,20 @@ test("Game Boy device file names resolve the kind the loader no longer reads fro
       ],
       releases: [],
       sourceRevision: REVISION,
-    }).games[0].cheats[0].codeKind;
-  assert.equal(build("Public Test (USA) (Xploder).cht"), "xploder");
-  assert.equal(build("Public Test (USA) (Code Breaker).cht"), "xploder");
-  assert.equal(build("Public Test (USA) (GameShark).cht"), "pro-action-replay");
-  assert.equal(build("Public Test (USA).cht"), undefined);
+    });
+  const [cheat] = build("Public Test (USA) (Xploder).cht").games[0].cheats;
+  assert.equal(cheat.codeKind, undefined);
+  assert.equal(cheat.kindHint, "xploder");
+  assert.equal(build("Public Test (USA) (Code Breaker).cht").games[0].cheats[0].kindHint, "xploder");
+  assert.equal(build("Public Test (USA).cht").games[0].cheats[0].kindHint, undefined);
+  // An annotation the importer already read stays the ID-bearing codeKind.
+  assert.equal(build("Public Test (USA) (GameShark).cht").games[0].cheats[0].codeKind, "pro-action-replay");
+
+  const shard = build("Public Test (USA) (Xploder).cht");
+  const expanded = await expandCheatShard(JSON.parse(encodeCheatShard(shard)), nodeSha256Hex);
+  const [record] = expanded.games[0].cheats;
+  assert.equal(record.codeKind, "xploder");
+  assert.equal(record.id, stableCheatId("gameboy", record.gameId, { rawFields: record.rawFields }));
 });
 
 test("buildCheatShard refuses to build without a system or revision", () => {

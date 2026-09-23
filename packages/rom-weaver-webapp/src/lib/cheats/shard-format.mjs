@@ -13,7 +13,9 @@
  *       cheats: [{
  *         description?,   // present iff the source record has a `desc` field
  *         rawCode,
- *         codeKind?, importWarnings?,
+ *         codeKind?,      // from the file's device annotation; part of the ID
+ *         kindHint?,      // other device words in the file name; not part of the ID
+ *         importWarnings?,
  *         rawFields?,     // source fields other than desc/code, and enable when it is not "false"
  *         sourceIndex,    // numbers the "Cheat N" name of a record without desc
  *       }],
@@ -46,6 +48,7 @@ const CODE_KINDS = new Set(["game-genie", "pro-action-replay", "xploder"]);
  *   description?: string;
  *   rawCode: string | null;
  *   codeKind?: string;
+ *   kindHint?: string;
  *   importWarnings?: string[];
  *   rawFields?: RawFields;
  *   sourceIndex: number;
@@ -67,6 +70,7 @@ const CODE_KINDS = new Set(["game-genie", "pro-action-replay", "xploder"]);
  *   description: string;
  *   rawCode: string | null;
  *   codeKind?: string;
+ *   kindHint?: string;
  *   importWarnings?: string[];
  *   rawFields: RawFields;
  *   sourceFile: string;
@@ -132,6 +136,9 @@ const validateStoredCheat = (value, where) => {
   if (cheat.rawCode !== null && typeof cheat.rawCode !== "string") throw new Error(`${where} has an invalid rawCode.`);
   if (cheat.codeKind !== undefined && !CODE_KINDS.has(/** @type {string} */ (cheat.codeKind))) {
     throw new Error(`${where} has an unknown codeKind.`);
+  }
+  if (cheat.kindHint !== undefined && !CODE_KINDS.has(/** @type {string} */ (cheat.kindHint))) {
+    throw new Error(`${where} has an unknown kindHint.`);
   }
   if (cheat.importWarnings !== undefined && !isStringArray(cheat.importWarnings)) {
     throw new Error(`${where} has invalid importWarnings.`);
@@ -228,7 +235,11 @@ export const expandCheatShard = async (shard, sha256Hex) => {
           gameId: game.id,
           description: cheat.description ?? defaultDescription(cheat.sourceIndex),
           rawCode: cheat.rawCode ?? null,
-          ...(cheat.codeKind === undefined ? {} : { codeKind: cheat.codeKind }),
+          // The ID above hashes only the stored codeKind; the hint fills the
+          // kind for classification without changing the ID.
+          ...(cheat.codeKind === undefined && cheat.kindHint === undefined
+            ? {}
+            : { codeKind: cheat.codeKind ?? cheat.kindHint }),
           ...(cheat.importWarnings === undefined ? {} : { importWarnings: cheat.importWarnings }),
           rawFields,
           sourceFile: DATABASE_SOURCE_FILE,
@@ -270,6 +281,7 @@ export const storeCheat = (record) => {
     ...(hasDesc ? { description: record.description } : {}),
     rawCode: record.rawCode,
     ...(record.codeKind === undefined ? {} : { codeKind: record.codeKind }),
+    ...(record.kindHint === undefined ? {} : { kindHint: record.kindHint }),
     ...(record.importWarnings === undefined ? {} : { importWarnings: record.importWarnings }),
     ...(Object.keys(rawFields).length === 0 ? {} : { rawFields }),
     sourceIndex: record.sourceIndex,

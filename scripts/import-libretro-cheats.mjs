@@ -431,7 +431,7 @@ const codeKindForTitle = (title, cheatSystem) => {
   if (annotations.some((annotation) => ["action replay", "gameshark", "pro action replay"].includes(annotation))) {
     return "pro-action-replay";
   }
-  return codeKindForFileName(title, cheatSystem);
+  return null;
 };
 
 const ACTION_REPLAY_WORDS = ["action replay", "action-replay", "gameshark", "game shark"];
@@ -440,11 +440,15 @@ const XPLODER_WORDS = ["xploder", "xplorer", "codebreaker", "code breaker"];
 // Shards do not store the file name, so the kind the Rust classifier used to
 // read from it at load time (`record_kind_hint` in
 // crates/rom-weaver-cli/src/cheats/mod.rs) MUST be resolved here with the same
-// words and precedence. Game Boy "(Xploder)" files depend on it.
+// words and precedence. Game Boy "(Xploder)" files depend on it. It is stored
+// as `kindHint`, never as `codeKind`, because the cheat ID hashes `codeKind`.
 const codeKindForFileName = (fileName, cheatSystem) => {
   const name = fileName.toLowerCase();
   const has = (words) => words.some((word) => name.includes(word));
-  if ((cheatSystem === "gameboyadvance" || cheatSystem === "playstation") && has([...ACTION_REPLAY_WORDS, ...XPLODER_WORDS])) {
+  if (
+    (cheatSystem === "gameboyadvance" || cheatSystem === "playstation") &&
+    has([...ACTION_REPLAY_WORDS, ...XPLODER_WORDS])
+  ) {
     return "xploder";
   }
   if (has(["game genie", "game-genie"])) return "game-genie";
@@ -566,6 +570,7 @@ export function buildCheatShard({ cheatSystem, files, releases, sourceRevision }
     const baseName = sourceFile.slice(sourceFile.lastIndexOf("/") + 1);
     const sourceTitle = stripExtension(baseName);
     const codeKind = codeKindForTitle(sourceTitle, cheatSystem);
+    const kindHint = codeKind ? null : codeKindForFileName(sourceTitle, cheatSystem);
     const normalizedTitle = normalizeReleaseName(sourceTitle);
     const matched = byTitle.get(normalizedTitle) ?? [];
     const canonicalTitle = matched[0]?.name ?? stripDeviceAnnotation(sourceTitle);
@@ -593,7 +598,13 @@ export function buildCheatShard({ cheatSystem, files, releases, sourceRevision }
     }
 
     for (const parsed of parseCht(file.text, { sourceFile, sourceRevision })) {
-      const record = { ...parsed, gameId, system: cheatSystem, ...(codeKind ? { codeKind } : {}) };
+      const record = {
+        ...parsed,
+        gameId,
+        system: cheatSystem,
+        ...(codeKind ? { codeKind } : {}),
+        ...(kindHint ? { kindHint } : {}),
+      };
       if (!isBakeableCandidate(cheatSystem, record)) {
         droppedCount += 1;
         continue;
