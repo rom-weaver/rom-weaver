@@ -1232,7 +1232,10 @@ fn resolving_patches_passes_plain_files_through_unchanged() {
     let context = test_context(temp.path().join("resolve-temp"));
     let mut temp_paths = Vec::new();
 
-    let (resolved, notes) = app()
+    let ResolvedPatchList {
+        patches: resolved,
+        extracted_notes: notes,
+    } = app()
         .resolve_patches(
             &[first.clone(), second.clone()],
             PatchSelectors {
@@ -1256,7 +1259,10 @@ fn resolving_patches_passes_plain_files_through_unchanged() {
         .expect("plain patch files resolve to themselves");
 
     assert_eq!(
-        resolved,
+        resolved
+            .iter()
+            .map(|patch| (patch.source.clone(), patch.resolved.clone()))
+            .collect::<Vec<_>>(),
         vec![(first.clone(), first), (second.clone(), second)]
     );
     assert!(notes.is_empty());
@@ -1599,10 +1605,7 @@ fn bundle_resolution(
         checks,
         expected_rom_name: None,
         output_checks,
-        step_verifications: Vec::new(),
-        step_inputs: Vec::new(),
-        step_targets: Vec::new(),
-        step_ids: Vec::new(),
+        steps: Vec::new(),
         rom_member: None,
     }
 }

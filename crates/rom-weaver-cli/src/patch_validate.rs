@@ -163,7 +163,10 @@ impl CliApp {
         // re-reads the whole input just to re-derive a CRC32 we already have.
         context.seed_checksums(&resolved_input, &cached_input_checksums);
         let mut temp_paths = cleanup_paths;
-        let (resolved_patches, extracted_patch_notes) = match self.resolve_patches(
+        let ResolvedPatchList {
+            patches: resolved_patches,
+            extracted_notes: extracted_patch_notes,
+        } = match self.resolve_patches(
             &patches,
             PatchSelectors {
                 select: &select,
@@ -238,7 +241,9 @@ impl CliApp {
             let validate_input = match self.resolve_patch_n64_target(
                 N64TargetRequest {
                     input: &validate_input,
-                    patch: resolved_patches.first().map(|(_, patch)| patch.as_path()),
+                    patch: resolved_patches
+                        .first()
+                        .map(|patch| patch.resolved.as_path()),
                     expected_crc32: expected_input_checksums.get("crc32").map(String::as_str),
                     mode: n64_byte_order,
                     inference: N64AutoInference::ChecksumOnly,
@@ -413,10 +418,12 @@ impl CliApp {
             let patch_count = resolved_patches.len();
             let mut current_input = validate_input;
             let mut formats = Vec::with_capacity(patch_count);
-            for (index, (patch_path, resolved_patch_path)) in resolved_patches.iter().enumerate() {
+            for (index, patch) in resolved_patches.iter().enumerate() {
+                let patch_path = &patch.source;
+                let resolved_patch_path = &patch.resolved;
                 let handler = match self.probe_patch_handler(
-                    patch_path,
-                    resolved_patch_path,
+                    &patch.source,
+                    &patch.resolved,
                     index,
                     patch_count,
                     probe_threads.clone(),
@@ -676,7 +683,7 @@ impl CliApp {
     /// failure so the whole call maps to a retryable "unknown".
     fn run_patch_validate_independent(
         &self,
-        resolved_patches: &[(PathBuf, PathBuf)],
+        resolved_patches: &[ResolvedPatch],
         validate_input: &Path,
         context: &OperationContext,
         probe_threads: Option<ThreadExecution>,
@@ -693,11 +700,11 @@ impl CliApp {
         // verdicts rather than aborting the batch.
         let mut ready_jobs: Vec<IndependentReadyJob> = Vec::new();
         let mut decided: Vec<PerPatchVerdict> = Vec::new();
-        for (index, (patch_path, resolved_patch_path)) in resolved_patches.iter().enumerate() {
-            let patch_label = patch_path.to_string_lossy().to_string();
+        for (index, patch) in resolved_patches.iter().enumerate() {
+            let patch_label = patch.source.to_string_lossy().to_string();
             match self.probe_patch_handler(
-                patch_path,
-                resolved_patch_path,
+                &patch.source,
+                &patch.resolved,
                 index,
                 patch_count,
                 probe_threads.clone(),
@@ -709,7 +716,7 @@ impl CliApp {
                             index,
                             patch: patch_label,
                             input: validate_input.to_path_buf(),
-                            resolved: resolved_patch_path.clone(),
+                            resolved: patch.resolved.clone(),
                             format,
                             handler,
                         });
@@ -1027,8 +1034,10 @@ impl CliApp {
 
         // Assemble what is known about each patch.
         let mut plan_inputs: Vec<patch_plan::PlanPatchInput> = Vec::with_capacity(patch_count);
-        for (index, (patch_path, resolved_patch_path)) in resolved_patches.iter().enumerate() {
-            let mut declared_input = Self::filename_plan_state(patch_path);
+        for (index, patch) in resolved_patches.iter().enumerate() {
+            let patch_path = &patch.source;
+            let resolved_patch_path = &patch.resolved;
+            let mut declared_input = Self::filename_plan_state(&patch.source);
             if let Some(tokens) = input_check_flags[index].as_ref() {
                 match Self::parse_plan_check_tokens(tokens, "--patch-input-check") {
                     Ok(parsed) => declared_input.checksums.extend(parsed),
@@ -1043,8 +1052,8 @@ impl CliApp {
                 }
             }
             let mut plan_input = Self::build_plan_patch_input(
-                patch_path,
-                resolved_patch_path,
+                &patch.source,
+                &patch.resolved,
                 handlers[index].as_deref(),
                 basis_modes[index].unwrap_or(flags.default_basis).declared(),
                 declared_input,
@@ -1269,7 +1278,7 @@ impl CliApp {
         let mut ready_jobs: Vec<IndependentReadyJob> = resolved_patches
             .iter()
             .enumerate()
-            .filter_map(|(index, (patch_path, resolved_patch_path))| {
+            .filter_map(|(index, patch)| {
                 let verdict = &per_patch[index];
                 let reverse_only_base_match = plan_inputs[index].has_only_reverse_base_executions();
                 // A reversible reverse match may be an ordinary forward revert
@@ -1286,9 +1295,9 @@ impl CliApp {
                 let handler = handlers[index].clone()?;
                 handler.capabilities().apply.then(|| IndependentReadyJob {
                     index,
-                    patch: patch_path.to_string_lossy().to_string(),
+                    patch: patch.source.to_string_lossy().to_string(),
                     input: validate_input.to_path_buf(),
-                    resolved: resolved_patch_path.clone(),
+                    resolved: patch.resolved.clone(),
                     format: handler.descriptor().name.to_string(),
                     handler,
                 })
@@ -1384,16 +1393,16 @@ impl CliApp {
 
     fn probe_plan_handlers(
         &self,
-        resolved_patches: &[(PathBuf, PathBuf)],
+        resolved_patches: &[ResolvedPatch],
         patch_count: usize,
         probe_threads: Option<ThreadExecution>,
     ) -> ProbedPlanHandlers {
         let mut handlers = Vec::with_capacity(patch_count);
         let mut probe_failures = vec![None; patch_count];
-        for (index, (patch_path, resolved_patch_path)) in resolved_patches.iter().enumerate() {
+        for (index, patch) in resolved_patches.iter().enumerate() {
             match self.probe_patch_handler(
-                patch_path,
-                resolved_patch_path,
+                &patch.source,
+                &patch.resolved,
                 index,
                 patch_count,
                 probe_threads.clone(),
@@ -1820,7 +1829,7 @@ struct PlanFlagInputs {
 }
 
 struct PatchValidatePlanInputs<'a> {
-    resolved_patches: &'a [(PathBuf, PathBuf)],
+    resolved_patches: &'a [ResolvedPatch],
     validate_input: &'a Path,
     temp_paths: &'a mut Vec<PathBuf>,
     context: &'a OperationContext,
@@ -1830,7 +1839,7 @@ struct PatchValidatePlanInputs<'a> {
 }
 
 struct PlanReadyJobInputs<'a> {
-    resolved_patches: &'a [(PathBuf, PathBuf)],
+    resolved_patches: &'a [ResolvedPatch],
     validate_input: &'a Path,
     temp_paths: &'a mut Vec<PathBuf>,
     context: &'a OperationContext,
