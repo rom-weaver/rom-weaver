@@ -33,6 +33,7 @@ const LINK_AUDIT_WORKFLOW_ROUTES = [
   "identify-rom",
   "test-rom",
   "bundle-patches",
+  "extract",
   "trim-rom",
   "ppf-undo",
   "save-editor",
