@@ -41,7 +41,16 @@ mod cheat_ordering_tests {
     }
 
     #[test]
+    fn database_cheat_compare_uses_the_post_patch_rom() {
+        assert_database_cheat_compare_uses_the_post_patch_rom(false);
+    }
+
+    #[test]
     fn database_cheat_compare_keeps_target_lane_metadata_patch_aligned() {
+        assert_database_cheat_compare_uses_the_post_patch_rom(true);
+    }
+
+    fn assert_database_cheat_compare_uses_the_post_patch_rom(with_target_lanes: bool) {
         let temp = TempDir::new().unwrap();
         let input = temp.path().join("game.nes");
         let patch = temp.path().join("change-compare.ips");
@@ -57,12 +66,11 @@ mod cheat_ordering_tests {
         )
         .unwrap();
 
-        let args: PatchApplyCommand = serde_json::from_value(json!({
+        let mut command = json!({
             "input": input,
-            "patches": [patch.clone(), patch],
+            "patches": [patch],
             "output": output,
             "no_compress": true,
-            "patch_target": [{ "rom": true }, null],
             "cheat_records": [{
                 "id": "compare-cheat",
                 "system": "nes",
@@ -75,8 +83,12 @@ mod cheat_ordering_tests {
                 "sourceIndex": 0,
                 "sourceRevision": "test"
             }]
-        }))
-        .unwrap();
+        });
+        if with_target_lanes {
+            command["patches"] = json!([patch.clone(), patch]);
+            command["patch_target"] = json!([{ "rom": true }, null]);
+        }
+        let args: PatchApplyCommand = serde_json::from_value(command).unwrap();
         let sink = Arc::new(EventSink::default());
         let app = CliApp::new(
             sink.clone(),
