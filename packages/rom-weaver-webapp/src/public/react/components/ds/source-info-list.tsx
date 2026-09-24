@@ -660,12 +660,14 @@ type DiscTrackPanelInfo = {
  * single-file checksum variants. Each track is one labeled checksum group. */
 const DiscTracksPanel = ({
   tracks,
+  lead,
   open,
   onToggle,
   timing,
   summary,
 }: {
   tracks: DiscTrackPanelInfo[];
+  lead?: ReactNode;
   open?: boolean;
   onToggle?: (open: boolean) => void;
   timing?: ReactNode;
@@ -681,6 +683,7 @@ const DiscTracksPanel = ({
       open={open}
       summary={summary}
       timing={timing}
+      lead={lead}
     >
       {tracks.map((track) => {
         const hasBytes = typeof track.bytes === "number" && Number.isFinite(track.bytes);

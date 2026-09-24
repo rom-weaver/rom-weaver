@@ -79,11 +79,29 @@ const RomInputPanels = ({
   const matchedPlatforms = [...new Set((identification?.matches ?? []).map((match) => match.platform).filter(Boolean))];
   const systemTag = matchedPlatforms.length ? matchedPlatforms.map(abbreviatePlatform).join(" · ") : platformTag;
   const status = identification?.status;
+  const conditionNote =
+    !(detailedViewEnabled || identifyPending) && identification?.condition ? (
+      <p className="pdesc identify-drawer-condition">
+        <b>{localizer.message(`ui.identifyDrawer.condition.${identification.condition}`)}.</b>{" "}
+        {identification.hint || localizer.message("ui.identifyDrawer.unsupported")}
+      </p>
+    ) : null;
+  const checksLead =
+    info.lead || conditionNote ? (
+      <>
+        {info.lead}
+        {conditionNote}
+      </>
+    ) : undefined;
   const summary = detailedViewEnabled ? undefined : (
     <>
       {systemTag ? <DrawerReadout>{systemTag}</DrawerReadout> : null}
       {identifyPending ? (
         <DrawerReadout muted>{localizer.message("ui.identifyDrawer.identifying")}</DrawerReadout>
+      ) : identification?.condition ? (
+        <DrawerReadout muted>
+          {localizer.message(`ui.identifyDrawer.condition.${identification.condition}`)}
+        </DrawerReadout>
       ) : status === "unavailable" ? (
         <DrawerReadout muted>{localizer.message("ui.apply.titleLookupUnavailable")}</DrawerReadout>
       ) : status === "matched" ? (
@@ -96,8 +114,8 @@ const RomInputPanels = ({
     </>
   );
   const renderInfo = () => {
-    if (isDisc) return <DiscTracksPanel summary={summary} timing={info.timing} tracks={tracks} />;
-    if (showInfo) return <SourceInfoList {...info} summary={summary} />;
+    if (isDisc) return <DiscTracksPanel lead={checksLead} summary={summary} timing={info.timing} tracks={tracks} />;
+    if (showInfo) return <SourceInfoList {...info} lead={checksLead} summary={summary} />;
     return null;
   };
   // Shared card drawer order: the disc index sheets, then the single Checks

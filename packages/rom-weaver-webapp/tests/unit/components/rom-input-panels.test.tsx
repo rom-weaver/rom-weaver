@@ -16,6 +16,13 @@ const identification = {
   status: "matched",
 } as never;
 
+const databaseRequiredIdentification = {
+  condition: "database_required",
+  hint: "Identifying Sony PlayStation ROMs needs the Sony PlayStation database.",
+  matches: [],
+  status: "unknown",
+} as never;
+
 const renderPanels = (detailedViewEnabled: boolean) =>
   render(
     <RomWeaverSettingsProvider settings={{ detailedViewEnabled }}>
@@ -57,5 +64,41 @@ describe("RomInputPanels view detail", () => {
     );
     expect(container.querySelector(".cks-head")?.textContent).toContain("Title lookup unavailable");
     expect(container.querySelector(".cks-head")?.textContent).not.toContain("Unidentified");
+  });
+
+  it("shows a structured identification condition and its hint in simple view", () => {
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{ detailedViewEnabled: false }}>
+        <RomInputPanels
+          identification={databaseRequiredIdentification}
+          info={{ bytes: 4, checksums: { crc32: "1234abcd" } }}
+          platformTag="PSX"
+        />
+      </RomWeaverSettingsProvider>,
+    );
+    const checks = container.querySelector(".cks-head")?.textContent || "";
+    expect(checks).toContain("Database required");
+    expect(checks).not.toContain("Unidentified");
+    expect(container.querySelector(".identify-drawer-condition")?.textContent).toContain(
+      "needs the Sony PlayStation database",
+    );
+    expect(container.querySelector(".identify-drawer")).toBeNull();
+  });
+
+  it("hides the prior identification condition while a new lookup is pending", () => {
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{ detailedViewEnabled: false }}>
+        <RomInputPanels
+          identification={databaseRequiredIdentification}
+          identifyPending
+          info={{ bytes: 4, checksums: { crc32: "1234abcd" } }}
+          platformTag="PSX"
+        />
+      </RomWeaverSettingsProvider>,
+    );
+    const checks = container.querySelector(".cks-head")?.textContent || "";
+    expect(checks).toContain("Identifying");
+    expect(checks).not.toContain("Database required");
+    expect(container.querySelector(".identify-drawer-condition")).toBeNull();
   });
 });
