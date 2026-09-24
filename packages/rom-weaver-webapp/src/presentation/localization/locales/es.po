@@ -1980,6 +1980,11 @@ msgstr "Más información"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.select.romsTitle"
+msgstr "Se soltaron varias ROMs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.mostUsed"
 msgstr "más usado"
 
@@ -2002,6 +2007,11 @@ msgstr "Mover arriba"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.moveUp"
 msgstr "Subir"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.select.multipleCandidates"
+msgstr "Se encontraron varios candidatos, elige uno"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2107,6 +2117,11 @@ msgstr "Ningún ROM en los datos de identificación tiene esta suma de verificac
 #: src/presentation/localization/messages.ts
 msgid "error.NO_SELECTABLE_CANDIDATE"
 msgstr "No se encontró ningún archivo seleccionable."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.select.noSelectableFiles"
+msgstr "No hay archivos seleccionables en este origen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2937,6 +2952,16 @@ msgstr "con partidas guardadas que permanecen en este dispositivo."
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.selectTarget"
 msgstr "Seleccionar destino"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.select.patchesHint"
+msgstr "Elige los parches que quieres agregar y luego pulsa Agregar parches."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.select.multipleRoms"
+msgstr "Elige la ROM que usarás"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

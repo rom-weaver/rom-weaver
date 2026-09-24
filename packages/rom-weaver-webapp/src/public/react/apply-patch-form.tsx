@@ -1830,7 +1830,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     resolvedUiController,
     setLocalBundleSession,
     props.onError,
+    selectFile,
   );
+  const handleUnifiedDropFiles = (files: File[], onSettled?: () => void) => {
+    handleUnifiedDrop(files, undefined, undefined, onSettled);
+  };
 
   // Forward a page-level drop (dragging anywhere on the page) to the same unified
   // drop handler so the whole tab is a drop target, not just the dropzone box.
@@ -1850,13 +1854,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     }
     if (request.role !== "input") return;
     const romInputs = resolvedUiController.getState().romInputs;
-    // A "which one?" prompt over several separately-provided ROMs spans every pending row, so
-    // cancelling it abandons the whole pending input. Clear them all - removing a single row would
-    // leave the other ROM(s) to auto-stage as if one had been chosen.
-    if (romInputs.length > 1) {
-      resolvedUiController.provideRomInputFile?.(null);
-      return;
-    }
     const matchingInput = romInputs.find((entry) =>
       [entry.info.fileName, entry.info.archiveName].some(
         (value) => value.trim().toLowerCase() === normalizedSourceName,
@@ -1909,7 +1906,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         onSelectTab={props.onSelectTab}
         onSelectView={props.onSelectView}
         onTrace={emitApplyFormInputTrace}
-        onUnifiedDrop={handleUnifiedDrop}
+        onUnifiedDrop={handleUnifiedDropFiles}
         patchEnablement={{
           disabledIds: disabledPatchIds,
           getPatchIds,

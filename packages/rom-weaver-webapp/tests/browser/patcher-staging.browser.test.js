@@ -197,7 +197,7 @@ test("apply patch staging errors render in the patch section and can be dismisse
   await expect.poll(() => document.getElementById("rom-weaver-patch-notice-message")).toBeNull();
 });
 
-test("adding a ROM input preserves active input progress", async () => {
+test("replacing a ROM input retires the old row and stages the replacement", async () => {
   const firstInput = new File([new Uint8Array([0, 1, 2, 3])], "first.nds", {
     type: "application/octet-stream",
   });
@@ -222,23 +222,19 @@ test("adding a ROM input preserves active input progress", async () => {
     resolveUpdatedStaging = () =>
       resolve([
         {
-          fileName: "first.nds",
-          id: "input-1",
-          order: 0,
-          size: firstInput.size,
-          sourceSize: firstInput.size,
-        },
-        {
           fileName: "second.nds",
           id: "input-2",
-          order: 1,
+          order: 0,
           size: secondInput.size,
           sourceSize: secondInput.size,
         },
       ]);
   });
   let latestUiController = null;
-  const stageInput = vi.fn(async (snapshot) => (snapshot.inputs.length === 1 ? initialStaging : updatedStaging));
+  const stageInput = vi
+    .fn()
+    .mockImplementationOnce(async () => initialStaging)
+    .mockImplementationOnce(async () => updatedStaging);
   const Harness = () => {
     const [inputs, setInputs] = useState([firstInput]);
     const { localNoticeController, localOutputController, localStackController, localUiController } =
@@ -280,17 +276,21 @@ test("adding a ROM input preserves active input progress", async () => {
 
     latestUiController.provideRomInputFiles([secondInput]);
 
-    // Adding a second input must not wipe the first row's in-flight staging
-    // status: the first row still shows its "Checksumming…" progress and the new
-    // (queued) row joins with its own staging status.
+    await expect
+      .poll(() =>
+        Array.from(document.querySelectorAll("#rom-weaver-list-input-stack .nmline[data-file-name]")).map((row) =>
+          row.getAttribute("data-file-name"),
+        ),
+      )
+      .toEqual(["second.nds"]);
     await expect
       .poll(() =>
         Array.from(document.querySelectorAll("#rom-weaver-list-input-stack .stage-status")).map(
           (row) => row.textContent || "",
         ),
       )
-      .toEqual([expect.stringContaining("Checksumming"), expect.stringContaining("Checksumming")]);
-    expect(stageInput.mock.calls.map((call) => call[0].inputs.length)).toEqual([1, 2]);
+      .toEqual([expect.stringContaining("Checksumming")]);
+    expect(stageInput.mock.calls.map((call) => call[0].inputs.length)).toEqual([1, 1]);
   } finally {
     resolveInitialStaging();
     resolveUpdatedStaging();

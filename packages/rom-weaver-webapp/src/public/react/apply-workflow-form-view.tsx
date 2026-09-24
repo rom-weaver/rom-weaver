@@ -900,7 +900,7 @@ const resolveRomCardState = (
 };
 
 const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomRowDeps): WorkflowRomInputStepItem => {
-  const { localizer, romInputs, verificationStates, ui } = deps;
+  const { localizer, verificationStates, ui } = deps;
   const identification = resolveRomIdentification(romInput, deps.identificationStates.get(romInput.id));
   const identificationLookup = romInput.info.identification || buildPatchIdentificationLookup(identification);
   const database = identifyRecordChecks(romInput.info.identification);
@@ -939,10 +939,7 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
         staging,
         statusId: `rom-weaver-progress-${stagingPhase}-${index}`,
       }),
-      onRemove: () => {
-        if (romInputs.length === 1 && ui.clearRomInput) ui.clearRomInput();
-        else ui.removeRomInput?.(romInput.id);
-      },
+      onRemove: () => ui.clearRomInput?.(),
       panels: {
         ...(identificationLookup ? { identification: identificationLookup } : {}),
         identifyPending: staging,
@@ -965,7 +962,7 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
         },
         ...(hasDiscSheet && romInput.cueText ? { cue: { cueText: romInput.cueText } } : {}),
       },
-      removeLabel: localizer.message(romInputs.length > 1 ? "ui.apply.removeRom" : "ui.apply.clearRom"),
+      removeLabel: localizer.message("ui.apply.clearRom"),
       stageBar: stageBarValue(staging, percent),
       state,
     },
@@ -1873,7 +1870,7 @@ function ApplyWorkflowFormView({
   onSelectTab?: (id: string) => void;
   onSelectView?: (view: "test") => void;
   onTrace?: (message: string, details?: Record<string, unknown>) => void;
-  onUnifiedDrop?: (files: File[]) => void;
+  onUnifiedDrop?: (files: File[], onSettled?: () => void) => void;
   mode?: "apply" | "bundle";
   patchEnablement?: PatchEnablement;
   patchInputBasis?: PatchInputBasis;
@@ -2083,6 +2080,9 @@ function ApplyWorkflowFormView({
   // Unified drop: bare files stage immediately; each archive shows an
   // "identifying" placeholder until its ROM-vs-patch bucket is classified.
   const handleUnifiedDrop = onUnifiedDrop ?? (() => undefined);
+  const handleUnifiedDropFiles = (files: File[]) => {
+    handleUnifiedDrop(files, () => setDropStarted(false));
+  };
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
   const { closeSampleTutorial, sampleError, sampleLoading, sampleTutorial, startApplySample, startBundleSample } =
     useGuidedSampleLoader({
@@ -2231,7 +2231,7 @@ function ApplyWorkflowFormView({
               }
         }
         onDropStart={() => setDropStarted(true)}
-        onFiles={handleUnifiedDrop}
+        onFiles={handleUnifiedDropFiles}
         supported={getApplySupportedFiles(localizer)}
       />
       {workflowEmpty ? (
