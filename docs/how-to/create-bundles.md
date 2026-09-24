@@ -32,15 +32,14 @@ Set **Compression type** to ZIP unless your audience specifically wants 7z. Brow
 4. Open each patch's three-dot **Patch actions** menu and choose **Edit details**. Add a readable name and, when useful, a description, version, and author. People see this information when they open the bundle.
 5. Open **Checks** on each patch. Use **Add check** to record a known CRC32, MD5, SHA-1, or byte count for the input or output. Input checks describe the bytes the patch expects. Embedded output checks describe the patch’s standalone result. They do not verify a combined stack when earlier patches changed its source. Do not guess a value just to fill the form.
 
-Set **Authored for** on each patch card. It chooses the state that the patch's source checks describe:
+Set the input selector on each patch card. It chooses the state that the patch runs on, and the patch's input checks describe that same state:
 
-1. Keep **Automatic** to let the checks select their input state.
+1. Keep **auto** to let the checks select the state.
 2. Choose **Original ROM** when the patch was made from the clean ROM.
 3. Choose **Previous patch output** when the patch was made from the result above it.
+4. Choose **Output of** a named patch when the patch depends on that patch's result. Keep each referenced patch enabled and before its dependent patch.
 
-Use **Apply to** to select the bytes a patch modifies. Keep the current stack behavior for an accumulated result, select **Original ROM** to start from the original again, or select a named patch output for a dependency. Keep each referenced producer enabled and before its dependent patch. To read a member from that output, enter its exact path in **Member path**.
-
-For a disc, use the ROM target selector to select the required track. Keep accumulated execution to continue that track's selected patch chain. Turn each optional patch on and off after reopening the exported bundle to check both results.
+For a disc, use the track selector to select the required track. Keep accumulated execution to continue that track's selected patch chain. Turn each optional patch on and off after reopening the exported bundle to check both results.
 
 Keep an explicit input and its target on the same track in the browser. A recipe that reads one track and writes another requires the [CLI](cli-apply.md); the browser stops before applying that recipe.
 
