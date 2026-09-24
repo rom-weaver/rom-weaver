@@ -368,6 +368,12 @@ fn detect_size_based_copier_header(
         return None;
     };
     if header_declares_smd_interleave(prefix) {
+        tracing::debug!(
+            ?header,
+            total_len,
+            extension,
+            "size matches a copier header but the bytes declare a Super Magic Drive interleave; not stripping"
+        );
         return None;
     }
     Some(KnownRomHeaderMatch {
