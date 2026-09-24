@@ -1,13 +1,20 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
 import crypto from "node:crypto";
-import { createReadStream, createWriteStream } from "node:fs";
+import { createReadStream, createWriteStream, readFileSync } from "node:fs";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 import { once } from "node:events";
 import { fileURLToPath, pathToFileURL } from "node:url";
+
+const PLATFORM_NAMES = JSON.parse(
+  readFileSync(
+    new URL("../crates/rom-weaver-checksum/src/platform-names.json", import.meta.url),
+    "utf8",
+  ),
+);
 
 import { brotliCompressBufferCached } from "./wasm/brotli-compress.mjs";
 import {
@@ -391,137 +398,12 @@ export const KNOWN_PLATFORM_PROFILES = Object.freeze({
   "Nintendo - Wii": "wii-decoded-iso-v1",
 });
 
-// Curated alias table, keyed by canonical platform name. Alias matching is
-// case-insensitive after normalizing: lowercase, collapse [^a-z0-9]+ to one
-// space, trim. A platform's own normalized name always wins over another
-// platform's curated alias (e.g. a discovered "GBA" dump directory claims
-// "gba"); a collision between two platforms' own names is a build error.
-// Every alias the Rust built-in fallback catalog promises
-// (crates/rom-weaver-checksum/src/identify_catalog.rs) MUST appear here too:
-// a build that ships data resolves names through this catalog instead, so an
-// alias missing here stops resolving the moment the packaged data is present.
-export const CURATED_ALIASES = Object.freeze({
-  "Atari - 2600": ["atari 2600", "2600", "atari vcs", "vcs", "atari2600"],
-  "Atari - 5200": ["atari 5200", "5200", "atari5200"],
-  "Atari - 7800": ["atari 7800", "7800", "atari7800"],
-  "Atari - Lynx": ["atari lynx", "lynx", "atarilynx"],
-  "Atari - Jaguar CD": ["atari jaguar cd", "jaguar cd", "ajcd"],
-  "Microsoft - Xbox": ["xbox"],
-  "NEC - PC Engine - TurboGrafx 16": [
-    "turbografx-16 pc engine",
-    "turbografx",
-    "turbografx 16",
-    "tg16",
-    "pc engine",
-    "pcengine",
-    "pce",
-    "supergrafx",
-  ],
-  "NEC - PC Engine CD - TurboGrafx-CD": [
-    "pc engine cd",
-    "pcenginecd",
-    "pcecd",
-    "turbografx cd",
-    "tg-cd",
-    "pce cd",
-  ],
-  "SNK - Neo Geo CD": ["neo geo cd", "ngcd", "neogeocd", "neocd"],
-  "Nintendo - Virtual Boy": ["nintendo virtual boy", "virtual boy"],
-  "Sega - 32X": [
-    "sega 32x",
-    "32x",
-    "megadrive 32x",
-    "sega32",
-    "sega32x",
-    "sega32xjp",
-    "sega32xna",
-  ],
-  "Sega - Dreamcast": ["sega dreamcast", "dreamcast", "dc"],
-  "Sega - Saturn": ["sega saturn", "saturn"],
-  "Nintendo - Family Computer Disk System": ["fds", "famicom disk system", "nintendo fds"],
-  "SNK - Neo Geo Pocket": ["neo geo pocket", "ngp"],
-  "SNK - Neo Geo Pocket Color": ["neo geo pocket color", "neo geo pocket colour", "ngpc"],
-  "Nintendo - Nintendo 3DS": ["nintendo 3ds", "3ds", "n3ds", "new3ds"],
-  "Nintendo - Nintendo DS": ["nintendo ds", "nds", "ds", "dsi"],
-  "Nintendo - Nintendo Entertainment System": [
-    "nintendo entertainment system",
-    "nes",
-    "famicom",
-    "nintendo famicom",
-    "family computer",
-    "fc",
-  ],
-  "Nintendo - Game Boy": ["nintendo game boy", "game boy", "gameboy", "gb", "sgb"],
-  "Nintendo - Game Boy Advance": [
-    "nintendo game boy advance",
-    "game boy advance",
-    "gameboy advance",
-    "gba",
-    "ereader",
-  ],
-  "Nintendo - Game Boy Color": [
-    "nintendo game boy color",
-    "game boy color",
-    "gameboy color",
-    "gbc",
-  ],
-  "Nintendo - GameCube": ["nintendo gamecube", "gamecube", "gc", "ngc"],
-  "Nintendo - Nintendo 64": ["nintendo 64", "n64", "n64dd", "64dd"],
-  "Nintendo - Super Nintendo Entertainment System": [
-    "nintendo super nintendo entertainment system",
-    "snes",
-    "sfc",
-    "sfam",
-    "snesna",
-    "satellaview",
-    "sufami",
-    "super famicom",
-    "super nintendo",
-    "super nes",
-    "sufami turbo",
-  ],
-  "Nintendo - Wii": ["nintendo wii", "wii"],
-  "Nintendo - Wii U": ["nintendo wii u", "wii u", "wiiu"],
-  "Sega - Game Gear": ["sega game gear", "game gear", "gamegear", "gg"],
-  "Sega - Master System - Mark III": [
-    "sega master system",
-    "master system",
-    "mastersystem",
-    "mark3",
-    "sms",
-    "ms",
-  ],
-  "Sega - Mega Drive - Genesis": [
-    "genesis",
-    "mega drive",
-    "megadrive",
-    "megadrivejp",
-    "md",
-    "smd",
-    "sega genesis",
-    "sega mega drive",
-  ],
-  "Sega - Mega-CD - Sega CD": [
-    "mega cd",
-    "megacd",
-    "megacdjp",
-    "sega cd",
-    "segacd",
-    "mcd",
-    "scd",
-  ],
-  "Sony - PlayStation": ["sony playstation", "playstation", "psx", "ps1", "ps"],
-  "Sony - PlayStation 2": ["sony playstation 2", "ps2", "playstation 2", "play station 2"],
-  "Sony - PlayStation 3": ["sony playstation 3", "playstation 3", "ps3"],
-  "Sony - PlayStation Portable": [
-    "sony playstation portable",
-    "psp",
-    "playstation portable",
-    "psminis",
-    "psp minis",
-  ],
-  "Sony - PlayStation Vita": ["sony playstation vita", "playstation vita", "psvita", "vita"],
-});
+// Shared with the native fallback catalog, native imports, and browser labels.
+export const CURATED_ALIASES = Object.freeze(
+  Object.fromEntries(
+    PLATFORM_NAMES.builderPlatforms.map((name) => [name, PLATFORM_NAMES.aliases[name]]),
+  ),
+);
 
 export const DEFAULT_PACK_PLATFORMS = Object.freeze([
   "Atari - 2600",
@@ -2509,7 +2391,9 @@ function collectTitles(games) {
 async function writeTitleIndex(entries, samples, systems, options) {
   const encoded = JSON.parse(encodeTitleIndex(entries));
   const defaults = new Set(
-    systems.filter((system) => packGroupFor(system.platform) === "default").map((system) => system.slug),
+    systems
+      .filter((system) => packGroupFor(system.platform) === "default")
+      .map((system) => system.slug),
   );
   encoded.defaultPacks = encoded.packs.map((slug) => defaults.has(slug));
   const json = `${JSON.stringify(encoded)}\n`;
