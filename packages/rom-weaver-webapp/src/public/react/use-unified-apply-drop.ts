@@ -230,6 +230,8 @@ const routeUnifiedDrop = async (
     romInputCount: romInputs.length,
   });
   const chosenRom = await chooseSingleRom(romInputs, selectFile);
+  // The chooser stays open while newer drops arrive; a later ROM drop aborts this route.
+  if (signal?.aborted || isCancelled?.()) return;
   if (chosenRom) controller.provideRomInputFiles?.(chosenRom);
   if (patchInputs.length) controller.providePatchInputFiles?.(patchInputs);
 };
@@ -249,16 +251,16 @@ const groupDirectDiscInputs = async (romInputs: readonly File[]): Promise<RomDro
         parseCueFileReferences(await cue.text()).map((reference) => leafName(reference.fileName)),
       );
       const files = [cue];
-      unassigned.delete(cue);
       for (const file of unassigned) {
+        if (file === cue) continue;
         const isReferencedTrack = references.has(leafName(file.name));
+        const gdiReferences = isGdiEntryFileName(file.name) ? parseGdiFileReferences(await file.text()) : [];
         const isMatchingGdi =
-          isGdiEntryFileName(file.name) &&
-          parseGdiFileReferences(await file.text()).every((reference) => references.has(leafName(reference)));
-        if (!(isReferencedTrack || isMatchingGdi)) continue;
-        files.push(file);
-        unassigned.delete(file);
+          gdiReferences.length > 0 && gdiReferences.every((reference) => references.has(leafName(reference)));
+        if (isReferencedTrack || isMatchingGdi) files.push(file);
       }
+      // Claim the files only after every read succeeded, so a failed read leaves them selectable.
+      for (const file of files) unassigned.delete(file);
       groups.push({ files, label: cue.name, size: files.reduce((total, file) => total + file.size, 0) });
     } catch (error) {
       logger.debug("direct CUE grouping failed", { error: String(error), fileName: cue.name });
