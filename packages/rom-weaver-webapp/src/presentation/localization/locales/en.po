@@ -1980,6 +1980,11 @@ msgstr "More info"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.select.romsTitle"
+msgstr "More than one ROM was dropped"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.mostUsed"
 msgstr "most used"
 
@@ -2002,6 +2007,11 @@ msgstr "Move up"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.moveUp"
 msgstr "Move up"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.select.multipleCandidates"
+msgstr "Multiple candidates found, select one"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2107,6 +2117,11 @@ msgstr "No ROM in the identification data has this checksum."
 #: src/presentation/localization/messages.ts
 msgid "error.NO_SELECTABLE_CANDIDATE"
 msgstr "No selectable file was found."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.select.noSelectableFiles"
+msgstr "No selectable files in this source"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2937,6 +2952,16 @@ msgstr "See your changes in play."
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.selectTarget"
 msgstr "Select target"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.select.patchesHint"
+msgstr "Select the patches you want to add, then choose Add patches."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.select.multipleRoms"
+msgstr "Select the ROM to use"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

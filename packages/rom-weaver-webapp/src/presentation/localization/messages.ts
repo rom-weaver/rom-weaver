@@ -292,6 +292,20 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
       "IPS, IPS32, SOLID, BPS, UPS, VCDIFF/xdelta, GDIFF, HDiffPatch, APS, APSGBA, RUP, PPF, EBP, BSDIFF, and more.",
   }),
   "ui.patch.target": msg({ id: "ui.patch.target", message: "Apply patch into" }),
+  "ui.select.multipleCandidates": msg({
+    id: "ui.select.multipleCandidates",
+    message: "Multiple candidates found, select one",
+  }),
+  "ui.select.multipleRoms": msg({ id: "ui.select.multipleRoms", message: "Select the ROM to use" }),
+  "ui.select.noSelectableFiles": msg({
+    id: "ui.select.noSelectableFiles",
+    message: "No selectable files in this source",
+  }),
+  "ui.select.patchesHint": msg({
+    id: "ui.select.patchesHint",
+    message: "Select the patches you want to add, then choose Add patches.",
+  }),
+  "ui.select.romsTitle": msg({ id: "ui.select.romsTitle", message: "More than one ROM was dropped" }),
   "ui.apply.add.replaceOrPatches": msg({
     id: "ui.apply.add.replaceOrPatches",
     message: "Replace the ROM or add patches",
