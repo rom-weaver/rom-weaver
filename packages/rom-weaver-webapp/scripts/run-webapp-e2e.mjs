@@ -179,6 +179,14 @@ const requestStatus = (url, { headers = {}, maxRedirects = 5 } = {}) =>
     request.on("error", reject);
   });
 
+const openSettingsPanel = async (page) => {
+  const settings = page.locator(
+    ".shell-head-tools .tool[aria-label='Settings']:visible, .topbar-tools .tool[aria-label='Settings']:visible",
+  );
+  await settings.first().click();
+  await page.getByRole("dialog").waitFor({ state: "visible" });
+};
+
 const runHydrationAudit = async (createContext, baseUrl) => {
   const context = await createContext({ ignoreHTTPSErrors: true });
   await context.addInitScript((settings) => {
@@ -273,14 +281,14 @@ const runHydrationAudit = async (createContext, baseUrl) => {
         // the original rejection.
         navigation.catch(() => undefined);
         if (testCase.replayClick) {
-          const settings = page.locator(".panel.workflow:not([hidden]) .panel-settings-btn");
+          const viewToggle = page.locator(".panel.workflow:not([hidden]) .panel-view-toggle");
           const dock = page.locator(".dock");
           const workflow = page.locator("#panel-patcher .workflow-body");
           // WebKit can expose the masthead before it finishes parsing the
           // prerendered dock and workflow. Wait for the complete shell, then
           // keep the geometry assertion below as the real visibility check.
           await Promise.all([
-            settings.waitFor({ state: "visible" }),
+            viewToggle.waitFor({ state: "visible" }),
             dock.waitFor({ state: "attached" }),
             workflow.waitFor({ state: "attached" }),
           ]);
@@ -316,7 +324,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           if (!hasVisiblePrerenderedShell(initialShell)) {
             throw new Error(`initial shell dock is not visible: ${JSON.stringify(initialShell)}`);
           }
-          await settings.click();
+          await viewToggle.click();
           releaseScripts();
         }
         await navigation;
@@ -329,7 +337,6 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           if (active) return active.id === `tab-${expectedView}`;
           return !!document.querySelector(`#panel-${expectedView}:not([hidden])`);
         }, testCase.finalView);
-        if (testCase.replayClick) await page.getByRole("dialog").waitFor({ state: "visible" });
         await page.evaluate(
           () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
         );
@@ -340,7 +347,9 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           const dock = document.querySelector(".dock")?.getBoundingClientRect();
           const workflow = document.querySelector("#panel-patcher .workflow-body")?.getBoundingClientRect();
           const workflowStyle = document.querySelector("#panel-patcher .workflow-body");
+          const viewToggle = document.querySelector("#panel-patcher .panel-view-toggle");
           return {
+            detailedViewEnabled: viewToggle?.getAttribute("aria-pressed") === "true",
             finalTheme: document.documentElement.dataset.theme || "",
             finalView:
               document.querySelector('.side-nav [aria-current="page"]')?.id.replace(/^tab-/, "") ||
@@ -375,6 +384,8 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           problems.push(`theme changed: ${result.initialTheme} -> ${result.finalTheme}`);
         if (result.initialView !== testCase.initialView || result.finalView !== testCase.finalView)
           problems.push(`view changed unexpectedly: ${result.initialView} -> ${result.finalView}`);
+        if (testCase.replayClick && !result.detailedViewEnabled)
+          problems.push("prerendered view toggle click was not replayed after hydration");
         if (testCase.replayClick && !result.shellHandoffStable)
           problems.push("prerendered shell moved during hydration");
         if (testCase.replayClick && (!result.shellSettled || result.panelAnimation !== "none"))
@@ -806,8 +817,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       await page.setViewportSize(viewport);
       for (const theme of ["light", "dark"]) {
         await setTheme(theme);
-        await page.locator(".panel.workflow:not([hidden]) .panel-settings-btn").click();
-        await page.getByRole("dialog").waitFor({ state: "visible" });
+        await openSettingsPanel(page);
         await scanLiveApp(page, `Settings (${viewport.label}, ${theme})`);
         const betaTools = page.locator("#settings-beta-tools-enabled");
         if (!(await betaTools.isChecked())) await betaTools.check();
@@ -853,8 +863,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await scanVariants("info popover");
     await infoButton.click();
 
-    await page.locator(".panel.workflow:not([hidden]) .panel-settings-btn").click();
-    await page.getByRole("dialog").waitFor({ state: "visible" });
+    await openSettingsPanel(page);
     const codecCombobox = page.locator(".codec-combobox input").first();
     await codecCombobox.click();
     await page.locator(".codec-combobox-list").waitFor({ state: "visible" });
@@ -1135,7 +1144,7 @@ const createWorkerReuseCorpus = () => {
 };
 
 const configureUncompressedOutput = async (page) => {
-  await page.locator(".panel.workflow:not([hidden]) .panel-settings-btn").click();
+  await openSettingsPanel(page);
   await page.locator("#settings-default-compression").selectOption("none");
   await page.getByRole("button", { exact: true, name: "Save" }).click();
 };
