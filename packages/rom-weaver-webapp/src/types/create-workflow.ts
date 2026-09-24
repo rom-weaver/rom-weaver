@@ -1,4 +1,4 @@
-import type { ChecksumVariant } from "./checksum.ts";
+import type { ChecksumVariant, RomTypeTag } from "./checksum.ts";
 import type { ParsedIdentifyResolution } from "./identify.ts";
 import type { SelectionCandidate } from "./selection.ts";
 import type { WorkflowWarning } from "./workflow-controller.ts";
@@ -29,6 +29,8 @@ type CreateWorkflowSourceState = {
   checksumTimeMs?: number;
   decompressionTimeMs?: number;
   identification?: ParsedIdentifyResolution;
+  /** Platform ingest read from the ROM header, set even when identify finds no match. */
+  romType?: RomTypeTag;
   wasDecompressed?: boolean;
   warnings: WorkflowWarning[];
 };

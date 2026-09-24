@@ -776,7 +776,7 @@ msgstr "chd, rvz/wia/gcz, and z3ds files are decompressed before patching."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.step.cheats"
-msgstr "Cheats"
+msgstr "Cheats as a Patch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2482,6 +2482,11 @@ msgstr "Patches"
 #: src/presentation/localization/messages.ts
 msgid "ui.step.patches"
 msgstr "Patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.step.patchesCheats"
+msgstr "Patches & Cheats"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

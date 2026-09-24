@@ -97,6 +97,106 @@ mod cheat_ordering_tests {
         assert!(labels.contains("compare-cheat"), "{labels}");
         assert!(labels.contains("cheat_no_compare_match"), "{labels}");
     }
+
+    #[test]
+    fn database_cheat_position_changes_actual_apply_order() {
+        let temp = TempDir::new().unwrap();
+        let input = temp.path().join("game.nes");
+        let patch = temp.path().join("change-after-cheat.ips");
+        let output = temp.path().join("output.nes");
+        let mut rom = vec![0u8; 0x8000];
+        rom[0x4000] = 0xff;
+        fs::write(&input, rom).unwrap();
+        fs::write(
+            &patch,
+            [
+                b'P', b'A', b'T', b'C', b'H', 0x00, 0x40, 0x00, 0x00, 0x01, 0x00, b'E', b'O', b'F',
+            ],
+        )
+        .unwrap();
+
+        let args: PatchApplyCommand = serde_json::from_value(json!({
+            "input": input,
+            "patches": [patch],
+            "output": output,
+            "no_compress": true,
+            "cheat_records": [{
+                "id": "compare-cheat",
+                "system": "nes",
+                "gameId": "synthetic",
+                "description": "Compare cheat",
+                "rawCode": "C00012FF",
+                "codeKind": "pro-action-replay",
+                "rawFields": { "code": "C00012FF" },
+                "sourceFile": "fixture.cht",
+                "sourceIndex": 0,
+                "sourceRevision": "test"
+            }],
+            "cheat_positions": [0]
+        }))
+        .unwrap();
+        let app = CliApp::new(
+            Arc::new(EventSink::default()),
+            Arc::new(rom_weaver_core::NoninteractivePrompter),
+            false,
+            false,
+            false,
+        );
+        let outcome = app.run(Commands::Patch(PatchCommands::Apply(Box::new(args))));
+
+        assert_eq!(outcome.status, OperationStatus::Succeeded);
+        assert_eq!(fs::read(output).unwrap()[0x4000], 0);
+    }
+
+    #[test]
+    fn database_cheats_at_one_position_still_detect_write_conflicts() {
+        let temp = TempDir::new().unwrap();
+        let input = temp.path().join("game.nes");
+        let output = temp.path().join("output.nes");
+        fs::write(&input, vec![0xff; 0x8000]).unwrap();
+        let record = |id: &str, code: &str| {
+            json!({
+                "id": id,
+                "system": "nes",
+                "gameId": "synthetic",
+                "description": id,
+                "rawCode": code,
+                "codeKind": "pro-action-replay",
+                "rawFields": { "code": code },
+                "sourceFile": "fixture.cht",
+                "sourceIndex": 0,
+                "sourceRevision": "test"
+            })
+        };
+        let args: PatchApplyCommand = serde_json::from_value(json!({
+            "input": input,
+            "output": output,
+            "no_compress": true,
+            "cheat_records": [record("first", "C00012FF"), record("second", "C00013FF")],
+            "cheat_positions": [0, 0]
+        }))
+        .unwrap();
+        let sink = Arc::new(EventSink::default());
+        let app = CliApp::new(
+            sink.clone(),
+            Arc::new(rom_weaver_core::NoninteractivePrompter),
+            false,
+            false,
+            false,
+        );
+        let outcome = app.run(Commands::Patch(PatchCommands::Apply(Box::new(args))));
+
+        assert_eq!(outcome.status, OperationStatus::Failed);
+        let labels = sink
+            .0
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|event| event.label.clone())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(labels.contains("cheat_write_conflict"), "{labels}");
+    }
 }
 
 fn path_is_occupied(path: &Path) -> Result<bool> {
@@ -694,6 +794,7 @@ impl CliApp {
             code_system,
             code_kind,
             cheat_records,
+            cheat_positions,
             cheat_selection,
             emit_bundle: _,
             tui: _,
@@ -1367,6 +1468,7 @@ impl CliApp {
                     context: &context,
                     temp_paths: &mut temp_paths,
                     cheat_records: &cheat_records,
+                    cheat_positions: &cheat_positions,
                     allow_cheat_conflicts: cheat_selection.allow_cheat_conflicts,
                 }) {
                     Ok(outcome) => outcome,
@@ -3534,7 +3636,74 @@ struct RunPatchApplyLoopInputs<'a> {
     context: &'a OperationContext,
     temp_paths: &'a mut Vec<PathBuf>,
     cheat_records: &'a [CheatRecord],
+    cheat_positions: &'a [usize],
     allow_cheat_conflicts: bool,
+}
+
+struct ApplyDatabaseCheatStageInputs<'a> {
+    input: &'a Path,
+    output: &'a Path,
+    records: &'a [CheatRecord],
+    allow_conflicts: bool,
+    stage_index: usize,
+    stage_count: usize,
+    context: &'a OperationContext,
+}
+
+fn resolve_cheat_stage_positions(
+    positions: &[usize],
+    cheat_count: usize,
+    patch_count: usize,
+) -> Result<(Vec<usize>, bool, usize)> {
+    if positions.is_empty() {
+        return Ok((
+            vec![patch_count; cheat_count],
+            false,
+            usize::from(cheat_count > 0),
+        ));
+    }
+    if positions.len() != cheat_count {
+        return Err(RomWeaverError::Validation(
+            "cheat positions must align with the cheat record list".to_string(),
+        ));
+    }
+    if let Some(position) = positions.iter().find(|position| **position > patch_count) {
+        return Err(RomWeaverError::Validation(format!(
+            "cheat position {position} exceeds the {patch_count} normal patch stages"
+        )));
+    }
+    let stage_count = positions.iter().copied().collect::<BTreeSet<_>>().len();
+    Ok((positions.to_vec(), true, stage_count))
+}
+
+fn cheat_records_at_position(
+    records: &[CheatRecord],
+    positions: &[usize],
+    position: usize,
+) -> Vec<CheatRecord> {
+    records
+        .iter()
+        .zip(positions)
+        .filter(|(_, candidate)| **candidate == position)
+        .map(|(record, _)| record.clone())
+        .collect()
+}
+
+fn database_cheat_stage_output(
+    stage_index: usize,
+    stage_count: usize,
+    staged_output: &Path,
+    context: &OperationContext,
+    temp_paths: &mut Vec<PathBuf>,
+) -> PathBuf {
+    if stage_index + 1 == stage_count {
+        return staged_output.to_path_buf();
+    }
+    let output = context
+        .temp_paths()
+        .next_path("patch-apply-cheat-step", Some("bin"));
+    temp_paths.push(output.clone());
+    output
 }
 
 /// Which end of a bundle chain step a `BundlePatchInput` reference names. The
@@ -3723,9 +3892,22 @@ impl CliApp {
             context,
             temp_paths,
             cheat_records,
+            cheat_positions,
             allow_cheat_conflicts,
         } = inputs;
-        let patch_count = resolved_patches.len() + usize::from(!cheat_records.is_empty());
+        let normal_patch_count = resolved_patches.len();
+        let (cheat_positions, ordered_cheats, cheat_stage_count) =
+            resolve_cheat_stage_positions(cheat_positions, cheat_records.len(), normal_patch_count)
+                .map_err(|error| {
+                    Box::new(OperationReport::failed(
+                        OperationFamily::Patch,
+                        Some("cheat".to_string()),
+                        "validate",
+                        error.to_string(),
+                        context.single_thread_execution(),
+                    ))
+                })?;
+        let patch_count = normal_patch_count + cheat_stage_count;
         let mut current_input = apply_input;
         let initial_input = current_input.clone();
         let initial_header_state = header_state.clone();
@@ -3765,7 +3947,35 @@ impl CliApp {
             context.single_thread_execution(),
         );
 
+        let mut stage_index = 0usize;
         for (index, (patch_path, resolved_patch_path)) in resolved_patches.iter().enumerate() {
+            let positioned_records =
+                cheat_records_at_position(cheat_records, &cheat_positions, index);
+            if ordered_cheats && !positioned_records.is_empty() {
+                let apply_output = database_cheat_stage_output(
+                    stage_index,
+                    patch_count,
+                    staged_output,
+                    context,
+                    temp_paths,
+                );
+                self.apply_database_cheat_stage(ApplyDatabaseCheatStageInputs {
+                    input: &current_input,
+                    output: &apply_output,
+                    records: &positioned_records,
+                    allow_conflicts: allow_cheat_conflicts,
+                    stage_index,
+                    stage_count: patch_count,
+                    context,
+                })?;
+                current_input = apply_output;
+                legacy_output = ProducedPatchOutput {
+                    path: current_input.clone(),
+                    header_state: header_state.clone(),
+                    n64_order: *n64_order,
+                };
+                stage_index += 1;
+            }
             let user_index = index.checked_sub(step_input_offset);
             let explicit_input = user_index
                 .and_then(|index| step_inputs.get(index))
@@ -3831,7 +4041,7 @@ impl CliApp {
             let step = self
                 .resolve_lane_step_verification(LaneVerificationInputs {
                     index,
-                    patch_count,
+                    patch_count: normal_patch_count,
                     resolved_patches,
                     step_input_offset,
                     step_targets,
@@ -3863,7 +4073,7 @@ impl CliApp {
                 probe_threads.clone(),
             )?;
             applied_formats.push(handler.descriptor().name);
-            let patch_start_percent = patch_progress_segment_start(index, patch_count);
+            let patch_start_percent = patch_progress_segment_start(stage_index, patch_count);
 
             // Later chain steps may need a different header state than the previous
             // patch left behind (explicit per-patch mode, or auto evidence from this
@@ -3923,7 +4133,7 @@ impl CliApp {
                 )));
             }
 
-            let is_last = index + 1 == patch_count;
+            let is_last = stage_index + 1 == patch_count;
             let apply_output = if is_last {
                 staged_output.to_path_buf()
             } else {
@@ -4030,7 +4240,7 @@ impl CliApp {
                     .clone()
                     .with_progress_sink(Arc::new(PatchApplyProgressSink::new(
                         context.progress_sink(),
-                        index,
+                        stage_index,
                         patch_count,
                         progress_tracker.clone(),
                     )));
@@ -4207,69 +4417,40 @@ impl CliApp {
             {
                 producer_outputs.insert(id.clone(), output_state);
             }
+            stage_index += 1;
         }
 
-        if !cheat_records.is_empty() {
-            self.emit_running(
-                OperationLabel {
-                    command: "patch-apply",
-                    family: OperationFamily::Patch,
-                    format: Some("cheat"),
-                },
-                "apply",
-                format!("baking {} database cheat(s)", cheat_records.len()),
-                Some(0.0),
-                None,
-            );
-            let mut rom = fs::read(&current_input).map_err(|error| {
-                Box::new(OperationReport::failed(
-                    OperationFamily::Patch,
-                    Some("cheat".to_string()),
-                    "apply",
-                    error.to_string(),
-                    context.single_thread_execution(),
-                ))
+        if !ordered_cheats && !cheat_records.is_empty() {
+            report = self.apply_database_cheat_stage(ApplyDatabaseCheatStageInputs {
+                input: &current_input,
+                output: staged_output,
+                records: cheat_records,
+                allow_conflicts: allow_cheat_conflicts,
+                stage_index,
+                stage_count: patch_count,
+                context,
             })?;
-            let (writes, summary) =
-                Self::resolve_database_cheat_writes(&rom, cheat_records, allow_cheat_conflicts)
-                    .map_err(|error| {
-                        Box::new(OperationReport::failed(
-                            OperationFamily::Patch,
-                            Some("cheat".to_string()),
-                            "validate",
-                            error.to_string(),
-                            context.single_thread_execution(),
-                        ))
-                    })?;
-            cheats::apply_writes(&mut rom, summary.system, &writes).map_err(|error| {
-                Box::new(OperationReport::failed(
-                    OperationFamily::Patch,
-                    Some("cheat".to_string()),
-                    "apply",
-                    error.to_string(),
-                    context.single_thread_execution(),
-                ))
-            })?;
-            fs::write(staged_output, rom).map_err(|error| {
-                Box::new(OperationReport::failed(
-                    OperationFamily::Patch,
-                    Some("cheat".to_string()),
-                    "apply",
-                    error.to_string(),
-                    context.single_thread_execution(),
-                ))
-            })?;
-            if resolved_patches.is_empty() {
-                report = OperationReport::succeeded(
-                    OperationFamily::Patch,
-                    Some("cheat".to_string()),
-                    "apply",
-                    "applied database ROM cheats",
-                    Some(100.0),
-                    context.single_thread_execution(),
+        } else {
+            let positioned_records =
+                cheat_records_at_position(cheat_records, &cheat_positions, normal_patch_count);
+            if !positioned_records.is_empty() {
+                let apply_output = database_cheat_stage_output(
+                    stage_index,
+                    patch_count,
+                    staged_output,
+                    context,
+                    temp_paths,
                 );
+                report = self.apply_database_cheat_stage(ApplyDatabaseCheatStageInputs {
+                    input: &current_input,
+                    output: &apply_output,
+                    records: &positioned_records,
+                    allow_conflicts: allow_cheat_conflicts,
+                    stage_index,
+                    stage_count: patch_count,
+                    context,
+                })?;
             }
-            report.label = format!("{}; {}", report.label, summary.label());
         }
 
         Ok(PatchApplyLoopOutcome {
@@ -4277,6 +4458,68 @@ impl CliApp {
             applied_formats,
             disc_track_replacements,
         })
+    }
+
+    fn apply_database_cheat_stage(
+        &self,
+        inputs: ApplyDatabaseCheatStageInputs<'_>,
+    ) -> std::result::Result<OperationReport, Box<OperationReport>> {
+        let ApplyDatabaseCheatStageInputs {
+            input,
+            output,
+            records,
+            allow_conflicts,
+            stage_index,
+            stage_count,
+            context,
+        } = inputs;
+        let description = if records.len() == 1 {
+            format!("`{}`", records[0].description)
+        } else {
+            format!("{} database ROM cheats", records.len())
+        };
+        self.emit_running(
+            OperationLabel {
+                command: "patch-apply",
+                family: OperationFamily::Patch,
+                format: Some("cheat"),
+            },
+            "apply",
+            format!(
+                "applying cheat {}/{} ({})",
+                stage_index + 1,
+                stage_count,
+                description
+            ),
+            Some(patch_progress_segment_start(stage_index, stage_count)),
+            None,
+        );
+        let fail = |stage: &str, error: String| {
+            Box::new(OperationReport::failed(
+                OperationFamily::Patch,
+                Some("cheat".to_string()),
+                stage,
+                error,
+                context.single_thread_execution(),
+            ))
+        };
+        let mut rom = fs::read(input).map_err(|error| fail("apply", error.to_string()))?;
+        let (writes, summary) = Self::resolve_database_cheat_writes(&rom, records, allow_conflicts)
+            .map_err(|error| fail("validate", error.to_string()))?;
+        cheats::apply_writes(&mut rom, summary.system, &writes)
+            .map_err(|error| fail("apply", error.to_string()))?;
+        if let Some(parent) = output.parent() {
+            fs::create_dir_all(parent).map_err(|error| fail("prepare", error.to_string()))?;
+        }
+        fs::write(output, rom).map_err(|error| fail("apply", error.to_string()))?;
+        Ok(OperationReport::succeeded(
+            OperationFamily::Patch,
+            Some("cheat".to_string()),
+            "apply",
+            format!("applied {description}; {}", summary.label()),
+            Some(((stage_index + 1) as f32 / stage_count as f32) * 100.0),
+            context.single_thread_execution(),
+        ))
     }
 
     fn resolve_lane_step_verification(

@@ -5,11 +5,11 @@ Use the Apply Patches page to bake cheats into a ROM.
 Cheats are a beta tool, so turn on beta tools in Settings first.
 
 1. Add the original ROM to the Apply Patches page.
-2. Open the Cheats section after rom-weaver identifies the system.
-3. Check the game title, region, revision, and match label.
-4. Search the list.
-5. Select the cheats that you want.
-6. Review each selected cheat's delivery badge.
+2. Turn on **0x04 Cheats as a Patch** after rom-weaver stages the ROM.
+3. Select **Search the cheat database**.
+4. If needed, choose a system or game in the dialog.
+5. Search the list and add the cheats that you want.
+6. Review each added cheat's delivery badge.
 7. Start Apply and save the output ROM.
 
 An exact match means a known ROM checksum matched a known release record. A title match does not prove the ROM revision.
@@ -24,7 +24,7 @@ Resolve a reported ROM-write conflict before Apply. rom-weaver does not let the 
 ## Table of contents
 
 - [Add a code manually](#add-a-code-manually)
-- [Save the selected ROM cheats as a patch](#save-the-selected-rom-cheats-as-a-patch)
+- [Save a ROM cheat as a patch](#save-a-rom-cheat-as-a-patch)
 - [Create a patch from cheat codes](#create-a-patch-from-cheat-codes)
 - [Use the database offline](#use-the-database-offline)
 
@@ -32,7 +32,7 @@ Resolve a reported ROM-write conflict before Apply. rom-weaver does not let the 
 
 ## Add a code manually
 
-1. Select **Add code manually** in the Cheats section.
+1. Open the cheat database dialog and select **Add code manually**.
 2. Enter the code and an optional description.
 3. Keep automatic system and code-type detection, or select an override.
 4. Review the detected system, code type, and delivery result.
@@ -40,13 +40,13 @@ Resolve a reported ROM-write conflict before Apply. rom-weaver does not let the 
 
 A code with `?` or `X` placeholders needs a value that rom-weaver cannot supply, so it shows as unsupported.
 
-## Save the selected ROM cheats as a patch
+## Save a ROM cheat as a patch
 
-1. Turn on the cheats that you want in the Cheats section.
-2. Select **Save as patch**.
+1. Add a ROM cheat to **0x04 Cheats as a Patch**.
+2. Open that cheat's download menu and select **Save as patch**.
 3. Save the downloaded patch file.
 
-rom-weaver selects IPS for ROMs smaller than 16 MiB, BPS from 16 MiB through 256 MiB, and xdelta above 256 MiB. The 256 MiB cutoff is rom-weaver's creation policy, not a limit of the BPS format. The status line names the created file and counts the baked cheats.
+rom-weaver selects IPS for ROMs smaller than 16 MiB, BPS from 16 MiB through 256 MiB, and xdelta above 256 MiB. The 256 MiB cutoff is rom-weaver's creation policy, not a limit of the BPS format. The status line names the created file.
 
 ## Create a patch from cheat codes
 

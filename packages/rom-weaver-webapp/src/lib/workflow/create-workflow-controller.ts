@@ -1,4 +1,4 @@
-import type { ChecksumVariant } from "../../types/checksum.ts";
+import type { ChecksumVariant, RomTypeTag } from "../../types/checksum.ts";
 import type { CreateWorkflowParentCompression, CreateWorkflowSourceState } from "../../types/create-workflow.ts";
 import type { ParsedIdentifyResolution } from "../../types/identify.ts";
 import type { CreateResult } from "../../types/public.ts";
@@ -22,6 +22,7 @@ import {
   calculateStandardInputChecksumsForFile,
   cloneChecksumVariants,
   cloneIdentification,
+  cloneRomType,
   getAssetDecompressionTimeMs,
   getAssetParentCompressions,
   getAssetSourceSize,
@@ -29,6 +30,7 @@ import {
   getPatchFilePrecomputedChecksums,
   getPatchFilePrecomputedChecksumVariants,
   getPatchFilePrecomputedIdentification,
+  getPatchFilePrecomputedRomType,
   type StandardWorkflowChecksums,
 } from "./staged-source-checksums.ts";
 
@@ -51,6 +53,7 @@ type InternalSourceState = {
   checksumVariants?: ChecksumVariant[];
   decompressionTimeMs?: number;
   identification?: ParsedIdentifyResolution;
+  romType?: RomTypeTag;
   wasDecompressed?: boolean;
   warnings: WorkflowWarning[];
   role: SourceRole;
@@ -88,6 +91,7 @@ const cloneSourceState = (state: InternalSourceState | null | undefined) =>
         fileName: state.fileName,
         id: state.id,
         identification: cloneIdentification(state.identification),
+        romType: cloneRomType(state.romType),
         parentCompressions: state.parentCompressions.map((entry) => ({ ...entry })),
         selectedCandidateId: state.selectedCandidateId,
         size: state.size,
@@ -349,6 +353,7 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
           asset.checksums = precomputed;
           asset.checksumVariants = getPatchFilePrecomputedChecksumVariants(asset.file);
           asset.identification = getPatchFilePrecomputedIdentification(asset.file);
+          asset.romType = getPatchFilePrecomputedRomType(asset.file);
           asset.checksumTimeMs = 0;
           continue;
         }
@@ -390,6 +395,7 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
         stage.state.checksumVariants = cloneChecksumVariants(primaryAsset?.checksumVariants);
         stage.state.checksumTimeMs = primaryAsset?.checksumTimeMs;
         stage.state.identification = cloneIdentification(primaryAsset?.identification);
+        stage.state.romType = cloneRomType(primaryAsset?.romType);
       }
     }
     if (session.synthetic) this.syncSourceSessionView(session);

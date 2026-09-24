@@ -503,6 +503,7 @@ const applyPatchesToAsset = async ({
   asset,
   assetPatches,
   cheatRecords,
+  cheatPositions,
   options,
   defaultPatchBasis,
   patchOptions,
@@ -514,6 +515,7 @@ const applyPatchesToAsset = async ({
   asset: InputAsset;
   assetPatches: ParsedPatchLike[];
   cheatRecords: PatchInput["cheatRecords"];
+  cheatPositions: PatchInput["cheatPositions"];
   options: ApplyPatchOptions;
   defaultPatchBasis?: PatchInput["defaultPatchBasis"];
   patchOptions: PatchInput["patchOptions"];
@@ -522,6 +524,9 @@ const applyPatchesToAsset = async ({
   workerOutputName?: string;
 }) => {
   const patchIndices = assetPatches.map((patch) => patches.indexOf(patch));
+  const selectedCheatPositions = cheatPositions?.map(
+    (position) => patchIndices.filter((patchIndex) => patchIndex < position).length,
+  );
   const patchBasis = getPatchBases(patchIndices, patchOptions);
   const patchIds = getPatchIds(patchIndices, patchOptions);
   const patchInputs = getPatchInputs(patchIndices, patchOptions, asset);
@@ -549,6 +554,7 @@ const applyPatchesToAsset = async ({
     options: {
       ...createWorkerApplyOptions(options, workerOutputName),
       ...(cheatRecords?.length ? { cheatRecords } : {}),
+      ...(selectedCheatPositions?.length ? { cheatPositions: selectedCheatPositions } : {}),
       headerModes: getPatchHeaderModes(patchIndices, patchOptions),
       n64ByteOrders: getPatchN64ByteOrders(patchIndices, patchOptions),
       outputHeader: options.output?.header || ("auto" as const),
@@ -576,6 +582,7 @@ const applyPreparedPatches = async ({
   assetCount,
   assets,
   cheatRecords,
+  cheatPositions,
   inputAssets,
   options,
   patchOptions,
@@ -588,6 +595,7 @@ const applyPreparedPatches = async ({
   assetCount: number;
   assets: InputAsset[];
   cheatRecords: PatchInput["cheatRecords"];
+  cheatPositions: PatchInput["cheatPositions"];
   inputAssets: InputAsset[];
   options: ApplyPatchOptions;
   patchOptions: PatchInput["patchOptions"];
@@ -656,6 +664,7 @@ const applyPreparedPatches = async ({
           asset,
           assetPatches,
           cheatRecords: assetCheatRecords,
+          cheatPositions,
           options,
           patchOptions,
           defaultPatchBasis,
@@ -766,6 +775,7 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
     assetCount: inputAssets.length,
     assets: inputAssets,
     cheatRecords: input.cheatRecords,
+    cheatPositions: input.cheatPositions,
     inputAssets,
     options,
     patchOptions: input.patchOptions,

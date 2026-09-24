@@ -190,6 +190,29 @@ describe("create controller execution input and checksums", () => {
     expect(workerIo.ingest).not.toHaveBeenCalled();
   });
 
+  it("keeps the header ROM type for a ROM identify cannot match", async () => {
+    const controller = makeController();
+    const originalStage = stage("original", "game.nes");
+    const file = {
+      ...patchFile("game.nes"),
+      identification: { matches: [], status: "unidentified" },
+      romType: { platform: "Nintendo Entertainment System" },
+    };
+    originalStage.preparedInputAssets = [
+      { file, fileName: "game.nes", id: "game", kind: "rom", patchable: true, size: 8 },
+    ];
+    const originalSession = session("original", originalStage);
+    controller.originalSession = originalSession;
+    (controller as unknown as { runtime: Record<string, unknown> }).runtime = {
+      name: "browser",
+      workerIo: { ingest: vi.fn() },
+    };
+
+    await controller.finalizeSourceStableState(originalSession);
+    // The create form routes cheat codes on this platform when identify has none.
+    expect(controller.getOriginal()?.romType).toEqual({ platform: "Nintendo Entertainment System" });
+  });
+
   it("routes create progress events to preparation, create, and compression stages", () => {
     const controller = makeController();
     const originalStage = stage("original", "old.sfc");

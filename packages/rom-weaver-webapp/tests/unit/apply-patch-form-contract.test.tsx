@@ -228,6 +228,10 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
       expect(container.querySelector("section.step.is-input.is-empty")).toBeNull();
     });
     expect(container.querySelector("#rom-weaver-list-input-stack .card.file")).toBeTruthy();
+    expect(container.querySelector("#rom-weaver-row-cheat-stack")).toBeTruthy();
+    expect(container.querySelector("#rom-weaver-row-patch-stack .step-num")?.textContent).toBe("0x03");
+    expect(container.querySelector("#rom-weaver-row-patch-stack #rom-weaver-row-cheat-stack")).toBeTruthy();
+    expect(container.querySelector("#rom-weaver-row-patch-stack button.cheat-add")).toBeTruthy();
   });
 
   it("surfaces an apply error from the fake workflow's run()", async () => {

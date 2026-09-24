@@ -1,4 +1,4 @@
-import { Search } from "lucide-react";
+import { WandSparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type {
   CheatDatabaseIndex,
@@ -17,7 +17,8 @@ import {
   splitCheatCodes,
   type CreateCheatCodeEntry,
 } from "../create-cheat-codes-model.ts";
-import { AddCheatsDialog, gameLabel } from "./cheat-database-section.tsx";
+import { AddCheatsDialog, CheatGamePicker } from "./cheat-database-section.tsx";
+import { FileCard } from "./ds/file-card.tsx";
 import { useCheatDatabaseRecords } from "./use-cheat-database-records.ts";
 import "./create-cheat-codes-panel.css";
 
@@ -97,13 +98,13 @@ const CreateCheatCodesPanel = ({
   reportSystem.current = onSystemChange;
 
   const {
-    activeIndex,
     classificationError,
     entry: databaseEntry,
     game,
     loadError,
     manualGameId,
     manualSystem,
+    match,
     records,
     setManualGameId,
     shard,
@@ -189,89 +190,106 @@ const CreateCheatCodesPanel = ({
 
   const gamePicker =
     rom && databaseEntry && shard ? (
-      <label className="cheat-game-picker">
-        <span>Browse games for {databaseEntry.platform}</span>
-        <select onChange={(event) => setManualGameId(event.target.value)} value={manualGameId}>
-          <option value="">Use automatic match</option>
-          {shard.games.map((candidate) => (
-            <option key={candidate.id} value={candidate.id}>
-              {gameLabel(candidate)}
-            </option>
-          ))}
-        </select>
-      </label>
+      <CheatGamePicker
+        games={shard.games}
+        onChange={setManualGameId}
+        platform={databaseEntry.platform}
+        unverified={match.kind === "title" || match.kind === "manual"}
+        value={manualGameId}
+      />
     ) : null;
+
+  // Entries mirror the split codes one to one, so the position picks out the
+  // card's own code even when the same code is typed twice.
+  const removeCode = (position: number) => {
+    onValueChange(
+      splitCheatCodes(value, manualSystem)
+        .filter((_code, index) => index !== position)
+        .join("\n"),
+    );
+  };
 
   return (
     <div className="create-cheat-codes">
-      <label className="create-cheat-codes-input">
-        <span>Cheat codes</span>
-        <textarea
-          autoCapitalize="characters"
-          disabled={disabled}
-          maxLength={8192}
-          onChange={(event) => onValueChange(event.target.value)}
-          placeholder="one per line or joined with +"
-          rows={4}
-          spellCheck={false}
-          value={value}
-        />
-      </label>
       {detected ? (
         <p className="create-cheat-codes-detected" role="status">
           {detected}
         </p>
       ) : null}
       {entries.length ? (
-        <ul className="create-cheat-codes-list">
-          {entries.map((entry) => {
+        <div className="cards workflow-file-list create-cheat-codes-list">
+          {entries.map((entry, position) => {
             const writes = getCheatCodeWrites(entry.record);
+            const blocked =
+              entry.error || (entry.record?.resolution.type === "unsupported" ? entry.record.resolution.reason : "");
             return (
-              <li className="create-cheat-code" key={entry.id}>
-                <span className="mono create-cheat-code-raw">{entry.code}</span>
-                {writes.length ? (
-                  <span className="create-cheat-code-writes">
-                    {writes.map((write) => (
-                      <span className="create-cheat-code-write" key={`${write.offset}:${write.value}`}>
-                        <span className="mono">{formatCheatWrite(write)}</span>
-                        {getCheatCompareLabel(write) ? (
-                          <span className="rb mono">{getCheatCompareLabel(write)}</span>
-                        ) : null}
-                      </span>
-                    ))}
-                  </span>
-                ) : (
-                  <span className="create-cheat-code-blocked">
-                    {entry.error ||
-                      (entry.record?.resolution.type === "unsupported" ? entry.record.resolution.reason : "Checking…")}
-                  </span>
-                )}
-              </li>
+              <FileCard
+                className="cheat-card create-cheat-code"
+                description={
+                  writes.length ? null : <span className="create-cheat-code-blocked">{blocked || "Checking…"}</span>
+                }
+                key={entry.id}
+                meta={
+                  <>
+                    {entry.description ? <span className="rb mono">{entry.code}</span> : null}
+                    {writes.flatMap((write) => {
+                      const key = `${write.offset}:${write.value}`;
+                      const compareLabel = getCheatCompareLabel(write);
+                      return [
+                        <span className="rb mono" key={key}>
+                          {formatCheatWrite(write)}
+                        </span>,
+                        ...(compareLabel
+                          ? [
+                              <span className="rb mono" key={`${key}:compare`}>
+                                {compareLabel}
+                              </span>,
+                            ]
+                          : []),
+                      ];
+                    })}
+                  </>
+                }
+                name={<span className={entry.description ? "nm" : "nm mono"}>{entry.description || entry.code}</span>}
+                onRemove={disabled ? undefined : () => removeCode(position)}
+                removeLabel={`Remove code ${entry.code}`}
+                {...(writes.length ? { state: "ok" as const } : blocked ? { state: "warn" as const } : {})}
+              />
             );
           })}
-        </ul>
+        </div>
       ) : null}
 
       <button className="needs-input cheat-add" disabled={disabled} onClick={() => setDialogOpen(true)} type="button">
-        <Search aria-hidden="true" />
-        <span>Pick from the cheat database</span>
+        <span className="cheat-add-copy">
+          <span className="cheat-add-label">
+            <WandSparkles aria-hidden="true" />
+            Pick from the cheat database
+          </span>
+          <small>Choose codes for this game, or type your own below.</small>
+        </span>
       </button>
+
+      <label className="create-cheat-codes-input">
+        <span>Type codes</span>
+        <textarea
+          autoCapitalize="characters"
+          className="input mono"
+          disabled={disabled}
+          maxLength={8192}
+          onChange={(event) => onValueChange(event.target.value)}
+          placeholder="One per line or joined with +"
+          rows={3}
+          spellCheck={false}
+          value={value}
+        />
+      </label>
       {classificationError ? <p role="alert">{classificationError}</p> : null}
       {loadError ? <p role="alert">{loadError}</p> : null}
 
       <AddCheatsDialog
         addedIds={addedIds}
         gamePicker={gamePicker}
-        notices={
-          <aside className="cheat-notices">
-            <p>Community cheat data can contain errors. A checksum match does not prove that each cheat works.</p>
-            {activeIndex ? (
-              <p>
-                Database: {activeIndex.sourceUrl} at {activeIndex.sourceRevision} · {activeIndex.license}
-              </p>
-            ) : null}
-          </aside>
-        }
         onAdd={(record) => onValueChange(appendCodes(value, recordCodes(record, manualSystem), manualSystem))}
         onClose={() => setDialogOpen(false)}
         onRemove={(record) => {

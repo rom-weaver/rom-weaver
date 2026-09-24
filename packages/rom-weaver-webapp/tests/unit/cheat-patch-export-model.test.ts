@@ -108,7 +108,7 @@ describe("getCheatPatchFileName", () => {
 
 describe("getCheatPatchStatus", () => {
   it("counts the baked cheats", () => {
-    expect(getCheatPatchStatus("game - A.ips", 2)).toBe("Created game - A.ips from the 2 ROM cheats that are On.");
-    expect(getCheatPatchStatus("game - A.ips", 1)).toBe("Created game - A.ips from the 1 ROM cheat that is On.");
+    expect(getCheatPatchStatus("game - A.ips", 2)).toBe("Created game - A.ips from 2 ROM cheats.");
+    expect(getCheatPatchStatus("game - A.ips", 1)).toBe("Created game - A.ips from 1 ROM cheat.");
   });
 });

@@ -6,30 +6,39 @@
  * The file stores each record once, without the values a reader can derive:
  *
  *   {
- *     schemaVersion: 1,
+ *     schemaVersion: 2,
  *     system, sourceRevision,
  *     games: [{
- *       id, title, normalizedTitle, regions, revisions, sourceFiles, checksums,
+ *       id, title, normalizedTitle, regions, revisions, checksums,
  *       cheats: [{
  *         description?,   // present iff the source record has a `desc` field
  *         rawCode,
- *         codeKind?, importWarnings?,
+ *         codeKind?,      // from the file's device annotation; part of the ID
+ *         kindHint?,      // other device words in the file name; not part of the ID
+ *         importWarnings?,
  *         rawFields?,     // source fields other than desc/code, and enable when it is not "false"
- *         sourceFile,     // index into the game's sourceFiles
- *         sourceIndex,
+ *         sourceIndex,    // numbers the "Cheat N" name of a record without desc
  *       }],
  *     }],
  *   }
  *
  * {@link expandCheatShard} restores the full in-memory record: `system`,
- * `gameId`, and `sourceRevision` from the parents, `rawFields.desc`,
+ * `gameId`, and `sourceRevision` from the parents, `sourceFile` as
+ * {@link DATABASE_SOURCE_FILE}, `rawFields.desc`,
  * `rawFields.code`, and `rawFields.enable` from the record itself, and the
  * record `id` by hashing the restored fields. The native CLI performs the same
  * expansion in `crates/rom-weaver-cli/src/cheat_database.rs`; the two MUST
  * produce identical IDs, because bundles store them.
  */
 
-export const CHEAT_SHARD_SCHEMA_VERSION = 1;
+export const CHEAT_SHARD_SCHEMA_VERSION = 2;
+
+/**
+ * The `sourceFile` of every database record. Shards do not store the Libretro
+ * file a record came from: the ID does not hash it, and its code kind is
+ * resolved at build time.
+ */
+export const DATABASE_SOURCE_FILE = "libretro-database";
 
 const CODE_KINDS = new Set(["game-genie", "pro-action-replay", "xploder"]);
 
@@ -39,9 +48,9 @@ const CODE_KINDS = new Set(["game-genie", "pro-action-replay", "xploder"]);
  *   description?: string;
  *   rawCode: string | null;
  *   codeKind?: string;
+ *   kindHint?: string;
  *   importWarnings?: string[];
  *   rawFields?: RawFields;
- *   sourceFile: number;
  *   sourceIndex: number;
  * }} StoredCheat
  * @typedef {{
@@ -50,11 +59,10 @@ const CODE_KINDS = new Set(["game-genie", "pro-action-replay", "xploder"]);
  *   normalizedTitle: string;
  *   regions: string[];
  *   revisions: string[];
- *   sourceFiles: string[];
  *   checksums: Array<Record<string, unknown>>;
  *   cheats: StoredCheat[];
  * }} StoredGame
- * @typedef {{ schemaVersion: 1; system: string; sourceRevision: string; games: StoredGame[] }} StoredShard
+ * @typedef {{ schemaVersion: 2; system: string; sourceRevision: string; games: StoredGame[] }} StoredShard
  * @typedef {{
  *   id: string;
  *   system: string;
@@ -62,6 +70,7 @@ const CODE_KINDS = new Set(["game-genie", "pro-action-replay", "xploder"]);
  *   description: string;
  *   rawCode: string | null;
  *   codeKind?: string;
+ *   kindHint?: string;
  *   importWarnings?: string[];
  *   rawFields: RawFields;
  *   sourceFile: string;
@@ -69,7 +78,7 @@ const CODE_KINDS = new Set(["game-genie", "pro-action-replay", "xploder"]);
  *   sourceRevision: string;
  * }} ExpandedCheat
  * @typedef {Omit<StoredGame, "cheats"> & { cheats: ExpandedCheat[] }} ExpandedGame
- * @typedef {{ schemaVersion: 1; system: string; games: ExpandedGame[] }} ExpandedShard
+ * @typedef {{ schemaVersion: 2; system: string; games: ExpandedGame[] }} ExpandedShard
  */
 
 /**
@@ -128,6 +137,9 @@ const validateStoredCheat = (value, where) => {
   if (cheat.codeKind !== undefined && !CODE_KINDS.has(/** @type {string} */ (cheat.codeKind))) {
     throw new Error(`${where} has an unknown codeKind.`);
   }
+  if (cheat.kindHint !== undefined && !CODE_KINDS.has(/** @type {string} */ (cheat.kindHint))) {
+    throw new Error(`${where} has an unknown kindHint.`);
+  }
   if (cheat.importWarnings !== undefined && !isStringArray(cheat.importWarnings)) {
     throw new Error(`${where} has invalid importWarnings.`);
   }
@@ -139,7 +151,7 @@ const validateStoredCheat = (value, where) => {
       if (typeof field !== "string") throw new Error(`${where} raw field ${key} is not a string.`);
     }
   }
-  if (!(isIndex(cheat.sourceFile) && isIndex(cheat.sourceIndex))) throw new Error(`${where} has an invalid index.`);
+  if (!isIndex(cheat.sourceIndex)) throw new Error(`${where} has an invalid index.`);
   return /** @type {StoredCheat} */ (cheat);
 };
 
@@ -169,7 +181,6 @@ export const validateStoredShard = (value) => {
     if (typeof record.id !== "string" || typeof record.title !== "string") {
       throw new Error(`${where} has no id or title.`);
     }
-    if (!isStringArray(record.sourceFiles)) throw new Error(`${where} has invalid sourceFiles.`);
     if (!Array.isArray(record.cheats)) throw new Error(`${where} has no cheats array.`);
     for (const [position, cheat] of record.cheats.entries()) validateStoredCheat(cheat, `${where} cheat ${position}`);
   });
@@ -214,11 +225,7 @@ export const expandCheatShard = async (shard, sha256Hex) => {
   for (const game of shard.games) {
     const { cheats: stored, ...rest } = game;
     const cheats = await Promise.all(
-      stored.map(async (cheat, position) => {
-        const sourceFile = game.sourceFiles[cheat.sourceFile];
-        if (sourceFile === undefined) {
-          throw new Error(`Cheat ${position} of game ${game.id} names a source file the game does not list.`);
-        }
+      stored.map(async (cheat) => {
         const rawFields = expandRawFields(cheat);
         const hex = await sha256Hex(encoder.encode(cheatIdSource(shard.system, game.id, cheat.codeKind, rawFields)));
         /** @type {ExpandedCheat} */
@@ -228,10 +235,14 @@ export const expandCheatShard = async (shard, sha256Hex) => {
           gameId: game.id,
           description: cheat.description ?? defaultDescription(cheat.sourceIndex),
           rawCode: cheat.rawCode ?? null,
-          ...(cheat.codeKind === undefined ? {} : { codeKind: cheat.codeKind }),
+          // The ID above hashes only the stored codeKind; the hint fills the
+          // kind for classification without changing the ID.
+          ...(cheat.codeKind === undefined && cheat.kindHint === undefined
+            ? {}
+            : { codeKind: cheat.codeKind ?? cheat.kindHint }),
           ...(cheat.importWarnings === undefined ? {} : { importWarnings: cheat.importWarnings }),
           rawFields,
-          sourceFile,
+          sourceFile: DATABASE_SOURCE_FILE,
           sourceIndex: cheat.sourceIndex,
           sourceRevision: shard.sourceRevision,
         };
@@ -247,12 +258,9 @@ export const expandCheatShard = async (shard, sha256Hex) => {
  * Reduce a full record to what the file stores. Inverse of the expansion in
  * {@link expandCheatShard}; the builder calls it once per record.
  * @param {ExpandedCheat} record
- * @param {string[]} sourceFiles
  * @returns {StoredCheat}
  */
-export const storeCheat = (record, sourceFiles) => {
-  const sourceFile = sourceFiles.indexOf(record.sourceFile);
-  if (sourceFile < 0) throw new Error(`${record.sourceFile} is not one of the game's source files.`);
+export const storeCheat = (record) => {
   // The reader rebuilds desc and code from description and rawCode, so a record
   // where they differ would come back changed.
   const hasDesc = Object.hasOwn(record.rawFields, "desc");
@@ -273,9 +281,9 @@ export const storeCheat = (record, sourceFiles) => {
     ...(hasDesc ? { description: record.description } : {}),
     rawCode: record.rawCode,
     ...(record.codeKind === undefined ? {} : { codeKind: record.codeKind }),
+    ...(record.kindHint === undefined ? {} : { kindHint: record.kindHint }),
     ...(record.importWarnings === undefined ? {} : { importWarnings: record.importWarnings }),
     ...(Object.keys(rawFields).length === 0 ? {} : { rawFields }),
-    sourceFile,
     sourceIndex: record.sourceIndex,
   };
 };

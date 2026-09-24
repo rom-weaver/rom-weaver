@@ -776,7 +776,7 @@ msgstr "Los archivos chd, rvz/wia/gcz y z3ds se descomprimen antes de aplicar pa
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.step.cheats"
-msgstr "Trucos"
+msgstr "Trucos como parche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2482,6 +2482,11 @@ msgstr "Parches"
 #: src/presentation/localization/messages.ts
 msgid "ui.step.patches"
 msgstr "Parches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.step.patchesCheats"
+msgstr "Parches y trucos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

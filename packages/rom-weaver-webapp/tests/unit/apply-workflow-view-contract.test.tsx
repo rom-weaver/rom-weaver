@@ -189,7 +189,14 @@ const renderView = ({
     <RomWeaverSettingsProvider settings={settings}>
       <ApplyWorkflowFormView
         bundleMetaById={bundleMetaById}
-        cheats={() => cheatsStep}
+        cheats={({ renderStack }) =>
+          renderStack({
+            cards: [],
+            controls: cheatsStep,
+            onOrderChange: () => undefined,
+            renderCard: () => null,
+          })
+        }
         bundleExpectedRomChecks={bundleExpectedRomChecks}
         controllers={controllers}
         emulatorOutput={emulatorOutput as never}
@@ -903,6 +910,7 @@ describe("apply workflow view - staged bench", () => {
     expect(patchPosition.disabled).toBe(true);
     expect(patchPosition.getAttribute("aria-label")).toBe("Patch 1 of 1. Reordering unavailable.");
     expect(container.querySelector("#rom-weaver-row-patch-stack [data-testid=cheats-step]")).toBeTruthy();
+    expect(container.querySelector("[data-testid=cheats-step]")).toBeTruthy();
     expect(container.querySelector("#rom-weaver-row-file-rom [data-testid=cheats-step]")).toBeNull();
     // the patches step header counts staged files
     expect(container.querySelector("#rom-weaver-row-patch-stack .step-meta .rb")?.textContent).toContain("1 file");
@@ -910,10 +918,15 @@ describe("apply workflow view - staged bench", () => {
     expect(container.querySelectorAll("button.needs-input").length).toBe(0);
   });
 
-  it.each([false, undefined])("hides cheats when beta tools are %s", (betaToolsEnabled) => {
+  it.each([false, undefined])("shows cheats when beta tools are %s", (betaToolsEnabled) => {
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const { container } = renderView({ settings: { betaToolsEnabled }, ui });
-    expect(container.querySelector("[data-testid=cheats-step]")).toBeNull();
+    const patchStep = container.querySelector("#rom-weaver-row-patch-stack");
+    const drop = patchStep?.querySelector(".needs-input");
+    const cheats = container.querySelector("[data-testid=cheats-step]");
+    expect(drop).toBeTruthy();
+    expect(cheats).toBeTruthy();
+    expect(drop?.compareDocumentPosition(cheats as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("uses a matched title on the ROM card and keeps it out of Checks", () => {

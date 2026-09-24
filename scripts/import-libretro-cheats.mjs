@@ -382,7 +382,8 @@ export function parseCht(source, options = {}) {
     if (!fields.has(fieldName) && fields.size >= MAX_FIELDS_PER_RECORD) {
       fail(`${sourceFile}:cheat${sourceIndex} has more than ${MAX_FIELDS_PER_RECORD} fields.`);
     }
-    const parsedValue = parseValue(line.slice(equals + 1), `${sourceFile}:${lineIndex + 1}`);
+    // Warnings are stored in the shard, which does not record the source file.
+    const parsedValue = parseValue(line.slice(equals + 1), `Line ${lineIndex + 1}`);
     const fieldValue = parsedValue.value;
     if (parsedValue.warning) {
       if (!warnings.has(sourceIndex)) warnings.set(sourceIndex, []);
@@ -433,6 +434,29 @@ const codeKindForTitle = (title, cheatSystem) => {
   return null;
 };
 
+const ACTION_REPLAY_WORDS = ["action replay", "action-replay", "gameshark", "game shark"];
+const XPLODER_WORDS = ["xploder", "xplorer", "codebreaker", "code breaker"];
+
+// Shards do not store the file name, so the kind the Rust classifier used to
+// read from it at load time (`record_kind_hint` in
+// crates/rom-weaver-cli/src/cheats/mod.rs) MUST be resolved here with the same
+// words and precedence. Game Boy "(Xploder)" files depend on it. It is stored
+// as `kindHint`, never as `codeKind`, because the cheat ID hashes `codeKind`.
+const codeKindForFileName = (fileName, cheatSystem) => {
+  const name = fileName.toLowerCase();
+  const has = (words) => words.some((word) => name.includes(word));
+  if (
+    (cheatSystem === "gameboyadvance" || cheatSystem === "playstation") &&
+    has([...ACTION_REPLAY_WORDS, ...XPLODER_WORDS])
+  ) {
+    return "xploder";
+  }
+  if (has(["game genie", "game-genie"])) return "game-genie";
+  if (has(ACTION_REPLAY_WORDS)) return "pro-action-replay";
+  if (has(XPLODER_WORDS)) return "xploder";
+  return null;
+};
+
 export const normalizeReleaseName = (name) =>
   stripDeviceAnnotation(stripExtension(name))
     .normalize("NFKC")
@@ -472,6 +496,17 @@ export const stableGameId = (cheatSystem, normalizedTitle) =>
 // Rust loader); the builder uses it only to merge duplicate records.
 export const stableCheatId = (cheatSystem, gameId, record) =>
   cheatIdFromHex(sha256Hex(cheatIdSource(cheatSystem, gameId, record.codeKind, record.rawFields)));
+
+// Libretro often ships one game's codes twice: in the plain `.cht` and in the
+// device-annotated one (`(Game Genie)`), which differ only in the code kind and
+// in description case or spacing. Records with the same code and description
+// MUST collapse to one, keeping the record that names its code kind.
+const cheatContentKey = (record) =>
+  `${(record.rawCode ?? "").replace(/\s+/gu, "").toUpperCase()}\0${record.description
+    .normalize("NFKC")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .toLocaleLowerCase("en-US")}`;
 
 // Codepoint comparison, never localeCompare: ICU collation varies by machine
 // and would break the byte-identical rebuild promise the identify data makes.
@@ -535,6 +570,7 @@ export function buildCheatShard({ cheatSystem, files, releases, sourceRevision }
     const baseName = sourceFile.slice(sourceFile.lastIndexOf("/") + 1);
     const sourceTitle = stripExtension(baseName);
     const codeKind = codeKindForTitle(sourceTitle, cheatSystem);
+    const kindHint = codeKind ? null : codeKindForFileName(sourceTitle, cheatSystem);
     const normalizedTitle = normalizeReleaseName(sourceTitle);
     const matched = byTitle.get(normalizedTitle) ?? [];
     const canonicalTitle = matched[0]?.name ?? stripDeviceAnnotation(sourceTitle);
@@ -543,17 +579,16 @@ export function buildCheatShard({ cheatSystem, files, releases, sourceRevision }
       const metadata = titleMetadata(canonicalTitle, matched[0]?.region);
       games.set(gameId, {
         cheats: new Map(),
+        cheatsByContent: new Map(),
         checksums: new Map(),
         id: gameId,
         normalizedTitle,
         regions: new Set(metadata.regions),
         revisions: new Set(metadata.revisions),
-        sourceFiles: new Set(),
         title: metadata.title,
       });
     }
     const game = games.get(gameId);
-    game.sourceFiles.add(sourceFile);
     for (const release of matched) {
       if (release.region) game.regions.add(release.region);
       const metadata = titleMetadata(release.name, release.region);
@@ -563,13 +598,32 @@ export function buildCheatShard({ cheatSystem, files, releases, sourceRevision }
     }
 
     for (const parsed of parseCht(file.text, { sourceFile, sourceRevision })) {
-      const record = { ...parsed, gameId, system: cheatSystem, ...(codeKind ? { codeKind } : {}) };
+      const record = {
+        ...parsed,
+        gameId,
+        system: cheatSystem,
+        ...(codeKind ? { codeKind } : {}),
+        ...(kindHint ? { kindHint } : {}),
+      };
       if (!isBakeableCandidate(cheatSystem, record)) {
         droppedCount += 1;
         continue;
       }
       record.id = stableCheatId(cheatSystem, gameId, record);
-      if (!game.cheats.has(record.id)) game.cheats.set(record.id, record);
+      if (game.cheats.has(record.id)) continue;
+      // One record per content and code kind; a kindless record yields to any
+      // kinded one, since the kind is the only thing it lacks.
+      const contentKey = cheatContentKey(record);
+      const kinds = game.cheatsByContent.get(contentKey) ?? new Map();
+      game.cheatsByContent.set(contentKey, kinds);
+      const kind = record.codeKind ?? "";
+      if (kinds.has(kind) || (!kind && kinds.size)) continue;
+      if (kinds.has("")) {
+        game.cheats.delete(kinds.get(""));
+        kinds.delete("");
+      }
+      kinds.set(kind, record.id);
+      game.cheats.set(record.id, record);
     }
   }
 
@@ -577,17 +631,15 @@ export function buildCheatShard({ cheatSystem, files, releases, sourceRevision }
 
   const serializedGames = [...games.values()]
     .map((game) => {
-      const sourceFiles = [...game.sourceFiles].sort(compare);
       return {
         checksums: [...game.checksums.values()].sort((left, right) => compare(checksumKey(left), checksumKey(right))),
         cheats: [...game.cheats.values()]
           .sort((left, right) => compare(left.sourceFile, right.sourceFile) || left.sourceIndex - right.sourceIndex)
-          .map((record) => storeCheat(record, sourceFiles)),
+          .map(storeCheat),
         id: game.id,
         normalizedTitle: game.normalizedTitle,
         regions: [...game.regions].sort(compare),
         revisions: [...game.revisions].sort(compare),
-        sourceFiles,
         title: game.title,
       };
     })

@@ -287,6 +287,18 @@ describe("serializeSettingsForStorage", () => {
     expect(loadSettings(makeStorage(json)).betaToolsEnabled).toBe(true);
   });
 
+  it("ignores the obsolete Cheats as a Patch setting", () => {
+    const oldSettings = JSON.stringify({
+      version: SETTINGS_STORAGE_VERSION,
+      common: { betaToolsEnabled: true, cheatsEnabled: true },
+    });
+    const loaded = loadSettings(makeStorage(oldSettings));
+    const serialized = JSON.parse(serializeSettingsForStorage(loaded) as string);
+    expect(loaded).not.toHaveProperty("cheatsEnabled");
+    expect(serialized.common.betaToolsEnabled).toBe(true);
+    expect(serialized.common).not.toHaveProperty("cheatsEnabled");
+  });
+
   it("serializes and loads both post-apply behaviors under apply.output", () => {
     const settings = {
       ...getDefaultSettings(),

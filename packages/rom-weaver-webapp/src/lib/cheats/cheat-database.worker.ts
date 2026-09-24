@@ -2,7 +2,12 @@
 
 import { sha256Hex } from "../identify/sha256-hex.ts";
 import type { CheatDatabaseEntry, CheatSystemShard } from "./model.ts";
-import { expandCheatShard, type StoredShard, validateStoredShard } from "./shard-format.mjs";
+import {
+  CHEAT_SHARD_SCHEMA_VERSION,
+  expandCheatShard,
+  type StoredShard,
+  validateStoredShard,
+} from "./shard-format.mjs";
 
 const MAX_SHARD_BYTES = 128 * 1024 * 1024;
 const MAX_GAMES = 100_000;
@@ -21,7 +26,7 @@ const scope = self as DedicatedWorkerGlobalScope;
 const parseShard = async (text: string, entry: CheatDatabaseEntry): Promise<CheatSystemShard> => {
   const value = JSON.parse(text) as Partial<StoredShard>;
   if (
-    value.schemaVersion !== 1 ||
+    value.schemaVersion !== CHEAT_SHARD_SCHEMA_VERSION ||
     value.system !== entry.cheatSystem ||
     typeof value.sourceRevision !== "string" ||
     !Array.isArray(value.games)

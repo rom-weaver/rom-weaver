@@ -32,6 +32,7 @@ import type {
 } from "./apply-session-types.ts";
 import { getBinarySourceListStableIds, getBinarySourceSize, sameBinarySourceLists } from "./input-session-helpers.ts";
 import { getGeneratedOutputName } from "./output-view-model.ts";
+import { buildCheatOutputBaseName } from "../../lib/output/output-name-composition.ts";
 import type { ApplyPatchFormSettings, BinarySource, NoticeController } from "./patcher-form.ts";
 import {
   formatElapsedTiming,
@@ -103,6 +104,7 @@ const useLocalApplyPatchFormSession = ({
   resolvedOutputCompression,
   resolvedOutputName,
   resolvedOutputNameKey,
+  cheatNames = [],
   disabledPatchIds,
   stageInput,
   stagePatches,
@@ -321,7 +323,8 @@ const useLocalApplyPatchFormSession = ({
     ? currentResolvedOutputName || generatedOutputName
     : generatedOutputName;
   const resolvedThreads = activeSettings.workers?.threads ?? getLegacyCompressionThreads(activeSettings) ?? threads;
-  const effectiveResolvedOutputName = requestedOutputName || automaticResolvedOutputName;
+  const effectiveResolvedOutputName =
+    requestedOutputName || buildCheatOutputBaseName(automaticResolvedOutputName, cheatNames);
   const stageSettingsKey = useMemo(
     () =>
       createStageSettingsKey({

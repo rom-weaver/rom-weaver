@@ -531,7 +531,6 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
 
     const betaToolsEnabled = readStoredField(storedBooleanSchema, loadedSettings.betaToolsEnabled);
     if (betaToolsEnabled !== undefined) settings.betaToolsEnabled = betaToolsEnabled;
-
     const identifiedOutputName = readStoredField(storedBooleanSchema, loadedSettings.identifiedOutputName);
     if (identifiedOutputName !== undefined) settings.identifiedOutputName = identifiedOutputName;
 

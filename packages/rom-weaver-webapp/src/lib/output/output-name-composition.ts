@@ -76,4 +76,13 @@ const buildPatchedOutputBaseName = (inputBaseName: string, patchNames: readonly 
   return `${base}${bracketSuffix}`;
 };
 
-export { buildPatchedOutputBaseName, createPatchMetadataLabel };
+const buildCheatOutputBaseName = (baseName: string, descriptions: readonly string[]): string => {
+  const base = String(baseName || "").replace(/(?: \[cht [^[\]]+\])+$/u, "");
+  const labels = descriptions
+    .map((description) => sanitizePatchMetadataPart(description))
+    .filter(Boolean)
+    .map((description) => ` [cht ${description}]`);
+  return `${base}${labels.join("")}`;
+};
+
+export { buildCheatOutputBaseName, buildPatchedOutputBaseName, createPatchMetadataLabel };

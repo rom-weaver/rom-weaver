@@ -2,6 +2,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ApplyPatchListStep } from "../../src/public/react/apply-patch-list-step.tsx";
+import type { CheatStackRenderState } from "../../src/public/react/components/cheat-database-section.tsx";
 import type { PatcherStackController } from "../../src/public/react/patcher-form.ts";
 import type { PatchStackItemState } from "../../src/public/react/patcher-presentation.ts";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
@@ -63,6 +64,40 @@ const renderList = (overrides: Partial<Parameters<typeof ApplyPatchListStep>[0]>
 };
 
 describe("ApplyPatchListStep", () => {
+  it("reorders cheats across patches in the shared apply list", async () => {
+    const onOrderChange = vi.fn();
+    const cheat = { record: { id: "cheat-one" } } as CheatStackRenderState["cards"][number];
+    const cheats: CheatStackRenderState = {
+      cards: [cheat],
+      controls: <p>Cheat controls</p>,
+      onOrderChange,
+      renderCard: (entry, position, _canReorder, handleProps, rowProps) => (
+        <div className="cheat-test-card" ref={rowProps.rootRef}>
+          <button {...handleProps} type="button">
+            Cheat {position}
+          </button>
+          {entry.record.id}
+        </div>
+      ),
+    };
+    const { container } = renderList({ cheats });
+    const cardNames = () =>
+      Array.from(container.querySelector("#rom-weaver-list-patch-stack")?.children || []).map((card) =>
+        card.classList.contains("cheat-test-card") ? "cheat" : "patch",
+      );
+
+    expect(cardNames()).toEqual(["patch", "patch", "cheat"]);
+    const list = container.querySelector("#rom-weaver-list-patch-stack");
+    const controls = screen.getByText("Cheat controls");
+    expect(list?.compareDocumentPosition(controls) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole("button", { name: "Cheat 3" }), { key: "ArrowUp" });
+    await waitFor(() => expect(cardNames()).toEqual(["patch", "cheat", "patch"]));
+    expect(onOrderChange).toHaveBeenLastCalledWith([{ id: "cheat-one", position: 1 }]);
+    fireEvent.keyDown(screen.getByRole("button", { name: "Cheat 2" }), { key: "ArrowUp" });
+    await waitFor(() => expect(cardNames()).toEqual(["cheat", "patch", "patch"]));
+    expect(onOrderChange).toHaveBeenLastCalledWith([{ id: "cheat-one", position: 0 }]);
+  });
+
   it("renders an empty stack with its supplied empty state", () => {
     const { container } = renderList({ patches: [], emptyState: <p>Drop a patch here</p> });
 

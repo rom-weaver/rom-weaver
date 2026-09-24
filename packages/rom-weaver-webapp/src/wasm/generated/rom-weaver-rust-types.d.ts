@@ -492,7 +492,13 @@ patch_output_check?: Array<string>, default_patch_basis?: PatchBasisMode, output
  * Structured database records selected for ROM baking. This field exists
  * on the JSON/WASM boundary; the public CLI keeps `--code` unchanged.
  */
-cheat_records?: Array<CheatRecord>, threads?: ThreadBudget, force?: boolean, dry_run?: boolean, };
+cheat_records?: Array<CheatRecord>,
+/**
+ * Stage position for each structured cheat record. Each value is the
+ * number of ordinary patches that run before the corresponding cheat.
+ * An empty list keeps the compatibility behavior: all cheats run last.
+ */
+cheat_positions?: Array<number>, threads?: ThreadBudget, force?: boolean, dry_run?: boolean, };
 
 export type PatchValidateCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches: Array<string>, patch_select?: Array<string>, assume_in?: Array<string>, expect_in?: Array<string>, strip_header?: boolean, n64_byte_order?: PatchN64ByteOrderMode, ignore_checksum_validation?: boolean, independent?: boolean, plan?: boolean, patch_basis?: Array<PatchBasisMode>, default_patch_basis?: PatchBasisMode, patch_input_check?: Array<string>, patch_output_check?: Array<string>, threads?: ThreadBudget, };
 
