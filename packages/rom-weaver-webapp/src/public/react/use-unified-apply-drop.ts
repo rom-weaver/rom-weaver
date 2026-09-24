@@ -62,7 +62,7 @@ const isRootJsonArchiveEntry = (name: string) => {
 
 type UnifiedApplyDrop = {
   pendingDrops: PendingDrop[];
-  onDrop: (files: File[], isCancelled?: () => boolean, signal?: AbortSignal) => void;
+  onDrop: (files: File[], isCancelled?: () => boolean, signal?: AbortSignal, onSettled?: () => void) => void;
 };
 type ActiveDropKind = "bundle" | "patch" | "rom" | "unknown";
 type DropRouteLifecycle = {
@@ -349,7 +349,7 @@ const useUnifiedApplyDrop = (
     bundleSourceCleanupsRef.current.add(cleanup);
   }, []);
   const onDrop = useCallback(
-    (files: File[], isCancelled?: () => boolean, outerSignal?: AbortSignal) => {
+    (files: File[], isCancelled?: () => boolean, outerSignal?: AbortSignal, onSettled?: () => void) => {
       const classification = classifyDroppedFiles(files);
       // The classifier deliberately treats unknown bare extensions as ROM/input fallbacks. Use its
       // bucket here too so replacement/cancellation policy cannot disagree with the eventual route;
@@ -380,6 +380,7 @@ const useUnifiedApplyDrop = (
       if (dropController.signal.aborted) {
         activeDropsRef.current.delete(dropController);
         outerSignal?.removeEventListener("abort", abortDrop);
+        onSettled?.();
         return;
       }
       // This drop supersedes whatever the last run produced. Retire it now rather than when routing
@@ -470,6 +471,7 @@ const useUnifiedApplyDrop = (
           outerSignal?.removeEventListener("abort", abortDrop);
           activeDropsRef.current.delete(dropController);
           clearPending();
+          onSettled?.();
         });
     },
     [controller, onError, onBundleSession, rememberBundleSourceCleanup, selectFile],

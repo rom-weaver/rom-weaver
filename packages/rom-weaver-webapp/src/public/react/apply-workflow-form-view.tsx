@@ -1870,7 +1870,7 @@ function ApplyWorkflowFormView({
   onSelectTab?: (id: string) => void;
   onSelectView?: (view: "test") => void;
   onTrace?: (message: string, details?: Record<string, unknown>) => void;
-  onUnifiedDrop?: (files: File[]) => void;
+  onUnifiedDrop?: (files: File[], onSettled?: () => void) => void;
   mode?: "apply" | "bundle";
   patchEnablement?: PatchEnablement;
   patchInputBasis?: PatchInputBasis;
@@ -2080,6 +2080,9 @@ function ApplyWorkflowFormView({
   // Unified drop: bare files stage immediately; each archive shows an
   // "identifying" placeholder until its ROM-vs-patch bucket is classified.
   const handleUnifiedDrop = onUnifiedDrop ?? (() => undefined);
+  const handleUnifiedDropFiles = (files: File[]) => {
+    handleUnifiedDrop(files, () => setDropStarted(false));
+  };
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
   const { closeSampleTutorial, sampleError, sampleLoading, sampleTutorial, startApplySample, startBundleSample } =
     useGuidedSampleLoader({
@@ -2228,7 +2231,7 @@ function ApplyWorkflowFormView({
               }
         }
         onDropStart={() => setDropStarted(true)}
-        onFiles={handleUnifiedDrop}
+        onFiles={handleUnifiedDropFiles}
         supported={getApplySupportedFiles(localizer)}
       />
       {workflowEmpty ? (

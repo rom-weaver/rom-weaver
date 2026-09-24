@@ -1832,6 +1832,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     props.onError,
     selectFile,
   );
+  const handleUnifiedDropFiles = (files: File[], onSettled?: () => void) => {
+    handleUnifiedDrop(files, undefined, undefined, onSettled);
+  };
 
   // Forward a page-level drop (dragging anywhere on the page) to the same unified
   // drop handler so the whole tab is a drop target, not just the dropzone box.
@@ -1903,7 +1906,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         onSelectTab={props.onSelectTab}
         onSelectView={props.onSelectView}
         onTrace={emitApplyFormInputTrace}
-        onUnifiedDrop={handleUnifiedDrop}
+        onUnifiedDrop={handleUnifiedDropFiles}
         patchEnablement={{
           disabledIds: disabledPatchIds,
           getPatchIds,
