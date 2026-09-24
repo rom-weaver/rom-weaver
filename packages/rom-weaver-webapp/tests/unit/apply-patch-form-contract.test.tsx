@@ -299,6 +299,43 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
     });
   });
 
+  it("refreshes automatic output names after patch metadata edits and preserves a manual name", async () => {
+    const { container } = renderForm();
+    const getControl = (selector: string) => {
+      const element = container.querySelector(selector);
+      if (!element) throw new Error(`Missing control: ${selector}`);
+      return element;
+    };
+    const fileInput = container.querySelector("#rom-weaver-input-file-unified") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(fileInput, "files", {
+        configurable: true,
+        value: [new File(["rom-bytes"], "game.bin"), new File(["patch-bytes"], "change.ips")],
+      });
+      fireEvent.change(fileInput);
+    });
+    const outputName = () => container.querySelector<HTMLTextAreaElement>("#rom-weaver-input-output-file-name")?.value;
+    await vi.waitFor(() => expect(outputName()).toBe("game-patched.zip"));
+    fireEvent.click(getControl("#rom-weaver-patch-menu-0"));
+    fireEvent.click(getControl("#rom-weaver-patch-meta-edit-0"));
+
+    for (const [field, value, expected] of [
+      ["name", "Reviewed Name", "game [Reviewed Name]"],
+      ["author", "Reviewer", "game [Reviewed Name Reviewer]"],
+      ["version", "2.0", "game [Reviewed Name Reviewer 2.0]"],
+    ]) {
+      fireEvent.blur(getControl(`#rom-weaver-patch-${field}-0`), { target: { value } });
+      await vi.waitFor(() => expect(outputName()).toBe(expected));
+    }
+
+    fireEvent.change(getControl("#rom-weaver-input-output-file-name"), {
+      target: { value: "manual-output" },
+    });
+    fireEvent.blur(getControl("#rom-weaver-input-output-file-name"));
+    fireEvent.blur(getControl("#rom-weaver-patch-name-0"), { target: { value: "Another Name" } });
+    await vi.waitFor(() => expect(outputName()).toBe("manual-output"));
+  });
+
   it("stages a ROM and patch together, applies them, and exposes output controls", async () => {
     const onApplyComplete = vi.fn();
     const { container } = renderForm({ onApplyComplete });

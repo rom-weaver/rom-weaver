@@ -136,4 +136,33 @@ describe("Apply workflow snapshot store", () => {
     replacement.change({ ready: false });
     expect(onChange).toHaveBeenCalledTimes(changesAfterReset);
   });
+
+  it("keeps names invalidated across preparation of the same sources", () => {
+    const store = createApplyWorkflowSnapshotStore();
+    const workflow = createWorkflow({
+      input: { selectedCandidateId: "input-1", status: "ready" } as Snapshot["input"],
+      output: { manualOutputFormat: false, manualOutputName: false, outputFormat: "chd", outputName: "old.chd" },
+      ready: true,
+    });
+    store.setWorkflow(workflow);
+    store.setOutputSourceKey("source-key");
+    const prepared = store.getSnapshot();
+    store.invalidateOutputName();
+    expect(store.getSnapshot()).toEqual({ ...prepared, outputName: "", outputNameRevision: 1 });
+
+    const invalidated = store.getSnapshot();
+    workflow.change({ busy: true });
+    expect(store.getSnapshot()).toBe(invalidated);
+    store.invalidateOutputName();
+    expect(store.getSnapshot()).toEqual({ ...invalidated, outputNameRevision: 2 });
+
+    workflow.change({
+      output: { manualOutputFormat: false, manualOutputName: false, outputFormat: "chd", outputName: "new.chd" },
+    });
+    store.setOutputSourceKey("");
+    store.setOutputSourceKey("source-key");
+    expect(store.getSnapshot().outputName).toBe("");
+    store.setOutputSourceKey("replacement-source-key");
+    expect(store.getSnapshot().outputName).toBe("new.chd");
+  });
 });

@@ -7,6 +7,7 @@ type ApplyWorkflowFormSnapshot = {
   inputReady: boolean;
   outputCompression: ApplyWorkflowSnapshot["output"]["outputFormat"] | undefined;
   outputName: string;
+  outputNameRevision: number;
   outputSourceKey: string;
   patchCount: number;
   ready: boolean;
@@ -16,6 +17,7 @@ const EMPTY_APPLY_WORKFLOW_SNAPSHOT: ApplyWorkflowFormSnapshot = {
   inputReady: false,
   outputCompression: undefined,
   outputName: "",
+  outputNameRevision: 0,
   outputSourceKey: "",
   patchCount: 0,
   ready: false,
@@ -25,6 +27,7 @@ const sameApplyWorkflowFormSnapshot = (left: ApplyWorkflowFormSnapshot, right: A
   left.inputReady === right.inputReady &&
   left.outputCompression === right.outputCompression &&
   left.outputName === right.outputName &&
+  left.outputNameRevision === right.outputNameRevision &&
   left.outputSourceKey === right.outputSourceKey &&
   left.patchCount === right.patchCount &&
   left.ready === right.ready;
@@ -34,6 +37,8 @@ const createApplyWorkflowSnapshotStore = () => {
   let unsubscribeWorkflow: (() => void) | null = null;
   let snapshot = EMPTY_APPLY_WORKFLOW_SNAPSHOT;
   let outputSourceKey = "";
+  let invalidatedOutputSourceKey: string | undefined;
+  let outputNameRevision = 0;
   const listeners = new Set<() => void>();
 
   const getSnapshot = (): ApplyWorkflowFormSnapshot => {
@@ -43,7 +48,8 @@ const createApplyWorkflowSnapshotStore = () => {
     const next: ApplyWorkflowFormSnapshot = {
       inputReady: current.input?.status === "ready" && !!current.input.selectedCandidateId,
       outputCompression: current.output.outputFormat,
-      outputName: current.output.outputName,
+      outputName: invalidatedOutputSourceKey === outputSourceKey ? "" : current.output.outputName,
+      outputNameRevision,
       outputSourceKey,
       patchCount: current.patches.length,
       ready: current.ready,
@@ -59,17 +65,26 @@ const createApplyWorkflowSnapshotStore = () => {
 
   return {
     getSnapshot,
+    invalidateOutputName: () => {
+      invalidatedOutputSourceKey = outputSourceKey;
+      // Each metadata edit MUST publish after the source labels update, even when the workflow name is already invalid.
+      outputNameRevision += 1;
+      notify();
+    },
     setWorkflow: (next: ApplyWorkflowSnapshotSource | null) => {
       if (workflow === next) return;
       unsubscribeWorkflow?.();
       workflow = next;
       outputSourceKey = "";
+      invalidatedOutputSourceKey = undefined;
+      outputNameRevision = 0;
       unsubscribeWorkflow = workflow ? workflow.subscribe(notify) : null;
       notify();
     },
     setOutputSourceKey: (next: string) => {
       if (outputSourceKey === next) return;
       outputSourceKey = next;
+      if (next && next !== invalidatedOutputSourceKey) invalidatedOutputSourceKey = undefined;
       notify();
     },
     subscribe: (listener: () => void) => {

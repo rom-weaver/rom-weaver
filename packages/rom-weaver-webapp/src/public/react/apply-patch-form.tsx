@@ -396,6 +396,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     seedPatchEnablement,
   });
 
+  // Metadata edits MUST invalidate the workflow name because the source identities stay unchanged.
+  useEffect(() => {
+    if (bundleMetaById.size) workflowSnapshotStore.invalidateOutputName();
+  }, [bundleMetaById, workflowSnapshotStore]);
+
   // Declared chain metadata (bundle/user basis + checks) per patch index, forwarded into the
   // plan-mode validation so the engine resolves each patch's basis with the same declarations
   // the apply run will enforce.
