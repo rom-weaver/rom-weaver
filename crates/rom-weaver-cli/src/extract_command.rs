@@ -133,11 +133,11 @@ impl CliApp {
             Err(error) => {
                 return self.finish(
                     "extract",
-                    OperationReport::failed(
+                    OperationReport::failed_with_error(
                         OperationFamily::Container,
                         Some(handler.descriptor().name.to_string()),
                         "extract",
-                        error.to_string(),
+                        error,
                         extract_threads.clone(),
                     ),
                 );
@@ -183,11 +183,11 @@ impl CliApp {
                 &context,
             )
             .unwrap_or_else(|error| {
-                OperationReport::failed(
+                OperationReport::failed_with_error(
                     OperationFamily::Container,
                     Some(handler.descriptor().name.to_string()),
                     "extract",
-                    error.to_string(),
+                    error,
                     context.single_thread_execution(),
                 )
             });
@@ -227,11 +227,11 @@ impl CliApp {
                     report = Self::set_emitted_files_detail(report, leaves);
                 }
                 Err(error) => {
-                    report = OperationReport::failed(
+                    report = OperationReport::failed_with_error(
                         OperationFamily::Container,
                         Some(format_name.to_string()),
                         "extract",
-                        error.to_string(),
+                        error,
                         context.single_thread_execution(),
                     );
                 }

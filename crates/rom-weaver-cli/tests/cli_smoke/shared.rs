@@ -47,6 +47,33 @@ pub(crate) fn parse_single_json_line(output: &[u8]) -> Value {
     terminal
 }
 
+pub(crate) fn pseudo_random_bytes(len: usize, seed: u64) -> Vec<u8> {
+    let mut state = seed | 1;
+    (0..len)
+        .map(|_| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state >> 24) as u8
+        })
+        .collect()
+}
+
+pub(crate) fn super_magic_drive_dump(plain: &[u8]) -> Vec<u8> {
+    let mut dump = vec![0_u8; 512];
+    dump[0] = (plain.len() / 0x4000) as u8;
+    dump[8] = 0xAA;
+    dump[9] = 0xBB;
+    dump[10] = 0x06;
+    for block in plain.chunks(0x4000) {
+        let odd = block.iter().skip(1).step_by(2).copied();
+        let even = block.iter().step_by(2).copied();
+        dump.extend(odd);
+        dump.extend(even);
+    }
+    dump
+}
+
 pub(crate) fn command_stdout(args: &[&str], expected_code: i32) -> Vec<u8> {
     let normalized_args = normalize_cli_args(args);
     let mut command = Command::cargo_bin("rom-weaver").expect("binary");

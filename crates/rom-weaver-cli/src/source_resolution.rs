@@ -20,9 +20,20 @@ pub(super) struct AutoExtractResolutionLabels<'a> {
     pub(super) temp_prefix: &'a str,
 }
 
-/// The `(original, resolved)` patch pairs plus the "resolved via N container
-/// extract step(s)" notes produced by [`CliApp::resolve_patches`].
-pub(super) type ResolvedPatchList = (Vec<(PathBuf, PathBuf)>, Vec<String>);
+/// One requested patch and the path that auto-extraction resolved for it.
+#[derive(Clone, Debug)]
+pub(super) struct ResolvedPatch {
+    pub(super) source: PathBuf,
+    pub(super) resolved: PathBuf,
+}
+
+/// Resolved patch records plus any "resolved via N container extract step(s)"
+/// notes produced by [`CliApp::resolve_patches`].
+#[derive(Debug)]
+pub(super) struct ResolvedPatchList {
+    pub(super) patches: Vec<ResolvedPatch>,
+    pub(super) extracted_notes: Vec<String>,
+}
 
 /// Command-specific labels for [`CliApp::resolve_patches`]; the only difference
 /// between the patch-apply and patch-validate resolution loops.

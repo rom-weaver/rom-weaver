@@ -4,6 +4,11 @@ import {
   getGeneratedCompressionCodecLevelMax,
   getGeneratedCompressionCodecLevelMin,
 } from "../../lib/compression/compression-metadata.ts";
+import {
+  clampBrowserThreadCount,
+  DEFAULT_BROWSER_THREAD_COUNT,
+  MAX_BROWSER_THREAD_COUNT,
+} from "./browser-thread-defaults.ts";
 
 const INTEGER_STRING_REGEX = /^-?\d+$/;
 
@@ -81,9 +86,6 @@ const canUseThreadedWasm = (root?: NavigatorRoot | null): boolean => {
   return typeof SharedArrayBuffer === "function" && runtimeRoot?.crossOriginIsolated === true;
 };
 
-const DEFAULT_BROWSER_WORKER_THREADS = 4;
-const MAX_BROWSER_WORKER_THREADS = 64;
-
 const getHardwareConcurrency = (root?: NavigatorRoot | null): number => {
   const navigatorObject = root?.navigator
     ? root.navigator
@@ -95,12 +97,12 @@ const getHardwareConcurrency = (root?: NavigatorRoot | null): number => {
       })();
   const hardwareConcurrency = navigatorObject?.hardwareConcurrency;
   return typeof hardwareConcurrency === "number" && Number.isFinite(hardwareConcurrency) && hardwareConcurrency > 0
-    ? Math.floor(hardwareConcurrency)
-    : 4;
+    ? hardwareConcurrency
+    : DEFAULT_BROWSER_THREAD_COUNT;
 };
 
 const getDefaultThreadCount = (root?: NavigatorRoot | null): number =>
-  Math.min(MAX_BROWSER_WORKER_THREADS, Math.max(DEFAULT_BROWSER_WORKER_THREADS, getHardwareConcurrency(root)));
+  clampBrowserThreadCount(getHardwareConcurrency(root));
 
 const getDefaultBrowserThreadCount = (root?: NavigatorRoot | null): number =>
   canUseThreadedWasm(root) ? getDefaultThreadCount(root) : 1;
@@ -229,7 +231,7 @@ const normalizeBrowserThreadCount = (
     normalizeThreadCount(value, {
       allowOff: true,
       fallback,
-      max: MAX_BROWSER_WORKER_THREADS,
+      max: MAX_BROWSER_THREAD_COUNT,
     }) ?? fallback
   );
 };

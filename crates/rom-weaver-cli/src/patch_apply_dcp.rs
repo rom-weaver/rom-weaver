@@ -37,6 +37,15 @@ impl CliApp {
         let fail = |stage: &str, message: String| {
             OperationReport::failed(OperationFamily::Patch, None, stage, message, single.clone())
         };
+        let fail_error = |stage: &str, error: RomWeaverError| {
+            OperationReport::failed_with_error(
+                OperationFamily::Patch,
+                None,
+                stage,
+                error,
+                single.clone(),
+            )
+        };
 
         // A `.dcp` rebuilds the whole data track, so the byte-level header /
         // checksum transforms and chaining do not apply.
@@ -103,7 +112,7 @@ impl CliApp {
             args.compress_level,
         ) {
             Ok(options) => options,
-            Err(error) => return fail("validate", error.to_string()),
+            Err(error) => return fail_error("validate", error),
         };
         if let Err(error) = self.validate_patch_apply_compression_plan(
             args.output
@@ -112,7 +121,7 @@ impl CliApp {
             &args.input,
             &compression_options,
         ) {
-            return fail("validate", error.to_string());
+            return fail_error("validate", error);
         }
 
         let disc = match self.build_dcp_disc_context(&args.input) {
@@ -123,7 +132,7 @@ impl CliApp {
                     "a .dcp patch requires a disc-sheet (.cue/.gdi) input".to_string(),
                 );
             }
-            Err(error) => return fail("prepare", error.to_string()),
+            Err(error) => return fail_error("prepare", error),
         };
         let name_warning = warn_on_rom_name_mismatch(expected_rom_name, &disc.target_file);
 
@@ -149,8 +158,24 @@ impl CliApp {
         context: &OperationContext,
         single: Option<ThreadExecution>,
     ) -> OperationReport {
-        let fail = |stage: &str, message: String| {
-            OperationReport::failed(OperationFamily::Patch, None, stage, message, single.clone())
+        let fail_error = |stage: &str, error: RomWeaverError| {
+            OperationReport::failed_with_error(
+                OperationFamily::Patch,
+                None,
+                stage,
+                error,
+                single.clone(),
+            )
+        };
+        let fail_io = |stage: &str, error: std::io::Error| {
+            OperationReport::failed(
+                OperationFamily::Patch,
+                None,
+                stage,
+                error.to_string(),
+                single.clone(),
+            )
+            .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Io)
         };
         let output = args
             .output
@@ -159,7 +184,7 @@ impl CliApp {
         // The `.dcp` flow branches off before `run_patch_apply`'s overwrite
         // guard, so it checks its own output here.
         if let Err(error) = ensure_output_available(output, args.force) {
-            return fail("validate", error.to_string());
+            return fail_error("validate", error);
         }
 
         self.emit_running(
@@ -180,11 +205,11 @@ impl CliApp {
             .and_then(|file| GdRomFs::open(BufReader::new(file), GD_HIGH_DENSITY_START_LBA))
         {
             Ok(fs) => fs,
-            Err(error) => return fail("prepare", error.to_string()),
+            Err(error) => return fail_error("prepare", error),
         };
         let mut dcp_reader = match File::open(dcp_path) {
             Ok(file) => BufReader::new(file),
-            Err(error) => return fail("prepare", error.to_string()),
+            Err(error) => return fail_io("prepare", error),
         };
 
         // Stream the rebuilt track straight to a temp file for staging - the
@@ -196,12 +221,12 @@ impl CliApp {
         if let Some(parent) = rebuilt_path.parent()
             && let Err(error) = fs::create_dir_all(parent)
         {
-            return fail("apply", error.to_string());
+            return fail_io("apply", error);
         }
         let rebuilt = {
             let track_file = match File::create(&rebuilt_path) {
                 Ok(file) => file,
-                Err(error) => return fail("apply", error.to_string()),
+                Err(error) => return fail_io("apply", error),
             };
             let mut sink = BufWriter::new(track_file);
             let summary = match rebuild_track_to_writer(
@@ -213,11 +238,11 @@ impl CliApp {
                 Ok(summary) => summary,
                 Err(error) => {
                     Self::cleanup_temp_paths(std::slice::from_ref(&rebuilt_path));
-                    return fail("apply", error.to_string());
+                    return fail_error("apply", error);
                 }
             };
             if let Err(error) = sink.flush() {
-                return fail("apply", error.to_string());
+                return fail_io("apply", error);
             }
             summary
         };
@@ -246,7 +271,7 @@ impl CliApp {
                     Ok(track_override) => track_override,
                     Err(error) => {
                         Self::cleanup_temp_paths(&temp_paths);
-                        return fail("prepare", error.to_string());
+                        return fail_error("prepare", error);
                     }
                 };
             self.compress_dcp_disc(CompressDcpDiscInputs {
@@ -266,7 +291,7 @@ impl CliApp {
                     Ok(path) => path,
                     Err(error) => {
                         Self::cleanup_temp_paths(&temp_paths);
-                        return fail("prepare", error.to_string());
+                        return fail_error("prepare", error);
                     }
                 };
             match self.write_disc_output(disc, &staged_sheet, output) {
@@ -286,7 +311,7 @@ impl CliApp {
                         None,
                     )
                 }
-                Err(error) => fail("compat", error.to_string()),
+                Err(error) => fail_error("compat", error),
             }
         };
 
@@ -312,20 +337,29 @@ impl CliApp {
         let fail = |stage: &str, message: String| {
             OperationReport::failed(OperationFamily::Patch, None, stage, message, single.clone())
         };
+        let fail_error = |stage: &str, error: RomWeaverError| {
+            OperationReport::failed_with_error(
+                OperationFamily::Patch,
+                None,
+                stage,
+                error,
+                single.clone(),
+            )
+        };
         let plan = match self.resolve_patch_apply_compression_plan(
             output,
             extension_source,
             compression_options,
         ) {
             Ok(plan) => plan,
-            Err(error) => return fail("compress", error.to_string()),
+            Err(error) => return fail_error("compress", error),
         };
         // The early guard checked the path the user named; an appended
         // container extension makes the real output a different file.
         if plan.extension_appended
             && let Err(error) = ensure_output_available(&plan.output_path, force)
         {
-            return fail("compress", error.to_string());
+            return fail_error("compress", error);
         }
         let running_label = format!(
             "compressing rebuilt disc as {} (codec={})",
@@ -340,13 +374,18 @@ impl CliApp {
             context,
         ) {
             Ok(result) => result,
-            Err(error) => return fail("compress", error.to_string()),
+            Err(error) => return fail_error("compress", error),
         };
         if compress_report.status != OperationStatus::Succeeded {
-            return fail(
+            let error_kind = compress_report.resolved_error_kind();
+            let mut failure = fail(
                 "compress",
                 format!("rebuilt disc compression failed: {}", compress_report.label),
             );
+            if let Some(error_kind) = error_kind {
+                failure = failure.with_error_kind(error_kind);
+            }
+            return failure;
         }
         *label = format!(
             "{label}; rebuilt disc compressed as {} (codec={codec_label}, path=`{}`)",

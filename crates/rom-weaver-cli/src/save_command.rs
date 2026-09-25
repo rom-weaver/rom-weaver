@@ -595,6 +595,7 @@ fn save_error_report(stage: &str, error: RomWeaverError) -> OperationReport {
         error.to_string(),
         Some(json!({ SAVE_DETAILS_KEY: { "error": structured } })),
     )
+    .with_error_kind(error.kind())
 }
 
 fn save_value_text(value: &SaveValue) -> String {

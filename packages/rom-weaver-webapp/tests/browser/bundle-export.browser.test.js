@@ -144,7 +144,12 @@ test("export bundle bundles the session from main-page options with a checks-onl
   patchToggle.click();
   await expect.poll(() => patchToggle.checked).toBe(false);
 
-  exportButton.click();
+  // The patch update runs chain validation before the export action is ready again.
+  const readyExportButton = await waitForState(() => {
+    const button = document.getElementById("rom-weaver-button-export-bundle");
+    return button instanceof HTMLButtonElement && !button.disabled ? button : null;
+  });
+  readyExportButton.click();
 
   // The runtime create call resolves with the canonical bundle - assert on it directly rather
   // than intercepting the browser download.

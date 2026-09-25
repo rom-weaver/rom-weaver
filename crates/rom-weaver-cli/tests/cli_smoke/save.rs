@@ -86,6 +86,7 @@ fn save_identify_rejects_oversized_input_before_reading_it() {
         json["details"]["save_editor"]["error"]["code"],
         "save_size_limit"
     );
+    assert_eq!(json["error_kind"], "validation");
 }
 
 #[test]

@@ -21,6 +21,34 @@ fn test_context(temp_root: PathBuf) -> OperationContext {
     )
 }
 
+#[test]
+fn patch_create_input_inspection_preserves_contextual_io_kinds() {
+    let temp = assert_fs::TempDir::new().expect("temp dir");
+    let present = temp.path().join("present.bin");
+    let missing = temp.path().join("missing.bin");
+    fs::write(&present, [0_u8]).expect("input fixture");
+    for (original, modified, role) in [
+        (&missing, &present, "original"),
+        (&present, &missing, "modified"),
+    ] {
+        let report = app()
+            .inspect_patch_create_input_sizes("patch-create", None, original, modified, None)
+            .expect_err("missing input fails inspection");
+        let event = report.into_event("patch-create");
+        assert_eq!(
+            event.error_kind,
+            Some(rom_weaver_core::RomWeaverErrorKind::Io)
+        );
+        assert!(
+            event
+                .label
+                .starts_with(&format!("failed to inspect patch-create {role} input")),
+            "{}",
+            event.label
+        );
+    }
+}
+
 /// A minimal IPS patch: `PATCH`, one literal record per entry, `EOF`.
 fn ips_patch(records: &[(u32, &[u8])]) -> Vec<u8> {
     let mut bytes = b"PATCH".to_vec();
@@ -1233,7 +1261,10 @@ fn resolving_patches_passes_plain_files_through_unchanged() {
     let context = test_context(temp.path().join("resolve-temp"));
     let mut temp_paths = Vec::new();
 
-    let (resolved, notes) = app()
+    let ResolvedPatchList {
+        patches: resolved,
+        extracted_notes: notes,
+    } = app()
         .resolve_patches(
             &[first.clone(), second.clone()],
             PatchSelectors {
@@ -1257,7 +1288,10 @@ fn resolving_patches_passes_plain_files_through_unchanged() {
         .expect("plain patch files resolve to themselves");
 
     assert_eq!(
-        resolved,
+        resolved
+            .iter()
+            .map(|patch| (patch.source.clone(), patch.resolved.clone()))
+            .collect::<Vec<_>>(),
         vec![(first.clone(), first), (second.clone(), second)]
     );
     assert!(notes.is_empty());
@@ -1600,10 +1634,7 @@ fn bundle_resolution(
         checks,
         expected_rom_name: None,
         output_checks,
-        step_verifications: Vec::new(),
-        step_inputs: Vec::new(),
-        step_targets: Vec::new(),
-        step_ids: Vec::new(),
+        steps: Vec::new(),
         rom_member: None,
     }
 }
@@ -1756,6 +1787,10 @@ fn a_container_that_cannot_be_written_fails_the_compress_stage() {
 
     assert_eq!(failure.status, OperationStatus::Failed);
     assert_eq!(failure.stage, "compress");
+    assert_eq!(
+        failure.error_kind,
+        Some(rom_weaver_core::RomWeaverErrorKind::Io)
+    );
     assert!(
         failure.label.contains("patch output compression failed"),
         "{}",

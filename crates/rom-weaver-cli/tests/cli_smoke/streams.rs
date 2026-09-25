@@ -12,6 +12,30 @@ fn binary() -> ProcessCommand {
     command
 }
 
+#[cfg(unix)]
+#[test]
+fn stdin_read_failures_preserve_context_and_io_kind() {
+    let temp = setup_temp_dir();
+    for command in ["probe", "checksum"] {
+        let output = binary()
+            .args([command, "--input", "-", "--json"])
+            .stdin(File::open(temp.path()).expect("open directory as unreadable stdin"))
+            .output()
+            .expect("run CLI with unreadable stdin");
+        assert_eq!(output.status.code(), Some(1));
+        let report: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("JSON failure report");
+        assert_eq!(report["error_kind"], "io", "{report}");
+        assert!(
+            report["label"]
+                .as_str()
+                .expect("failure label")
+                .starts_with("failed to read stdin input: i/o error:"),
+            "{report}"
+        );
+    }
+}
+
 fn compress_stdin_to_file(temp: &TempDir, format: &str, name: &str, bytes: &[u8]) -> PathBuf {
     let archive = temp.child(format!("archive.{format}"));
     let output = binary()

@@ -864,6 +864,15 @@ impl CliApp {
                 thread_execution,
             )
         };
+        let identify_failed_error = |error: RomWeaverError, thread_execution| {
+            OperationReport::failed_with_error(
+                OperationFamily::Command,
+                Some("identify".to_string()),
+                "identify",
+                error,
+                thread_execution,
+            )
+        };
         if let Some(outcome) = self.run_identify_name_branch(&mut args, &identify_failed) {
             return outcome;
         }
@@ -895,7 +904,7 @@ impl CliApp {
                     );
                 }
                 Err(error) => {
-                    return self.finish("identify", identify_failed(error.to_string(), None));
+                    return self.finish("identify", identify_failed_error(error, None));
                 }
             };
             return self.run_identify_hash(&hashes, args.size, &databases);
@@ -917,7 +926,8 @@ impl CliApp {
                         "read",
                         format!("failed to read stdin input: {error}"),
                         None,
-                    ),
+                    )
+                    .with_error_kind(error.kind()),
                 );
             }
         };
@@ -963,7 +973,7 @@ impl CliApp {
         #[cfg(not(target_arch = "wasm32"))]
         let provider = match IdentifyPackProvider::new(database_dir) {
             Ok(provider) => Some(provider),
-            Err(error) => return self.finish("identify", identify_failed(error.to_string(), None)),
+            Err(error) => return self.finish("identify", identify_failed_error(error, None)),
         };
         #[cfg(target_arch = "wasm32")]
         let provider: Option<IdentifyPackProvider> = {
@@ -1083,7 +1093,7 @@ impl CliApp {
                 Err(error) => {
                     return self.finish(
                         "identify",
-                        identify_failed(error.to_string(), checksum_report.thread_execution),
+                        identify_failed_error(error, checksum_report.thread_execution),
                     );
                 }
             };
@@ -1102,7 +1112,7 @@ impl CliApp {
                 Err(error) => {
                     return self.finish(
                         "identify",
-                        identify_failed(error.to_string(), checksum_report.thread_execution),
+                        identify_failed_error(error, checksum_report.thread_execution),
                     );
                 }
             }
@@ -1123,7 +1133,7 @@ impl CliApp {
             Err(error) => {
                 return self.finish(
                     "identify",
-                    identify_failed(error.to_string(), checksum_report.thread_execution),
+                    identify_failed_error(error, checksum_report.thread_execution),
                 );
             }
         };
@@ -1269,6 +1279,15 @@ impl CliApp {
                 None,
             )
         };
+        let hash_failed_error = |error: RomWeaverError| {
+            OperationReport::failed_with_error(
+                OperationFamily::Command,
+                Some("identify".to_string()),
+                "identify",
+                error,
+                None,
+            )
+        };
         let mut checksums: BTreeMap<String, String> = BTreeMap::new();
         for raw in hashes {
             let hash = raw.trim().to_ascii_lowercase();
@@ -1304,7 +1323,7 @@ impl CliApp {
         let lookup = match databases.resolve_variants(&checksum_variants, size) {
             Ok(lookup) => lookup,
             Err(error) => {
-                return self.finish("identify", hash_failed(&error.to_string()));
+                return self.finish("identify", hash_failed_error(error));
             }
         };
         let label = match lookup.status {
@@ -1359,11 +1378,11 @@ impl CliApp {
             Ok(report) => self.finish("identify", report),
             Err(error) => self.finish(
                 "identify",
-                OperationReport::failed(
+                OperationReport::failed_with_error(
                     OperationFamily::Command,
                     Some("identify".to_string()),
                     "identify",
-                    error.to_string(),
+                    error,
                     None,
                 ),
             ),

@@ -2456,6 +2456,54 @@ fn patch_apply_emit_bundle_preserves_per_patch_basis_overrides() {
 }
 
 #[test]
+fn patch_apply_emit_bundle_records_inferred_bases_with_cheat_codes() {
+    let temp = setup_temp_dir();
+    let base = with_nes_header(&vec![0_u8; 0x8000]);
+    let rom = temp.child("game.nes");
+    fs::write(rom.path(), &base).expect("rom fixture");
+    let mut mid_bytes = base.clone();
+    mid_bytes[0x100] = 0xAA;
+    let mid = temp.child("mid.nes");
+    fs::write(mid.path(), &mid_bytes).expect("mid fixture");
+    let mut target_bytes = mid_bytes.clone();
+    target_bytes[0x200] = 0xBB;
+    let target = temp.child("target.nes");
+    fs::write(target.path(), &target_bytes).expect("target fixture");
+    let first_patch = temp.child("first.bps");
+    let second_patch = temp.child("second.bps");
+    create_patch_file(rom.path(), mid.path(), "bps", first_patch.path());
+    create_patch_file(mid.path(), target.path(), "bps", second_patch.path());
+
+    let emitted = temp.child("emitted-bundle.json");
+    let output = temp.child("output.nes");
+    run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            rom.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            second_patch.path().to_str().expect("path"),
+            "--code",
+            "AKE-LVS",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--emit-bundle",
+            emitted.path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        0,
+    );
+
+    let emitted_json: Value = serde_json::from_slice(&fs::read(emitted.path()).expect("bundle"))
+        .expect("valid emitted bundle");
+    assert_eq!(emitted_json["patches"][0]["basis"], "base");
+    assert_eq!(emitted_json["patches"][1]["basis"], "previous");
+}
+
+#[test]
 fn bundle_ignore_mode_does_not_use_stale_output_checks_to_select_rup_direction() {
     let temp = setup_temp_dir();
     write_bundle_rom(&temp, "game.bin");

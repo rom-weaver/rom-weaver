@@ -135,13 +135,12 @@ fn report_error(
     status: u8,
 ) {
     if json {
-        reporter.emit(crate::native_output::error_event(
-            command,
-            "stream",
-            code,
-            &error.to_string(),
-            status,
-        ));
+        let mut event =
+            crate::native_output::error_event(command, "stream", code, &error.to_string(), status);
+        if event.status == OperationStatus::Failed {
+            event.error_kind = Some(error.kind());
+        }
+        reporter.emit(event);
     } else {
         crate::render::write_stderr(format_args!(
             "error: {}\n",
@@ -149,6 +148,10 @@ fn report_error(
         ));
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/streams.rs"]
+mod tests;
 
 fn invalid(message: &str) -> RomWeaverError {
     RomWeaverError::Validation(message.to_string())

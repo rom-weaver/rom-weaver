@@ -78,6 +78,7 @@ import { createWorkflowFormError, getReactBinarySourceFileName, toReactProgressE
 import { usePageDropForwarder } from "./workflow-form-effects.ts";
 import { createReactWorkflowId } from "./workflow-form-utils.ts";
 import { createWorkflowHandle, loadBrowserApi } from "./workflow-loader.ts";
+import { createApplyWorkflowSnapshotStore } from "./apply-workflow-snapshot-store.ts";
 
 // A patch parses eagerly (its extraction overlaps the ROM's), but its addPatch mutation is queued
 // behind the ROM's setInput, so the staged info would otherwise only reach the card once the ROM
@@ -228,15 +229,23 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const { candidateSelectionDialog, selectFile } = useCandidateSelection({
     onCancelSelection: (request) => handleSelectionCancelledRef.current(request),
   });
-  const [applyReady, setApplyReady] = useState(false);
   const [patchInputBasis, setPatchInputBasis] = useState<PatchInputBasis>("auto");
   const patchInputBasisRef = useRef<PatchInputBasis>(patchInputBasis);
   patchInputBasisRef.current = patchInputBasis;
   const [completedOutput, setCompletedOutput] = useState<BrowserApplyResult["output"] | null>(null);
   const [completedCheats, setCompletedCheats] = useState<BrowserApplyResult["cheats"]>();
-  const [resolvedOutputCompression, setResolvedOutputCompression] = useState<CompressionFormat | undefined>(undefined);
-  const [resolvedOutputName, setResolvedOutputName] = useState("");
-  const [resolvedOutputNameKey, setResolvedOutputNameKey] = useState("");
+  const [preStageOutputEstimate, setPreStageOutputEstimate] = useState<{
+    compression: CompressionFormat;
+    name: string;
+    sourceKey: string;
+  } | null>(null);
+  const [workflowSnapshotStore] = useState(() => createApplyWorkflowSnapshotStore());
+  const workflowSnapshot = useSyncExternalStore(
+    workflowSnapshotStore.subscribe,
+    workflowSnapshotStore.getSnapshot,
+    workflowSnapshotStore.getSnapshot,
+  );
+  const expectedWorkflowPatchCountRef = useRef(0);
   const handleApplyComplete = useCallback(
     (result: BrowserApplyResult) => {
       setCompletedOutput(result.output);
@@ -333,11 +342,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     [syncInputSelectionRefs, syncPatchSelectionRefs],
   );
 
-  const setResolvedOutputNameForSnapshot = useCallback((snapshot: ApplyWorkflowSessionInput, outputName: string) => {
-    setResolvedOutputName(outputName);
-    setResolvedOutputNameKey(getOutputSourceKey(snapshot.inputs, snapshot.patches));
-  }, []);
-
   const handleLocalInputsChange = useCallback(
     (nextInputs: BinarySource[]) => {
       setCompletedOutput(null);
@@ -392,11 +396,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     seedPatchEnablement,
   });
 
+  // Metadata edits MUST invalidate the workflow name because the source identities stay unchanged.
   useEffect(() => {
-    if (!bundleMetaById.size) return;
-    setResolvedOutputName("");
-    setResolvedOutputNameKey("");
-  }, [bundleMetaById]);
+    if (bundleMetaById.size) workflowSnapshotStore.invalidateOutputName();
+  }, [bundleMetaById, workflowSnapshotStore]);
 
   // Declared chain metadata (bundle/user basis + checks) per patch index, forwarded into the
   // plan-mode validation so the engine resolves each patch's basis with the same declarations
@@ -620,6 +623,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
 
   const resetWorkflow = useCallback(() => {
     const workflow = workflowHandle.reset();
+    workflowSnapshotStore.setWorkflow(null);
+    expectedWorkflowPatchCountRef.current = 0;
     preparedWorkflowRef.current = null;
     bundleSourcesRef.current = null;
     forceInputWorkflowRefreshRef.current = false;
@@ -627,7 +632,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     workflowOutputOverridesKeyRef.current = "";
     prepareHandlersRef.current = null;
     void workflow?.dispose();
-  }, [workflowHandle]);
+  }, [workflowHandle, workflowSnapshotStore]);
 
   const retainUncompressedOutput = useCallback(async (request: UncompressedOutputRetentionRequest) => {
     if (!shouldRetainEmulatorOutput(request)) return;
@@ -651,47 +656,47 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     }
   }, []);
 
-  const getWorkflow = useCallback(
-    () =>
-      workflowHandle.get(() =>
-        loadBrowserApi().then(
-          ({ ApplyWorkflow }) =>
-            () =>
-              new ApplyWorkflow({
-                ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
-                id: workflowIdRef.current,
-                retainUncompressedOutput,
-                selectFile: async (request) => {
-                  if (request.role === "input") {
-                    const session = activeBundleSessionRef.current;
-                    const members =
-                      session?.entries.flatMap((entry) =>
-                        [entry.input, entry.target].flatMap((reference) =>
-                          reference && "rom" in reference && reference.member ? [reference.member] : [],
-                        ),
-                      ) || [];
-                    if (session?.romMember) members.push(session.romMember);
-                    const selection = selectBundleMembers(members, request.candidates);
-                    if (selection) return selection;
-                  }
-                  const handlers = prepareHandlersRef.current;
-                  const promptInputSelection = handlers?.selection?.promptInputSelection !== false;
-                  const promptPatchSelection = handlers?.selection?.promptPatchSelection !== false;
-                  if (
-                    (request.role === "input" && !promptInputSelection) ||
-                    (request.role === "patch" && !promptPatchSelection)
-                  )
-                    throw createWorkflowFormError(
-                      "WORKFLOW_SELECTION_SKIPPED",
-                      `${request.sourceName} requires selection`,
-                    );
-                  return selectFileRef.current(request);
-                },
-              }),
-        ),
+  const getWorkflow = useCallback(async () => {
+    const workflow = await workflowHandle.get(() =>
+      loadBrowserApi().then(
+        ({ ApplyWorkflow }) =>
+          () =>
+            new ApplyWorkflow({
+              ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
+              id: workflowIdRef.current,
+              retainUncompressedOutput,
+              selectFile: async (request) => {
+                if (request.role === "input") {
+                  const session = activeBundleSessionRef.current;
+                  const members =
+                    session?.entries.flatMap((entry) =>
+                      [entry.input, entry.target].flatMap((reference) =>
+                        reference && "rom" in reference && reference.member ? [reference.member] : [],
+                      ),
+                    ) || [];
+                  if (session?.romMember) members.push(session.romMember);
+                  const selection = selectBundleMembers(members, request.candidates);
+                  if (selection) return selection;
+                }
+                const handlers = prepareHandlersRef.current;
+                const promptInputSelection = handlers?.selection?.promptInputSelection !== false;
+                const promptPatchSelection = handlers?.selection?.promptPatchSelection !== false;
+                if (
+                  (request.role === "input" && !promptInputSelection) ||
+                  (request.role === "patch" && !promptPatchSelection)
+                )
+                  throw createWorkflowFormError(
+                    "WORKFLOW_SELECTION_SKIPPED",
+                    `${request.sourceName} requires selection`,
+                  );
+                return selectFileRef.current(request);
+              },
+            }),
       ),
-    [resolvedAssetBaseUrl, retainUncompressedOutput, workflowHandle],
-  );
+    );
+    if (workflowHandle.peek() === workflow) workflowSnapshotStore.setWorkflow(workflow);
+    return workflow;
+  }, [resolvedAssetBaseUrl, retainUncompressedOutput, workflowHandle, workflowSnapshotStore]);
 
   useEffect(
     () => () => {
@@ -762,13 +767,19 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       }) => Promise<TValue>,
     ): Promise<TValue> => {
       syncSelectionRefs(snapshot);
+      expectedWorkflowPatchCountRef.current = snapshot.patches.length;
+      workflowSnapshotStore.setOutputSourceKey("");
       emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow start", {
         inputCount: snapshot.inputs.length,
         inputs: summarizeApplyWorkflowSources(snapshot.inputs, "Input"),
         patchCount: snapshot.patches.length,
       });
-      setResolvedOutputCompression(getApplyOutputCompression(snapshot, null));
-      setResolvedOutputNameForSnapshot(snapshot, getAutomaticApplyOutputName(snapshot, null, []));
+      // The UI MUST keep an estimate until the current source set resolves in the workflow snapshot.
+      setPreStageOutputEstimate({
+        compression: getApplyOutputCompression(snapshot, null),
+        name: getAutomaticApplyOutputName(snapshot, null, []),
+        sourceKey: getOutputSourceKey(snapshot.inputs, snapshot.patches),
+      });
       const workflow = await getWorkflow();
       // A reset that raced the load already cleared these refs (and disposed the
       // workflow); don't repopulate them with the stale instance. The prepare
@@ -959,6 +970,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           patches: snapshot.patches.slice(),
           preparationSettingsKey,
         };
+        workflowSnapshotStore.setOutputSourceKey(getOutputSourceKey(snapshot.inputs, snapshot.patches));
         if (snapshot.inputs.length) forceInputWorkflowRefreshRef.current = false;
         forcePatchWorkflowRefreshRef.current = false;
 
@@ -966,21 +978,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         const patches = workflow.getPatches();
         bundleSourcesRef.current = workflow.getBundleExportSources();
         const checksums = input?.checksums || null;
-        // Post-stage, the controller's output state is the authoritative resolved name + format
-        // (it owns the auto-naming, including the disc-name special-casing, and the manual overrides
-        // applied above). The form keeps only the eager pre-stage estimate for instant feedback.
         const resolvedOutput = workflow.getSnapshot().output;
-        setResolvedOutputCompression(resolvedOutput.outputFormat);
-        setResolvedOutputNameForSnapshot(snapshot, resolvedOutput.outputName);
         handlers.onInputState?.(input);
         handlers.onPatchState?.(patches);
         if (input?.checksums) handlers.onChecksumReady?.(input);
-        // The controller's snapshot is the authoritative readiness source (it mirrors run()'s
-        // preconditions: input ready+selected, every patch ready, output name resolved). The form
-        // adds only the UI-side gate that every *requested* patch finished staging.
-        setApplyReady(
-          workflow.getSnapshot().ready && (!snapshot.patches.length || patches.length === snapshot.patches.length),
-        );
         emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow finish", {
           hasChecksums: !!input?.checksums,
           inputStatus: input?.status,
@@ -1011,14 +1012,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         workflow.off("progress", handleProgress);
       }
     },
-    [
-      getWorkflow,
-      props.threads,
-      setResolvedOutputNameForSnapshot,
-      syncSelectionRefs,
-      syncWorkflowOutputOverrides,
-      workflowHandle,
-    ],
+    [getWorkflow, props.threads, syncSelectionRefs, syncWorkflowOutputOverrides, workflowHandle, workflowSnapshotStore],
   );
 
   const withPreparedWorkflow = useCallback(
@@ -1527,7 +1521,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           await workflow.setPatchTarget(patchIndex, targetInputId || "auto");
           const refreshedInput = workflow.getInput();
           const refreshedPatches = workflow.getPatches();
-          setApplyReady(workflow.getSnapshot().ready && refreshedPatches.length === input.patches.length);
           const buildInfo = createPatchStageInfoMapper(toStagedInputInfos(refreshedInput || stagedInput, input.inputs));
           return refreshedPatches.map((patch, index) =>
             buildInfo(patch, index, originalNames[index] || `Patch ${index + 1}`),
@@ -1599,6 +1592,26 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     },
     [buildChainMeta, emitApplyFormInputTrace, getDisabledPatchIndexes, withPreparedWorkflow],
   );
+
+  const hasRequestedPatches = expectedWorkflowPatchCountRef.current > 0;
+  const requestedPatchesSettled = hasRequestedPatches
+    ? workflowSnapshot.patchCount === expectedWorkflowPatchCountRef.current
+    : workflowSnapshot.ready;
+  const workflowOutputReady =
+    !!preStageOutputEstimate &&
+    workflowSnapshot.inputReady &&
+    workflowSnapshot.outputSourceKey === preStageOutputEstimate.sourceKey &&
+    requestedPatchesSettled;
+  const resolvedOutputCompression = workflowOutputReady
+    ? workflowSnapshot.outputCompression
+    : preStageOutputEstimate?.compression;
+  const resolvedOutputName = workflowOutputReady ? workflowSnapshot.outputName : (preStageOutputEstimate?.name ?? "");
+  const resolvedOutputNameKey = workflowOutputReady
+    ? workflowSnapshot.outputSourceKey
+    : (preStageOutputEstimate?.sourceKey ?? "");
+  const applyReady =
+    workflowSnapshot.ready &&
+    (!expectedWorkflowPatchCountRef.current || workflowSnapshot.patchCount === expectedWorkflowPatchCountRef.current);
 
   const { localUiController, localStackController, localOutputController, localNoticeController } =
     useLocalApplyPatchFormSession({

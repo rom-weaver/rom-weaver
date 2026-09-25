@@ -163,31 +163,37 @@ impl CliApp {
         let original_size = match fs::metadata(original) {
             Ok(metadata) => metadata.len(),
             Err(error) => {
-                return Err(Box::new(OperationReport::failed(
-                    OperationFamily::Patch,
-                    format,
-                    "validate",
-                    format!(
-                        "failed to inspect {command} original input `{}`: {error}",
-                        original.display()
-                    ),
-                    thread_execution,
-                )));
+                return Err(Box::new(
+                    OperationReport::failed(
+                        OperationFamily::Patch,
+                        format,
+                        "validate",
+                        format!(
+                            "failed to inspect {command} original input `{}`: {error}",
+                            original.display()
+                        ),
+                        thread_execution,
+                    )
+                    .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Io),
+                ));
             }
         };
         let modified_size = match fs::metadata(modified) {
             Ok(metadata) => metadata.len(),
             Err(error) => {
-                return Err(Box::new(OperationReport::failed(
-                    OperationFamily::Patch,
-                    format,
-                    "validate",
-                    format!(
-                        "failed to inspect {command} modified input `{}`: {error}",
-                        modified.display()
-                    ),
-                    thread_execution,
-                )));
+                return Err(Box::new(
+                    OperationReport::failed(
+                        OperationFamily::Patch,
+                        format,
+                        "validate",
+                        format!(
+                            "failed to inspect {command} modified input `{}`: {error}",
+                            modified.display()
+                        ),
+                        thread_execution,
+                    )
+                    .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Io),
+                ));
             }
         };
         Ok(PatchCreateInputSizes {
@@ -415,6 +421,15 @@ impl CliApp {
                 probe_threads.clone(),
             )
         };
+        let fail_error = |format: Option<String>, stage: &str, error: RomWeaverError| {
+            OperationReport::failed_with_error(
+                OperationFamily::Patch,
+                format,
+                stage,
+                error,
+                probe_threads.clone(),
+            )
+        };
         let xdelta_secondary_mode = match args.xdelta_secondary.parse::<XdeltaSecondaryMode>() {
             Ok(mode) => mode,
             Err(error) => {
@@ -436,7 +451,7 @@ impl CliApp {
             Err(error) => {
                 return self.finish(
                     "patch-create",
-                    fail(args.format.clone(), "validate", error.to_string()),
+                    fail_error(args.format.clone(), "validate", error),
                 );
             }
         };
@@ -510,14 +525,13 @@ impl CliApp {
             cheat_summary,
             #[cfg_attr(target_arch = "wasm32", allow(unused_variables))]
             skipped_cheats,
-        } = match self.resolve_patch_create_modified(&args, &context) {
+        } = match self.resolve_patch_create_modified(
+            &args,
+            &context,
+            Some(requested_format.clone()),
+        ) {
             Ok(source) => source,
-            Err((stage, message)) => {
-                return self.finish(
-                    "patch-create",
-                    fail(Some(requested_format.clone()), stage, message),
-                );
-            }
+            Err(report) => return self.finish("patch-create", *report),
         };
         fill_solid_comment_with_codes(solid_options.as_mut(), cheat_summary.as_ref(), &args.codes);
         if let Some(report) = self.require_readable_path(
@@ -575,10 +589,10 @@ impl CliApp {
                 Err(error) => {
                     return self.finish(
                         "patch-create",
-                        fail(
+                        fail_error(
                             Some(handler.descriptor().name.to_string()),
                             "validate",
-                            error.to_string(),
+                            error,
                         ),
                     );
                 }
@@ -590,10 +604,10 @@ impl CliApp {
                     Err(error) => {
                         return self.finish(
                             "patch-create",
-                            fail(
+                            fail_error(
                                 Some(handler.descriptor().name.to_string()),
                                 "validate",
-                                error.to_string(),
+                                error,
                             ),
                         );
                     }
@@ -617,11 +631,11 @@ impl CliApp {
         if let Err(error) = ensure_output_available(&create_output, args.force) {
             return self.finish(
                 "patch-create",
-                OperationReport::failed(
+                OperationReport::failed_with_error(
                     OperationFamily::Patch,
                     Some(handler.descriptor().name.to_string()),
                     "validate",
-                    error.to_string(),
+                    error,
                     probe_threads.clone(),
                 ),
             );
@@ -652,11 +666,11 @@ impl CliApp {
                 op.to_string(),
                 context.single_thread_execution(),
             ),
-            Err(error) => OperationReport::failed(
+            Err(error) => OperationReport::failed_with_error(
                 OperationFamily::Patch,
                 Some(handler.descriptor().name.to_string()),
                 "create",
-                error.to_string(),
+                error,
                 context.single_thread_execution(),
             ),
         };
@@ -689,7 +703,26 @@ impl CliApp {
         &self,
         args: &PatchCreateCommand,
         context: &OperationContext,
-    ) -> std::result::Result<PatchCreateModifiedSource, (&'static str, String)> {
+        format: Option<String>,
+    ) -> std::result::Result<PatchCreateModifiedSource, Box<OperationReport>> {
+        let fail = |stage: &'static str, message: String| {
+            Box::new(OperationReport::failed(
+                OperationFamily::Patch,
+                format.clone(),
+                stage,
+                message,
+                context.single_thread_execution(),
+            ))
+        };
+        let fail_error = |stage: &'static str, error: RomWeaverError| {
+            Box::new(OperationReport::failed_with_error(
+                OperationFamily::Patch,
+                format.clone(),
+                stage,
+                error,
+                context.single_thread_execution(),
+            ))
+        };
         // Native-only: the cheat database lives on disk and `cheat_selection`
         // is `serde(skip)`, so a wasm run never carries a selection.
         #[cfg(not(target_arch = "wasm32"))]
@@ -701,7 +734,7 @@ impl CliApp {
                     has_other_source: args.modified.is_some() || !args.codes.is_empty(),
                     context,
                 })
-                .map_err(|error| ("prepare", error.to_string()))?;
+                .map_err(|error| fail_error("prepare", error))?;
             return Ok(PatchCreateModifiedSource {
                 modified_path: plan.modified,
                 cheat_summary: Some(plan.summary),
@@ -710,7 +743,7 @@ impl CliApp {
         }
         if !args.codes.is_empty() {
             if args.modified.is_some() {
-                return Err((
+                return Err(fail(
                     "validate",
                     "--modified cannot be combined with --code".to_string(),
                 ));
@@ -726,17 +759,19 @@ impl CliApp {
                     &args.code_kind,
                     &dest,
                 )
-                .map_err(|error| ("prepare", error.to_string()))?;
+                .map_err(|error| fail_error("prepare", error))?;
             return Ok(PatchCreateModifiedSource {
                 modified_path: dest,
                 cheat_summary: Some(summary),
                 ..PatchCreateModifiedSource::default()
             });
         }
-        let modified_path = args.modified.clone().ok_or((
-            "validate",
-            "patch create requires --modified or --code".to_string(),
-        ))?;
+        let modified_path = args.modified.clone().ok_or_else(|| {
+            fail(
+                "validate",
+                "patch create requires --modified or --code".to_string(),
+            )
+        })?;
         Ok(PatchCreateModifiedSource {
             modified_path,
             ..PatchCreateModifiedSource::default()

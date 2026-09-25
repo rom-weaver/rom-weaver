@@ -751,7 +751,16 @@ fn probing_plan_handlers_keeps_a_slot_for_every_patch() {
     fs::write(&good, ips_patch(&[(0, b"A")])).expect("patch fixture");
     let unknown = temp.path().join("notes.bin");
     fs::write(&unknown, b"just bytes").expect("fixture");
-    let resolved = [(good.clone(), good), (unknown.clone(), unknown)];
+    let resolved = [
+        ResolvedPatch {
+            source: good.clone(),
+            resolved: good,
+        },
+        ResolvedPatch {
+            source: unknown.clone(),
+            resolved: unknown,
+        },
+    ];
 
     let probed = app().probe_plan_handlers(&resolved, 2, None);
 

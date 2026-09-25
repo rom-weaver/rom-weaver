@@ -16,9 +16,9 @@ use serde_json::{Value, json};
 use tracing::{trace, warn};
 
 use crate::rom_headers::{
-    GBA_HEADER_MAGIC, KnownRomHeader, KnownRomHeaderMatch, N64_BIG_ENDIAN_MAGIC,
-    N64_BYTE_SWAPPED_MAGIC, N64_LITTLE_ENDIAN_MAGIC, PCE_COPIER_HEADER_MODULUS, ROM_HEADER_BYTES,
-    ROM_HEADER_SCAN_BYTES, SNES_COPIER_HEADER_MODULUS, header_has_nsrt_metadata,
+    GBA_HEADER_MAGIC, KnownRomHeaderMatch, N64_BIG_ENDIAN_MAGIC, N64_BYTE_SWAPPED_MAGIC,
+    N64_LITTLE_ENDIAN_MAGIC, ROM_HEADER_SCAN_BYTES, detect_strippable_rom_header_from_prefix,
+    header_has_nsrt_metadata,
 };
 use crate::{StreamingChecksum, StreamingChecksumTiming};
 
@@ -1091,85 +1091,12 @@ fn detect_strippable_rom_header(
     total_len: u64,
     extension: Option<&str>,
 ) -> Option<KnownRomHeaderMatch> {
-    let mut matched = detect_known_rom_header_from_prefix(prefix, extension);
-    if matched.and_then(|value| value.stripped_bytes()).is_none() {
-        matched = detect_size_based_copier_header(extension, total_len);
-    }
-    let header_match = matched?;
+    let header_match = detect_strippable_rom_header_from_prefix(prefix, total_len, extension)?;
     let header_len = header_match.stripped_bytes()?;
     if total_len < header_len as u64 {
         return None;
     }
     Some(header_match)
-}
-
-/// Header candidates ordered by extension match first, then the rest, mirroring
-/// `known_header_candidates_for_path`.
-fn detect_known_rom_header_from_prefix(
-    prefix: &[u8],
-    extension: Option<&str>,
-) -> Option<KnownRomHeaderMatch> {
-    for header in known_header_candidates(extension) {
-        if header.signature_matches(prefix) {
-            return Some(KnownRomHeaderMatch {
-                header,
-                stripped_bytes: header.data_offset_bytes(),
-            });
-        }
-    }
-    None
-}
-
-fn known_header_candidates(extension: Option<&str>) -> Vec<KnownRomHeader> {
-    let mut candidates = Vec::with_capacity(KnownRomHeader::ALL.len());
-    if let Some(extension) = extension {
-        for header in KnownRomHeader::ALL {
-            if header.matches_extension(extension) {
-                candidates.push(header);
-            }
-        }
-    }
-    for header in KnownRomHeader::ALL {
-        if !candidates.contains(&header) {
-            candidates.push(header);
-        }
-    }
-    candidates
-}
-
-/// SNES/PCE copier detection by extension + size modulus, matching
-/// `detect_size_based_copier_header`.
-fn detect_size_based_copier_header(
-    extension: Option<&str>,
-    total_len: u64,
-) -> Option<KnownRomHeaderMatch> {
-    if total_len <= ROM_HEADER_BYTES as u64 {
-        return None;
-    }
-    let extension = extension?;
-    if extension_matches(extension, &[".smc", ".sfc"])
-        && total_len % SNES_COPIER_HEADER_MODULUS == ROM_HEADER_BYTES as u64
-    {
-        return Some(KnownRomHeaderMatch {
-            header: KnownRomHeader::SnesCopier,
-            stripped_bytes: Some(ROM_HEADER_BYTES),
-        });
-    }
-    if extension_matches(extension, &[".pce", ".tg16"])
-        && total_len % PCE_COPIER_HEADER_MODULUS == ROM_HEADER_BYTES as u64
-    {
-        return Some(KnownRomHeaderMatch {
-            header: KnownRomHeader::PceCopier,
-            stripped_bytes: Some(ROM_HEADER_BYTES),
-        });
-    }
-    None
-}
-
-fn extension_matches(extension: &str, candidates: &[&str]) -> bool {
-    candidates
-        .iter()
-        .any(|candidate| extension.eq_ignore_ascii_case(candidate))
 }
 
 /// Extract a `.ext` suffix (lowercased by the caller) from a file name/path.

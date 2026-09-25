@@ -869,11 +869,11 @@ impl CliApp {
             let report = self
                 .run_identify_database_inner(command)
                 .unwrap_or_else(|error| {
-                    OperationReport::failed(
+                    OperationReport::failed_with_error(
                         OperationFamily::Command,
                         Some("identify-database".to_string()),
                         "identify-database",
-                        error.to_string(),
+                        error,
                         None,
                     )
                 });
@@ -1302,11 +1302,11 @@ impl CliApp {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let report = self.run_setup_inner(command).unwrap_or_else(|error| {
-                OperationReport::failed(
+                OperationReport::failed_with_error(
                     OperationFamily::Command,
                     Some("setup".to_string()),
                     "setup",
-                    error.to_string(),
+                    error,
                     None,
                 )
             });

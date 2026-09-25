@@ -18,6 +18,7 @@ fn into_event_preserves_thread_fallback_metadata() {
             thread_fallback: true,
             thread_fallback_reason: Some("operation not supported on this platform".to_string()),
         }),
+        error_kind: None,
         status: OperationStatus::Succeeded,
     };
 
@@ -50,7 +51,7 @@ fn into_event_classifies_failed_report_error_kind() {
 }
 
 #[test]
-fn into_event_omits_error_kind_for_success_and_context_wrapped_failures() {
+fn into_event_omits_error_kind_for_success_and_untyped_context_wrapped_failures() {
     // Succeeded events never carry an error kind.
     let ok = OperationReport::succeeded(
         OperationFamily::Patch,
@@ -59,12 +60,12 @@ fn into_event_omits_error_kind_for_success_and_context_wrapped_failures() {
         "done",
         Some(100.0),
         None,
-    );
+    )
+    .with_error_kind(crate::RomWeaverErrorKind::Cancelled);
     assert_eq!(ok.into_event("patch-apply").error_kind, None);
 
-    // A failure message wrapped in extra context is not a bare RomWeaverError
-    // rendering, so it stays unclassified here and falls back to JS-side
-    // inference, exactly as before the typed field existed.
+    // A legacy string failure wrapped in extra context stays unclassified and
+    // falls back to JS-side inference.
     let wrapped = OperationReport::failed(
         OperationFamily::Patch,
         None,
@@ -76,6 +77,69 @@ fn into_event_omits_error_kind_for_success_and_context_wrapped_failures() {
         None,
     );
     assert_eq!(wrapped.into_event("patch-apply").error_kind, None);
+}
+
+#[test]
+fn explicit_error_kind_survives_context_and_overrides_message_classification() {
+    let error = crate::RomWeaverError::Cancelled;
+    let report = OperationReport::failed(
+        OperationFamily::Patch,
+        None,
+        "prepare",
+        format!("failed to prepare output: {error}"),
+        None,
+    )
+    .with_error_kind(error.kind());
+    assert_eq!(
+        report.into_event("patch-apply").error_kind,
+        Some(crate::RomWeaverErrorKind::Cancelled)
+    );
+
+    let misleading = OperationReport::failed(
+        OperationFamily::Patch,
+        None,
+        "prepare",
+        "operation cancelled while reading input",
+        None,
+    )
+    .with_error_kind(crate::RomWeaverErrorKind::Io);
+    assert_eq!(
+        misleading.into_event("patch-apply").error_kind,
+        Some(crate::RomWeaverErrorKind::Io)
+    );
+
+    let mut cancelled = OperationReport::failed(
+        OperationFamily::Patch,
+        None,
+        "prepare",
+        format!("failed to prepare output: {error}"),
+        None,
+    )
+    .with_error_kind(error.kind());
+    cancelled.status = OperationStatus::Cancelled;
+    assert_eq!(cancelled.into_event("patch-apply").error_kind, None);
+}
+
+#[test]
+fn failed_with_error_carries_the_canonical_kind() {
+    for (error, expected_kind) in [
+        (
+            crate::RomWeaverError::Validation("bad input".to_string()),
+            crate::RomWeaverErrorKind::Validation,
+        ),
+        (
+            crate::RomWeaverError::Cancelled,
+            crate::RomWeaverErrorKind::Cancelled,
+        ),
+        (
+            crate::RomWeaverError::Io(std::io::Error::other("read failed")),
+            crate::RomWeaverErrorKind::Io,
+        ),
+    ] {
+        let report =
+            OperationReport::failed_with_error(OperationFamily::Command, None, "read", error, None);
+        assert_eq!(report.into_event("command").error_kind, Some(expected_kind));
+    }
 }
 
 // Container wrapper forwarding guard.
@@ -110,6 +174,7 @@ fn guard_report(stage: &str) -> OperationReport {
         details: None,
         percent: None,
         thread_execution: None,
+        error_kind: None,
         status: OperationStatus::Succeeded,
     }
 }
@@ -629,6 +694,7 @@ fn patch_report(stage: &str) -> OperationReport {
         details: None,
         percent: None,
         thread_execution: None,
+        error_kind: None,
         status: OperationStatus::Succeeded,
     }
 }

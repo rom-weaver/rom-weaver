@@ -1075,6 +1075,37 @@ fn checksum_headered_roms_include_remove_header_variant() {
 }
 
 #[test]
+fn checksum_misnamed_smd_dump_does_not_offer_remove_header_variant() {
+    let temp = setup_temp_dir();
+    let mut plain = pseudo_random_bytes(64 * 1024, 22);
+    plain[0x100..0x104].copy_from_slice(b"SEGA");
+    let dump = super_magic_drive_dump(&plain);
+    assert_eq!(dump.len() % 1024, 512);
+
+    for name in ["input.smc", "input.sfc"] {
+        fs::write(temp.child(name).path(), &dump).expect("fixture");
+        let output = command_stdout(
+            &[
+                "checksum",
+                "--input",
+                temp.child(name).path().to_str().expect("path"),
+                "--algo",
+                "crc32",
+                "--no-extract",
+                "--threads",
+                "1",
+                "--jsonl",
+            ],
+            0,
+        );
+        let events = parse_json_lines(&output);
+        let terminal = events.last().expect("terminal checksum event");
+        assert_eq!(terminal["status"], "succeeded");
+        assert_eq!(checksum_variant_ids(terminal), vec!["raw"], "{name}");
+    }
+}
+
+#[test]
 fn checksum_legacy_range_skips_variants() {
     let temp = setup_temp_dir();
     let payload = (0..2048)

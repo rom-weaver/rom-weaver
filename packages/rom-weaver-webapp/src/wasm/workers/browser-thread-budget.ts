@@ -1,14 +1,9 @@
 import type { RomWeaverDefaultThreads } from "../rom-weaver-types.d.ts";
-
-// Floor for the implicit default browser worker-thread count. The UI advertises that "auto" resolves
-// to the browser-reported core count (settings.threadsHint / getDefaultThreadCount in
-// compression-options.ts), so the engine scales `navigator.hardwareConcurrency` up from this floor -
-// it is NOT a cap.
-const DEFAULT_BROWSER_THREAD_COUNT = 4;
-
-// Upper bound for the resolved/configured browser thread count. Keeps a high core count or a runaway
-// `defaultThreads` option from oversubscribing the pool.
-const MAX_BROWSER_THREAD_COUNT = 64;
+import {
+  clampBrowserThreadCount,
+  DEFAULT_BROWSER_THREAD_COUNT,
+  MAX_BROWSER_THREAD_COUNT,
+} from "../../platform/shared/browser-thread-defaults.ts";
 
 /**
  * Resolve the implicit default thread count from the host environment: `navigator.hardwareConcurrency`
@@ -19,7 +14,7 @@ const MAX_BROWSER_THREAD_COUNT = 64;
 export function resolveBrowserDefaultThreads(root: typeof globalThis = globalThis): number {
   const hardwareConcurrency = Number(root?.navigator?.hardwareConcurrency);
   if (Number.isFinite(hardwareConcurrency) && hardwareConcurrency > 0) {
-    return Math.min(MAX_BROWSER_THREAD_COUNT, Math.max(DEFAULT_BROWSER_THREAD_COUNT, Math.floor(hardwareConcurrency)));
+    return clampBrowserThreadCount(hardwareConcurrency);
   }
   return DEFAULT_BROWSER_THREAD_COUNT;
 }

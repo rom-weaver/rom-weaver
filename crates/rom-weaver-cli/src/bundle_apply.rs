@@ -30,16 +30,8 @@ pub(super) struct BundleApplyResolution {
     /// patch's `outputChecks`, or the bundle's `output.checks` when the
     /// selection ends the full chain.
     pub output_checks: Option<(String, FilenameRequirements)>,
-    /// Per selected patch (apply order): declared basis and mid-chain
-    /// declared checks, consumed by the apply chain loop.
-    pub step_verifications: Vec<patch_plan::PatchStepVerification>,
-    /// Concrete selected inputs, index-aligned with the resolved bundle patch
-    /// list. Omitted inputs retain the legacy sequential execution path.
-    pub step_inputs: Vec<Option<BundlePatchInput>>,
-    /// Cumulative selected execution lanes, index-aligned with step inputs.
-    pub step_targets: Vec<Option<BundlePatchInput>>,
-    /// Stable producer IDs for concrete patch-output inputs.
-    pub step_ids: Vec<Option<String>>,
+    /// Per selected patch declarations and concrete execution selectors.
+    pub steps: Vec<patch_apply::PatchApplyStepMetadata>,
     /// Bundle-authored ROM member selector. It applies only while resolving
     /// the ROM source; patch archives keep the caller's selections.
     pub rom_member: Option<String>,
@@ -144,10 +136,7 @@ impl CliApp {
         // Explicit --patch flags replace the bundle patch list wholesale;
         // the bundle still contributes rom checks and output defaults.
         let mut output_checks: Option<(String, FilenameRequirements)> = None;
-        let mut step_verifications: Vec<patch_plan::PatchStepVerification> = Vec::new();
-        let mut step_inputs: Vec<Option<BundlePatchInput>> = Vec::new();
-        let mut step_targets: Vec<Option<BundlePatchInput>> = Vec::new();
-        let mut step_ids: Vec<Option<String>> = Vec::new();
+        let mut steps: Vec<patch_apply::PatchApplyStepMetadata> = Vec::new();
         if args.patches.is_empty() {
             let selected =
                 self.select_bundle_patches(&bundle, &args.with_patches, &args.without_patches)?;
@@ -200,7 +189,6 @@ impl CliApp {
                     }
                 }
             }
-            let mut header_modes = Vec::with_capacity(selected.len());
             for (position, index) in selected.iter().enumerate() {
                 let entry = &bundle.patches[*index];
                 let entry_label = format!("patches[{index}]");
@@ -277,7 +265,6 @@ impl CliApp {
                         "bundle chain mismatch at {entry_label}: this patch's inputChecks differ from the previous selected patch's outputChecks"
                     ));
                 }
-                header_modes.push(entry.header.unwrap_or_default());
                 // A declared state gates only when every earlier entry in its
                 // own execution lane is selected. Other ROM/member lanes do
                 // not change these bytes.
@@ -301,7 +288,7 @@ impl CliApp {
                     entry.output_checks.as_ref(),
                     entry.output_checks_ref.as_deref(),
                 )?;
-                step_verifications.push(patch_plan::PatchStepVerification {
+                let verification = patch_plan::PatchStepVerification {
                     execution: None,
                     base_variant: None,
                     base_representation: None,
@@ -317,10 +304,15 @@ impl CliApp {
                         .map(patch_plan::PlanState::from_bundle_checks),
                     is_chain_prefix,
                     lane_source_input: false,
+                };
+                steps.push(patch_apply::PatchApplyStepMetadata {
+                    input: entry.input.clone(),
+                    target: entry.target.clone(),
+                    id: entry.id.clone(),
+                    verification: Some(verification),
+                    header_mode: entry.header.unwrap_or_default(),
+                    ..patch_apply::PatchApplyStepMetadata::default()
                 });
-                step_inputs.push(entry.input.clone());
-                step_targets.push(entry.target.clone());
-                step_ids.push(entry.id.clone());
                 trace!(
                     patch = %resolved.display(),
                     optional = entry.optional,
@@ -331,23 +323,18 @@ impl CliApp {
                 );
                 args.patches.push(resolved);
             }
-            fill_member_lane_checks(
-                &bundle,
-                &step_targets,
-                &step_inputs,
-                &mut step_verifications,
-            )?;
+            fill_member_lane_checks(&bundle, &mut steps)?;
             output_checks =
                 resolve_selected_bundle_output_check(&bundle, &selected, &selected_set)?;
             // Only pin per-patch header modes when the bundle sets any;
             // otherwise the all-auto default (empty list) applies. Explicit
             // --patch-header flags win untouched.
             if args.patch_header.is_empty()
-                && header_modes
+                && steps
                     .iter()
-                    .any(|mode| *mode != PatchApplyHeaderMode::Auto)
+                    .any(|step| step.header_mode != PatchApplyHeaderMode::Auto)
             {
-                args.patch_header = header_modes;
+                args.patch_header = steps.iter().map(|step| step.header_mode).collect();
             }
         } else {
             trace!(
@@ -373,10 +360,7 @@ impl CliApp {
             checks,
             expected_rom_name,
             output_checks,
-            step_verifications,
-            step_inputs,
-            step_targets,
-            step_ids,
+            steps,
             rom_member,
             // `--without-cheats` runs the patch chain alone.
             #[cfg(not(target_arch = "wasm32"))]
@@ -1087,13 +1071,12 @@ fn push_expected_state_fields(
 /// as authored.
 fn fill_member_lane_checks(
     bundle: &RomWeaverBundle,
-    step_targets: &[Option<BundlePatchInput>],
-    step_inputs: &[Option<BundlePatchInput>],
-    step_verifications: &mut [patch_plan::PatchStepVerification],
+    steps: &mut [patch_apply::PatchApplyStepMetadata],
 ) -> Result<()> {
     let mut seen_lanes: BTreeSet<Option<&BundlePatchInput>> = BTreeSet::new();
-    let mut pending: Vec<(&str, usize)> = Vec::new();
-    for (position, target) in step_targets.iter().enumerate() {
+    let mut pending: Vec<(String, usize)> = Vec::new();
+    for (position, step) in steps.iter().enumerate() {
+        let target = &step.target;
         if !seen_lanes.insert(target.as_ref()) {
             continue;
         }
@@ -1104,14 +1087,15 @@ fn fill_member_lane_checks(
         else {
             continue;
         };
-        if step_inputs.get(position).is_some_and(Option::is_some)
-            || step_verifications
-                .get(position)
-                .is_none_or(|step| step.declared_input.is_some())
+        if step.input.is_some()
+            || step
+                .verification
+                .as_ref()
+                .is_none_or(|verification| verification.declared_input.is_some())
         {
             continue;
         }
-        pending.push((member.as_str(), position));
+        pending.push((member.clone(), position));
     }
     if pending.is_empty() {
         return Ok(());
@@ -1135,7 +1119,7 @@ fn fill_member_lane_checks(
     ) else {
         return Ok(());
     };
-    fill_member_lane_checks_from(&rom_checks, &databases, &pending, step_verifications);
+    fill_member_lane_checks_from(&rom_checks, &databases, &pending, steps);
     Ok(())
 }
 
@@ -1144,8 +1128,8 @@ fn fill_member_lane_checks(
 fn fill_member_lane_checks_from(
     rom_checks: &BundleChecks,
     databases: &IdentifyDatabaseSet,
-    pending: &[(&str, usize)],
-    step_verifications: &mut [patch_plan::PatchStepVerification],
+    pending: &[(String, usize)],
+    steps: &mut [patch_apply::PatchApplyStepMetadata],
 ) {
     let Some(matched) = lookup_expected_title(rom_checks, databases) else {
         return;
@@ -1175,9 +1159,11 @@ fn fill_member_lane_checks_from(
             checksums = state.checksums.len(),
             "filled the ROM member lane's input checks from the identify database"
         );
-        let step = &mut step_verifications[*position];
-        step.declared_input = Some(state);
-        step.lane_source_input = true;
+        let verification = steps[*position]
+            .verification
+            .get_or_insert_with(patch_plan::PatchStepVerification::default);
+        verification.declared_input = Some(state);
+        verification.lane_source_input = true;
     }
 }
 
