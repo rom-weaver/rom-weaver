@@ -855,24 +855,6 @@ impl CliApp {
         if let Some(IdentifySubcommands::Database(command)) = args.subcommand.take() {
             return self.run_identify_database(command);
         }
-        let identify_failed = |message: String, thread_execution| {
-            OperationReport::failed(
-                OperationFamily::Command,
-                Some("identify".to_string()),
-                "identify",
-                message,
-                thread_execution,
-            )
-        };
-        let identify_failed_error = |error: RomWeaverError, thread_execution| {
-            OperationReport::failed_with_error(
-                OperationFamily::Command,
-                Some("identify".to_string()),
-                "identify",
-                error,
-                thread_execution,
-            )
-        };
         if let Some(outcome) = self.run_identify_name_branch(&mut args, &identify_failed) {
             return outcome;
         }
@@ -890,24 +872,7 @@ impl CliApp {
             );
         }
         if has_hash {
-            let hashes = std::mem::take(&mut args.hash);
-            let databases = match IdentifyDatabaseSet::load(&args.database) {
-                Ok(Some(databases)) => databases,
-                Ok(None) => {
-                    return self.finish(
-                        "identify",
-                        identify_failed(
-                            "the browser identify command requires a staged --database pack"
-                                .to_string(),
-                            None,
-                        ),
-                    );
-                }
-                Err(error) => {
-                    return self.finish("identify", identify_failed_error(error, None));
-                }
-            };
-            return self.run_identify_hash(&hashes, args.size, &databases);
+            return self.run_identify_hash_branch(&mut args);
         }
         let Some(mut input) = args.input.take() else {
             return self.finish(
@@ -931,6 +896,33 @@ impl CliApp {
                 );
             }
         };
+        let report = self.run_identify_input(input, args);
+        self.finish("identify", report)
+    }
+
+    fn run_identify_hash_branch(&self, args: &mut IdentifyCommand) -> AppRunOutcome {
+        let hashes = std::mem::take(&mut args.hash);
+        let databases = match IdentifyDatabaseSet::load(&args.database) {
+            Ok(Some(databases)) => databases,
+            Ok(None) => {
+                return self.finish(
+                    "identify",
+                    identify_failed(
+                        "the browser identify command requires a staged --database pack"
+                            .to_string(),
+                        None,
+                    ),
+                );
+            }
+            Err(error) => {
+                return self.finish("identify", identify_failed_error(error, None));
+            }
+        };
+        self.run_identify_hash(&hashes, args.size, &databases)
+    }
+
+    /// Identifies one input file: hash it, pick the packs to search, and build the result.
+    fn run_identify_input(&self, input: PathBuf, args: IdentifyCommand) -> OperationReport {
         if args.offline {
             // Identify is offline by construction natively; the flag only
             // records the guarantee in the log.
@@ -973,7 +965,7 @@ impl CliApp {
         #[cfg(not(target_arch = "wasm32"))]
         let provider = match IdentifyPackProvider::new(database_dir) {
             Ok(provider) => Some(provider),
-            Err(error) => return self.finish("identify", identify_failed_error(error, None)),
+            Err(error) => return identify_failed_error(error, None),
         };
         #[cfg(target_arch = "wasm32")]
         let provider: Option<IdentifyPackProvider> = {
@@ -982,46 +974,15 @@ impl CliApp {
         };
 
         // Resolve the explicit --system override before hashing anything.
-        let override_entry: Option<IdentifyPlatformCatalogEntry> = match &system {
-            Some(name) => {
-                let resolved = provider
-                    .as_ref()
-                    .and_then(|provider| provider.resolve_entry(name))
-                    .or_else(|| IdentifyCatalog::builtin().resolve_platform(name).cloned());
-                match resolved {
-                    Some(entry) => {
-                        trace!(
-                            system = name,
-                            platform = %entry.canonical_platform,
-                            "resolved --system override"
-                        );
-                        Some(entry)
-                    }
-                    None => {
-                        return self.finish(
-                            "identify",
-                            identify_failed(
-                                format!(
-                                    "unknown system `{name}`: it is not in the identify catalog. \
-                                     Run `rom-weaver identify database list` to see the known \
-                                     platform names and aliases"
-                                ),
-                                None,
-                            ),
-                        );
-                    }
-                }
-            }
-            None => None,
+        let override_entry = match resolve_identify_system_override(provider.as_ref(), &system) {
+            Ok(entry) => entry,
+            Err(report) => return *report,
         };
 
         if database.is_empty() && provider.is_none() {
-            return self.finish(
-                "identify",
-                identify_failed(
-                    "the browser identify command requires a staged --database pack".to_string(),
-                    None,
-                ),
+            return identify_failed(
+                "the browser identify command requires a staged --database pack".to_string(),
+                None,
             );
         }
 
@@ -1040,28 +1001,11 @@ impl CliApp {
         });
         if checksum_report.status != OperationStatus::Succeeded {
             checksum_report.stage = "identify".to_string();
-            return self.finish("identify", checksum_report);
+            return checksum_report;
         }
 
         let details = checksum_report.details.take().unwrap_or(Value::Null);
-        let checksums = checksum_map(details.get("checksums"));
-        let checksum_variants = details
-            .get("checksum_variants")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_else(|| {
-                vec![json!({
-                    "id": "raw",
-                    "label": "Raw",
-                    "checksums": checksums,
-                })]
-            });
-        let detected_platform = details
-            .get("platform")
-            .and_then(Value::as_str)
-            .map(str::to_string);
-        let is_disc = details.get("disc_format").is_some();
-        let raw_size = details.get("size").and_then(Value::as_u64);
+        let hashed = IdentifyHashedInput::from_checksum_details(&details);
 
         let platform_candidates: Vec<PlatformCandidate> = match &override_entry {
             Some(entry) => vec![PlatformCandidate {
@@ -1069,54 +1013,33 @@ impl CliApp {
                 confidence: DetectionConfidence::Certain,
                 evidence: DetectionEvidence::UserOverride,
             }],
-            None => detected_platform_candidates(detected_platform.as_deref(), is_disc),
+            None => {
+                detected_platform_candidates(hashed.detected_platform.as_deref(), hashed.is_disc)
+            }
         };
         trace!(
             candidates = ?platform_candidates
                 .iter()
                 .map(|candidate| candidate.platform.as_str())
                 .collect::<Vec<_>>(),
-            detected_platform = ?detected_platform,
-            is_disc,
-            raw_size = ?raw_size,
-            crc32 = ?checksums.get("crc32"),
+            detected_platform = ?hashed.detected_platform,
+            is_disc = hashed.is_disc,
+            raw_size = ?hashed.raw_size,
+            crc32 = ?hashed.checksums.get("crc32"),
             "identify platform candidates"
         );
 
         // Select the packs to search, and remember catalog platforms whose
         // pack is not installed (for the database_required condition).
-        let mut selected: Vec<SelectedPack> = Vec::new();
-        let mut missing_platforms: Vec<String> = Vec::new();
-        if !database.is_empty() {
-            let loaded = match Self::load_explicit_packs(&database) {
-                Ok(loaded) => loaded,
-                Err(error) => {
-                    return self.finish(
-                        "identify",
-                        identify_failed_error(error, checksum_report.thread_execution),
-                    );
-                }
-            };
-            selected.extend(loaded);
-        } else if let Some(provider) = &provider {
-            let selection = Self::select_catalog_packs(
-                provider,
-                &platform_candidates,
-                exhaustive_database_search,
-            );
-            match selection {
-                Ok((packs, missing)) => {
-                    selected = packs;
-                    missing_platforms = missing;
-                }
-                Err(error) => {
-                    return self.finish(
-                        "identify",
-                        identify_failed_error(error, checksum_report.thread_execution),
-                    );
-                }
-            }
-        }
+        let (selected, missing_platforms) = match Self::select_identify_packs(
+            &database,
+            provider.as_ref(),
+            &platform_candidates,
+            exhaustive_database_search,
+        ) {
+            Ok(selection) => selection,
+            Err(error) => return identify_failed_error(error, checksum_report.thread_execution),
+        };
 
         trace!(
             selected = ?selected
@@ -1126,126 +1049,49 @@ impl CliApp {
             missing = ?missing_platforms,
             "identify pack selection"
         );
-        let resolved =
-            Self::resolve_against_selected(&selected, &checksum_variants, raw_size, &checksums);
+        let resolved = Self::resolve_against_selected(
+            &selected,
+            &hashed.checksum_variants,
+            hashed.raw_size,
+            &hashed.checksums,
+        );
         let resolved = match resolved {
             Ok(resolved) => resolved,
-            Err(error) => {
-                return self.finish(
-                    "identify",
-                    identify_failed_error(error, checksum_report.thread_execution),
-                );
-            }
+            Err(error) => return identify_failed_error(error, checksum_report.thread_execution),
         };
-        let ResolvedIdentify {
-            matches,
-            quality,
-            evidence,
-            database: database_info,
-        } = resolved;
-
-        let status = match matches.len() {
-            0 => IdentifyStatus::Unknown,
-            1 => IdentifyStatus::Matched,
-            _ => IdentifyStatus::Ambiguous,
-        };
-
-        let mut condition = None;
-        let mut hint = None;
-        if status == IdentifyStatus::Unknown {
-            if let Some(platform) = missing_platforms.first() {
-                condition = Some("database_required".to_string());
-                hint = Some(format!(
-                    "no identify pack is installed for {platform}; this install shipped no \
-                     identify database, or pass `--database-dir` with an existing one"
-                ));
-            } else if let Some(selected) = selected.iter().find(|selected| {
-                let IdentifyPackFile::V1(pack) = &selected.pack.file;
-                let profile = Some(pack.canonicalization_profile().to_string());
-                profile.as_deref().is_some_and(profile_needs_tracks)
-            }) {
-                let IdentifyPackFile::V1(pack) = &selected.pack.file;
-                let profile = pack.canonicalization_profile().to_string();
-                condition = Some("unsupported_media_profile".to_string());
-                hint = Some(format!(
-                    "this system's pack ({profile}) stores CD dumps as per-track hashes, but \
-                     the input was hashed as one payload; for a CD image, extract the disc's \
-                     track files and identify the data track"
-                ));
-            }
-        }
-
-        let label = match status {
-            IdentifyStatus::Matched => format!("identified {}", matches[0].name),
-            IdentifyStatus::Ambiguous => format!("found {} possible titles", matches.len()),
-            IdentifyStatus::Unknown => match condition.as_deref() {
-                Some("database_required") => format!(
-                    "no identify pack installed for {}",
-                    missing_platforms.first().map(String::as_str).unwrap_or("?")
-                ),
-                Some("unsupported_media_profile") => {
-                    "this input's media profile is not supported yet".to_string()
-                }
-                _ => "no title matched the supplied database".to_string(),
-            },
-        };
-
-        let components = match raw_size {
-            Some(size) => vec![IdentifyComponent {
-                role: ComponentRole::PrimaryPayload,
-                ordinal: 0,
-                size,
-                hash_scope: None,
-                filename: None,
-                crc32: checksums.get("crc32").cloned(),
-                md5: checksums.get("md5").cloned(),
-                sha1: checksums.get("sha1").cloned(),
-                sha256: checksums.get("sha256").cloned(),
-                track: None,
-            }],
-            None => Vec::new(),
-        };
-        let media = if is_disc {
-            Some(IdentifyMedia {
-                kind: MediaKind::OpticalDisc,
-                container: None,
-                sessions: None,
-            })
-        } else {
-            None
-        };
-        let detected_platform = detected_platform.or_else(|| {
-            override_entry
-                .as_ref()
-                .map(|entry| entry.canonical_platform.clone())
-        });
-
-        let result = IdentifyResult {
-            status,
-            input: input.to_string_lossy().into_owned(),
-            detected_platform,
-            checksums,
-            checksum_variants,
-            matches,
-            quality,
+        let selection = IdentifyPackSelection {
+            selected,
+            missing_platforms,
+            override_entry,
             platform_candidates,
-            media,
-            components,
-            database: database_info,
-            evidence,
-            condition,
-            hint,
         };
-        let mut report = OperationReport::succeeded(
-            OperationFamily::Command,
-            Some("identify".to_string()),
-            "identify",
-            label,
-            Some(100.0),
+        identify_input_report(
+            &input,
+            hashed,
+            selection,
+            resolved,
             checksum_report.thread_execution,
-        );
-        report.details = Some(json!({ "identify": result }));
-        self.finish("identify", report)
+        )
+    }
+
+    /// Loads the explicit `--database` packs, or routes through the catalog provider.
+    fn select_identify_packs(
+        database: &[PathBuf],
+        provider: Option<&IdentifyPackProvider>,
+        platform_candidates: &[PlatformCandidate],
+        exhaustive_database_search: bool,
+    ) -> Result<(Vec<SelectedPack>, Vec<String>)> {
+        if !database.is_empty() {
+            return Ok((Self::load_explicit_packs(database)?, Vec::new()));
+        }
+        if let Some(provider) = provider {
+            return Self::select_catalog_packs(
+                provider,
+                platform_candidates,
+                exhaustive_database_search,
+            );
+        }
+        Ok((Vec::new(), Vec::new()))
     }
 
     /// The algorithm a bare hex digest belongs to, inferred from its length.
@@ -1757,6 +1603,251 @@ struct ResolvedIdentify {
     quality: Option<String>,
     evidence: Option<IdentifyEvidence>,
     database: Option<IdentifyDatabaseInfo>,
+}
+
+fn identify_failed(message: String, thread_execution: Option<ThreadExecution>) -> OperationReport {
+    OperationReport::failed(
+        OperationFamily::Command,
+        Some("identify".to_string()),
+        "identify",
+        message,
+        thread_execution,
+    )
+}
+
+fn identify_failed_error(
+    error: RomWeaverError,
+    thread_execution: Option<ThreadExecution>,
+) -> OperationReport {
+    OperationReport::failed_with_error(
+        OperationFamily::Command,
+        Some("identify".to_string()),
+        "identify",
+        error,
+        thread_execution,
+    )
+}
+
+fn resolve_identify_system_override(
+    provider: Option<&IdentifyPackProvider>,
+    system: &Option<String>,
+) -> std::result::Result<Option<IdentifyPlatformCatalogEntry>, Box<OperationReport>> {
+    let Some(name) = system else {
+        return Ok(None);
+    };
+    let resolved = provider
+        .and_then(|provider| provider.resolve_entry(name))
+        .or_else(|| IdentifyCatalog::builtin().resolve_platform(name).cloned());
+    match resolved {
+        Some(entry) => {
+            trace!(
+                system = name,
+                platform = %entry.canonical_platform,
+                "resolved --system override"
+            );
+            Ok(Some(entry))
+        }
+        None => Err(Box::new(identify_failed(
+            format!(
+                "unknown system `{name}`: it is not in the identify catalog. \
+                 Run `rom-weaver identify database list` to see the known \
+                 platform names and aliases"
+            ),
+            None,
+        ))),
+    }
+}
+
+/// The values identify reads from the checksum report of its input.
+struct IdentifyHashedInput {
+    checksums: BTreeMap<String, String>,
+    checksum_variants: Vec<Value>,
+    detected_platform: Option<String>,
+    is_disc: bool,
+    raw_size: Option<u64>,
+}
+
+impl IdentifyHashedInput {
+    fn from_checksum_details(details: &Value) -> Self {
+        let checksums = checksum_map(details.get("checksums"));
+        let checksum_variants = details
+            .get("checksum_variants")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_else(|| {
+                vec![json!({
+                    "id": "raw",
+                    "label": "Raw",
+                    "checksums": checksums,
+                })]
+            });
+        let detected_platform = details
+            .get("platform")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let is_disc = details.get("disc_format").is_some();
+        let raw_size = details.get("size").and_then(Value::as_u64);
+        Self {
+            checksums,
+            checksum_variants,
+            detected_platform,
+            is_disc,
+            raw_size,
+        }
+    }
+}
+
+/// The packs searched for one identify run and the platform routing behind them.
+struct IdentifyPackSelection {
+    selected: Vec<SelectedPack>,
+    missing_platforms: Vec<String>,
+    override_entry: Option<IdentifyPlatformCatalogEntry>,
+    platform_candidates: Vec<PlatformCandidate>,
+}
+
+/// Explains an unknown result: a missing pack, or a pack whose media profile needs tracks.
+fn identify_unknown_condition(
+    missing_platforms: &[String],
+    selected: &[SelectedPack],
+) -> (Option<String>, Option<String>) {
+    if let Some(platform) = missing_platforms.first() {
+        return (
+            Some("database_required".to_string()),
+            Some(format!(
+                "no identify pack is installed for {platform}; this install shipped no \
+                 identify database, or pass `--database-dir` with an existing one"
+            )),
+        );
+    }
+    if let Some(selected) = selected.iter().find(|selected| {
+        let IdentifyPackFile::V1(pack) = &selected.pack.file;
+        let profile = Some(pack.canonicalization_profile().to_string());
+        profile.as_deref().is_some_and(profile_needs_tracks)
+    }) {
+        let IdentifyPackFile::V1(pack) = &selected.pack.file;
+        let profile = pack.canonicalization_profile().to_string();
+        return (
+            Some("unsupported_media_profile".to_string()),
+            Some(format!(
+                "this system's pack ({profile}) stores CD dumps as per-track hashes, but \
+                 the input was hashed as one payload; for a CD image, extract the disc's \
+                 track files and identify the data track"
+            )),
+        );
+    }
+    (None, None)
+}
+
+fn identify_input_report(
+    input: &Path,
+    hashed: IdentifyHashedInput,
+    selection: IdentifyPackSelection,
+    resolved: ResolvedIdentify,
+    thread_execution: Option<ThreadExecution>,
+) -> OperationReport {
+    let IdentifyHashedInput {
+        checksums,
+        checksum_variants,
+        detected_platform,
+        is_disc,
+        raw_size,
+    } = hashed;
+    let IdentifyPackSelection {
+        selected,
+        missing_platforms,
+        override_entry,
+        platform_candidates,
+    } = selection;
+    let ResolvedIdentify {
+        matches,
+        quality,
+        evidence,
+        database: database_info,
+    } = resolved;
+
+    let status = match matches.len() {
+        0 => IdentifyStatus::Unknown,
+        1 => IdentifyStatus::Matched,
+        _ => IdentifyStatus::Ambiguous,
+    };
+
+    let (condition, hint) = if status == IdentifyStatus::Unknown {
+        identify_unknown_condition(&missing_platforms, &selected)
+    } else {
+        (None, None)
+    };
+
+    let label = match status {
+        IdentifyStatus::Matched => format!("identified {}", matches[0].name),
+        IdentifyStatus::Ambiguous => format!("found {} possible titles", matches.len()),
+        IdentifyStatus::Unknown => match condition.as_deref() {
+            Some("database_required") => format!(
+                "no identify pack installed for {}",
+                missing_platforms.first().map(String::as_str).unwrap_or("?")
+            ),
+            Some("unsupported_media_profile") => {
+                "this input's media profile is not supported yet".to_string()
+            }
+            _ => "no title matched the supplied database".to_string(),
+        },
+    };
+
+    let components = match raw_size {
+        Some(size) => vec![IdentifyComponent {
+            role: ComponentRole::PrimaryPayload,
+            ordinal: 0,
+            size,
+            hash_scope: None,
+            filename: None,
+            crc32: checksums.get("crc32").cloned(),
+            md5: checksums.get("md5").cloned(),
+            sha1: checksums.get("sha1").cloned(),
+            sha256: checksums.get("sha256").cloned(),
+            track: None,
+        }],
+        None => Vec::new(),
+    };
+    let media = if is_disc {
+        Some(IdentifyMedia {
+            kind: MediaKind::OpticalDisc,
+            container: None,
+            sessions: None,
+        })
+    } else {
+        None
+    };
+    let detected_platform = detected_platform.or_else(|| {
+        override_entry
+            .as_ref()
+            .map(|entry| entry.canonical_platform.clone())
+    });
+
+    let result = IdentifyResult {
+        status,
+        input: input.to_string_lossy().into_owned(),
+        detected_platform,
+        checksums,
+        checksum_variants,
+        matches,
+        quality,
+        platform_candidates,
+        media,
+        components,
+        database: database_info,
+        evidence,
+        condition,
+        hint,
+    };
+    let mut report = OperationReport::succeeded(
+        OperationFamily::Command,
+        Some("identify".to_string()),
+        "identify",
+        label,
+        Some(100.0),
+        thread_execution,
+    );
+    report.details = Some(json!({ "identify": result }));
+    report
 }
 
 fn checksum_map(value: Option<&Value>) -> BTreeMap<String, String> {
