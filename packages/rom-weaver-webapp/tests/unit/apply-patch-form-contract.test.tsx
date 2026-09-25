@@ -268,6 +268,15 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
     await vi.waitFor(() => {
       expect((rendered.container.querySelector("#rom-weaver-button-apply") as HTMLButtonElement)?.disabled).toBe(false);
     });
+    // Apply MAY enable before staging builds the workflow, and the cheat section loads its database
+    // on its own schedule; both MUST settle before commits are counted.
+    await vi.waitFor(() => expect(latestFakeWorkflow?.setInput).toHaveBeenCalled());
+    await vi.waitFor(() => expect(rendered.container.textContent).toContain("The cheat database is unavailable"));
+    await vi.waitFor(async () => {
+      const commits = onRender.mock.calls.length;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(onRender).toHaveBeenCalledTimes(commits);
+    });
 
     const commitsAfterStaging = onRender.mock.calls.length;
     await act(async () => latestFakeWorkflow?.__setBusy(true));
