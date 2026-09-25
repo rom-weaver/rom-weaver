@@ -37,6 +37,7 @@ const LOCAL_STORAGE_SETTINGS_ID = "rom-weaver-settings";
 
 type SettingsState = {
   defaultCompression: string;
+  detailedViewEnabled: boolean;
   accent: string;
   language: string;
   byteUnits: ByteUnitSystem;
@@ -162,6 +163,7 @@ const SETTINGS_FIELD_ORDER = [
   "language",
   "byteUnits",
   "logLevel",
+  "detailedViewEnabled",
   "betaToolsEnabled",
   "emulatorSaveStorageEnabled",
   "offlineCopyEnabled",
@@ -234,6 +236,7 @@ const SETTINGS_PANEL_SECTIONS: ReadonlyArray<{ fields: SettingsFieldKey[]; title
       "accent",
       "byteUnits",
       "logLevel",
+      "detailedViewEnabled",
       "offlineCopyEnabled",
       "onboardingEnabled",
       "betaToolsEnabled",
@@ -403,6 +406,16 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
       ".zip or ROM specific is the default: ZIP for archive output, or ROM-specific compression such as Z3DS, CHD, RVZ, etc. when available.",
     validationLabel: "Type",
     validValues: ["7z/special", "zip/special", "special only", "7z only", "zip only", "none"],
+  },
+  detailedViewEnabled: {
+    defaultValue: false,
+    id: "settings-detailed-view-enabled",
+    key: "detailedViewEnabled",
+    kind: "checkbox",
+    label: getSettingsLabel("detailedViewEnabled"),
+    labelDataLocalize: "Show detailed file information",
+    layout: "large",
+    suggestion: "Shows extraction, identification, and disc details in separate drawers.",
   },
   fixChecksum: {
     defaultValue: false,

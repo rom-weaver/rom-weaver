@@ -2,6 +2,7 @@
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChecksumList, ChecksumRow } from "../../../src/public/react/components/ds/checksum-list.tsx";
+import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { navigatorWith } from "../navigator-test-utils.ts";
 
 /**
@@ -37,15 +38,27 @@ describe("ChecksumRow", () => {
 });
 
 describe("ChecksumList", () => {
-  it("wraps rows in a drawer with timing and verdict readouts", () => {
-    const { container } = render(
-      <ChecksumList defaultOpen label="Input Check" match={{ label: null, ok: true }} timing="Verify 2.1s">
-        <ChecksumRow label="BYTES" value="13" />
-      </ChecksumList>,
+  const renderList = (detailedViewEnabled: boolean) =>
+    render(
+      <RomWeaverSettingsProvider settings={{ detailedViewEnabled }}>
+        <ChecksumList defaultOpen label="Input Check" match={{ label: null, ok: true }} timing="Verify 2.1s">
+          <ChecksumRow label="BYTES" value="13" />
+        </ChecksumList>
+      </RomWeaverSettingsProvider>,
     );
+
+  it("wraps rows in a drawer with timing and verdict readouts in the detailed view", () => {
+    const { container } = renderList(true);
     expect(container.querySelector(".cks.is-open")).toBeTruthy();
     expect(container.querySelector(".rb.time")?.textContent).toBe("Verify 2.1s");
     expect(container.querySelector(".rb-mark.ok")).toBeTruthy();
     expect(container.querySelector(".ckrows .ck")).toBeTruthy();
+  });
+
+  it("keeps the verdict but hides the timing readout in the simple view", () => {
+    const { container } = renderList(false);
+    expect(container.querySelector(".cks.is-open")).toBeTruthy();
+    expect(container.querySelector(".rb.time")).toBeNull();
+    expect(container.querySelector(".rb-mark.ok")).toBeTruthy();
   });
 });

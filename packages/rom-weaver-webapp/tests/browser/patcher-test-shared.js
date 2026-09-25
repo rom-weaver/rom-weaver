@@ -1,6 +1,8 @@
+import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect } from "vitest";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
+import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { getActiveBrowserVirtualFiles } from "../../src/workers/protocol/browser-virtual-files.ts";
 import { resetRomWeaverRunner, warmupRomWeaverRunner } from "../../src/workers/rom-weaver/rom-weaver-runner.ts";
 
@@ -40,7 +42,9 @@ export const mount = (element) => {
   mountedRoot?.unmount?.();
   mountedRoot = null;
   const root = createRoot(getRoot());
-  root.render(element);
+  // These integration tests inspect the complete workflow surface. Simple-mode
+  // coverage lives in the focused view-contract tests.
+  root.render(createElement(RomWeaverSettingsProvider, { settings: { detailedViewEnabled: true } }, element));
   mountedRoot = root;
   return root;
 };

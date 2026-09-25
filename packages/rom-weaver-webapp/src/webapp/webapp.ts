@@ -486,6 +486,7 @@ const renderWebappRoot = (): undefined => {
       onCreatorSettingsChange: (settings) => webappController.setCreatorSettingsState(settings),
       onDraftChange: (field, value) =>
         webappController.updateDraftSetting(field as Parameters<typeof webappController.updateDraftSetting>[0], value),
+      onDetailedViewEnabledChange: (enabled) => webappController.setDetailedViewEnabled(enabled),
       onLanguageChange: (language) => webappController.setLanguage(language),
       onLogLevelChange: (level) => webappController.setLogLevel(level),
       onOfflineCopyEnabledChange: (enabled) => webappController.setOfflineCopyEnabled(enabled),

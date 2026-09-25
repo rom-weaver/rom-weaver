@@ -7,7 +7,7 @@ import { FileCard } from "./components/ds/file-card.tsx";
 import { SampleTutorialStart } from "./components/ds/sample-tutorial.tsx";
 import { resolveGuidedSampleHref } from "./guided-sample-start.ts";
 import { StageStatus } from "./components/ds/staging-meta.tsx";
-import { useRomWeaverAssetBaseUrl, useUiLocalizer } from "./settings-context.tsx";
+import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
 import type { PendingDrop } from "./use-unified-apply-drop.ts";
 
 // Bare name, resolved against the app's base at fetch time: a root-absolute
@@ -64,6 +64,7 @@ export const usePendingCardMorph = (pendingCount: number, _resolvedCount: number
 
 const PendingDropCard = ({ drop }: { drop: PendingDrop }) => {
   const localizer = useUiLocalizer();
+  const { detailedViewEnabled = false } = useRomWeaverSettings();
   return (
     <FileCard
       className="pending-card"
@@ -83,7 +84,7 @@ const PendingDropCard = ({ drop }: { drop: PendingDrop }) => {
       name={<ExtractName fileName={drop.name} />}
       stageBar="indeterminate"
     >
-      {drop.extracting ? (
+      {drop.extracting && detailedViewEnabled ? (
         <Drawer
           bodyClassName="taskbody"
           className="extract-d"

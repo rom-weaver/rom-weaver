@@ -274,7 +274,7 @@
 }
 /* Heading actions use text-only styling to match the section titles. */
 .rw-app .reset-btn,
-.rw-app .panel-settings-btn,
+.rw-app .panel-view-toggle,
 .rw-app .panel-threads-btn {
   position: relative;
   display: inline-flex;
@@ -299,15 +299,14 @@
 .rw-app .reset-btn {
   margin-inline-end: 4px;
 }
-.rw-app .reset-btn svg,
-.rw-app .panel-settings-btn svg {
+.rw-app .reset-btn svg {
   flex: none;
   width: 13px;
   height: 13px;
 }
 /* the halo is on top of that floor, for the finger rather than the audit */
 .rw-app .reset-btn::after,
-.rw-app .panel-settings-btn::after,
+.rw-app .panel-view-toggle::after,
 .rw-app .panel-threads-btn::after {
   position: absolute;
   inset: -4px -8px;
@@ -321,7 +320,6 @@
 .rw-app .reset-btn:active {
   color: var(--fault);
 }
-.rw-app .panel-settings-btn,
 .rw-app .panel-threads-btn {
   text-decoration: underline dotted;
   text-decoration-color: color-mix(in oklab, currentColor 45%, transparent);
@@ -329,23 +327,28 @@
   transition: text-decoration-color 0.18s;
 }
 @media (hover: hover) {
-  .rw-app .panel-settings-btn:hover,
   .rw-app .panel-threads-btn:hover {
     text-decoration-color: currentColor;
   }
 }
-.rw-app .panel-settings-btn:active,
 .rw-app .panel-threads-btn:active {
   text-decoration-color: currentColor;
 }
-@media (max-width: 359px) {
-  .rw-app .workflow-panel-head[data-threads] .panel-settings-btn,
+.rw-app .panel-view-toggle input[type="checkbox"]:checked + span {
+  color: var(--thread-text);
+}
+/* Reset keeps its aria-label, so its text goes first when the heading runs out of room. */
+@media (max-width: 419px) {
   .rw-app .workflow-panel-head[data-threads] .reset-btn {
     justify-content: center;
     min-inline-size: 24px;
   }
-  .rw-app .workflow-panel-head[data-threads] .panel-settings-btn span,
   .rw-app .workflow-panel-head[data-threads] .reset-btn span {
+    display: none;
+  }
+}
+@media (max-width: 359px) {
+  .rw-app .workflow-panel-head[data-threads] .panel-view-toggle span {
     display: none;
   }
 }

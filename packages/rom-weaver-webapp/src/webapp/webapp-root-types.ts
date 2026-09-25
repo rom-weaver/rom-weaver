@@ -68,6 +68,7 @@ type WebappRootProps = {
   actions: {
     onStartGuide: (guide: GuidedSample) => void;
     onSelectView: (view: WebappView) => void;
+    onDetailedViewEnabledChange: (enabled: boolean) => void;
     /** Masthead quick pickers commit straight to settings - no draft, no Save. */
     onAccentChange: (accent: string) => void;
     onLanguageChange: (language: string) => void;

@@ -38,10 +38,10 @@ import {
 
 const logger = createLogger("settings");
 
-const SETTINGS_STORAGE_VERSION = 9;
+const SETTINGS_STORAGE_VERSION = 10;
 // Accept older settings payloads and save them in the current format on the next write.
 // New schema versions MUST preserve compatible fields through defaults or migrate them before reading.
-const COMPATIBLE_PRIOR_STORAGE_VERSIONS = new Set<number>([5, 6, 7, 8]);
+const COMPATIBLE_PRIOR_STORAGE_VERSIONS = new Set<number>([5, 6, 7, 8, 9]);
 
 type GroupedStoredSettings = {
   apply?: {
@@ -75,6 +75,7 @@ const isCodecSettingValue = (value: unknown): value is string | string[] | numbe
   (Array.isArray(value) && value.every((item) => typeof item === "string"));
 const BOOLEAN_SETTINGS_FIELDS = [
   "betaToolsEnabled",
+  "detailedViewEnabled",
   "onboardingEnabled",
   "offlineCopyEnabled",
   "emulatorSaveStorageEnabled",
@@ -406,6 +407,7 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
   const validation = isRecord(applySettings.validation) ? applySettings.validation : {};
   return {
     betaToolsEnabled: commonSettings.betaToolsEnabled,
+    detailedViewEnabled: commonSettings.detailedViewEnabled,
     legacyApplyPlayButtonEnabled: commonSettings.applyPlayButtonEnabled,
     emulatorSaveStorageEnabled: commonSettings.emulatorSaveStorageEnabled,
     onboardingEnabled: commonSettings.onboardingEnabled,
@@ -531,6 +533,10 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
 
     const betaToolsEnabled = readStoredField(storedBooleanSchema, loadedSettings.betaToolsEnabled);
     if (betaToolsEnabled !== undefined) settings.betaToolsEnabled = betaToolsEnabled;
+
+    const detailedViewEnabled = readStoredField(storedBooleanSchema, loadedSettings.detailedViewEnabled);
+    if (detailedViewEnabled !== undefined) settings.detailedViewEnabled = detailedViewEnabled;
+
     const identifiedOutputName = readStoredField(storedBooleanSchema, loadedSettings.identifiedOutputName);
     if (identifiedOutputName !== undefined) settings.identifiedOutputName = identifiedOutputName;
 
@@ -639,6 +645,7 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
     if (
       fieldKey === "accent" ||
       fieldKey === "betaToolsEnabled" ||
+      fieldKey === "detailedViewEnabled" ||
       fieldKey === "emulatorSaveStorageEnabled" ||
       fieldKey === "onboardingEnabled" ||
       fieldKey === "offlineCopyEnabled" ||

@@ -1125,6 +1125,11 @@ msgstr "Descripción"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.view.detailed"
+msgstr "Detallada"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.trimDetected"
 msgstr "Detectado"
 
@@ -3057,6 +3062,11 @@ msgstr "Mostrar detalles de {label}"
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.showChecksums"
 msgstr "Mostrar sumas de comprobación"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.detailedViewEnabled"
+msgstr "Mostrar información detallada del archivo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

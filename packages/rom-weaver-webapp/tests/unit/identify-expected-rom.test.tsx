@@ -108,7 +108,7 @@ it("marks the staged ROM ok when it matches the pasted checksum", async () => {
 
   await waitFor(() => expect(container.querySelector(".card.ok")).not.toBeNull());
   // The expectation survives the drop and lands as Expected rows on the card.
-  expect(container.querySelector("#rom-weaver-rom-expected-checks")).not.toBeNull();
+  await waitFor(() => expect(container.querySelector("#rom-weaver-rom-expected-checks")).not.toBeNull());
 });
 
 it("faults the step when the staged ROM misses the pasted checksum", async () => {

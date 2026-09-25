@@ -871,6 +871,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "settings.chdCreateCdCodecs": msg({ id: "settings.chdCreateCdCodecs", message: "CD Codecs" }),
   "settings.chdCreateDvdCodecs": msg({ id: "settings.chdCreateDvdCodecs", message: "DVD Codecs" }),
   "settings.compressionProfile": msg({ id: "settings.compressionProfile", message: "Level" }),
+  "settings.detailedViewEnabled": msg({
+    id: "settings.detailedViewEnabled",
+    message: "Show detailed file information",
+  }),
   "settings.fixChecksum": msg({ id: "settings.fixChecksum", message: "Fix ROM header" }),
   "settings.language": msg({ id: "settings.language", message: "Language" }),
   "settings.levelOverride": msg({ id: "settings.levelOverride", message: "Level override" }),
@@ -1245,6 +1249,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.settings.save": msg({ id: "ui.settings.save", message: "Save" }),
   "ui.settings.sevenZipCodec": msg({ id: "ui.settings.sevenZipCodec", message: "7z" }),
   "ui.settings.title": msg({ id: "ui.settings.title", message: "Settings" }),
+  "ui.view.detailed": msg({ id: "ui.view.detailed", message: "Detailed" }),
   "ui.settings.zipCodec": msg({ id: "ui.settings.zipCodec", message: "ZIP" }),
   "ui.status.doneMsg": msg({ id: "ui.status.doneMsg", message: "rom-weaver finished in {t}" }),
   "ui.step.apply": msg({ id: "ui.step.apply", message: "Apply" }),

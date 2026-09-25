@@ -160,7 +160,7 @@ const renderView = ({
   pendingDrops,
   romLookupRequest,
   setPatchTarget,
-  settings = {},
+  settings = { detailedViewEnabled: true },
   startup,
   ui,
 }: {
@@ -195,8 +195,9 @@ const renderView = ({
     ui: Object.assign(storeOf(ui), ui) as unknown as PatcherUiController,
   };
   Object.assign(controllers.output, outputControllerOverrides);
+  const resolvedSettings = { detailedViewEnabled: true, ...settings };
   return render(
-    <RomWeaverSettingsProvider settings={settings}>
+    <RomWeaverSettingsProvider settings={resolvedSettings}>
       <ApplyWorkflowFormView
         bundleMetaById={bundleMetaById}
         cheats={({ renderStack }) =>
@@ -1094,6 +1095,22 @@ describe("apply workflow view - staged bench", () => {
     expect(container.querySelector("#rom-weaver-row-patch-stack .step-meta .rb")?.textContent).toContain("1 file");
     // no needs-input directives once content is staged
     expect(container.querySelectorAll("button.needs-input").length).toBe(0);
+  });
+
+  it("hides ROM and patch Files drawers in simple view but keeps Checks", () => {
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = renderView({
+      patches: [patchItem("change.ips")],
+      settings: { detailedViewEnabled: false },
+      ui,
+    });
+
+    const romCard = container.querySelector("#rom-weaver-list-input-stack .card.file");
+    const patchCard = container.querySelector("#rom-weaver-list-patch-stack .card.patch");
+    expect(romCard?.querySelector(".extract-d")).toBeNull();
+    expect(patchCard?.querySelector(".extract-d")).toBeNull();
+    expect(romCard?.textContent).toContain("Checks");
+    expect(patchCard?.textContent).toContain("Checks");
   });
 
   it.each([false, undefined])("shows cheats when beta tools are %s", (betaToolsEnabled) => {
