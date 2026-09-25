@@ -1,46 +1,4 @@
 /* Result */
-.rw-app .extract-list {
-  display: grid;
-  gap: var(--sp-s);
-  margin-block: var(--sp-m);
-}
-.rw-app .extract-row {
-  display: flex;
-  gap: var(--sp-m);
-  align-items: center;
-  min-width: 0;
-  padding: var(--sp-s) var(--sp-m);
-  border: 1px solid var(--seam);
-  border-radius: var(--r-s);
-}
-.rw-app .extract-pick {
-  display: flex;
-  flex: 1;
-  gap: var(--sp-s);
-  align-items: center;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.rw-app .extract-pick > span {
-  min-width: 0;
-}
-.rw-app .extract-size {
-  flex: none;
-}
-.rw-app .extract-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-s);
-  margin-block-start: var(--sp-m);
-}
-@media (max-width: 600px) {
-  .rw-app .extract-row {
-    flex-wrap: wrap;
-  }
-  .rw-app .extract-row > button {
-    margin-inline-start: auto;
-  }
-}
 .rw-app .result {
   margin-block-start: 2px;
   animation: drop-in 0.4s var(--ease);

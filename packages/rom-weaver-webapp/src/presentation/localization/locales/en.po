@@ -1420,6 +1420,11 @@ msgstr "extract"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.extractDescription"
+msgstr "Extract every file from a ZIP, 7z, CHD, or other supported archive or disc image. Archives inside it are extracted too. Download one file, or several as one ZIP."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.extractTiming"
 msgstr "Extract timing"
 
@@ -1461,6 +1466,11 @@ msgstr "Files"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.file.files"
+msgstr "Files"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.nav.groupFiles"
 msgstr "Files"
 
 #. js-lingui-explicit-id
@@ -1527,11 +1537,6 @@ msgstr "full table"
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.searchPlaceholder"
 msgstr "Game, system, or checksum"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.nav.groupGeneral"
-msgstr "General"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1777,6 +1782,11 @@ msgstr "keep current ({order})"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.header.keepInfo"
 msgstr "Keep header: the patched output carries the ROM header."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.extractThesis2"
+msgstr "Keep only the files you need."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2272,6 +2282,11 @@ msgstr "Open in the Test tab"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.openSource"
 msgstr "Open source, forever"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.extractThesis"
+msgstr "Open the archive."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -1,30 +1,43 @@
-import { Download, FileArchive, X } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
 import { InlineProgress, Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
 import { StepSection } from "../../public/react/components/ds/layout.tsx";
 import { Modal } from "../../public/react/components/ds/modal.tsx";
+import { SelectionCheckList, type SelectionItem, SelectionTree } from "../../public/react/components/ds/selection.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 
 type ExtractFormProps = { pageDrop?: PageFileDrop | null };
 
+const ONE_FILE_ERROR = "Add one file at a time.";
 const outputPath = (output: PublicOutput): string => output.relativePath || output.fileName;
 const isChd = (file: File): boolean => /\.chd$/i.test(file.name);
 const binCount = (entries: { filename: string }[]): number =>
   entries.filter((entry) => /\.bin$/i.test(entry.filename)).length;
 const zipName = (file: File): string => `${file.name.replace(/\.[^.]+$/, "") || "extracted"}.zip`;
+const errorMessage = (cause: unknown): string => (cause instanceof Error ? cause.message : String(cause));
+
+const toSelectionItem = (output: PublicOutput): SelectionItem => {
+  const path = outputPath(output);
+  return {
+    defaultSelected: true,
+    id: path,
+    name: path.split("/").join(" › "),
+    selectable: true,
+    sizeLabel: formatByteSize(output.size),
+  };
+};
 
 const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
   const [source, setSource] = useState<File | null>(null);
   const [outputs, setOutputs] = useState<PublicOutput[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [downloadBusy, setDownloadBusy] = useState(false);
   const [progress, setProgress] = useState<{ label: string; percent?: number | null } | null>(null);
-  const [splitPrompt, setSplitPrompt] = useState(false);
+  const [splitPrompt, setSplitPrompt] = useState<File | null>(null);
   const [error, setError] = useState("");
   const outputRef = useRef<PublicOutput[]>([]);
   const abortRef = useRef<AbortController | null>(null);
@@ -35,23 +48,108 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
     const old = outputRef.current;
     outputRef.current = [];
     setOutputs([]);
-    setSelected(new Set());
     void Promise.all(old.map((output) => output.dispose()));
   }, []);
 
+  const extract = useCallback(
+    async (file: File, splitBin: boolean) => {
+      const runId = ++runIdRef.current;
+      const abort = new AbortController();
+      abortRef.current = abort;
+      clearOutputs();
+      setSplitPrompt(null);
+      setBusy(true);
+      setError("");
+      setProgress({ label: `Extracting ${file.name}…` });
+      try {
+        const { browserRuntime } = await import("../../platform/browser/workflow-runtime.ts");
+        const result = await browserRuntime.compression.extract?.({
+          source: file,
+          entries: [],
+          extractAll: true,
+          options: {
+            chdSplitBin: splitBin,
+            signal: abort.signal,
+            onProgress: (event) => {
+              if (runId === runIdRef.current) setProgress({ label: event.label, percent: event.percent });
+            },
+          },
+        });
+        if (!result) throw new Error("Extraction is not available in this browser.");
+        if (runId !== runIdRef.current) {
+          await Promise.all(result.outputs.map((output) => output.dispose()));
+          return;
+        }
+        outputRef.current = result.outputs;
+        setOutputs(result.outputs);
+      } catch (cause) {
+        if (!abort.signal.aborted && runId === runIdRef.current) setError(errorMessage(cause));
+      } finally {
+        if (runId === runIdRef.current) {
+          abortRef.current = null;
+          setBusy(false);
+          setProgress(null);
+        }
+      }
+    },
+    [clearOutputs],
+  );
+
+  // A multi-track CD CHD can extract as one BIN or as one BIN per track, so ask before extracting it.
+  const startExtract = useCallback(
+    async (file: File) => {
+      if (!isChd(file)) {
+        await extract(file, false);
+        return;
+      }
+      const runId = ++runIdRef.current;
+      const abort = new AbortController();
+      abortRef.current = abort;
+      setBusy(true);
+      setError("");
+      setProgress({ label: `Reading the tracks in ${file.name}…` });
+      let askSplit = false;
+      try {
+        const { browserRuntime } = await import("../../platform/browser/workflow-runtime.ts");
+        const probe = browserRuntime.compression.probe;
+        if (!probe) throw new Error("Reading files is not available in this browser.");
+        const normal = await probe({ source: file, options: { signal: abort.signal } });
+        const split = await probe({ source: file, options: { chdSplitBin: true, signal: abort.signal } });
+        if (runId !== runIdRef.current) return;
+        askSplit = binCount(split.entries) > 1 && binCount(split.entries) > binCount(normal.entries);
+      } catch (cause) {
+        if (!abort.signal.aborted && runId === runIdRef.current) setError(errorMessage(cause));
+        return;
+      } finally {
+        if (runId === runIdRef.current) {
+          abortRef.current = null;
+          setBusy(false);
+          setProgress(null);
+        }
+      }
+      if (askSplit) setSplitPrompt(file);
+      else await extract(file, false);
+    },
+    [extract],
+  );
+
   const stageFiles = useCallback(
     (files: File[]) => {
-      if (!files.length) return;
-      if (downloadBusy) return;
+      const file = files[0];
+      if (!file || downloadBusy) return;
       runIdRef.current += 1;
       abortRef.current?.abort();
       clearOutputs();
-      setSplitPrompt(false);
+      setSplitPrompt(null);
       setProgress(null);
-      setSource(files[0] || null);
-      setError(files.length > 1 ? "Choose one container at a time." : "");
+      setSource(file);
+      if (files.length > 1) {
+        setError(ONE_FILE_ERROR);
+        return;
+      }
+      void startExtract(file);
     },
-    [clearOutputs, downloadBusy],
+    [clearOutputs, downloadBusy, startExtract],
   );
 
   useEffect(() => {
@@ -68,247 +166,133 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
     [],
   );
 
-  const extract = async (splitBin: boolean) => {
-    if (!source || busy) return;
-    const runId = ++runIdRef.current;
-    const abort = new AbortController();
-    abortRef.current = abort;
-    clearOutputs();
-    setSplitPrompt(false);
-    setBusy(true);
-    setError("");
-    setProgress({ label: `Extracting ${source.name}…` });
-    try {
-      const { browserRuntime } = await import("../../platform/browser/workflow-runtime.ts");
-      const result = await browserRuntime.compression.extract?.({
-        source,
-        entries: [],
-        extractAll: true,
-        options: {
-          chdSplitBin: splitBin,
-          signal: abort.signal,
-          onProgress: (event) => {
-            if (runId === runIdRef.current) setProgress({ label: event.label, percent: event.percent });
-          },
-        },
-      });
-      if (!result) throw new Error("The extract runtime is unavailable.");
-      if (runId !== runIdRef.current) {
-        await Promise.all(result.outputs.map((output) => output.dispose()));
-        return;
-      }
-      outputRef.current = result.outputs;
-      setOutputs(result.outputs);
-      setSelected(new Set(result.outputs.map(outputPath)));
-    } catch (cause) {
-      if (!abort.signal.aborted && runId === runIdRef.current)
-        setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      if (runId === runIdRef.current) {
-        abortRef.current = null;
-        setBusy(false);
-        setProgress(null);
-      }
-    }
+  const cancelSplitPrompt = () => {
+    setSplitPrompt(null);
+    setError("Extraction cancelled. Choose Extract again to pick a track layout.");
   };
 
-  const startExtract = async () => {
-    if (!source || busy) return;
-    if (!isChd(source)) {
-      await extract(false);
-      return;
-    }
-    const runId = ++runIdRef.current;
-    const abort = new AbortController();
-    abortRef.current = abort;
-    setBusy(true);
-    setError("");
-    setProgress({ label: `Checking ${source.name}…` });
-    try {
-      const { browserRuntime } = await import("../../platform/browser/workflow-runtime.ts");
-      const probe = browserRuntime.compression.probe;
-      if (!probe) throw new Error("The container probe is unavailable.");
-      const normal = await probe({ source, options: { signal: abort.signal } });
-      const split = await probe({ source, options: { chdSplitBin: true, signal: abort.signal } });
-      if (runId !== runIdRef.current) return;
-      if (binCount(split.entries) > 1 && binCount(split.entries) > binCount(normal.entries)) {
-        setSplitPrompt(true);
-        return;
-      }
-    } catch (cause) {
-      if (!abort.signal.aborted && runId === runIdRef.current)
-        setError(cause instanceof Error ? cause.message : String(cause));
-      return;
-    } finally {
-      if (runId === runIdRef.current) {
-        abortRef.current = null;
-        setBusy(false);
-        setProgress(null);
-      }
-    }
-    await extract(false);
-  };
-
-  const download = async (output: PublicOutput) => {
-    try {
-      setError("");
-      await output.saveAs({ fileName: output.fileName, interactive: true });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  };
-
-  const downloadZip = async (all: boolean) => {
+  // One file downloads as itself; several download together as one uncompressed ZIP.
+  const download = async (ids: string[]) => {
     if (!source || downloadBusy) return;
-    const chosen = all ? outputs : outputs.filter((output) => selected.has(outputPath(output)));
+    const chosen = outputs.filter((output) => ids.includes(outputPath(output)));
     if (!chosen.length) return;
     setDownloadBusy(true);
     setError("");
     let archive: PublicOutput | undefined;
     try {
+      const [single] = chosen;
+      if (chosen.length === 1 && single) {
+        await single.saveAs({ fileName: single.fileName, interactive: true });
+        return;
+      }
       const { browserRuntime } = await import("../../platform/browser/workflow-runtime.ts");
       const result = await browserRuntime.compression.create?.({
         entries: chosen.map((output) => ({ filePath: output.path, filename: outputPath(output) })),
         format: "zip",
         options: { outputName: zipName(source), preservePaths: true, zipCodec: "store" },
       });
-      if (!result) throw new Error("The ZIP runtime is unavailable.");
+      if (!result) throw new Error("ZIP downloads are not available in this browser.");
       archive = "output" in result ? result.output : result;
-      if (!archive) throw new Error("ZIP creation returned no output.");
+      if (!archive) throw new Error("The ZIP file was not created.");
       await archive.saveAs({ fileName: zipName(source), interactive: true });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(errorMessage(cause));
     } finally {
       await archive?.dispose();
       setDownloadBusy(false);
     }
   };
 
-  const selectedCount = outputs.filter((output) => selected.has(outputPath(output))).length;
+  const canRetry = !(busy || outputs.length || splitPrompt) && error !== ONE_FILE_ERROR;
+  const totalBytes = outputs.reduce((sum, output) => sum + output.size, 0);
   return (
     <section className="panel extract-tool" id="extract-container">
       <UnifiedDropZone
-        addLabel="Replace container"
+        addLabel="Replace the file"
         big={!source}
         disabled={busy || downloadBusy}
-        heroLabel="Drop a container to extract"
-        heroLabelCoarse="Tap to add a container"
+        heroLabel="Drop an archive or disc image to extract it"
+        heroLabelCoarse="Tap to add an archive or disc image"
+        info={<p>Extraction runs locally. Your files never leave this browser.</p>}
         inputId="extract-input-picker"
-        lead={{ line1: "ui.hero.toolsThesis", line2: "ui.hero.toolsThesis2", description: "ui.hero.toolsDescription" }}
+        lead={{
+          line1: "ui.hero.extractThesis",
+          line2: "ui.hero.extractThesis2",
+          description: "ui.hero.extractDescription",
+        }}
         multiple={false}
         onFiles={stageFiles}
-        title="Container"
+        title="Archive"
       />
       {source ? (
-        <>
-          <StepSection num="0x02" title="Extract" woven={outputs.length > 0}>
-            <div className="card outcard extract-action-card">
-              <div className="outbar">
-                <span className="fname mono">{source.name}</span>
-                <span className="mono">{formatByteSize(source.size)}</span>
-              </div>
-              {progress ? (
-                <InlineProgress
-                  label={progress.label}
-                  percent={progress.percent}
-                  onCancel={() => abortRef.current?.abort()}
-                />
-              ) : (
-                <RunButton
-                  disabled={busy || (!!error && error === "Choose one container at a time.")}
-                  icon={<FileArchive aria-hidden="true" />}
-                  onClick={() => void startExtract()}
-                >
-                  {outputs.length ? "Extract again" : "Extract all files"}
-                </RunButton>
-              )}
-            </div>
-          </StepSection>
-          {outputs.length > 0 ? (
-            <StepSection num="0x03" title="Download" woven>
-              <p className="pdesc">
-                Files remain in browser storage until you replace this container or leave the page.
-              </p>
-              <div className="extract-list">
-                {outputs.map((output) => {
-                  const path = outputPath(output);
-                  return (
-                    <div className="extract-row" key={path}>
-                      <label className="extract-pick">
-                        <input
-                          checked={selected.has(path)}
-                          onChange={(event) => {
-                            const next = new Set(selected);
-                            if (event.currentTarget.checked) next.add(path);
-                            else next.delete(path);
-                            setSelected(next);
-                          }}
-                          type="checkbox"
-                        />
-                        <span className="mono" title={path}>
-                          {path}
-                        </span>
-                      </label>
-                      <span className="mono extract-size">{formatByteSize(output.size)}</span>
-                      <button
-                        aria-label={`Download ${path}`}
-                        className="btn slim ghost"
-                        onClick={() => void download(output)}
-                        type="button"
-                      >
-                        <Download aria-hidden="true" /> Download
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="extract-actions">
-                <button
-                  className="btn ghost"
-                  disabled={selectedCount === 0 || downloadBusy}
-                  onClick={() => void downloadZip(false)}
-                  type="button"
-                >
-                  <FileArchive aria-hidden="true" /> Download selected as ZIP ({selectedCount})
-                </button>
-                <button
-                  className="btn primary"
-                  disabled={downloadBusy}
-                  onClick={() => void downloadZip(true)}
-                  type="button"
-                >
-                  <Download aria-hidden="true" /> Download all as ZIP
-                </button>
-              </div>
-            </StepSection>
+        <StepSection
+          meta={
+            outputs.length ? (
+              <>
+                <span className="rb mono">{outputs.length === 1 ? "1 file" : `${outputs.length} files`}</span>
+                <span className="rb mono">{formatByteSize(totalBytes)}</span>
+              </>
+            ) : undefined
+          }
+          num="0x02"
+          title="Files"
+          woven={outputs.length > 0}
+        >
+          {progress ? (
+            <InlineProgress
+              label={progress.label}
+              percent={progress.percent}
+              onCancel={() => abortRef.current?.abort()}
+            />
           ) : null}
-        </>
+          {outputs.length ? (
+            <>
+              <p className="pdesc">
+                Select the files to download. Several files download together as one ZIP. The files stay in this browser
+                until you add another file or leave this page.
+              </p>
+              <SelectionCheckList
+                items={outputs.map(toSelectionItem)}
+                onSubmit={(ids) => void download(ids)}
+                submitLabel={(count) => (count === 1 ? "Download 1 file" : `Download ${count} files as ZIP`)}
+              />
+            </>
+          ) : null}
+          {canRetry ? (
+            <RunButton icon={<RotateCcw aria-hidden="true" />} onClick={() => void startExtract(source)}>
+              Extract again
+            </RunButton>
+          ) : null}
+        </StepSection>
       ) : (
-        <GhostSteps
-          steps={[
-            { num: "0x02", title: "Extract" },
-            { num: "0x03", title: "Download" },
-          ]}
-        />
+        <GhostSteps steps={[{ num: "0x02", title: "Files" }]} />
       )}
       {error ? (
         <Notice level="error" onDismiss={() => setError("")}>
           {error}
         </Notice>
       ) : null}
-      <Modal open={splitPrompt} onClose={() => setSplitPrompt(false)} title="Extract a multi-track CD">
-        <p>This CHD can produce one merged BIN or a separate BIN for each track.</p>
-        <div className="extract-actions">
-          <button className="btn ghost" onClick={() => setSplitPrompt(false)} type="button">
-            <X aria-hidden="true" /> Cancel
-          </button>
-          <button className="btn ghost" onClick={() => void extract(false)} type="button">
-            One merged BIN
-          </button>
-          <button className="btn primary" onClick={() => void extract(true)} type="button">
-            Separate BINs
-          </button>
-        </div>
+      <Modal
+        onClose={cancelSplitPrompt}
+        open={!!splitPrompt}
+        subtitle="This CHD holds a CD with more than one track. Choose how to write the tracks."
+        title={splitPrompt?.name}
+        variant="select-modal"
+      >
+        <SelectionTree
+          items={[
+            { id: "merged", name: "One BIN file", note: "All tracks in a single BIN file", selectable: true },
+            {
+              id: "split",
+              name: "One BIN file per track",
+              note: "A separate BIN file for each track",
+              selectable: true,
+            },
+          ]}
+          onSelect={(id) => {
+            if (splitPrompt) void extract(splitPrompt, id === "split");
+          }}
+        />
       </Modal>
     </section>
   );

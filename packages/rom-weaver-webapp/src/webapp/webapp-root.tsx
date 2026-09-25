@@ -123,11 +123,12 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     railLabel: "Identify",
   },
   {
-    group: "general",
+    group: "files",
     href: "extract",
     icon: <FileArchive aria-hidden="true" />,
     id: "extract",
-    label: "Extract",
+    label: "Extract files",
+    railLabel: "Extract",
   },
   {
     beta: true,

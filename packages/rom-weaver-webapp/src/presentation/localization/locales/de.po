@@ -1420,6 +1420,11 @@ msgstr "extrahieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.extractDescription"
+msgstr "Extrahiere alle Dateien aus einem ZIP-, 7z-, CHD- oder anderen unterstützten Archiv oder Disc-Image. Enthaltene Archive werden ebenfalls extrahiert. Lade eine Datei herunter oder mehrere als ein ZIP."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.extractTiming"
 msgstr "Zeit zum Extrahieren"
 
@@ -1461,6 +1466,11 @@ msgstr "Dateien"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.file.files"
+msgstr "Dateien"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.nav.groupFiles"
 msgstr "Dateien"
 
 #. js-lingui-explicit-id
@@ -1527,11 +1537,6 @@ msgstr "vollständige Tabelle"
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.searchPlaceholder"
 msgstr "Spiel, System oder Prüfsumme"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.nav.groupGeneral"
-msgstr "Allgemein"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1777,6 +1782,11 @@ msgstr "aktuelle behalten ({order})"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.header.keepInfo"
 msgstr "Header behalten: Die gepatchte Ausgabe enthält den ROM-Header."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.extractThesis2"
+msgstr "Nur die Dateien behalten, die du brauchst."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2272,6 +2282,11 @@ msgstr "Im Test-Tab öffnen"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.openSource"
 msgstr "Für immer Open Source"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.extractThesis"
+msgstr "Das Archiv öffnen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

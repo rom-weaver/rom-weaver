@@ -109,7 +109,7 @@ describe("Masthead", () => {
       "Project",
       "Patches",
       "ROMs",
-      "General",
+      "Files",
       "This device",
     ]);
     expect(rowsOf(nav)).toEqual([
@@ -170,7 +170,7 @@ describe("Masthead", () => {
     expect(Array.from(sheet.querySelectorAll(".nav-group-label")).map((heading) => heading.textContent)).toEqual([
       "Patches",
       "ROMs",
-      "General",
+      "Files",
       "This device",
       "Project",
     ]);
