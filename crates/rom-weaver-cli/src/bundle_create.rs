@@ -358,208 +358,13 @@ impl CliApp {
                 "bundle create requires at least one --patch or --cheat".to_string(),
             ));
         }
-        let algorithms: Vec<String> = if args.checksum.is_empty() {
-            BUNDLE_CREATE_DEFAULT_ALGORITHMS
-                .iter()
-                .map(|algorithm| (*algorithm).to_string())
-                .collect()
-        } else {
-            args.checksum
-                .iter()
-                .map(|algorithm| algorithm.to_ascii_lowercase())
-                .collect()
-        };
-        if let Some(invalid) = algorithms.iter().find(|algorithm| {
-            !supported_algorithms()
-                .iter()
-                .any(|supported| supported.eq_ignore_ascii_case(algorithm))
-        }) {
-            return Err(unsupported_checksum_algorithm(invalid));
-        }
+        let algorithms = bundle_create_algorithms(args)?;
         let mut warnings = Vec::new();
-
-        if args.bundle_rom.is_some() && args.rom.is_none() {
-            return Err(RomWeaverError::Validation(
-                "--bundle-rom requires --input so the recorded checksums describe the real ROM"
-                    .to_string(),
-            ));
-        }
-
-        if args.no_bundle_rom && args.rom.is_none() {
-            warnings.push("--no-bundle-rom ignored: no local ROM given with --input".to_string());
-        }
-        // Trusted rom checksums/size from a prior staging pass, so export skips
-        // re-hashing the prepared leaf. `algo=hex` tokens seed the rom checks; a
-        // `size=N` token seeds the prepared size.
-        let rom_assume = parse_expect_tokens(&args.assume_in, "--assume-in", true)?;
-        let cached_rom_checks = (!rom_assume.checksums.is_empty() || rom_assume.size.is_some())
-            .then(|| BundleChecks {
-                checksums: rom_assume.checksums.clone(),
-                size: rom_assume.size,
-            });
-        // Presence matters: an explicit empty --rom-name suppresses the
-        // sourceless-ROM default, which lets the web authoring field be cleared.
-        let rom_name = args.rom_name.as_deref().and_then(|name| {
-            let name = name.trim();
-            (!name.is_empty()).then(|| name.to_owned())
-        });
-
-        let mut rom = match (&args.rom, &args.rom_url) {
-            (None, None) => {
-                if rom_name.is_some() {
-                    warnings.push(
-                        "--rom-name ignored: no ROM given with --input or --rom-url".to_string(),
-                    );
-                }
-                None
-            }
-            (Some(path), url_override) => {
-                if !path.is_file() {
-                    return Err(RomWeaverError::Validation(format!(
-                        "rom path does not exist: `{}`",
-                        path.display()
-                    )));
-                }
-                let resolved_member = if let Some(member) = args.rom_member.as_ref()
-                    && args.bundle_rom.is_none()
-                    && (cached_rom_checks.is_none() || rom_assume.size.is_none())
-                {
-                    let resolved = if let Some(disc) =
-                        self.build_disc_context(path, Some(member), None, context)?
-                    {
-                        ResolvedChecksumSource {
-                            source: self.disc_member_path(&disc, member)?,
-                            extracted_archives: 0,
-                            cleanup_paths: Vec::new(),
-                        }
-                    } else {
-                        self.resolve_exact_member_source(
-                            path,
-                            member,
-                            context,
-                            AutoExtractResolutionLabels {
-                                command: "bundle-create",
-                                family: OperationFamily::Command,
-                                format: None,
-                                source_label: "bundle ROM member",
-                                temp_prefix: "bundle-create-rom-member",
-                            },
-                            AutoExtractResolutionFlags {
-                                no_extract: false,
-                                no_ignore: true,
-                                kind_filter: Self::archive_entry_kind_filter(true, false),
-                                stop_on_single_payload_codec: false,
-                            },
-                        )?
-                    };
-                    Some(resolved)
-                } else {
-                    None
-                };
-                let logical_path = resolved_member
-                    .as_ref()
-                    .map_or(path.as_path(), |resolved| resolved.source.as_path());
-                let checks_result = (|| -> Result<BundleChecks> {
-                    let logical_size = fs::metadata(logical_path)?.len();
-                    let mut hashed_bytes = 0;
-                    let checksums = if let Some(cached) = cached_rom_checks.as_ref() {
-                        cached.checksums.clone()
-                    } else {
-                        self.bundle_checksum_with_progress(
-                            logical_path,
-                            &algorithms,
-                            context,
-                            &mut hashed_bytes,
-                            logical_size,
-                        )?
-                    };
-                    Ok(BundleChecks {
-                        checksums,
-                        size: Some(rom_assume.size.unwrap_or(logical_size)),
-                    })
-                })();
-                if let Some(resolved) = resolved_member {
-                    Self::cleanup_temp_paths(&resolved.cleanup_paths);
-                }
-                let checks = checks_result?;
-                let bundle_source = args.bundle_rom.as_deref().unwrap_or(path);
-                if !bundle_source.is_file() {
-                    return Err(RomWeaverError::Validation(format!(
-                        "bundle rom path does not exist: `{}`",
-                        bundle_source.display()
-                    )));
-                }
-                let base_name = required_base_name(bundle_source, "rom")?;
-                // A no-bundle-rom entry keeps its checks but carries no
-                // source: the applying user supplies the ROM themselves. A
-                // sourceless entry always gets a name (the local file's base
-                // name) so consumers can tell the user WHICH ROM to supply.
-                let distribute_path = url_override.is_none() && !args.no_bundle_rom;
-                let sourceless_name = (url_override.is_none() && !distribute_path)
-                    .then(|| required_base_name(path, "rom"))
-                    .transpose()?;
-                Some(BundleRom {
-                    name: if args.rom_name.is_some() {
-                        rom_name.clone()
-                    } else {
-                        sourceless_name
-                    },
-                    url: url_override.clone(),
-                    path: distribute_path.then_some(base_name),
-                    member: args.rom_member.clone(),
-                    checks: Some(checks),
-                    checks_ref: None,
-                })
-            }
-            (None, Some(url)) => Some(BundleRom {
-                name: rom_name,
-                url: Some(url.clone()),
-                path: None,
-                member: args.rom_member.clone(),
-                checks: None,
-                checks_ref: None,
-            }),
-        };
+        let mut rom = self.bundle_create_rom_entry(args, &algorithms, context, &mut warnings)?;
 
         let output_checks = bundle_entry_checks(&args.output_check, "--expect-out")?;
 
-        let mut patches = Vec::with_capacity(specs.len());
-        for spec in &specs {
-            if !spec.path.is_file() {
-                return Err(RomWeaverError::Validation(format!(
-                    "patch path does not exist: `{}`",
-                    spec.path.display()
-                )));
-            }
-            let base_name = required_base_name(&spec.path, "patch")?;
-            // Equal checksums do not prove the same byte state. Keep every
-            // authored entry value until scope-aware reference canonicalization
-            // proves it is the ROM, a selected producer, or the final output.
-            let entry_input_checks = bundle_entry_checks(&spec.input_checks, "--patch-expect-in")?;
-            let entry_output_checks =
-                bundle_entry_checks(&spec.output_checks, "--patch-expect-out")?;
-            patches.push(BundlePatchEntry {
-                id: spec.id.clone(),
-                version: spec.version.clone(),
-                author: spec.author.clone(),
-                name: spec.name.clone(),
-                description: spec.description.clone(),
-                optional: spec.optional.unwrap_or(false),
-                label: spec.label.clone(),
-                url: spec.source_url.clone(),
-                path: spec.source_url.is_none().then_some(base_name),
-                input: spec.input.clone(),
-                target: spec.target.clone(),
-                input_checks: entry_input_checks,
-                input_checks_ref: spec.input_checks_ref.clone(),
-                output_checks: entry_output_checks,
-                output_checks_ref: spec.output_checks_ref.clone(),
-                header: spec.header,
-                basis: spec
-                    .basis
-                    .filter(|basis| Some(*basis) != patch_basis.declared()),
-            });
-        }
+        let mut patches = bundle_create_patch_entries(&specs, patch_basis)?;
 
         let packaged_rom_source = args
             .bundle_rom
@@ -569,18 +374,7 @@ impl CliApp {
         if args.bundle.is_some() {
             assign_bundle_member_paths(&mut rom, packaged_rom_source, &mut patches, &specs)?;
         } else {
-            let mut seen_names = BTreeSet::new();
-            for name in rom
-                .iter()
-                .filter_map(|rom| rom.path.as_ref())
-                .chain(patches.iter().filter_map(|patch| patch.path.as_ref()))
-            {
-                if !seen_names.insert(name) {
-                    return Err(RomWeaverError::Validation(format!(
-                        "duplicate source file name `{name}`; use --bundle to disambiguate archive members"
-                    )));
-                }
-            }
+            require_unique_bundle_source_names(rom.as_ref(), &patches)?;
         }
 
         let mut output =
@@ -612,25 +406,7 @@ impl CliApp {
             cheats,
             output,
         };
-        let mut bytes = serde_json::to_vec_pretty(&bundle).map_err(|error| {
-            RomWeaverError::Validation(format!("failed to serialize bundle: {error}"))
-        })?;
-        bytes.push(b'\n');
-        // Round-trip validation: create can never emit what parse rejects.
-        parse_bundle_bytes(&bytes)?;
-
-        let output_base_name = args
-            .output
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or_default();
-        if bundle_file_name_codec(output_base_name).is_none() {
-            warnings.push(format!(
-                "bundle written as `{output_base_name}`: apply auto-detection only recognizes rom-weaver-bundle.json / rom-weaver-bundle.json.<codec> names"
-            ));
-        }
-        write_bundle_bytes(&args.output, &bytes)?;
-        trace!(output = %args.output.display(), bytes = bytes.len(), "bundle written");
+        let bytes = write_bundle_create_output(args, &bundle, &mut warnings)?;
 
         let bundle_path = match &args.bundle {
             Some(bundle_archive) => Some(self.create_bundle_bundle(
@@ -651,6 +427,177 @@ impl CliApp {
             bundle,
             warnings,
         })
+    }
+
+    /// Builds the bundle's `rom` entry from `--input`, `--rom-url`, and the ROM flags.
+    fn bundle_create_rom_entry(
+        &self,
+        args: &BundleCreateCommand,
+        algorithms: &[String],
+        context: &OperationContext,
+        warnings: &mut Vec<String>,
+    ) -> Result<Option<BundleRom>> {
+        if args.bundle_rom.is_some() && args.rom.is_none() {
+            return Err(RomWeaverError::Validation(
+                "--bundle-rom requires --input so the recorded checksums describe the real ROM"
+                    .to_string(),
+            ));
+        }
+
+        if args.no_bundle_rom && args.rom.is_none() {
+            warnings.push("--no-bundle-rom ignored: no local ROM given with --input".to_string());
+        }
+        // Trusted rom checksums/size from a prior staging pass, so export skips
+        // re-hashing the prepared leaf. `algo=hex` tokens seed the rom checks; a
+        // `size=N` token seeds the prepared size.
+        let rom_assume = parse_expect_tokens(&args.assume_in, "--assume-in", true)?;
+        // Presence matters: an explicit empty --rom-name suppresses the
+        // sourceless-ROM default, which lets the web authoring field be cleared.
+        let rom_name = args.rom_name.as_deref().and_then(|name| {
+            let name = name.trim();
+            (!name.is_empty()).then(|| name.to_owned())
+        });
+
+        match (&args.rom, &args.rom_url) {
+            (None, None) => {
+                if rom_name.is_some() {
+                    warnings.push(
+                        "--rom-name ignored: no ROM given with --input or --rom-url".to_string(),
+                    );
+                }
+                Ok(None)
+            }
+            (Some(path), _) => self
+                .bundle_create_local_rom(args, path, rom_name, &rom_assume, algorithms, context)
+                .map(Some),
+            (None, Some(url)) => Ok(Some(BundleRom {
+                name: rom_name,
+                url: Some(url.clone()),
+                path: None,
+                member: args.rom_member.clone(),
+                checks: None,
+                checks_ref: None,
+            })),
+        }
+    }
+
+    /// Hashes a local `--input` ROM (or its `--rom-member`) and builds its bundle entry.
+    fn bundle_create_local_rom(
+        &self,
+        args: &BundleCreateCommand,
+        path: &Path,
+        rom_name: Option<String>,
+        rom_assume: &ExpectSpec,
+        algorithms: &[String],
+        context: &OperationContext,
+    ) -> Result<BundleRom> {
+        let url_override = &args.rom_url;
+        let cached_rom_checks = (!rom_assume.checksums.is_empty() || rom_assume.size.is_some())
+            .then(|| BundleChecks {
+                checksums: rom_assume.checksums.clone(),
+                size: rom_assume.size,
+            });
+        if !path.is_file() {
+            return Err(RomWeaverError::Validation(format!(
+                "rom path does not exist: `{}`",
+                path.display()
+            )));
+        }
+        let resolved_member = if let Some(member) = args.rom_member.as_ref()
+            && args.bundle_rom.is_none()
+            && (cached_rom_checks.is_none() || rom_assume.size.is_none())
+        {
+            Some(self.resolve_bundle_create_rom_member(path, member, context)?)
+        } else {
+            None
+        };
+        let logical_path = resolved_member
+            .as_ref()
+            .map_or(path, |resolved| resolved.source.as_path());
+        let checks_result = (|| -> Result<BundleChecks> {
+            let logical_size = fs::metadata(logical_path)?.len();
+            let mut hashed_bytes = 0;
+            let checksums = if let Some(cached) = cached_rom_checks.as_ref() {
+                cached.checksums.clone()
+            } else {
+                self.bundle_checksum_with_progress(
+                    logical_path,
+                    algorithms,
+                    context,
+                    &mut hashed_bytes,
+                    logical_size,
+                )?
+            };
+            Ok(BundleChecks {
+                checksums,
+                size: Some(rom_assume.size.unwrap_or(logical_size)),
+            })
+        })();
+        if let Some(resolved) = resolved_member {
+            Self::cleanup_temp_paths(&resolved.cleanup_paths);
+        }
+        let checks = checks_result?;
+        let bundle_source = args.bundle_rom.as_deref().unwrap_or(path);
+        if !bundle_source.is_file() {
+            return Err(RomWeaverError::Validation(format!(
+                "bundle rom path does not exist: `{}`",
+                bundle_source.display()
+            )));
+        }
+        let base_name = required_base_name(bundle_source, "rom")?;
+        // A no-bundle-rom entry keeps its checks but carries no
+        // source: the applying user supplies the ROM themselves. A
+        // sourceless entry always gets a name (the local file's base
+        // name) so consumers can tell the user WHICH ROM to supply.
+        let distribute_path = url_override.is_none() && !args.no_bundle_rom;
+        let sourceless_name = (url_override.is_none() && !distribute_path)
+            .then(|| required_base_name(path, "rom"))
+            .transpose()?;
+        Ok(BundleRom {
+            name: if args.rom_name.is_some() {
+                rom_name
+            } else {
+                sourceless_name
+            },
+            url: url_override.clone(),
+            path: distribute_path.then_some(base_name),
+            member: args.rom_member.clone(),
+            checks: Some(checks),
+            checks_ref: None,
+        })
+    }
+
+    fn resolve_bundle_create_rom_member(
+        &self,
+        path: &Path,
+        member: &str,
+        context: &OperationContext,
+    ) -> Result<ResolvedChecksumSource> {
+        if let Some(disc) = self.build_disc_context(path, Some(member), None, context)? {
+            return Ok(ResolvedChecksumSource {
+                source: self.disc_member_path(&disc, member)?,
+                extracted_archives: 0,
+                cleanup_paths: Vec::new(),
+            });
+        }
+        self.resolve_exact_member_source(
+            path,
+            member,
+            context,
+            AutoExtractResolutionLabels {
+                command: "bundle-create",
+                family: OperationFamily::Command,
+                format: None,
+                source_label: "bundle ROM member",
+                temp_prefix: "bundle-create-rom-member",
+            },
+            AutoExtractResolutionFlags {
+                no_extract: false,
+                no_ignore: true,
+                kind_filter: Self::archive_entry_kind_filter(true, false),
+                stop_on_single_payload_codec: false,
+            },
+        )
     }
 
     /// The definition and archive MUST name different files. Both destinations
@@ -864,6 +811,118 @@ fn resolve_spec_checks(
 
 /// Normalize per-patch specs for the wasm JSON path: metadata vectors must be
 /// index-aligned with `patch` (same length) or omitted entirely.
+fn bundle_create_algorithms(args: &BundleCreateCommand) -> Result<Vec<String>> {
+    let algorithms: Vec<String> = if args.checksum.is_empty() {
+        BUNDLE_CREATE_DEFAULT_ALGORITHMS
+            .iter()
+            .map(|algorithm| (*algorithm).to_string())
+            .collect()
+    } else {
+        args.checksum
+            .iter()
+            .map(|algorithm| algorithm.to_ascii_lowercase())
+            .collect()
+    };
+    if let Some(invalid) = algorithms.iter().find(|algorithm| {
+        !supported_algorithms()
+            .iter()
+            .any(|supported| supported.eq_ignore_ascii_case(algorithm))
+    }) {
+        return Err(unsupported_checksum_algorithm(invalid));
+    }
+    Ok(algorithms)
+}
+
+fn bundle_create_patch_entries(
+    specs: &[BundleCreatePatchSpec],
+    patch_basis: PatchBasisMode,
+) -> Result<Vec<BundlePatchEntry>> {
+    let mut patches = Vec::with_capacity(specs.len());
+    for spec in specs {
+        if !spec.path.is_file() {
+            return Err(RomWeaverError::Validation(format!(
+                "patch path does not exist: `{}`",
+                spec.path.display()
+            )));
+        }
+        let base_name = required_base_name(&spec.path, "patch")?;
+        // Equal checksums do not prove the same byte state. Keep every
+        // authored entry value until scope-aware reference canonicalization
+        // proves it is the ROM, a selected producer, or the final output.
+        let entry_input_checks = bundle_entry_checks(&spec.input_checks, "--patch-expect-in")?;
+        let entry_output_checks = bundle_entry_checks(&spec.output_checks, "--patch-expect-out")?;
+        patches.push(BundlePatchEntry {
+            id: spec.id.clone(),
+            version: spec.version.clone(),
+            author: spec.author.clone(),
+            name: spec.name.clone(),
+            description: spec.description.clone(),
+            optional: spec.optional.unwrap_or(false),
+            label: spec.label.clone(),
+            url: spec.source_url.clone(),
+            path: spec.source_url.is_none().then_some(base_name),
+            input: spec.input.clone(),
+            target: spec.target.clone(),
+            input_checks: entry_input_checks,
+            input_checks_ref: spec.input_checks_ref.clone(),
+            output_checks: entry_output_checks,
+            output_checks_ref: spec.output_checks_ref.clone(),
+            header: spec.header,
+            basis: spec
+                .basis
+                .filter(|basis| Some(*basis) != patch_basis.declared()),
+        });
+    }
+    Ok(patches)
+}
+
+fn require_unique_bundle_source_names(
+    rom: Option<&BundleRom>,
+    patches: &[BundlePatchEntry],
+) -> Result<()> {
+    let mut seen_names = BTreeSet::new();
+    for name in rom
+        .into_iter()
+        .filter_map(|rom| rom.path.as_ref())
+        .chain(patches.iter().filter_map(|patch| patch.path.as_ref()))
+    {
+        if !seen_names.insert(name) {
+            return Err(RomWeaverError::Validation(format!(
+                "duplicate source file name `{name}`; use --bundle to disambiguate archive members"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Serializes the bundle, round-trip validates it, and writes it to `--output`.
+fn write_bundle_create_output(
+    args: &BundleCreateCommand,
+    bundle: &RomWeaverBundle,
+    warnings: &mut Vec<String>,
+) -> Result<Vec<u8>> {
+    let mut bytes = serde_json::to_vec_pretty(bundle).map_err(|error| {
+        RomWeaverError::Validation(format!("failed to serialize bundle: {error}"))
+    })?;
+    bytes.push(b'\n');
+    // Round-trip validation: create can never emit what parse rejects.
+    parse_bundle_bytes(&bytes)?;
+
+    let output_base_name = args
+        .output
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    if bundle_file_name_codec(output_base_name).is_none() {
+        warnings.push(format!(
+            "bundle written as `{output_base_name}`: apply auto-detection only recognizes rom-weaver-bundle.json / rom-weaver-bundle.json.<codec> names"
+        ));
+    }
+    write_bundle_bytes(&args.output, &bytes)?;
+    trace!(output = %args.output.display(), bytes = bytes.len(), "bundle written");
+    Ok(bytes)
+}
+
 fn bundle_create_patch_specs(args: &BundleCreateCommand) -> Result<Vec<BundleCreatePatchSpec>> {
     if !args.patch_specs.is_empty() {
         return Ok(args.patch_specs.clone());
