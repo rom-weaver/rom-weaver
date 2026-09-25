@@ -1807,7 +1807,9 @@ describe("apply workflow view - bundle controls", () => {
     expect(job?.querySelector("#rom-weaver-button-export-bundle")).toBeTruthy();
   });
 
-  it("presents Bundle as 0x04 with output controls and keeps Apply collapsed as 0x05", () => {
+  it("presents Bundle as 0x04 with Apply as its optional alternate job", () => {
+    const exported = bundleExport();
+    const setOutputCompression = vi.fn();
     const rom = romRow("game.nes");
     rom.info.checksumVariants = [
       {
@@ -1821,10 +1823,13 @@ describe("apply workflow view - bundle controls", () => {
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
         <ApplyWorkflowFormView
-          bundleExport={bundleExport()}
+          bundleExport={exported}
           bundleTools={bundleTools(() => undefined)}
           controllers={{
-            output: storeOf(outputState()) as unknown as PatcherOutputController,
+            output: {
+              ...storeOf(outputState()),
+              setOutputCompression,
+            } as unknown as PatcherOutputController,
             patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
             ui: storeOf(ui) as unknown as PatcherUiController,
           }}
@@ -1834,21 +1839,27 @@ describe("apply workflow view - bundle controls", () => {
     );
 
     const job = container.querySelector("#rom-weaver-bundle-job");
-    const applyStep = container.querySelector("#rom-weaver-row-output-file-name");
+    const applyJob = container.querySelector("#rom-weaver-apply-job");
     expect(job?.querySelector(".step-num")?.textContent).toBe("0x04");
     expect(job?.querySelector(".step-title")?.textContent).toBe("Bundle");
     expect(job?.querySelector("#rom-weaver-input-bundle-file-name")).toBeTruthy();
     expect(job?.querySelector("#rom-weaver-bundle-export-format")).toBeTruthy();
     expect(job?.querySelector("#rom-weaver-button-export-bundle")).toBeTruthy();
+    fireEvent.change(job?.querySelector("#rom-weaver-bundle-export-format") as HTMLSelectElement, {
+      target: { value: "7z" },
+    });
+    expect(exported.format).toBe("7z");
+    expect(setOutputCompression).toHaveBeenCalledWith("7z");
     fireEvent.click(job?.querySelector(".outopts .cks-head") as HTMLButtonElement);
     expect(job?.querySelector("#rom-weaver-bundle-export-bundle-rom")).toBeTruthy();
     expect(job?.querySelector(".optsnote")?.textContent).toBe("Output header changes apply only to this session.");
     expect(job?.querySelectorAll("#rom-weaver-select-bundle-output-header")).toHaveLength(1);
-    expect(job?.compareDocumentPosition(applyStep || container)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(applyStep?.querySelector(".step-num")?.textContent).toBe("0x05");
-    expect(applyStep?.classList).toContain("is-collapsed");
-    expect(container.querySelector("#rom-weaver-button-apply")).toBeNull();
-    fireEvent.click(applyStep?.querySelector(".step-collapse") as HTMLButtonElement);
+    expect(job?.contains(applyJob)).toBe(true);
+    expect(applyJob?.querySelector(".cks-head")?.textContent).toContain("Apply");
+    expect(applyJob?.querySelector(".cks-head")?.getAttribute("aria-expanded")).toBe("false");
+    expect(container.textContent).not.toContain("0x05");
+    expect(applyJob?.querySelector(".bundle-job")?.classList).not.toContain("is-open");
+    fireEvent.click(applyJob?.querySelector(".cks-head") as HTMLButtonElement);
     expect(container.querySelectorAll("#rom-weaver-select-output-header")).toHaveLength(1);
     expect(container.querySelectorAll('[id="rom-weaver-select-bundle-output-header"]')).toHaveLength(1);
   });
@@ -1878,8 +1889,9 @@ describe("apply workflow view - bundle controls", () => {
       </RomWeaverSettingsProvider>,
     );
 
-    fireEvent.click(container.querySelector("#rom-weaver-row-output-file-name .step-collapse") as HTMLButtonElement);
-    expect(container.querySelector("#rom-weaver-row-output-file-name")?.classList).not.toContain("is-collapsed");
+    const applyJob = container.querySelector("#rom-weaver-apply-job");
+    fireEvent.click(applyJob?.querySelector(".cks-head") as HTMLButtonElement);
+    expect(applyJob?.querySelector(".cks-head")?.getAttribute("aria-expanded")).toBe("true");
     expect(container.querySelector("#rom-weaver-button-apply")).toBeTruthy();
   });
 
