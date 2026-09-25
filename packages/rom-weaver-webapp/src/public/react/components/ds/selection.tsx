@@ -69,11 +69,13 @@ const SelectionTree = ({ items, onSelect }: { items: SelectionItem[]; onSelect: 
  * added to the patch stack.
  */
 const SelectionCheckList = ({
+  disabled,
   items,
   onCancel,
   onSubmit,
   submitLabel,
 }: {
+  disabled?: boolean;
   items: SelectionItem[];
   onCancel?: () => void;
   onSubmit: (ids: string[]) => void;
@@ -138,7 +140,7 @@ const SelectionCheckList = ({
         ) : null}
         <button
           className="btn primary selconfirm"
-          disabled={!selectedIds.length}
+          disabled={disabled || !selectedIds.length}
           onClick={() => onSubmit(selectedIds)}
           type="button"
         >

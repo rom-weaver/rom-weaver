@@ -20,11 +20,12 @@ const binCount = (entries: { filename: string }[]): number =>
 const zipName = (file: File): string => `${file.name.replace(/\.[^.]+$/, "") || "extracted"}.zip`;
 const errorMessage = (cause: unknown): string => (cause instanceof Error ? cause.message : String(cause));
 
+// The browser-storage path is the id because two archive entries can share one relative path.
 const toSelectionItem = (output: PublicOutput): SelectionItem => {
   const path = outputPath(output);
   return {
     defaultSelected: true,
-    id: path,
+    id: output.path,
     name: path.split("/").join(" › "),
     selectable: true,
     sizeLabel: formatByteSize(output.size),
@@ -136,7 +137,11 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
   const stageFiles = useCallback(
     (files: File[]) => {
       const file = files[0];
-      if (!file || downloadBusy) return;
+      if (!file) return;
+      if (downloadBusy) {
+        setError("Wait for the download to finish, then add the file again.");
+        return;
+      }
       runIdRef.current += 1;
       abortRef.current?.abort();
       clearOutputs();
@@ -160,6 +165,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
 
   useEffect(
     () => () => {
+      runIdRef.current += 1;
       abortRef.current?.abort();
       void Promise.all(outputRef.current.map((output) => output.dispose()));
     },
@@ -174,7 +180,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
   // One file downloads as itself; several download together as one uncompressed ZIP.
   const download = async (ids: string[]) => {
     if (!source || downloadBusy) return;
-    const chosen = outputs.filter((output) => ids.includes(outputPath(output)));
+    const chosen = outputs.filter((output) => ids.includes(output.path));
     if (!chosen.length) return;
     setDownloadBusy(true);
     setError("");
@@ -252,6 +258,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
                 until you add another file or leave this page.
               </p>
               <SelectionCheckList
+                disabled={downloadBusy}
                 items={outputs.map(toSelectionItem)}
                 onSubmit={(ids) => void download(ids)}
                 submitLabel={(count) => (count === 1 ? "Download 1 file" : `Download ${count} files as ZIP`)}
