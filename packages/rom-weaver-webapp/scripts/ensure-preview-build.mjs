@@ -19,6 +19,7 @@ const DIST_INDEX = path.join(PACKAGE_DIR, "dist", "index.html");
 // Inputs that gate the vite rebuild (in addition to the WASM artifact itself).
 const WEB_ROOTS = [
   path.join(PACKAGE_DIR, "src"),
+  path.join(PACKAGE_DIR, "scripts", "vite-config"),
   path.join(REPO_ROOT, "crates", "rom-weaver-cli", "data", "identify", "v1"),
 ];
 const WEB_FILES = [
