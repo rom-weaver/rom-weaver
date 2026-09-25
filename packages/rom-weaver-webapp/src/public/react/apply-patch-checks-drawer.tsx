@@ -10,6 +10,7 @@ import {
   normalizeCheckInput,
 } from "./components/ds/check-fields.ts";
 import { ChecksumList, ChecksumRow } from "./components/ds/checksum-list.tsx";
+import { DrawerReadout } from "./components/ds/drawer.tsx";
 import { DropdownSelect } from "./components/ds/dropdown-select.tsx";
 import type { PatcherStackController } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
@@ -38,6 +39,7 @@ const PatchChecksDrawer = ({
   meta,
   onMetaChange,
   outputCheckHint,
+  patchType,
   patchStack,
   romActuals,
   sharedInputChecks,
@@ -64,6 +66,7 @@ const PatchChecksDrawer = ({
   /** Chain-output card of a run with optional/skipped patches: remind that the
    * expected output only describes the full chain. */
   outputCheckHint?: boolean;
+  patchType?: string;
   patchStack: PatcherStackController;
   /** The chain-input patch's target ROM computed checks - the actual values a
    * user-entered INPUT check is compared against for its per-row match mark. */
@@ -173,6 +176,7 @@ const PatchChecksDrawer = ({
       defaultOpen={hasBuiltIn || hasUserChecks}
       label={localizer.message("ui.patch.checks")}
       match={ok ? undefined : match}
+      summary={patchType ? <DrawerReadout>{patchType}</DrawerReadout> : undefined}
       sublabel={
         !(disabled || verifying) && chainChip ? (
           <span id={`rom-weaver-patch-chain-chip-${index}`}>
