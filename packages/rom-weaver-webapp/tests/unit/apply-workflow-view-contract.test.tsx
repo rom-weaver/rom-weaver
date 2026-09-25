@@ -1083,6 +1083,9 @@ describe("apply workflow view - staged bench", () => {
       "14 B",
       "IPS",
     ]);
+    expect(
+      Array.from(patchCard?.querySelectorAll(".patch-checks .cks-head .rb") || []).map((el) => el.textContent),
+    ).not.toContain("IPS");
     expect(patchCard?.querySelector(".card-meta .meta-fmt")).toBeNull();
     const patchPosition = patchCard?.querySelector("button.phandle") as HTMLButtonElement;
     expect(patchPosition.textContent).toContain("1");
@@ -1111,6 +1114,9 @@ describe("apply workflow view - staged bench", () => {
     expect(patchCard?.querySelector(".extract-d")).toBeNull();
     expect(romCard?.textContent).toContain("Checks");
     expect(patchCard?.textContent).toContain("Checks");
+    expect(
+      Array.from(patchCard?.querySelectorAll(".patch-checks .cks-head .rb") || []).map((el) => el.textContent),
+    ).toContain("IPS");
   });
 
   it.each([false, undefined])("shows cheats when beta tools are %s", (betaToolsEnabled) => {
