@@ -2,7 +2,7 @@ import { bundleCheckTokens, selectBundleMembers, validatePatchDependencies } fro
 import type { ParsedBundlePatchInput } from "../../types/bundle.ts";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
-import { cheatDelivery, type CheatManualSystem, type ClassifiedCheatRecord } from "../../lib/cheats/index.ts";
+import { cheatDelivery, type ClassifiedCheatRecord } from "../../lib/cheats/index.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
 import type { ApplyWorkflow, BrowserApplyResult, WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
@@ -21,9 +21,7 @@ import type {
 import type { PatchValidationPlan } from "../../wasm/index.ts";
 import type { StagedInputInfo } from "./apply-session-types.ts";
 import { ApplyWorkflowFormView } from "./apply-workflow-form-view.tsx";
-import { getCheatPatchCodes, getCheatPatchFileName, getCheatPatchFormat } from "./cheat-patch-export-model.ts";
 import { CheatDatabaseSection } from "./components/cheat-database-section.tsx";
-import { createCheatClassifiers } from "./cheat-classifier.ts";
 import {
   type ApplyWorkflowPrepareHandlers,
   type ApplyWorkflowSessionInput,
@@ -48,7 +46,7 @@ import {
   toPatchStageInfo,
   toStagedInputInfos,
 } from "./apply-workflow-staging-model.ts";
-import { resolveBundleArchiveFormat, useBundleExport } from "./bundle-export.tsx";
+import { resolveBundleArchiveFormat } from "./bundle-export.tsx";
 import { useCandidateSelection } from "./candidate-selection.tsx";
 import { useInputSelectionHandler } from "./input-selection-handler.ts";
 import { getBinarySourceListStableIds, sameBinarySourceLists } from "./input-session-helpers.ts";
@@ -65,6 +63,9 @@ import {
 import { getEmulatorJsCore } from "./components/emulatorjs.ts";
 import { addEntry } from "./emulator-session-store.ts";
 import { shouldRetainEmulatorOutput } from "./emulator-retention-policy.ts";
+import { useApplyBundleExport } from "./use-apply-bundle-export.ts";
+import { getApplyOutputVerification, useApplyBundleChainStatus } from "./use-apply-bundle-chain-status.ts";
+import { useApplyCheats } from "./use-apply-cheats.ts";
 import { useApplyPatchEnablement } from "./use-apply-patch-enablement.ts";
 import {
   type BundlePatchMeta,
@@ -100,45 +101,6 @@ const buildEagerPatchStageInfo = (
   const fileName = getReactBinarySourceFileName(patchSource ?? snapshot.patches[order] ?? null, `Patch ${order + 1}`);
   const buildInfo = createPatchStageInfoMapper(toStagedInputInfos(workflow.getInput(), snapshot.inputs));
   return buildInfo(patch, order, fileName);
-};
-
-const getApplyOutputVerification = ({
-  bundleChainStatus,
-  bundleOutputChecksum,
-  chainPlans,
-  enabledPatchCount,
-  localizer,
-}: {
-  bundleChainStatus: string | null;
-  bundleOutputChecksum: string | null;
-  chainPlans: ReadonlyMap<string, PatchValidationPlan>;
-  enabledPatchCount: number;
-  localizer: ReturnType<typeof useUiLocalizer>;
-}): { level: "warn"; message: string } | null => {
-  if (enabledPatchCount <= 0) return null;
-  const finalEntries: Array<{ enforceable: boolean }> = [];
-  let orderIssue = false;
-  let inputIssue = false;
-  for (const plan of chainPlans.values()) {
-    for (const entry of plan.output_verification) {
-      if (entry.patch_index === plan.patch_count - 1) finalEntries.push(entry);
-    }
-    for (const verdict of plan.per_patch) {
-      if (verdict.expected_predecessor !== undefined) orderIssue = true;
-      if (verdict.input_verdict === "failed") inputIssue = true;
-    }
-  }
-  if (finalEntries.length) {
-    if (finalEntries.every((entry) => entry.enforceable)) return null;
-    if (orderIssue) return { level: "warn", message: localizer.message("ui.output.outOfOrder") };
-    if (inputIssue) return { level: "warn", message: localizer.message("ui.output.inputMismatch") };
-    return { level: "warn", message: localizer.message("ui.output.differentChain") };
-  }
-  if (bundleOutputChecksum && bundleChainStatus) {
-    if (bundleChainStatus === "full" || bundleChainStatus === "partial") return null;
-    return { level: "warn", message: localizer.message("ui.output.bundleDiverged") };
-  }
-  return null;
 };
 
 const getSinglePatchReplaceIndex = ({
@@ -534,30 +496,12 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     [handleBundlePatchesChange, onPatchesChange, syncPatchSelectionRefs, syncPatchTracking],
   );
 
-  // How the current bench relates to the loaded bundle's authored chain:
-  // - "full": every bundle patch enabled, in bundle order, nothing foreign -
-  //   the only state the bundle's expected output describes.
-  // - "partial": same chain, but at least one patch toggled off.
-  // - "diverged": the patch list itself differs (append/remove/reorder/foreign).
-  const bundleChainStatus = useMemo((): "full" | "partial" | "diverged" | null => {
-    const session = activeBundleSession;
-    if (!(session?.entries.length && bundleMetaById.size && currentPatchNames.length)) return null;
-    const expected = session.entries.map((entry) => entry.fileName);
-    const namesMatch =
-      currentPatchNames.length === expected.length &&
-      expected.every((name, index) => currentPatchNames[index] === name);
-    if (!namesMatch) return "diverged";
-    return disabledPatchIds.size ? "partial" : "full";
-  }, [activeBundleSession, bundleMetaById, currentPatchNames, disabledPatchIds]);
-
-  const bundleSessionMatches = useMemo(() => {
-    const session = activeBundleSession;
-    if (!(session?.entries.length && currentPatchNames.length)) return false;
-    const expected = session.entries.map((entry) => entry.fileName);
-    return (
-      currentPatchNames.length === expected.length && expected.every((name, index) => currentPatchNames[index] === name)
-    );
-  }, [activeBundleSession, currentPatchNames]);
+  const { bundleChainStatus, bundleSessionMatches } = useApplyBundleChainStatus({
+    activeBundleSession,
+    bundleMetaById,
+    currentPatchNames,
+    disabledPatchIds,
+  });
 
   // Reactive owner of the bundle's expected-output check: engaged only while the
   // full authored chain is enabled (the bundle's output.checks describe exactly
@@ -1644,197 +1588,39 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   );
   bundleControllersRef.current = { output: resolvedOutputController, patchStack: resolvedStackController };
 
-  const cheatUiState = useSyncExternalStore(
-    resolvedUiController.subscribe,
-    resolvedUiController.getState,
-    resolvedUiController.getState,
-  );
-  const cheatRomRow = cheatUiState.romInputs.length === 1 ? cheatUiState.romInputs[0] : undefined;
-  const cheatFileName = cheatRomRow?.info.fileName || cheatRomRow?.info.archiveName || "";
-  const cheatPlatform = cheatRomRow?.info.romType?.platform;
-  const cheatChecksums = useMemo(() => {
-    if (!cheatRomRow) return undefined;
-    const values: Record<string, string[]> = {};
-    const add = (algorithm: string, value: string | undefined) => {
-      if (!value) return;
-      values[algorithm] ??= [];
-      const list = values[algorithm];
-      if (!list.includes(value)) list.push(value);
-    };
-    add("crc32", cheatRomRow.info.crc32);
-    add("md5", cheatRomRow.info.md5);
-    add("sha1", cheatRomRow.info.sha1);
-    for (const variant of cheatRomRow.info.checksumVariants || []) {
-      for (const [algorithm, value] of Object.entries(variant.checksums)) add(algorithm, value);
-    }
-    return values;
-  }, [cheatRomRow]);
-  const cheatRom = useMemo(
-    () =>
-      cheatRomRow
-        ? {
-            checksums: cheatChecksums,
-            fileName: cheatFileName,
-            key: `${cheatRomRow.id}:${cheatRomRow.info.sha1 || cheatRomRow.info.crc32 || cheatFileName}`,
-            platform: cheatPlatform,
-            title: cheatFileName,
-          }
-        : null,
-    [cheatChecksums, cheatFileName, cheatPlatform, cheatRomRow],
-  );
-  const getCheatSource = useCallback(() => {
-    const source = (preparedWorkflowRef.current || workflowHandle.peek())?.getBundleExportSources().rom?.source;
-    if (!source) throw new Error("Wait for ROM staging to finish before checking cheats");
-    return source;
-  }, [workflowHandle]);
-  const { classifyDatabaseCheats, classifyManualCode } = useMemo(
-    () => createCheatClassifiers(getCheatSource),
-    [getCheatSource],
-  );
-  const saveCheatsAsPatch = useCallback(
-    async (records: ClassifiedCheatRecord[], system: CheatManualSystem | undefined) => {
-      const codes = getCheatPatchCodes(records);
-      if (!codes.length) throw new Error("Turn on at least one ROM cheat to bake it into a patch");
-      const format = getCheatPatchFormat(cheatRomRow?.size);
-      const fileName = getCheatPatchFileName(cheatFileName, records, format);
-      const { CreateWorkflow } = await loadBrowserApi();
-      // The patch is a side product of this apply run, so it gets its own
-      // short-lived workflow: the apply workflow owns the run's own output.
-      const workflow = new CreateWorkflow({
-        ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
-        settings: { format, output: { compression: "none", outputName: fileName } },
-      });
-      try {
-        await workflow.setOriginal(getCheatSource() as never);
-        await workflow.setCheatCodes(codes, system);
-        await workflow.setPatchType(format);
-        await workflow.setOutputName(fileName);
-        const result = await workflow.run();
-        await result.output.saveAs({ interactive: true });
-        return result.output.fileName;
-      } finally {
-        await workflow.dispose().catch(() => undefined);
-      }
-    },
-    [cheatFileName, cheatRomRow?.size, getCheatSource, resolvedAssetBaseUrl],
-  );
-  const preflightSequence = useRef(0);
-  const handleCheatSelection = useCallback(
-    (records: ClassifiedCheatRecord[], positions: number[] = []) => {
-      selectedCheatsRef.current = records;
-      selectedCheatPositionsRef.current = positions;
-      // ROM cheat offsets refer to the staged bytes, so selected ROM writes
-      // prevent header stripping during apply.
-      const romRecords = records.filter((record) => cheatDelivery(record) === "rom").map(({ record }) => record);
-      const romPositions = records.flatMap((record, index) =>
-        cheatDelivery(record) === "rom" ? [positions[index] ?? 0] : [],
-      );
-      setCheatsOn(romRecords.length > 0);
-      setCheatNames(romRecords.map((record) => record.description));
-      setCompletedOutput(null);
-      setCompletedCheats(undefined);
-      (preparedWorkflowRef.current || workflowHandle.peek())?.setCheats?.(romRecords, romPositions);
-      const sequence = ++preflightSequence.current;
-      setCheatConflictMessage("");
-      if (romRecords.length < 2) return;
-      const groups = new Map<number, typeof romRecords>();
-      romRecords.forEach((record, index) => {
-        const position = romPositions[index] ?? 0;
-        groups.set(position, [...(groups.get(position) || []), record]);
-      });
-      const groupsToCheck = [...groups.values()].filter((group) => group.length > 1);
-      if (!groupsToCheck.length) return;
-      const descriptions = new Map(romRecords.map((record) => [record.id, record.description]));
-      void loadBrowserApi()
-        .then(async ({ runBrowserCheats }) => {
-          for (const group of groupsToCheck) {
-            const { conflicts } = await runBrowserCheats({ records: group, rom: getCheatSource() });
-            if (conflicts[0]) return conflicts[0];
-          }
-          return undefined;
-        })
-        .then((conflict) => {
-          if (sequence !== preflightSequence.current || !conflict) return;
-          const firstDescription = descriptions.get(conflict.firstId) || conflict.firstId;
-          const secondDescription = descriptions.get(conflict.secondId) || conflict.secondId;
-          setCheatConflictMessage(
-            `Cheat conflict at ROM offset 0x${conflict.offset.toString(16).toUpperCase()}: ` +
-              `${firstDescription} writes ${conflict.firstValue.toString(16).padStart(2, "0").toUpperCase()}, ` +
-              `${secondDescription} writes ${conflict.secondValue.toString(16).padStart(2, "0").toUpperCase()}.`,
-          );
-        })
-        .catch((error: unknown) => {
-          if (sequence === preflightSequence.current) {
-            setCheatConflictMessage(error instanceof Error ? error.message : "Cheat conflict validation failed");
-          }
-        });
-    },
-    [getCheatSource, workflowHandle],
-  );
+  const { cheatRom, classifyDatabaseCheats, classifyManualCode, handleCheatSelection, saveCheatsAsPatch } =
+    useApplyCheats({
+      preparedWorkflowRef,
+      resolvedAssetBaseUrl,
+      resolvedUiController,
+      selectedCheatPositionsRef,
+      selectedCheatsRef,
+      setCheatConflictMessage,
+      setCheatNames,
+      setCheatsOn,
+      setCompletedCheats,
+      setCompletedOutput,
+      workflowHandle,
+    });
 
-  useEffect(() => {
-    if (cheatUiState.romInputs.length === 1) return;
-    // Cheats MUST be cleared without one ROM so Apply cannot reuse their ROM writes.
-    handleCheatSelection([]);
-  }, [cheatUiState.romInputs.length, handleCheatSelection]);
-
-  // "Share this setup" (secondary job after the output card): snapshots the current
-  // session's files + enablement into a rom-weaver-bundle.json (or everything-bundle .zip).
-  const stagedBundleSources = (preparedWorkflowRef.current || workflowHandle.peek())?.getBundleExportSources();
-  const bundleExportReady =
-    (!!stagedBundleSources?.rom && stagedBundleSources.patches.length > 0) ||
-    (!!bundleSourcesRef.current?.rom && bundleSourcesRef.current.patches.length > 0);
-  const bundleExport = useBundleExport({
+  const { bundleExport, changeBundlePackage } = useApplyBundleExport({
     bundleMetaById,
-    patchBasis: patchInputBasis,
+    bundleSourcesRef,
+    currentPatchesRef,
+    defaultBundleContents,
+    defaultBundleFormat,
     disabledPatchIds,
     getPatchIds,
-    getName: () => resolvedOutputController.getState().displayFileName,
-    getOutputHeader: () => resolvedOutputController.getState().outputHeader,
-    getSessionSources: (): ApplyWorkflowBundleSources => {
-      const workflowSources = (preparedWorkflowRef.current || workflowHandle.peek())?.getBundleExportSources();
-      if (workflowSources?.rom || workflowSources?.patches.length) return workflowSources;
-      if (bundleSourcesRef.current?.rom || bundleSourcesRef.current?.patches.length) return bundleSourcesRef.current;
-      return {
-        patches: currentPatchesRef.current.map((source, index) => ({
-          fileName: getReactBinarySourceFileName(source, `patch-${index + 1}.bin`),
-          originalSource: source,
-          source,
-        })),
-        rom: lastInputsRef.current[0]
-          ? {
-              fileName: getReactBinarySourceFileName(lastInputsRef.current[0], "rom.bin"),
-              originalSource: lastInputsRef.current[0],
-              source: lastInputsRef.current[0],
-            }
-          : null,
-      };
-    },
-    getStackItems: () => resolvedStackController.getState().items,
-    waitForPendingWork: () => mutationQueueRef.current,
-    initialBundleRom: defaultBundleContents === "rom",
-    initialFormat: defaultBundleFormat,
-    ready: bundleExportReady,
-    ...(props.onBundleExportComplete ? { onComplete: props.onBundleExportComplete } : {}),
+    lastInputsRef,
+    mutationQueueRef,
+    outputState,
+    patchInputBasis,
+    preparedWorkflowRef,
+    props,
+    resolvedOutputController,
+    resolvedStackController,
+    workflowHandle,
   });
-  const { setFormat: setBundleExportFormat } = bundleExport;
-
-  useEffect(() => {
-    setBundleExportFormat(resolveBundleArchiveFormat(outputState.compressionFormat));
-  }, [outputState.compressionFormat, setBundleExportFormat]);
-
-  // The bundle package controls live in the separate sharing job. Compression
-  // type selects the archive format; this callback persists only ROM inclusion.
-  const { setBundleRom: setBundleExportRom } = bundleExport;
-  const { onBundlePackageChange } = props;
-  const changeBundlePackage = useCallback(
-    (value: string) => {
-      const contents = value === "rom" || value.endsWith(":rom") ? "rom" : "patches";
-      setBundleExportRom(contents === "rom");
-      onBundlePackageChange?.(contents);
-    },
-    [onBundlePackageChange, setBundleExportRom],
-  );
 
   // Unified drop orchestration shared by the in-tab dropzone and the page-wide
   // forwarder: bare files stage immediately, archives show an instant placeholder
