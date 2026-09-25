@@ -66,15 +66,6 @@ impl CliApp {
                     PatchChecksumValidation::Strict
                 });
         let probe_threads = context.single_thread_execution();
-        let fail = |stage: &str, message: String| {
-            OperationReport::failed(
-                OperationFamily::Patch,
-                None,
-                stage,
-                message,
-                probe_threads.clone(),
-            )
-        };
         let fail_error = |stage: &str, error: RomWeaverError| {
             OperationReport::failed_with_error(
                 OperationFamily::Patch,
@@ -118,16 +109,87 @@ impl CliApp {
         {
             return self.finish("patch-validate", report);
         }
+        if let Some(report) = self.require_patch_validate_paths(&input, &patches, &probe_threads) {
+            return self.finish("patch-validate", report);
+        }
+
+        let (resolved_input, resolved_patch_list, mut temp_paths) = match self
+            .resolve_patch_validate_sources(
+                PatchValidateSourceArgs {
+                    input: &input,
+                    select: &select,
+                    patches: &patches,
+                    patch_select: &patch_select,
+                    no_extract,
+                    no_ignore,
+                    input_kind_filter,
+                    patch_kind_filter,
+                    cached_input_checksums: &cached_input_checksums,
+                },
+                &context,
+            ) {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                return self.finish("patch-validate", fail_error("prepare", error));
+            }
+        };
+
+        let report = if patches.is_empty() {
+            OperationReport::failed(
+                OperationFamily::Patch,
+                None,
+                "validate",
+                "at least one --patch value is required".to_string(),
+                probe_threads.clone(),
+            )
+        } else {
+            self.validate_resolved_patches(
+                PatchValidateRun {
+                    resolved_input: resolved_input.source,
+                    extracted_archives: resolved_input.extracted_archives,
+                    resolved_patches: resolved_patch_list.patches,
+                    extracted_patch_notes: resolved_patch_list.extracted_notes,
+                    cached_input_checksums,
+                    expected_input_checksums,
+                    effective_expected_size,
+                    validate_with_min_size,
+                    n64_byte_order,
+                    strip_header,
+                    plan,
+                    independent,
+                    plan_flags: PlanFlagInputs {
+                        basis: patch_basis,
+                        default_basis: default_patch_basis.unwrap_or(PatchBasisMode::Auto),
+                        input_checks: patch_input_check,
+                        output_checks: patch_output_check,
+                    },
+                    probe_threads,
+                },
+                &context,
+                &mut temp_paths,
+            )
+        };
+
+        Self::cleanup_temp_paths(&temp_paths);
+        self.finish("patch-validate", report)
+    }
+
+    fn require_patch_validate_paths(
+        &self,
+        input: &Path,
+        patches: &[PathBuf],
+        probe_threads: &Option<ThreadExecution>,
+    ) -> Option<OperationReport> {
         if let Some(report) = self.require_readable_path(
             "patch-validate",
             OperationFamily::Patch,
             None,
-            &input,
+            input,
             probe_threads.clone(),
         ) {
-            return self.finish("patch-validate", report);
+            return Some(report);
         }
-        for patch_path in &patches {
+        for patch_path in patches {
             if let Some(report) = self.require_readable_path(
                 "patch-validate",
                 OperationFamily::Patch,
@@ -135,14 +197,23 @@ impl CliApp {
                 patch_path,
                 probe_threads.clone(),
             ) {
-                return self.finish("patch-validate", report);
+                return Some(report);
             }
         }
+        None
+    }
 
-        let resolved_input = match self.resolve_source_with_auto_extract(
-            &input,
-            &select,
-            &context,
+    /// Resolves the input and every patch (auto-extracting containers) and returns the
+    /// temp paths the resolution created.
+    fn resolve_patch_validate_sources(
+        &self,
+        args: PatchValidateSourceArgs<'_>,
+        context: &OperationContext,
+    ) -> Result<(ResolvedChecksumSource, ResolvedPatchList, Vec<PathBuf>)> {
+        let resolved_input = self.resolve_source_with_auto_extract(
+            args.input,
+            args.select,
+            context,
             AutoExtractResolutionLabels {
                 command: "patch-validate",
                 family: OperationFamily::Patch,
@@ -151,41 +222,28 @@ impl CliApp {
                 temp_prefix: "patch-validate-input-extract",
             },
             AutoExtractResolutionFlags {
-                no_extract,
-                no_ignore,
-                kind_filter: input_kind_filter,
+                no_extract: args.no_extract,
+                no_ignore: args.no_ignore,
+                kind_filter: args.input_kind_filter,
                 stop_on_single_payload_codec: false,
             },
-        ) {
-            Ok(resolved) => resolved,
-            Err(error) => {
-                return self.finish("patch-validate", fail_error("prepare", error));
-            }
-        };
-        let ResolvedChecksumSource {
-            source: resolved_input,
-            extracted_archives,
-            cleanup_paths,
-        } = resolved_input;
+        )?;
         // Reuse the host-provided input checksums (the CRC32 the webapp already computed during
         // staging) for the handler's source-checksum verification - preflight otherwise
         // re-reads the whole input just to re-derive a CRC32 we already have.
-        context.seed_checksums(&resolved_input, &cached_input_checksums);
-        let mut temp_paths = cleanup_paths;
-        let ResolvedPatchList {
-            patches: resolved_patches,
-            extracted_notes: extracted_patch_notes,
-        } = match self.resolve_patches(
-            &patches,
+        context.seed_checksums(&resolved_input.source, args.cached_input_checksums);
+        let mut temp_paths = resolved_input.cleanup_paths.clone();
+        let resolved_patches = self.resolve_patches(
+            args.patches,
             PatchSelectors {
-                select: &select,
-                per_patch: &patch_select,
+                select: args.select,
+                per_patch: args.patch_select,
             },
-            &context,
+            context,
             AutoExtractResolutionFlags {
-                no_extract,
-                no_ignore,
-                kind_filter: patch_kind_filter,
+                no_extract: args.no_extract,
+                no_ignore: args.no_ignore,
+                kind_filter: args.patch_kind_filter,
                 stop_on_single_payload_codec: false,
             },
             PatchResolveLabels {
@@ -194,501 +252,497 @@ impl CliApp {
                 temp_prefix: "patch-validate-patch-extract",
             },
             &mut temp_paths,
-        ) {
-            Ok(resolved) => resolved,
-            Err(error) => {
-                return self.finish("patch-validate", fail_error("prepare", error));
-            }
-        };
+        )?;
+        Ok((resolved_input, resolved_patches, temp_paths))
+    }
 
-        let report = (|| {
-            if patches.is_empty() {
-                return fail(
-                    "validate",
-                    "at least one --patch value is required".to_string(),
-                );
-            }
-
-            let mut validation_labels = Vec::new();
-            let validate_input = if strip_header {
-                self.emit_running(
-                    OperationLabel {
-                        command: "patch-validate",
-                        family: OperationFamily::Patch,
-                        format: None,
-                    },
-                    "prepare",
-                    "stripping ROM header before patch validation",
-                    None,
-                    None,
-                );
-                let stripped_path = context
-                    .temp_paths()
-                    .next_path("patch-validate-input-noheader", Some("bin"));
-                match Self::strip_header_to_temp(&resolved_input, &stripped_path) {
-                    Ok(_result) => {
-                        temp_paths.push(stripped_path.clone());
-                        stripped_path
-                    }
-                    Err(error) => {
-                        return OperationReport::failed_with_error(
-                            OperationFamily::Patch,
-                            None,
-                            "compat",
-                            error,
-                            context.single_thread_execution(),
-                        );
-                    }
-                }
-            } else {
-                resolved_input.clone()
+    /// Prepares the validate input, checks the input expectations, and dispatches to the
+    /// plan, independent, or sequential validation mode.
+    fn validate_resolved_patches(
+        &self,
+        run: PatchValidateRun,
+        context: &OperationContext,
+        temp_paths: &mut Vec<PathBuf>,
+    ) -> OperationReport {
+        let (validate_input, n64_order) =
+            match self.prepare_patch_validate_input(&run, context, temp_paths) {
+                Ok(prepared) => prepared,
+                Err(report) => return *report,
             };
-            let mut n64_order = None;
-            // Validate stays on checksum proof. It writes nothing, so it has no
-            // output bytes to protect, and its verdict has no place to report a
-            // decision made on evidence rather than proof.
-            let validate_input = match self.resolve_patch_n64_target(
+        let validation_labels =
+            match self.check_patch_validate_input(&run, &validate_input, context) {
+                Ok(labels) => labels,
+                Err(report) => return *report,
+            };
+        let PatchValidateRun {
+            resolved_patches,
+            extracted_archives,
+            extracted_patch_notes,
+            expected_input_checksums,
+            effective_expected_size,
+            validate_with_min_size,
+            n64_byte_order,
+            plan,
+            independent,
+            plan_flags,
+            probe_threads,
+            ..
+        } = run;
+
+        if plan {
+            return self.run_patch_validate_plan(PatchValidatePlanInputs {
+                resolved_patches: &resolved_patches,
+                validate_input: &validate_input,
+                temp_paths,
+                context,
+                probe_threads: probe_threads.clone(),
+                summary: IndependentValidationSummary {
+                    extracted_archives,
+                    n64_byte_order: (n64_order.is_some()
+                        || n64_byte_order != PatchN64ByteOrderMode::Auto)
+                        .then_some(n64_byte_order),
+                    extracted_patch_notes,
+                    validation_labels,
+                    min_size: validate_with_min_size,
+                    expected_size: effective_expected_size,
+                    expected_input_checksums: expected_input_checksums.clone(),
+                },
+                flags: plan_flags,
+            });
+        }
+
+        if independent {
+            return self.run_patch_validate_independent(
+                &resolved_patches,
+                &validate_input,
+                context,
+                probe_threads.clone(),
+                IndependentValidationSummary {
+                    extracted_archives,
+                    n64_byte_order: (n64_order.is_some()
+                        || n64_byte_order != PatchN64ByteOrderMode::Auto)
+                        .then_some(n64_byte_order),
+                    extracted_patch_notes,
+                    validation_labels,
+                    min_size: validate_with_min_size,
+                    expected_size: effective_expected_size,
+                    expected_input_checksums: expected_input_checksums.clone(),
+                },
+            );
+        }
+
+        let mut chain = PatchValidateChain {
+            current_input: validate_input,
+            n64_order,
+            n64_byte_order,
+            probe_threads,
+        };
+        let patch_count = resolved_patches.len();
+        let mut formats = Vec::with_capacity(patch_count);
+        for (index, patch) in resolved_patches.iter().enumerate() {
+            match self.validate_sequential_patch(
+                &mut chain,
+                patch,
+                index,
+                patch_count,
+                context,
+                temp_paths,
+            ) {
+                Ok(format) => formats.push(format),
+                Err(report) => return *report,
+            }
+        }
+
+        let mut validation_labels = validation_labels;
+        if extracted_archives > 0 {
+            validation_labels.push(format!(
+                "input resolved via {extracted_archives} container extract step(s)"
+            ));
+        }
+        if chain.n64_order.is_some() || n64_byte_order != PatchN64ByteOrderMode::Auto {
+            validation_labels.push(format!("n64_byte_order={}", n64_byte_order.id()));
+        }
+        validation_labels.extend(extracted_patch_notes);
+        patch_validate_passed_report(
+            formats,
+            patch_count,
+            validation_labels,
+            validate_with_min_size,
+            effective_expected_size,
+            expected_input_checksums,
+            context,
+        )
+    }
+
+    /// Strips the header (with `--strip-header`) and transforms the N64 byte order of the
+    /// input that validation reads.
+    fn prepare_patch_validate_input(
+        &self,
+        run: &PatchValidateRun,
+        context: &OperationContext,
+        temp_paths: &mut Vec<PathBuf>,
+    ) -> std::result::Result<(PathBuf, Option<N64ByteOrderTransform>), Box<OperationReport>> {
+        let compat_failed = |error: RomWeaverError| {
+            Box::new(OperationReport::failed_with_error(
+                OperationFamily::Patch,
+                None,
+                "compat",
+                error,
+                context.single_thread_execution(),
+            ))
+        };
+        let validate_input = if run.strip_header {
+            self.emit_running(
+                OperationLabel {
+                    command: "patch-validate",
+                    family: OperationFamily::Patch,
+                    format: None,
+                },
+                "prepare",
+                "stripping ROM header before patch validation",
+                None,
+                None,
+            );
+            let stripped_path = context
+                .temp_paths()
+                .next_path("patch-validate-input-noheader", Some("bin"));
+            Self::strip_header_to_temp(&run.resolved_input, &stripped_path)
+                .map_err(compat_failed)?;
+            temp_paths.push(stripped_path.clone());
+            stripped_path
+        } else {
+            run.resolved_input.clone()
+        };
+        // Validate stays on checksum proof. It writes nothing, so it has no
+        // output bytes to protect, and its verdict has no place to report a
+        // decision made on evidence rather than proof.
+        let resolution = self
+            .resolve_patch_n64_target(
                 N64TargetRequest {
                     input: &validate_input,
-                    patch: resolved_patches
+                    patch: run
+                        .resolved_patches
                         .first()
                         .map(|patch| patch.resolved.as_path()),
-                    expected_crc32: expected_input_checksums.get("crc32").map(String::as_str),
-                    mode: n64_byte_order,
+                    expected_crc32: run
+                        .expected_input_checksums
+                        .get("crc32")
+                        .map(String::as_str),
+                    mode: run.n64_byte_order,
                     inference: N64AutoInference::ChecksumOnly,
                 },
-                &context,
-                &mut temp_paths,
-            ) {
-                Ok(Some(N64TargetResolution {
-                    source: source_order,
-                    target: target_order,
-                    ..
-                })) => {
-                    n64_order = Some(N64ByteOrderTransform {
-                        from: target_order,
-                        to: source_order,
-                    });
-                    if source_order == target_order {
-                        validate_input
-                    } else {
-                        self.emit_running(
-                            OperationLabel {
-                                command: "patch-validate",
-                                family: OperationFamily::Patch,
-                                format: None,
-                            },
-                            "compat",
-                            format!(
-                                "transforming N64 input byte order to {}",
-                                target_order.label()
-                            ),
-                            None,
-                            context.single_thread_execution(),
-                        );
-                        let transformed_path = context
-                            .temp_paths()
-                            .next_path("patch-validate-input-n64-byte-order", Some("bin"));
-                        if let Err(error) = Self::rewrite_n64_byte_order(
-                            &validate_input,
-                            &transformed_path,
-                            source_order,
-                            target_order,
-                        ) {
-                            return OperationReport::failed_with_error(
-                                OperationFamily::Patch,
-                                None,
-                                "compat",
-                                error,
-                                context.single_thread_execution(),
-                            );
-                        }
-                        temp_paths.push(transformed_path.clone());
-                        transformed_path
-                    }
-                }
-                Ok(None) => validate_input,
-                Err(error) => {
-                    return OperationReport::failed_with_error(
-                        OperationFamily::Patch,
-                        None,
-                        "compat",
-                        error,
-                        context.single_thread_execution(),
-                    );
-                }
-            };
-            let transformed_checksum_hints = BTreeMap::new();
-            let effective_checksum_hints = if validate_input == resolved_input {
-                &cached_input_checksums
-            } else {
-                &transformed_checksum_hints
-            };
-            if effective_expected_size.is_some() || validate_with_min_size.is_some() {
-                match Self::validate_patch_input_size(
-                    &validate_input,
-                    effective_expected_size,
-                    validate_with_min_size,
-                ) {
-                    Ok(label) => validation_labels.push(label),
-                    Err(error) => {
-                        return OperationReport::failed_with_error(
-                            OperationFamily::Patch,
-                            None,
-                            "validate",
-                            error,
-                            context.single_thread_execution(),
-                        );
-                    }
-                }
-            }
-            if !expected_input_checksums.is_empty() {
-                self.emit_running(
-                    OperationLabel {
-                        command: "patch-validate",
-                        family: OperationFamily::Patch,
-                        format: None,
-                    },
-                    "validate",
+                context,
+                temp_paths,
+            )
+            .map_err(compat_failed)?;
+        let Some(N64TargetResolution {
+            source: source_order,
+            target: target_order,
+            ..
+        }) = resolution
+        else {
+            return Ok((validate_input, None));
+        };
+        let n64_order = Some(N64ByteOrderTransform {
+            from: target_order,
+            to: source_order,
+        });
+        if source_order == target_order {
+            return Ok((validate_input, n64_order));
+        }
+        self.emit_running(
+            OperationLabel {
+                command: "patch-validate",
+                family: OperationFamily::Patch,
+                format: None,
+            },
+            "compat",
+            format!(
+                "transforming N64 input byte order to {}",
+                target_order.label()
+            ),
+            None,
+            context.single_thread_execution(),
+        );
+        let transformed_path = context
+            .temp_paths()
+            .next_path("patch-validate-input-n64-byte-order", Some("bin"));
+        Self::rewrite_n64_byte_order(
+            &validate_input,
+            &transformed_path,
+            source_order,
+            target_order,
+        )
+        .map_err(compat_failed)?;
+        temp_paths.push(transformed_path.clone());
+        Ok((transformed_path, n64_order))
+    }
+
+    /// Checks the input's expected size and checksums and returns their validation labels.
+    fn check_patch_validate_input(
+        &self,
+        run: &PatchValidateRun,
+        validate_input: &Path,
+        context: &OperationContext,
+    ) -> std::result::Result<Vec<String>, Box<OperationReport>> {
+        let validate_failed = |error: RomWeaverError| {
+            Box::new(OperationReport::failed_with_error(
+                OperationFamily::Patch,
+                None,
+                "validate",
+                error,
+                context.single_thread_execution(),
+            ))
+        };
+        let mut validation_labels = Vec::new();
+        let transformed_checksum_hints = BTreeMap::new();
+        let effective_checksum_hints = if validate_input == run.resolved_input {
+            &run.cached_input_checksums
+        } else {
+            &transformed_checksum_hints
+        };
+        if run.effective_expected_size.is_some() || run.validate_with_min_size.is_some() {
+            let label = Self::validate_patch_input_size(
+                validate_input,
+                run.effective_expected_size,
+                run.validate_with_min_size,
+            )
+            .map_err(validate_failed)?;
+            validation_labels.push(label);
+        }
+        if !run.expected_input_checksums.is_empty() {
+            self.emit_running(
+                OperationLabel {
+                    command: "patch-validate",
+                    family: OperationFamily::Patch,
+                    format: None,
+                },
+                "validate",
+                format!(
+                    "validating {} requested input checksum(s)",
+                    run.expected_input_checksums.len()
+                ),
+                None,
+                context.single_thread_execution(),
+            );
+            let label = Self::validate_patch_apply_expected_checksums(
+                validate_input,
+                &run.expected_input_checksums,
+                effective_checksum_hints,
+                "input",
+                context,
+            )
+            .map_err(validate_failed)?;
+            validation_labels.push(label);
+        }
+        Ok(validation_labels)
+    }
+
+    /// Validates one patch of a sequential chain and advances the chain input. Returns the
+    /// patch's format name.
+    fn validate_sequential_patch(
+        &self,
+        chain: &mut PatchValidateChain,
+        patch: &ResolvedPatch,
+        index: usize,
+        patch_count: usize,
+        context: &OperationContext,
+        temp_paths: &mut Vec<PathBuf>,
+    ) -> std::result::Result<String, Box<OperationReport>> {
+        let patch_path = &patch.source;
+        let resolved_patch_path = &patch.resolved;
+        let handler = self.probe_patch_handler(
+            &patch.source,
+            &patch.resolved,
+            index,
+            patch_count,
+            chain.probe_threads.clone(),
+        )?;
+        if !handler.capabilities().apply {
+            return Err(Box::new(OperationReport::unsupported(
+                OperationFamily::Patch,
+                Some(handler.descriptor().name.to_string()),
+                "validate",
+                format!(
+                    "{} does not support patch preflight",
+                    handler.descriptor().name
+                ),
+                context.single_thread_execution(),
+            )));
+        }
+        let format = handler.descriptor().name.to_string();
+
+        if index > 0
+            && let Err(error) = self.transition_n64_byte_order(
+                ChainN64TransitionPlan {
+                    mode: chain.n64_byte_order,
+                    base_variant: None,
+                    base_representation: None,
+                },
+                resolved_patch_path,
+                &mut chain.current_input,
+                &mut chain.n64_order,
+                context,
+                temp_paths,
+            )
+        {
+            return Err(Box::new(
+                OperationReport::failed(
+                    OperationFamily::Patch,
+                    Some(handler.descriptor().name.to_string()),
+                    "prepare",
                     format!(
-                        "validating {} requested input checksum(s)",
-                        expected_input_checksums.len()
+                        "patch {}/{} (`{}`): N64 byte-order transition failed: {error}",
+                        index + 1,
+                        patch_count,
+                        patch_path.display()
                     ),
-                    None,
                     context.single_thread_execution(),
-                );
-                match Self::validate_patch_apply_expected_checksums(
-                    &validate_input,
-                    &expected_input_checksums,
-                    effective_checksum_hints,
-                    "input",
-                    &context,
-                ) {
-                    Ok(label) => validation_labels.push(label),
-                    Err(error) => {
-                        return OperationReport::failed_with_error(
-                            OperationFamily::Patch,
-                            None,
-                            "validate",
-                            error,
-                            context.single_thread_execution(),
-                        );
-                    }
-                }
-            }
+                )
+                .with_error_kind(error.kind()),
+            ));
+        }
 
-            if plan {
-                return self.run_patch_validate_plan(PatchValidatePlanInputs {
-                    resolved_patches: &resolved_patches,
-                    validate_input: &validate_input,
-                    temp_paths: &mut temp_paths,
-                    context: &context,
-                    probe_threads: probe_threads.clone(),
-                    summary: IndependentValidationSummary {
-                        extracted_archives,
-                        n64_byte_order: (n64_order.is_some()
-                            || n64_byte_order != PatchN64ByteOrderMode::Auto)
-                            .then_some(n64_byte_order),
-                        extracted_patch_notes,
-                        validation_labels,
-                        min_size: validate_with_min_size,
-                        expected_size: effective_expected_size,
-                        expected_input_checksums: expected_input_checksums.clone(),
-                    },
-                    flags: PlanFlagInputs {
-                        basis: patch_basis,
-                        default_basis: default_patch_basis.unwrap_or(PatchBasisMode::Auto),
-                        input_checks: patch_input_check,
-                        output_checks: patch_output_check,
-                    },
-                });
-            }
+        self.emit_running(
+            OperationLabel {
+                command: "patch-validate",
+                family: OperationFamily::Patch,
+                format: Some(handler.descriptor().name),
+            },
+            "validate",
+            if patch_count == 1 {
+                format!("validating patch using {}", handler.descriptor().name)
+            } else {
+                format!(
+                    "validating patch {}/{} using {} (`{}`)",
+                    index + 1,
+                    patch_count,
+                    handler.descriptor().name,
+                    patch_path.display()
+                )
+            },
+            Some(patch_progress_segment_start(index, patch_count)),
+            None,
+        );
 
-            if independent {
-                return self.run_patch_validate_independent(
-                    &resolved_patches,
-                    &validate_input,
-                    &context,
-                    probe_threads.clone(),
-                    IndependentValidationSummary {
-                        extracted_archives,
-                        n64_byte_order: (n64_order.is_some()
-                            || n64_byte_order != PatchN64ByteOrderMode::Auto)
-                            .then_some(n64_byte_order),
-                        extracted_patch_notes,
-                        validation_labels,
-                        min_size: validate_with_min_size,
-                        expected_size: effective_expected_size,
-                        expected_input_checksums: expected_input_checksums.clone(),
-                    },
-                );
-            }
-
-            let patch_count = resolved_patches.len();
-            let mut current_input = validate_input;
-            let mut formats = Vec::with_capacity(patch_count);
-            for (index, patch) in resolved_patches.iter().enumerate() {
-                let patch_path = &patch.source;
-                let resolved_patch_path = &patch.resolved;
-                let handler = match self.probe_patch_handler(
-                    &patch.source,
-                    &patch.resolved,
+        let progress_tracker = Arc::new(PatchApplyProgressTracker::default());
+        let patch_context =
+            context
+                .clone()
+                .with_progress_sink(Arc::new(PatchApplyProgressSink::new_for_command(
+                    context.progress_sink(),
                     index,
                     patch_count,
-                    probe_threads.clone(),
-                ) {
-                    Ok(handler) => handler,
-                    Err(report) => return *report,
-                };
-                if !handler.capabilities().apply {
-                    return OperationReport::unsupported(
-                        OperationFamily::Patch,
-                        Some(handler.descriptor().name.to_string()),
-                        "validate",
-                        format!(
-                            "{} does not support patch preflight",
-                            handler.descriptor().name
-                        ),
-                        context.single_thread_execution(),
-                    );
-                }
-                formats.push(handler.descriptor().name.to_string());
+                    progress_tracker.clone(),
+                    "patch-validate",
+                    "validate",
+                )));
 
-                if index > 0
-                    && let Err(error) = self.transition_n64_byte_order(
-                        ChainN64TransitionPlan {
-                            mode: n64_byte_order,
-                            base_variant: None,
-                            base_representation: None,
-                        },
-                        resolved_patch_path,
-                        &mut current_input,
-                        &mut n64_order,
-                        &context,
-                        &mut temp_paths,
-                    )
-                {
-                    return OperationReport::failed(
+        let handler_failed = |error: RomWeaverError| {
+            Box::new(match error {
+                RomWeaverError::Unsupported(op) => OperationReport::unsupported(
+                    OperationFamily::Patch,
+                    Some(handler.descriptor().name.to_string()),
+                    "validate",
+                    op.to_string(),
+                    context.single_thread_execution(),
+                ),
+                error => OperationReport::failed_with_error(
+                    OperationFamily::Patch,
+                    Some(handler.descriptor().name.to_string()),
+                    "validate",
+                    error,
+                    context.single_thread_execution(),
+                ),
+            })
+        };
+        let mut validate_output = None;
+        let report = if patch_count == 1 {
+            let request = PatchValidateRequest {
+                input: chain.current_input.clone(),
+                patches: vec![resolved_patch_path.clone()],
+            };
+            handler
+                .validate(&request, &patch_context)
+                .map_err(handler_failed)?
+        } else {
+            let output = context
+                .temp_paths()
+                .next_path("patch-validate-output-step", Some("bin"));
+            temp_paths.push(output.clone());
+            if let Some(parent) = output.parent()
+                && !parent.exists()
+                && let Err(error) = fs::create_dir_all(parent)
+            {
+                return Err(Box::new(
+                    OperationReport::failed(
                         OperationFamily::Patch,
                         Some(handler.descriptor().name.to_string()),
                         "prepare",
                         format!(
-                            "patch {}/{} (`{}`): N64 byte-order transition failed: {error}",
-                            index + 1,
-                            patch_count,
-                            patch_path.display()
+                            "failed to prepare validation output path `{}`: {error}",
+                            output.display()
                         ),
                         context.single_thread_execution(),
                     )
-                    .with_error_kind(error.kind());
-                }
-
-                self.emit_running(
-                    OperationLabel {
-                        command: "patch-validate",
-                        family: OperationFamily::Patch,
-                        format: Some(handler.descriptor().name),
-                    },
-                    "validate",
-                    if patch_count == 1 {
-                        format!("validating patch using {}", handler.descriptor().name)
-                    } else {
-                        format!(
-                            "validating patch {}/{} using {} (`{}`)",
-                            index + 1,
-                            patch_count,
-                            handler.descriptor().name,
-                            patch_path.display()
-                        )
-                    },
-                    Some(patch_progress_segment_start(index, patch_count)),
-                    None,
-                );
-
-                let progress_tracker = Arc::new(PatchApplyProgressTracker::default());
-                let patch_context = context.clone().with_progress_sink(Arc::new(
-                    PatchApplyProgressSink::new_for_command(
-                        context.progress_sink(),
-                        index,
-                        patch_count,
-                        progress_tracker.clone(),
-                        "patch-validate",
-                        "validate",
-                    ),
-                ));
-
-                let mut validate_output = None;
-                let report = if patch_count == 1 {
-                    let request = PatchValidateRequest {
-                        input: current_input.clone(),
-                        patches: vec![resolved_patch_path.clone()],
-                    };
-                    match handler.validate(&request, &patch_context) {
-                        Ok(report) => report,
-                        Err(RomWeaverError::Unsupported(op)) => {
-                            return OperationReport::unsupported(
-                                OperationFamily::Patch,
-                                Some(handler.descriptor().name.to_string()),
-                                "validate",
-                                op.to_string(),
-                                context.single_thread_execution(),
-                            );
-                        }
-                        Err(error) => {
-                            return OperationReport::failed_with_error(
-                                OperationFamily::Patch,
-                                Some(handler.descriptor().name.to_string()),
-                                "validate",
-                                error,
-                                context.single_thread_execution(),
-                            );
-                        }
-                    }
-                } else {
-                    let output = context
-                        .temp_paths()
-                        .next_path("patch-validate-output-step", Some("bin"));
-                    temp_paths.push(output.clone());
-                    if let Some(parent) = output.parent()
-                        && !parent.exists()
-                        && let Err(error) = fs::create_dir_all(parent)
-                    {
-                        return OperationReport::failed(
-                            OperationFamily::Patch,
-                            Some(handler.descriptor().name.to_string()),
-                            "prepare",
-                            format!(
-                                "failed to prepare validation output path `{}`: {error}",
-                                output.display()
-                            ),
-                            context.single_thread_execution(),
-                        )
-                        .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Io);
-                    }
-
-                    let request = PatchApplyRequest {
-                        input: current_input.clone(),
-                        patches: vec![resolved_patch_path.clone()],
-                        output: output.clone(),
-                    };
-                    let report = match handler.apply(&request, &patch_context) {
-                        Ok(report) => report,
-                        Err(RomWeaverError::Unsupported(op)) => {
-                            return OperationReport::unsupported(
-                                OperationFamily::Patch,
-                                Some(handler.descriptor().name.to_string()),
-                                "validate",
-                                op.to_string(),
-                                context.single_thread_execution(),
-                            );
-                        }
-                        Err(error) => {
-                            return OperationReport::failed_with_error(
-                                OperationFamily::Patch,
-                                Some(handler.descriptor().name.to_string()),
-                                "validate",
-                                error,
-                                context.single_thread_execution(),
-                            );
-                        }
-                    };
-                    validate_output = Some(output);
-                    report
-                };
-                if report.status != OperationStatus::Succeeded {
-                    let error_kind = report.resolved_error_kind();
-                    let mut failure = OperationReport::failed(
-                        OperationFamily::Patch,
-                        Some(handler.descriptor().name.to_string()),
-                        "validate",
-                        report.label,
-                        report
-                            .thread_execution
-                            .or_else(|| context.single_thread_execution()),
-                    );
-                    if let Some(error_kind) = error_kind {
-                        failure = failure.with_error_kind(error_kind);
-                    }
-                    return failure;
-                }
-                if !progress_tracker.saw_meaningful_running_progress() {
-                    self.emit_running(
-                        OperationLabel {
-                            command: "patch-validate",
-                            family: OperationFamily::Patch,
-                            format: Some(handler.descriptor().name),
-                        },
-                        "validate",
-                        if patch_count == 1 {
-                            format!("validated patch using {}", handler.descriptor().name)
-                        } else {
-                            format!(
-                                "validated patch {}/{} using {} (`{}`)",
-                                index + 1,
-                                patch_count,
-                                handler.descriptor().name,
-                                patch_path.display()
-                            )
-                        },
-                        None,
-                        report.thread_execution.clone(),
-                    );
-                }
-                if let Some(output) = validate_output {
-                    current_input = output;
-                }
-            }
-
-            if extracted_archives > 0 {
-                validation_labels.push(format!(
-                    "input resolved via {extracted_archives} container extract step(s)"
+                    .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Io),
                 ));
             }
-            if n64_order.is_some() || n64_byte_order != PatchN64ByteOrderMode::Auto {
-                validation_labels.push(format!("n64_byte_order={}", n64_byte_order.id()));
-            }
-            validation_labels.extend(extracted_patch_notes);
-            let format_label = if formats.is_empty() {
-                "patch".to_string()
-            } else {
-                formats.join(", ")
+
+            let request = PatchApplyRequest {
+                input: chain.current_input.clone(),
+                patches: vec![resolved_patch_path.clone()],
+                output: output.clone(),
             };
-            let suffix = if validation_labels.is_empty() {
-                String::new()
-            } else {
-                format!("; {}", validation_labels.join("; "))
-            };
-            let final_format = formats.last().cloned();
-            let mut report = OperationReport::succeeded(
-                OperationFamily::Patch,
-                final_format.clone(),
-                "validate",
-                format!(
-                    "patch validation passed for {} patch(es) ({format_label}){suffix}",
-                    patch_count
-                ),
-                Some(100.0),
-                context.single_thread_execution(),
-            );
-            report.details = Some(json!({
-                "patch_validation": {
-                    "preflight": true,
-                    "format": final_format,
-                    "formats": formats,
-                    "patch_count": patch_count,
-                    "source_values": {
-                        "minimum_size": validate_with_min_size,
-                        "size": effective_expected_size,
-                        "checksums": expected_input_checksums,
-                    },
-                    "status": "passed",
-                }
-            }));
+            let report = handler
+                .apply(&request, &patch_context)
+                .map_err(handler_failed)?;
+            validate_output = Some(output);
             report
-        })();
-
-        Self::cleanup_temp_paths(&temp_paths);
-        self.finish("patch-validate", report)
+        };
+        if report.status != OperationStatus::Succeeded {
+            let error_kind = report.resolved_error_kind();
+            let mut failure = OperationReport::failed(
+                OperationFamily::Patch,
+                Some(handler.descriptor().name.to_string()),
+                "validate",
+                report.label,
+                report
+                    .thread_execution
+                    .or_else(|| context.single_thread_execution()),
+            );
+            if let Some(error_kind) = error_kind {
+                failure = failure.with_error_kind(error_kind);
+            }
+            return Err(Box::new(failure));
+        }
+        if !progress_tracker.saw_meaningful_running_progress() {
+            self.emit_running(
+                OperationLabel {
+                    command: "patch-validate",
+                    family: OperationFamily::Patch,
+                    format: Some(handler.descriptor().name),
+                },
+                "validate",
+                if patch_count == 1 {
+                    format!("validated patch using {}", handler.descriptor().name)
+                } else {
+                    format!(
+                        "validated patch {}/{} using {} (`{}`)",
+                        index + 1,
+                        patch_count,
+                        handler.descriptor().name,
+                        patch_path.display()
+                    )
+                },
+                None,
+                report.thread_execution.clone(),
+            );
+        }
+        if let Some(output) = validate_output {
+            chain.current_input = output;
+        }
+        Ok(format)
     }
 
     /// Validate each patch independently against the ORIGINAL prepared input (no
@@ -1032,11 +1086,7 @@ impl CliApp {
         };
         let endpoint_base_inputs = [(validate_input, "raw", base_representation)];
 
-        let PlanAlignedMetadata {
-            basis_modes,
-            input_check_flags,
-            output_check_flags,
-        } = match Self::align_plan_metadata(&flags, patch_count) {
+        let metadata = match Self::align_plan_metadata(&flags, patch_count) {
             Ok(metadata) => metadata,
             Err(error) => return fail_error(error),
         };
@@ -1048,62 +1098,17 @@ impl CliApp {
             failures: probe_failures,
         } = self.probe_plan_handlers(resolved_patches, patch_count, probe_threads.clone());
 
-        // Assemble what is known about each patch.
-        let mut plan_inputs: Vec<patch_plan::PlanPatchInput> = Vec::with_capacity(patch_count);
-        for (index, patch) in resolved_patches.iter().enumerate() {
-            let patch_path = &patch.source;
-            let resolved_patch_path = &patch.resolved;
-            let mut declared_input = Self::filename_plan_state(&patch.source);
-            if let Some(tokens) = input_check_flags[index].as_ref() {
-                match Self::parse_plan_check_tokens(tokens, "--patch-input-check") {
-                    Ok(parsed) => declared_input.checksums.extend(parsed),
-                    Err(error) => return fail_error(error),
-                }
-            }
-            let mut declared_output = patch_plan::PlanState::default();
-            if let Some(tokens) = output_check_flags[index].as_ref() {
-                match Self::parse_plan_check_tokens(tokens, "--patch-output-check") {
-                    Ok(parsed) => declared_output.checksums.extend(parsed),
-                    Err(error) => return fail_error(error),
-                }
-            }
-            let mut plan_input = Self::build_plan_patch_input(
-                &patch.source,
-                &patch.resolved,
-                handlers[index].as_deref(),
-                basis_modes[index].unwrap_or(flags.default_basis).declared(),
-                declared_input,
-                declared_output,
-                context,
-            );
-            if patch_plan::should_resolve_base_endpoints(index, plan_input.declared_basis)
-                && let Some(handler) = handlers[index].as_deref()
-            {
-                plan_input.base_executions = match Self::resolve_base_endpoint_selections(
-                    handler,
-                    resolved_patch_path,
-                    &endpoint_base_inputs,
-                    context,
-                ) {
-                    Ok(matches) => matches
-                        .into_iter()
-                        .map(|matched| matched.selection)
-                        .collect(),
-                    Err(RomWeaverError::Cancelled) => {
-                        return fail_error(RomWeaverError::Cancelled);
-                    }
-                    Err(error) => {
-                        debug!(
-                            %error,
-                            patch = %patch_path.display(),
-                            "handler-normalized base endpoint evidence unavailable"
-                        );
-                        Vec::new()
-                    }
-                };
-            }
-            plan_inputs.push(plan_input);
-        }
+        let plan_inputs = match Self::build_plan_patch_inputs(
+            resolved_patches,
+            &handlers,
+            &metadata,
+            flags.default_basis,
+            &endpoint_base_inputs,
+            context,
+        ) {
+            Ok(plan_inputs) => plan_inputs,
+            Err(error) => return fail_error(error),
+        };
 
         let base_variants = match self.plan_base_variants(validate_input, &plan_inputs, context) {
             Ok(variants) => variants,
@@ -1111,7 +1116,7 @@ impl CliApp {
         };
 
         let mut resolved = patch_plan::resolve_verification_plan(&base_variants, &plan_inputs);
-        let mut per_patch = resolved.per_patch;
+        let mut per_patch = std::mem::take(&mut resolved.per_patch);
 
         // Probe failures override whatever the planner said.
         for (entry, message) in per_patch
@@ -1123,12 +1128,6 @@ impl CliApp {
             entry.message = message;
         }
 
-        // Probe the base for chain heads, proven base inputs, and speculative chained inputs. A
-        // checksumless patch should not appear chained merely because it follows another patch.
-        let is_speculative_base = |verdict: &PatchPlanVerdict| {
-            verdict.basis == PatchInputBasis::Previous
-                && verdict.basis_source == PatchBasisSource::Default
-        };
         let ready_jobs = match Self::plan_ready_jobs(PlanReadyJobInputs {
             resolved_patches,
             validate_input,
@@ -1152,128 +1151,89 @@ impl CliApp {
             Ok(result) => result,
             Err(report) => return *report,
         };
-        for preflight in preflight_verdicts {
-            let entry = &mut per_patch[preflight.index];
-            let speculative = is_speculative_base(entry);
-            if preflight.passed {
-                if entry.input_verdict == PatchInputVerdict::Unknown
-                    || (speculative && entry.input_verdict == PatchInputVerdict::ChainDeferred)
-                {
-                    entry.input_verdict = PatchInputVerdict::Passed;
-                    entry.message = preflight.message;
-                    // A guessed-chain patch that cleanly applies to the ROM consumes the base like
-                    // the head: present it identically (base basis, green check) so its verdict no
-                    // longer depends on list position.
-                    if speculative {
-                        entry.basis = PatchInputBasis::Base;
-                    }
-                }
-            } else if !speculative {
-                // A definite base consumer that fails is a real failure. A guessed-chain patch that
-                // fails to apply to the base is NOT proven bad - it may genuinely target an
-                // intermediate - so its honest `chain_deferred` verdict stands.
-                entry.input_verdict = PatchInputVerdict::Failed;
-                entry.message = preflight.message;
-            }
-        }
-
-        let passed_count = per_patch
-            .iter()
-            .filter(|verdict| verdict.input_verdict == PatchInputVerdict::Passed)
-            .count();
-        let failed_count = per_patch
-            .iter()
-            .filter(|verdict| verdict.input_verdict == PatchInputVerdict::Failed)
-            .count();
-        let status = if failed_count == 0 { "passed" } else { "mixed" };
-        let mut formats: Vec<String> = Vec::new();
-        for verdict in &per_patch {
-            if let Some(format) = &verdict.format
-                && !formats.iter().any(|existing| existing == format)
-            {
-                formats.push(format.clone());
-            }
-        }
-
-        let IndependentValidationSummary {
-            extracted_archives,
-            n64_byte_order,
-            extracted_patch_notes,
-            mut validation_labels,
-            min_size,
-            expected_size,
-            expected_input_checksums,
-        } = summary;
-        if extracted_archives > 0 {
-            validation_labels.push(format!(
-                "input resolved via {extracted_archives} container extract step(s)"
-            ));
-        }
-        if let Some(target_order) = n64_byte_order {
-            validation_labels.push(format!("n64_byte_order={}", target_order.id()));
-        }
-        validation_labels.extend(extracted_patch_notes);
-        if let Some(order) = &resolved.suggested_order {
-            let rendered = order
-                .iter()
-                .map(|index| (index + 1).to_string())
-                .collect::<Vec<_>>()
-                .join(", ");
-            validation_labels.push(format!("suggested patch order: {rendered}"));
-        }
-
-        let format_label = if formats.is_empty() {
-            "patch".to_string()
-        } else {
-            formats.join(", ")
-        };
-        let suffix = if validation_labels.is_empty() {
-            String::new()
-        } else {
-            format!("; {}", validation_labels.join("; "))
-        };
-        resolved.output_verification =
-            patch_plan::resolve_output_verification(&plan_inputs, &per_patch);
-
-        let plan_payload = PatchValidationPlan {
-            plan: true,
+        apply_plan_preflight_verdicts(&mut per_patch, preflight_verdicts);
+        patch_validation_plan_report(
+            resolved,
             per_patch,
-            suggested_order: resolved.suggested_order,
-            output_verification: resolved.output_verification,
-            status: status.to_string(),
-            patch_count: patch_count as u32,
-            passed_count: passed_count as u32,
-            failed_count: failed_count as u32,
-            formats: formats.clone(),
-        };
-        let mut payload = serde_json::to_value(&plan_payload)
-            .expect("verification plan serializes")
-            .as_object()
-            .cloned()
-            .expect("verification plan is a JSON object");
-        payload.insert("preflight".to_string(), json!(true));
-        payload.insert(
-            "source_values".to_string(),
-            json!({
-                "minimum_size": min_size,
-                "size": expected_size,
-                "checksums": expected_input_checksums,
-            }),
-        );
+            &plan_inputs,
+            summary,
+            patch_count,
+            planned,
+        )
+    }
 
-        let mut report = OperationReport::succeeded(
-            OperationFamily::Patch,
-            formats.first().cloned(),
-            "validate",
-            format!(
-                "patch verification plan {status}: {passed_count} passed, {failed_count} failed, {} deferred of {patch_count} ({format_label}){suffix}",
-                patch_count - passed_count - failed_count
-            ),
-            Some(100.0),
-            Some(planned),
-        );
-        report.details = Some(json!({ "patch_validation": payload }));
-        report
+    /// Assembles what is known about each patch for the verification planner.
+    fn build_plan_patch_inputs(
+        resolved_patches: &[ResolvedPatch],
+        handlers: &[Option<Arc<dyn rom_weaver_core::PatchHandler>>],
+        metadata: &PlanAlignedMetadata,
+        default_basis: PatchBasisMode,
+        endpoint_base_inputs: &[(&Path, &str, patch_plan::BaseRepresentation)],
+        context: &OperationContext,
+    ) -> Result<Vec<patch_plan::PlanPatchInput>> {
+        let mut plan_inputs: Vec<patch_plan::PlanPatchInput> =
+            Vec::with_capacity(resolved_patches.len());
+        for (index, patch) in resolved_patches.iter().enumerate() {
+            let patch_path = &patch.source;
+            let resolved_patch_path = &patch.resolved;
+            let mut declared_input = Self::filename_plan_state(&patch.source);
+            if let Some(tokens) = metadata.input_check_flags[index].as_ref() {
+                declared_input
+                    .checksums
+                    .extend(Self::parse_plan_check_tokens(
+                        tokens,
+                        "--patch-input-check",
+                    )?);
+            }
+            let mut declared_output = patch_plan::PlanState::default();
+            if let Some(tokens) = metadata.output_check_flags[index].as_ref() {
+                declared_output
+                    .checksums
+                    .extend(Self::parse_plan_check_tokens(
+                        tokens,
+                        "--patch-output-check",
+                    )?);
+            }
+            let mut plan_input = Self::build_plan_patch_input(
+                &patch.source,
+                &patch.resolved,
+                handlers[index].as_deref(),
+                metadata.basis_modes[index]
+                    .unwrap_or(default_basis)
+                    .declared(),
+                declared_input,
+                declared_output,
+                context,
+            );
+            if patch_plan::should_resolve_base_endpoints(index, plan_input.declared_basis)
+                && let Some(handler) = handlers[index].as_deref()
+            {
+                plan_input.base_executions = match Self::resolve_base_endpoint_selections(
+                    handler,
+                    resolved_patch_path,
+                    endpoint_base_inputs,
+                    context,
+                ) {
+                    Ok(matches) => matches
+                        .into_iter()
+                        .map(|matched| matched.selection)
+                        .collect(),
+                    Err(RomWeaverError::Cancelled) => {
+                        return Err(RomWeaverError::Cancelled);
+                    }
+                    Err(error) => {
+                        debug!(
+                            %error,
+                            patch = %patch_path.display(),
+                            "handler-normalized base endpoint evidence unavailable"
+                        );
+                        Vec::new()
+                    }
+                };
+            }
+            plan_inputs.push(plan_input);
+        }
+        Ok(plan_inputs)
     }
 
     fn plan_ready_jobs(inputs: PlanReadyJobInputs<'_>) -> Result<Vec<IndependentReadyJob>> {
@@ -1837,6 +1797,93 @@ impl CliApp {
 
 /// Per-patch plan flags handed from `run_patch_validate` into plan mode,
 /// index-aligned with `patches` (native argv alignment or wasm vectors).
+/// Borrowed `patch validate` arguments that source resolution needs.
+struct PatchValidateSourceArgs<'a> {
+    input: &'a Path,
+    select: &'a [String],
+    patches: &'a [PathBuf],
+    patch_select: &'a [String],
+    no_extract: bool,
+    no_ignore: bool,
+    input_kind_filter: ArchiveEntryKindFilter,
+    patch_kind_filter: ArchiveEntryKindFilter,
+    cached_input_checksums: &'a BTreeMap<String, String>,
+}
+
+/// Resolved inputs and flags for one `patch validate` run.
+struct PatchValidateRun {
+    resolved_input: PathBuf,
+    extracted_archives: usize,
+    resolved_patches: Vec<ResolvedPatch>,
+    extracted_patch_notes: Vec<String>,
+    cached_input_checksums: BTreeMap<String, String>,
+    expected_input_checksums: BTreeMap<String, String>,
+    effective_expected_size: Option<u64>,
+    validate_with_min_size: Option<u64>,
+    n64_byte_order: PatchN64ByteOrderMode,
+    strip_header: bool,
+    plan: bool,
+    independent: bool,
+    plan_flags: PlanFlagInputs,
+    probe_threads: Option<ThreadExecution>,
+}
+
+/// State carried from one patch to the next in a sequential validation chain.
+struct PatchValidateChain {
+    current_input: PathBuf,
+    n64_order: Option<N64ByteOrderTransform>,
+    n64_byte_order: PatchN64ByteOrderMode,
+    probe_threads: Option<ThreadExecution>,
+}
+
+fn patch_validate_passed_report(
+    formats: Vec<String>,
+    patch_count: usize,
+    validation_labels: Vec<String>,
+    validate_with_min_size: Option<u64>,
+    effective_expected_size: Option<u64>,
+    expected_input_checksums: BTreeMap<String, String>,
+    context: &OperationContext,
+) -> OperationReport {
+    let format_label = if formats.is_empty() {
+        "patch".to_string()
+    } else {
+        formats.join(", ")
+    };
+    let suffix = if validation_labels.is_empty() {
+        String::new()
+    } else {
+        format!("; {}", validation_labels.join("; "))
+    };
+    let final_format = formats.last().cloned();
+    let mut report = OperationReport::succeeded(
+        OperationFamily::Patch,
+        final_format.clone(),
+        "validate",
+        format!(
+            "patch validation passed for {} patch(es) ({format_label}){suffix}",
+            patch_count
+        ),
+        Some(100.0),
+        context.single_thread_execution(),
+    );
+    report.details = Some(json!({
+        "patch_validation": {
+            "preflight": true,
+            "format": final_format,
+            "formats": formats,
+            "patch_count": patch_count,
+            "source_values": {
+                "minimum_size": validate_with_min_size,
+                "size": effective_expected_size,
+                "checksums": expected_input_checksums,
+            },
+            "status": "passed",
+        }
+    }));
+    report
+}
+
 struct PlanFlagInputs {
     basis: Vec<PatchBasisMode>,
     default_basis: PatchBasisMode,
@@ -1863,6 +1910,149 @@ struct PlanReadyJobInputs<'a> {
     plan_inputs: &'a [patch_plan::PlanPatchInput],
     base_variants: &'a [patch_plan::BaseVariant],
     per_patch: &'a [PatchPlanVerdict],
+}
+
+/// Folds the preflight verdicts into the planner's per-patch verdicts.
+fn apply_plan_preflight_verdicts(
+    per_patch: &mut [PatchPlanVerdict],
+    preflight_verdicts: Vec<PerPatchVerdict>,
+) {
+    // Probe the base for chain heads, proven base inputs, and speculative chained inputs. A
+    // checksumless patch should not appear chained merely because it follows another patch.
+    let is_speculative_base = |verdict: &PatchPlanVerdict| {
+        verdict.basis == PatchInputBasis::Previous
+            && verdict.basis_source == PatchBasisSource::Default
+    };
+    for preflight in preflight_verdicts {
+        let entry = &mut per_patch[preflight.index];
+        let speculative = is_speculative_base(entry);
+        if preflight.passed {
+            if entry.input_verdict == PatchInputVerdict::Unknown
+                || (speculative && entry.input_verdict == PatchInputVerdict::ChainDeferred)
+            {
+                entry.input_verdict = PatchInputVerdict::Passed;
+                entry.message = preflight.message;
+                // A guessed-chain patch that cleanly applies to the ROM consumes the base like
+                // the head: present it identically (base basis, green check) so its verdict no
+                // longer depends on list position.
+                if speculative {
+                    entry.basis = PatchInputBasis::Base;
+                }
+            }
+        } else if !speculative {
+            // A definite base consumer that fails is a real failure. A guessed-chain patch that
+            // fails to apply to the base is NOT proven bad - it may genuinely target an
+            // intermediate - so its honest `chain_deferred` verdict stands.
+            entry.input_verdict = PatchInputVerdict::Failed;
+            entry.message = preflight.message;
+        }
+    }
+}
+
+fn patch_validation_plan_report(
+    mut resolved: patch_plan::ResolvedPlan,
+    per_patch: Vec<PatchPlanVerdict>,
+    plan_inputs: &[patch_plan::PlanPatchInput],
+    summary: IndependentValidationSummary,
+    patch_count: usize,
+    planned: ThreadExecution,
+) -> OperationReport {
+    let passed_count = per_patch
+        .iter()
+        .filter(|verdict| verdict.input_verdict == PatchInputVerdict::Passed)
+        .count();
+    let failed_count = per_patch
+        .iter()
+        .filter(|verdict| verdict.input_verdict == PatchInputVerdict::Failed)
+        .count();
+    let status = if failed_count == 0 { "passed" } else { "mixed" };
+    let mut formats: Vec<String> = Vec::new();
+    for verdict in &per_patch {
+        if let Some(format) = &verdict.format
+            && !formats.iter().any(|existing| existing == format)
+        {
+            formats.push(format.clone());
+        }
+    }
+
+    let IndependentValidationSummary {
+        extracted_archives,
+        n64_byte_order,
+        extracted_patch_notes,
+        mut validation_labels,
+        min_size,
+        expected_size,
+        expected_input_checksums,
+    } = summary;
+    if extracted_archives > 0 {
+        validation_labels.push(format!(
+            "input resolved via {extracted_archives} container extract step(s)"
+        ));
+    }
+    if let Some(target_order) = n64_byte_order {
+        validation_labels.push(format!("n64_byte_order={}", target_order.id()));
+    }
+    validation_labels.extend(extracted_patch_notes);
+    if let Some(order) = &resolved.suggested_order {
+        let rendered = order
+            .iter()
+            .map(|index| (index + 1).to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        validation_labels.push(format!("suggested patch order: {rendered}"));
+    }
+
+    let format_label = if formats.is_empty() {
+        "patch".to_string()
+    } else {
+        formats.join(", ")
+    };
+    let suffix = if validation_labels.is_empty() {
+        String::new()
+    } else {
+        format!("; {}", validation_labels.join("; "))
+    };
+    resolved.output_verification = patch_plan::resolve_output_verification(plan_inputs, &per_patch);
+
+    let plan_payload = PatchValidationPlan {
+        plan: true,
+        per_patch,
+        suggested_order: resolved.suggested_order,
+        output_verification: resolved.output_verification,
+        status: status.to_string(),
+        patch_count: patch_count as u32,
+        passed_count: passed_count as u32,
+        failed_count: failed_count as u32,
+        formats: formats.clone(),
+    };
+    let mut payload = serde_json::to_value(&plan_payload)
+        .expect("verification plan serializes")
+        .as_object()
+        .cloned()
+        .expect("verification plan is a JSON object");
+    payload.insert("preflight".to_string(), json!(true));
+    payload.insert(
+        "source_values".to_string(),
+        json!({
+            "minimum_size": min_size,
+            "size": expected_size,
+            "checksums": expected_input_checksums,
+        }),
+    );
+
+    let mut report = OperationReport::succeeded(
+        OperationFamily::Patch,
+        formats.first().cloned(),
+        "validate",
+        format!(
+            "patch verification plan {status}: {passed_count} passed, {failed_count} failed, {} deferred of {patch_count} ({format_label}){suffix}",
+            patch_count - passed_count - failed_count
+        ),
+        Some(100.0),
+        Some(planned),
+    );
+    report.details = Some(json!({ "patch_validation": payload }));
+    report
 }
 
 struct PlanAlignedMetadata {
