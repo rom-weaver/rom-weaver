@@ -2,17 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   formatDownloadCompressionRatio,
   formatElapsedTiming,
-  getLogicalRomInputCount,
-  getMultiInputOutputError,
   getRequestedOutputName,
   isWorkflowDisposedError,
   resolveLocalStateUpdate,
   resolvePendingDownloadFileName,
   toError,
 } from "../../src/public/react/patcher-form-session-utils.ts";
-import type { RomInputRowState } from "../../src/public/react/patcher-ui-state.ts";
-
-const row = (overrides: Partial<RomInputRowState>): RomInputRowState => ({ groupId: "", ...overrides }) as never;
 
 describe("getRequestedOutputName", () => {
   it("trims and collapses blank names to undefined", () => {
@@ -37,26 +32,6 @@ describe("resolvePendingDownloadFileName", () => {
     expect(resolvePendingDownloadFileName({ automaticOutputName: "auto.zip" })).toBe("auto.zip");
     expect(resolvePendingDownloadFileName({ fallbackOutputName: "fb.zip" })).toBe("fb.zip");
     expect(resolvePendingDownloadFileName({})).toBe("output");
-  });
-});
-
-describe("getLogicalRomInputCount", () => {
-  it("counts each group once plus every ungrouped row", () => {
-    const rows = [row({ groupId: "disc" }), row({ groupId: "disc" }), row({ groupId: "" }), row({ groupId: "  " })];
-    expect(getLogicalRomInputCount(rows)).toBe(3);
-  });
-});
-
-describe("getMultiInputOutputError", () => {
-  it("is empty for single logical inputs or archive formats", () => {
-    expect(getMultiInputOutputError("none", 1)).toBe("");
-    expect(getMultiInputOutputError("zip", 2)).toBe("");
-    expect(getMultiInputOutputError("7z", 2)).toBe("");
-  });
-
-  it("explains the 'none' and non-archive cases for multi-input output", () => {
-    expect(getMultiInputOutputError("none", 2)).toContain("cannot be used for multi-file output");
-    expect(getMultiInputOutputError("chd", 2)).toContain("'chd' cannot be used for multi-file output");
   });
 });
 

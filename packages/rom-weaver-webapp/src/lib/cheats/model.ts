@@ -75,7 +75,6 @@ export type CheatGameRecord = {
   normalizedTitle: string;
   regions: string[];
   revisions: string[];
-  sourceFiles: string[];
   checksums: Array<{
     crc32?: string | null;
     md5?: string | null;
@@ -87,7 +86,7 @@ export type CheatGameRecord = {
 };
 
 export type CheatSystemShard = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   system: CheatDatabaseSystem;
   games: CheatGameRecord[];
 };

@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import { loadLocalBundleSession } from "../../lib/bundle/local-bundle-session.ts";
+import {
+  isCueEntryFileName,
+  isGdiEntryFileName,
+  parseCueFileReferences,
+  parseGdiFileReferences,
+} from "../../lib/input/archive.ts";
 import { listDroppedArchiveEntryNames } from "../../lib/input/input-preparation-archive.ts";
 import { createLogger } from "../../lib/logging.ts";
+import type { SelectFile, SelectionCandidate } from "../../types/selection.ts";
 import { classifyDroppedFiles, isArchiveFileName, isPatchFileName, isRomFileName } from "./file-classification.ts";
 
 /**
@@ -55,7 +62,7 @@ const isRootJsonArchiveEntry = (name: string) => {
 
 type UnifiedApplyDrop = {
   pendingDrops: PendingDrop[];
-  onDrop: (files: File[], isCancelled?: () => boolean, signal?: AbortSignal) => void;
+  onDrop: (files: File[], isCancelled?: () => boolean, signal?: AbortSignal, onSettled?: () => void) => void;
 };
 type ActiveDropKind = "bundle" | "patch" | "rom" | "unknown";
 type DropRouteLifecycle = {
@@ -101,6 +108,7 @@ const routeUnifiedDrop = async (
   onPendingUpdate?: (file: File, update: PendingDropUpdate) => void,
   signal?: AbortSignal,
   lifecycle?: DropRouteLifecycle,
+  selectFile?: SelectFile,
 ): Promise<void> => {
   if (signal?.aborted || isCancelled?.()) return;
   const { archives, inputs, patches } = classifyDroppedFiles(files);
@@ -221,8 +229,78 @@ const routeUnifiedDrop = async (
     romArchiveCount: romArchives.length,
     romInputCount: romInputs.length,
   });
-  if (romInputs.length) controller.provideRomInputFiles?.(romInputs);
+  const chosenRom = await chooseSingleRom(romInputs, selectFile);
+  // The chooser stays open while newer drops arrive; a later ROM drop aborts this route.
+  if (signal?.aborted || isCancelled?.()) return;
+  if (chosenRom) controller.provideRomInputFiles?.(chosenRom);
   if (patchInputs.length) controller.providePatchInputFiles?.(patchInputs);
+};
+
+type RomDropGroup = { files: File[]; label: string; size: number };
+
+const leafName = (name: string) => name.replaceAll("\\", "/").split("/").at(-1)?.toLowerCase() || "";
+
+/** Keep a directly dropped CUE and its tracks together as one logical ROM. */
+const groupDirectDiscInputs = async (romInputs: readonly File[]): Promise<RomDropGroup[]> => {
+  const unassigned = new Set(romInputs);
+  const groups: RomDropGroup[] = [];
+  for (const cue of romInputs) {
+    if (!(unassigned.has(cue) && isCueEntryFileName(cue.name))) continue;
+    try {
+      const references = new Set(
+        parseCueFileReferences(await cue.text()).map((reference) => leafName(reference.fileName)),
+      );
+      const files = [cue];
+      for (const file of unassigned) {
+        if (file === cue) continue;
+        const isReferencedTrack = references.has(leafName(file.name));
+        const gdiReferences = isGdiEntryFileName(file.name) ? parseGdiFileReferences(await file.text()) : [];
+        const isMatchingGdi =
+          gdiReferences.length > 0 && gdiReferences.every((reference) => references.has(leafName(reference)));
+        if (isReferencedTrack || isMatchingGdi) files.push(file);
+      }
+      // Claim the files only after every read succeeded, so a failed read leaves them selectable.
+      for (const file of files) unassigned.delete(file);
+      groups.push({ files, label: cue.name, size: files.reduce((total, file) => total + file.size, 0) });
+    } catch (error) {
+      logger.debug("direct CUE grouping failed", { error: String(error), fileName: cue.name });
+    }
+  }
+  for (const file of unassigned) groups.push({ files: [file], label: file.name, size: file.size });
+  return groups;
+};
+
+/**
+ * A run patches exactly one logical ROM. A directly dropped disc can contain a
+ * CUE plus several track files, which MUST stay together as one candidate.
+ */
+const chooseSingleRom = async (romInputs: readonly File[], selectFile?: SelectFile): Promise<File[] | undefined> => {
+  const groups = await groupDirectDiscInputs(romInputs);
+  if (groups.length <= 1) return groups[0]?.files;
+  if (!selectFile) return groups[0]?.files;
+  const candidates: SelectionCandidate[] = groups.map((group, index) => ({
+    fileName: group.label,
+    id: `dropped-rom-${index}`,
+    kind: "rom",
+    selectable: true,
+    size: group.size,
+    type: "file",
+  }));
+  try {
+    const choice = await selectFile({
+      candidates,
+      role: "input",
+      // Empty so the dialog uses its own "More than one ROM was dropped" heading
+      // rather than naming one of the files the user has not chosen yet.
+      sourceName: "",
+      warnings: [],
+    });
+    const index = candidates.findIndex((candidate) => candidate.id === choice?.id);
+    return index >= 0 ? groups[index]?.files : undefined;
+  } catch (error) {
+    logger.debug("multi-ROM drop prompt was cancelled", { error: String(error) });
+    return undefined;
+  }
 };
 
 const normalizeArchivePath = (name: string) => name.replaceAll("\\", "/").replace(/^\.\//, "").replace(/^\//, "");
@@ -231,6 +309,7 @@ const useUnifiedApplyDrop = (
   controller: UnifiedDropController,
   onBundleSession?: (session: BundleApplySession) => void,
   onError?: (error: Error) => void,
+  selectFile?: SelectFile,
 ): UnifiedApplyDrop => {
   const [pendingDrops, setPendingDrops] = useState<PendingDrop[]>([]);
   const nextIdRef = useRef(0);
@@ -272,7 +351,7 @@ const useUnifiedApplyDrop = (
     bundleSourceCleanupsRef.current.add(cleanup);
   }, []);
   const onDrop = useCallback(
-    (files: File[], isCancelled?: () => boolean, outerSignal?: AbortSignal) => {
+    (files: File[], isCancelled?: () => boolean, outerSignal?: AbortSignal, onSettled?: () => void) => {
       const classification = classifyDroppedFiles(files);
       // The classifier deliberately treats unknown bare extensions as ROM/input fallbacks. Use its
       // bucket here too so replacement/cancellation policy cannot disagree with the eventual route;
@@ -303,6 +382,7 @@ const useUnifiedApplyDrop = (
       if (dropController.signal.aborted) {
         activeDropsRef.current.delete(dropController);
         outerSignal?.removeEventListener("abort", abortDrop);
+        onSettled?.();
         return;
       }
       // This drop supersedes whatever the last run produced. Retire it now rather than when routing
@@ -360,11 +440,20 @@ const useUnifiedApplyDrop = (
         activeDropsRef.current.set(dropController, "bundle");
       };
       const runRoute = () =>
-        routeUnifiedDrop(files, controller, onBundleSession, isCancelled, updatePending, dropController.signal, {
-          ...(mayContainBundle ? { beforeNonBundleDelivery: () => previousRoute } : {}),
-          rememberBundleSourceCleanup,
-          onBundleDetected: promoteToBundle,
-        });
+        routeUnifiedDrop(
+          files,
+          controller,
+          onBundleSession,
+          isCancelled,
+          updatePending,
+          dropController.signal,
+          {
+            ...(mayContainBundle ? { beforeNonBundleDelivery: () => previousRoute } : {}),
+            rememberBundleSourceCleanup,
+            onBundleDetected: promoteToBundle,
+          },
+          selectFile,
+        );
       // Input callbacks mutate ordered ROM/patch stacks. Serialize delivery so a small later patch cannot
       // overtake an earlier archive/bundle that is still being identified or downloaded. Potential
       // bundles identify concurrently; a real bundle supersedes prior routes, while an ordinary
@@ -384,9 +473,10 @@ const useUnifiedApplyDrop = (
           outerSignal?.removeEventListener("abort", abortDrop);
           activeDropsRef.current.delete(dropController);
           clearPending();
+          onSettled?.();
         });
     },
-    [controller, onError, onBundleSession, rememberBundleSourceCleanup],
+    [controller, onError, onBundleSession, rememberBundleSourceCleanup, selectFile],
   );
 
   return { onDrop, pendingDrops };

@@ -444,9 +444,9 @@
   display: flex;
   align-items: center;
   width: fit-content;
-  padding: 3px 16px 3px 9px;
-  margin-block-end: 6px;
-  font-size: 0.66rem;
+  padding: 2px 9px;
+  margin-block-end: 3px;
+  font-size: 0.62rem;
   font-weight: 800;
   color: var(--ink);
   text-transform: uppercase;
@@ -458,11 +458,9 @@
   inset: 0;
   z-index: -1;
   content: "";
-  background: linear-gradient(90deg, var(--thread) 45%, transparent 96%);
-  border-radius: 2px 0 0 2px;
-  opacity: 0.2;
-  mask-image: var(--weave-mask);
-  mask-size: 7px 7px;
+  background: linear-gradient(90deg, var(--thread) 35%, transparent 100%);
+  border-radius: 2px;
+  opacity: 0.1;
 }
 .rw-app .ck-group-title {
   display: block;
@@ -471,13 +469,33 @@
   font-size: 0.72rem;
   color: var(--ink-3);
 }
-.rw-app .patch-checks-explanation {
+.rw-app .patch-checks-context {
+  display: grid;
   grid-column: 1 / -1;
-  padding-inline: 9px;
-  margin: 6px 0 0;
+  gap: 5px;
+  padding: 7px 9px;
+  margin: 3px 0 5px;
+  background: color-mix(in oklab, var(--well) 58%, transparent);
+  border-block: 1px solid var(--ck-seam);
+}
+.rw-app .patch-checks-context-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px var(--sp-s);
+  align-items: center;
+  justify-content: space-between;
+}
+.rw-app .patch-checks-execution {
+  min-width: 0;
+  margin: 0;
   font-size: 0.72rem;
+  font-weight: 650;
   line-height: 1.35;
-  color: var(--ink-3);
+  color: var(--ink-2);
+}
+.rw-app .patch-checks-context .patch-execution-grp {
+  min-width: 0;
+  color: var(--thread-text);
 }
 .rw-app .ck {
   /* The label track floor aligns independently gridded rows. */

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 
 import {
+  DATABASE_SOURCE_FILE,
   expandCheatShard,
   storeCheat,
   validateStoredShard,
@@ -158,7 +159,7 @@ test("parseCht preserves unknown escapes and reports malformed quotes", () => {
   assert.throws(() => parseCht("cheat0_code = 1234", { maxFileBytes: 2 }), /limit is 2 bytes/u);
   const [malformed] = parseCht('cheat0_desc = "broken');
   assert.equal(malformed.description, "broken");
-  assert.match(malformed.importWarnings[0], /unterminated quoted value/u);
+  assert.equal(malformed.importWarnings[0], "Line 1 has an unterminated quoted value.");
   const [bom] = parseCht("\uFEFFcheat0_code = 1234\n");
   assert.equal(bom.rawCode, "1234");
 });
@@ -217,39 +218,37 @@ test("buildCheatShard uses stable IDs and exact checksum title associations", ()
   assert.equal(first.games.length, 1);
 
   const matched = first.games.find((game) => game.title === "Test Game (USA)");
-  assert.equal(matched.sourceFiles.length, 2);
+  assert.ok(!("sourceFiles" in matched), "stored game carries sourceFiles");
   assert.equal(matched.checksums.length, 1);
   assert.equal(matched.checksums[0].crc32, "abcdef01");
   assert.deepEqual(matched.regions, ["USA"]);
   // cheat2 (placeholder "7E1234??") and cheat7 (structured address/value/handler
   // fields) are dropped by the prefilter; cheat9 and cheat11 share one stable
-  // ID, so 3 records remain of the original 6.
-  assert.equal(matched.cheats.length, 3);
+  // ID; cheat0 repeats the Game Genie file's cheat4 without a code kind, so 2
+  // records remain of the original 6.
+  assert.equal(matched.cheats.length, 2);
   // The file stores nothing a reader can derive: no per-record id, system,
-  // gameId, or sourceRevision, and the source file is an index.
+  // gameId, or sourceRevision, and no source file.
   assert.equal(first.sourceRevision, REVISION);
   const storedKeys = new Set(matched.cheats.flatMap((cheat) => Object.keys(cheat)));
-  for (const derived of ["id", "system", "gameId", "sourceRevision"]) {
+  for (const derived of ["id", "system", "gameId", "sourceRevision", "sourceFile"]) {
     assert.ok(!storedKeys.has(derived), `stored record carries ${derived}`);
   }
-  const fileOf = (cheat) => matched.sourceFiles[cheat.sourceFile];
-  assert.ok(
-    matched.cheats
-      .filter((cheat) => fileOf(cheat).includes("Game Genie"))
-      .every((cheat) => cheat.codeKind === "game-genie"),
-  );
-  assert.ok(
-    matched.cheats.filter((cheat) => !fileOf(cheat).includes("Game Genie")).every((cheat) => !("codeKind" in cheat)),
+  // Both survivors come from the Game Genie file, and the kind is all that
+  // records which file that was.
+  assert.deepEqual(
+    matched.cheats.map((cheat) => cheat.codeKind),
+    ["game-genie", "game-genie"],
   );
   // desc, code, and a false enable are restored on read, so only the enabled
   // record and the unknown field reach the stored rawFields.
   assert.deepEqual(
     matched.cheats.map((cheat) => cheat.rawFields),
-    [{ enable: "true", unknown_field: "keep\\this" }, undefined, { unknown_field: "keep\\this" }],
+    [{ enable: "true", unknown_field: "keep\\this" }, undefined],
   );
   assert.deepEqual(
     matched.cheats.map((cheat) => cheat.description),
-    ['Infinite "Things"', "A distinct variant", 'Infinite "Things"'],
+    ['Infinite "Things"', "A distinct variant"],
   );
 
   const missing = first.games.find((game) => game.title === "Unknown Homebrew (World)");
@@ -272,12 +271,12 @@ test("expandCheatShard restores every derived field and the builder's stable IDs
   const expanded = await expandCheatShard(JSON.parse(encodeCheatShard(shard)), nodeSha256Hex);
   assert.deepEqual(Object.keys(expanded), ["schemaVersion", "system", "games"]);
   const [game] = expanded.games;
-  assert.equal(game.cheats.length, 3);
+  assert.equal(game.cheats.length, 2);
   for (const cheat of game.cheats) {
     assert.equal(cheat.system, "nes");
     assert.equal(cheat.gameId, game.id);
     assert.equal(cheat.sourceRevision, REVISION);
-    assert.ok(game.sourceFiles.includes(cheat.sourceFile));
+    assert.equal(cheat.sourceFile, DATABASE_SOURCE_FILE);
     assert.equal(cheat.rawFields.desc, cheat.description);
     assert.equal(cheat.rawFields.code, cheat.rawCode);
     assert.equal(cheat.id, stableCheatId("nes", game.id, cheat));
@@ -288,12 +287,12 @@ test("expandCheatShard restores every derived field and the builder's stable IDs
   assert.deepEqual(Object.keys(enabled.rawFields), ["desc", "code", "enable", "unknown_field"]);
   assert.equal(enabled.rawFields.unknown_field, "keep\\this");
   assert.equal(enabled.codeKind, "game-genie");
-  assert.equal(new Set(game.cheats.map((cheat) => cheat.id)).size, 3);
+  assert.equal(new Set(game.cheats.map((cheat) => cheat.id)).size, 2);
 });
 
-test("expandCheatShard defaults a record without desc and rejects a bad source file index", async () => {
+test("expandCheatShard defaults a record without desc", async () => {
   const stored = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     system: "nes",
     sourceRevision: "rev",
     games: [
@@ -303,9 +302,8 @@ test("expandCheatShard defaults a record without desc and rejects a bad source f
         normalizedTitle: "x",
         regions: [],
         revisions: [],
-        sourceFiles: ["cht/x.cht"],
         checksums: [],
-        cheats: [{ rawCode: "AKE-LVS", sourceFile: 0, sourceIndex: 4 }],
+        cheats: [{ rawCode: "AKE-LVS", sourceIndex: 4 }],
       },
     ],
   };
@@ -314,25 +312,23 @@ test("expandCheatShard defaults a record without desc and rejects a bad source f
   assert.equal(cheat.description, "Cheat 5");
   assert.deepEqual(cheat.rawFields, { code: "AKE-LVS", enable: "false" });
   assert.equal(cheat.id, "cheat_83275ab42d2759effefab00f");
-  stored.games[0].cheats[0].sourceFile = 1;
-  await assert.rejects(() => expandCheatShard(stored, nodeSha256Hex), /source file/u);
 });
 
 test("validateStoredShard rejects records the Rust loader would read differently", () => {
   const game = (cheat) => ({
-    schemaVersion: 1,
+    schemaVersion: 2,
     system: "nes",
     sourceRevision: "rev",
-    games: [{ id: "game_x", title: "X", sourceFiles: ["cht/x.cht"], cheats: [cheat] }],
+    games: [{ id: "game_x", title: "X", cheats: [cheat] }],
   });
-  const good = { rawCode: "AKE-LVS", sourceFile: 0, sourceIndex: 0 };
+  const good = { rawCode: "AKE-LVS", sourceIndex: 0 };
   assert.equal(validateStoredShard(game(good)).games[0].cheats[0].rawCode, "AKE-LVS");
   assert.throws(() => validateStoredShard(game({ ...good, description: null })), /description/u);
   assert.throws(() => validateStoredShard(game({ ...good, codeKind: "gameshark" })), /codeKind/u);
   assert.throws(() => validateStoredShard(game({ ...good, rawFields: { enable: true } })), /enable/u);
-  assert.throws(() => validateStoredShard(game({ ...good, sourceFile: -1 })), /index/u);
+  assert.throws(() => validateStoredShard(game({ ...good, sourceIndex: -1 })), /index/u);
   assert.throws(() => validateStoredShard(game({ ...good, sourceIndex: 1.5 })), /index/u);
-  assert.throws(() => validateStoredShard({ ...game(good), schemaVersion: 2 }), /schema/u);
+  assert.throws(() => validateStoredShard({ ...game(good), schemaVersion: 1 }), /schema/u);
   assert.throws(() => validateStoredShard({ ...game(good), games: [{ id: "g" }] }), /title/u);
 });
 
@@ -344,14 +340,13 @@ test("storeCheat refuses a record whose description or rawCode drifted from its 
     sourceFile: "cht/x.cht",
     sourceIndex: 0,
   };
-  assert.deepEqual(storeCheat(record, ["cht/x.cht"]), {
+  assert.deepEqual(storeCheat(record), {
     description: "Lives",
     rawCode: "AAAA",
-    sourceFile: 0,
     sourceIndex: 0,
   });
-  assert.throws(() => storeCheat({ ...record, description: "Other" }, ["cht/x.cht"]), /description/u);
-  assert.throws(() => storeCheat({ ...record, rawCode: "BBBB" }, ["cht/x.cht"]), /rawCode/u);
+  assert.throws(() => storeCheat({ ...record, description: "Other" }), /description/u);
+  assert.throws(() => storeCheat({ ...record, rawCode: "BBBB" }), /rawCode/u);
 });
 
 test("stable cheat IDs ignore enable state but retain distinct record semantics", () => {
@@ -390,6 +385,34 @@ test("GBA device annotations use the Xploder decoder family", () => {
   });
 
   assert.equal(shard.games[0].cheats[0].codeKind, "xploder");
+});
+
+test("Game Boy device file names give a kind hint that leaves the cheat ID alone", async () => {
+  const build = (fileName) =>
+    buildCheatShard({
+      cheatSystem: "gameboy",
+      files: [
+        {
+          sourcePath: `cht/Nintendo - Game Boy/${fileName}`,
+          text: 'cheat0_desc = "Lives"\ncheat0_code = "00A-17B-C49"\n',
+        },
+      ],
+      releases: [],
+      sourceRevision: REVISION,
+    });
+  const [cheat] = build("Public Test (USA) (Xploder).cht").games[0].cheats;
+  assert.equal(cheat.codeKind, undefined);
+  assert.equal(cheat.kindHint, "xploder");
+  assert.equal(build("Public Test (USA) (Code Breaker).cht").games[0].cheats[0].kindHint, "xploder");
+  assert.equal(build("Public Test (USA).cht").games[0].cheats[0].kindHint, undefined);
+  // An annotation the importer already read stays the ID-bearing codeKind.
+  assert.equal(build("Public Test (USA) (GameShark).cht").games[0].cheats[0].codeKind, "pro-action-replay");
+
+  const shard = build("Public Test (USA) (Xploder).cht");
+  const expanded = await expandCheatShard(JSON.parse(encodeCheatShard(shard)), nodeSha256Hex);
+  const [record] = expanded.games[0].cheats;
+  assert.equal(record.codeKind, "xploder");
+  assert.equal(record.id, stableCheatId("gameboy", record.gameId, { rawFields: record.rawFields }));
 });
 
 test("buildCheatShard refuses to build without a system or revision", () => {
@@ -466,6 +489,57 @@ test("isBakeableCandidate: mastersystem, gamegear, sg1000 drop RAM forms, keep G
     assert.equal(isBakeableCandidate(cheatSystem, record("C000:01")), false); // Fusion RAM code
     assert.equal(isBakeableCandidate(cheatSystem, record("1F2-3C4")), true); // Game Genie
   }
+});
+
+test("buildCheatShard collapses a code repeated across device files, keeping its code kind", () => {
+  const shard = buildCheatShard({
+    cheatSystem: "nes",
+    files: [
+      {
+        sourcePath: `${NES_DIRECTORY}/Repeat Game (USA).cht`,
+        text: 'cheat0_desc = "Infinite  Lives"\ncheat0_code = "sxiopo"\ncheat1_desc = "Start with 9 lives"\ncheat1_code = "PEUZUGAA"\n',
+      },
+      {
+        sourcePath: `${NES_DIRECTORY}/Repeat Game (USA) (Game Genie).cht`,
+        text: 'cheat0_desc = "infinite lives"\ncheat0_code = "SXIOPO"\ncheat1_desc = "Start with 10 lives"\ncheat1_code = "PEUZUGAA"\n',
+      },
+    ],
+    releases: [],
+    sourceRevision: REVISION,
+  });
+  const [game] = shard.games;
+  const byDescription = Object.fromEntries(game.cheats.map((cheat) => [cheat.description, cheat]));
+  // Same code and description differ only by case and spacing: one record, the
+  // one that names its code kind. The same code under a different description
+  // is a different cheat and stays.
+  assert.deepEqual(Object.keys(byDescription).sort(), ["Start with 10 lives", "Start with 9 lives", "infinite lives"]);
+  assert.equal(byDescription["infinite lives"].codeKind, "game-genie");
+});
+
+test("buildCheatShard keeps one record per code kind when device files disagree", () => {
+  const cheat = (desc) => `cheat0_desc = "${desc}"\ncheat0_code = "808000EA"\n`;
+  const shard = buildCheatShard({
+    cheatSystem: "snes",
+    files: [
+      {
+        sourcePath: "cht/Nintendo - Super Nintendo Entertainment System/Kinds (USA) (Game Genie).cht",
+        text: cheat("Lives"),
+      },
+      {
+        sourcePath: "cht/Nintendo - Super Nintendo Entertainment System/Kinds (USA) (Pro Action Replay).cht",
+        text: cheat("Lives"),
+      },
+      {
+        sourcePath: "cht/Nintendo - Super Nintendo Entertainment System/Kinds (USA) (Action Replay).cht",
+        text: cheat("lives "),
+      },
+      { sourcePath: "cht/Nintendo - Super Nintendo Entertainment System/Kinds (USA).cht", text: cheat("LIVES") },
+    ],
+    releases: [],
+    sourceRevision: REVISION,
+  });
+  const [game] = shard.games;
+  assert.deepEqual(game.cheats.map((entry) => entry.codeKind).sort(), ["game-genie", "pro-action-replay"]);
 });
 
 test("a game left with only dropped records disappears from the shard", () => {

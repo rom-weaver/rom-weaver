@@ -51,11 +51,10 @@ const shard: CheatSystemShard = {
       normalizedTitle: "super mario bros",
       regions: ["USA"],
       revisions: [],
-      sourceFiles: ["Super Mario Bros (USA).cht"],
       title: "Super Mario Bros",
     },
   ],
-  schemaVersion: 1,
+  schemaVersion: 2,
   system: "nes",
 };
 
@@ -145,6 +144,13 @@ describe("CreateCheatCodesPanel", () => {
       const entries = onEntriesChange.mock.calls.at(-1)?.[0] as Array<{ code: string }>;
       expect(entries.map((entry) => entry.code)).toEqual(["SXIOPO", "7E0DBE3F"]);
     });
+  });
+
+  it("removes only the clicked card's code when the same code is typed twice", async () => {
+    const { onValueChange, view } = renderPanel("SXIOPO\n7E0DBE3F\nSXIOPO");
+    await waitFor(() => expect(view.getAllByRole("button", { name: "Remove code SXIOPO" })).toHaveLength(2));
+    fireEvent.click(view.getAllByRole("button", { name: "Remove code SXIOPO" })[1] as HTMLElement);
+    expect(onValueChange).toHaveBeenCalledWith("SXIOPO\n7E0DBE3F");
   });
 
   it("disables the unbakeable row in the picker", async () => {

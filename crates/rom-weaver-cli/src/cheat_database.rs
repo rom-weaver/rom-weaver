@@ -22,7 +22,12 @@ use tracing::{debug, trace};
 use crate::cheats::{CheatKind, CheatRecord, CheatResolution, CheatSystem, ClassifiedCheatRecord};
 
 /// The only `schemaVersion` this loader reads; `shard-format.mjs` writes it.
-const CHEAT_SHARD_SCHEMA_VERSION: u32 = 1;
+const CHEAT_SHARD_SCHEMA_VERSION: u32 = 2;
+
+/// The `source_file` of every database record. Shards do not store the
+/// Libretro file a record came from; mirrors `DATABASE_SOURCE_FILE` in
+/// `shard-format.mjs`.
+const DATABASE_SOURCE_FILE: &str = "libretro-database";
 
 /// Overrides the cheat-database directory. `--cheat-database` wins over it.
 pub(crate) const CHEAT_DATABASE_ENV: &str = "ROM_WEAVER_CHEAT_DATABASE";
@@ -110,8 +115,6 @@ struct StoredGame {
     #[serde(default)]
     checksums: Vec<CheatGameChecksums>,
     #[serde(default)]
-    source_files: Vec<String>,
-    #[serde(default)]
     cheats: Vec<StoredCheat>,
 }
 
@@ -125,12 +128,15 @@ struct StoredCheat {
     raw_code: Option<String>,
     #[serde(default)]
     code_kind: Option<CheatKind>,
+    /// A kind read from other device words in the file name. It fills
+    /// `code_kind` on the record but stays out of the ID.
+    #[serde(default)]
+    kind_hint: Option<CheatKind>,
     /// Source fields other than `desc` and `code`; `enable` only when it is
     /// not `"false"`.
     #[serde(default)]
     raw_fields: BTreeMap<String, String>,
-    /// Index into the game's `sourceFiles`.
-    source_file: usize,
+    /// Numbers the `Cheat N` description of a record without `desc`.
     source_index: usize,
 }
 
@@ -205,17 +211,7 @@ fn expand_shard(stored: StoredShard, path: &Path) -> Result<CheatShard> {
     let mut games = Vec::with_capacity(stored.games.len());
     for game in stored.games {
         let mut cheats = Vec::with_capacity(game.cheats.len());
-        for (position, cheat) in game.cheats.into_iter().enumerate() {
-            let Some(source_file) = game.source_files.get(cheat.source_file).cloned() else {
-                return Err(RomWeaverError::Validation(format!(
-                    "the cheat database shard `{}` is not valid: cheat {position} of game `{}` \
-                     names source file {} but the game lists {} file(s)",
-                    path.display(),
-                    game.id,
-                    cheat.source_file,
-                    game.source_files.len()
-                )));
-            };
+        for cheat in game.cheats {
             let mut raw_fields = BTreeMap::new();
             if let Some(description) = &cheat.description {
                 raw_fields.insert("desc".to_owned(), description.clone());
@@ -237,9 +233,9 @@ fn expand_shard(stored: StoredShard, path: &Path) -> Result<CheatShard> {
                 game_id: game.id.clone(),
                 description,
                 raw_code: cheat.raw_code,
-                code_kind: cheat.code_kind,
+                code_kind: cheat.code_kind.or(cheat.kind_hint),
                 raw_fields,
-                source_file,
+                source_file: DATABASE_SOURCE_FILE.to_owned(),
                 source_index: cheat.source_index,
                 source_revision: stored.source_revision.clone(),
             });
@@ -766,23 +762,21 @@ mod tests {
     #[test]
     fn expand_shard_restores_the_derived_fields() {
         let stored: StoredShard = serde_json::from_value(serde_json::json!({
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "system": "nes",
             "sourceRevision": "rev",
             "games": [{
                 "id": "game_x",
                 "title": "X",
                 "normalizedTitle": "x",
-                "sourceFiles": ["cht/x.cht", "cht/y.cht"],
                 "checksums": [],
                 "cheats": [
-                    { "rawCode": "AKE-LVS", "sourceFile": 1, "sourceIndex": 4 },
+                    { "rawCode": "AKE-LVS", "sourceIndex": 4 },
                     {
                         "description": "Lives",
                         "rawCode": "AAAA",
                         "codeKind": "game-genie",
                         "rawFields": { "enable": "true", "extra": "1" },
-                        "sourceFile": 0,
                         "sourceIndex": 0
                     }
                 ]
@@ -794,7 +788,7 @@ mod tests {
         let first = &game.cheats[0];
         assert_eq!(first.id, "cheat_83275ab42d2759effefab00f");
         assert_eq!(first.description, "Cheat 5");
-        assert_eq!(first.source_file, "cht/y.cht");
+        assert_eq!(first.source_file, DATABASE_SOURCE_FILE);
         assert_eq!(first.source_revision, "rev");
         assert_eq!(first.game_id, "game_x");
         assert_eq!(
@@ -810,23 +804,12 @@ mod tests {
         assert_eq!(second.raw_fields["extra"], "1");
         assert_eq!(second.code_kind, Some(CheatKind::GameGenie));
 
-        let bad: StoredShard = serde_json::from_value(serde_json::json!({
-            "schemaVersion": 1,
-            "system": "nes",
-            "sourceRevision": "rev",
-            "games": [{ "id": "g", "title": "G", "sourceFiles": [],
-                "cheats": [{ "rawCode": "AKE-LVS", "sourceFile": 0, "sourceIndex": 0 }] }]
+        let previous: StoredShard = serde_json::from_value(serde_json::json!({
+            "schemaVersion": 1, "system": "nes", "sourceRevision": "rev", "games": []
         }))
         .expect("stored shard");
-        let error = expand_shard(bad, Path::new("shard.json")).expect_err("bad index");
-        assert!(error.to_string().contains("source file 0"), "{error}");
-
-        let future: StoredShard = serde_json::from_value(serde_json::json!({
-            "schemaVersion": 2, "system": "nes", "sourceRevision": "rev", "games": []
-        }))
-        .expect("stored shard");
-        let error = expand_shard(future, Path::new("shard.json")).expect_err("wrong version");
-        assert!(error.to_string().contains("schema version 2"), "{error}");
+        let error = expand_shard(previous, Path::new("shard.json")).expect_err("wrong version");
+        assert!(error.to_string().contains("schema version 1"), "{error}");
     }
 
     #[test]
@@ -836,7 +819,7 @@ mod tests {
         fs::create_dir_all(&directory).expect("directory");
         let slug = shard_slug(CheatSystem::Nes).expect("slug");
         let shard = serde_json::json!({
-            "schemaVersion": 1,
+            "schemaVersion": 2,
             "system": "nes",
             "sourceRevision": "test",
             "games": [],

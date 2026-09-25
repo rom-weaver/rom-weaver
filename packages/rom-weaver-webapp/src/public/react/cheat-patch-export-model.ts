@@ -4,11 +4,7 @@ import { cheatDelivery, type ClassifiedCheatRecord } from "../../lib/cheats/inde
 import { getFileNameWithoutExtension } from "../../lib/input/path-utils.ts";
 import { sanitizeCheatPatchNamePart, toCheatPatchNameSuffix } from "./cheat-patch-name.ts";
 
-/**
- * Pure projections for "Save as patch" on the apply workflow's Cheats step: it
- * bakes the ROM cheats that are On into a standalone patch. A cheat the decoder
- * could not resolve into ROM writes is not selectable, so nothing is left out.
- */
+/** Pure projections for a cheat card's standalone patch download. */
 
 /** How many cheat descriptions the file name spells out before "and N more". */
 const MAX_NAMED_CHEATS = 3;
@@ -53,8 +49,8 @@ const getCheatPatchFileName = (romTitle: string, records: readonly ClassifiedChe
   return `${stem} - ${toCheatPatchNameSuffix(suffix) || "cheats"}.${String(format || "ips").toLowerCase()}`;
 };
 
-/** The line shown under the cards after a successful export. */
+/** The line shown in the cheat section after a successful export. */
 const getCheatPatchStatus = (fileName: string, romCount: number): string =>
-  `Created ${fileName} from the ${romCount} ROM cheat${romCount === 1 ? "" : "s"} that ${romCount === 1 ? "is" : "are"} On.`;
+  `Created ${fileName} from ${romCount} ROM cheat${romCount === 1 ? "" : "s"}.`;
 
 export { getCheatPatchCodes, getCheatPatchFileName, getCheatPatchFormat, getCheatPatchStatus, getRomCheats };

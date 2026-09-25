@@ -8,7 +8,9 @@ use std::rc::Rc;
 
 use rom_weaver_checksum::identify_catalog::{IdentifyCatalog, IdentifyPlatformCatalogEntry};
 #[cfg(not(target_arch = "wasm32"))]
-use rom_weaver_checksum::identify_catalog::{IdentifySource, normalize_platform_name};
+use rom_weaver_checksum::identify_catalog::{
+    IdentifySource, import_platform_aliases as curated_aliases, normalize_platform_name,
+};
 use rom_weaver_checksum::identify_pack::IdentifyPackFile;
 #[cfg(not(target_arch = "wasm32"))]
 use rom_weaver_checksum::identify_pack_types::{
@@ -159,118 +161,6 @@ fn media_profile_for(platform: &str) -> &'static str {
         "Sega Dreamcast" => "redump-gdrom-track-v1",
         _ if redump_endpoint(platform).is_some() => "redump-cd-track-v1",
         _ => "nointro-single-image-v1",
-    }
-}
-
-/// Mirror of `CURATED_ALIASES` in the builder script, for imported platforms.
-#[cfg(not(target_arch = "wasm32"))]
-fn curated_aliases(platform: &str) -> &'static [&'static str] {
-    match normalize_platform_name(platform).as_str() {
-        "atari 2600" => &["2600", "atari vcs", "vcs", "atari2600"],
-        "atari 5200" => &["5200", "atari5200"],
-        "atari 7800" => &["7800", "atari7800"],
-        "atari lynx" => &["lynx", "atarilynx"],
-        "atari jaguar cd" | "atari jaguar cd interactive multimedia system" => {
-            &["atari jaguar cd", "jaguar cd", "ajcd"]
-        }
-        "microsoft xbox" => &["xbox"],
-        "microsoft xbox 360" => &["xbox 360", "xbox360"],
-        "nec pc engine cd turbografx cd" => &[
-            "pc engine cd",
-            "pcenginecd",
-            "pcecd",
-            "turbografx cd",
-            "tg-cd",
-            "pce cd",
-        ],
-        "family computer disk system" => &["fds", "famicom disk system"],
-        "nintendo famicom disk system" => &["nintendo fds"],
-        "nintendo family computer disk system" => &["fds", "famicom disk system", "nintendo fds"],
-        "nintendo 3ds" => &["3ds", "n3ds", "new3ds"],
-        "nintendo 64" => &["n64", "n64dd", "64dd"],
-        "nintendo nintendo 64" => &["nintendo 64", "n64", "n64dd", "64dd"],
-        "nintendo ds" => &["nds", "ds", "dsi"],
-        "nintendo nintendo ds" => &["nintendo ds", "nds", "ds", "dsi"],
-        "nintendo entertainment system" => &[
-            "nes",
-            "famicom",
-            "nintendo famicom",
-            "family computer",
-            "fc",
-        ],
-        "nintendo nintendo entertainment system" => &[
-            "nintendo entertainment system",
-            "nes",
-            "famicom",
-            "nintendo famicom",
-            "family computer",
-            "fc",
-        ],
-        "nintendo game boy" => &["game boy", "gameboy", "gb", "sgb"],
-        "nintendo game boy advance" => &["game boy advance", "gameboy advance", "gba", "ereader"],
-        "nintendo game boy color" => &["game boy color", "gameboy color", "gbc"],
-        "nintendo gamecube" => &["gamecube", "gc", "ngc"],
-        "nintendo super nintendo entertainment system" => &[
-            "snes",
-            "sfc",
-            "sfam",
-            "snesna",
-            "satellaview",
-            "super famicom",
-            "super nintendo",
-            "super nes",
-            "sufami",
-            "sufami turbo",
-        ],
-        "nintendo virtual boy" => &["virtual boy"],
-        "nintendo wii" => &["wii"],
-        "nintendo wii u" => &["wii u", "wiiu"],
-        "neo geo pocket" | "snk neo geo pocket" => &["neo geo pocket", "ngp"],
-        "neo geo pocket color" | "snk neo geo pocket color" => {
-            &["neo geo pocket color", "neo geo pocket colour", "ngpc"]
-        }
-        "neo geo cd" | "snk neo geo cd" => &["neo geo cd", "ngcd", "neogeocd", "neocd"],
-        "sega 32x" => &[
-            "32x",
-            "megadrive 32x",
-            "sega32",
-            "sega32x",
-            "sega32xjp",
-            "sega32xna",
-        ],
-        "sega dreamcast" => &["dreamcast", "dc"],
-        "sega game gear" => &["game gear", "gamegear", "gg"],
-        "sega master system mark iii" => &["master system", "mastersystem", "mark3", "sms", "ms"],
-        "sega mega drive genesis" => &[
-            "genesis",
-            "mega drive",
-            "megadrive",
-            "megadrivejp",
-            "md",
-            "smd",
-            "sega genesis",
-            "sega mega drive",
-        ],
-        "sega mega cd sega cd" => &[
-            "mega cd", "megacd", "megacdjp", "sega cd", "segacd", "mcd", "scd",
-        ],
-        "sega saturn" => &["saturn", "saturnjp", "ss"],
-        "sony playstation" => &["playstation", "psx", "ps1", "ps"],
-        "sony playstation 2" => &["ps2", "playstation 2", "play station 2"],
-        "sony playstation 3" => &["playstation 3", "ps3"],
-        "sony playstation portable" => &["psp", "playstation portable", "psminis", "psp minis"],
-        "sony playstation vita" => &["playstation vita", "psvita", "vita"],
-        "nec pc engine turbografx 16" => &[
-            "turbografx-16 pc engine",
-            "turbografx",
-            "turbografx 16",
-            "tg16",
-            "pc engine",
-            "pcengine",
-            "pce",
-            "supergrafx",
-        ],
-        _ => &[],
     }
 }
 
@@ -923,7 +813,7 @@ fn write_merged_catalog(
     for system in imported {
         let mut aliases: Vec<String> = vec![normalize_platform_name(&system.platform)];
         for alias in curated_aliases(&system.platform) {
-            let normalized = normalize_platform_name(alias);
+            let normalized = normalize_platform_name(&alias);
             if !aliases.contains(&normalized) {
                 aliases.push(normalized);
             }

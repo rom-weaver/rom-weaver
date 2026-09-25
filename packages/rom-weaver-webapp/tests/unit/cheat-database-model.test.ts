@@ -41,7 +41,7 @@ const cheatRecord = (id: string, description: string): CheatRecord => ({
 });
 
 const shard: CheatSystemShard = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   system: "snes",
   games: [
     {
@@ -50,7 +50,6 @@ const shard: CheatSystemShard = {
       normalizedTitle: "super mario world",
       regions: ["USA"],
       revisions: ["Rev 1"],
-      sourceFiles: ["Super Mario World (USA).cht"],
       checksums: [{ sha1: "AA11", crc32: "BB22" }, { crc32: "CC33" }],
       cheats: [raw("rom", "Infinite lives"), raw("ram", "Infinite health")],
     },

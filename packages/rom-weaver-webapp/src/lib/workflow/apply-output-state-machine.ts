@@ -7,7 +7,7 @@ import {
 } from "../compression/container-format-registry.ts";
 import { appendFileNameExtension, getFileNameWithoutExtension, stripFileNameQuery } from "../input/path-utils.ts";
 import { identifiedOutputBaseName } from "../../presentation/identify-title.ts";
-import { buildPatchedOutputBaseName } from "../output/output-name-composition.ts";
+import { buildCheatOutputBaseName, buildPatchedOutputBaseName } from "../output/output-name-composition.ts";
 import { getFileNameExtension } from "../path-utils.ts";
 import type { InputSession } from "./apply-workflow-state.ts";
 import { getSourceFileName, getSourceSize } from "./controller-utils.ts";
@@ -110,14 +110,20 @@ const recomputeApplyOutputState = (
     input,
     inputSession,
     patchOutputNames,
+    cheatNames = [],
   }: {
     input: ApplyWorkflowInputState | null;
     inputSession?: InputSession<unknown>;
     patchOutputNames: string[];
+    cheatNames?: string[];
   },
 ): void => {
   if (!state.manualOutputFormat) state.outputFormat = resolveAutomaticFormat(inputSession, settings);
-  if (!state.manualOutputName) state.outputName = buildAutomaticOutputName(state, input, patchOutputNames, settings);
+  if (!state.manualOutputName)
+    state.outputName = buildCheatOutputBaseName(
+      buildAutomaticOutputName(state, input, patchOutputNames, settings),
+      cheatNames,
+    );
 };
 
 // A multi-track disc's "primary" resolved file is a track (e.g. `track01.bin`), a poor output name.

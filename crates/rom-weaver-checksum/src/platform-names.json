@@ -1,0 +1,878 @@
+{
+  "abbreviations": {
+    "Atari 2600": "A2600",
+    "Atari 5200": "A5200",
+    "Atari 7800": "A7800",
+    "Atari Lynx": "LYNX",
+    "Microsoft Xbox": "XBOX",
+    "NEC PC-Engine CD & TurboGrafx-16 CD": "PCE-CD",
+    "Neo Geo Pocket": "NGP",
+    "Neo Geo Pocket Color": "NGPC",
+    "Nintendo 3DS": "3DS",
+    "Nintendo 64": "N64",
+    "Nintendo DS": "NDS",
+    "Nintendo Entertainment System": "NES",
+    "Nintendo Famicom Disk System": "FDS",
+    "Nintendo Family Computer Disk System": "FDS",
+    "Nintendo Game Boy": "GB",
+    "Nintendo Game Boy Advance": "GBA",
+    "Nintendo Game Boy Color": "GBC",
+    "Nintendo GameCube": "GC",
+    "Nintendo Super Nintendo Entertainment System": "SNES",
+    "Nintendo Wii": "WII",
+    "Nintendo Wii U": "WIIU",
+    "PC Engine - TurboGrafx 16": "PCE",
+    "PC Engine CD - TurboGrafx-CD": "PCE-CD",
+    "Sega 32X": "32X",
+    "Sega Dreamcast": "DC",
+    "Sega Game Gear": "GG",
+    "Sega Master System": "SMS",
+    "Sega Mega CD _ Sega CD": "SCD",
+    "Sega Mega Drive _ Genesis": "GEN",
+    "Sega Mega-CD - Sega CD": "SCD",
+    "Sega Saturn": "SAT",
+    "Sony PlayStation": "PSX",
+    "Sony PlayStation 2": "PS2",
+    "Sony PlayStation 3": "PS3",
+    "Sony PlayStation Vita": "VITA",
+    "Sony Playstation Portable": "PSP",
+    "Super Nintendo Entertainment System": "SNES",
+    "TurboGrafx-16_PC Engine": "PCE",
+    "Master System - Mark III": "SMS",
+    "Mega Drive - Genesis": "GEN"
+  },
+  "aliases": {
+    "Acorn Archimedes": [
+      "archimedes"
+    ],
+    "Apple Macintosh": [
+      "macintosh",
+      "mac"
+    ],
+    "Atari - 2600": [
+      "atari 2600",
+      "2600",
+      "atari vcs",
+      "vcs",
+      "atari2600"
+    ],
+    "Atari - 5200": [
+      "atari 5200",
+      "5200",
+      "atari5200"
+    ],
+    "Atari - 7800": [
+      "atari 7800",
+      "7800",
+      "atari7800"
+    ],
+    "Atari - Jaguar CD": [
+      "atari jaguar cd",
+      "jaguar cd",
+      "ajcd"
+    ],
+    "Atari - Lynx": [
+      "atari lynx",
+      "lynx",
+      "atarilynx"
+    ],
+    "Atari 2600": [
+      "2600",
+      "atari vcs",
+      "vcs",
+      "atari2600"
+    ],
+    "Atari 5200": [
+      "5200",
+      "atari5200"
+    ],
+    "Atari 7800": [
+      "7800",
+      "atari7800"
+    ],
+    "Atari Jaguar CD Interactive Multimedia System": [
+      "atari jaguar cd",
+      "jaguar cd",
+      "ajcd"
+    ],
+    "Atari Lynx": [
+      "lynx",
+      "atarilynx"
+    ],
+    "Bandai Pippin": [
+      "pippin"
+    ],
+    "Bandai Playdia Quick Interactive System": [
+      "playdia"
+    ],
+    "Commodore Amiga CD": [
+      "amiga cd"
+    ],
+    "Commodore Amiga CD32": [
+      "amiga cd32",
+      "cd32"
+    ],
+    "Commodore Amiga CDTV": [
+      "amiga cdtv",
+      "cdtv"
+    ],
+    "Fujitsu FM Towns series": [
+      "fm towns"
+    ],
+    "IBM PC compatible": [
+      "ibm pc",
+      "pc"
+    ],
+    "Incredible Technologies Eagle": [
+      "eagle"
+    ],
+    "Konami FireBeat": [
+      "firebeat"
+    ],
+    "Konami System 573": [
+      "system 573"
+    ],
+    "Konami System GV": [
+      "system gv"
+    ],
+    "Konami e-Amusement": [
+      "e-amusement"
+    ],
+    "Mattel Fisher-Price iXL": [
+      "ixl"
+    ],
+    "Mattel HyperScan": [
+      "hyperscan"
+    ],
+    "Memorex Visual Information System": [
+      "vis"
+    ],
+    "Microsoft - Xbox": [
+      "xbox"
+    ],
+    "Microsoft Xbox": [
+      "xbox"
+    ],
+    "Microsoft Xbox 360": [
+      "xbox 360",
+      "xbox360"
+    ],
+    "NEC - PC Engine - TurboGrafx 16": [
+      "turbografx-16 pc engine",
+      "turbografx",
+      "turbografx 16",
+      "tg16",
+      "pc engine",
+      "pcengine",
+      "pce",
+      "supergrafx"
+    ],
+    "NEC - PC Engine CD - TurboGrafx-CD": [
+      "pc engine cd",
+      "pcenginecd",
+      "pcecd",
+      "turbografx cd",
+      "tg-cd",
+      "pce cd"
+    ],
+    "NEC PC Engine CD & TurboGrafx CD": [
+      "pc engine cd",
+      "pcenginecd",
+      "pcecd",
+      "turbografx cd",
+      "tg-cd",
+      "pce cd"
+    ],
+    "NEC PC-88 series": [
+      "pc-88",
+      "pc88"
+    ],
+    "NEC PC-98 series": [
+      "pc-98",
+      "pc98"
+    ],
+    "NEC PC-FX & PC-FXGA": [
+      "pc-fx",
+      "pcfx"
+    ],
+    "Namco - Sega - Nintendo Triforce": [
+      "triforce"
+    ],
+    "Namco System 246": [
+      "system 246"
+    ],
+    "Neo Geo CD": [
+      "neo geo cd",
+      "ngcd",
+      "neogeocd",
+      "neocd"
+    ],
+    "Neo Geo Pocket": [
+      "ngp"
+    ],
+    "Neo Geo Pocket Color": [
+      "ngpc",
+      "neo geo pocket color",
+      "neo geo pocket colour"
+    ],
+    "Nintendo - Family Computer Disk System": [
+      "fds",
+      "famicom disk system",
+      "nintendo fds"
+    ],
+    "Nintendo - Game Boy": [
+      "nintendo game boy",
+      "game boy",
+      "gameboy",
+      "gb",
+      "sgb"
+    ],
+    "Nintendo - Game Boy Advance": [
+      "nintendo game boy advance",
+      "game boy advance",
+      "gameboy advance",
+      "gba",
+      "ereader"
+    ],
+    "Nintendo - Game Boy Color": [
+      "nintendo game boy color",
+      "game boy color",
+      "gameboy color",
+      "gbc"
+    ],
+    "Nintendo - GameCube": [
+      "nintendo gamecube",
+      "gamecube",
+      "gc",
+      "ngc"
+    ],
+    "Nintendo - Nintendo 3DS": [
+      "nintendo 3ds",
+      "3ds",
+      "n3ds",
+      "new3ds"
+    ],
+    "Nintendo - Nintendo 64": [
+      "nintendo 64",
+      "n64",
+      "n64dd",
+      "64dd"
+    ],
+    "Nintendo - Nintendo DS": [
+      "nintendo ds",
+      "nds",
+      "ds",
+      "dsi"
+    ],
+    "Nintendo - Nintendo Entertainment System": [
+      "nintendo entertainment system",
+      "nes",
+      "famicom",
+      "nintendo famicom",
+      "family computer",
+      "fc"
+    ],
+    "Nintendo - Super Nintendo Entertainment System": [
+      "nintendo super nintendo entertainment system",
+      "snes",
+      "sfc",
+      "sfam",
+      "snesna",
+      "satellaview",
+      "sufami",
+      "super famicom",
+      "super nintendo",
+      "super nes",
+      "sufami turbo"
+    ],
+    "Nintendo - Virtual Boy": [
+      "nintendo virtual boy",
+      "virtual boy"
+    ],
+    "Nintendo - Wii": [
+      "nintendo wii",
+      "wii"
+    ],
+    "Nintendo - Wii U": [
+      "nintendo wii u",
+      "wii u",
+      "wiiu"
+    ],
+    "Nintendo 64": [
+      "n64",
+      "n64dd",
+      "64dd"
+    ],
+    "Nintendo Entertainment System": [
+      "nes",
+      "famicom",
+      "nintendo famicom",
+      "fc"
+    ],
+    "Nintendo Game Boy": [
+      "gb",
+      "gameboy",
+      "sgb"
+    ],
+    "Nintendo Game Boy Advance": [
+      "gba",
+      "gameboy advance",
+      "ereader"
+    ],
+    "Nintendo Game Boy Color": [
+      "gbc",
+      "gameboy color"
+    ],
+    "Nintendo GameCube": [
+      "gamecube",
+      "gc",
+      "ngc"
+    ],
+    "Nintendo Super Nintendo Entertainment System": [
+      "snes",
+      "sfc",
+      "sfam",
+      "satellaview",
+      "super nintendo",
+      "super nes",
+      "super famicom",
+      "sufami",
+      "sufami turbo"
+    ],
+    "Nintendo Wii": [
+      "wii"
+    ],
+    "Palm OS": [
+      "palm"
+    ],
+    "Panasonic 3DO Interactive Multiplayer": [
+      "3do"
+    ],
+    "Philips CD-i": [
+      "cd-i",
+      "cdi"
+    ],
+    "Photo CD": [
+      "photo cd"
+    ],
+    "PlayStation GameShark Updates": [
+      "playstation gameshark",
+      "psxgs"
+    ],
+    "Pocket PC": [
+      "ppc"
+    ],
+    "SNK - Neo Geo CD": [
+      "neo geo cd",
+      "ngcd",
+      "neogeocd",
+      "neocd"
+    ],
+    "SNK - Neo Geo Pocket": [
+      "neo geo pocket",
+      "ngp"
+    ],
+    "SNK - Neo Geo Pocket Color": [
+      "neo geo pocket color",
+      "neo geo pocket colour",
+      "ngpc"
+    ],
+    "Sega - 32X": [
+      "sega 32x",
+      "32x",
+      "megadrive 32x",
+      "sega32",
+      "sega32x",
+      "sega32xjp",
+      "sega32xna"
+    ],
+    "Sega - Dreamcast": [
+      "sega dreamcast",
+      "dreamcast",
+      "dc"
+    ],
+    "Sega - Game Gear": [
+      "sega game gear",
+      "game gear",
+      "gamegear",
+      "gg"
+    ],
+    "Sega - Master System - Mark III": [
+      "sega master system",
+      "master system",
+      "mastersystem",
+      "mark3",
+      "sms",
+      "ms"
+    ],
+    "Sega - Mega Drive - Genesis": [
+      "genesis",
+      "mega drive",
+      "megadrive",
+      "megadrivejp",
+      "md",
+      "smd",
+      "sega genesis",
+      "sega mega drive"
+    ],
+    "Sega - Mega-CD - Sega CD": [
+      "mega cd",
+      "megacd",
+      "megacdjp",
+      "sega cd",
+      "segacd",
+      "mcd",
+      "scd"
+    ],
+    "Sega - Saturn": [
+      "sega saturn",
+      "saturn"
+    ],
+    "Sega 32X": [
+      "32x",
+      "megadrive 32x",
+      "sega32",
+      "sega32x",
+      "sega32xjp",
+      "sega32xna"
+    ],
+    "Sega Chihiro": [
+      "chihiro"
+    ],
+    "Sega Dreamcast": [
+      "dreamcast",
+      "dc"
+    ],
+    "Sega Game Gear": [
+      "gg",
+      "game gear",
+      "gamegear"
+    ],
+    "Sega Lindbergh": [
+      "lindbergh"
+    ],
+    "Sega Master System": [
+      "sms",
+      "master system",
+      "mastersystem",
+      "mark3",
+      "ms"
+    ],
+    "Sega Mega CD & Sega CD": [
+      "mega cd",
+      "megacd",
+      "megacdjp",
+      "sega cd",
+      "segacd",
+      "mcd",
+      "scd"
+    ],
+    "Sega Mega Drive _ Genesis": [
+      "genesis",
+      "mega drive",
+      "megadrive",
+      "megadrivejp",
+      "md",
+      "smd",
+      "sega genesis"
+    ],
+    "Sega Naomi": [
+      "naomi"
+    ],
+    "Sega Naomi 2": [
+      "naomi 2",
+      "naomi2"
+    ],
+    "Sega Prologue 21 Multimedia Karaoke System": [
+      "prologue 21"
+    ],
+    "Sega RingEdge": [
+      "ringedge"
+    ],
+    "Sega RingEdge 2": [
+      "ringedge 2"
+    ],
+    "Sega Saturn": [
+      "saturn",
+      "saturnjp",
+      "ss"
+    ],
+    "Sharp X68000": [
+      "x68000"
+    ],
+    "Sony - PlayStation": [
+      "sony playstation",
+      "playstation",
+      "psx",
+      "ps1",
+      "ps"
+    ],
+    "Sony - PlayStation 2": [
+      "sony playstation 2",
+      "ps2",
+      "playstation 2",
+      "play station 2"
+    ],
+    "Sony - PlayStation 3": [
+      "sony playstation 3",
+      "playstation 3",
+      "ps3"
+    ],
+    "Sony - PlayStation Portable": [
+      "sony playstation portable",
+      "psp",
+      "playstation portable",
+      "psminis",
+      "psp minis"
+    ],
+    "Sony - PlayStation Vita": [
+      "sony playstation vita",
+      "playstation vita",
+      "psvita",
+      "vita"
+    ],
+    "Sony PlayStation": [
+      "playstation",
+      "psx",
+      "ps1",
+      "ps"
+    ],
+    "Sony PlayStation 2": [
+      "playstation 2",
+      "play station 2",
+      "ps2"
+    ],
+    "Sony PlayStation 3": [
+      "playstation 3",
+      "ps3"
+    ],
+    "Sony PlayStation Portable": [
+      "playstation portable",
+      "psp"
+    ],
+    "TAB-Austria Quizard": [
+      "quizard"
+    ],
+    "Tomy Kiss-Site": [
+      "kiss-site"
+    ],
+    "TurboGrafx-16_PC Engine": [
+      "tg16",
+      "turbografx",
+      "turbografx 16",
+      "pc engine",
+      "pcengine",
+      "pce",
+      "supergrafx"
+    ],
+    "VM Labs NUON": [
+      "nuon"
+    ],
+    "VTech V.Flash & V.Smile Pro": [
+      "v.flash",
+      "v.smile pro"
+    ],
+    "ZAPiT Games Game Wave Family Entertainment System": [
+      "game wave",
+      "gamewave"
+    ],
+    "funworld Photo Play": [
+      "photo play"
+    ]
+  },
+  "importAliases": {
+    "atari 2600": [
+      "2600",
+      "atari vcs",
+      "vcs",
+      "atari2600"
+    ],
+    "atari 5200": [
+      "5200",
+      "atari5200"
+    ],
+    "atari 7800": [
+      "7800",
+      "atari7800"
+    ],
+    "atari jaguar cd": [
+      "atari jaguar cd",
+      "jaguar cd",
+      "ajcd"
+    ],
+    "atari jaguar cd interactive multimedia system": [
+      "atari jaguar cd",
+      "jaguar cd",
+      "ajcd"
+    ],
+    "atari lynx": [
+      "lynx",
+      "atarilynx"
+    ],
+    "family computer disk system": [
+      "fds",
+      "famicom disk system"
+    ],
+    "microsoft xbox": [
+      "xbox"
+    ],
+    "microsoft xbox 360": [
+      "xbox 360",
+      "xbox360"
+    ],
+    "nec pc engine cd turbografx cd": [
+      "pc engine cd",
+      "pcenginecd",
+      "pcecd",
+      "turbografx cd",
+      "tg-cd",
+      "pce cd"
+    ],
+    "nec pc engine turbografx 16": [
+      "turbografx-16 pc engine",
+      "turbografx",
+      "turbografx 16",
+      "tg16",
+      "pc engine",
+      "pcengine",
+      "pce",
+      "supergrafx"
+    ],
+    "neo geo cd": [
+      "neo geo cd",
+      "ngcd",
+      "neogeocd",
+      "neocd"
+    ],
+    "neo geo pocket": [
+      "neo geo pocket",
+      "ngp"
+    ],
+    "neo geo pocket color": [
+      "neo geo pocket color",
+      "neo geo pocket colour",
+      "ngpc"
+    ],
+    "nintendo 3ds": [
+      "3ds",
+      "n3ds",
+      "new3ds"
+    ],
+    "nintendo 64": [
+      "n64",
+      "n64dd",
+      "64dd"
+    ],
+    "nintendo ds": [
+      "nds",
+      "ds",
+      "dsi"
+    ],
+    "nintendo entertainment system": [
+      "nes",
+      "famicom",
+      "nintendo famicom",
+      "family computer",
+      "fc"
+    ],
+    "nintendo famicom disk system": [
+      "nintendo fds"
+    ],
+    "nintendo family computer disk system": [
+      "fds",
+      "famicom disk system",
+      "nintendo fds"
+    ],
+    "nintendo game boy": [
+      "game boy",
+      "gameboy",
+      "gb",
+      "sgb"
+    ],
+    "nintendo game boy advance": [
+      "game boy advance",
+      "gameboy advance",
+      "gba",
+      "ereader"
+    ],
+    "nintendo game boy color": [
+      "game boy color",
+      "gameboy color",
+      "gbc"
+    ],
+    "nintendo gamecube": [
+      "gamecube",
+      "gc",
+      "ngc"
+    ],
+    "nintendo nintendo 64": [
+      "nintendo 64",
+      "n64",
+      "n64dd",
+      "64dd"
+    ],
+    "nintendo nintendo ds": [
+      "nintendo ds",
+      "nds",
+      "ds",
+      "dsi"
+    ],
+    "nintendo nintendo entertainment system": [
+      "nintendo entertainment system",
+      "nes",
+      "famicom",
+      "nintendo famicom",
+      "family computer",
+      "fc"
+    ],
+    "nintendo super nintendo entertainment system": [
+      "snes",
+      "sfc",
+      "sfam",
+      "snesna",
+      "satellaview",
+      "super famicom",
+      "super nintendo",
+      "super nes",
+      "sufami",
+      "sufami turbo"
+    ],
+    "nintendo virtual boy": [
+      "virtual boy"
+    ],
+    "nintendo wii": [
+      "wii"
+    ],
+    "nintendo wii u": [
+      "wii u",
+      "wiiu"
+    ],
+    "sega 32x": [
+      "32x",
+      "megadrive 32x",
+      "sega32",
+      "sega32x",
+      "sega32xjp",
+      "sega32xna"
+    ],
+    "sega dreamcast": [
+      "dreamcast",
+      "dc"
+    ],
+    "sega game gear": [
+      "game gear",
+      "gamegear",
+      "gg"
+    ],
+    "sega master system mark iii": [
+      "master system",
+      "mastersystem",
+      "mark3",
+      "sms",
+      "ms"
+    ],
+    "sega mega cd sega cd": [
+      "mega cd",
+      "megacd",
+      "megacdjp",
+      "sega cd",
+      "segacd",
+      "mcd",
+      "scd"
+    ],
+    "sega mega drive genesis": [
+      "genesis",
+      "mega drive",
+      "megadrive",
+      "megadrivejp",
+      "md",
+      "smd",
+      "sega genesis",
+      "sega mega drive"
+    ],
+    "sega saturn": [
+      "saturn",
+      "saturnjp",
+      "ss"
+    ],
+    "snk neo geo cd": [
+      "neo geo cd",
+      "ngcd",
+      "neogeocd",
+      "neocd"
+    ],
+    "snk neo geo pocket": [
+      "neo geo pocket",
+      "ngp"
+    ],
+    "snk neo geo pocket color": [
+      "neo geo pocket color",
+      "neo geo pocket colour",
+      "ngpc"
+    ],
+    "sony playstation": [
+      "playstation",
+      "psx",
+      "ps1",
+      "ps"
+    ],
+    "sony playstation 2": [
+      "ps2",
+      "playstation 2",
+      "play station 2"
+    ],
+    "sony playstation 3": [
+      "playstation 3",
+      "ps3"
+    ],
+    "sony playstation portable": [
+      "psp",
+      "playstation portable",
+      "psminis",
+      "psp minis"
+    ],
+    "sony playstation vita": [
+      "playstation vita",
+      "psvita",
+      "vita"
+    ]
+  },
+  "builderPlatforms": [
+    "Atari - 2600",
+    "Atari - 5200",
+    "Atari - 7800",
+    "Atari - Lynx",
+    "Atari - Jaguar CD",
+    "Microsoft - Xbox",
+    "NEC - PC Engine - TurboGrafx 16",
+    "NEC - PC Engine CD - TurboGrafx-CD",
+    "SNK - Neo Geo CD",
+    "Nintendo - Virtual Boy",
+    "Sega - 32X",
+    "Sega - Dreamcast",
+    "Sega - Saturn",
+    "Nintendo - Family Computer Disk System",
+    "SNK - Neo Geo Pocket",
+    "SNK - Neo Geo Pocket Color",
+    "Nintendo - Nintendo 3DS",
+    "Nintendo - Nintendo DS",
+    "Nintendo - Nintendo Entertainment System",
+    "Nintendo - Game Boy",
+    "Nintendo - Game Boy Advance",
+    "Nintendo - Game Boy Color",
+    "Nintendo - GameCube",
+    "Nintendo - Nintendo 64",
+    "Nintendo - Super Nintendo Entertainment System",
+    "Nintendo - Wii",
+    "Nintendo - Wii U",
+    "Sega - Game Gear",
+    "Sega - Master System - Mark III",
+    "Sega - Mega Drive - Genesis",
+    "Sega - Mega-CD - Sega CD",
+    "Sony - PlayStation",
+    "Sony - PlayStation 2",
+    "Sony - PlayStation 3",
+    "Sony - PlayStation Portable",
+    "Sony - PlayStation Vita"
+  ]
+}

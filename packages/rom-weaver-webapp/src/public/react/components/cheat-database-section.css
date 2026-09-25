@@ -1,28 +1,39 @@
 @layer style, foundation, drawers, controls, readouts, docs, overrides;
 
 @layer controls {
-  /* The database is an optional patch card attached to the patches step, so its
-     header follows the same float-and-wrap contract as patch cards. */
-  .rw-app .cheat-card-row > .cheat-database-card > .card-top {
-    display: flow-root;
-  }
-
-  .rw-app .cheat-card-row > .cheat-database-card > .card-top .card-name {
-    display: block;
-    min-width: 0;
-  }
-
-  .rw-app .cheat-card-row > .cheat-database-card > .card-top .card-name > .card-meta {
-    display: flex;
-    flex-wrap: wrap;
-    margin-block-start: var(--sp-xs);
-  }
-
   .rw-app .cheat-card-body {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: var(--sp-s);
     min-width: 0;
+    margin-block-start: var(--sp-s);
+  }
+
+  .rw-app .cheat-download-menu summary {
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .rw-app .cheat-download-menu summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .rw-app
+    :is(#rom-weaver-list-cheat-stack, #rom-weaver-list-patch-stack)
+    > .cheat-card:has(.cheat-download-menu[open]) {
+    z-index: 1;
+  }
+
+  .rw-app .cheat-download-menu[open] summary {
+    color: var(--thread-text);
+    border-color: color-mix(in oklab, var(--thread) 45%, transparent);
+  }
+
+  .rw-app .cheat-download-menu .patch-menu-list {
+    width: max-content;
+    min-width: 10rem;
   }
 
   .rw-app .cheat-card-body > .workflow-file-list {
@@ -34,29 +45,28 @@
     grid-template-columns: minmax(0, 1fr);
     gap: var(--sp-s);
     min-width: 0;
-    padding: var(--sp-s);
-    border: 1px solid var(--seam-soft);
-  }
-
-  .rw-app .cheat-database-options {
-    display: grid;
-    gap: 1px;
-    min-width: 0;
-    overflow: hidden;
+    padding: var(--sp-m);
+    background: var(--plate-2);
     border: 1px solid var(--seam);
     border-radius: var(--r-m);
   }
 
-  .rw-app .cheat-database-option {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-s);
-    align-items: center;
-    justify-content: space-between;
+  .rw-app .cheat-database-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-xs);
     min-width: 0;
-    padding: 0.65rem 0.75rem;
+  }
+
+  .rw-app .cheat-database-option {
+    display: grid;
+    gap: var(--sp-xs);
+    min-width: 0;
+    padding: var(--sp-s) var(--sp-m);
     text-align: start;
-    background: var(--plate-2);
+    background: var(--plate);
+    border: 1px solid var(--seam-soft);
+    border-radius: var(--r-s);
   }
 
   .rw-app .cheat-database-option > span {
@@ -65,54 +75,51 @@
   }
 
   .rw-app .cheat-database-option .rb {
+    width: fit-content;
     white-space: normal;
   }
 
-  .rw-app .cheat-database-option + .cheat-database-option {
-    border-block-start: 1px solid var(--seam-soft);
-  }
-
   .rw-app .cheat-database-option:active {
-    filter: brightness(0.9);
+    border-color: var(--empty-border-hover);
   }
 
   @media (hover: hover) {
     .rw-app .cheat-database-option:hover {
-      filter: brightness(1.08);
+      border-color: var(--empty-border-hover);
     }
   }
 
   /* Float the cheat card actions so long descriptions wrap beneath them - the
      same treatment the patch stack gets, restated because those rules are
      scoped to #rom-weaver-list-patch-stack. */
-  .rw-app #rom-weaver-list-cheat-stack > .card.patch .card-top {
+  .rw-app :is(#rom-weaver-list-cheat-stack, #rom-weaver-list-patch-stack) > .cheat-card .card-top {
     display: flow-root;
   }
 
-  .rw-app #rom-weaver-list-cheat-stack > .card.patch .card-actions {
+  .rw-app :is(#rom-weaver-list-cheat-stack, #rom-weaver-list-patch-stack) > .cheat-card .card-actions {
     float: right;
     display: flex;
     margin: 0 0 var(--sp-xs) var(--sp-m);
   }
 
-  .rw-app #rom-weaver-list-cheat-stack > .card.patch .card-btns {
+  .rw-app :is(#rom-weaver-list-cheat-stack, #rom-weaver-list-patch-stack) > .cheat-card .card-btns {
     display: flex;
     gap: var(--sp-s);
     align-items: center;
   }
 
-  .rw-app #rom-weaver-list-cheat-stack > .card.patch .card-name {
+  .rw-app :is(#rom-weaver-list-cheat-stack, #rom-weaver-list-patch-stack) > .cheat-card .card-name {
     display: block;
     min-width: 0;
   }
 
-  .rw-app #rom-weaver-list-cheat-stack > .card.patch .card-name > .card-meta {
+  .rw-app :is(#rom-weaver-list-cheat-stack, #rom-weaver-list-patch-stack) > .cheat-card .card-name > .card-meta {
     display: flex;
     flex-wrap: wrap;
     margin-block-start: var(--sp-xs);
   }
 
-  .rw-app #rom-weaver-list-cheat-stack > .card.patch .phandle {
+  .rw-app :is(#rom-weaver-list-cheat-stack, #rom-weaver-list-patch-stack) > .cheat-card .phandle {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -122,13 +129,13 @@
     padding: 2px;
   }
 
-  .rw-app #rom-weaver-list-cheat-stack .nm {
+  .rw-app .cheat-card .nm {
     font-weight: 700;
   }
 
   /* The .rb chip chrome is scoped to step headers and drawer readouts; the
      cheat card's meta line needs the same badge. */
-  .rw-app #rom-weaver-list-cheat-stack .card-meta .rb,
+  .rw-app .cheat-card .card-meta .rb,
   .rw-app .cheat-pick-badges .rb {
     display: inline-flex;
     align-items: center;
@@ -140,36 +147,31 @@
     white-space: nowrap;
     background: var(--well);
     border: 1px solid var(--seam-soft);
-    border-radius: 6px;
+    border-radius: var(--r-s);
   }
 
-  .rw-app .cheat-add {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-s);
+  /* The shared needs-input directive is a single nowrap line; this one also
+     says what adding does, so its hint wraps under the label. */
+  .rw-app .cheat-add-copy {
+    display: grid;
+    gap: var(--sp-2xs);
+    min-width: 0;
+    white-space: normal;
+  }
+
+  /* The icon rides the label line, as it does in the one-line directives, so
+     the hint below stays centred under both. */
+  .rw-app .cheat-add-label {
+    display: inline-flex;
+    gap: var(--sp-m);
     align-items: center;
     justify-content: center;
-    width: 100%;
   }
 
-  .rw-app .cheat-add > span {
-    min-width: 0;
-    text-align: center;
-    overflow-wrap: anywhere;
-  }
-
-  .rw-app .cheat-add svg {
-    width: 1.05rem;
-    height: 1.05rem;
-  }
-
-  .rw-app .cheat-add-note {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-    margin: var(--sp-s) 0 0;
-    font-size: 0.82rem;
-    color: var(--ink-3);
+  .rw-app .cheat-add-copy small {
+    font-size: 0.8rem;
+    font-weight: 400;
+    color: var(--ink-4);
   }
 
   .rw-app .cheat-output-summary p {
@@ -180,8 +182,17 @@
      other dialog sizes, in the same layer as the .dlg rules it overrides. */
   .rw-app .cheat-dlg .dlg-body {
     display: grid;
-    gap: 0.75rem;
+    gap: var(--sp-m);
     min-width: 0;
+  }
+
+  .rw-app .cheat-dlg .dlg-head {
+    justify-content: space-between;
+  }
+
+  .rw-app .cheat-dlg .dlg-title {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .rw-app .cheat-search {
@@ -215,26 +226,36 @@
     padding: 0;
     margin: 0;
     list-style: none;
-    border: 1px solid var(--seam, currentColor);
-    border-radius: var(--r-m, 6px);
+    background: var(--plate);
+    border: 1px solid var(--seam);
+    border-radius: var(--r-m);
   }
 
   .rw-app .cheat-pick {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.75rem;
+    gap: var(--sp-m);
     align-items: center;
     min-width: 0;
-    padding: 0.6rem 0.75rem;
+    padding: var(--sp-xs) var(--sp-m);
   }
 
   .rw-app .cheat-pick + .cheat-pick {
-    border-block-start: 1px solid var(--seam-soft, currentColor);
+    border-block-start: 1px solid var(--seam-soft);
+  }
+
+  .rw-app .cheat-pick:nth-child(even) {
+    background: var(--plate-2);
+  }
+
+  .rw-app .cheat-pick.is-added {
+    background: color-mix(in oklab, var(--thread) 6%, var(--plate));
+    box-shadow: inset 3px 0 0 var(--thread);
   }
 
   .rw-app .cheat-pick-text {
     display: grid;
-    gap: 0.3rem;
+    gap: var(--sp-2xs);
     min-width: 0;
   }
 
@@ -250,30 +271,56 @@
     align-items: center;
   }
 
-  .rw-app .cheat-pick-btn {
-    display: inline-flex;
-    gap: 0.35rem;
-    align-items: center;
-    justify-content: center;
+  /* Adding is the dialog's main action, so the row button takes the accent
+     outline the format tags use; an added row carries the accent itself and
+     its button steps back to a neutral remove. */
+  .rw-app .btn.cheat-pick-btn {
     min-width: 5.5rem;
-    min-height: 2.5rem;
-    padding-inline: 0.7rem;
-    border: 1px solid var(--seam-strong, currentColor);
-    border-radius: 6px;
+    color: var(--thread-text);
+    background: transparent;
+    border-color: color-mix(in oklab, var(--thread) 45%, var(--seam-strong));
   }
 
-  .rw-app .cheat-pick-btn svg {
-    width: 0.95rem;
-    height: 0.95rem;
+  .rw-app .btn.cheat-pick-btn:active {
+    background: color-mix(in oklab, var(--thread) 14%, transparent);
+    border-color: var(--thread);
   }
 
-  .rw-app .cheat-pick-btn.is-added {
-    color: var(--verified, currentColor);
-    border-color: color-mix(in oklab, var(--verified, currentColor) 55%, var(--seam-strong, currentColor));
+  @media (hover: hover) {
+    .rw-app .btn.cheat-pick-btn:hover {
+      background: color-mix(in oklab, var(--thread) 9%, transparent);
+      border-color: var(--thread);
+    }
+  }
+
+  .rw-app .btn.cheat-pick-btn.is-added {
+    color: var(--ink-2);
+    border-color: var(--seam-strong);
+  }
+
+  .rw-app .btn.cheat-pick-btn.is-added:active {
+    color: var(--fault);
+    background: color-mix(in oklab, var(--fault) 10%, transparent);
+    border-color: color-mix(in oklab, var(--fault) 55%, var(--seam-strong));
+  }
+
+  @media (hover: hover) {
+    .rw-app .btn.cheat-pick-btn.is-added:hover {
+      color: var(--fault);
+      background: color-mix(in oklab, var(--fault) 10%, transparent);
+      border-color: color-mix(in oklab, var(--fault) 55%, var(--seam-strong));
+    }
+  }
+
+  .rw-app .btn.cheat-pick-btn:disabled {
+    color: var(--ink-3);
+    background: transparent;
+    border-color: var(--seam);
   }
 
   .rw-app .cheat-pick-empty {
     margin: 0;
+    font-size: 0.82rem;
     color: var(--ink-3);
   }
 
@@ -293,33 +340,36 @@
     align-items: center;
   }
 
-  .rw-app .cheat-pager button {
-    min-height: 2.4rem;
-    padding-inline: 0.7rem;
-    border: 1px solid var(--seam-strong, currentColor);
-    border-radius: 6px;
-  }
-
-  .rw-app .cheat-pager button:disabled {
-    opacity: 0.5;
-  }
-
-  .rw-app .cheat-notices,
   .rw-app .manual-cheat-result {
     display: grid;
-    gap: 0.25rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--sp-xs) var(--sp-m);
+    align-items: center;
     min-width: 0;
-    padding: 0.8rem;
-    border: 1px solid var(--seam, currentColor);
+    padding: var(--sp-m);
+    background: color-mix(in oklab, var(--verified) 6%, var(--well));
+    border: 1px solid color-mix(in oklab, var(--verified) 40%, var(--seam));
+    border-radius: var(--r-s);
   }
 
-  .rw-app .cheat-notices {
-    font-size: 0.88rem;
-  }
-
-  .rw-app .cheat-notices p,
   .rw-app .manual-cheat-result p {
+    grid-column: 1;
     margin: 0;
+  }
+
+  .rw-app .manual-cheat-result p:first-child {
+    font-weight: 650;
+    color: var(--ink);
+  }
+
+  .rw-app .manual-cheat-result p:nth-child(2) {
+    font-size: 0.82rem;
+    color: var(--ink-3);
+  }
+
+  .rw-app .manual-cheat-result .btn {
+    grid-row: 1 / span 2;
+    grid-column: 2;
   }
 
   .rw-app .cheat-game-picker,
@@ -331,6 +381,17 @@
     min-width: 0;
   }
 
+  .rw-app .cheat-game-picker {
+    padding: var(--sp-m);
+    background: var(--plate-2);
+    border: 1px solid var(--seam);
+    border-radius: var(--r-m);
+  }
+
+  .rw-app .cheat-game-picker > label > span {
+    font-weight: 650;
+  }
+
   .rw-app .cheat-game-picker > label {
     display: grid;
     gap: 0.35rem;
@@ -338,6 +399,7 @@
   }
 
   .rw-app .cheat-game-picker select,
+  .rw-app .cheat-game-picker input,
   .rw-app .manual-cheat input,
   .rw-app .manual-cheat textarea,
   .rw-app .manual-cheat select {
@@ -347,64 +409,133 @@
     min-height: 2.75rem;
   }
 
+  .rw-app .manual-cheat textarea {
+    height: auto;
+    min-height: 6.5rem;
+    padding-block: var(--sp-s);
+    line-height: 1.5;
+    resize: vertical;
+  }
+
+  .rw-app .manual-cheat label > span {
+    font-size: 0.78rem;
+    font-weight: 650;
+    color: var(--ink-2);
+    letter-spacing: 0.02em;
+  }
+
   .rw-app .manual-cheat-toggle {
     display: inline-flex;
     gap: 0.35rem;
     align-items: center;
     justify-content: center;
+    width: 100%;
     min-height: 2.75rem;
   }
 
+  .rw-app .manual-cheat-toggle[aria-expanded="true"] {
+    color: var(--thread-text);
+    background: color-mix(in oklab, var(--thread) 8%, var(--plate-2));
+    border-color: color-mix(in oklab, var(--thread) 45%, var(--seam-strong));
+  }
+
   .rw-app .manual-cheat form {
-    gap: 0.75rem;
-    padding: 0.75rem;
-    border: 1px solid var(--seam, currentColor);
+    gap: var(--sp-m);
+    padding: var(--sp-m);
+    margin-block-start: var(--sp-s);
+    background: var(--plate-2);
+    border: 1px solid var(--seam);
+    border-radius: var(--r-m);
   }
 
   .rw-app .manual-cheat-options {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.75rem;
+    gap: var(--sp-m);
   }
 
-  .rw-app .cheat-pick-btn:active,
-  .rw-app .cheat-pager button:not(:disabled):active,
-  .rw-app .manual-cheat-toggle:active {
-    filter: brightness(0.9);
+  .rw-app .manual-cheat-actions {
+    display: flex;
+    justify-content: flex-end;
   }
 
-  @media (hover: hover) {
-    .rw-app .cheat-pick-btn:hover,
-    .rw-app .cheat-pager button:not(:disabled):hover,
-    .rw-app .manual-cheat-toggle:hover {
-      filter: brightness(1.08);
-    }
+  .rw-app .manual-cheat-error {
+    margin: 0;
+    font-size: 0.82rem;
+    color: var(--fault);
   }
 
   @media (max-width: 40rem) {
-    .rw-app .cheat-pick {
+    .rw-app .cheat-database-options {
       grid-template-columns: minmax(0, 1fr);
+    }
+
+    /* Phones keep the button beside the text, as an icon-only square, so a
+       row costs one name line plus its badges instead of a stacked button. */
+    .rw-app .cheat-pick {
+      gap: var(--sp-s);
+      padding: var(--sp-xs) var(--sp-s);
+    }
+
+    .rw-app .btn.cheat-pick-btn {
+      width: var(--ctrl-h);
+      min-width: 0;
+      padding: 0;
+    }
+
+    .rw-app .cheat-pick-btn-label {
+      display: none;
+    }
+
+    .rw-app .cheat-pick-name {
+      font-size: 0.9rem;
+      line-height: 1.3;
+    }
+
+    .rw-app .cheat-pick-badges .rb {
+      padding-inline: 6px;
+    }
+
+    .rw-app .cheat-dlg .dlg-body {
+      gap: var(--sp-s);
+    }
+
+    .rw-app .cheat-game-picker {
+      padding: var(--sp-s);
+    }
+
+    .rw-app .cheat-game-picker > label > span {
+      font-size: 0.85rem;
     }
 
     .rw-app .manual-cheat-options {
       grid-template-columns: minmax(0, 1fr);
     }
+
+    .rw-app .manual-cheat-result {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .rw-app .manual-cheat-result .btn {
+      grid-row: auto;
+      grid-column: 1;
+      width: 100%;
+      margin-block-start: var(--sp-xs);
+    }
   }
 }
 
-@layer controls {
-  /* "Save as patch": a side export of the ROM cheats that are On, so it sits
-     below the cards rather than competing with the run action. */
-  .rw-app .cheat-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--sp-s);
-    align-items: center;
-    margin-block: var(--sp-s);
+@layer drawers {
+  .rw-app .cheat-card .cheat-details .ck {
+    grid-template-columns: minmax(3.5rem, max-content) minmax(0, 1fr);
   }
 
-  .rw-app .cheat-actions p {
-    margin: 0;
-    color: var(--ink-2);
+  .rw-app .cheat-card .cheat-details .ck-v {
+    min-width: 0;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    text-transform: none;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 }

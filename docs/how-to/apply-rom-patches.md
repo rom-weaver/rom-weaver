@@ -80,9 +80,9 @@ Each patch card shows its format and position. Open **Checks** to see the state 
 
 ## Put several patches in order
 
-Patches run from top to bottom and modify one result. Each patch card has an input selector. This selector chooses the state that the patch's **Input** checks must match.
+Patches run from top to bottom and modify one result. Each patch card has an input selector. This selector chooses the state that the patch runs on. The patch's **Input** checks must match that state.
 
-Keep **Automatic** to let the checks select their input state. Choose **Original ROM** when the patch was made from the clean ROM. Choose **Previous patch output** when the patch depends on the result above it.
+Keep **auto** to let the checks select the state. Choose **Original ROM** when the patch was made from the clean ROM. Choose **Previous patch output** when the patch depends on the result above it.
 
 Drag a numbered handle to move a patch. With a keyboard, focus the handle and use its announced controls. The number changes when the card moves.
 

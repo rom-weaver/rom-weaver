@@ -4,6 +4,7 @@ import {
   recomputeApplyOutputState,
 } from "../../src/lib/workflow/apply-output-state-machine.ts";
 import { resolvePatchOutputName } from "../../src/lib/workflow/apply-patch-output-naming.ts";
+import { buildCheatOutputBaseName } from "../../src/lib/output/output-name-composition.ts";
 import type { ApplyWorkflowInputState, ApplyWorkflowResolvedInput } from "../../src/types/apply-workflow.ts";
 import type { ParsedIdentifyResolution } from "../../src/types/identify.ts";
 import type { ApplySettings } from "../../src/types/settings.ts";
@@ -33,9 +34,10 @@ const autoOutputName = (
   input: ApplyWorkflowInputState,
   patchOutputNames: string[] = [],
   settings: Partial<ApplySettings> = {},
+  cheatNames: string[] = [],
 ): string => {
   const state = createApplyOutputState(settings);
-  recomputeApplyOutputState(state, settings, { input, inputSession: undefined, patchOutputNames });
+  recomputeApplyOutputState(state, settings, { input, inputSession: undefined, patchOutputNames, cheatNames });
   return state.outputName;
 };
 
@@ -57,6 +59,17 @@ describe("apply automatic output name", () => {
 
   it("appends patch names to the input stem", () => {
     expect(autoOutputName(makeInput({ fileName: "game.gba" }), ["Hard Mode.ips"])).toBe("game [Hard Mode]");
+  });
+
+  it("appends each baked cheat after the patch labels", () => {
+    expect(
+      autoOutputName(makeInput({ fileName: "game.gba" }), ["Hard Mode.ips"], {}, ["Infinite Lives", "Max HP"]),
+    ).toBe("game [Hard Mode] [cht Infinite Lives] [cht Max HP]");
+  });
+
+  it("drops stale cheat labels and strips unsafe characters when the selection changes", () => {
+    expect(buildCheatOutputBaseName("game [cht Infinite Lives]", ["Max [HP]/Lives"])).toBe("game [cht Max HP Lives]");
+    expect(buildCheatOutputBaseName("game [cht Infinite Lives]", [])).toBe("game");
   });
 
   it("uses a generated metadata label before the patch filename", () => {

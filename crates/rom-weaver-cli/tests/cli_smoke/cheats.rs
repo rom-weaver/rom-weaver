@@ -378,14 +378,13 @@ fn write_cheat_database(temp: &TempDir, rom: &[u8]) -> String {
     let mut crc = flate2::Crc::new();
     crc.update(rom);
     let shard = serde_json::json!({
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "system": "nes",
         "sourceRevision": "testrevision",
         "games": [{
             "id": "game_test",
             "title": "Test Game",
             "normalizedTitle": "test game",
-            "sourceFiles": ["test.cht"],
             "checksums": [{ "crc32": format!("{:08x}", crc.sum()) }],
             "cheats": [
                 cheat_entry("Team runs faster", "AKE-LVS", 0),
@@ -422,7 +421,6 @@ fn cheat_entry(description: &str, code: &str, index: usize) -> Value {
     serde_json::json!({
         "description": description,
         "rawCode": code,
-        "sourceFile": 0,
         "sourceIndex": index,
     })
 }

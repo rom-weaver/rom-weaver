@@ -60,7 +60,6 @@ import {
   getDefaultCompressionMode,
   useApplySettings,
   useRomWeaverAssetBaseUrl,
-  useRomWeaverSettings,
   useUiLocalizer,
 } from "./settings-context.tsx";
 import { getEmulatorJsCore } from "./components/emulatorjs.ts";
@@ -223,7 +222,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const { onApplyComplete, onInputsChange, onPatchesChange, onProgress: onProgressChange, threads } = props;
   const mode = props.mode ?? "apply";
   const providerSettings = useApplySettings();
-  const cheatsEnabled = useRomWeaverSettings().betaToolsEnabled === true;
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
   const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;
   const { startup } = props;
@@ -268,9 +266,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const forcePatchWorkflowRefreshRef = useRef(false);
   const [workflowHandle] = useState(() => createWorkflowHandle<ApplyWorkflow>());
   const selectedCheatsRef = useRef<ClassifiedCheatRecord[]>([]);
+  const selectedCheatPositionsRef = useRef<number[]>([]);
   const [cheatConflictMessage, setCheatConflictMessage] = useState("");
   // Mirrors the cheat card's On switches so the header controls in 0x03 and 0x04 can refuse a strip.
   const [cheatsOn, setCheatsOn] = useState(false);
+  const [cheatNames, setCheatNames] = useState<string[]>([]);
   const preparedWorkflowRef = useRef<ApplyWorkflow | null>(null);
   const bundleSourcesRef = useRef<ApplyWorkflowBundleSources | null>(null);
   const workflowSyncRef = useRef<ApplyWorkflowSyncState>({
@@ -1214,6 +1214,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           const selectedCheats = selectedCheatsRef.current;
           workflow.setCheats?.(
             selectedCheats.filter((record) => cheatDelivery(record) === "rom").map(({ record }) => record),
+            selectedCheats.flatMap((record, index) =>
+              cheatDelivery(record) === "rom" ? [selectedCheatPositionsRef.current[index] ?? 0] : [],
+            ),
           );
           const result = (await workflow.run()) as BrowserApplyResult;
           handleApplyComplete(result);
@@ -1624,6 +1627,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       resolvedOutputCompression,
       resolvedOutputName,
       resolvedOutputNameKey,
+      cheatNames,
       setPatchOption,
       setPatchTarget,
       stageInput,
@@ -1716,23 +1720,40 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   );
   const preflightSequence = useRef(0);
   const handleCheatSelection = useCallback(
-    (records: ClassifiedCheatRecord[]) => {
+    (records: ClassifiedCheatRecord[], positions: number[] = []) => {
       selectedCheatsRef.current = records;
+      selectedCheatPositionsRef.current = positions;
       // ROM cheat offsets refer to the staged bytes, so selected ROM writes
       // prevent header stripping during apply.
-      setCheatsOn(records.some((record) => cheatDelivery(record) === "rom"));
+      const romRecords = records.filter((record) => cheatDelivery(record) === "rom").map(({ record }) => record);
+      const romPositions = records.flatMap((record, index) =>
+        cheatDelivery(record) === "rom" ? [positions[index] ?? 0] : [],
+      );
+      setCheatsOn(romRecords.length > 0);
+      setCheatNames(romRecords.map((record) => record.description));
       setCompletedOutput(null);
       setCompletedCheats(undefined);
-      const romRecords = records.filter((record) => cheatDelivery(record) === "rom").map(({ record }) => record);
-      (preparedWorkflowRef.current || workflowHandle.peek())?.setCheats?.(romRecords);
+      (preparedWorkflowRef.current || workflowHandle.peek())?.setCheats?.(romRecords, romPositions);
       const sequence = ++preflightSequence.current;
       setCheatConflictMessage("");
       if (romRecords.length < 2) return;
+      const groups = new Map<number, typeof romRecords>();
+      romRecords.forEach((record, index) => {
+        const position = romPositions[index] ?? 0;
+        groups.set(position, [...(groups.get(position) || []), record]);
+      });
+      const groupsToCheck = [...groups.values()].filter((group) => group.length > 1);
+      if (!groupsToCheck.length) return;
       const descriptions = new Map(romRecords.map((record) => [record.id, record.description]));
       void loadBrowserApi()
-        .then(({ runBrowserCheats }) => runBrowserCheats({ records: romRecords, rom: getCheatSource() }))
-        .then(({ conflicts }) => {
-          const [conflict] = conflicts;
+        .then(async ({ runBrowserCheats }) => {
+          for (const group of groupsToCheck) {
+            const { conflicts } = await runBrowserCheats({ records: group, rom: getCheatSource() });
+            if (conflicts[0]) return conflicts[0];
+          }
+          return undefined;
+        })
+        .then((conflict) => {
           if (sequence !== preflightSequence.current || !conflict) return;
           const firstDescription = descriptions.get(conflict.firstId) || conflict.firstId;
           const secondDescription = descriptions.get(conflict.secondId) || conflict.secondId;
@@ -1752,10 +1773,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   );
 
   useEffect(() => {
-    if (cheatsEnabled && cheatUiState.romInputs.length === 1) return;
-    // Hidden cheats MUST be cleared so Apply cannot reuse their ROM writes.
+    if (cheatUiState.romInputs.length === 1) return;
+    // Cheats MUST be cleared without one ROM so Apply cannot reuse their ROM writes.
     handleCheatSelection([]);
-  }, [cheatUiState.romInputs.length, cheatsEnabled, handleCheatSelection]);
+  }, [cheatUiState.romInputs.length, handleCheatSelection]);
 
   // "Share this setup" (secondary job after the output card): snapshots the current
   // session's files + enablement into a rom-weaver-bundle.json (or everything-bundle .zip).
@@ -1822,7 +1843,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     resolvedUiController,
     setLocalBundleSession,
     props.onError,
+    selectFile,
   );
+  const handleUnifiedDropFiles = (files: File[], onSettled?: () => void) => {
+    handleUnifiedDrop(files, undefined, undefined, onSettled);
+  };
 
   // Forward a page-level drop (dragging anywhere on the page) to the same unified
   // drop handler so the whole tab is a drop target, not just the dropzone box.
@@ -1842,13 +1867,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     }
     if (request.role !== "input") return;
     const romInputs = resolvedUiController.getState().romInputs;
-    // A "which one?" prompt over several separately-provided ROMs spans every pending row, so
-    // cancelling it abandons the whole pending input. Clear them all - removing a single row would
-    // leave the other ROM(s) to auto-stage as if one had been chosen.
-    if (romInputs.length > 1) {
-      resolvedUiController.provideRomInputFile?.(null);
-      return;
-    }
     const matchingInput = romInputs.find((entry) =>
       [entry.info.fileName, entry.info.archiveName].some(
         (value) => value.trim().toLowerCase() === normalizedSourceName,
@@ -1863,22 +1881,18 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     <>
       <ApplyWorkflowFormView
         mode={mode}
-        cheats={
-          cheatsEnabled
-            ? ({ headerStripConflict }) => (
-                <CheatDatabaseSection
-                  classifyDatabaseCheats={classifyDatabaseCheats}
-                  classifyManualCode={classifyManualCode}
-                  onSaveAsPatch={saveCheatsAsPatch}
-                  onSelectionChange={handleCheatSelection}
-                  outputSummary={completedCheats}
-                  rom={cheatRom}
-                  title={localizer.message("ui.step.cheats")}
-                  validationMessage={cheatConflictMessage || headerStripConflict}
-                />
-              )
-            : undefined
-        }
+        cheats={({ headerStripConflict, renderStack }) => (
+          <CheatDatabaseSection
+            classifyDatabaseCheats={classifyDatabaseCheats}
+            classifyManualCode={classifyManualCode}
+            onSaveAsPatch={saveCheatsAsPatch}
+            onSelectionChange={handleCheatSelection}
+            outputSummary={completedCheats}
+            rom={cheatRom}
+            renderStack={renderStack}
+            validationMessage={cheatConflictMessage || headerStripConflict}
+          />
+        )}
         cheatsOn={cheatsOn}
         emulatorOutput={completedOutput}
         bundleExport={bundleExport}
@@ -1905,7 +1919,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         onSelectTab={props.onSelectTab}
         onSelectView={props.onSelectView}
         onTrace={emitApplyFormInputTrace}
-        onUnifiedDrop={handleUnifiedDrop}
+        onUnifiedDrop={handleUnifiedDropFiles}
         patchEnablement={{
           disabledIds: disabledPatchIds,
           getPatchIds,

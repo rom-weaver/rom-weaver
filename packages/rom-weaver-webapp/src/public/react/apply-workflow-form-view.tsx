@@ -17,6 +17,7 @@ import { PendingIdentifyDrawer } from "../../webapp/components/identify-drawer.t
 import { RelatedStrip } from "../../webapp/components/related-strip.tsx";
 import { getCheatHeaderStripConflict } from "../../lib/cheats/header-guard.ts";
 import { ApplyPatchListStep, type RomCheckActuals } from "./apply-patch-list-step.tsx";
+import type { CheatStackRenderState } from "./components/cheat-database-section.tsx";
 import { DropdownSelect } from "./components/ds/dropdown-select.tsx";
 import { getEmulatorJsCore } from "./components/emulatorjs.ts";
 import {
@@ -899,7 +900,7 @@ const resolveRomCardState = (
 };
 
 const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomRowDeps): WorkflowRomInputStepItem => {
-  const { localizer, romInputs, verificationStates, ui } = deps;
+  const { localizer, verificationStates, ui } = deps;
   const identification = resolveRomIdentification(romInput, deps.identificationStates.get(romInput.id));
   const identificationLookup = romInput.info.identification || buildPatchIdentificationLookup(identification);
   const database = identifyRecordChecks(romInput.info.identification);
@@ -938,10 +939,7 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
         staging,
         statusId: `rom-weaver-progress-${stagingPhase}-${index}`,
       }),
-      onRemove: () => {
-        if (romInputs.length === 1 && ui.clearRomInput) ui.clearRomInput();
-        else ui.removeRomInput?.(romInput.id);
-      },
+      onRemove: () => ui.clearRomInput?.(),
       panels: {
         ...(identificationLookup ? { identification: identificationLookup } : {}),
         identifyPending: staging,
@@ -964,7 +962,7 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
         },
         ...(hasDiscSheet && romInput.cueText ? { cue: { cueText: romInput.cueText } } : {}),
       },
-      removeLabel: localizer.message(romInputs.length > 1 ? "ui.apply.removeRom" : "ui.apply.clearRom"),
+      removeLabel: localizer.message("ui.apply.clearRom"),
       stageBar: stageBarValue(staging, percent),
       state,
     },
@@ -1841,7 +1839,10 @@ function ApplyWorkflowFormView({
    * The optional cheat patch card attached to the ROM step. It receives the
    * header-strip guard the patch controls derive.
    */
-  cheats?: (state: { headerStripConflict: string }) => ReactNode;
+  cheats?: (state: {
+    headerStripConflict: string;
+    renderStack: (stack: CheatStackRenderState) => ReactNode;
+  }) => ReactNode;
   /** At least one cheat card's switch is On. */
   cheatsOn?: boolean;
   controllers: {
@@ -1869,7 +1870,7 @@ function ApplyWorkflowFormView({
   onSelectTab?: (id: string) => void;
   onSelectView?: (view: "test") => void;
   onTrace?: (message: string, details?: Record<string, unknown>) => void;
-  onUnifiedDrop?: (files: File[]) => void;
+  onUnifiedDrop?: (files: File[], onSettled?: () => void) => void;
   mode?: "apply" | "bundle";
   patchEnablement?: PatchEnablement;
   patchInputBasis?: PatchInputBasis;
@@ -2079,6 +2080,9 @@ function ApplyWorkflowFormView({
   // Unified drop: bare files stage immediately; each archive shows an
   // "identifying" placeholder until its ROM-vs-patch bucket is classified.
   const handleUnifiedDrop = onUnifiedDrop ?? (() => undefined);
+  const handleUnifiedDropFiles = (files: File[]) => {
+    handleUnifiedDrop(files, () => setDropStarted(false));
+  };
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
   const { closeSampleTutorial, sampleError, sampleLoading, sampleTutorial, startApplySample, startBundleSample } =
     useGuidedSampleLoader({
@@ -2227,14 +2231,17 @@ function ApplyWorkflowFormView({
               }
         }
         onDropStart={() => setDropStarted(true)}
-        onFiles={handleUnifiedDrop}
+        onFiles={handleUnifiedDropFiles}
         supported={getApplySupportedFiles(localizer)}
       />
       {workflowEmpty ? (
         <GhostSteps
           steps={[
             { num: "0x02", title: localizer.message("ui.step.rom") },
-            { num: "0x03", title: localizer.message("ui.step.patches") },
+            {
+              num: "0x03",
+              title: localizer.message(bundlePage ? "ui.step.patches" : "ui.step.patchesCheats"),
+            },
             ...(bundlePage
               ? [
                   { num: "0x04", title: localizer.message("ui.bundleExport.shareTitle") },
@@ -2311,44 +2318,46 @@ function ApplyWorkflowFormView({
             woven={wovenSteps}
           />
 
-          <ApplyPatchListStep
-            afterItems={
-              settings.betaToolsEnabled === true && romInputs.length === 1
-                ? cheats?.({
-                    headerStripConflict: cheatHeaderStripConflict,
-                  })
-                : null
-            }
-            bundleMeta={bundleMeta}
-            bundleOutputCheckHint={!!bundleTools?.hasOptionalEntries}
-            bundleSessionMatches={bundleSessionMatches}
-            disabledFlags={disabledPatchFlags}
-            emptyState={patchesNeedsInput}
-            fault={applyFailed}
-            onBundleMetaChange={(index, updates) => {
-              const id = patchIds[index];
-              if (id) onBundleMetaChange?.(id, updates);
-            }}
-            onBundleMetaBulkChange={(updates) => onBundleMetaBulkChange?.(patchIds, updates)}
-            onTogglePatch={patchEnablement?.onToggle}
-            overrideAvailable={uiState.checksumOverride.visible}
-            patches={patches}
-            patchStack={controllers.patchStack}
-            patchInputBasis={patchInputBasis}
-            patchInputBasisDisabled={bundleExport?.busy}
-            onPatchInputBasisChange={onPatchInputBasisChange}
-            romActualsById={romActualsById}
-            sharedRomChecks={singleRom ? expectedRomChecks : undefined}
-            stripDisabled={!!cheatsOn}
-            notice={
-              <SectionNotice
-                id="rom-weaver-patch-notice-message"
-                onDismiss={dismissSectionNotice("patchNotice")}
-                state={uiState.patchNotice}
+          {(() => {
+            const renderPatchStep = (stack?: CheatStackRenderState) => (
+              <ApplyPatchListStep
+                cheats={stack}
+                bundleMeta={bundleMeta}
+                bundleOutputCheckHint={!!bundleTools?.hasOptionalEntries}
+                bundleSessionMatches={bundleSessionMatches}
+                disabledFlags={disabledPatchFlags}
+                emptyState={patchesNeedsInput}
+                fault={applyFailed}
+                onBundleMetaChange={(index, updates) => {
+                  const id = patchIds[index];
+                  if (id) onBundleMetaChange?.(id, updates);
+                }}
+                onBundleMetaBulkChange={(updates) => onBundleMetaBulkChange?.(patchIds, updates)}
+                onTogglePatch={patchEnablement?.onToggle}
+                overrideAvailable={uiState.checksumOverride.visible}
+                patches={patches}
+                patchKeys={patchIds}
+                patchStack={controllers.patchStack}
+                patchInputBasis={patchInputBasis}
+                patchInputBasisDisabled={bundleExport?.busy}
+                onPatchInputBasisChange={onPatchInputBasisChange}
+                romActualsById={romActualsById}
+                sharedRomChecks={singleRom ? expectedRomChecks : undefined}
+                stripDisabled={!!cheatsOn}
+                notice={
+                  <SectionNotice
+                    id="rom-weaver-patch-notice-message"
+                    onDismiss={dismissSectionNotice("patchNotice")}
+                    state={uiState.patchNotice}
+                  />
+                }
+                woven={wovenSteps}
               />
-            }
-            woven={wovenSteps}
-          />
+            );
+            return !bundlePage && romInputs.length === 1 && cheats
+              ? cheats({ headerStripConflict: cheatHeaderStripConflict, renderStack: renderPatchStep })
+              : renderPatchStep();
+          })()}
 
           {bundlePage ? bundleSecondaryJob : null}
 

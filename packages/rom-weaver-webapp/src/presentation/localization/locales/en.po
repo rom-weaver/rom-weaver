@@ -165,6 +165,51 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.explanation"
+#~ msgstr "Authored input checks describe a patch source. Every patch runs on the current stack input."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.currentStackInput"
+#~ msgstr "Current stack input"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.execution"
+#~ msgstr "Apply to"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.executionMember"
+#~ msgstr "Member path"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.originalRom"
+#~ msgstr "Original ROM{member}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patch.selectTarget"
+#~ msgstr "Select target"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.targetRom"
+#~ msgstr "Target ROM: {target}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patchChecks.executionMemberTitle"
+#~ msgstr "Use the exact member path from the selected ROM or patch output."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.patch.target"
+#~ msgstr "Target"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", an output extension. The format selector adds the extension; remove it to avoid a doubled name."
 
@@ -425,11 +470,6 @@ msgstr "Apply both patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.target"
-msgstr "Apply patch into"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.file.patchTarget"
 msgstr "Apply patch into"
 
@@ -447,11 +487,6 @@ msgstr "Apply Patches"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.applyToAll"
 msgstr "Apply to all"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.execution"
-msgstr "Apply to: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -492,11 +527,6 @@ msgstr "Archives are decompressed; we find the ROM or let you choose."
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.author"
 msgstr "Author"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.explanation"
-msgstr "Authored input checks describe a patch source. Every patch runs on the current stack input."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -776,7 +806,7 @@ msgstr "chd, rvz/wia/gcz, and z3ds files are decompressed before patching."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.step.cheats"
-msgstr "Cheats"
+msgstr "Cheats as a Patch"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1047,11 +1077,6 @@ msgstr "Create tool"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.n64CurrentOrder"
 msgstr "current order"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.currentStackInput"
-msgstr "Current stack input"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1935,11 +1960,6 @@ msgstr "Media profile not supported"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.executionMember"
-msgstr "Member path"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.tools.menu"
 msgstr "Menu"
 
@@ -1980,6 +2000,11 @@ msgstr "More info"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.select.romsTitle"
+msgstr "More than one ROM was dropped"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.mostUsed"
 msgstr "most used"
 
@@ -2002,6 +2027,11 @@ msgstr "Move up"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.moveUp"
 msgstr "Move up"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.select.multipleCandidates"
+msgstr "Multiple candidates found, select one"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2107,6 +2137,11 @@ msgstr "No ROM in the identification data has this checksum."
 #: src/presentation/localization/messages.ts
 msgid "error.NO_SELECTABLE_CANDIDATE"
 msgstr "No selectable file was found."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.select.noSelectableFiles"
+msgstr "No selectable files in this source"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2280,11 +2315,6 @@ msgstr "Original ROM (automatic)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.originalRom"
-msgstr "Original ROM{member}"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.home.workflowsTitle"
 msgstr "Other capabilities"
 
@@ -2410,6 +2440,11 @@ msgstr "Patch {n}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.runsOn"
+msgstr "Patch {n} runs on"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.reorderHelp"
 msgstr "Patch {position} of {total}. Drag to reorder, click to edit its position, or press the up and down arrow keys."
 
@@ -2482,6 +2517,11 @@ msgstr "Patches"
 #: src/presentation/localization/messages.ts
 msgid "ui.step.patches"
 msgstr "Patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.step.patchesCheats"
+msgstr "Patches & Cheats"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2561,6 +2601,11 @@ msgstr "previous output"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchInputs.previous"
+msgstr "Previous patch output"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.precedingPatchOutput"
 msgstr "Previous patch output"
 
 #. js-lingui-explicit-id
@@ -2930,8 +2975,18 @@ msgstr "See your changes in play."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patch.selectTarget"
-msgstr "Select target"
+msgid "ui.select.patchesHint"
+msgstr "Select the patches you want to add, then choose Add patches."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.select.multipleRoms"
+msgstr "Select the ROM to use"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.selectTrack"
+msgstr "Select track"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3147,11 +3202,6 @@ msgstr "Tap to add ROMs, patches, bundles, or archives"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.tap"
 msgstr "Tap to choose files"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.targetRom"
-msgstr "Target ROM: {target}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3465,6 +3515,11 @@ msgstr "TOTAL"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.track"
+msgstr "Track"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.cachedFilesTransferred"
 msgstr "Transferred"
 
@@ -3586,11 +3641,6 @@ msgstr "Use duplicate ROMs"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.duplicateTitle"
 msgstr "Use duplicate ROMs?"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.executionMemberTitle"
-msgstr "Use the exact member path from the selected ROM or patch output."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

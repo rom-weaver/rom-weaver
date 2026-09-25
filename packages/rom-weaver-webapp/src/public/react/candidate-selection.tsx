@@ -71,6 +71,10 @@ function CandidateSelectionDialog({
     };
   });
   const multiSelect = !!request.multiSelect && selectableCount > 1;
+  // A ROM prompt answers "which ROM do I patch?" rather than "which patch do I
+  // add?", so its heading and hint name the ROM rather than the patch stack.
+  const isRomRole = request.role === "input";
+  const isMultiRomPrompt = isRomRole && request.candidates.every((candidate) => candidate.type === "file");
   return (
     <Modal
       onClose={onCancel}
@@ -78,11 +82,13 @@ function CandidateSelectionDialog({
       subtitle={
         selectableCount
           ? multiSelect
-            ? "Select the patches you want to add, then choose Add patches."
-            : "Multiple candidates found, select one"
-          : "No selectable files in this source"
+            ? localizer.message("ui.select.patchesHint")
+            : localizer.message(isMultiRomPrompt ? "ui.select.multipleRoms" : "ui.select.multipleCandidates")
+          : localizer.message("ui.select.noSelectableFiles")
       }
-      title={request.sourceName}
+      title={
+        isMultiRomPrompt && request.sourceName === "" ? localizer.message("ui.select.romsTitle") : request.sourceName
+      }
       variant="select-modal"
     >
       {multiSelect ? (

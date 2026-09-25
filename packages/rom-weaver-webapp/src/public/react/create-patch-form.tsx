@@ -1164,7 +1164,10 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   };
   // Cheat classification runs against the original ROM: it supplies the platform
   // the database lookup routes on and the ROM bytes the decoder resolves against.
+  // The header platform comes first, as in Apply: identify leaves both of its
+  // fields empty for a ROM it cannot match.
   const cheatPlatform =
+    originalState?.romType?.platform ||
     originalState?.identification?.matches?.[0]?.platform ||
     originalState?.identification?.platformCandidates?.[0]?.platform;
   const cheatRom = useMemo(

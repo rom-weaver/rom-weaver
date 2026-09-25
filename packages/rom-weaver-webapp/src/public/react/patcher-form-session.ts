@@ -32,11 +32,10 @@ import type {
 } from "./apply-session-types.ts";
 import { getBinarySourceListStableIds, getBinarySourceSize, sameBinarySourceLists } from "./input-session-helpers.ts";
 import { getGeneratedOutputName } from "./output-view-model.ts";
+import { buildCheatOutputBaseName } from "../../lib/output/output-name-composition.ts";
 import type { ApplyPatchFormSettings, BinarySource, NoticeController } from "./patcher-form.ts";
 import {
   formatElapsedTiming,
-  getLogicalRomInputCount,
-  getMultiInputOutputError,
   getRequestedOutputName,
   isWorkflowDisposedError,
   resolvePendingDownloadFileName,
@@ -103,6 +102,7 @@ const useLocalApplyPatchFormSession = ({
   resolvedOutputCompression,
   resolvedOutputName,
   resolvedOutputNameKey,
+  cheatNames = [],
   disabledPatchIds,
   stageInput,
   stagePatches,
@@ -301,10 +301,9 @@ const useLocalApplyPatchFormSession = ({
   ]);
   const { getKey: getInputKey } = useStableSourceKeys(effectiveInputs, "input");
   const { getKey: getPatchKey } = useStableSourceKeys(activePatches, "patch");
-  // Only a single-ROM apply has one title to name the output after; a multi-ROM
-  // run has no single answer.
-  const identifiedTitle =
-    getLogicalRomInputCount(romInputs) === 1 ? identifiedOutputBaseName(romInputs[0]?.info.identification) : null;
+  // A run stages one ROM input (a disc's tracks share it), so its identified
+  // title names the output.
+  const identifiedTitle = identifiedOutputBaseName(romInputs[0]?.info.identification);
   const identifiedOutputBase = activeSettings.output?.identifiedName === false ? null : identifiedTitle;
   const generatedOutputName = getGeneratedOutputName(
     effectiveInputs[0],
@@ -321,7 +320,8 @@ const useLocalApplyPatchFormSession = ({
     ? currentResolvedOutputName || generatedOutputName
     : generatedOutputName;
   const resolvedThreads = activeSettings.workers?.threads ?? getLegacyCompressionThreads(activeSettings) ?? threads;
-  const effectiveResolvedOutputName = requestedOutputName || automaticResolvedOutputName;
+  const effectiveResolvedOutputName =
+    requestedOutputName || buildCheatOutputBaseName(automaticResolvedOutputName, cheatNames);
   const stageSettingsKey = useMemo(
     () =>
       createStageSettingsKey({
@@ -388,11 +388,10 @@ const useLocalApplyPatchFormSession = ({
   const hasStrictInputChecksumMismatch =
     strictInputChecksumValidation && stagedPatchInfos.some((info) => info.checksumPreflightMismatch === true);
   const strictInputChecksumBlocked = hasStrictInputChecksumMismatch && !checksumOverrideChecked;
-  const multiInputOutputError = getMultiInputOutputError(displayedCompression, getLogicalRomInputCount(romInputs));
   const inputNoticeMessage = failurePlacement === "input" ? failureMessage : "";
   const patchNoticeMessage = failurePlacement === "patch" ? failureMessage : "";
   const outputRuntimeNoticeMessage = outputErrorMessage || (failurePlacement === "output" ? failureMessage : "");
-  const effectiveOutputNoticeMessage = outputRuntimeNoticeMessage || multiInputOutputError;
+  const effectiveOutputNoticeMessage = outputRuntimeNoticeMessage;
   // Deferred patch validation has no staging progress, but its verdict still controls whether the
   // next run is safe. Keep a queued Apply behind that silent pass.
   const applyPreparationPending =
@@ -407,7 +406,7 @@ const useLocalApplyPatchFormSession = ({
   );
   const applyQueueBlocked =
     !!failureMessage || !!outputErrorMessage || strictInputChecksumBlocked || patchValidationBlocked;
-  const canQueueApply = !!effectiveInputs.length && !multiInputOutputError;
+  const canQueueApply = !!effectiveInputs.length;
   const canStartApply = canQueueApply && applyReady && !applyQueueBlocked && !applyPreparationPending;
   const disposeActiveOutput = useCallback(() => {
     clearPendingDownload();

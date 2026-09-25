@@ -720,6 +720,11 @@ const getPatchApplyCommandOptions = (input: RuntimePatchApplyWorkerInput) => {
       : Array.isArray(options?.cheat_records)
         ? options.cheat_records
         : [],
+    cheatPositions: Array.isArray(options?.cheatPositions)
+      ? options.cheatPositions
+      : Array.isArray(options?.cheat_positions)
+        ? options.cheat_positions
+        : [],
     headerModes: getPatchApplyHeaderModes(options, removeHeader),
     ignoreChecksumValidation:
       (input.options as { requireInputChecksumMatch?: unknown } | undefined)?.requireInputChecksumMatch !== true,
@@ -828,6 +833,7 @@ const getPatchApplyExecution = (input: RuntimePatchApplyWorkerInput, outputPath:
   const syncAccessMode = threadOptions.hasBpsPatch ? "readwrite-unsafe" : undefined;
   const command = createRomWeaverCommand("patch-apply", {
     ...(commandOptions.cheatRecords.length ? { cheat_records: commandOptions.cheatRecords } : {}),
+    ...(commandOptions.cheatPositions.length ? { cheat_positions: commandOptions.cheatPositions } : {}),
     ...(commandOptions.headerModes.length ? { patch_header: commandOptions.headerModes } : {}),
     ignore_checksum_validation: commandOptions.ignoreChecksumValidation,
     input: input.romFilePath,
