@@ -1,17 +1,12 @@
 import {
-  ArrowDown,
   ArrowLeftRight,
-  ArrowUp,
   Check,
   Disc3,
-  EllipsisVertical,
   GitBranch,
   Pencil,
   Plus,
-  RefreshCw,
   Scissors,
   Tag,
-  Trash2,
   TriangleAlert,
   UserRound,
   X,
@@ -19,15 +14,10 @@ import {
 import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import { CHEAT_HEADER_STRIP_HINT } from "../../lib/cheats/header-guard.ts";
 import type { Localizer } from "../../presentation/localization/index.ts";
-import { InfoToggle } from "../../presentation/react/info-toggle.tsx";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
-import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
 import type { ParsedBundleChecks } from "../../types/bundle.ts";
 import {
-  CHECK_ALGORITHMS,
-  type CHECK_FIELDS,
   CHECK_FIELDS_PAIRED,
-  CHECK_HEX_LENGTHS,
   CHECK_LABELS,
   type CheckAlgorithm,
   type CheckField,
@@ -43,9 +33,7 @@ import { ExtractDrawer, ExtractName } from "./components/ds/extraction-tree.tsx"
 import { FileCard } from "./components/ds/file-card.tsx";
 import { InfoPopover, StepSection } from "./components/ds/layout.tsx";
 import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
-import { useExpectedRomIdentification } from "./use-expected-rom-identification.ts";
 import { reorder, useListReorder } from "./components/ds/use-list-reorder.ts";
-import { getFileInputAcceptAttributes } from "./file-input-accept.ts";
 import type { PatcherStackController } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import { formatHeaderAutoLabel } from "./patcher-view-models.ts";
@@ -54,158 +42,30 @@ import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
 import type { PatchInputBasis } from "./patch-input-basis.ts";
 import type { CheatStackRenderState } from "./components/cheat-database-section.tsx";
 import { toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
-
-const TIMING_LABEL = (ms?: number) =>
-  typeof ms === "number" && Number.isFinite(ms) ? formatTiming(createTiming(ms)) : "";
-const CHECKSUM_TIMING_LABEL = (timing?: string, prefix = "Checksum") => (timing ? `${prefix} ${timing}` : undefined);
-
-const PATCH_INPUT_VERIFICATION_LABELS: Record<string, string> = {
-  "in crc32": "CRC32",
-  "in md5": "MD5",
-  "in min size": "MIN BYTES",
-  "in sha-1": "SHA-1",
-  "in sha1": "SHA-1",
-  "in size": "BYTES",
-  "in rom": "ROM",
-};
-
-const PATCH_OUTPUT_VERIFICATION_LABELS: Record<string, string> = {
-  "out crc32": "CRC32",
-  "out md5": "MD5",
-  "out sha-1": "SHA-1",
-  "out sha1": "SHA-1",
-  "out size": "BYTES",
-};
-
-const BUNDLE_CHECK_LABELS: Record<string, string> = {
-  crc32: CHECK_LABELS.crc32,
-  md5: CHECK_LABELS.md5,
-  sha1: CHECK_LABELS.sha1,
-};
-
-/** Requirement rows this patch will actually verify, per side: embedded/declared
- * hashes, sizes, and free-form validation notes. */
-const getPatchVerificationRows = (item: PatchStackItemState) => {
-  const inputRows: Array<{ label: string; value: string }> = [];
-  const outputRows: Array<{ label: string; value: string }> = [];
-  const xdeltaSizeOnly = item.validationValues.some((entry) => /^in min size=/i.test(entry));
-  for (const entry of item.validationValues) {
-    const separatorIndex = entry.indexOf("=");
-    if (separatorIndex === -1) {
-      // The generic preflight marker never renders as a per-type row; the drawer-header verdict
-      // already covers it.
-      if (/preflight|dry-?run/i.test(entry)) continue;
-      inputRows.push({ label: "VALIDATION", value: entry });
-      continue;
-    }
-    const rawLabel = entry.slice(0, separatorIndex).trim().toLowerCase();
-    const value = entry.slice(separatorIndex + 1).trim();
-    if (!value) continue;
-    if (xdeltaSizeOnly && (rawLabel === "in min size" || rawLabel === "out size")) continue;
-    if (PATCH_INPUT_VERIFICATION_LABELS[rawLabel]) {
-      inputRows.push({ label: PATCH_INPUT_VERIFICATION_LABELS[rawLabel], value });
-      continue;
-    }
-    outputRows.push({ label: PATCH_OUTPUT_VERIFICATION_LABELS[rawLabel] || rawLabel.toUpperCase(), value });
-  }
-  // BYTES pairs with CRC32 on one grid row, so it rides directly after it;
-  // with no CRC32 requirement the size row keeps its end-of-list spot.
-  const bytesAfterCrc32 = (rows: typeof inputRows) => {
-    const bytes = rows.filter((row) => row.label === "BYTES");
-    if (!bytes.length) return rows;
-    const rest = rows.filter((row) => row.label !== "BYTES");
-    const crcIndex = rest.findIndex((row) => row.label === "CRC32");
-    if (crcIndex === -1) return [...rest, ...bytes];
-    return [...rest.slice(0, crcIndex + 1), ...bytes, ...rest.slice(crcIndex + 1)];
-  };
-  return { inputRows: bytesAfterCrc32(inputRows), outputRows: bytesAfterCrc32(outputRows) };
-};
-
-/* The dry-run's "validation failed: " lead-in duplicates the well's title -
-   strip it and re-capitalize what remains so the detail reads as a sentence. */
-const toFaultDetail = (message: string, localizer: Localizer): string => {
-  const detail = message.replace(/^\s*validation failed:?\s*/i, "").trim();
-  if (!detail) return localizer.message("ui.patch.validationMismatch");
-  return detail.charAt(0).toUpperCase() + detail.slice(1);
-};
-
-/** Failed dry-run verdict: an inset fault well with the verdict, the detail,
- * and what to do next (naming the 0x04 override toggle when it is offered). */
-const PatchFaultWell = ({ message, overrideAvailable }: { message: string; overrideAvailable?: boolean }) => {
-  const localizer = useUiLocalizer();
-  return (
-    <div className="pverdict pfault">
-      <div className="pfault-title">
-        <X aria-hidden="true" />
-        <span>{localizer.message("ui.patch.validationFailed")}</span>
-      </div>
-      <p className="pfault-detail">{toFaultDetail(message, localizer)}</p>
-      <p className="pfault-hint">
-        {overrideAvailable
-          ? localizer.message("ui.patch.validationMismatchOverride")
-          : localizer.message("ui.patch.validationMismatchHint")}
-      </p>
-    </div>
-  );
-};
-
-const PreflightSuccess = () => {
-  const localizer = useUiLocalizer();
-  return (
-    <InfoToggle
-      ariaLabel={localizer.message("ui.patch.preflightPassed")}
-      className="dry-apply-info"
-      icon={<Check aria-hidden="true" />}
-      panelClassName="dry-apply-pop"
-      portalPanel
-      title={localizer.message("ui.patch.preflightPassed")}
-    >
-      <strong>{localizer.message("ui.patch.preflightPassed")}</strong>
-      <p>{localizer.message("ui.patch.preflightVerified")}</p>
-      <p>{localizer.message("ui.patch.preflightOutputPending")}</p>
-    </InfoToggle>
-  );
-};
-
-/** Grow a textarea to its content (`field-sizing: content` isn't in every
- * target browser yet); runs on mount and on every input. */
-const autosizeTextarea = (element: HTMLTextAreaElement | null) => {
-  if (!element) return;
-  element.style.height = "auto";
-  element.style.height = `${element.scrollHeight + 2}px`;
-};
-
-const getEmbeddedChecks = (item: PatchStackItemState, side: "input" | "output") => {
-  const prefix = side === "input" ? "in " : "out ";
-  const checks: Partial<Record<(typeof CHECK_FIELDS)[number], string>> = {};
-  for (const entry of item.validationValues) {
-    const [rawLabel, rawValue] = entry.split("=", 2);
-    const label = rawLabel?.trim().toLowerCase();
-    const value = rawValue?.trim();
-    if (!(label?.startsWith(prefix) && value)) continue;
-    const algorithm = label.slice(prefix.length).replace("sha-1", "sha1");
-    // exact byte size only - "min size" is a lower bound, not a bytes value
-    if (algorithm === "size") {
-      checks.bytes = value;
-      continue;
-    }
-    if (CHECK_ALGORITHMS.includes(algorithm as (typeof CHECK_ALGORITHMS)[number])) {
-      checks[algorithm as (typeof CHECK_ALGORITHMS)[number]] = value;
-    }
-  }
-  return checks;
-};
-
-const bundleCheckRows = (checks: ParsedBundleChecks | undefined) => {
-  const rows: Array<{ label: string; value: string }> = [];
-  for (const [algorithm, value] of Object.entries(checks?.checksums || {})) {
-    const normalized = algorithm.toLowerCase().replace("sha-1", "sha1");
-    const label = BUNDLE_CHECK_LABELS[normalized];
-    if (label && value.trim()) rows.push({ label, value: value.trim() });
-  }
-  if (typeof checks?.size === "number") rows.push({ label: "BYTES", value: String(checks.size) });
-  return rows;
-};
+import {
+  TIMING_LABEL,
+  CHECKSUM_TIMING_LABEL,
+  getPatchVerificationRows,
+  PatchFaultWell,
+  PreflightSuccess,
+  autosizeTextarea,
+  getEmbeddedChecks,
+  bundleCheckRows,
+} from "./apply-patch-list-helpers.tsx";
+import {
+  type ReorderHandleProps,
+  PatchDragHandle,
+  PatchEnableToggle,
+  PatchMetaDoneButton,
+  PatchActionsMenu,
+} from "./apply-patch-card-controls.tsx";
+import {
+  chainChipText,
+  resolvedBasisLabel,
+  checkInputBasisLabel,
+  IdentifiedCheckTitle,
+} from "./apply-patch-chain-labels.tsx";
+import { type RomCheckActuals, matchInputCheck, checkErrorMessage } from "./apply-patch-input-checks.ts";
 
 type PatchMetaFieldProps = {
   index: number;
@@ -499,30 +359,6 @@ const PatchN64ByteOrderSelect = ({
   );
 };
 
-/** A ROM's computed identity values, used to verify user-entered input checks. */
-type RomCheckActuals = { crc32?: string; md5?: string; sha1?: string; bytes?: number };
-
-/** Compare a committed (already-valid) input check to the real ROM value.
- * Returns undefined when there is nothing to compare against (the ROM value has
- * not been computed, or the field is empty). */
-const matchInputCheck = (field: CheckField, value: string, actuals?: RomCheckActuals): "bad" | "ok" | undefined => {
-  if (!(actuals && value)) return undefined;
-  if (field === "bytes") {
-    if (typeof actuals.bytes !== "number") return undefined;
-    return Number(value) === actuals.bytes ? "ok" : "bad";
-  }
-  const actual = (actuals[field] || "").trim().toLowerCase();
-  if (!actual) return undefined;
-  return normalizeCheckInput(value) === actual ? "ok" : "bad";
-};
-
-/** Why a committed check value failed validation - shown inline under the field
- * and as its title. */
-const checkErrorMessage = (field: CheckField, localizer: Localizer): string =>
-  field === "bytes"
-    ? localizer.message("ui.patch.expectedWholeBytes")
-    : localizer.message("ui.patch.expectedHexCharacters", { count: CHECK_HEX_LENGTHS[field as CheckAlgorithm] });
-
 /** An editable expected-check field (user-specified, not built into the patch):
  * commits on blur, removable via the trailing X. A malformed value shows an
  * inline error; a well-formed value that was compared to the real ROM shows a
@@ -675,91 +511,6 @@ const EditableCheckRow = ({
       ) : null}
     </div>
   );
-};
-
-/** The chain chip: one plain-language line for what this patch's input was matched against.
- * Positions in the verdict are 0-based ENABLED-chain positions; `enabledIndexes` maps them to
- * the list numbering the drag handles use. Quiet by design: single-patch stacks show only the
- * identity verdicts. */
-const chainChipText = (
-  item: PatchStackItemState,
-  hasImplicitPredecessor: boolean,
-  enabledIndexes: readonly number[],
-  localizer: Localizer,
-  patchLabels: readonly string[],
-): { text: string; warn?: boolean } | null => {
-  const verdict = item.chainVerdict;
-  const targetLabel = item.targetOptions?.find((option) => option.value === item.targetValue)?.label;
-  const checkedTarget =
-    targetLabel ||
-    localizer.message(hasImplicitPredecessor ? "ui.patchChecks.precedingPatchOutput" : "ui.patchInputs.original");
-  if (!verdict) {
-    if (item.validationState === "deferred") {
-      return { text: localizer.message("ui.patchChecks.deferred", { input: checkedTarget }) };
-    }
-    if (item.validationState === "valid") {
-      return { text: localizer.message("ui.patchChecks.verified") };
-    }
-    return { text: localizer.message("ui.patchChecks.unknown", { input: checkedTarget }) };
-  }
-  const displayNumber = (enabledPosition: number) => (enabledIndexes[enabledPosition] ?? enabledPosition) + 1;
-  const displayPatch = (enabledPosition: number) => {
-    const index = enabledIndexes[enabledPosition] ?? enabledPosition;
-    return patchLabels[index] || localizer.message("ui.patchChecks.patchNumber", { n: displayNumber(enabledPosition) });
-  };
-  if (item.validationState === "invalid" && verdict.matched.kind === "none" && verdict.basisSource !== "default") {
-    return { text: localizer.message("ui.chain.differentRom"), warn: true };
-  }
-  if (verdict.expectedPredecessor !== undefined) {
-    return {
-      text: localizer.message("ui.patchChecks.expects", { patch: displayPatch(verdict.expectedPredecessor) }),
-      warn: true,
-    };
-  }
-  if (verdict.matched.kind === "patch_output") {
-    const predecessor = displayPatch(verdict.matched.index);
-    return item.validationState === "deferred"
-      ? { text: localizer.message("ui.patchChecks.deferred", { input: predecessor }) }
-      : { text: localizer.message("ui.patchChecks.verified") };
-  }
-  if (verdict.matched.kind === "base") {
-    return item.validationState === "deferred"
-      ? { text: localizer.message("ui.patchChecks.deferred", { input: checkedTarget }) }
-      : { text: localizer.message("ui.patchChecks.verified") };
-  }
-  if (item.validationState === "deferred") {
-    return { text: localizer.message("ui.patchChecks.deferred", { input: checkedTarget }) };
-  }
-  if (item.validationState === "valid") {
-    return { text: localizer.message("ui.patchChecks.verified") };
-  }
-  return { text: localizer.message("ui.patchChecks.unknown", { input: checkedTarget }) };
-};
-
-const resolvedBasisLabel = (
-  basis: PatchInputBasis,
-  localizer: Localizer,
-  verdictBasis?: "base" | "previous",
-): string => {
-  if (basis === "auto") {
-    if (verdictBasis === "base") return localizer.message("ui.basis.autoBase");
-    if (verdictBasis === "previous") return localizer.message("ui.basis.autoPrevious");
-    return localizer.message("ui.patchInputs.auto");
-  }
-  return basis === "base" ? localizer.message("ui.patchInputs.original") : localizer.message("ui.patchInputs.previous");
-};
-
-const checkInputBasisLabel = (
-  basis: PatchInputBasis,
-  localizer: Localizer,
-  verdictBasis?: "base" | "previous",
-): string => {
-  if (basis === "auto") {
-    if (verdictBasis === "base") return localizer.message("ui.patchChecks.autoBase");
-    if (verdictBasis === "previous") return localizer.message("ui.patchChecks.autoPrevious");
-    return localizer.message("ui.patchChecks.automatic");
-  }
-  return basis === "base" ? localizer.message("ui.patchInputs.original") : localizer.message("ui.patchInputs.previous");
 };
 
 const PatchChecksDrawer = ({
@@ -1018,147 +769,6 @@ const PatchChecksDrawer = ({
 };
 
 /**
- * The database title behind a declared check state, so a drawer group names the
- * ROM its checksums describe. A per-track check matches a multi-track record
- * only partially, and the title is still the right one, so any `matched`
- * resolution is shown.
- */
-const IdentifiedCheckTitle = ({ checks, enabled }: { checks?: ParsedBundleChecks; enabled: boolean }) => {
-  const localizer = useUiLocalizer();
-  const hasChecksums = !!Object.keys(checks?.checksums || {}).length;
-  const identification = useExpectedRomIdentification(hasChecksums ? checks : undefined, enabled && hasChecksums);
-  const match = identification?.status === "matched" ? identification.matches[0] : undefined;
-  if (!match) return null;
-  // Redump-style names already carry the region as its own word or bracketed
-  // tag, so it is only appended when the name has no such word.
-  const region = match.region?.trim();
-  const carriesRegion =
-    !!region &&
-    new RegExp(`(^|[\\s(,])${region.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=$|[\\s),])`, "i").test(match.name);
-  const title = region && !carriesRegion ? `${match.name} (${region})` : match.name;
-  return (
-    <span className="ck-group-title">
-      {localizer.message("ui.patchChecks.identified", { platform: match.platform, title })}
-    </span>
-  );
-};
-
-type ReorderHandleProps = ReturnType<ReturnType<typeof useListReorder>["handleProps"]>;
-
-/** Numbered drag target that turns into a position editor on click. */
-const PatchDragHandle = ({
-  disabled,
-  handleProps,
-  index,
-  onReorder,
-  position,
-  total,
-}: {
-  disabled: boolean;
-  handleProps: ReorderHandleProps;
-  index: number;
-  onReorder: (from: number, to: number) => void;
-  position: number;
-  total: number;
-}) => {
-  const localizer = useUiLocalizer();
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(String(position));
-  const cancelEditRef = useRef(false);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    if (!editing) return;
-    const input = inputRef.current;
-    if (!input) return;
-    input.select();
-
-    const keepInputVisible = () => {
-      const viewport = window.visualViewport;
-      const viewportTop = viewport?.offsetTop ?? 0;
-      const viewportBottom = viewportTop + (viewport?.height ?? window.innerHeight);
-      const rect = input.getBoundingClientRect();
-      const margin = 24;
-      if (rect.top < viewportTop + margin || rect.bottom > viewportBottom - margin) {
-        input.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
-      }
-    };
-    const frame = window.requestAnimationFrame(keepInputVisible);
-    const viewport = window.visualViewport;
-    viewport?.addEventListener("resize", keepInputVisible);
-    viewport?.addEventListener("scroll", keepInputVisible);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      viewport?.removeEventListener("resize", keepInputVisible);
-      viewport?.removeEventListener("scroll", keepInputVisible);
-    };
-  }, [editing]);
-
-  const commit = () => {
-    setEditing(false);
-    if (cancelEditRef.current) {
-      cancelEditRef.current = false;
-      return;
-    }
-    const position = Number.parseInt(draft, 10);
-    if (!Number.isInteger(position)) return;
-    const target = Math.max(1, Math.min(total, position)) - 1;
-    if (target !== index) onReorder(index, target);
-  };
-
-  if (editing) {
-    return (
-      <input
-        aria-label={localizer.message("ui.patch.editPosition", { position, total })}
-        className="handle phandle phandle-input mono"
-        max={total}
-        min={1}
-        onBlur={commit}
-        onChange={(event) => setDraft(event.currentTarget.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            event.currentTarget.blur();
-          } else if (event.key === "Escape") {
-            event.preventDefault();
-            cancelEditRef.current = true;
-            event.currentTarget.blur();
-          }
-        }}
-        ref={inputRef}
-        type="number"
-        value={draft}
-      />
-    );
-  }
-
-  return (
-    <button
-      aria-label={
-        disabled
-          ? localizer.message("ui.patch.reorderUnavailable", { position, total })
-          : localizer.message("ui.patch.reorderHelp", { position, total })
-      }
-      className="handle phandle"
-      {...handleProps}
-      disabled={disabled}
-      onClick={(event) => {
-        handleProps.onClick?.(event);
-        if (event.defaultPrevented) return;
-        setDraft(String(position));
-        setEditing(true);
-      }}
-      title={localizer.message(disabled ? "ui.patch.position" : "ui.patch.reorderTitle")}
-      type="button"
-    >
-      <span aria-hidden="true" className="phandle-number mono">
-        {position}
-      </span>
-    </button>
-  );
-};
-
-/**
  * The one "runs on" choice for a patch: the stack state it applies to. It writes
  * the run input and the matching basis together, because the engine pairs a ROM
  * input with the `base` basis and a patch-output input with `previous`; two
@@ -1264,209 +874,6 @@ const PatchRunsOnSelect = ({
         ) : null}
       </DropdownSelect>
     </span>
-  );
-};
-
-/** The loom On/Off switch leading a patch card's meta line. */
-const PatchEnableToggle = ({
-  disabled,
-  fileName,
-  onToggle,
-}: {
-  disabled: boolean;
-  fileName: string;
-  onToggle: () => void;
-}) => {
-  const localizer = useUiLocalizer();
-  return (
-    <label className="patch-enable">
-      <input
-        aria-label={localizer.message("ui.patch.include", { name: fileName.replace(/\.[^.]+$/, "") })}
-        checked={!disabled}
-        onChange={onToggle}
-        type="checkbox"
-      />
-      <span aria-hidden="true" className="switch-state">
-        <b className="on">{localizer.message("ui.patch.on")}</b>
-        <b className="off">{localizer.message("ui.patch.off")}</b>
-      </span>
-    </label>
-  );
-};
-
-/** The check that closes the patch-details form; it takes the menu's slot in
- * the action column while editing (commit happens on each field's blur; the
- * check just closes the form). Carries the same id as the menu's Edit item so
- * open/close drive one control identity. */
-const PatchMetaDoneButton = ({ index, onToggle }: { index: number; onToggle: () => void }) => {
-  const localizer = useUiLocalizer();
-  return (
-    <button
-      aria-expanded
-      aria-label={localizer.message("ui.patch.doneEditing")}
-      className="rm patch-menu-btn is-editing"
-      id={`rom-weaver-patch-meta-edit-${index}`}
-      onClick={onToggle}
-      title={localizer.message("ui.patch.done")}
-      type="button"
-    >
-      <Check aria-hidden="true" />
-    </button>
-  );
-};
-
-const PatchActionsMenu = ({
-  canMoveDown,
-  canMoveUp,
-  index,
-  onMoveDown,
-  onMoveUp,
-  onReplace,
-  onOpenChange,
-  onEdit,
-  onRemove,
-  open,
-}: {
-  canMoveDown: boolean;
-  canMoveUp: boolean;
-  index: number;
-  onMoveDown: () => void;
-  onMoveUp: () => void;
-  onReplace: (file: File) => void;
-  onOpenChange: (open: boolean) => void;
-  /** Absent while the details form cannot be edited (no bundle meta channel). */
-  onEdit?: () => void;
-  onRemove: () => void;
-  open: boolean;
-}) => {
-  const localizer = useUiLocalizer();
-  const fileRef = useRef<HTMLInputElement | null>(null);
-  const buttonRef = useRef<HTMLButtonElement | null>(null);
-  const close = () => {
-    onOpenChange(false);
-    buttonRef.current?.focus();
-  };
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (!open) return undefined;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) onOpenChange(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [onOpenChange, open]);
-  return (
-    <div className="patch-menu" ref={rootRef}>
-      <button
-        aria-expanded={open}
-        aria-haspopup="menu"
-        aria-label={localizer.message("ui.patch.actions")}
-        className={open ? "rm patch-menu-btn is-open" : "rm patch-menu-btn"}
-        id={`rom-weaver-patch-menu-${index}`}
-        onClick={() => onOpenChange(!open)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") close();
-        }}
-        ref={buttonRef}
-        title={localizer.message("ui.patch.actions")}
-        type="button"
-      >
-        <EllipsisVertical aria-hidden="true" />
-      </button>
-      <div
-        aria-label={localizer.message("ui.patch.actions")}
-        className="patch-menu-list"
-        hidden={!open}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") close();
-        }}
-        role="menu"
-      >
-        <button
-          className="patch-menu-item"
-          disabled={!canMoveUp}
-          id={`rom-weaver-patch-move-up-${index}`}
-          onClick={() => {
-            close();
-            onMoveUp();
-          }}
-          role="menuitem"
-          type="button"
-        >
-          <ArrowUp aria-hidden="true" />
-          {localizer.message("ui.patch.moveUp")}
-        </button>
-        <button
-          className="patch-menu-item"
-          disabled={!canMoveDown}
-          id={`rom-weaver-patch-move-down-${index}`}
-          onClick={() => {
-            close();
-            onMoveDown();
-          }}
-          role="menuitem"
-          type="button"
-        >
-          <ArrowDown aria-hidden="true" />
-          {localizer.message("ui.patch.moveDown")}
-        </button>
-        <button
-          className="patch-menu-item"
-          id={`rom-weaver-patch-replace-${index}`}
-          onClick={() => fileRef.current?.click()}
-          title={localizer.message("ui.patch.replaceHelp")}
-          role="menuitem"
-          type="button"
-        >
-          <RefreshCw aria-hidden="true" />
-          {localizer.message("ui.patch.replace")}
-        </button>
-        {onEdit ? (
-          <button
-            className="patch-menu-item"
-            id={`rom-weaver-patch-meta-edit-${index}`}
-            onClick={() => {
-              onOpenChange(false);
-              onEdit();
-            }}
-            role="menuitem"
-            type="button"
-          >
-            <Pencil aria-hidden="true" />
-            {localizer.message("ui.patch.editDetails")}
-          </button>
-        ) : null}
-        <button
-          aria-label={localizer.message("ui.patch.remove")}
-          className="patch-menu-item is-danger"
-          id={`rom-weaver-patch-menu-remove-${index}`}
-          onClick={() => {
-            onOpenChange(false);
-            onRemove();
-          }}
-          role="menuitem"
-          type="button"
-        >
-          <Trash2 aria-hidden="true" />
-          {localizer.message("ui.patch.remove")}
-        </button>
-      </div>
-      <input
-        accept={getFileInputAcceptAttributes().patchReplace}
-        aria-label={localizer.message("ui.patch.replacementInput")}
-        className="sr-only"
-        id={`rom-weaver-patch-replace-input-${index}`}
-        onChange={(event) => {
-          const file = event.currentTarget.files?.[0];
-          event.currentTarget.value = "";
-          close();
-          if (file) onReplace(file);
-        }}
-        ref={fileRef}
-        tabIndex={-1}
-        type="file"
-      />
-    </div>
   );
 };
 
