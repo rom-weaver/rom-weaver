@@ -1,4 +1,5 @@
 use std::{
+    cell::Cell,
     collections::{BTreeMap, BTreeSet},
     ffi::OsString,
     fs::{self, DirBuilder, File, OpenOptions},
@@ -26,7 +27,7 @@ use rayon::prelude::*;
 use rom_weaver_core::{
     ArchiveEntryKindFilter, ContainerByteProgress, ContainerCreateRequest, ContainerExtractRequest,
     ContainerListEntry, OperationContext, OperationFamily, OperationReport, ProbeConfidence,
-    Result, RomWeaverError, SelectionMatcher, ThreadCapability, ThreadExecution,
+    Result, RomWeaverError, SelectionMatcher, SharedThreadPool, ThreadCapability, ThreadExecution,
     bounded_items_for_threads, create_extract_output_file, emit_container_running_progress,
     maybe_emit_container_byte_progress, normalize_archive_name,
     should_ignore_common_container_file,
@@ -253,17 +254,8 @@ fn libarchive_close_create_archive(archive: WriteArchive, format_name: &str) -> 
     )
 }
 
-pub(crate) fn write_archive_with_libarchive(
-    request: &ContainerCreateRequest,
-    entries: &[ArchiveInputEntry],
-    context: &OperationContext,
-    execution: &ThreadExecution,
-    config: LibarchiveCreateConfig,
-) -> Result<u64> {
-    if let Some(parent) = request.output.parent() {
-        fs::create_dir_all(parent)?;
-    }
-
+/// Returns each entry's input size (directories count as zero) and their sum.
+fn libarchive_create_entry_sizes(entries: &[ArchiveInputEntry]) -> Result<(Vec<u64>, u64)> {
     let mut entry_sizes = Vec::with_capacity(entries.len());
     let mut total_input_bytes = 0u64;
     for entry in entries {
@@ -275,90 +267,99 @@ pub(crate) fn write_archive_with_libarchive(
         total_input_bytes = total_input_bytes.saturating_add(size);
         entry_sizes.push(size);
     }
+    Ok((entry_sizes, total_input_bytes))
+}
 
-    let compressed_bytes_written = Arc::new(AtomicU64::new(0));
-    let emitted_compressed_progress_bucket = Arc::new(AtomicU64::new(0));
-    let emitted_codec_progress_bucket = Arc::new(AtomicU8::new(0));
+/// Builds the 7z codec progress callback. Only 7z reports codec progress, and only when the
+/// input has a nonzero size.
+fn libarchive_create_codec_progress(
+    context: &OperationContext,
+    execution: &ThreadExecution,
+    config: LibarchiveCreateConfig,
+    total_input_bytes: u64,
+    codec_progress_bucket: Arc<AtomicU8>,
+) -> Option<Box<dyn FnMut(u64)>> {
+    if !matches!(config.format, LibarchiveCreateFormat::SevenZ) || total_input_bytes == 0 {
+        return None;
+    }
     let codec_progress_context = context.clone();
-    let codec_progress_bucket = Arc::clone(&emitted_codec_progress_bucket);
-    let final_codec_progress_bucket = Arc::clone(&emitted_codec_progress_bucket);
-    let final_codec_progress_context = context.clone();
-    let final_codec_progress_execution = execution.clone();
-    let final_codec_progress_format = config.format_name;
     let codec_progress_execution = execution.clone();
     let codec_progress_format = config.format_name;
-    let on_codec_bytes_processed: Option<Box<dyn FnMut(u64)>> =
-        if matches!(config.format, LibarchiveCreateFormat::SevenZ) && total_input_bytes > 0 {
-            Some(Box::new(move |processed_bytes| {
-                let running_processed = processed_bytes.min(total_input_bytes.saturating_sub(1));
-                let percent = running_processed
-                    .saturating_mul(100)
-                    .checked_div(total_input_bytes)
-                    .unwrap_or(100);
-                // Every codec callback is a raw progress event (one per streamed
-                // block step), most of which are coalesced before reaching the
-                // UI. Trace them all for progress debugging.
-                trace!(
-                    command = "compress",
-                    format = codec_progress_format,
-                    stage = "create",
-                    processed_bytes,
-                    running_processed,
-                    total_input_bytes,
-                    percent,
-                    "7z codec progress event"
-                );
-                if running_processed == 0 {
-                    return;
-                }
-                let percent_bucket = percent.min(99) as u8;
-                if percent_bucket == 0 {
-                    return;
-                }
-                let previous_bucket = loop {
-                    let previous_bucket = codec_progress_bucket.load(Ordering::Relaxed);
-                    if percent_bucket <= previous_bucket {
-                        return;
-                    }
-                    if codec_progress_bucket
-                        .compare_exchange(
-                            previous_bucket,
-                            percent_bucket,
-                            Ordering::Relaxed,
-                            Ordering::Relaxed,
-                        )
-                        .is_ok()
-                    {
-                        break previous_bucket;
-                    }
-                };
-                // The main archive thread samples the shared encoded-bytes
-                // counter only at drain points, so a fast multi-threaded
-                // encode can skip many percent levels between callbacks (and
-                // observe only the final one). Fill the gap like
-                // maybe_emit_container_byte_progress does, so progress stays
-                // dense no matter how sparsely the counter was sampled.
-                for bucket in previous_bucket.saturating_add(1)..=percent_bucket {
-                    emit_container_running_progress(
-                        &codec_progress_context,
-                        "compress",
-                        codec_progress_format,
-                        "create",
-                        format!("compressing `{codec_progress_format}`"),
-                        bucket as f32,
-                        Some(&codec_progress_execution),
-                    );
-                }
-            }))
-        } else {
-            None
+    Some(Box::new(move |processed_bytes| {
+        let running_processed = processed_bytes.min(total_input_bytes.saturating_sub(1));
+        let percent = running_processed
+            .saturating_mul(100)
+            .checked_div(total_input_bytes)
+            .unwrap_or(100);
+        // Every codec callback is a raw progress event (one per streamed
+        // block step), most of which are coalesced before reaching the
+        // UI. Trace them all for progress debugging.
+        trace!(
+            command = "compress",
+            format = codec_progress_format,
+            stage = "create",
+            processed_bytes,
+            running_processed,
+            total_input_bytes,
+            percent,
+            "7z codec progress event"
+        );
+        if running_processed == 0 {
+            return;
+        }
+        let percent_bucket = percent.min(99) as u8;
+        if percent_bucket == 0 {
+            return;
+        }
+        let previous_bucket = loop {
+            let previous_bucket = codec_progress_bucket.load(Ordering::Relaxed);
+            if percent_bucket <= previous_bucket {
+                return;
+            }
+            if codec_progress_bucket
+                .compare_exchange(
+                    previous_bucket,
+                    percent_bucket,
+                    Ordering::Relaxed,
+                    Ordering::Relaxed,
+                )
+                .is_ok()
+            {
+                break previous_bucket;
+            }
         };
-    let compressed_progress_bytes = Arc::clone(&compressed_bytes_written);
-    let compressed_progress_bucket = Arc::clone(&emitted_compressed_progress_bucket);
+        // The main archive thread samples the shared encoded-bytes
+        // counter only at drain points, so a fast multi-threaded
+        // encode can skip many percent levels between callbacks (and
+        // observe only the final one). Fill the gap like
+        // maybe_emit_container_byte_progress does, so progress stays
+        // dense no matter how sparsely the counter was sampled.
+        for bucket in previous_bucket.saturating_add(1)..=percent_bucket {
+            emit_container_running_progress(
+                &codec_progress_context,
+                "compress",
+                codec_progress_format,
+                "create",
+                format!("compressing `{codec_progress_format}`"),
+                bucket as f32,
+                Some(&codec_progress_execution),
+            );
+        }
+    }))
+}
+
+/// Builds the callback that traces compressed output growth once per new MiB.
+fn libarchive_create_compressed_progress(
+    request: &ContainerCreateRequest,
+    execution: &ThreadExecution,
+    format_name: &'static str,
+) -> Box<dyn FnMut(u64)> {
+    let compressed_progress_bytes = Arc::new(AtomicU64::new(0));
+    let compressed_progress_bucket = Arc::new(AtomicU64::new(0));
     let compressed_progress_execution = execution.clone();
-    let compressed_progress_format = config.format_name;
+    let compressed_progress_format = format_name;
     let compressed_progress_output = request.output.clone();
-    let on_compressed_bytes_written = move |delta: u64| {
+    Box::new(move |delta: u64| {
         let total = compressed_progress_bytes
             .fetch_add(delta, Ordering::Relaxed)
             .saturating_add(delta);
@@ -388,83 +389,124 @@ pub(crate) fn write_archive_with_libarchive(
             thread_fallback_reason = ?compressed_progress_execution.thread_fallback_reason,
             "wrote compressed archive bytes"
         );
-    };
+    })
+}
+
+/// Writes every entry into the open archive and returns the logical bytes written. Byte
+/// progress comes from the input side except for 7z, which reports codec progress instead.
+fn libarchive_create_write_entries(
+    archive: &mut WriteArchive,
+    entries: &[ArchiveInputEntry],
+    entry_sizes: &[u64],
+    total_input_bytes: u64,
+    context: &OperationContext,
+    execution: &ThreadExecution,
+    config: LibarchiveCreateConfig,
+) -> Result<u64> {
+    let input_progress_enabled =
+        total_input_bytes > 0 && !matches!(config.format, LibarchiveCreateFormat::SevenZ);
+    let input_progress_label = format!("creating `{}`", config.format_name);
+    let input_progress_bytes = AtomicU64::new(0);
+    let emitted_input_progress_bucket = AtomicU8::new(0);
+    let total_entries = entries.len();
+    let mut logical_bytes = 0u64;
+    for (entry_index, (entry, entry_size_bytes)) in
+        entries.iter().zip(entry_sizes.iter().copied()).enumerate()
+    {
+        logical_bytes = logical_bytes.saturating_add(libarchive_write_archive_entry(
+            archive,
+            config.format_name,
+            entry,
+            entry_size_bytes,
+            config.io_buffer_bytes,
+            |delta| {
+                if !input_progress_enabled {
+                    return;
+                }
+                let accepted = input_progress_bytes
+                    .fetch_add(delta, Ordering::Relaxed)
+                    .saturating_add(delta)
+                    .min(total_input_bytes);
+                if accepted >= total_input_bytes {
+                    return;
+                }
+                maybe_emit_container_byte_progress(
+                    context,
+                    accepted,
+                    total_input_bytes,
+                    ContainerByteProgress {
+                        command: "compress",
+                        format: config.format_name,
+                        stage: "create",
+                        label: &input_progress_label,
+                        thread_execution: Some(execution),
+                        emitted_progress_bucket: &emitted_input_progress_bucket,
+                    },
+                );
+            },
+        )?);
+        if total_input_bytes == 0 {
+            emit_container_step_progress(
+                &ContainerProgressContext {
+                    context,
+                    command: "compress",
+                    format: config.format_name,
+                    stage: "create",
+                    thread_execution: Some(execution),
+                },
+                entry_index.saturating_add(1),
+                total_entries,
+                format!(
+                    "creating `{}` ({}/{})",
+                    config.format_name,
+                    entry_index.saturating_add(1),
+                    total_entries
+                ),
+            );
+        }
+    }
+    Ok(logical_bytes)
+}
+
+pub(crate) fn write_archive_with_libarchive(
+    request: &ContainerCreateRequest,
+    entries: &[ArchiveInputEntry],
+    context: &OperationContext,
+    execution: &ThreadExecution,
+    config: LibarchiveCreateConfig,
+) -> Result<u64> {
+    if let Some(parent) = request.output.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let (entry_sizes, total_input_bytes) = libarchive_create_entry_sizes(entries)?;
+    let emitted_codec_progress_bucket = Arc::new(AtomicU8::new(0));
+    let on_codec_bytes_processed = libarchive_create_codec_progress(
+        context,
+        execution,
+        config,
+        total_input_bytes,
+        Arc::clone(&emitted_codec_progress_bucket),
+    );
+    let on_compressed_bytes_written =
+        libarchive_create_compressed_progress(request, execution, config.format_name);
 
     let mut archive = libarchive_open_create_archive(
         &request.output,
         config,
         total_input_bytes,
         on_codec_bytes_processed,
-        Some(Box::new(on_compressed_bytes_written)),
+        Some(on_compressed_bytes_written),
     )?;
-    let input_progress_enabled =
-        total_input_bytes > 0 && !matches!(config.format, LibarchiveCreateFormat::SevenZ);
-    let input_progress_label = format!("creating `{}`", config.format_name);
-    let input_progress_bytes = Arc::new(AtomicU64::new(0));
-    let emitted_input_progress_bucket = Arc::new(AtomicU8::new(0));
-    let input_progress_context = context.clone();
-    let input_progress_execution = execution.clone();
-    let input_progress_format = config.format_name;
-    let result = (|| -> Result<u64> {
-        let total_entries = entries.len();
-        let mut logical_bytes = 0u64;
-        for (entry_index, (entry, entry_size_bytes)) in
-            entries.iter().zip(entry_sizes.iter().copied()).enumerate()
-        {
-            logical_bytes = logical_bytes.saturating_add(libarchive_write_archive_entry(
-                &mut archive,
-                config.format_name,
-                entry,
-                entry_size_bytes,
-                config.io_buffer_bytes,
-                |delta| {
-                    if !input_progress_enabled {
-                        return;
-                    }
-                    let accepted = input_progress_bytes
-                        .fetch_add(delta, Ordering::Relaxed)
-                        .saturating_add(delta)
-                        .min(total_input_bytes);
-                    if accepted >= total_input_bytes {
-                        return;
-                    }
-                    maybe_emit_container_byte_progress(
-                        &input_progress_context,
-                        accepted,
-                        total_input_bytes,
-                        ContainerByteProgress {
-                            command: "compress",
-                            format: input_progress_format,
-                            stage: "create",
-                            label: &input_progress_label,
-                            thread_execution: Some(&input_progress_execution),
-                            emitted_progress_bucket: emitted_input_progress_bucket.as_ref(),
-                        },
-                    );
-                },
-            )?);
-            if total_input_bytes == 0 {
-                emit_container_step_progress(
-                    &ContainerProgressContext {
-                        context,
-                        command: "compress",
-                        format: config.format_name,
-                        stage: "create",
-                        thread_execution: Some(execution),
-                    },
-                    entry_index.saturating_add(1),
-                    total_entries,
-                    format!(
-                        "creating `{}` ({}/{})",
-                        config.format_name,
-                        entry_index.saturating_add(1),
-                        total_entries
-                    ),
-                );
-            }
-        }
-        Ok(logical_bytes)
-    })();
+    let result = libarchive_create_write_entries(
+        &mut archive,
+        entries,
+        &entry_sizes,
+        total_input_bytes,
+        context,
+        execution,
+        config,
+    );
 
     match (
         result,
@@ -472,10 +514,10 @@ pub(crate) fn write_archive_with_libarchive(
     ) {
         (Ok(bytes), Ok(())) => {
             emit_final_7zip_codec_progress(
-                &final_codec_progress_context,
-                final_codec_progress_format,
-                &final_codec_progress_execution,
-                &final_codec_progress_bucket,
+                context,
+                config.format_name,
+                execution,
+                &emitted_codec_progress_bucket,
             );
             Ok(bytes)
         }
@@ -1944,6 +1986,475 @@ fn extract_libarchive_task_chunk_to_sender(
     Ok(())
 }
 
+/// Shared progress state for one libarchive extract. Counters use `Cell` so the serial path's
+/// byte and step callbacks can both borrow it at once.
+struct LibarchiveExtractProgress<'a> {
+    context: &'a OperationContext,
+    execution: &'a ThreadExecution,
+    format_name: &'static str,
+    total_file_bytes: Option<u64>,
+    total_tasks: usize,
+    emitted_progress_bucket: AtomicU8,
+    copied_bytes: Cell<u64>,
+    completed: Cell<usize>,
+}
+
+impl<'a> LibarchiveExtractProgress<'a> {
+    fn new(
+        context: &'a OperationContext,
+        execution: &'a ThreadExecution,
+        format_name: &'static str,
+        total_file_bytes: Option<u64>,
+        total_tasks: usize,
+    ) -> Self {
+        Self {
+            context,
+            execution,
+            format_name,
+            total_file_bytes,
+            total_tasks,
+            emitted_progress_bucket: AtomicU8::new(0),
+            copied_bytes: Cell::new(0),
+            completed: Cell::new(0),
+        }
+    }
+
+    /// Byte progress is reported only when the total file size is known.
+    fn record_bytes(&self, delta: u64) {
+        let Some(total_bytes) = self.total_file_bytes else {
+            return;
+        };
+        let copied_bytes = self
+            .copied_bytes
+            .get()
+            .saturating_add(delta)
+            .min(total_bytes);
+        self.copied_bytes.set(copied_bytes);
+        let format_name = self.format_name;
+        maybe_emit_container_byte_progress(
+            self.context,
+            copied_bytes,
+            total_bytes,
+            ContainerByteProgress {
+                command: "extract",
+                format: format_name,
+                stage: "extract",
+                label: &format!("extracting `{format_name}`"),
+                thread_execution: Some(self.execution),
+                emitted_progress_bucket: &self.emitted_progress_bucket,
+            },
+        );
+    }
+
+    /// Step progress is the fallback when the total file size is unknown.
+    fn record_step(&self) {
+        if self.total_file_bytes.is_some() {
+            return;
+        }
+        let completed = self.completed.get().saturating_add(1);
+        self.completed.set(completed);
+        let format_name = self.format_name;
+        let total_tasks = self.total_tasks;
+        emit_container_step_progress(
+            &ContainerProgressContext {
+                context: self.context,
+                command: "extract",
+                format: format_name,
+                stage: "extract",
+                thread_execution: Some(self.execution),
+            },
+            completed,
+            total_tasks,
+            format!("extracting `{format_name}` ({completed}/{total_tasks})"),
+        );
+    }
+}
+
+fn extract_libarchive_tasks_serial(
+    request: &ContainerExtractRequest,
+    tasks: &[LibarchiveExtractTask],
+    context: &OperationContext,
+    progress: &LibarchiveExtractProgress<'_>,
+) -> Result<(u64, Vec<ExtractedFileChecksum>)> {
+    extract_libarchive_task_chunk(
+        &request.source,
+        tasks,
+        progress.format_name,
+        context,
+        request.overwrite,
+        |delta| progress.record_bytes(delta),
+        || progress.record_step(),
+    )
+}
+
+/// Consumer-side state of a parallel extract: the files the workers have started but not
+/// finished, plus the totals the report needs.
+struct LibarchiveParallelExtractWriter<'a> {
+    context: &'a OperationContext,
+    progress: &'a LibarchiveExtractProgress<'a>,
+    buffer_pool: &'a ExtractIoBufferPool,
+    format_name: &'static str,
+    overwrite: bool,
+    hasher_share: usize,
+    open_outputs: BTreeMap<usize, LibarchiveOpenExtractOutput>,
+    written_bytes: u64,
+    output_checksums: Vec<ExtractedFileChecksum>,
+}
+
+impl LibarchiveParallelExtractWriter<'_> {
+    /// The outer error MUST end the consumer at once. The inner error is a protocol error that
+    /// first stops the receiver and joins the producer before it is returned.
+    fn handle(&mut self, item: LibarchiveExtractOutput) -> Result<Result<()>> {
+        match item {
+            LibarchiveExtractOutput::Directory { output_path } => {
+                fs::create_dir_all(output_path)?;
+                self.progress.record_step();
+                Ok(Ok(()))
+            }
+            LibarchiveExtractOutput::FileStart {
+                index,
+                archive_name,
+                output_path,
+                write_path,
+                logical_bytes,
+            } => self.start_file(index, archive_name, output_path, write_path, logical_bytes),
+            LibarchiveExtractOutput::FileData { index, bytes } => {
+                self.write_file_data(index, bytes)?;
+                Ok(Ok(()))
+            }
+            LibarchiveExtractOutput::FileEnd { index } => {
+                self.finish_file(index)?;
+                Ok(Ok(()))
+            }
+        }
+    }
+
+    fn start_file(
+        &mut self,
+        index: usize,
+        archive_name: String,
+        output_path: PathBuf,
+        write_path: PathBuf,
+        logical_bytes: Option<u64>,
+    ) -> Result<Result<()>> {
+        let format_name = self.format_name;
+        if let Some(parent) = write_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let std::collections::btree_map::Entry::Vacant(e) = self.open_outputs.entry(index) else {
+            return Ok(Err(RomWeaverError::Validation(format!(
+                "{format_name} extract received duplicate start for entry {index} (`{archive_name}`)"
+            ))));
+        };
+        let writer = BufWriter::new(create_extract_output_file(&write_path, self.overwrite)?);
+        // Up to `worker_count` leaves decode at once, each building its own hasher, so they
+        // share the hash budget rather than each taking it. Bounded by the file count too: a
+        // single-file archive plans two threads to overlap decode with the writer, but still
+        // only ever has one hasher live, and dividing by the worker count there would halve its
+        // budget for nothing.
+        let hasher =
+            ExtractHasher::new(self.context, logical_bytes, &output_path, self.hasher_share)?;
+        e.insert(LibarchiveOpenExtractOutput {
+            archive_name,
+            hasher,
+            output_path,
+            write_path,
+            writer,
+        });
+        Ok(Ok(()))
+    }
+
+    fn write_file_data(&mut self, index: usize, bytes: Vec<u8>) -> Result<()> {
+        let format_name = self.format_name;
+        let output = self.open_outputs.get_mut(&index).ok_or_else(|| {
+            RomWeaverError::Validation(format!(
+                "{format_name} extract received data before start for entry {index}"
+            ))
+        })?;
+        let archive_name = &output.archive_name;
+        output.writer.write_all(&bytes).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "{format_name} extract failed while writing entry {index} (`{archive_name}`): {error}"
+            ))
+        })?;
+        let delta = bytes.len() as u64;
+        output.hasher.update(&bytes)?;
+        // Surface the payload's platform identity as soon as enough bytes have streamed to
+        // determine it, rather than waiting for the whole file.
+        if let Some(identity) = output.hasher.take_ready_identity(&output.output_path) {
+            emit_extract_identity(self.context, format_name, &identity);
+        }
+        if let Some(plan) = output.hasher.take_ready_variant_plan() {
+            emit_variant_plan(self.context, format_name, &output.output_path, &plan);
+        }
+        // Hand the buffer back as soon as its bytes are written and hashed; a worker that finds
+        // the pool empty allocates instead of waiting, so returning it early is what keeps the
+        // steady state allocation-free.
+        self.buffer_pool.recycle(bytes);
+        self.written_bytes = self.written_bytes.saturating_add(delta);
+        self.progress.record_bytes(delta);
+        Ok(())
+    }
+
+    fn finish_file(&mut self, index: usize) -> Result<()> {
+        let format_name = self.format_name;
+        let mut output = self.open_outputs.remove(&index).ok_or_else(|| {
+            RomWeaverError::Validation(format!(
+                "{format_name} extract received end before start for entry {index}"
+            ))
+        })?;
+        output.writer.flush().map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "{format_name} extract failed while flushing entry {index} (`{}`): {error}",
+                output.archive_name
+            ))
+        })?;
+        let LibarchiveOpenExtractOutput {
+            hasher,
+            output_path,
+            write_path,
+            writer,
+            ..
+        } = output;
+        drop(writer);
+        if let Some(mut entry) = hasher.finish(&write_path)? {
+            entry.path = output_path;
+            self.output_checksums.push(entry);
+        }
+        self.progress.record_step();
+        Ok(())
+    }
+}
+
+fn extract_libarchive_tasks_parallel(
+    request: &ContainerExtractRequest,
+    tasks: &[LibarchiveExtractTask],
+    context: &OperationContext,
+    pool: Option<&SharedThreadPool>,
+    file_task_count: usize,
+    progress: &LibarchiveExtractProgress<'_>,
+) -> Result<(u64, Vec<ExtractedFileChecksum>)> {
+    let format_name = progress.format_name;
+    let execution = progress.execution;
+    let source = &request.source;
+    // `effective_threads` is the compute-worker budget. The two coordination threads - the
+    // rayon driver below (it calls `pool.install` and parks, so it holds no pool slot) and the
+    // consuming thread that drains the channel and hashes every extracted byte - run on top of
+    // these workers, not subtracted from them, so a configured budget of N decodes with N
+    // workers.
+    let worker_count = execution.effective_threads.max(1);
+    let task_chunks = libarchive_extract_chunks(tasks, worker_count);
+    trace!(
+        format = format_name,
+        worker_count,
+        chunks = task_chunks.len(),
+        "libarchive parallel extract chunk split"
+    );
+    let inflight_items = bounded_items_for_threads(execution.effective_threads);
+    let (sender, receiver) = mpsc::sync_channel::<LibarchiveExtractOutput>(inflight_items);
+    // Buffers live in one of three places: a worker filling one, the channel, or the writer.
+    // Sizing the free list to that ceiling means recycling never drops a buffer and the steady
+    // state stops allocating entirely.
+    let buffer_pool = ExtractIoBufferPool::new(
+        LIBARCHIVE_PARALLEL_EXTRACT_CHUNK_BYTES,
+        worker_count
+            .saturating_add(inflight_items)
+            .saturating_add(1),
+    );
+    let mut writer = LibarchiveParallelExtractWriter {
+        context,
+        progress,
+        buffer_pool: &buffer_pool,
+        format_name,
+        overwrite: request.overwrite,
+        hasher_share: worker_count.min(file_task_count),
+        open_outputs: BTreeMap::new(),
+        written_bytes: 0,
+        output_checksums: Vec::new(),
+    };
+    let mut write_result = Ok(());
+
+    thread::scope(|scope| -> Result<()> {
+        let producer = thread::Builder::new()
+            .name("rom-weaver-libarchive-extract".to_string())
+            .stack_size(PARALLEL_COORDINATOR_STACK_SIZE_BYTES)
+            .spawn_scoped(scope, || {
+                pool.expect("parallel extract builds a worker pool")
+                    .install(|| {
+                        task_chunks
+                            .into_par_iter()
+                            .try_for_each_with(sender, |sender, chunk| {
+                                extract_libarchive_task_chunk_to_sender(
+                                    source,
+                                    chunk,
+                                    format_name,
+                                    sender,
+                                    &buffer_pool,
+                                )
+                            })
+                    })
+            })
+            .map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "failed to start parallel {format_name} extract coordinator: {error}"
+                ))
+            })?;
+
+        let mut receiver = Some(receiver);
+        while let Some(active_receiver) = receiver.as_ref() {
+            let item = match active_receiver.recv() {
+                Ok(item) => item,
+                Err(_) => break,
+            };
+            if let Err(error) = writer.handle(item)? {
+                write_result = Err(error);
+                drop(receiver.take());
+                break;
+            }
+        }
+
+        let producer_result = producer.join().map_err(|_| {
+            RomWeaverError::Validation(format!(
+                "parallel {format_name} extract coordinator panicked"
+            ))
+        })?;
+        write_result?;
+        producer_result?;
+        if let Some((index, output)) = writer.open_outputs.iter().next() {
+            return Err(RomWeaverError::Validation(format!(
+                "{format_name} extract finished with unclosed entry {index} (`{}`)",
+                output.archive_name
+            )));
+        }
+        Ok(())
+    })?;
+    Ok((writer.written_bytes, writer.output_checksums))
+}
+
+/// Plans and runs the extract of staged tasks, returning the thread plan it used.
+fn run_libarchive_extract(
+    request: &ContainerExtractRequest,
+    tasks: &[LibarchiveExtractTask],
+    context: &OperationContext,
+    format_name: &'static str,
+    total_file_bytes: Option<u64>,
+    total_tasks: usize,
+) -> Result<(ThreadExecution, u64, Vec<ExtractedFileChecksum>)> {
+    if tasks.is_empty() {
+        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let progress = LibarchiveExtractProgress::new(
+            context,
+            &execution,
+            format_name,
+            total_file_bytes,
+            total_tasks,
+        );
+        let (written, output_checksums) =
+            extract_libarchive_tasks_serial(request, tasks, context, &progress)?;
+        return Ok((execution, written, output_checksums));
+    }
+
+    let file_task_count = tasks.iter().filter(|task| !task.is_dir).count().max(1);
+    let total_logical_bytes = libarchive_extract_total_logical_bytes(tasks);
+    let parallel_units = libarchive_extract_parallel_units(tasks);
+    let achievable_threads =
+        libarchive_extract_achievable_threads(total_logical_bytes, file_task_count, parallel_units);
+    trace!(
+        format = format_name,
+        file_task_count,
+        parallel_units,
+        achievable_threads,
+        "libarchive extract parallel unit plan"
+    );
+    // Keep the shared pool lazy for serial extracts; a later parallel extract in the same
+    // operation can still build and reuse it.
+    let mut execution = context.plan_threads(ThreadCapability::parallel(Some(achievable_threads)));
+    let pool = if execution.used_parallelism {
+        let (pool_execution, pool) =
+            context.build_pool(ThreadCapability::parallel(Some(achievable_threads)))?;
+        execution = pool_execution;
+        Some(pool)
+    } else {
+        None
+    };
+    // Each worker opens its own reader and extracts its assigned entries. The OPFS proxy owns
+    // the source handle and serves spawned WASM threads.
+    trace!(
+        format = format_name,
+        used_parallelism = execution.used_parallelism,
+        effective_threads = execution.effective_threads,
+        "libarchive parallel extract path selected"
+    );
+    let progress = LibarchiveExtractProgress::new(
+        context,
+        &execution,
+        format_name,
+        total_file_bytes,
+        total_tasks,
+    );
+    let (written_bytes, output_checksums) = if execution.used_parallelism {
+        extract_libarchive_tasks_parallel(
+            request,
+            tasks,
+            context,
+            pool.as_ref(),
+            file_task_count,
+            &progress,
+        )?
+    } else {
+        extract_libarchive_tasks_serial(request, tasks, context, &progress)?
+    };
+    Ok((execution, written_bytes, output_checksums))
+}
+
+fn libarchive_extract_report(
+    request: &ContainerExtractRequest,
+    destination_tasks: &[LibarchiveExtractTask],
+    format_name: &'static str,
+    execution: ThreadExecution,
+    written_bytes: u64,
+    output_checksums: Vec<ExtractedFileChecksum>,
+) -> OperationReport {
+    let file_count = destination_tasks.iter().filter(|task| !task.is_dir).count();
+    debug!(
+        format = format_name,
+        files = file_count,
+        written_bytes,
+        used_parallelism = execution.used_parallelism,
+        "libarchive archive extract complete"
+    );
+    let report = OperationReport::succeeded(
+        OperationFamily::Container,
+        Some(format_name.to_string()),
+        "extract",
+        format!(
+            "extracted `{}` to `{}` ({} file(s), {} bytes written)",
+            request.source.display(),
+            request.out_dir.display(),
+            file_count,
+            written_bytes
+        ),
+        Some(100.0),
+        Some(execution.clone()),
+    );
+    let report = attach_extraction_details(
+        report,
+        destination_tasks.len(),
+        file_count,
+        written_bytes,
+        &execution,
+    );
+    let report = attach_extract_checksum_details(report, output_checksums);
+    // Report every file this extract wrote (path-attach skips directory tasks via its is_file
+    // gate), so the app treats this report as authoritative and never infers outputs from an
+    // out_dir scan.
+    let produced_outputs = destination_tasks
+        .iter()
+        .map(|task| task.output_path.clone())
+        .collect::<Vec<_>>();
+    attach_emitted_file_paths(report, &produced_outputs)
+}
+
 pub(crate) fn extract_regular_archive_with_libarchive(
     request: &ContainerExtractRequest,
     context: &OperationContext,
@@ -1982,430 +2493,25 @@ pub(crate) fn extract_regular_archive_with_libarchive(
         LibarchiveExtractTransaction::new(&request.out_dir, request.overwrite, format_name)?;
     let tasks = transaction.stage_tasks(&destination_tasks)?;
 
-    let (execution, written_bytes, output_checksums) = if tasks.is_empty() {
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
-        let emitted_progress_bucket = AtomicU8::new(0);
-        let mut copied_bytes = 0u64;
-        let mut completed = 0usize;
-        let (written, output_checksums) = extract_libarchive_task_chunk(
-            &request.source,
-            &tasks,
-            format_name,
-            context,
-            request.overwrite,
-            |delta| {
-                if let Some(total_bytes) = total_file_bytes {
-                    copied_bytes = copied_bytes.saturating_add(delta).min(total_bytes);
-                    maybe_emit_container_byte_progress(
-                        context,
-                        copied_bytes,
-                        total_bytes,
-                        ContainerByteProgress {
-                            command: "extract",
-                            format: format_name,
-                            stage: "extract",
-                            label: &format!("extracting `{format_name}`"),
-                            thread_execution: Some(&execution),
-                            emitted_progress_bucket: &emitted_progress_bucket,
-                        },
-                    );
-                }
-            },
-            || {
-                if total_file_bytes.is_none() {
-                    completed = completed.saturating_add(1);
-                    emit_container_step_progress(
-                        &ContainerProgressContext {
-                            context,
-                            command: "extract",
-                            format: format_name,
-                            stage: "extract",
-                            thread_execution: Some(&execution),
-                        },
-                        completed,
-                        total_tasks,
-                        format!("extracting `{format_name}` ({completed}/{total_tasks})"),
-                    );
-                }
-            },
-        )?;
-        (execution, written, output_checksums)
-    } else {
-        let file_task_count = tasks.iter().filter(|task| !task.is_dir).count().max(1);
-        let total_logical_bytes = libarchive_extract_total_logical_bytes(&tasks);
-        let parallel_units = libarchive_extract_parallel_units(&tasks);
-        let achievable_threads = libarchive_extract_achievable_threads(
-            total_logical_bytes,
-            file_task_count,
-            parallel_units,
-        );
-        trace!(
-            format = format_name,
-            file_task_count,
-            parallel_units,
-            achievable_threads,
-            "libarchive extract parallel unit plan"
-        );
-        // Keep the shared pool lazy for serial extracts; a later parallel
-        // extract in the same operation can still build and reuse it.
-        let mut execution =
-            context.plan_threads(ThreadCapability::parallel(Some(achievable_threads)));
-        let pool = if execution.used_parallelism {
-            let (pool_execution, pool) =
-                context.build_pool(ThreadCapability::parallel(Some(achievable_threads)))?;
-            execution = pool_execution;
-            Some(pool)
-        } else {
-            None
-        };
-        let source = request.source.clone();
-        let progress_context = context.clone();
-        let progress_execution = execution.clone();
-        // Each worker opens its own reader and extracts its assigned entries. The
-        // OPFS proxy owns the source handle and serves spawned WASM threads.
-        trace!(
-            format = format_name,
-            used_parallelism = execution.used_parallelism,
-            effective_threads = execution.effective_threads,
-            "libarchive parallel extract path selected"
-        );
-
-        let mut output_checksums = Vec::new();
-        let written_bytes = if execution.used_parallelism {
-            // `effective_threads` is the compute-worker budget. The two coordination threads - the
-            // rayon driver below (it calls `pool.install` and parks, so it holds no pool slot) and
-            // the consuming thread that drains the channel and hashes every extracted byte - run on
-            // top of these workers, not subtracted from them, so a configured budget of N decodes
-            // with N workers.
-            let worker_count = execution.effective_threads.max(1);
-            let task_chunks = libarchive_extract_chunks(&tasks, worker_count);
-            trace!(
-                format = format_name,
-                worker_count,
-                chunks = task_chunks.len(),
-                "libarchive parallel extract chunk split"
-            );
-            let inflight_items = bounded_items_for_threads(execution.effective_threads);
-            let (sender, receiver) = mpsc::sync_channel::<LibarchiveExtractOutput>(inflight_items);
-            // Buffers live in one of three places: a worker filling one, the channel, or the
-            // writer. Sizing the free list to that ceiling means recycling never drops a buffer
-            // and the steady state stops allocating entirely.
-            let buffer_pool = ExtractIoBufferPool::new(
-                LIBARCHIVE_PARALLEL_EXTRACT_CHUNK_BYTES,
-                worker_count
-                    .saturating_add(inflight_items)
-                    .saturating_add(1),
-            );
-            let emitted_progress_bucket = AtomicU8::new(0);
-            let mut copied_bytes = 0u64;
-            let mut completed = 0usize;
-            let mut written_bytes = 0u64;
-            let mut open_outputs = BTreeMap::<usize, LibarchiveOpenExtractOutput>::new();
-            let mut write_result = Ok(());
-
-            thread::scope(|scope| -> Result<u64> {
-                let producer = thread::Builder::new()
-                    .name("rom-weaver-libarchive-extract".to_string())
-                    .stack_size(PARALLEL_COORDINATOR_STACK_SIZE_BYTES)
-                    .spawn_scoped(scope, || {
-                        pool.as_ref()
-                            .expect("parallel extract builds a worker pool")
-                            .install(|| {
-                                task_chunks.into_par_iter().try_for_each_with(
-                                    sender,
-                                    |sender, chunk| {
-                                        extract_libarchive_task_chunk_to_sender(
-                                            &source,
-                                            chunk,
-                                            format_name,
-                                            sender,
-                                            &buffer_pool,
-                                        )
-                                    },
-                                )
-                            })
-                    })
-                    .map_err(|error| {
-                        RomWeaverError::Validation(format!(
-                            "failed to start parallel {format_name} extract coordinator: {error}"
-                        ))
-                    })?;
-
-                let mut receiver = Some(receiver);
-                while let Some(active_receiver) = receiver.as_ref() {
-                    let item = match active_receiver.recv() {
-                        Ok(item) => item,
-                        Err(_) => break,
-                    };
-                    let item_result = match item {
-                        LibarchiveExtractOutput::Directory { output_path } => {
-                            fs::create_dir_all(output_path)?;
-                            if total_file_bytes.is_none() {
-                                completed = completed.saturating_add(1);
-                                emit_container_step_progress(
-                                    &ContainerProgressContext {
-                                        context: &progress_context,
-                                        command: "extract",
-                                        format: format_name,
-                                        stage: "extract",
-                                        thread_execution: Some(&progress_execution),
-                                    },
-                                    completed,
-                                    total_tasks,
-                                    format!(
-                                        "extracting `{format_name}` ({completed}/{total_tasks})"
-                                    ),
-                                );
-                            }
-                            Ok(())
-                        }
-                        LibarchiveExtractOutput::FileStart {
-                            index,
-                            archive_name,
-                            output_path,
-                            write_path,
-                            logical_bytes,
-                        } => {
-                            if let Some(parent) = write_path.parent() {
-                                fs::create_dir_all(parent)?;
-                            }
-                            if let std::collections::btree_map::Entry::Vacant(e) =
-                                open_outputs.entry(index)
-                            {
-                                let writer = BufWriter::new(create_extract_output_file(
-                                    &write_path,
-                                    request.overwrite,
-                                )?);
-                                // Up to `worker_count` leaves decode at once, each building its own
-                                // hasher, so they share the hash budget rather than each taking it.
-                                // Bounded by the file count too: a single-file archive plans two
-                                // threads to overlap decode with the writer, but still only ever
-                                // has one hasher live, and dividing by the worker count there
-                                // would halve its budget for nothing.
-                                let hasher = ExtractHasher::new(
-                                    context,
-                                    logical_bytes,
-                                    &output_path,
-                                    worker_count.min(file_task_count),
-                                )?;
-                                e.insert(LibarchiveOpenExtractOutput {
-                                    archive_name,
-                                    hasher,
-                                    output_path,
-                                    write_path,
-                                    writer,
-                                });
-                                Ok(())
-                            } else {
-                                Err(RomWeaverError::Validation(format!(
-                                    "{format_name} extract received duplicate start for entry {index} (`{archive_name}`)"
-                                )))
-                            }
-                        }
-                        LibarchiveExtractOutput::FileData { index, bytes } => {
-                            let output = open_outputs.get_mut(&index).ok_or_else(|| {
-                                RomWeaverError::Validation(format!(
-                                    "{format_name} extract received data before start for entry {index}"
-                                ))
-                            })?;
-                            let archive_name = &output.archive_name;
-                            output.writer.write_all(&bytes).map_err(|error| {
-                                RomWeaverError::Validation(format!(
-                                    "{format_name} extract failed while writing entry {index} (`{archive_name}`): {error}"
-                                ))
-                            })?;
-                            let delta = bytes.len() as u64;
-                            output.hasher.update(&bytes)?;
-                            // Surface the payload's platform identity as soon as enough bytes have
-                            // streamed to determine it, rather than waiting for the whole file.
-                            if let Some(identity) =
-                                output.hasher.take_ready_identity(&output.output_path)
-                            {
-                                emit_extract_identity(context, format_name, &identity);
-                            }
-                            if let Some(plan) = output.hasher.take_ready_variant_plan() {
-                                emit_variant_plan(context, format_name, &output.output_path, &plan);
-                            }
-                            // Hand the buffer back as soon as its bytes are written and hashed; a
-                            // worker that finds the pool empty allocates instead of waiting, so
-                            // returning it early is what keeps the steady state allocation-free.
-                            buffer_pool.recycle(bytes);
-                            written_bytes = written_bytes.saturating_add(delta);
-                            if let Some(total_bytes) = total_file_bytes {
-                                copied_bytes = copied_bytes.saturating_add(delta).min(total_bytes);
-                                maybe_emit_container_byte_progress(
-                                    &progress_context,
-                                    copied_bytes,
-                                    total_bytes,
-                                    ContainerByteProgress {
-                                        command: "extract",
-                                        format: format_name,
-                                        stage: "extract",
-                                        label: &format!("extracting `{format_name}`"),
-                                        thread_execution: Some(&progress_execution),
-                                        emitted_progress_bucket: &emitted_progress_bucket,
-                                    },
-                                );
-                            }
-                            Ok(())
-                        }
-                        LibarchiveExtractOutput::FileEnd { index } => {
-                            let mut output = open_outputs.remove(&index).ok_or_else(|| {
-                                RomWeaverError::Validation(format!(
-                                    "{format_name} extract received end before start for entry {index}"
-                                ))
-                            })?;
-                            output.writer.flush().map_err(|error| {
-                                RomWeaverError::Validation(format!(
-                                    "{format_name} extract failed while flushing entry {index} (`{}`): {error}",
-                                    output.archive_name
-                                ))
-                            })?;
-                            let LibarchiveOpenExtractOutput {
-                                hasher,
-                                output_path,
-                                write_path,
-                                writer,
-                                ..
-                            } = output;
-                            drop(writer);
-                            if let Some(mut entry) = hasher.finish(&write_path)? {
-                                entry.path = output_path;
-                                output_checksums.push(entry);
-                            }
-                            if total_file_bytes.is_none() {
-                                completed = completed.saturating_add(1);
-                                emit_container_step_progress(
-                                    &ContainerProgressContext {
-                                        context: &progress_context,
-                                        command: "extract",
-                                        format: format_name,
-                                        stage: "extract",
-                                        thread_execution: Some(&progress_execution),
-                                    },
-                                    completed,
-                                    total_tasks,
-                                    format!(
-                                        "extracting `{format_name}` ({completed}/{total_tasks})"
-                                    ),
-                                );
-                            }
-                            Ok(())
-                        }
-                    };
-                    if let Err(error) = item_result {
-                        write_result = Err(error);
-                        drop(receiver.take());
-                        break;
-                    }
-                }
-
-                let producer_result = producer.join().map_err(|_| {
-                    RomWeaverError::Validation(format!(
-                        "parallel {format_name} extract coordinator panicked"
-                    ))
-                })?;
-                write_result?;
-                producer_result?;
-                if let Some((index, output)) = open_outputs.into_iter().next() {
-                    return Err(RomWeaverError::Validation(format!(
-                        "{format_name} extract finished with unclosed entry {index} (`{}`)",
-                        output.archive_name
-                    )));
-                }
-                Ok(written_bytes)
-            })?
-        } else {
-            let emitted_progress_bucket = AtomicU8::new(0);
-            let mut copied_bytes = 0u64;
-            let mut completed = 0usize;
-            let (written_bytes, checksums) = extract_libarchive_task_chunk(
-                &source,
-                &tasks,
-                format_name,
-                context,
-                request.overwrite,
-                |delta| {
-                    if let Some(total_bytes) = total_file_bytes {
-                        copied_bytes = copied_bytes.saturating_add(delta).min(total_bytes);
-                        maybe_emit_container_byte_progress(
-                            &progress_context,
-                            copied_bytes,
-                            total_bytes,
-                            ContainerByteProgress {
-                                command: "extract",
-                                format: format_name,
-                                stage: "extract",
-                                label: &format!("extracting `{format_name}`"),
-                                thread_execution: Some(&progress_execution),
-                                emitted_progress_bucket: &emitted_progress_bucket,
-                            },
-                        );
-                    }
-                },
-                || {
-                    if total_file_bytes.is_none() {
-                        completed = completed.saturating_add(1);
-                        emit_container_step_progress(
-                            &ContainerProgressContext {
-                                context: &progress_context,
-                                command: "extract",
-                                format: format_name,
-                                stage: "extract",
-                                thread_execution: Some(&progress_execution),
-                            },
-                            completed,
-                            total_tasks,
-                            format!("extracting `{format_name}` ({completed}/{total_tasks})"),
-                        );
-                    }
-                },
-            )?;
-            output_checksums = checksums;
-            written_bytes
-        };
-        (execution, written_bytes, output_checksums)
-    };
+    let (execution, written_bytes, output_checksums) = run_libarchive_extract(
+        request,
+        &tasks,
+        context,
+        format_name,
+        total_file_bytes,
+        total_tasks,
+    )?;
 
     transaction.commit(&tasks)?;
 
-    let file_count = destination_tasks.iter().filter(|task| !task.is_dir).count();
-    debug!(
-        format = format_name,
-        files = file_count,
+    Ok(libarchive_extract_report(
+        request,
+        &destination_tasks,
+        format_name,
+        execution,
         written_bytes,
-        used_parallelism = execution.used_parallelism,
-        "libarchive archive extract complete"
-    );
-    let report = OperationReport::succeeded(
-        OperationFamily::Container,
-        Some(format_name.to_string()),
-        "extract",
-        format!(
-            "extracted `{}` to `{}` ({} file(s), {} bytes written)",
-            request.source.display(),
-            request.out_dir.display(),
-            file_count,
-            written_bytes
-        ),
-        Some(100.0),
-        Some(execution.clone()),
-    );
-    let report = attach_extraction_details(
-        report,
-        destination_tasks.len(),
-        file_count,
-        written_bytes,
-        &execution,
-    );
-    let report = attach_extract_checksum_details(report, output_checksums);
-    // Report every file this extract wrote (path-attach skips directory tasks via its is_file gate),
-    // so the app treats this report as authoritative and never infers outputs from an out_dir scan.
-    let produced_outputs = destination_tasks
-        .iter()
-        .map(|task| task.output_path.clone())
-        .collect::<Vec<_>>();
-    Ok(attach_emitted_file_paths(report, &produced_outputs))
+        output_checksums,
+    ))
 }
 
 #[cfg(test)]
