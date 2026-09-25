@@ -1,5 +1,5 @@
 // Serve build-produced quality-11 Brotli sidecars to clients that accept br.
-// writeBrotliSidecars in vite.config.mjs scopes this function through _routes.json.
+// writeBrotliSidecars (scripts/vite-config/brotli-sidecars.mjs) scopes this function through _routes.json.
 
 import { sidecarContentType } from "./content-types.js";
 
