@@ -238,7 +238,7 @@ describe("apply workflow view - empty bench", () => {
     expect(chip.textContent).toContain("New here?");
     fireEvent.click(chip);
     expect(container.querySelector(".first-weave-demo")?.textContent).toContain("Start guided Apply");
-    expect(container.querySelector(".first-weave-demo")?.textContent).not.toContain("Create a sharable bundle");
+    expect(container.querySelector(".first-weave-demo")?.textContent).not.toContain("Start guided bundle");
     expect(document.querySelector(".sample-tutorial-dialog")).toBeNull();
     // The remaining workflow is progressively disclosed after staging begins.
     const numbers = Array.from(container.querySelectorAll(".step-num")).map((el) => el.textContent);
@@ -248,7 +248,7 @@ describe("apply workflow view - empty bench", () => {
 
   it.each([
     ["apply", "/apply-patches?guide=apply", "Start guided Apply"],
-    ["bundle", "/bundle-patches?guide=bundle", "Create a sharable bundle"],
+    ["bundle", "/bundle-patches?guide=bundle", "Start guided bundle"],
   ] as const)("offers the %s guide and the test bundle download", (mode, href, label) => {
     const { container } = renderView({ mode, ui: createEmptyPatcherUiState() });
     fireEvent.click(container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement);

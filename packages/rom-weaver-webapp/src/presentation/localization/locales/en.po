@@ -1066,7 +1066,7 @@ msgstr "Create {format} ROM Bundle"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.createBundle"
-msgstr "Create a sharable bundle"
+msgstr "Start guided bundle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -123,7 +123,7 @@ describe("sample tutorial start", () => {
         loading={false}
         onStart={onStart}
         onSecondaryStart={onSecondaryStart}
-        secondaryLabel="Create a sharable bundle"
+        secondaryLabel="Start guided bundle"
         secondaryHref="/bundle?guide=bundle"
       />,
     );
@@ -137,7 +137,7 @@ describe("sample tutorial start", () => {
     expect(guidedApply.getAttribute("href")).toBe("/apply-patch?guide=apply");
     fireEvent.click(guidedApply);
     expect(onStart).toHaveBeenCalledOnce();
-    const guidedBundle = screen.getByRole("link", { name: /Create a sharable bundle/ });
+    const guidedBundle = screen.getByRole("link", { name: /Start guided bundle/ });
     expect(guidedBundle.getAttribute("href")).toBe("/bundle?guide=bundle");
     fireEvent.click(guidedBundle);
     expect(onSecondaryStart).toHaveBeenCalledOnce();

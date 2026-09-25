@@ -519,7 +519,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.tutorial.applyDownload": msg({ id: "ui.apply.tutorial.applyDownload", message: "Apply & download" }),
   "ui.apply.tutorial.browse": msg({ id: "ui.apply.tutorial.browse", message: "Browse" }),
   "ui.apply.tutorial.checks": msg({ id: "ui.apply.tutorial.checks", message: "Checks" }),
-  "ui.apply.tutorial.createBundle": msg({ id: "ui.apply.tutorial.createBundle", message: "Create a sharable bundle" }),
+  "ui.apply.tutorial.createBundle": msg({ id: "ui.apply.tutorial.createBundle", message: "Start guided bundle" }),
   "ui.apply.tutorial.downloadTestBundle": msg({
     id: "ui.apply.tutorial.downloadTestBundle",
     message: "Download a test bundle",
