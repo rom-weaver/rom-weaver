@@ -7,8 +7,8 @@ import {
   POST_APPLY_TEST_BEHAVIOR_OPTIONS,
 } from "../../lib/apply/post-apply-behavior.ts";
 import type { BrowserApplyResult } from "../../platform/browser/browser-api.ts";
-import { type ProgressViewModel } from "../../presentation/workflow-presentation.ts";
-import { type RomCheckActuals } from "./apply-patch-list-step.tsx";
+import type { ProgressViewModel } from "../../presentation/workflow-presentation.ts";
+import type { RomCheckActuals } from "./apply-patch-input-checks.ts";
 import { DropdownSelect } from "./components/ds/dropdown-select.tsx";
 import { FieldInfoToggle } from "./components/ds/compress-panel.tsx";
 import { Drawer, DrawerReadout } from "./components/ds/drawer.tsx";

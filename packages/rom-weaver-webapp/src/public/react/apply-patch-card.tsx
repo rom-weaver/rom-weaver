@@ -19,7 +19,7 @@ import {
   PatchMetaDoneButton,
   PatchActionsMenu,
 } from "./apply-patch-card-controls.tsx";
-import { type RomCheckActuals } from "./apply-patch-input-checks.ts";
+import type { RomCheckActuals } from "./apply-patch-input-checks.ts";
 import { PatchMetaFields } from "./apply-patch-meta-fields.tsx";
 import {
   PatchHeaderModeSelect,

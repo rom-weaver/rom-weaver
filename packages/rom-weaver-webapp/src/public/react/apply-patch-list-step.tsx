@@ -12,7 +12,7 @@ import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
 import type { PatchInputBasis } from "./patch-input-basis.ts";
 import type { CheatStackRenderState } from "./components/cheat-database-section.tsx";
 import { chainChipText } from "./apply-patch-chain-labels.tsx";
-import { type RomCheckActuals } from "./apply-patch-input-checks.ts";
+import type { RomCheckActuals } from "./apply-patch-input-checks.ts";
 import { PatchCard } from "./apply-patch-card.tsx";
 import { EditableCheckRow } from "./apply-patch-check-row.tsx";
 
@@ -465,4 +465,4 @@ const ApplyPatchListStep = ({
   );
 };
 
-export { ApplyPatchListStep, EditableCheckRow, type RomCheckActuals };
+export { ApplyPatchListStep, EditableCheckRow };

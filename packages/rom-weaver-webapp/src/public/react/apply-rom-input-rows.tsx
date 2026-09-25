@@ -4,7 +4,7 @@ import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./co
 import { IDENTIFY_STATUS_LABEL } from "../../presentation/identify-status.ts";
 import { identifyRecordChecks } from "../../lib/identify/identify-record-checks.ts";
 import { abbreviatePlatform } from "../../presentation/platform-abbreviations.ts";
-import { type WorkflowRomInputStepItem } from "./components/ds/workflow-rom-input-step.tsx";
+import type { WorkflowRomInputStepItem } from "./components/ds/workflow-rom-input-step.tsx";
 import type { PatcherUiController } from "./patcher-form.ts";
 import type { RomInputRowState } from "./patcher-ui-state.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
