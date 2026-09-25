@@ -105,6 +105,7 @@ export const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
   <url><loc>https://rom-weaver.com/apply-patches</loc></url>
   <url><loc>https://rom-weaver.com/bundle-patches</loc></url>
   <url><loc>https://rom-weaver.com/create-patch</loc></url>
+  <url><loc>https://rom-weaver.com/extract</loc></url>
   <url><loc>https://rom-weaver.com/identify-rom</loc></url>
   <url><loc>https://rom-weaver.com/test-rom</loc></url>
 ${DOC_SOURCES.map((source) => {

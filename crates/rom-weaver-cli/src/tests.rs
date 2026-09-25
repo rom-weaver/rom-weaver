@@ -572,6 +572,7 @@ fn extract_payload_selection_collapses_multi_track_disc_without_prompting() {
 fn compress_zip_fixture(app: &CliApp, inputs: &[PathBuf], output: &Path) {
     let outcome = app.run(Commands::Compress(CompressCommand {
         input: inputs.to_vec(),
+        entry_names: Vec::new(),
         format: Some("zip".to_string()),
         output: output.to_path_buf(),
         codec: Vec::new(),

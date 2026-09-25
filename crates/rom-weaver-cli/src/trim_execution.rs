@@ -412,6 +412,7 @@ impl CliApp {
         handler
             .create(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![source.to_path_buf()],
                     output: destination.to_path_buf(),
                     format: "rvz".to_string(),
@@ -447,6 +448,7 @@ impl CliApp {
         handler
             .create_dry_run_size(
                 &ContainerCreateRequest {
+                    archive_names: None,
                     inputs: vec![source.to_path_buf()],
                     output: source.with_extension("rvz"),
                     format: "rvz".to_string(),

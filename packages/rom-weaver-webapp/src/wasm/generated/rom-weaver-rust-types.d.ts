@@ -343,7 +343,7 @@ export type OutputEnforceableEntry = { patch_index: number, source: string, chec
 
 export type PatchValidationPlan = { plan: boolean, per_patch: Array<PatchPlanVerdict>, suggested_order?: Array<number>, output_verification: Array<OutputEnforceableEntry>, status: string, patch_count: number, passed_count: number, failed_count: number, formats: Array<string>, };
 
-export type ProbeCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, };
+export type ProbeCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, split_bin?: boolean, };
 
 export type ExtractCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, output: string, split_bin?: boolean, no_ignore?: boolean, no_nested_extract?: boolean, force?: boolean, checksum?: Array<string>, checksum_rom?: Array<string>, probe?: boolean, threads?: ThreadBudget, };
 
@@ -455,7 +455,7 @@ export type CheatCommand = { input: string,
  */
 records: Array<CheatRecord>, };
 
-export type CompressCommand = { input: Array<string>, format?: string, output: string, codec?: Array<string>, level?: CompressionLevelProfile, force?: boolean, dry_run?: boolean, threads?: ThreadBudget, };
+export type CompressCommand = { input: Array<string>, entry_names?: Array<string>, format?: string, output: string, codec?: Array<string>, level?: CompressionLevelProfile, force?: boolean, dry_run?: boolean, threads?: ThreadBudget, };
 
 export type TrimCommand = { input: Array<string>, output?: string, extension?: string, in_place?: boolean, dry_run?: boolean, revert?: boolean, recursive?: boolean, filter?: Array<FilterKind>,
 /**

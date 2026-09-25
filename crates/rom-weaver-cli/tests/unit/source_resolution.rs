@@ -108,6 +108,7 @@ fn make_zip(app: &CliApp, output: &Path, inputs: &[PathBuf], context: &Operation
     handler
         .create(
             &ContainerCreateRequest {
+                archive_names: None,
                 inputs: inputs.to_vec(),
                 output: output.to_path_buf(),
                 format: "zip".to_string(),

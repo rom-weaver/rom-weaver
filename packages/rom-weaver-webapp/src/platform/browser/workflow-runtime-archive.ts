@@ -5,6 +5,7 @@ import { createVfsPathId } from "../../storage/vfs/path-id.ts";
 import { romTypeFromEmittedFile } from "../../lib/runtime/run-result-parsing.ts";
 import {
   invokeRomWeaverCompressionCreateWorker,
+  invokeRomWeaverExtractAllWorker,
   invokeRomWeaverExtractWorker,
   invokeRomWeaverIngestWorker,
   runRomWeaverProbeWorker,
@@ -43,6 +44,33 @@ import {
 
 const ZIP_LIKE_EXTENSION_REGEX = /\.(zip|jar|apk|cbz|epub|xpi)$/i;
 const zipAliasFiles = new WeakMap<File, File>();
+
+const normalizeArchiveRelativePath = (value: string): string => {
+  const normalized = String(value || "")
+    .trim()
+    .replace(/\\/g, "/");
+  const segments = normalized.split("/");
+  if (
+    !normalized ||
+    normalized.startsWith("/") ||
+    segments.some((segment) => !segment || segment === "." || segment === "..")
+  ) {
+    throw new Error(`Archive entry has an unsafe relative path: ${value}`);
+  }
+  return segments.join("/");
+};
+
+const getExtractRelativePath = (rootPath: string, outputPath: string): string => {
+  const normalizedRoot = rootPath.replace(/\\/g, "/").replace(/\/+$/, "");
+  const normalizedOutput = outputPath.replace(/\\/g, "/");
+  const prefix = `${normalizedRoot}/`;
+  if (!normalizedOutput.startsWith(prefix)) {
+    throw new Error(`Extracted output is outside its operation scope: ${outputPath}`);
+  }
+  const relativePath = normalizedOutput.slice(prefix.length).replace(/^\/+/, "");
+  if (!relativePath) throw new Error(`Extracted output has no relative path: ${outputPath}`);
+  return relativePath;
+};
 
 const toFileBlobPart = (source: ArrayBufferLike | Uint8Array): BlobPart => {
   const bytes = source instanceof Uint8Array ? source : new Uint8Array(source);
@@ -182,6 +210,7 @@ const stageBrowserCompressionEntries = async (
   }> = [];
   try {
     const inputPaths: string[] = [];
+    const entryNames: string[] = [];
     for (let index = 0; index < normalizedEntries.length; index++) {
       const entry = normalizedEntries[index];
       if (!entry) continue;
@@ -189,6 +218,7 @@ const stageBrowserCompressionEntries = async (
       const stagedEntry = await stageCompressionEntryForRomWeaver(workerIo, entry, fileName, index, pathPrefixRoot);
       stagedEntries.push(stagedEntry);
       inputPaths.push(stagedEntry.filePath);
+      entryNames.push(fileName);
     }
 
     return {
@@ -196,6 +226,7 @@ const stageBrowserCompressionEntries = async (
         await Promise.all(stagedEntries.map((entry) => entry.cleanup().catch(() => undefined)));
       },
       inputPaths,
+      entryNames,
       stagedEntries,
     };
   } catch (error) {
@@ -208,9 +239,13 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
   create: async (workflowInput) => {
     if (!("entries" in workflowInput)) throw new Error("archive runtime received non-archive create input");
     const trace = { logLevel: workflowInput.options?.logLevel, onLog: workflowInput.options?.onLog };
+    const format = workflowInput.format || workflowInput.options?.compression || "7z";
     const staged = await stageBrowserCompressionEntries(workflowInput.entries, workerIo);
     try {
-      const format = workflowInput.format || workflowInput.options?.compression || "7z";
+      const entryNames =
+        format === "zip" && workflowInput.options?.preservePaths
+          ? staged.entryNames.map(normalizeArchiveRelativePath)
+          : undefined;
       const codec = format === "zip" ? workflowInput.options?.zipCodec : workflowInput.options?.sevenZipCodec;
       const level = format === "zip" ? workflowInput.options?.zipLevel : workflowInput.options?.sevenZipLevel;
       const levelProfile = toLevelProfile(level);
@@ -232,6 +267,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
           await invokeRomWeaverCompressionCreateWorker(
             {
               codecs: codecEntries,
+              entryNames,
               format,
               inputPaths: staged.inputPaths,
               invalidateMountCacheBeforeRun: true,
@@ -263,6 +299,50 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
       trace: { logLevel: workflowInput.options?.logLevel, onLog: workflowInput.options?.onLog },
     });
     try {
+      if (workflowInput.extractAll) {
+        const outputScope = createRomWeaverOutputScope();
+        try {
+          const extracted = await invokeRomWeaverExtractAllWorker(
+            {
+              inputPath: archive.filePath,
+              interactiveSelectionEnabled: false,
+              knownInputPaths: [archive.filePath],
+              logLevel: workflowInput.options?.logLevel,
+              noIgnore: true,
+              outDirPath: outputScope.rootPath,
+              signal: workflowInput.options?.signal,
+              splitBin: workflowInput.options?.chdSplitBin,
+              threads: workflowInput.options?.threads,
+            },
+            forwardArchiveProgress("input", workflowInput.options?.onProgress, `Extracting ${archive.fileName}...`),
+            workflowInput.options?.onLog,
+          );
+          const outputCleanups = await outputScope.createOutputCleanups(
+            extracted.map((entry) => entry.filePath),
+            (filePath) => browserVfs.remove(filePath),
+          );
+          const outputs = await Promise.all(
+            extracted.map(async (entry, index) => {
+              const relativePath = getExtractRelativePath(outputScope.rootPath, entry.filePath);
+              const fileName = getPathBaseName(relativePath, entry.fileName || "output.bin");
+              const output = await workerIo.createWorkerOutput(
+                {
+                  ...entry,
+                  cleanup: outputCleanups[index],
+                  fileName,
+                },
+                fileName,
+                "archive extract-all worker did not return browser output",
+              );
+              return Object.assign(output, { relativePath });
+            }),
+          );
+          return createCompressionExtractResult(outputs);
+        } catch (error) {
+          await outputScope.cleanup().catch(() => undefined);
+          throw error;
+        }
+      }
       if (workflowInput.options?.directExtract) {
         const selectedEntries = Array.isArray(workflowInput.entries)
           ? workflowInput.entries.map((entryName) => String(entryName || "").trim()).filter((entryName) => !!entryName)
@@ -588,6 +668,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
           romFilter: workflowInput.options?.romFilter,
           signal: workflowInput.options?.signal,
           sourcePath: archive.filePath,
+          splitBin: workflowInput.options?.chdSplitBin,
         },
         forwardArchiveProgress("input", workflowInput.options?.onProgress, `Reading ${archive.fileName}...`),
         workflowInput.options?.onLog,

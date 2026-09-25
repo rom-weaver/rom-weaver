@@ -14,6 +14,12 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
     slug: "create-patch",
     title: `${SITE_NAME}: Create ROM patches online`,
   }),
+  extract: Object.freeze({
+    description:
+      "Extract supported ROM archives and disc images locally in your browser. Download individual files or an uncompressed ZIP. No uploads or account required.",
+    slug: "extract",
+    title: `${SITE_NAME}: Extract ROM archives online`,
+  }),
   // The apex. An empty slug is deliberate: the canonical URL is the bare origin.
   home: Object.freeze({
     description:

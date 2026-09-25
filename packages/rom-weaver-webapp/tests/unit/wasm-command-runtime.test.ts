@@ -3,6 +3,7 @@ import {
   invokeRomWeaverBundleCreateWorker,
   invokeRomWeaverBundleParseWorker,
   invokeRomWeaverCompressionCreateWorker,
+  invokeRomWeaverExtractAllWorker,
   invokeRomWeaverCreatePatchCandidatesWorker,
   invokeRomWeaverCreatePatchWorker,
   invokeRomWeaverExtractWorker,
@@ -141,6 +142,30 @@ describe("invokeRomWeaverExtractWorker", () => {
     await invokeRomWeaverExtractWorker({ inputPath: "/in.zip", outDirPath: "/out" }, onProgress);
 
     expect(onProgress).toHaveBeenCalled();
+  });
+
+  it("returns every emitted file and disables interactive selection for extract-all", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({
+        emitted_files: [
+          { file_name: "one.bin", path: "/out/folder/one.bin", size_bytes: 1 },
+          { file_name: "two.bin", path: "/out/deeper/two.bin", size_bytes: 2 },
+        ],
+      }),
+    );
+
+    const outputs = await invokeRomWeaverExtractAllWorker({
+      inputPath: "/in.chd",
+      interactiveSelectionEnabled: false,
+      noIgnore: true,
+      outDirPath: "/out",
+      splitBin: true,
+    });
+
+    expect(outputs).toHaveLength(2);
+    expect(lastCall()[0].args).toMatchObject({ no_ignore: true, split_bin: true });
+    expect(lastCall()[0].args).not.toHaveProperty("select");
+    expect(lastCall()[1]).toMatchObject({ interactiveSelectionEnabled: false });
   });
 });
 
@@ -408,6 +433,24 @@ describe("output-producing runtime workers", () => {
       format: "chd",
       input: ["/in/game.bin"],
       output: expect.any(String),
+    });
+  });
+
+  it("passes archive entry names aligned with compression inputs", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({ emitted_files: [{ path: "/out/files.zip", size_bytes: 20 }] }),
+    );
+
+    await invokeRomWeaverCompressionCreateWorker({
+      entryNames: ["folder/one.bin", "deeper/two.bin"],
+      format: "zip",
+      inputPaths: ["/in/one.bin", "/in/two.bin"],
+      outputFileName: "files.zip",
+    });
+
+    expect(lastCall()[0].args).toMatchObject({
+      entry_names: ["folder/one.bin", "deeper/two.bin"],
+      input: ["/in/one.bin", "/in/two.bin"],
     });
   });
 

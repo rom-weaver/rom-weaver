@@ -84,3 +84,30 @@ fn collect_archive_inputs_handles_a_tiny_directory_tree() {
 
     assert!(collect_archive_inputs(&[]).is_err());
 }
+
+#[test]
+fn named_archive_inputs_keep_paths_and_reject_collisions_or_escapes() {
+    let temp = TempDir::new("named-archive-entries");
+    let first = temp.path().join("one.bin");
+    let second = temp.path().join("two.bin");
+    fs::write(&first, b"one").expect("write first fixture");
+    fs::write(&second, b"two").expect("write second fixture");
+    let inputs = vec![first, second];
+    let entries = collect_named_archive_inputs(
+        &inputs,
+        &[
+            "disc/track.bin".to_string(),
+            "extras/readme.txt".to_string(),
+        ],
+    )
+    .expect("collect named inputs");
+    assert_eq!(entries[0].archive_name, "disc/track.bin");
+    assert_eq!(entries[1].archive_name, "extras/readme.txt");
+
+    for names in [
+        vec!["same.bin".to_string(), "./same.bin".to_string()],
+        vec!["ok.bin".to_string(), "../escape.bin".to_string()],
+    ] {
+        assert!(collect_named_archive_inputs(&inputs, &names).is_err());
+    }
+}

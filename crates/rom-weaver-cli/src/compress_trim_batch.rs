@@ -33,6 +33,7 @@ struct CompressPlan {
     handler: Arc<dyn ContainerHandler>,
     resolved_format: String,
     format_warning: Option<String>,
+    archive_names: Option<Vec<String>>,
     codec: Option<String>,
     level: Option<i32>,
     create_threads: Option<ThreadExecution>,
@@ -62,6 +63,7 @@ impl CliApp {
         );
         let CompressCommand {
             input,
+            entry_names,
             format,
             output,
             codec,
@@ -113,6 +115,22 @@ impl CliApp {
             Ok(plan) => plan,
             Err(report) => return self.finish("compress", *report),
         };
+        let mut plan = plan;
+        if !entry_names.is_empty()
+            && (!plan.handler.descriptor().matches_name("zip") || entry_names.len() != input.len())
+        {
+            return self.finish(
+                "compress",
+                OperationReport::failed(
+                    OperationFamily::Container,
+                    Some(plan.resolved_format.clone()),
+                    "validate",
+                    "--entry-name requires ZIP format and one name per input",
+                    probe_threads,
+                ),
+            );
+        }
+        plan.archive_names = (!entry_names.is_empty()).then_some(entry_names);
         let report = if dry_run {
             Self::compress_dry_run(&plan, &input, &output, level_profile, &context)
         } else {
@@ -244,6 +262,7 @@ impl CliApp {
             handler,
             resolved_format,
             format_warning,
+            archive_names: None,
             codec,
             level,
             create_threads,
@@ -258,6 +277,7 @@ impl CliApp {
         context: &OperationContext,
     ) -> OperationReport {
         let request = ContainerCreateRequest {
+            archive_names: plan.archive_names.clone(),
             inputs: input.to_vec(),
             output: output.to_path_buf(),
             format: plan.resolved_format.clone(),
@@ -293,6 +313,7 @@ impl CliApp {
             handler,
             resolved_format,
             format_warning,
+            archive_names,
             codec,
             level,
             create_threads,
@@ -326,6 +347,7 @@ impl CliApp {
 
         let expected_output = output.clone();
         let request = ContainerCreateRequest {
+            archive_names: archive_names.clone(),
             inputs: input,
             output,
             format: resolved_format.clone(),
@@ -1166,6 +1188,7 @@ impl CliApp {
         );
 
         let request = ContainerCreateRequest {
+            archive_names: None,
             inputs,
             output: temp_output.clone(),
             format: format.clone(),

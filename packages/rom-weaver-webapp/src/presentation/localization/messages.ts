@@ -1028,6 +1028,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.nav.docs": msg({ id: "ui.nav.docs", message: "Docs" }),
   "ui.nav.groupDevice": msg({ id: "ui.nav.groupDevice", message: "This device" }),
   "ui.nav.groupPatches": msg({ id: "ui.nav.groupPatches", message: "Patches" }),
+  "ui.nav.groupFiles": msg({ id: "ui.nav.groupFiles", message: "Files" }),
   "ui.nav.groupRoms": msg({ id: "ui.nav.groupRoms", message: "ROMs" }),
   "ui.nav.home": msg({ id: "ui.nav.home", message: "rom-weaver home" }),
   "ui.nav.homeShort": msg({ id: "ui.nav.homeShort", message: "Home" }),
@@ -1060,6 +1061,13 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
       "Compare original and modified ROMs, raw or in archives, to create BPS, IPS, UPS, xdelta, or other patches.",
   }),
   "ui.hero.createGuide": msg({ id: "ui.hero.createGuide", message: "Read the Create guide" }),
+  "ui.hero.extractDescription": msg({
+    id: "ui.hero.extractDescription",
+    message:
+      "Extract every file from a ZIP, 7z, CHD, or other supported archive or disc image. Archives inside it are extracted too. Download one file, or several as one ZIP.",
+  }),
+  "ui.hero.extractThesis": msg({ id: "ui.hero.extractThesis", message: "Open the archive." }),
+  "ui.hero.extractThesis2": msg({ id: "ui.hero.extractThesis2", message: "Keep only the files you need." }),
   "ui.hero.identifyDescription": msg({
     id: "ui.hero.identifyDescription",
     message: "Match your ROM’s checksum against the local database to find its exact dump name.",

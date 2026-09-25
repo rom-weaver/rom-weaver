@@ -40,6 +40,7 @@ const filterSpread = (romFilter?: boolean, patchFilter?: boolean): { filter?: ("
 const invokeRomWeaverCompressionCreateWorker = async (
   input: {
     codecs?: unknown;
+    entryNames?: string[];
     format?: string | null;
     invalidateMountCacheBeforeRun?: boolean;
     inputPaths: string[];
@@ -59,6 +60,12 @@ const invokeRomWeaverCompressionCreateWorker = async (
     ? input.inputPaths.map((pathValue) => String(pathValue || "").trim()).filter((pathValue) => !!pathValue)
     : [];
   if (!inputPaths.length) throw new Error("Compression create requires at least one input path");
+  const entryNames = Array.isArray(input.entryNames)
+    ? input.entryNames.map((entryName) => String(entryName || "").trim()).filter((entryName) => !!entryName)
+    : [];
+  if (entryNames.length && entryNames.length !== inputPaths.length) {
+    throw new Error("Compression create entry names must align with input paths");
+  }
   return runWithRomWeaverOutputScope(inputPaths[0] || "", input.outputFileName, inputPaths, async (outputPath) => {
     const format = String(input.format || "").trim();
     const normalizedFormat = format.toLowerCase();
@@ -79,6 +86,7 @@ const invokeRomWeaverCompressionCreateWorker = async (
     const threadArg = toThreadBudget(input.threads);
     const command = createRomWeaverCommand("compress", {
       codec: codecs,
+      ...(entryNames.length ? { entry_names: entryNames } : {}),
       format: format || undefined,
       input: inputPaths,
       level: (levelProfile || "max") as CompressionLevelProfile,
@@ -117,21 +125,26 @@ const invokeRomWeaverCompressionCreateWorker = async (
   });
 };
 
-const invokeRomWeaverExtractWorker = async (
-  input: {
-    inputPath: string;
-    knownInputPaths?: string[];
-    logLevel?: LogLevel | string;
-    noIgnore?: boolean;
-    noNestedExtract?: boolean;
-    outDirPath: string;
-    select?: string[];
-    signal?: AbortSignal;
-    threads?: RuntimeThreadBudgetInput;
-  },
+type RomWeaverExtractWorkerInput = {
+  inputPath: string;
+  interactiveSelectionEnabled?: boolean;
+  knownInputPaths?: string[];
+  logLevel?: LogLevel | string;
+  noIgnore?: boolean;
+  noNestedExtract?: boolean;
+  outDirPath: string;
+  select?: string[];
+  signal?: AbortSignal;
+  splitBin?: boolean;
+  threads?: RuntimeThreadBudgetInput;
+};
+type RomWeaverExtractWorkerOutput = Parameters<RuntimeWorkerIo["createWorkerOutput"]>[0] & { filePath: string };
+
+const runRomWeaverExtractWorker = async (
+  input: RomWeaverExtractWorkerInput,
   onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
   onLog?: (log: WorkflowRuntimeLog) => void,
-): Promise<Parameters<RuntimeWorkerIo["createWorkerOutput"]>[0]> => {
+): Promise<RomWeaverExtractWorkerOutput[]> => {
   const inputPath = String(input.inputPath || "").trim();
   if (!inputPath) throw new Error("Extract input path is required");
   const outDirPath = String(input.outDirPath || "").trim();
@@ -146,6 +159,7 @@ const invokeRomWeaverExtractWorker = async (
     ...(select.length ? { select } : {}),
     ...(input.noIgnore ? { no_ignore: true } : {}),
     ...(input.noNestedExtract ? { no_nested_extract: true } : {}),
+    ...(typeof input.splitBin === "boolean" ? { split_bin: input.splitBin } : {}),
     ...(threadArg ? { threads: threadArg } : {}),
   });
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson extract dispatch", {
@@ -158,6 +172,7 @@ const invokeRomWeaverExtractWorker = async (
   const result = await runRomWeaverJson(
     command,
     toRomWeaverOptions({
+      interactiveSelectionEnabled: input.interactiveSelectionEnabled,
       knownInputPaths: input.knownInputPaths,
       logLevel: input.logLevel,
       onEvent: relaySimpleProgress(onProgress),
@@ -166,14 +181,36 @@ const invokeRomWeaverExtractWorker = async (
     }),
   );
   ensureRomWeaverSuccess(result, "Extraction failed");
-  const emitted = getEmittedFiles(result)[0];
-  if (!emitted?.path) throw new Error("Extraction returned no output file");
-  return {
-    fileName: emitted.fileName || select[0] || getPathBaseName(emitted.path, "output.bin"),
+  const timing = getRunResultTiming(result);
+  return getEmittedFiles(result).map((emitted) => ({
+    fileName: emitted.fileName || getPathBaseName(emitted.path, "output.bin"),
     filePath: emitted.path,
     size: emitted.sizeBytes,
-    timing: getRunResultTiming(result),
-  };
+    timing,
+  }));
+};
+
+const invokeRomWeaverExtractWorker = async (
+  input: RomWeaverExtractWorkerInput,
+  onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
+  onLog?: (log: WorkflowRuntimeLog) => void,
+): Promise<Parameters<RuntimeWorkerIo["createWorkerOutput"]>[0]> => {
+  const select = Array.isArray(input.select)
+    ? input.select.map((entryName) => String(entryName || "").trim()).filter((entryName) => !!entryName)
+    : [];
+  const emitted = (await runRomWeaverExtractWorker(input, onProgress, onLog))[0];
+  if (!emitted?.filePath) throw new Error("Extraction returned no output file");
+  return { ...emitted, fileName: emitted.fileName || select[0] || "output.bin" };
+};
+
+const invokeRomWeaverExtractAllWorker = async (
+  input: RomWeaverExtractWorkerInput,
+  onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
+  onLog?: (log: WorkflowRuntimeLog) => void,
+): Promise<RomWeaverExtractWorkerOutput[]> => {
+  const emitted = await runRomWeaverExtractWorker(input, onProgress, onLog);
+  if (!emitted.length) throw new Error("Extraction returned no output files");
+  return emitted;
 };
 
 // Enumerate a container's selectable entries without extracting, via the `probe` command's
@@ -186,6 +223,7 @@ const runRomWeaverProbeWorker = async (
     romFilter?: boolean;
     patchFilter?: boolean;
     sourcePath: string;
+    splitBin?: boolean;
     signal?: AbortSignal;
   },
   onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
@@ -197,6 +235,7 @@ const runRomWeaverProbeWorker = async (
     ...filterSpread(input.romFilter, input.patchFilter),
     no_extract: true,
     input: sourcePath,
+    ...(typeof input.splitBin === "boolean" ? { split_bin: input.splitBin } : {}),
   });
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson probe dispatch", {
     command,
@@ -232,4 +271,9 @@ const getChdProbeDetails = (value: unknown): CompressionProbeResult["chd"] | und
   return { ...(rawSha1 ? { rawSha1 } : {}), ...(sha1 ? { sha1 } : {}) };
 };
 
-export { invokeRomWeaverCompressionCreateWorker, invokeRomWeaverExtractWorker, runRomWeaverProbeWorker };
+export {
+  invokeRomWeaverCompressionCreateWorker,
+  invokeRomWeaverExtractAllWorker,
+  invokeRomWeaverExtractWorker,
+  runRomWeaverProbeWorker,
+};

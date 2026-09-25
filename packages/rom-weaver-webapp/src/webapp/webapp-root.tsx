@@ -1,5 +1,6 @@
 import {
   BookOpen,
+  FileArchive,
   Gamepad2,
   GitCompare,
   House,
@@ -66,6 +67,7 @@ import {
   CreatePatchRoute,
   DocsPageRoute,
   EmulatorTestRoute,
+  ExtractRouteForm,
   HomePageRoute,
   IdentifyRouteForm,
   preloadWorkflowRoute,
@@ -120,6 +122,14 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     railLabel: "Identify",
   },
   {
+    group: "files",
+    href: "extract",
+    icon: <FileArchive aria-hidden="true" />,
+    id: "extract",
+    label: "Extract files",
+    railLabel: "Extract",
+  },
+  {
     beta: true,
     group: "roms",
     href: "trim-rom",
@@ -169,6 +179,7 @@ const syncWorkflowSeoMetadata = (view: WebappView) => {
   let route = null;
   if (view === "creator") route = WORKFLOW_SEO_ROUTES.creator;
   else if (view === "bundle") route = WORKFLOW_SEO_ROUTES.bundle;
+  else if (view === "extract") route = WORKFLOW_SEO_ROUTES.extract;
   else if (view === "home") route = WORKFLOW_SEO_ROUTES.home;
   else if (view === "identify") route = WORKFLOW_SEO_ROUTES.identify;
   else if (view === "patcher") route = WORKFLOW_SEO_ROUTES.patcher;
@@ -806,6 +817,7 @@ function WebappRoot({
                     updateReady={pageUpdate.ready}
                   />,
                 )}
+                {workflowPanel("extract", <ExtractRouteForm pageDrop={pageDropFor("extract")} />)}
                 {workflowPanel(
                   "identify",
                   <IdentifyRouteForm
