@@ -107,8 +107,6 @@ impl CliApp {
         let plan = match self.plan_compress(
             requested_format,
             &output,
-            input.len(),
-            entry_names,
             codec,
             level_profile,
             &context,
@@ -117,6 +115,22 @@ impl CliApp {
             Ok(plan) => plan,
             Err(report) => return self.finish("compress", *report),
         };
+        let mut plan = plan;
+        if !entry_names.is_empty()
+            && (!plan.handler.descriptor().matches_name("zip") || entry_names.len() != input.len())
+        {
+            return self.finish(
+                "compress",
+                OperationReport::failed(
+                    OperationFamily::Container,
+                    Some(plan.resolved_format.clone()),
+                    "validate",
+                    "--entry-name requires ZIP format and one name per input",
+                    probe_threads,
+                ),
+            );
+        }
+        plan.archive_names = (!entry_names.is_empty()).then_some(entry_names);
         let report = if dry_run {
             Self::compress_dry_run(&plan, &input, &output, level_profile, &context)
         } else {
@@ -173,8 +187,6 @@ impl CliApp {
         &self,
         requested_format: Option<String>,
         output: &Path,
-        input_len: usize,
-        entry_names: Vec<String>,
         codec: Vec<String>,
         level_profile: CompressionLevelProfile,
         context: &OperationContext,
@@ -245,22 +257,12 @@ impl CliApp {
                 extract_only_create_validation_message(handler.descriptor().name),
             ));
         }
-        if !entry_names.is_empty()
-            && (!handler.descriptor().matches_name("zip") || entry_names.len() != input_len)
-        {
-            return Err(fail(
-                Some(resolved_format.clone()),
-                "validate",
-                "--entry-name requires ZIP format and one name per input".to_string(),
-            ));
-        }
-        let archive_names = (!entry_names.is_empty()).then_some(entry_names);
         let create_threads = Some(context.plan_threads(capabilities.create_threads.clone()));
         Ok(CompressPlan {
             handler,
             resolved_format,
             format_warning,
-            archive_names,
+            archive_names: None,
             codec,
             level,
             create_threads,
@@ -1186,6 +1188,7 @@ impl CliApp {
         );
 
         let request = ContainerCreateRequest {
+            archive_names: None,
             inputs,
             output: temp_output.clone(),
             format: format.clone(),

@@ -1,5 +1,11 @@
 use super::*;
 
+struct ProbeContainerOptions {
+    kind_filter: ArchiveEntryKindFilter,
+    no_ignore: bool,
+    split_bin: bool,
+}
+
 impl CliApp {
     pub(super) fn run_probe(&self, mut args: ProbeCommand) -> AppRunOutcome {
         let _stdin_guard = match crate::stdin_input::spool_stdin_if_dash(&mut args.input) {
@@ -162,13 +168,16 @@ impl CliApp {
         probe_recommendation: Option<&CompressFormatRecommendation>,
     ) -> OperationReport {
         if let Some(handler) = self.containers.probe(probe_source) {
+            let options = ProbeContainerOptions {
+                kind_filter,
+                no_ignore,
+                split_bin,
+            };
             return self.probe_container_source(
                 handler.as_ref(),
                 probe_source,
                 context,
-                kind_filter,
-                no_ignore,
-                split_bin,
+                &options,
                 probe_recommendation,
             );
         }
@@ -266,9 +275,7 @@ impl CliApp {
         handler: &dyn ContainerHandler,
         probe_source: &Path,
         context: &OperationContext,
-        kind_filter: ArchiveEntryKindFilter,
-        no_ignore: bool,
-        split_bin: bool,
+        options: &ProbeContainerOptions,
         probe_recommendation: Option<&CompressFormatRecommendation>,
     ) -> OperationReport {
         self.emit_running(
@@ -284,7 +291,7 @@ impl CliApp {
         );
         let request = ContainerProbeRequest {
             source: probe_source.to_path_buf(),
-            split_bin,
+            split_bin: options.split_bin,
         };
         let report = handler
             .probe_details(&request, context)
@@ -307,7 +314,11 @@ impl CliApp {
             .ok()
             .map(|entries| {
                 let (payload_entries, fallback_entries) =
-                    Self::kind_filtered_container_list_entries(&entries, kind_filter, !no_ignore);
+                    Self::kind_filtered_container_list_entries(
+                        &entries,
+                        options.kind_filter,
+                        !options.no_ignore,
+                    );
                 if payload_entries.is_empty() {
                     fallback_entries
                 } else {
