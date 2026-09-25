@@ -127,38 +127,70 @@ struct CdExtractSink<'a> {
     cleanup: &'a ChdOutputCleanup,
 }
 
+/// A cue `TRACK` as parsed, before its byte span in the file is resolved.
+#[derive(Clone, Debug)]
+struct CuePendingTrack {
+    number: u32,
+    mode: DiscTrackMode,
+    file_path: PathBuf,
+    file_offset_base_bytes: u64,
+    file_data_len_bytes: u64,
+    index00_frames: Option<u32>,
+    index01_frames: Option<u32>,
+    pregap_frames: u32,
+    postgap_frames: u32,
+    swap_audio_on_read: bool,
+}
+
+/// The cue `FILE` that later `TRACK` directives read from.
+#[derive(Clone, Debug)]
+struct CuePendingFile {
+    path: PathBuf,
+    data_offset_bytes: u64,
+    data_len_bytes: u64,
+    swap_audio_on_read: bool,
+}
+
+/// A `.gdi` track line as parsed, before its padding to the next track is known.
+#[derive(Clone, Debug)]
+struct GdiPendingTrack {
+    number: u32,
+    physframeofs: u32,
+    mode: DiscTrackMode,
+    file_path: PathBuf,
+    file_offset_bytes: u64,
+    data_frames: u32,
+    swap_audio_on_read: bool,
+}
+
 impl ChdContainerHandler {
     /// Resolve a cue sheet into unpadded CD-shaped tracks plus the number of the
     /// first track that falls inside a GD-ROM high-density area (when the sheet
     /// carries `REM HIGH-DENSITY AREA` markers). Callers frame the result as a CD
     /// (with implicit 4-frame padding) or synthesize a GD-ROM layout from it.
     fn resolve_cue_tracks(&self, path: &Path) -> Result<(Vec<DiscTrack>, Option<u32>)> {
-        #[derive(Clone, Debug)]
-        struct PendingTrack {
-            number: u32,
-            mode: DiscTrackMode,
-            file_path: PathBuf,
-            file_offset_base_bytes: u64,
-            file_data_len_bytes: u64,
-            index00_frames: Option<u32>,
-            index01_frames: Option<u32>,
-            pregap_frames: u32,
-            postgap_frames: u32,
-            swap_audio_on_read: bool,
+        let (tracks, high_density_first) = self.parse_cue_pending_tracks(path)?;
+        if tracks.is_empty() {
+            return Err(RomWeaverError::Validation(format!(
+                "cue `{}` did not define any tracks",
+                path.display()
+            )));
         }
 
-        #[derive(Clone, Debug)]
-        struct PendingFile {
-            path: PathBuf,
-            data_offset_bytes: u64,
-            data_len_bytes: u64,
-            swap_audio_on_read: bool,
+        let mut resolved = Vec::with_capacity(tracks.len());
+        for index in 0..tracks.len() {
+            resolved.push(Self::resolve_cue_track(path, &tracks, index)?);
         }
+        Ok((resolved, high_density_first))
+    }
 
+    /// Read every cue directive into pending tracks, plus the first track number
+    /// that follows a `REM HIGH-DENSITY AREA` marker.
+    fn parse_cue_pending_tracks(&self, path: &Path) -> Result<(Vec<CuePendingTrack>, Option<u32>)> {
         let cue_dir = path.parent().unwrap_or_else(|| Path::new("."));
         let mut cue_reader = BufReader::new(File::open(path)?);
-        let mut tracks = Vec::<PendingTrack>::new();
-        let mut current_file: Option<PendingFile> = None;
+        let mut tracks = Vec::<CuePendingTrack>::new();
+        let mut current_file: Option<CuePendingFile> = None;
         let mut current_track: Option<usize> = None;
         // GD-ROM cue sheets mark the inner program area with `REM HIGH-DENSITY
         // AREA`; remember the first track number that follows the marker.
@@ -186,150 +218,37 @@ impl ChdContainerHandler {
                 }
                 "TITLE" | "PERFORMER" | "SONGWRITER" | "FLAGS" | "CATALOG" | "ISRC" => {}
                 "FILE" => {
-                    let (name, rest) = split_token(remainder).ok_or_else(|| {
-                        RomWeaverError::Validation(format!(
-                            "invalid FILE entry in cue `{}`",
-                            path.display()
-                        ))
-                    })?;
-                    let (kind, _) = split_token(rest).ok_or_else(|| {
-                        RomWeaverError::Validation(format!(
-                            "missing FILE type in cue `{}`",
-                            path.display()
-                        ))
-                    })?;
-                    let full_path = cue_dir.join(name);
-                    let kind = kind.trim().to_ascii_uppercase();
-                    current_file = Some(match kind.as_str() {
-                        "BINARY" => PendingFile {
-                            path: full_path.clone(),
-                            data_offset_bytes: 0,
-                            data_len_bytes: fs::metadata(&full_path)?.len(),
-                            swap_audio_on_read: true,
-                        },
-                        "MOTOROLA" => PendingFile {
-                            path: full_path.clone(),
-                            data_offset_bytes: 0,
-                            data_len_bytes: fs::metadata(&full_path)?.len(),
-                            swap_audio_on_read: false,
-                        },
-                        "WAVE" => {
-                            let (data_offset_bytes, data_len_bytes) =
-                                self.parse_wave_file(&full_path)?;
-                            PendingFile {
-                                path: full_path,
-                                data_offset_bytes,
-                                data_len_bytes,
-                                swap_audio_on_read: true,
-                            }
-                        }
-                        other => {
-                            return Err(RomWeaverError::Validation(format!(
-                                "cue `{}` uses FILE type `{other}`; current chd cue support accepts BINARY, MOTOROLA, and WAVE files",
-                                path.display()
-                            )));
-                        }
-                    });
+                    current_file = Some(self.parse_cue_file_entry(path, cue_dir, remainder)?);
                     current_track = None;
                 }
                 "TRACK" => {
-                    let Some(file) = current_file.clone() else {
+                    let Some(file) = current_file.as_ref() else {
                         return Err(RomWeaverError::Validation(format!(
                             "TRACK entry appeared before FILE in cue `{}`",
                             path.display()
                         )));
                     };
-                    let (number, rest) = split_token(remainder).ok_or_else(|| {
-                        RomWeaverError::Validation(format!(
-                            "invalid TRACK entry in cue `{}`",
-                            path.display()
-                        ))
-                    })?;
-                    let (mode, _) = split_token(rest).ok_or_else(|| {
-                        RomWeaverError::Validation(format!(
-                            "missing TRACK type in cue `{}`",
-                            path.display()
-                        ))
-                    })?;
-                    let number = number.parse::<u32>().map_err(|_| {
-                        RomWeaverError::Validation(format!(
-                            "invalid TRACK number `{number}` in cue `{}`",
-                            path.display()
-                        ))
-                    })?;
-                    let mode = self.parse_disc_mode(mode)?;
-                    if file.data_offset_bytes != 0 && mode != DiscTrackMode::Audio {
-                        return Err(RomWeaverError::Validation(format!(
-                            "cue `{}` uses a WAVE file for non-audio track {}",
-                            path.display(),
-                            number
-                        )));
-                    }
+                    let track = self.parse_cue_track_entry(path, file, remainder)?;
                     if next_track_high_density {
-                        high_density_first.get_or_insert(number);
+                        high_density_first.get_or_insert(track.number);
                         next_track_high_density = false;
                     }
-                    tracks.push(PendingTrack {
-                        number,
-                        mode,
-                        file_path: file.path.clone(),
-                        file_offset_base_bytes: file.data_offset_bytes,
-                        file_data_len_bytes: file.data_len_bytes,
-                        index00_frames: None,
-                        index01_frames: None,
-                        pregap_frames: 0,
-                        postgap_frames: 0,
-                        swap_audio_on_read: file.swap_audio_on_read,
-                    });
+                    tracks.push(track);
                     current_track = Some(tracks.len() - 1);
                 }
                 "INDEX" => {
-                    let Some(track_index) = current_track else {
-                        return Err(RomWeaverError::Validation(format!(
-                            "INDEX entry appeared before TRACK in cue `{}`",
-                            path.display()
-                        )));
-                    };
-                    let (index_number, rest) = split_token(remainder).ok_or_else(|| {
-                        RomWeaverError::Validation(format!(
-                            "invalid INDEX entry in cue `{}`",
-                            path.display()
-                        ))
-                    })?;
-                    let (time, _) = split_token(rest).ok_or_else(|| {
-                        RomWeaverError::Validation(format!(
-                            "missing INDEX time in cue `{}`",
-                            path.display()
-                        ))
-                    })?;
-                    match index_number {
-                        "00" => tracks[track_index].index00_frames = Some(self.parse_msf(time)?),
-                        "01" => tracks[track_index].index01_frames = Some(self.parse_msf(time)?),
-                        other => {
-                            return Err(RomWeaverError::Validation(format!(
-                                "cue `{}` uses unsupported index `{other}`; current chd cue support accepts INDEX 00 and INDEX 01",
-                                path.display()
-                            )));
-                        }
-                    }
+                    let track = Self::current_cue_track(path, &mut tracks, current_track, "INDEX")?;
+                    self.parse_cue_index_entry(path, track, remainder)?;
                 }
                 "PREGAP" => {
-                    let Some(track_index) = current_track else {
-                        return Err(RomWeaverError::Validation(format!(
-                            "PREGAP entry appeared before TRACK in cue `{}`",
-                            path.display()
-                        )));
-                    };
-                    tracks[track_index].pregap_frames = self.parse_msf(remainder)?;
+                    let track =
+                        Self::current_cue_track(path, &mut tracks, current_track, "PREGAP")?;
+                    track.pregap_frames = self.parse_msf(remainder)?;
                 }
                 "POSTGAP" => {
-                    let Some(track_index) = current_track else {
-                        return Err(RomWeaverError::Validation(format!(
-                            "POSTGAP entry appeared before TRACK in cue `{}`",
-                            path.display()
-                        )));
-                    };
-                    tracks[track_index].postgap_frames = self.parse_msf(remainder)?;
+                    let track =
+                        Self::current_cue_track(path, &mut tracks, current_track, "POSTGAP")?;
+                    track.postgap_frames = self.parse_msf(remainder)?;
                 }
                 other => {
                     return Err(RomWeaverError::Validation(format!(
@@ -339,113 +258,252 @@ impl ChdContainerHandler {
                 }
             }
         }
+        Ok((tracks, high_density_first))
+    }
 
-        if tracks.is_empty() {
+    /// Return the track a per-track cue directive applies to, or reject a
+    /// directive that appears before any `TRACK`.
+    fn current_cue_track<'t>(
+        path: &Path,
+        tracks: &'t mut [CuePendingTrack],
+        current_track: Option<usize>,
+        directive: &str,
+    ) -> Result<&'t mut CuePendingTrack> {
+        let Some(track_index) = current_track else {
             return Err(RomWeaverError::Validation(format!(
-                "cue `{}` did not define any tracks",
+                "{directive} entry appeared before TRACK in cue `{}`",
+                path.display()
+            )));
+        };
+        Ok(&mut tracks[track_index])
+    }
+
+    /// Parse the operands of a cue `FILE` directive into its data span and byte order.
+    fn parse_cue_file_entry(
+        &self,
+        path: &Path,
+        cue_dir: &Path,
+        remainder: &str,
+    ) -> Result<CuePendingFile> {
+        let (name, rest) = split_token(remainder).ok_or_else(|| {
+            RomWeaverError::Validation(format!("invalid FILE entry in cue `{}`", path.display()))
+        })?;
+        let (kind, _) = split_token(rest).ok_or_else(|| {
+            RomWeaverError::Validation(format!("missing FILE type in cue `{}`", path.display()))
+        })?;
+        let full_path = cue_dir.join(name);
+        let kind = kind.trim().to_ascii_uppercase();
+        Ok(match kind.as_str() {
+            "BINARY" => CuePendingFile {
+                path: full_path.clone(),
+                data_offset_bytes: 0,
+                data_len_bytes: fs::metadata(&full_path)?.len(),
+                swap_audio_on_read: true,
+            },
+            "MOTOROLA" => CuePendingFile {
+                path: full_path.clone(),
+                data_offset_bytes: 0,
+                data_len_bytes: fs::metadata(&full_path)?.len(),
+                swap_audio_on_read: false,
+            },
+            "WAVE" => {
+                let (data_offset_bytes, data_len_bytes) = self.parse_wave_file(&full_path)?;
+                CuePendingFile {
+                    path: full_path,
+                    data_offset_bytes,
+                    data_len_bytes,
+                    swap_audio_on_read: true,
+                }
+            }
+            other => {
+                return Err(RomWeaverError::Validation(format!(
+                    "cue `{}` uses FILE type `{other}`; current chd cue support accepts BINARY, MOTOROLA, and WAVE files",
+                    path.display()
+                )));
+            }
+        })
+    }
+
+    /// Parse the operands of a cue `TRACK` directive against the current `FILE`.
+    fn parse_cue_track_entry(
+        &self,
+        path: &Path,
+        file: &CuePendingFile,
+        remainder: &str,
+    ) -> Result<CuePendingTrack> {
+        let (number, rest) = split_token(remainder).ok_or_else(|| {
+            RomWeaverError::Validation(format!("invalid TRACK entry in cue `{}`", path.display()))
+        })?;
+        let (mode, _) = split_token(rest).ok_or_else(|| {
+            RomWeaverError::Validation(format!("missing TRACK type in cue `{}`", path.display()))
+        })?;
+        let number = number.parse::<u32>().map_err(|_| {
+            RomWeaverError::Validation(format!(
+                "invalid TRACK number `{number}` in cue `{}`",
+                path.display()
+            ))
+        })?;
+        let mode = self.parse_disc_mode(mode)?;
+        if file.data_offset_bytes != 0 && mode != DiscTrackMode::Audio {
+            return Err(RomWeaverError::Validation(format!(
+                "cue `{}` uses a WAVE file for non-audio track {}",
+                path.display(),
+                number
+            )));
+        }
+        Ok(CuePendingTrack {
+            number,
+            mode,
+            file_path: file.path.clone(),
+            file_offset_base_bytes: file.data_offset_bytes,
+            file_data_len_bytes: file.data_len_bytes,
+            index00_frames: None,
+            index01_frames: None,
+            pregap_frames: 0,
+            postgap_frames: 0,
+            swap_audio_on_read: file.swap_audio_on_read,
+        })
+    }
+
+    /// Parse the operands of a cue `INDEX` directive into the current track.
+    fn parse_cue_index_entry(
+        &self,
+        path: &Path,
+        track: &mut CuePendingTrack,
+        remainder: &str,
+    ) -> Result<()> {
+        let (index_number, rest) = split_token(remainder).ok_or_else(|| {
+            RomWeaverError::Validation(format!("invalid INDEX entry in cue `{}`", path.display()))
+        })?;
+        let (time, _) = split_token(rest).ok_or_else(|| {
+            RomWeaverError::Validation(format!("missing INDEX time in cue `{}`", path.display()))
+        })?;
+        match index_number {
+            "00" => track.index00_frames = Some(self.parse_msf(time)?),
+            "01" => track.index01_frames = Some(self.parse_msf(time)?),
+            other => {
+                return Err(RomWeaverError::Validation(format!(
+                    "cue `{}` uses unsupported index `{other}`; current chd cue support accepts INDEX 00 and INDEX 01",
+                    path.display()
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// Return a pending cue track's `INDEX 01` frame, which every track requires.
+    fn cue_track_index01(path: &Path, track: &CuePendingTrack) -> Result<u32> {
+        track.index01_frames.ok_or_else(|| {
+            RomWeaverError::Validation(format!(
+                "cue track {} in `{}` is missing INDEX 01",
+                track.number,
+                path.display()
+            ))
+        })
+    }
+
+    /// Resolve `tracks[index]` into a byte span of its file: it runs from its
+    /// first index to the next track that shares the same file, or to the end
+    /// of the file.
+    fn resolve_cue_track(
+        path: &Path,
+        tracks: &[CuePendingTrack],
+        index: usize,
+    ) -> Result<DiscTrack> {
+        let track = &tracks[index];
+        let index01_frames = Self::cue_track_index01(path, track)?;
+        if track.pregap_frames > 0 && track.index00_frames.is_some() {
+            return Err(RomWeaverError::Validation(format!(
+                "cue track {} in `{}` uses both INDEX 00 and PREGAP; current chd cue support requires one pregap style",
+                track.number,
                 path.display()
             )));
         }
-
-        let mut resolved = Vec::with_capacity(tracks.len());
-        for (index, track) in tracks.iter().enumerate() {
-            let index01_frames = track.index01_frames.ok_or_else(|| {
-                RomWeaverError::Validation(format!(
-                    "cue track {} in `{}` is missing INDEX 01",
-                    track.number,
-                    path.display()
-                ))
-            })?;
-            if track.pregap_frames > 0 && track.index00_frames.is_some() {
-                return Err(RomWeaverError::Validation(format!(
-                    "cue track {} in `{}` uses both INDEX 00 and PREGAP; current chd cue support requires one pregap style",
-                    track.number,
-                    path.display()
-                )));
-            }
-            let start_frame = track.index00_frames.unwrap_or(index01_frames);
-            let sector_bytes = u64::try_from(track.mode.data_bytes()).unwrap_or(2352);
-            let start = track.file_offset_base_bytes + u64::from(start_frame) * sector_bytes;
-            let file_end = track.file_offset_base_bytes + track.file_data_len_bytes;
-            if start > file_end {
-                return Err(RomWeaverError::Validation(format!(
-                    "cue track {} starts past the end of `{}`",
-                    track.number,
-                    track.file_path.display()
-                )));
-            }
-            let mut next_start = file_end;
-            for candidate in &tracks[index + 1..] {
-                if candidate.file_path != track.file_path
-                    || candidate.file_offset_base_bytes != track.file_offset_base_bytes
-                {
-                    continue;
-                }
-                if candidate.mode.data_bytes() != track.mode.data_bytes() {
-                    return Err(RomWeaverError::Validation(format!(
-                        "cue `{}` shares `{}` across tracks with different sector sizes; current chd cue support requires a separate file per sector size",
-                        path.display(),
-                        track.file_path.display()
-                    )));
-                }
-                let candidate_index01 = candidate.index01_frames.ok_or_else(|| {
-                    RomWeaverError::Validation(format!(
-                        "cue track {} in `{}` is missing INDEX 01",
-                        candidate.number,
-                        path.display()
-                    ))
-                })?;
-                let candidate_start_frame = candidate.index00_frames.unwrap_or(candidate_index01);
-                next_start = candidate.file_offset_base_bytes
-                    + u64::from(candidate_start_frame) * sector_bytes;
-                break;
-            }
-            if next_start < start {
-                return Err(RomWeaverError::Validation(format!(
-                    "cue track {} has descending frame offsets in `{}`",
-                    track.number,
-                    path.display()
-                )));
-            }
-            let byte_len = next_start - start;
-            if byte_len % sector_bytes != 0 {
-                return Err(RomWeaverError::Validation(format!(
-                    "cue track {} length in `{}` is not divisible by {} bytes",
-                    track.number,
-                    track.file_path.display(),
-                    sector_bytes
-                )));
-            }
-            let frames = u32::try_from(byte_len / sector_bytes).map_err(|_| {
-                RomWeaverError::Validation(format!(
-                    "cue track {} is too large for current chd cd support",
-                    track.number
-                ))
-            })?;
-            let pregap_from_index = index01_frames.saturating_sub(start_frame);
-            let pregap_has_data = track.index00_frames.is_some() && pregap_from_index > 0;
-            let pregap_frames = if pregap_has_data {
-                pregap_from_index
-            } else {
-                track.pregap_frames
-            };
-            resolved.push(DiscTrack {
-                number: track.number,
-                mode: track.mode,
-                file_path: track.file_path.clone(),
-                memory_source: None,
-                file_offset_bytes: start,
-                frames,
-                pregap_frames,
-                postgap_frames: track.postgap_frames,
-                pregap_has_data,
-                has_subcode: false,
-                pad_frames: 0,
-                swap_audio_on_read: track.swap_audio_on_read,
-            });
+        let start_frame = track.index00_frames.unwrap_or(index01_frames);
+        let sector_bytes = u64::try_from(track.mode.data_bytes()).unwrap_or(2352);
+        let start = track.file_offset_base_bytes + u64::from(start_frame) * sector_bytes;
+        let file_end = track.file_offset_base_bytes + track.file_data_len_bytes;
+        if start > file_end {
+            return Err(RomWeaverError::Validation(format!(
+                "cue track {} starts past the end of `{}`",
+                track.number,
+                track.file_path.display()
+            )));
         }
+        let next_start =
+            Self::next_cue_track_start(path, track, &tracks[index + 1..], sector_bytes)?
+                .unwrap_or(file_end);
+        if next_start < start {
+            return Err(RomWeaverError::Validation(format!(
+                "cue track {} has descending frame offsets in `{}`",
+                track.number,
+                path.display()
+            )));
+        }
+        let byte_len = next_start - start;
+        if !byte_len.is_multiple_of(sector_bytes) {
+            return Err(RomWeaverError::Validation(format!(
+                "cue track {} length in `{}` is not divisible by {} bytes",
+                track.number,
+                track.file_path.display(),
+                sector_bytes
+            )));
+        }
+        let frames = u32::try_from(byte_len / sector_bytes).map_err(|_| {
+            RomWeaverError::Validation(format!(
+                "cue track {} is too large for current chd cd support",
+                track.number
+            ))
+        })?;
+        let pregap_from_index = index01_frames.saturating_sub(start_frame);
+        let pregap_has_data = track.index00_frames.is_some() && pregap_from_index > 0;
+        let pregap_frames = if pregap_has_data {
+            pregap_from_index
+        } else {
+            track.pregap_frames
+        };
+        Ok(DiscTrack {
+            number: track.number,
+            mode: track.mode,
+            file_path: track.file_path.clone(),
+            memory_source: None,
+            file_offset_bytes: start,
+            frames,
+            pregap_frames,
+            postgap_frames: track.postgap_frames,
+            pregap_has_data,
+            has_subcode: false,
+            pad_frames: 0,
+            swap_audio_on_read: track.swap_audio_on_read,
+        })
+    }
 
-        Ok((resolved, high_density_first))
+    /// Byte offset where the first later track in the same file span starts,
+    /// or `None` when `track` is the last one in its file.
+    fn next_cue_track_start(
+        path: &Path,
+        track: &CuePendingTrack,
+        later_tracks: &[CuePendingTrack],
+        sector_bytes: u64,
+    ) -> Result<Option<u64>> {
+        let Some(candidate) = later_tracks.iter().find(|candidate| {
+            candidate.file_path == track.file_path
+                && candidate.file_offset_base_bytes == track.file_offset_base_bytes
+        }) else {
+            return Ok(None);
+        };
+        if candidate.mode.data_bytes() != track.mode.data_bytes() {
+            return Err(RomWeaverError::Validation(format!(
+                "cue `{}` shares `{}` across tracks with different sector sizes; current chd cue support requires a separate file per sector size",
+                path.display(),
+                track.file_path.display()
+            )));
+        }
+        let candidate_index01 = Self::cue_track_index01(path, candidate)?;
+        let candidate_start_frame = candidate.index00_frames.unwrap_or(candidate_index01);
+        Ok(Some(
+            candidate.file_offset_base_bytes + u64::from(candidate_start_frame) * sector_bytes,
+        ))
     }
 
     /// Parse a cue sheet as a plain CD-ROM layout (with MAME's implicit 4-frame
@@ -546,17 +604,6 @@ impl ChdContainerHandler {
     }
 
     pub(super) fn parse_gdi_file(&self, path: &Path) -> Result<DiscLayout> {
-        #[derive(Clone, Debug)]
-        struct PendingTrack {
-            number: u32,
-            physframeofs: u32,
-            mode: DiscTrackMode,
-            file_path: PathBuf,
-            file_offset_bytes: u64,
-            data_frames: u32,
-            swap_audio_on_read: bool,
-        }
-
         let gdi_dir = path.parent().unwrap_or_else(|| Path::new("."));
         let mut gdi_reader = BufReader::new(File::open(path)?);
         let mut raw_line = String::new();
@@ -572,138 +619,12 @@ impl ChdContainerHandler {
                 continue;
             }
             if track_count.is_none() {
-                let parsed_track_count = line.parse::<usize>().map_err(|_| {
-                    RomWeaverError::Validation(format!(
-                        "gdi `{}` has an invalid track count header",
-                        path.display()
-                    ))
-                })?;
-                if parsed_track_count == 0 {
-                    return Err(RomWeaverError::Validation(format!(
-                        "gdi `{}` does not define any tracks",
-                        path.display()
-                    )));
-                }
+                let parsed_track_count = Self::parse_gdi_track_count(path, line)?;
                 track_count = Some(parsed_track_count);
                 tracks = Vec::with_capacity(parsed_track_count);
                 continue;
             }
-
-            let (number, remainder) = split_token(line).ok_or_else(|| {
-                RomWeaverError::Validation(format!(
-                    "invalid gdi track entry in `{}`",
-                    path.display()
-                ))
-            })?;
-            let (physframeofs, remainder) = split_token(remainder).ok_or_else(|| {
-                RomWeaverError::Validation(format!(
-                    "gdi track entry in `{}` is missing its physical offset",
-                    path.display()
-                ))
-            })?;
-            let (track_type, remainder) = split_token(remainder).ok_or_else(|| {
-                RomWeaverError::Validation(format!(
-                    "gdi track entry in `{}` is missing its track type",
-                    path.display()
-                ))
-            })?;
-            let (sector_size, remainder) = split_token(remainder).ok_or_else(|| {
-                RomWeaverError::Validation(format!(
-                    "gdi track entry in `{}` is missing its sector size",
-                    path.display()
-                ))
-            })?;
-            let (name, remainder) = split_token(remainder).ok_or_else(|| {
-                RomWeaverError::Validation(format!(
-                    "gdi track entry in `{}` is missing its filename",
-                    path.display()
-                ))
-            })?;
-            let (file_offset, _) = split_token(remainder).ok_or_else(|| {
-                RomWeaverError::Validation(format!(
-                    "gdi track entry in `{}` is missing its file offset",
-                    path.display()
-                ))
-            })?;
-
-            let number = number.parse::<u32>().map_err(|_| {
-                RomWeaverError::Validation(format!(
-                    "gdi `{}` has an invalid track number `{number}`",
-                    path.display()
-                ))
-            })?;
-            let physframeofs = physframeofs.parse::<u32>().map_err(|_| {
-                RomWeaverError::Validation(format!(
-                    "gdi `{}` has an invalid physical offset `{physframeofs}`",
-                    path.display()
-                ))
-            })?;
-            let track_type = track_type.parse::<u32>().map_err(|_| {
-                RomWeaverError::Validation(format!(
-                    "gdi `{}` has an invalid track type `{track_type}`",
-                    path.display()
-                ))
-            })?;
-            let sector_size = sector_size.parse::<u32>().map_err(|_| {
-                RomWeaverError::Validation(format!(
-                    "gdi `{}` has an invalid sector size `{sector_size}`",
-                    path.display()
-                ))
-            })?;
-            let file_offset_bytes = file_offset.parse::<u64>().map_err(|_| {
-                RomWeaverError::Validation(format!(
-                    "gdi `{}` has an invalid file offset `{file_offset}`",
-                    path.display()
-                ))
-            })?;
-
-            let (mode, swap_audio_on_read) = match (track_type, sector_size) {
-                (4, 2352) => (DiscTrackMode::Mode1Raw, false),
-                (4, 2048) => (DiscTrackMode::Mode1, false),
-                (0, 2352) => (DiscTrackMode::Audio, true),
-                _ => {
-                    return Err(RomWeaverError::Validation(format!(
-                        "gdi `{}` uses unsupported track type/sector-size pair `{track_type}/{sector_size}`",
-                        path.display()
-                    )));
-                }
-            };
-
-            let file_path = gdi_dir.join(name);
-            let file_size = fs::metadata(&file_path)?.len();
-            if file_offset_bytes > file_size {
-                return Err(RomWeaverError::Validation(format!(
-                    "gdi track {} starts past the end of `{}`",
-                    number,
-                    file_path.display()
-                )));
-            }
-            let payload_bytes = file_size - file_offset_bytes;
-            if payload_bytes % u64::from(sector_size) != 0 {
-                return Err(RomWeaverError::Validation(format!(
-                    "gdi track {} length in `{}` is not divisible by {} bytes",
-                    number,
-                    file_path.display(),
-                    sector_size
-                )));
-            }
-            let data_frames =
-                u32::try_from(payload_bytes / u64::from(sector_size)).map_err(|_| {
-                    RomWeaverError::Validation(format!(
-                        "gdi track {} is too large for current chd gd-rom support",
-                        number
-                    ))
-                })?;
-
-            tracks.push(PendingTrack {
-                number,
-                physframeofs,
-                mode,
-                file_path,
-                file_offset_bytes,
-                data_frames,
-                swap_audio_on_read,
-            });
+            tracks.push(Self::parse_gdi_track_line(path, gdi_dir, line)?);
         }
 
         let track_count = track_count.ok_or_else(|| {
@@ -722,6 +643,147 @@ impl ChdContainerHandler {
             )));
         }
 
+        Ok(DiscLayout {
+            kind: DiscKind::GdRom,
+            tracks: Self::resolve_gdi_tracks(path, tracks)?,
+        })
+    }
+
+    /// Parse the `.gdi` header line, which declares a non-zero track count.
+    fn parse_gdi_track_count(path: &Path, line: &str) -> Result<usize> {
+        let parsed_track_count = line.parse::<usize>().map_err(|_| {
+            RomWeaverError::Validation(format!(
+                "gdi `{}` has an invalid track count header",
+                path.display()
+            ))
+        })?;
+        if parsed_track_count == 0 {
+            return Err(RomWeaverError::Validation(format!(
+                "gdi `{}` does not define any tracks",
+                path.display()
+            )));
+        }
+        Ok(parsed_track_count)
+    }
+
+    /// Parse one `.gdi` track line and measure its data frames from the track file.
+    fn parse_gdi_track_line(path: &Path, gdi_dir: &Path, line: &str) -> Result<GdiPendingTrack> {
+        let (number, remainder) = split_token(line).ok_or_else(|| {
+            RomWeaverError::Validation(format!("invalid gdi track entry in `{}`", path.display()))
+        })?;
+        let (physframeofs, remainder) = split_token(remainder).ok_or_else(|| {
+            RomWeaverError::Validation(format!(
+                "gdi track entry in `{}` is missing its physical offset",
+                path.display()
+            ))
+        })?;
+        let (track_type, remainder) = split_token(remainder).ok_or_else(|| {
+            RomWeaverError::Validation(format!(
+                "gdi track entry in `{}` is missing its track type",
+                path.display()
+            ))
+        })?;
+        let (sector_size, remainder) = split_token(remainder).ok_or_else(|| {
+            RomWeaverError::Validation(format!(
+                "gdi track entry in `{}` is missing its sector size",
+                path.display()
+            ))
+        })?;
+        let (name, remainder) = split_token(remainder).ok_or_else(|| {
+            RomWeaverError::Validation(format!(
+                "gdi track entry in `{}` is missing its filename",
+                path.display()
+            ))
+        })?;
+        let (file_offset, _) = split_token(remainder).ok_or_else(|| {
+            RomWeaverError::Validation(format!(
+                "gdi track entry in `{}` is missing its file offset",
+                path.display()
+            ))
+        })?;
+
+        let number = number.parse::<u32>().map_err(|_| {
+            RomWeaverError::Validation(format!(
+                "gdi `{}` has an invalid track number `{number}`",
+                path.display()
+            ))
+        })?;
+        let physframeofs = physframeofs.parse::<u32>().map_err(|_| {
+            RomWeaverError::Validation(format!(
+                "gdi `{}` has an invalid physical offset `{physframeofs}`",
+                path.display()
+            ))
+        })?;
+        let track_type = track_type.parse::<u32>().map_err(|_| {
+            RomWeaverError::Validation(format!(
+                "gdi `{}` has an invalid track type `{track_type}`",
+                path.display()
+            ))
+        })?;
+        let sector_size = sector_size.parse::<u32>().map_err(|_| {
+            RomWeaverError::Validation(format!(
+                "gdi `{}` has an invalid sector size `{sector_size}`",
+                path.display()
+            ))
+        })?;
+        let file_offset_bytes = file_offset.parse::<u64>().map_err(|_| {
+            RomWeaverError::Validation(format!(
+                "gdi `{}` has an invalid file offset `{file_offset}`",
+                path.display()
+            ))
+        })?;
+
+        let (mode, swap_audio_on_read) = match (track_type, sector_size) {
+            (4, 2352) => (DiscTrackMode::Mode1Raw, false),
+            (4, 2048) => (DiscTrackMode::Mode1, false),
+            (0, 2352) => (DiscTrackMode::Audio, true),
+            _ => {
+                return Err(RomWeaverError::Validation(format!(
+                    "gdi `{}` uses unsupported track type/sector-size pair `{track_type}/{sector_size}`",
+                    path.display()
+                )));
+            }
+        };
+
+        let file_path = gdi_dir.join(name);
+        let file_size = fs::metadata(&file_path)?.len();
+        if file_offset_bytes > file_size {
+            return Err(RomWeaverError::Validation(format!(
+                "gdi track {} starts past the end of `{}`",
+                number,
+                file_path.display()
+            )));
+        }
+        let payload_bytes = file_size - file_offset_bytes;
+        if payload_bytes % u64::from(sector_size) != 0 {
+            return Err(RomWeaverError::Validation(format!(
+                "gdi track {} length in `{}` is not divisible by {} bytes",
+                number,
+                file_path.display(),
+                sector_size
+            )));
+        }
+        let data_frames = u32::try_from(payload_bytes / u64::from(sector_size)).map_err(|_| {
+            RomWeaverError::Validation(format!(
+                "gdi track {} is too large for current chd gd-rom support",
+                number
+            ))
+        })?;
+
+        Ok(GdiPendingTrack {
+            number,
+            physframeofs,
+            mode,
+            file_path,
+            file_offset_bytes,
+            data_frames,
+            swap_audio_on_read,
+        })
+    }
+
+    /// Order the parsed `.gdi` tracks, require numbers `1..=n`, and pad each
+    /// track up to the physical start of the next one.
+    fn resolve_gdi_tracks(path: &Path, mut tracks: Vec<GdiPendingTrack>) -> Result<Vec<DiscTrack>> {
         tracks.sort_by_key(|track| track.number);
         for (index, track) in tracks.iter().enumerate() {
             let expected = u32::try_from(index + 1).unwrap_or(u32::MAX);
@@ -769,10 +831,7 @@ impl ChdContainerHandler {
             });
         }
 
-        Ok(DiscLayout {
-            kind: DiscKind::GdRom,
-            tracks: resolved,
-        })
+        Ok(resolved)
     }
 
     pub(super) fn read_disc_tracks(
@@ -940,21 +999,9 @@ impl ChdContainerHandler {
             "chd extract cd start"
         );
         fs::create_dir_all(&request.out_dir)?;
-        let stem = request
-            .source
-            .file_stem()
-            .and_then(|value| value.to_str())
-            .filter(|value| !value.is_empty())
-            .unwrap_or("output");
+        let stem = disc_output_stem(request);
         let cue_path = request.out_dir.join(format!("{stem}.cue"));
-        let extract_progress = self.progress_bytes_callback(
-            context,
-            &execution,
-            "extract",
-            "extract",
-            header.logical_bytes,
-            format!("extracting `{}`", CHD.name),
-        );
+        let extract_progress = self.disc_extract_progress(context, &execution, header);
         let plan = self.plan_cd_selection(&layout, request, stem)?;
         let selection_requested = plan.selection_requested;
 
@@ -973,22 +1020,64 @@ impl ChdContainerHandler {
             extract_progress: &extract_progress,
             allow_parallel_checksums: request.containing_archive.is_none(),
         };
-        let (omitted_subcode, produced_outputs, wrote_single_bin_output, output_checksums) =
-            self.build_cd_extract_result(&inputs, &plan, &cue_path, &cleanup)?;
-        if request.kind_filter.enabled() && produced_outputs.is_empty() {
-            return Err(RomWeaverError::Validation(format!(
-                "no extract entries from `{}` matched {}",
-                request.source.display(),
-                request.kind_filter.flag_label()
-            )));
-        }
-        if selection_requested && produced_outputs.is_empty() {
-            return Err(RomWeaverError::Validation(
-                "requested selections resolved to no extractable cd outputs".into(),
-            ));
-        }
+        let outcome = self.build_cd_extract_result(&inputs, &plan, &cue_path, &cleanup)?;
+        ensure_disc_outputs_produced(
+            request,
+            selection_requested,
+            &outcome.produced_outputs,
+            "cd",
+        )?;
         cleanup.commit();
-        let suffix = if omitted_subcode {
+
+        let label = self.cd_extract_label(header, request, &plan, &cue_path, &outcome);
+        let CdExtractOutcome {
+            omitted_subcode,
+            produced_outputs,
+            output_checksums,
+            ..
+        } = outcome;
+        let (file_count, written_bytes) = written_output_totals(&produced_outputs);
+        debug!(
+            files = file_count,
+            written_bytes, omitted_subcode, "chd extract cd done"
+        );
+        Ok(disc_extract_report(
+            label,
+            &execution,
+            &produced_outputs,
+            (file_count, written_bytes),
+            output_checksums,
+        ))
+    }
+
+    /// Byte-progress callback for a CD/GD extract over the CHD's logical size.
+    fn disc_extract_progress(
+        &self,
+        context: &OperationContext,
+        execution: &ThreadExecution,
+        header: ChdHeader,
+    ) -> Arc<dyn Fn(u64) + Send + Sync> {
+        self.progress_bytes_callback(
+            context,
+            execution,
+            "extract",
+            "extract",
+            header.logical_bytes,
+            format!("extracting `{}`", CHD.name),
+        )
+    }
+
+    /// Build the human-readable report label for a finished CD extract.
+    fn cd_extract_label(
+        &self,
+        header: ChdHeader,
+        request: &ContainerExtractRequest,
+        plan: &CdSelectionPlan,
+        cue_path: &Path,
+        outcome: &CdExtractOutcome,
+    ) -> String {
+        let produced_outputs = &outcome.produced_outputs;
+        let suffix = if outcome.omitted_subcode {
             "; subcode data was omitted from cue/bin output"
         } else {
             ""
@@ -1010,7 +1099,7 @@ impl ChdContainerHandler {
             String::new()
         };
 
-        let label = if !selection_requested && wrote_single_bin_output {
+        if !plan.selection_requested && outcome.wrote_single_bin_output {
             let bin_path = request.out_dir.join(&plan.single_bin_name);
             format!(
                 "extracted `{}` to `{}` and `{}` (cd, {}){}{}",
@@ -1021,7 +1110,7 @@ impl ChdContainerHandler {
                 suffix,
                 split_bin_suffix
             )
-        } else if !selection_requested {
+        } else if !plan.selection_requested {
             format!(
                 "extracted `{}` to `{}` and per-track bin files (cd, {}){}{}",
                 request.source.display(),
@@ -1031,42 +1120,15 @@ impl ChdContainerHandler {
                 split_bin_suffix
             )
         } else {
-            let outputs = produced_outputs
-                .iter()
-                .map(|path| format!("`{}`", path.display()))
-                .collect::<Vec<_>>()
-                .join(", ");
             format!(
                 "extracted `{}` to selected outputs: {} (cd, {}){}{}",
                 request.source.display(),
-                outputs,
+                quoted_output_list(produced_outputs),
                 self.header_codec_label(header),
                 suffix,
                 split_bin_suffix
             )
-        };
-
-        let file_count = produced_outputs.len();
-        let written_bytes = produced_outputs
-            .iter()
-            .filter_map(|path| fs::metadata(path).ok().map(|metadata| metadata.len()))
-            .sum::<u64>();
-        debug!(
-            files = file_count,
-            written_bytes, omitted_subcode, "chd extract cd done"
-        );
-        let report = OperationReport::succeeded(
-            OperationFamily::Container,
-            Some(CHD.name.to_string()),
-            "extract",
-            label,
-            Some(100.0),
-            Some(execution.clone()),
-        );
-        let report =
-            attach_extraction_details(report, file_count, file_count, written_bytes, &execution);
-        let report = attach_extract_checksum_details(report, output_checksums);
-        Ok(attach_emitted_file_paths(report, &produced_outputs))
+        }
     }
 
     /// Resolve which CD outputs to write (cue, single combined bin, or per-track
@@ -1143,16 +1205,14 @@ impl ChdContainerHandler {
     }
 
     /// Write the planned CD outputs: open the cue writer (when selected), dispatch
-    /// to the single-bin or split-track writer, then flush the cue. Returns
-    /// `(omitted_subcode, produced_outputs, wrote_single_bin_output,
-    /// output_checksums)`.
+    /// to the single-bin or split-track writer, then flush the cue.
     fn build_cd_extract_result(
         &self,
         inputs: &CdExtractInputs<'_>,
         plan: &CdSelectionPlan,
         cue_path: &Path,
         cleanup: &ChdOutputCleanup,
-    ) -> Result<(bool, Vec<PathBuf>, bool, Vec<ExtractedFileChecksum>)> {
+    ) -> Result<CdExtractOutcome> {
         let mut omitted_subcode = false;
         let mut produced_outputs = Vec::new();
         let mut output_checksums = Vec::new();
@@ -1182,12 +1242,12 @@ impl ChdContainerHandler {
         if let Some(writer) = cue_writer.as_mut() {
             writer.flush()?;
         }
-        Ok((
+        Ok(CdExtractOutcome {
             omitted_subcode,
             produced_outputs,
             wrote_single_bin_output,
             output_checksums,
-        ))
+        })
     }
 
     /// Single combined-bin CD path: emit the cue body (with running output-frame
@@ -1227,57 +1287,12 @@ impl ChdContainerHandler {
         };
         // Per-track checksums for a merged multi-track bin, hashed inline from the
         // same cooked bytes the writer streams, so identify can still fingerprint
-        // the disc against per-track database entries. Frames arrive in disc order,
-        // so exactly one track checksum is live at a time.
-        let hash_tracks =
-            write_single_bin && layout.tracks.len() > 1 && single_bin_checksum.is_some();
-        let mut current_track_checksum: Option<(u32, u64, StreamingChecksum)> = None;
-        let mut finished_track_checksums: Vec<ExtractedTrackChecksum> = Vec::new();
-        let cue_writer = &mut *sink.cue_writer;
-        if let Some(writer) = cue_writer.as_mut() {
-            writer.write_all(format!("FILE \"{single_bin_name}\" BINARY\n").as_bytes())?;
-        }
-        let mut output_frame_offset = 0_u32;
-        for track in &layout.tracks {
-            if let Some(writer) = cue_writer.as_mut() {
-                writer.write_all(
-                    format!("  TRACK {:02} {}\n", track.number, track.mode.cue_label()).as_bytes(),
-                )?;
-                if track.pregap_frames > 0 && track.pregap_has_data {
-                    writer.write_all(
-                        format!("    INDEX 00 {}\n", self.format_msf(output_frame_offset))
-                            .as_bytes(),
-                    )?;
-                    writer.write_all(
-                        format!(
-                            "    INDEX 01 {}\n",
-                            self.format_msf(output_frame_offset + track.pregap_frames)
-                        )
-                        .as_bytes(),
-                    )?;
-                } else if track.pregap_frames > 0 {
-                    writer.write_all(
-                        format!("    PREGAP {}\n", self.format_msf(track.pregap_frames)).as_bytes(),
-                    )?;
-                    writer.write_all(
-                        format!("    INDEX 01 {}\n", self.format_msf(output_frame_offset))
-                            .as_bytes(),
-                    )?;
-                } else {
-                    writer.write_all(
-                        format!("    INDEX 01 {}\n", self.format_msf(output_frame_offset))
-                            .as_bytes(),
-                    )?;
-                }
-                if track.postgap_frames > 0 {
-                    writer.write_all(
-                        format!("    POSTGAP {}\n", self.format_msf(track.postgap_frames))
-                            .as_bytes(),
-                    )?;
-                }
-            }
-            output_frame_offset =
-                output_frame_offset.saturating_add(track.frames.saturating_sub(track.pad_frames));
+        // the disc against per-track database entries.
+        let mut track_checksums = MergedTrackChecksums::new(
+            write_single_bin && layout.tracks.len() > 1 && single_bin_checksum.is_some(),
+        );
+        if let Some(writer) = sink.cue_writer.as_mut() {
+            self.write_single_bin_cue(writer, layout, single_bin_name)?;
         }
 
         let expected_frames = DiscFrameRouter::expected_frames(&layout.tracks);
@@ -1298,55 +1313,70 @@ impl ChdContainerHandler {
                         if let Some(checksum) = single_bin_checksum.as_mut() {
                             checksum.update(data.as_ref())?;
                         }
-                        if hash_tracks {
-                            if current_track_checksum
-                                .as_ref()
-                                .is_some_and(|(number, _, _)| *number != track.number)
-                                && let Some((number, size_bytes, checksum)) =
-                                    current_track_checksum.take()
-                            {
-                                finished_track_checksums.push(ExtractedTrackChecksum {
-                                    number,
-                                    size_bytes,
-                                    values: checksum.finalize()?,
-                                });
-                            }
-                            if current_track_checksum.is_none() {
-                                current_track_checksum = create_extract_checksum(context, false)?
-                                    .map(|checksum| (track.number, 0, checksum));
-                            }
-                            if let Some((_, size_bytes, checksum)) = current_track_checksum.as_mut()
-                            {
-                                checksum.update(data.as_ref())?;
-                                *size_bytes += data.len() as u64;
-                            }
-                        }
+                        track_checksums.update(context, track.number, data.as_ref())?;
                     }
                     Ok(())
                 })
             },
         )?;
-        if router.processed_frames() != expected_frames || !router.finished() {
-            return Err(RomWeaverError::Validation(
-                "cd chd ended before all track frames were decoded".to_string(),
-            ));
-        }
+        ensure_router_finished(&router, expected_frames, "cd")?;
         if let Some(writer) = bin_writer.as_mut() {
             writer.flush()?;
-        }
-        if let Some((number, size_bytes, checksum)) = current_track_checksum.take() {
-            finished_track_checksums.push(ExtractedTrackChecksum {
-                number,
-                size_bytes,
-                values: checksum.finalize()?,
-            });
         }
         push_finalized_extract_checksum_with_tracks(
             sink.output_checksums,
             bin_path,
             single_bin_checksum.take(),
-            finished_track_checksums,
+            track_checksums.finish()?,
         )?;
+        Ok(())
+    }
+
+    /// Write the cue body for a single combined bin: one `FILE` entry, then every
+    /// track with MSF indexes at its running frame offset inside that bin.
+    fn write_single_bin_cue(
+        &self,
+        writer: &mut BufWriter<File>,
+        layout: &DiscLayout,
+        single_bin_name: &str,
+    ) -> Result<()> {
+        writer.write_all(format!("FILE \"{single_bin_name}\" BINARY\n").as_bytes())?;
+        let mut output_frame_offset = 0_u32;
+        for track in &layout.tracks {
+            writer.write_all(
+                format!("  TRACK {:02} {}\n", track.number, track.mode.cue_label()).as_bytes(),
+            )?;
+            if track.pregap_frames > 0 && track.pregap_has_data {
+                writer.write_all(
+                    format!("    INDEX 00 {}\n", self.format_msf(output_frame_offset)).as_bytes(),
+                )?;
+                writer.write_all(
+                    format!(
+                        "    INDEX 01 {}\n",
+                        self.format_msf(output_frame_offset + track.pregap_frames)
+                    )
+                    .as_bytes(),
+                )?;
+            } else if track.pregap_frames > 0 {
+                writer.write_all(
+                    format!("    PREGAP {}\n", self.format_msf(track.pregap_frames)).as_bytes(),
+                )?;
+                writer.write_all(
+                    format!("    INDEX 01 {}\n", self.format_msf(output_frame_offset)).as_bytes(),
+                )?;
+            } else {
+                writer.write_all(
+                    format!("    INDEX 01 {}\n", self.format_msf(output_frame_offset)).as_bytes(),
+                )?;
+            }
+            if track.postgap_frames > 0 {
+                writer.write_all(
+                    format!("    POSTGAP {}\n", self.format_msf(track.postgap_frames)).as_bytes(),
+                )?;
+            }
+            output_frame_offset =
+                output_frame_offset.saturating_add(track.frames.saturating_sub(track.pad_frames));
+        }
         Ok(())
     }
 
@@ -1360,50 +1390,19 @@ impl ChdContainerHandler {
         sink: &mut CdExtractSink<'_>,
     ) -> Result<()> {
         let CdExtractInputs {
-            chd,
             layout,
             request,
             context,
             execution,
-            extract_progress,
             allow_parallel_checksums,
+            ..
         } = *inputs;
         let split_track_names = &plan.split_track_names;
         let write_split_tracks = &plan.write_split_tracks;
-        let cue_writer = &mut *sink.cue_writer;
-        for (track_index, track) in layout.tracks.iter().enumerate() {
-            let track_name = &split_track_names[track_index];
-            let track_selected = write_split_tracks[track_index];
-            if track_selected && let Some(writer) = cue_writer.as_mut() {
-                writer.write_all(format!("FILE \"{track_name}\" BINARY\n").as_bytes())?;
-                writer.write_all(
-                    format!("  TRACK {:02} {}\n", track.number, track.mode.cue_label()).as_bytes(),
-                )?;
-                if track.pregap_frames > 0 && track.pregap_has_data {
-                    writer.write_all(b"    INDEX 00 00:00:00\n")?;
-                    writer.write_all(
-                        format!("    INDEX 01 {}\n", self.format_msf(track.pregap_frames))
-                            .as_bytes(),
-                    )?;
-                } else if track.pregap_frames > 0 {
-                    writer.write_all(
-                        format!("    PREGAP {}\n", self.format_msf(track.pregap_frames)).as_bytes(),
-                    )?;
-                    writer.write_all(b"    INDEX 01 00:00:00\n")?;
-                } else {
-                    writer.write_all(b"    INDEX 01 00:00:00\n")?;
-                }
-                if track.postgap_frames > 0 {
-                    writer.write_all(
-                        format!("    POSTGAP {}\n", self.format_msf(track.postgap_frames))
-                            .as_bytes(),
-                    )?;
-                }
-            }
+        if let Some(writer) = sink.cue_writer.as_mut() {
+            self.write_split_track_cue(writer, layout, split_track_names, write_split_tracks)?;
         }
 
-        let mut track_writers = Vec::with_capacity(layout.tracks.len());
-        let mut track_checksums = Vec::with_capacity(layout.tracks.len());
         let checksum_threads = if allow_parallel_checksums {
             split_checksum_thread_budget(
                 execution.effective_threads,
@@ -1415,63 +1414,64 @@ impl ChdContainerHandler {
         } else {
             1
         };
-        for (track_index, track_name) in split_track_names.iter().enumerate() {
-            if write_split_tracks[track_index] {
-                let track_path = request.out_dir.join(track_name);
-                let writer = sink.cleanup.create_output(&track_path, request.overwrite)?;
-                sink.produced_outputs.push(track_path.clone());
-                track_writers.push(Some(BufWriter::new(writer)));
-                track_checksums.push(StreamingChecksum::new_parallel(
+        let mut outputs = PerTrackOutputs::open(
+            request,
+            split_track_names,
+            write_split_tracks,
+            sink.cleanup,
+            sink.produced_outputs,
+            || {
+                StreamingChecksum::new_parallel(
                     context.extract_checksum_algorithms(),
                     checksum_threads,
-                )?);
-            } else {
-                track_writers.push(None);
-                track_checksums.push(None);
-            }
-        }
-
-        let expected_frames = DiscFrameRouter::expected_frames(&layout.tracks);
-        let mut router = DiscFrameRouter::new(&layout.tracks);
-        let omitted_subcode = &mut *sink.omitted_subcode;
-        self.stream_chd_frames_with_progress(
-            chd,
-            execution.effective_threads,
-            Some(extract_progress),
-            |frame| {
-                router.route_frame(frame, |track_index, track, data| {
-                    if write_split_tracks[track_index] {
-                        if track.has_subcode {
-                            *omitted_subcode = true;
-                        }
-                        let data = cook_disc_frame_payload(track, data);
-                        if let Some(writer) = track_writers[track_index].as_mut() {
-                            writer.write_all(data.as_ref())?;
-                            if let Some(checksum) = track_checksums[track_index].as_mut() {
-                                checksum.update(data.as_ref())?;
-                            }
-                        }
-                    }
-                    Ok(())
-                })
+                )
             },
         )?;
-        if router.processed_frames() != expected_frames || !router.finished() {
-            return Err(RomWeaverError::Validation(
-                "cd chd ended before all track frames were decoded".to_string(),
-            ));
-        }
-        for writer in &mut track_writers {
-            if let Some(writer) = writer.as_mut() {
-                writer.flush()?;
-            }
-        }
-        for (track_index, checksum) in track_checksums.iter_mut().enumerate() {
+        outputs.stream(self, inputs, write_split_tracks, sink.omitted_subcode, "cd")?;
+        outputs.finish(
+            request,
+            split_track_names,
+            write_split_tracks,
+            sink.output_checksums,
+        )
+    }
+
+    /// Write one cue `FILE`/`TRACK` entry per selected track, each indexed from
+    /// the start of its own bin.
+    fn write_split_track_cue(
+        &self,
+        writer: &mut BufWriter<File>,
+        layout: &DiscLayout,
+        split_track_names: &[String],
+        write_split_tracks: &[bool],
+    ) -> Result<()> {
+        for (track_index, track) in layout.tracks.iter().enumerate() {
             if !write_split_tracks[track_index] {
                 continue;
             }
-            let track_path = request.out_dir.join(&split_track_names[track_index]);
-            push_finalized_extract_checksum(sink.output_checksums, track_path, checksum.take())?;
+            let track_name = &split_track_names[track_index];
+            writer.write_all(format!("FILE \"{track_name}\" BINARY\n").as_bytes())?;
+            writer.write_all(
+                format!("  TRACK {:02} {}\n", track.number, track.mode.cue_label()).as_bytes(),
+            )?;
+            if track.pregap_frames > 0 && track.pregap_has_data {
+                writer.write_all(b"    INDEX 00 00:00:00\n")?;
+                writer.write_all(
+                    format!("    INDEX 01 {}\n", self.format_msf(track.pregap_frames)).as_bytes(),
+                )?;
+            } else if track.pregap_frames > 0 {
+                writer.write_all(
+                    format!("    PREGAP {}\n", self.format_msf(track.pregap_frames)).as_bytes(),
+                )?;
+                writer.write_all(b"    INDEX 01 00:00:00\n")?;
+            } else {
+                writer.write_all(b"    INDEX 01 00:00:00\n")?;
+            }
+            if track.postgap_frames > 0 {
+                writer.write_all(
+                    format!("    POSTGAP {}\n", self.format_msf(track.postgap_frames)).as_bytes(),
+                )?;
+            }
         }
         Ok(())
     }
@@ -1502,22 +1502,78 @@ impl ChdContainerHandler {
             "chd extract gd start"
         );
         fs::create_dir_all(&request.out_dir)?;
-        let stem = request
-            .source
-            .file_stem()
-            .and_then(|value| value.to_str())
-            .filter(|value| !value.is_empty())
-            .unwrap_or("output");
+        let stem = disc_output_stem(request);
         let gdi_path = request.out_dir.join(format!("{stem}.gdi"));
-        let extract_progress = self.progress_bytes_callback(
-            context,
-            &execution,
-            "extract",
-            "extract",
-            header.logical_bytes,
-            format!("extracting `{}`", CHD.name),
-        );
+        let extract_progress = self.disc_extract_progress(context, &execution, header);
+        let plan = self.plan_gd_selection(&layout, request, stem)?;
 
+        // Each track/gdi writer registers its output with `cleanup` only after
+        // the file is created, so a mid-decode error removes the partial files
+        // this op created without ever deleting a pre-existing target a
+        // `--no-overwrite` refusal left untouched.
+        let cleanup = ChdOutputCleanup::new();
+
+        let inputs = CdExtractInputs {
+            chd: &chd,
+            layout: &layout,
+            request,
+            context,
+            execution: &execution,
+            extract_progress: &extract_progress,
+            allow_parallel_checksums: request.containing_archive.is_none(),
+        };
+        let (omitted_subcode, produced_outputs, output_checksums) =
+            self.write_gd_outputs(&inputs, &plan, &gdi_path, &cleanup)?;
+        ensure_disc_outputs_produced(request, plan.selection_requested, &produced_outputs, "gd")?;
+        cleanup.commit();
+        let suffix = if omitted_subcode {
+            "; subcode data was omitted from gdi output"
+        } else {
+            ""
+        };
+
+        let label = if plan.selection_requested {
+            format!(
+                "extracted `{}` to selected outputs: {} (gd, {}){}",
+                request.source.display(),
+                quoted_output_list(&produced_outputs),
+                self.header_codec_label(header),
+                suffix
+            )
+        } else {
+            format!(
+                "extracted `{}` to `{}` and per-track gd files (gd, {}){}",
+                request.source.display(),
+                gdi_path.display(),
+                self.header_codec_label(header),
+                suffix
+            )
+        };
+
+        let (file_count, written_bytes) = written_output_totals(&produced_outputs);
+        debug!(
+            files = file_count,
+            written_bytes, omitted_subcode, "chd extract gd done"
+        );
+        Ok(disc_extract_report(
+            label,
+            &execution,
+            &produced_outputs,
+            (file_count, written_bytes),
+            output_checksums,
+        ))
+    }
+
+    /// Resolve which GD-ROM outputs to write (`.gdi` and per-track bins) from the
+    /// request's selections and kind-filter. When the `.gdi` alone was selected,
+    /// the matching track outputs are re-enabled so it does not reference files
+    /// that were never written.
+    fn plan_gd_selection(
+        &self,
+        layout: &DiscLayout,
+        request: &ContainerExtractRequest,
+        stem: &str,
+    ) -> Result<GdSelectionPlan> {
         let selection_requested = !request.selections.is_empty();
         let gdi_name = format!("{stem}.gdi");
         let mut selections = SelectionMatcher::new(&request.selections);
@@ -1538,177 +1594,346 @@ impl ChdContainerHandler {
             }
         }
         selections.ensure_all_matched()?;
+        Ok(GdSelectionPlan {
+            selection_requested,
+            write_gdi,
+            track_names,
+            write_tracks,
+        })
+    }
 
-        // Each track/gdi writer registers its output with `cleanup` only after
-        // the file is created, so a mid-decode error removes the partial files
-        // this op created without ever deleting a pre-existing target a
-        // `--no-overwrite` refusal left untouched.
-        let cleanup = ChdOutputCleanup::new();
+    /// Write the planned GD-ROM outputs: every selected track bin, then the
+    /// `.gdi`. Returns `(omitted_subcode, produced_outputs, output_checksums)`.
+    fn write_gd_outputs(
+        &self,
+        inputs: &CdExtractInputs<'_>,
+        plan: &GdSelectionPlan,
+        gdi_path: &Path,
+        cleanup: &ChdOutputCleanup,
+    ) -> Result<(bool, Vec<PathBuf>, Vec<ExtractedFileChecksum>)> {
+        let CdExtractInputs {
+            layout,
+            request,
+            context,
+            allow_parallel_checksums,
+            ..
+        } = *inputs;
+        let mut omitted_subcode = false;
+        let mut produced_outputs = Vec::new();
+        let mut output_checksums = Vec::new();
+        let gdi_lines = gdi_track_lines(layout, &plan.track_names, &plan.write_tracks)?;
 
-        let build_result: Result<(bool, Vec<PathBuf>, Vec<ExtractedFileChecksum>)> = (|| {
-            let mut omitted_subcode = false;
-            let mut produced_outputs = Vec::new();
-            let mut output_checksums = Vec::new();
-            let mut gdi_lines = Vec::new();
-            let mut physframeofs = 0_u32;
+        let mut outputs = PerTrackOutputs::open(
+            request,
+            &plan.track_names,
+            &plan.write_tracks,
+            cleanup,
+            &mut produced_outputs,
+            || create_extract_checksum(context, allow_parallel_checksums),
+        )?;
+        outputs.stream(self, inputs, &plan.write_tracks, &mut omitted_subcode, "gd")?;
+        outputs.finish(
+            request,
+            &plan.track_names,
+            &plan.write_tracks,
+            &mut output_checksums,
+        )?;
 
-            for (track_index, track) in layout.tracks.iter().enumerate() {
-                let (track_type, sector_size) = track.mode.gdi_track_descriptor()?;
-                let track_name = &track_names[track_index];
-                let track_selected = write_tracks[track_index];
-                if track_selected {
-                    gdi_lines.push(format!(
-                        "{} {} {} {} \"{}\" 0",
-                        track.number, physframeofs, track_type, sector_size, track_name
-                    ));
-                }
-                physframeofs = physframeofs.saturating_add(track.frames);
+        if plan.write_gdi {
+            let mut gdi_writer =
+                BufWriter::new(cleanup.create_output(gdi_path, request.overwrite)?);
+            produced_outputs.push(gdi_path.to_path_buf());
+            gdi_writer.write_all(format!("{}\n", gdi_lines.len()).as_bytes())?;
+            for line in &gdi_lines {
+                gdi_writer.write_all(line.as_bytes())?;
+                gdi_writer.write_all(b"\n")?;
             }
-
-            let mut track_writers = Vec::with_capacity(layout.tracks.len());
-            let mut track_checksums = Vec::with_capacity(layout.tracks.len());
-            for (track_index, track_name) in track_names.iter().enumerate() {
-                if write_tracks[track_index] {
-                    let track_path = request.out_dir.join(track_name);
-                    let writer = cleanup.create_output(&track_path, request.overwrite)?;
-                    produced_outputs.push(track_path.clone());
-                    track_writers.push(Some(BufWriter::new(writer)));
-                    track_checksums.push(create_extract_checksum(
-                        context,
-                        request.containing_archive.is_none(),
-                    )?);
-                } else {
-                    track_writers.push(None);
-                    track_checksums.push(None);
-                }
-            }
-
-            let expected_frames = DiscFrameRouter::expected_frames(&layout.tracks);
-            let mut router = DiscFrameRouter::new(&layout.tracks);
-            self.stream_chd_frames_with_progress(
-                &chd,
-                execution.effective_threads,
-                Some(&extract_progress),
-                |frame| {
-                    router.route_frame(frame, |track_index, track, data| {
-                        if write_tracks[track_index] {
-                            if track.has_subcode {
-                                omitted_subcode = true;
-                            }
-                            let data = cook_disc_frame_payload(track, data);
-                            if let Some(writer) = track_writers[track_index].as_mut() {
-                                writer.write_all(data.as_ref())?;
-                                if let Some(checksum) = track_checksums[track_index].as_mut() {
-                                    checksum.update(data.as_ref())?;
-                                }
-                            }
-                        }
-                        Ok(())
-                    })
-                },
-            )?;
-            if router.processed_frames() != expected_frames || !router.finished() {
-                return Err(RomWeaverError::Validation(
-                    "gd chd ended before all track frames were decoded".to_string(),
-                ));
-            }
-            for writer in &mut track_writers {
-                if let Some(writer) = writer.as_mut() {
-                    writer.flush()?;
-                }
-            }
-            for (track_index, checksum) in track_checksums.iter_mut().enumerate() {
-                if !write_tracks[track_index] {
-                    continue;
-                }
-                let track_path = request.out_dir.join(&track_names[track_index]);
-                push_finalized_extract_checksum(
-                    &mut output_checksums,
-                    track_path,
-                    checksum.take(),
-                )?;
-            }
-
-            if write_gdi {
-                let mut gdi_writer =
-                    BufWriter::new(cleanup.create_output(&gdi_path, request.overwrite)?);
-                produced_outputs.push(gdi_path.clone());
-                gdi_writer.write_all(format!("{}\n", gdi_lines.len()).as_bytes())?;
-                for line in &gdi_lines {
-                    gdi_writer.write_all(line.as_bytes())?;
-                    gdi_writer.write_all(b"\n")?;
-                }
-                gdi_writer.flush()?;
-            }
-
-            Ok((omitted_subcode, produced_outputs, output_checksums))
-        })();
-
-        let (omitted_subcode, produced_outputs, output_checksums) = build_result?;
-        if request.kind_filter.enabled() && produced_outputs.is_empty() {
-            return Err(RomWeaverError::Validation(format!(
-                "no extract entries from `{}` matched {}",
-                request.source.display(),
-                request.kind_filter.flag_label()
-            )));
+            gdi_writer.flush()?;
         }
-        if selection_requested && produced_outputs.is_empty() {
-            return Err(RomWeaverError::Validation(
-                "requested selections resolved to no extractable gd outputs".into(),
+
+        Ok((omitted_subcode, produced_outputs, output_checksums))
+    }
+}
+
+/// What the CD writer paths produced, reported back to `extract_cd`.
+struct CdExtractOutcome {
+    omitted_subcode: bool,
+    produced_outputs: Vec<PathBuf>,
+    wrote_single_bin_output: bool,
+    output_checksums: Vec<ExtractedFileChecksum>,
+}
+
+/// Resolved GD-ROM extract plan; `track_names` and `write_tracks` are parallel to
+/// the layout's tracks.
+struct GdSelectionPlan {
+    selection_requested: bool,
+    write_gdi: bool,
+    track_names: Vec<String>,
+    write_tracks: Vec<bool>,
+}
+
+/// One `.gdi` line per selected track, with physical frame offsets that still
+/// count every track (selected or not) so the layout stays intact.
+fn gdi_track_lines(
+    layout: &DiscLayout,
+    track_names: &[String],
+    write_tracks: &[bool],
+) -> Result<Vec<String>> {
+    let mut gdi_lines = Vec::new();
+    let mut physframeofs = 0_u32;
+    for (track_index, track) in layout.tracks.iter().enumerate() {
+        let (track_type, sector_size) = track.mode.gdi_track_descriptor()?;
+        if write_tracks[track_index] {
+            gdi_lines.push(format!(
+                "{} {} {} {} \"{}\" 0",
+                track.number, physframeofs, track_type, sector_size, track_names[track_index]
             ));
         }
-        cleanup.commit();
-        let suffix = if omitted_subcode {
-            "; subcode data was omitted from gdi output"
-        } else {
-            ""
-        };
-
-        let label = if selection_requested {
-            let outputs = produced_outputs
-                .iter()
-                .map(|path| format!("`{}`", path.display()))
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!(
-                "extracted `{}` to selected outputs: {} (gd, {}){}",
-                request.source.display(),
-                outputs,
-                self.header_codec_label(header),
-                suffix
-            )
-        } else {
-            format!(
-                "extracted `{}` to `{}` and per-track gd files (gd, {}){}",
-                request.source.display(),
-                gdi_path.display(),
-                self.header_codec_label(header),
-                suffix
-            )
-        };
-
-        let file_count = produced_outputs.len();
-        let written_bytes = produced_outputs
-            .iter()
-            .filter_map(|path| fs::metadata(path).ok().map(|metadata| metadata.len()))
-            .sum::<u64>();
-        debug!(
-            files = file_count,
-            written_bytes, omitted_subcode, "chd extract gd done"
-        );
-        let report = OperationReport::succeeded(
-            OperationFamily::Container,
-            Some(CHD.name.to_string()),
-            "extract",
-            label,
-            Some(100.0),
-            Some(execution.clone()),
-        );
-        let report =
-            attach_extraction_details(report, file_count, file_count, written_bytes, &execution);
-        let report = attach_extract_checksum_details(report, output_checksums);
-        Ok(attach_emitted_file_paths(report, &produced_outputs))
+        physframeofs = physframeofs.saturating_add(track.frames);
     }
+    Ok(gdi_lines)
+}
+
+/// Writers and checksums for per-track disc outputs (split CD bins and GD-ROM
+/// tracks), parallel to the layout's tracks; unselected tracks hold `None`.
+struct PerTrackOutputs {
+    writers: Vec<Option<BufWriter<File>>>,
+    checksums: Vec<Option<StreamingChecksum>>,
+}
+
+impl PerTrackOutputs {
+    /// Create each selected track's output file and checksum, in track order.
+    fn open<C>(
+        request: &ContainerExtractRequest,
+        track_names: &[String],
+        write_tracks: &[bool],
+        cleanup: &ChdOutputCleanup,
+        produced_outputs: &mut Vec<PathBuf>,
+        mut new_checksum: C,
+    ) -> Result<Self>
+    where
+        C: FnMut() -> Result<Option<StreamingChecksum>>,
+    {
+        let mut writers = Vec::with_capacity(track_names.len());
+        let mut checksums = Vec::with_capacity(track_names.len());
+        for (track_index, track_name) in track_names.iter().enumerate() {
+            if write_tracks[track_index] {
+                let track_path = request.out_dir.join(track_name);
+                let writer = cleanup.create_output(&track_path, request.overwrite)?;
+                produced_outputs.push(track_path.clone());
+                writers.push(Some(BufWriter::new(writer)));
+                checksums.push(new_checksum()?);
+            } else {
+                writers.push(None);
+                checksums.push(None);
+            }
+        }
+        Ok(Self { writers, checksums })
+    }
+
+    /// Decode every frame and write each selected track's cooked data to its
+    /// output. Sets `omitted_subcode` when a selected track drops subcode.
+    fn stream(
+        &mut self,
+        handler: &ChdContainerHandler,
+        inputs: &CdExtractInputs<'_>,
+        write_tracks: &[bool],
+        omitted_subcode: &mut bool,
+        media_label: &str,
+    ) -> Result<()> {
+        let layout = inputs.layout;
+        let expected_frames = DiscFrameRouter::expected_frames(&layout.tracks);
+        let mut router = DiscFrameRouter::new(&layout.tracks);
+        handler.stream_chd_frames_with_progress(
+            inputs.chd,
+            inputs.execution.effective_threads,
+            Some(inputs.extract_progress),
+            |frame| {
+                router.route_frame(frame, |track_index, track, data| {
+                    if write_tracks[track_index] {
+                        if track.has_subcode {
+                            *omitted_subcode = true;
+                        }
+                        let data = cook_disc_frame_payload(track, data);
+                        if let Some(writer) = self.writers[track_index].as_mut() {
+                            writer.write_all(data.as_ref())?;
+                            if let Some(checksum) = self.checksums[track_index].as_mut() {
+                                checksum.update(data.as_ref())?;
+                            }
+                        }
+                    }
+                    Ok(())
+                })
+            },
+        )?;
+        ensure_router_finished(&router, expected_frames, media_label)
+    }
+
+    /// Flush every track output, then record each selected track's checksum.
+    fn finish(
+        mut self,
+        request: &ContainerExtractRequest,
+        track_names: &[String],
+        write_tracks: &[bool],
+        output_checksums: &mut Vec<ExtractedFileChecksum>,
+    ) -> Result<()> {
+        for writer in &mut self.writers {
+            if let Some(writer) = writer.as_mut() {
+                writer.flush()?;
+            }
+        }
+        for (track_index, checksum) in self.checksums.iter_mut().enumerate() {
+            if !write_tracks[track_index] {
+                continue;
+            }
+            let track_path = request.out_dir.join(&track_names[track_index]);
+            push_finalized_extract_checksum(output_checksums, track_path, checksum.take())?;
+        }
+        Ok(())
+    }
+}
+
+/// Per-track checksums for a merged multi-track bin. Frames arrive in disc
+/// order, so exactly one track checksum is live at a time.
+struct MergedTrackChecksums {
+    enabled: bool,
+    current: Option<(u32, u64, StreamingChecksum)>,
+    finished: Vec<ExtractedTrackChecksum>,
+}
+
+impl MergedTrackChecksums {
+    fn new(enabled: bool) -> Self {
+        Self {
+            enabled,
+            current: None,
+            finished: Vec::new(),
+        }
+    }
+
+    /// Hash one cooked frame of `track_number`, closing the previous track's
+    /// checksum when the track changes.
+    fn update(&mut self, context: &OperationContext, track_number: u32, data: &[u8]) -> Result<()> {
+        if !self.enabled {
+            return Ok(());
+        }
+        if self
+            .current
+            .as_ref()
+            .is_some_and(|(number, _, _)| *number != track_number)
+        {
+            self.close_current()?;
+        }
+        if self.current.is_none() {
+            self.current = create_extract_checksum(context, false)?
+                .map(|checksum| (track_number, 0, checksum));
+        }
+        if let Some((_, size_bytes, checksum)) = self.current.as_mut() {
+            checksum.update(data)?;
+            *size_bytes += data.len() as u64;
+        }
+        Ok(())
+    }
+
+    fn close_current(&mut self) -> Result<()> {
+        if let Some((number, size_bytes, checksum)) = self.current.take() {
+            self.finished.push(ExtractedTrackChecksum {
+                number,
+                size_bytes,
+                values: checksum.finalize()?,
+            });
+        }
+        Ok(())
+    }
+
+    fn finish(mut self) -> Result<Vec<ExtractedTrackChecksum>> {
+        self.close_current()?;
+        Ok(self.finished)
+    }
+}
+
+/// Reject a decode that stopped before every track frame was routed.
+fn ensure_router_finished(
+    router: &DiscFrameRouter<'_>,
+    expected_frames: u64,
+    media_label: &str,
+) -> Result<()> {
+    if router.processed_frames() != expected_frames || !router.finished() {
+        return Err(RomWeaverError::Validation(format!(
+            "{media_label} chd ended before all track frames were decoded"
+        )));
+    }
+    Ok(())
+}
+
+/// Output file stem taken from the source name, or `output` when it has none.
+fn disc_output_stem(request: &ContainerExtractRequest) -> &str {
+    request
+        .source
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("output")
+}
+
+/// Reject an extract whose kind-filter or selections produced no output files.
+fn ensure_disc_outputs_produced(
+    request: &ContainerExtractRequest,
+    selection_requested: bool,
+    produced_outputs: &[PathBuf],
+    media_label: &str,
+) -> Result<()> {
+    if request.kind_filter.enabled() && produced_outputs.is_empty() {
+        return Err(RomWeaverError::Validation(format!(
+            "no extract entries from `{}` matched {}",
+            request.source.display(),
+            request.kind_filter.flag_label()
+        )));
+    }
+    if selection_requested && produced_outputs.is_empty() {
+        return Err(RomWeaverError::Validation(format!(
+            "requested selections resolved to no extractable {media_label} outputs"
+        )));
+    }
+    Ok(())
+}
+
+fn quoted_output_list(produced_outputs: &[PathBuf]) -> String {
+    produced_outputs
+        .iter()
+        .map(|path| format!("`{}`", path.display()))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Number of produced outputs and their total size on disk.
+fn written_output_totals(produced_outputs: &[PathBuf]) -> (usize, u64) {
+    let written_bytes = produced_outputs
+        .iter()
+        .filter_map(|path| fs::metadata(path).ok().map(|metadata| metadata.len()))
+        .sum::<u64>();
+    (produced_outputs.len(), written_bytes)
+}
+
+/// Build the succeeded extract report with its file, byte, checksum, and path details.
+fn disc_extract_report(
+    label: String,
+    execution: &ThreadExecution,
+    produced_outputs: &[PathBuf],
+    (file_count, written_bytes): (usize, u64),
+    output_checksums: Vec<ExtractedFileChecksum>,
+) -> OperationReport {
+    let report = OperationReport::succeeded(
+        OperationFamily::Container,
+        Some(CHD.name.to_string()),
+        "extract",
+        label,
+        Some(100.0),
+        Some(execution.clone()),
+    );
+    let report =
+        attach_extraction_details(report, file_count, file_count, written_bytes, execution);
+    let report = attach_extract_checksum_details(report, output_checksums);
+    attach_emitted_file_paths(report, produced_outputs)
 }
 
 #[cfg(test)]
