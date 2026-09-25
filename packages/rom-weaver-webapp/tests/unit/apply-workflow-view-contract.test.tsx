@@ -1097,6 +1097,22 @@ describe("apply workflow view - staged bench", () => {
     expect(container.querySelectorAll("button.needs-input").length).toBe(0);
   });
 
+  it("hides ROM and patch Files drawers in simple view but keeps Checks", () => {
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = renderView({
+      patches: [patchItem("change.ips")],
+      settings: { detailedViewEnabled: false },
+      ui,
+    });
+
+    const romCard = container.querySelector("#rom-weaver-list-input-stack .card.file");
+    const patchCard = container.querySelector("#rom-weaver-list-patch-stack .card.patch");
+    expect(romCard?.querySelector(".extract-d")).toBeNull();
+    expect(patchCard?.querySelector(".extract-d")).toBeNull();
+    expect(romCard?.textContent).toContain("Checks");
+    expect(patchCard?.textContent).toContain("Checks");
+  });
+
   it.each([false, undefined])("shows cheats when beta tools are %s", (betaToolsEnabled) => {
     const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
     const { container } = renderView({ settings: { betaToolsEnabled }, ui });
