@@ -347,9 +347,9 @@ const runHydrationAudit = async (createContext, baseUrl) => {
           const dock = document.querySelector(".dock")?.getBoundingClientRect();
           const workflow = document.querySelector("#panel-patcher .workflow-body")?.getBoundingClientRect();
           const workflowStyle = document.querySelector("#panel-patcher .workflow-body");
-          const viewToggle = document.querySelector("#panel-patcher .panel-view-toggle");
+          const viewToggle = document.querySelector("#panel-patcher .panel-view-toggle input");
           return {
-            detailedViewEnabled: viewToggle?.getAttribute("aria-pressed") === "true",
+            detailedViewEnabled: viewToggle?.checked === true,
             finalTheme: document.documentElement.dataset.theme || "",
             finalView:
               document.querySelector('.side-nav [aria-current="page"]')?.id.replace(/^tab-/, "") ||

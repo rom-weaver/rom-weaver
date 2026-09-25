@@ -3075,11 +3075,6 @@ msgstr "Mostrar los consejos de inicio rápido («New here?»)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.view.simple"
-msgstr "Simple"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.common.skipToMain"
 msgstr "Saltar al contenido principal"
 
@@ -3195,18 +3190,8 @@ msgstr "Cambiar a tema oscuro"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.view.switchToDetailed"
-msgstr "Cambiar a la vista detallada"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.theme.toLight"
 msgstr "Cambiar a tema claro"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.view.switchToSimple"
-msgstr "Cambiar a la vista simple"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

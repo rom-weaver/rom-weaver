@@ -5,11 +5,9 @@ import {
   House,
   Package,
   RotateCcw,
-  Rows3,
   Save as SaveIcon,
   ScanSearch,
   Scissors,
-  ListTree,
 } from "lucide-react";
 import {
   lazy,
@@ -245,19 +243,20 @@ const ResetButton = ({ onReset }: { onReset: () => void }) => {
 /** File-detail switch for the workflow panel's `0x01` heading band. */
 const PanelViewToggle = ({ detailed, onChange }: { detailed: boolean; onChange: (enabled: boolean) => void }) => {
   const localizer = useUiLocalizer();
-  const label = localizer.message(detailed ? "ui.view.detailed" : "ui.view.simple");
-  const action = localizer.message(detailed ? "ui.view.switchToSimple" : "ui.view.switchToDetailed");
+  const label = localizer.message("ui.view.detailed");
+  // The switch keeps one accessible name; its checked state carries on/off.
   return (
-    <button
-      aria-label={action}
-      aria-pressed={detailed}
-      className="panel-view-toggle"
-      onClick={() => onChange(!detailed)}
-      type="button"
-    >
-      {detailed ? <ListTree aria-hidden="true" /> : <Rows3 aria-hidden="true" />}
+    <label className="panel-view-toggle">
+      <input
+        aria-checked={detailed}
+        aria-label={label}
+        checked={detailed}
+        onChange={(event) => onChange(event.currentTarget.checked)}
+        role="switch"
+        type="checkbox"
+      />
       <span>{label}</span>
-    </button>
+    </label>
   );
 };
 

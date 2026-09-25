@@ -299,8 +299,7 @@
 .rw-app .reset-btn {
   margin-inline-end: 4px;
 }
-.rw-app .reset-btn svg,
-.rw-app .panel-view-toggle svg {
+.rw-app .reset-btn svg {
   flex: none;
   width: 13px;
   height: 13px;
@@ -321,7 +320,6 @@
 .rw-app .reset-btn:active {
   color: var(--fault);
 }
-.rw-app .panel-view-toggle,
 .rw-app .panel-threads-btn {
   text-decoration: underline dotted;
   text-decoration-color: color-mix(in oklab, currentColor 45%, transparent);
@@ -329,23 +327,28 @@
   transition: text-decoration-color 0.18s;
 }
 @media (hover: hover) {
-  .rw-app .panel-view-toggle:hover,
   .rw-app .panel-threads-btn:hover {
     text-decoration-color: currentColor;
   }
 }
-.rw-app .panel-view-toggle:active,
 .rw-app .panel-threads-btn:active {
   text-decoration-color: currentColor;
 }
-@media (max-width: 359px) {
-  .rw-app .workflow-panel-head[data-threads] .panel-view-toggle,
+.rw-app .panel-view-toggle input[type="checkbox"]:checked + span {
+  color: var(--thread-text);
+}
+/* Reset keeps its aria-label, so its text goes first when the heading runs out of room. */
+@media (max-width: 419px) {
   .rw-app .workflow-panel-head[data-threads] .reset-btn {
     justify-content: center;
     min-inline-size: 24px;
   }
-  .rw-app .workflow-panel-head[data-threads] .panel-view-toggle span,
   .rw-app .workflow-panel-head[data-threads] .reset-btn span {
+    display: none;
+  }
+}
+@media (max-width: 359px) {
+  .rw-app .workflow-panel-head[data-threads] .panel-view-toggle span {
     display: none;
   }
 }

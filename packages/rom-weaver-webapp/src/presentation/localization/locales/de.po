@@ -3075,11 +3075,6 @@ msgstr "Schnellstart-Tipps („New here?“) anzeigen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.view.simple"
-msgstr "Einfach"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.common.skipToMain"
 msgstr "Zum Hauptinhalt springen"
 
@@ -3195,18 +3190,8 @@ msgstr "Zum dunklen Design wechseln"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.view.switchToDetailed"
-msgstr "Zur detaillierten Ansicht wechseln"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.theme.toLight"
 msgstr "Zum hellen Design wechseln"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.view.switchToSimple"
-msgstr "Zur einfachen Ansicht wechseln"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

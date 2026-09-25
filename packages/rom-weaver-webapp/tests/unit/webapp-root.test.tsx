@@ -266,10 +266,11 @@ describe("the unified dialog", () => {
   it("switches from the default simple view to detailed view from the panel heading", async () => {
     const { called, container } = await renderRoot();
 
-    const toggle = container.querySelector(".workflow-panel-head .panel-view-toggle") as HTMLButtonElement;
-    expect(toggle.textContent).toBe("Simple");
-    expect(toggle.getAttribute("aria-pressed")).toBe("false");
-    expect(toggle.getAttribute("aria-label")).toBe("Switch to detailed view");
+    const toggle = container.querySelector(".workflow-panel-head .panel-view-toggle input") as HTMLInputElement;
+    expect(toggle.closest("label")?.textContent).toBe("Detailed");
+    expect(toggle.getAttribute("role")).toBe("switch");
+    expect(toggle.checked).toBe(false);
+    expect(toggle.getAttribute("aria-label")).toBe("Detailed");
     fireEvent.click(toggle);
 
     expect(called("onDetailedViewEnabledChange")).toHaveBeenCalledWith(true);
