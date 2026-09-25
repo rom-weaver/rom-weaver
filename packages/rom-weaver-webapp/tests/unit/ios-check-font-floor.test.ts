@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 
@@ -12,7 +12,13 @@ const read = (relativePath: string) => readFileSync(fileURLToPath(new URL(relati
 const MODALS_CSS = read("../../src/webapp/design-system/webapp-modals.css");
 const FIELDS_CSS = read("../../src/webapp/design-system/fields.css");
 const DRAWERS_CSS = read("../../src/webapp/design-system/drawers.css");
-const PATCH_LIST_STEP = read("../../src/public/react/apply-patch-list-step.tsx");
+// The patch list step is split across the apply-patch-* modules, so the call-site checks read all of them.
+const REACT_DIR = "../../src/public/react/";
+const PATCH_LIST_STEP = readdirSync(fileURLToPath(new URL(REACT_DIR, import.meta.url)))
+  .filter((name) => name.startsWith("apply-patch-") && name.endsWith(".tsx"))
+  .sort()
+  .map((name) => read(`${REACT_DIR}${name}`))
+  .join("\n");
 
 /** The `@supports (-webkit-touch-callout: none)` block: the iOS-only font-size floor. */
 const iosFloorBlock = (): string => {
