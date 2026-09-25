@@ -209,8 +209,16 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        "--check-manifests" => match check_package_man_pages(&pages) {
+            Ok(true) => ExitCode::SUCCESS,
+            Ok(false) => ExitCode::FAILURE,
+            Err(error) => {
+                eprintln!("failed to check CLI man page manifests: {error}");
+                ExitCode::FAILURE
+            }
+        },
         _ => {
-            eprintln!("usage: generate_manpages [--write|--check]");
+            eprintln!("usage: generate_manpages [--write|--check|--check-manifests]");
             ExitCode::from(2)
         }
     }

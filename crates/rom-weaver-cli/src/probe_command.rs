@@ -44,38 +44,18 @@ impl CliApp {
             return self.finish("probe", report);
         }
 
-        let resolved = if !no_extract {
-            let labels = AutoExtractResolutionLabels {
-                command: "probe",
-                family: OperationFamily::Command,
-                format: None,
-                source_label: "probe",
-                temp_prefix: "probe-extract",
-            };
-            self.resolve_source_with_auto_extract(
-                &source,
-                &select,
-                &context,
-                labels,
-                AutoExtractResolutionFlags {
-                    no_extract: false,
-                    no_ignore,
-                    kind_filter,
-                    stop_on_single_payload_codec: true,
-                },
-            )
-        } else {
-            Ok(ResolvedChecksumSource {
-                source: source.clone(),
-                extracted_archives: 0,
-                cleanup_paths: Vec::new(),
-            })
-        };
         let ResolvedChecksumSource {
             source: probe_source,
             extracted_archives,
             cleanup_paths,
-        } = match resolved {
+        } = match self.resolve_probe_source(
+            &source,
+            &select,
+            &context,
+            no_extract,
+            no_ignore,
+            kind_filter,
+        ) {
             Ok(resolved) => resolved,
             Err(error) => {
                 return self.finish(
@@ -104,77 +84,91 @@ impl CliApp {
             None,
         );
 
-        if let Some(handler) = self.containers.probe(&probe_source) {
-            self.emit_running(
-                OperationLabel {
-                    command: "probe",
-                    family: OperationFamily::Container,
-                    format: Some(handler.descriptor().name),
-                },
-                "probe",
-                format!("probing `{}`", probe_source.display()),
-                Some(0.0),
-                context.single_thread_execution(),
-            );
-            let request = ContainerProbeRequest {
-                source: probe_source.clone(),
-                split_bin: false,
+        let report = self.probe_resolved_source(
+            &probe_source,
+            &context,
+            kind_filter,
+            no_ignore,
+            probe_recommendation.as_ref(),
+        );
+        self.finish_probe(
+            report,
+            extracted_archives,
+            cleanup_paths,
+            probe_recommendation.as_ref(),
+        )
+    }
+
+    fn resolve_probe_source(
+        &self,
+        source: &Path,
+        select: &[String],
+        context: &OperationContext,
+        no_extract: bool,
+        no_ignore: bool,
+        kind_filter: ArchiveEntryKindFilter,
+    ) -> Result<ResolvedChecksumSource> {
+        if !no_extract {
+            let labels = AutoExtractResolutionLabels {
+                command: "probe",
+                family: OperationFamily::Command,
+                format: None,
+                source_label: "probe",
+                temp_prefix: "probe-extract",
             };
-            let mut report = handler
-                .probe_details(&request, &context)
-                .unwrap_or_else(|error| {
-                    OperationReport::failed_with_error(
-                        OperationFamily::Container,
-                        Some(handler.descriptor().name.to_string()),
-                        "probe",
-                        error,
-                        None,
-                    )
-                });
-            if !self.emit_progress_events {
-                report =
-                    Self::append_recommended_compress_label(report, probe_recommendation.as_ref());
-            }
-            // Enumerate the container's selectable entries (a cheap, decompression-free
-            // central-directory/header scan) so probe is a strict superset of the former `list`
-            // command. Honors the same `rom_filter`/`patch_filter`/`no_ignore` semantics: payload
-            // matches win, falling back to container entries when no payload matches.
-            let listed_entries =
-                handler
-                    .list_entry_records(&request, &context)
-                    .ok()
-                    .map(|entries| {
-                        let (payload_entries, fallback_entries) =
-                            Self::kind_filtered_container_list_entries(
-                                &entries,
-                                kind_filter,
-                                !no_ignore,
-                            );
-                        if payload_entries.is_empty() {
-                            fallback_entries
-                        } else {
-                            payload_entries
-                        }
-                    });
-            report = Self::attach_container_probe_details(
-                report,
-                listed_entries,
-                probe_recommendation.as_ref(),
-            );
-            // Console + optical medium of the resolved (decoded) source, from a bounded
-            // prefix read - the same identity detection checksum/extract surface, now in
-            // the probe path so platform identify lives with probe (no-op for archives
-            // and other inputs with no on-disc signature).
-            Self::attach_rom_identity_details(&mut report, &probe_source);
-            return self.finish_probe(
-                report,
-                extracted_archives,
-                cleanup_paths,
-                probe_recommendation.as_ref(),
+            self.resolve_source_with_auto_extract(
+                source,
+                select,
+                context,
+                labels,
+                AutoExtractResolutionFlags {
+                    no_extract: false,
+                    no_ignore,
+                    kind_filter,
+                    stop_on_single_payload_codec: true,
+                },
+            )
+        } else {
+            Ok(ResolvedChecksumSource {
+                source: source.to_path_buf(),
+                extracted_archives: 0,
+                cleanup_paths: Vec::new(),
+            })
+        }
+    }
+
+    fn with_recommended_label(
+        &self,
+        report: OperationReport,
+        recommendation: Option<&CompressFormatRecommendation>,
+    ) -> OperationReport {
+        if self.emit_progress_events {
+            return report;
+        }
+        Self::append_recommended_compress_label(report, recommendation)
+    }
+
+    /// Tries each probe surface in priority order and returns the first report.
+    fn probe_resolved_source(
+        &self,
+        probe_source: &Path,
+        context: &OperationContext,
+        kind_filter: ArchiveEntryKindFilter,
+        no_ignore: bool,
+        probe_recommendation: Option<&CompressFormatRecommendation>,
+    ) -> OperationReport {
+        if let Some(handler) = self.containers.probe(probe_source) {
+            return self.probe_container_source(
+                handler.as_ref(),
+                probe_source,
+                context,
+                kind_filter,
+                no_ignore,
+                probe_recommendation,
             );
         }
 
-        if let Some(handler) = self.patches.probe(&probe_source) {
+        if let Some(handler) = self.patches.probe(probe_source) {
             self.emit_running(
                 OperationLabel {
                     command: "probe",
@@ -186,8 +180,8 @@ impl CliApp {
                 Some(0.0),
                 None,
             );
-            let mut report = handler
-                .parse(&probe_source, &context)
+            let report = handler
+                .parse(probe_source, context)
                 .unwrap_or_else(|error| {
                     OperationReport::failed_with_error(
                         OperationFamily::Patch,
@@ -197,20 +191,12 @@ impl CliApp {
                         None,
                     )
                 });
-            if !self.emit_progress_events {
-                report =
-                    Self::append_recommended_compress_label(report, probe_recommendation.as_ref());
-            }
-            return self.finish_probe(
-                Self::attach_patch_probe_details(report),
-                extracted_archives,
-                cleanup_paths,
-                probe_recommendation.as_ref(),
-            );
+            let report = self.with_recommended_label(report, probe_recommendation);
+            return Self::attach_patch_probe_details(report);
         }
 
-        if let Some(reason) = explicitly_unsupported_patch_reason_for_path(&probe_source) {
-            let mut report = OperationReport::failed(
+        if let Some(reason) = explicitly_unsupported_patch_reason_for_path(probe_source) {
+            let report = OperationReport::failed(
                 OperationFamily::Patch,
                 Some("PDS".to_string()),
                 "probe",
@@ -220,81 +206,29 @@ impl CliApp {
                 ),
                 context.single_thread_execution(),
             );
-            if !self.emit_progress_events {
-                report =
-                    Self::append_recommended_compress_label(report, probe_recommendation.as_ref());
-            }
-            return self.finish_probe(
-                report,
-                extracted_archives,
-                cleanup_paths,
-                probe_recommendation.as_ref(),
-            );
+            return self.with_recommended_label(report, probe_recommendation);
         }
 
-        if let Ok(Some(header_match)) = Self::detect_known_rom_header(&probe_source) {
-            let mut report = OperationReport::succeeded(
-                OperationFamily::Command,
-                Some("rom-header".to_string()),
-                "probe",
-                format!(
-                    "detected ROM header {}; stripped_bytes={}; headered_extension={}; headerless_extension={}",
-                    header_match.profile_name(),
-                    header_match
-                        .stripped_bytes()
-                        .map(|value| value.to_string())
-                        .unwrap_or_else(|| "n/a".to_string()),
-                    header_match.header.headered_extension(),
-                    header_match.header.headerless_extension()
-                ),
-                Some(100.0),
-                context.single_thread_execution(),
-            );
-            if !self.emit_progress_events {
-                report =
-                    Self::append_recommended_compress_label(report, probe_recommendation.as_ref());
-            }
-            report.details = Some(json!({
-                "rom_header": {
-                    "profile": header_match.profile_name(),
-                    "stripped_bytes": header_match.stripped_bytes(),
-                    "headered_extension": header_match.header.headered_extension(),
-                    "headerless_extension": header_match.header.headerless_extension(),
-                },
-            }));
-            // Same console/medium detection the container branch attaches, so a bare
-            // cartridge ROM reports its platform too. Hosts use it to pick which
-            // identify database to load before hashing, and a headered ROM whose
-            // extension says nothing (`.bin`, `.rom`) has no other cheap signal.
-            Self::attach_rom_identity_details(&mut report, &probe_source);
-            return self.finish_probe(
-                report,
-                extracted_archives,
-                cleanup_paths,
-                probe_recommendation.as_ref(),
+        if let Ok(Some(header_match)) = Self::detect_known_rom_header(probe_source) {
+            return self.probe_rom_header_report(
+                &header_match,
+                probe_source,
+                context,
+                probe_recommendation,
             );
         }
 
         // A bare `.cue`/`.gdi` sheet: list its referenced track files and detect the
         // console from the first existing one, so hosts can stage identify data for
         // a raw disc dump exactly as they do for a container's probe.
-        if let Some(mut report) = Self::probe_disc_sheet(&probe_source) {
-            if !self.emit_progress_events {
-                report =
-                    Self::append_recommended_compress_label(report, probe_recommendation.as_ref());
-            }
-            return self.finish_probe(
-                report,
-                extracted_archives,
-                cleanup_paths,
-                probe_recommendation.as_ref(),
-            );
+        if let Some(report) = Self::probe_disc_sheet(probe_source) {
+            return self.with_recommended_label(report, probe_recommendation);
         }
 
         // A bare file no handler claims can still carry a disc signature (a raw
         // `.bin` track, a plain `.iso`): report the detected identity instead of
         // failing, so the "no handler" error is reserved for truly opaque bytes.
-        let identity = rom_weaver_checksum::detect_rom_identity_for_path(&probe_source);
+        let identity = rom_weaver_checksum::detect_rom_identity_for_path(probe_source);
         if !identity.is_empty() {
             let mut report = OperationReport::succeeded(
                 OperationFamily::Command,
@@ -308,35 +242,121 @@ impl CliApp {
                 Some(100.0),
                 context.single_thread_execution(),
             );
-            Self::attach_rom_identity_details(&mut report, &probe_source);
-            if !self.emit_progress_events {
-                report =
-                    Self::append_recommended_compress_label(report, probe_recommendation.as_ref());
-            }
-            return self.finish_probe(
-                report,
-                extracted_archives,
-                cleanup_paths,
-                probe_recommendation.as_ref(),
-            );
+            Self::attach_rom_identity_details(&mut report, probe_source);
+            return self.with_recommended_label(report, probe_recommendation);
         }
 
-        let mut report = OperationReport::failed(
+        let report = OperationReport::failed(
             OperationFamily::Command,
             None,
             "probe",
             format!("no registered handler matched `{}`", probe_source.display()),
             None,
         );
-        if !self.emit_progress_events {
-            report = Self::append_recommended_compress_label(report, probe_recommendation.as_ref());
-        }
-        self.finish_probe(
-            report,
-            extracted_archives,
-            cleanup_paths,
-            probe_recommendation.as_ref(),
-        )
+        self.with_recommended_label(report, probe_recommendation)
+    }
+
+    fn probe_container_source(
+        &self,
+        handler: &dyn ContainerHandler,
+        probe_source: &Path,
+        context: &OperationContext,
+        kind_filter: ArchiveEntryKindFilter,
+        no_ignore: bool,
+        probe_recommendation: Option<&CompressFormatRecommendation>,
+    ) -> OperationReport {
+        self.emit_running(
+            OperationLabel {
+                command: "probe",
+                family: OperationFamily::Container,
+                format: Some(handler.descriptor().name),
+            },
+            "probe",
+            format!("probing `{}`", probe_source.display()),
+            Some(0.0),
+            context.single_thread_execution(),
+        );
+        let request = ContainerProbeRequest {
+            source: probe_source.to_path_buf(),
+            split_bin: false,
+        };
+        let report = handler
+            .probe_details(&request, context)
+            .unwrap_or_else(|error| {
+                OperationReport::failed_with_error(
+                    OperationFamily::Container,
+                    Some(handler.descriptor().name.to_string()),
+                    "probe",
+                    error,
+                    None,
+                )
+            });
+        let report = self.with_recommended_label(report, probe_recommendation);
+        // Enumerate the container's selectable entries (a cheap, decompression-free
+        // central-directory/header scan) so probe is a strict superset of the former `list`
+        // command. Honors the same `rom_filter`/`patch_filter`/`no_ignore` semantics: payload
+        // matches win, falling back to container entries when no payload matches.
+        let listed_entries = handler
+            .list_entry_records(&request, context)
+            .ok()
+            .map(|entries| {
+                let (payload_entries, fallback_entries) =
+                    Self::kind_filtered_container_list_entries(&entries, kind_filter, !no_ignore);
+                if payload_entries.is_empty() {
+                    fallback_entries
+                } else {
+                    payload_entries
+                }
+            });
+        let mut report =
+            Self::attach_container_probe_details(report, listed_entries, probe_recommendation);
+        // Console + optical medium of the resolved (decoded) source, from a bounded
+        // prefix read - the same identity detection checksum/extract surface, now in
+        // the probe path so platform identify lives with probe (no-op for archives
+        // and other inputs with no on-disc signature).
+        Self::attach_rom_identity_details(&mut report, probe_source);
+        report
+    }
+
+    fn probe_rom_header_report(
+        &self,
+        header_match: &KnownRomHeaderMatch,
+        probe_source: &Path,
+        context: &OperationContext,
+        probe_recommendation: Option<&CompressFormatRecommendation>,
+    ) -> OperationReport {
+        let report = OperationReport::succeeded(
+            OperationFamily::Command,
+            Some("rom-header".to_string()),
+            "probe",
+            format!(
+                "detected ROM header {}; stripped_bytes={}; headered_extension={}; headerless_extension={}",
+                header_match.profile_name(),
+                header_match
+                    .stripped_bytes()
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| "n/a".to_string()),
+                header_match.header.headered_extension(),
+                header_match.header.headerless_extension()
+            ),
+            Some(100.0),
+            context.single_thread_execution(),
+        );
+        let mut report = self.with_recommended_label(report, probe_recommendation);
+        report.details = Some(json!({
+            "rom_header": {
+                "profile": header_match.profile_name(),
+                "stripped_bytes": header_match.stripped_bytes(),
+                "headered_extension": header_match.header.headered_extension(),
+                "headerless_extension": header_match.header.headerless_extension(),
+            },
+        }));
+        // Same console/medium detection the container branch attaches, so a bare
+        // cartridge ROM reports its platform too. Hosts use it to pick which
+        // identify database to load before hashing, and a headered ROM whose
+        // extension says nothing (`.bin`, `.rom`) has no other cheap signal.
+        Self::attach_rom_identity_details(&mut report, probe_source);
+        report
     }
 
     /// Probe a bare `.cue`/`.gdi` sheet: the referenced files become container-style

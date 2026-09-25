@@ -14,6 +14,19 @@ pub(crate) struct AssembleExtractedLeavesInputs<'a> {
     pub context: &'a OperationContext,
 }
 
+/// Resolved extract inputs shared by the stages of [`CliApp::run_extract`].
+struct ExtractRun<'a> {
+    handler: &'a dyn ContainerHandler,
+    source: &'a Path,
+    out_dir: &'a Path,
+    kind_filter: ArchiveEntryKindFilter,
+    split_bin: bool,
+    ignore_common_files: bool,
+    overwrite: bool,
+    no_nested_extract: bool,
+    context: &'a OperationContext,
+}
+
 impl CliApp {
     pub(super) fn run_extract(&self, args: ExtractCommand) -> AppRunOutcome {
         let rom_filter = args.rom_filter();
@@ -57,37 +70,9 @@ impl CliApp {
             .context(threads)
             .with_extract_checksum_algorithms(checksum_algorithms)
             .with_extract_checksum_rom_only(checksum_rom_only);
-        let probe_threads = context.single_thread_execution();
-        if let Some(report) = self.require_readable_path(
-            "extract",
-            OperationFamily::Container,
-            None,
-            &source,
-            probe_threads.clone(),
-        ) {
-            return self.finish("extract", report);
-        }
-        if let Some(report) = self.require_writable_output_dir(
-            "extract",
-            OperationFamily::Container,
-            None,
-            &out_dir,
-            probe_threads.clone(),
-        ) {
-            return self.finish("extract", report);
-        }
-
-        let Some(handler) = self.containers.probe(&source) else {
-            return self.finish(
-                "extract",
-                OperationReport::failed(
-                    OperationFamily::Container,
-                    None,
-                    "probe",
-                    format!("no registered container matched `{}`", source.display()),
-                    probe_threads,
-                ),
-            );
+        let handler = match self.probe_extract_source(&source, &out_dir, &context) {
+            Ok(handler) => handler,
+            Err(report) => return self.finish("extract", *report),
         };
 
         let (extract_split_bin, split_bin_warning) =
@@ -102,141 +87,18 @@ impl CliApp {
             } else {
                 (split_bin, None)
             };
-        let extract_threads = Some(context.plan_threads(handler.capabilities().extract_threads));
-        // Stream an early identity/type manifest the moment the container is listed - before the
-        // heavy descent below - so the host can route the drop and render its card immediately.
-        // Best-effort and streaming-only; the authoritative identity still rides the terminal report.
-        self.emit_probe_manifest(
-            handler.as_ref(),
-            &source,
-            extract_split_bin,
-            !no_ignore,
-            &context,
-        );
-        // When interactive selection is enabled and the caller did not pin entries, extract selected
-        // payload paths instead of every entry: keep unambiguous payloads whole, otherwise prompt the
-        // host (the same resolution is applied per nested level during the descent below). This is
-        // what lets the browser "just extract" with no separate `list` command.
-        let selections = match self.resolved_extract_selections(
-            handler.as_ref(),
-            &source,
-            selections,
-            SelectionResolutionOptions {
-                kind_filter,
-                split_bin: extract_split_bin,
-                ignore_common_files: !no_ignore,
-                source_label: "extract input",
-            },
-            &context,
-        ) {
-            Ok(selections) => selections,
-            Err(error) => {
-                return self.finish(
-                    "extract",
-                    OperationReport::failed_with_error(
-                        OperationFamily::Container,
-                        Some(handler.descriptor().name.to_string()),
-                        "extract",
-                        error,
-                        extract_threads.clone(),
-                    ),
-                );
-            }
+        let run = ExtractRun {
+            handler: handler.as_ref(),
+            source: &source,
+            out_dir: &out_dir,
+            kind_filter,
+            split_bin: extract_split_bin,
+            ignore_common_files: !no_ignore,
+            overwrite: force,
+            no_nested_extract,
+            context: &context,
         };
-        self.emit_running(
-            OperationLabel {
-                command: "extract",
-                family: OperationFamily::Container,
-                format: Some(handler.descriptor().name),
-            },
-            "extract",
-            format!("extracting `{}`", source.display()),
-            None,
-            extract_threads.clone(),
-        );
-        self.emit_running(
-            OperationLabel {
-                command: "extract",
-                family: OperationFamily::Container,
-                format: Some(handler.descriptor().name),
-            },
-            "extract",
-            format!("preparing extraction for `{}`", source.display()),
-            None,
-            extract_threads.clone(),
-        );
-        let primary_extract_started = std::time::Instant::now();
-        let mut report = self
-            .extract_with_selection_fallback(
-                handler.as_ref(),
-                &source,
-                SelectionExtract {
-                    out_dir: &out_dir,
-                    selections: &selections,
-                    kind_filter,
-                    split_bin: extract_split_bin,
-                    ignore_common_files: !no_ignore,
-                    overwrite: force,
-                    source_label: "extract input",
-                    allow_multi_select: true,
-                },
-                &context,
-            )
-            .unwrap_or_else(|error| {
-                OperationReport::failed_with_error(
-                    OperationFamily::Container,
-                    Some(handler.descriptor().name.to_string()),
-                    "extract",
-                    error,
-                    context.single_thread_execution(),
-                )
-            });
-        let mut warnings = Vec::new();
-        if let Some(split_bin_warning) = split_bin_warning {
-            warnings.push(split_bin_warning);
-        }
-        if !warnings.is_empty() {
-            report.label = format!("{}; warning={}", report.label, warnings.join("; "));
-            Self::append_report_warnings(&mut report, warnings);
-        }
-        if report.status == OperationStatus::Succeeded {
-            let format_name = handler.descriptor().name;
-            let primary_extract_elapsed_ms = primary_extract_started
-                .elapsed()
-                .as_millis()
-                .min(u32::MAX as u128) as u32;
-            match self.assemble_extracted_leaves(AssembleExtractedLeavesInputs {
-                format_name,
-                source: &source,
-                out_dir: &out_dir,
-                primary_report: &report,
-                primary_extract_elapsed_ms,
-                kind_filter,
-                ignore_common_files: !no_ignore,
-                overwrite: force,
-                no_nested_extract,
-                context: &context,
-            }) {
-                Ok((leaves, nested_count)) => {
-                    if nested_count > 0 {
-                        report.label = format!(
-                            "{}; recursively extracted {nested_count} nested container(s)",
-                            report.label
-                        );
-                    }
-                    report = Self::set_emitted_files_detail(report, leaves);
-                }
-                Err(error) => {
-                    report = OperationReport::failed_with_error(
-                        OperationFamily::Container,
-                        Some(format_name.to_string()),
-                        "extract",
-                        error,
-                        context.single_thread_execution(),
-                    );
-                }
-            }
-        }
+        let mut report = self.run_extract_stages(&run, selections, split_bin_warning);
         if probe {
             // Fold the container/platform probe metadata into the extract result so the
             // caller does not need a separate probe roundtrip. `is_single_payload_codec_container`
@@ -252,6 +114,192 @@ impl CliApp {
                 .attach_extract_probe_identity(report, handler.is_single_payload_codec_container());
         }
         self.finish("extract", report)
+    }
+
+    /// Checks the input and output paths, then finds the container handler for the input.
+    fn probe_extract_source(
+        &self,
+        source: &Path,
+        out_dir: &Path,
+        context: &OperationContext,
+    ) -> std::result::Result<Arc<dyn ContainerHandler>, Box<OperationReport>> {
+        let probe_threads = context.single_thread_execution();
+        if let Some(report) = self.require_readable_path(
+            "extract",
+            OperationFamily::Container,
+            None,
+            source,
+            probe_threads.clone(),
+        ) {
+            return Err(Box::new(report));
+        }
+        if let Some(report) = self.require_writable_output_dir(
+            "extract",
+            OperationFamily::Container,
+            None,
+            out_dir,
+            probe_threads.clone(),
+        ) {
+            return Err(Box::new(report));
+        }
+
+        self.containers.probe(source).ok_or_else(|| {
+            Box::new(OperationReport::failed(
+                OperationFamily::Container,
+                None,
+                "probe",
+                format!("no registered container matched `{}`", source.display()),
+                probe_threads,
+            ))
+        })
+    }
+
+    /// Resolves selections, runs the primary extract, and descends into nested containers.
+    fn run_extract_stages(
+        &self,
+        run: &ExtractRun<'_>,
+        selections: Vec<String>,
+        split_bin_warning: Option<String>,
+    ) -> OperationReport {
+        let handler = run.handler;
+        let extract_threads = Some(
+            run.context
+                .plan_threads(handler.capabilities().extract_threads),
+        );
+        // Stream an early identity/type manifest the moment the container is listed - before the
+        // heavy descent below - so the host can route the drop and render its card immediately.
+        // Best-effort and streaming-only; the authoritative identity still rides the terminal report.
+        self.emit_probe_manifest(
+            handler,
+            run.source,
+            run.split_bin,
+            run.ignore_common_files,
+            run.context,
+        );
+        // When interactive selection is enabled and the caller did not pin entries, extract selected
+        // payload paths instead of every entry: keep unambiguous payloads whole, otherwise prompt the
+        // host (the same resolution is applied per nested level during the descent below). This is
+        // what lets the browser "just extract" with no separate `list` command.
+        let selections = match self.resolved_extract_selections(
+            handler,
+            run.source,
+            selections,
+            SelectionResolutionOptions {
+                kind_filter: run.kind_filter,
+                split_bin: run.split_bin,
+                ignore_common_files: run.ignore_common_files,
+                source_label: "extract input",
+            },
+            run.context,
+        ) {
+            Ok(selections) => selections,
+            Err(error) => {
+                return OperationReport::failed_with_error(
+                    OperationFamily::Container,
+                    Some(handler.descriptor().name.to_string()),
+                    "extract",
+                    error,
+                    extract_threads.clone(),
+                );
+            }
+        };
+        for label in [
+            format!("extracting `{}`", run.source.display()),
+            format!("preparing extraction for `{}`", run.source.display()),
+        ] {
+            self.emit_running(
+                OperationLabel {
+                    command: "extract",
+                    family: OperationFamily::Container,
+                    format: Some(handler.descriptor().name),
+                },
+                "extract",
+                label,
+                None,
+                extract_threads.clone(),
+            );
+        }
+        let primary_extract_started = std::time::Instant::now();
+        let mut report = self
+            .extract_with_selection_fallback(
+                handler,
+                run.source,
+                SelectionExtract {
+                    out_dir: run.out_dir,
+                    selections: &selections,
+                    kind_filter: run.kind_filter,
+                    split_bin: run.split_bin,
+                    ignore_common_files: run.ignore_common_files,
+                    overwrite: run.overwrite,
+                    source_label: "extract input",
+                    allow_multi_select: true,
+                },
+                run.context,
+            )
+            .unwrap_or_else(|error| {
+                OperationReport::failed_with_error(
+                    OperationFamily::Container,
+                    Some(handler.descriptor().name.to_string()),
+                    "extract",
+                    error,
+                    run.context.single_thread_execution(),
+                )
+            });
+        let mut warnings = Vec::new();
+        if let Some(split_bin_warning) = split_bin_warning {
+            warnings.push(split_bin_warning);
+        }
+        if !warnings.is_empty() {
+            report.label = format!("{}; warning={}", report.label, warnings.join("; "));
+            Self::append_report_warnings(&mut report, warnings);
+        }
+        if report.status == OperationStatus::Succeeded {
+            let primary_extract_elapsed_ms = primary_extract_started
+                .elapsed()
+                .as_millis()
+                .min(u32::MAX as u128) as u32;
+            report = self.attach_extracted_leaves(run, report, primary_extract_elapsed_ms);
+        }
+        report
+    }
+
+    /// Adds the nested-extract leaves of a succeeded primary extract to its report.
+    fn attach_extracted_leaves(
+        &self,
+        run: &ExtractRun<'_>,
+        mut report: OperationReport,
+        primary_extract_elapsed_ms: u32,
+    ) -> OperationReport {
+        let format_name = run.handler.descriptor().name;
+        match self.assemble_extracted_leaves(AssembleExtractedLeavesInputs {
+            format_name,
+            source: run.source,
+            out_dir: run.out_dir,
+            primary_report: &report,
+            primary_extract_elapsed_ms,
+            kind_filter: run.kind_filter,
+            ignore_common_files: run.ignore_common_files,
+            overwrite: run.overwrite,
+            no_nested_extract: run.no_nested_extract,
+            context: run.context,
+        }) {
+            Ok((leaves, nested_count)) => {
+                if nested_count > 0 {
+                    report.label = format!(
+                        "{}; recursively extracted {nested_count} nested container(s)",
+                        report.label
+                    );
+                }
+                Self::set_emitted_files_detail(report, leaves)
+            }
+            Err(error) => OperationReport::failed_with_error(
+                OperationFamily::Container,
+                Some(format_name.to_string()),
+                "extract",
+                error,
+                run.context.single_thread_execution(),
+            ),
+        }
     }
 
     /// Resolve which container entries to extract when interactive selection is enabled and the

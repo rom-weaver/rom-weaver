@@ -887,304 +887,15 @@ impl CliApp {
         command: IdentifyDatabaseCommands,
     ) -> Result<OperationReport> {
         match command {
-            IdentifyDatabaseCommands::List(args) => {
-                let provider = IdentifyPackProvider::new(args.database_dir)?;
-                let entries: Vec<Value> = provider
-                    .catalog_entries()
-                    .iter()
-                    .map(|entry| {
-                        json!({
-                            "platform": entry.canonical_platform,
-                            "source": entry.source,
-                            "installed": provider.pack_installed(&entry.pack_slug),
-                            "pack_format": entry.pack_format,
-                            "pack_slug": entry.pack_slug,
-                        })
-                    })
-                    .collect();
-                let installed = entries
-                    .iter()
-                    .filter(|entry| entry["installed"] == json!(true))
-                    .count();
-                let mut report = OperationReport::succeeded(
-                    OperationFamily::Command,
-                    Some("identify-database".to_string()),
-                    "list",
-                    format!("{} platform(s), {installed} installed", entries.len()),
-                    Some(100.0),
-                    None,
-                );
-                report.details = Some(json!({
-                    "database_dir": provider.database_dir().to_string_lossy(),
-                    "platforms": entries,
-                }));
-                Ok(report)
-            }
-            IdentifyDatabaseCommands::Status(args) => {
-                let provider = IdentifyPackProvider::new(args.database_dir)?;
-                let mut packs = Vec::new();
-                let dir = provider.database_dir();
-                if dir.is_dir() {
-                    let mut names: Vec<String> = fs::read_dir(dir)
-                        .map_err(|error| {
-                            RomWeaverError::Validation(format!(
-                                "failed to read identify database dir `{}`: {error}",
-                                dir.display()
-                            ))
-                        })?
-                        .filter_map(|entry| entry.ok())
-                        .map(|entry| entry.file_name().to_string_lossy().into_owned())
-                        .filter(|name| name.ends_with(".pack"))
-                        .collect();
-                    names.sort();
-                    for name in names {
-                        let path = dir.join(&name);
-                        let bytes = fs::read(&path).map_err(|error| {
-                            RomWeaverError::Validation(format!(
-                                "failed to read ROM identify pack `{}`: {error}",
-                                path.display()
-                            ))
-                        })?;
-                        let format = match IdentifyPackFile::parse(&bytes) {
-                            Ok(IdentifyPackFile::V1(_)) => "RWFP1",
-                            Err(_) => "invalid",
-                        };
-                        packs.push(json!({
-                            "slug": name.trim_end_matches(".pack"),
-                            "format": format,
-                            "bytes": bytes.len(),
-                            "sha256": sha256_hex(&bytes),
-                        }));
-                    }
-                }
-                let mut report = OperationReport::succeeded(
-                    OperationFamily::Command,
-                    Some("identify-database".to_string()),
-                    "status",
-                    format!("{} installed pack(s)", packs.len()),
-                    Some(100.0),
-                    None,
-                );
-                report.details = Some(json!({
-                    "database_dir": dir.to_string_lossy(),
-                    "packs": packs,
-                }));
-                Ok(report)
-            }
-            IdentifyDatabaseCommands::Path(args) => {
-                let provider = IdentifyPackProvider::new(args.database_dir)?;
-                let dir = provider.database_dir().to_string_lossy().into_owned();
-                let mut report = OperationReport::succeeded(
-                    OperationFamily::Command,
-                    Some("identify-database".to_string()),
-                    "path",
-                    dir.clone(),
-                    Some(100.0),
-                    None,
-                );
-                report.details = Some(json!({ "database_dir": dir }));
-                Ok(report)
-            }
-            IdentifyDatabaseCommands::Remove(args) => {
-                let provider = IdentifyPackProvider::new(args.database_dir)?;
-                let entry = provider.resolve_entry(&args.system).ok_or_else(|| {
-                    RomWeaverError::Validation(format!(
-                        "unknown system `{}`; run `rom-weaver identify database list` for the catalog",
-                        args.system
-                    ))
-                })?;
-                let path = provider
-                    .database_dir()
-                    .join(format!("{}.pack", entry.pack_slug));
-                if !path.is_file() {
-                    return Err(RomWeaverError::Validation(format!(
-                        "no installed pack for `{}` at `{}`",
-                        entry.canonical_platform,
-                        path.display()
-                    )));
-                }
-                fs::remove_file(&path).map_err(|error| {
-                    RomWeaverError::Validation(format!(
-                        "failed to remove `{}`: {error}",
-                        path.display()
-                    ))
-                })?;
-                // The platform's cheat shard installs beside its pack and leaves with it.
-                // Its index row stays, as the pack's own `systems` row does: nothing
-                // native reads the rows, and a reinstall replaces them by slug.
-                let shard = provider
-                    .database_dir()
-                    .join("cheats")
-                    .join(format!("{}.json.br", entry.pack_slug));
-                if shard.is_file() {
-                    fs::remove_file(&shard).map_err(|error| {
-                        RomWeaverError::Validation(format!(
-                            "failed to remove `{}`: {error}",
-                            shard.display()
-                        ))
-                    })?;
-                }
-                let mut report = OperationReport::succeeded(
-                    OperationFamily::Command,
-                    Some("identify-database".to_string()),
-                    "remove",
-                    format!("removed the {} pack", entry.canonical_platform),
-                    Some(100.0),
-                    None,
-                );
-                report.details = Some(json!({
-                    "platform": entry.canonical_platform,
-                    "removed": path.to_string_lossy(),
-                }));
-                Ok(report)
-            }
-            IdentifyDatabaseCommands::ImportRedump(args) => {
-                let provider = IdentifyPackProvider::new(args.database_dir)?;
-                let (imported, skipped, over_caps) =
-                    import_redump_dat(&args.input, provider.database_dir(), None)?;
-                Ok(import_report(
-                    provider.database_dir(),
-                    &imported,
-                    &skipped,
-                    over_caps,
-                ))
-            }
-            IdentifyDatabaseCommands::InstallAll(args) => {
-                let provider = IdentifyPackProvider::new(args.database_dir)?;
-                let count = super::identify_builtin::install_all(provider.database_dir(), None)?;
-                let mut report = OperationReport::succeeded(
-                    OperationFamily::Command,
-                    Some("identify-database".to_string()),
-                    "install-all",
-                    format!("installed {count} identify pack(s)"),
-                    Some(100.0),
-                    None,
-                );
-                report.details = Some(json!({
-                    "database_dir": provider.database_dir().to_string_lossy(),
-                    "packs": count,
-                    "version": env!("CARGO_PKG_VERSION"),
-                }));
-                Ok(report)
-            }
-            IdentifyDatabaseCommands::InstallGroup(args) => {
-                let provider = IdentifyPackProvider::new(args.database_dir)?;
-                let count = super::identify_builtin::install_group(
-                    provider.database_dir(),
-                    &args.group,
-                    args.from.as_deref(),
-                )?;
-                let mut report = OperationReport::succeeded(
-                    OperationFamily::Command,
-                    Some("identify-database".to_string()),
-                    "install-group",
-                    format!(
-                        "installed {count} identify pack(s) from group `{}`",
-                        args.group
-                    ),
-                    Some(100.0),
-                    None,
-                );
-                report.details = Some(json!({
-                    "database_dir": provider.database_dir().to_string_lossy(),
-                    "group": args.group,
-                    "packs": count,
-                    "version": env!("CARGO_PKG_VERSION"),
-                }));
-                Ok(report)
-            }
-            IdentifyDatabaseCommands::Install(args) => {
-                let provider = IdentifyPackProvider::new(args.database_dir)?;
-                if let Some(from) = args.from {
-                    let only_platform = if args.all {
-                        None
-                    } else if let Some(system) = args.system.as_deref() {
-                        Some(resolve_install_platform(&provider, system)?)
-                    } else {
-                        return Err(RomWeaverError::Validation(
-                            "pass a system name or --all to `identify database install`"
-                                .to_string(),
-                        ));
-                    };
-                    let (imported, skipped, over_caps) = import_redump_dat(
-                        &from,
-                        provider.database_dir(),
-                        only_platform.as_deref(),
-                    )?;
-                    return Ok(import_report(
-                        provider.database_dir(),
-                        &imported,
-                        &skipped,
-                        over_caps,
-                    ));
-                }
-                let platforms: Vec<String> = if args.all {
-                    REDUMP_SYSTEMS
-                        .iter()
-                        .map(|(name, _)| (*name).to_string())
-                        .collect()
-                } else if let Some(system) = args.system {
-                    vec![resolve_install_platform(&provider, &system)?]
-                } else {
-                    return Err(RomWeaverError::Validation(
-                        "pass a system name or --all to `identify database install`".to_string(),
-                    ));
-                };
-                let (imported, skipped, over_caps) =
-                    download_and_import_redump(&platforms, provider.database_dir())?;
-                Ok(import_report(
-                    provider.database_dir(),
-                    &imported,
-                    &skipped,
-                    over_caps,
-                ))
-            }
-            IdentifyDatabaseCommands::Update(args) => {
-                let provider = IdentifyPackProvider::new(args.database_dir)?;
-                if let Some(from) = args.from {
-                    let only_platform = args
-                        .system
-                        .as_deref()
-                        .map(|system| resolve_install_platform(&provider, system))
-                        .transpose()?;
-                    let (imported, skipped, over_caps) = import_redump_dat(
-                        &from,
-                        provider.database_dir(),
-                        only_platform.as_deref(),
-                    )?;
-                    return Ok(import_report(
-                        provider.database_dir(),
-                        &imported,
-                        &skipped,
-                        over_caps,
-                    ));
-                }
-                let platforms = match args.system {
-                    Some(system) => vec![resolve_install_platform(&provider, &system)?],
-                    None => provider
-                        .catalog_entries()
-                        .into_iter()
-                        .filter(|entry| {
-                            entry.source == IdentifySource::Redump
-                                && provider.pack_installed(&entry.pack_slug)
-                        })
-                        .map(|entry| entry.canonical_platform)
-                        .collect(),
-                };
-                if platforms.is_empty() {
-                    return Err(RomWeaverError::Validation(
-                        "no installed Redump packs to update".to_string(),
-                    ));
-                }
-                let (imported, skipped, over_caps) =
-                    download_and_import_redump(&platforms, provider.database_dir())?;
-                Ok(import_report(
-                    provider.database_dir(),
-                    &imported,
-                    &skipped,
-                    over_caps,
-                ))
-            }
+            IdentifyDatabaseCommands::List(args) => identify_database_list(*args),
+            IdentifyDatabaseCommands::Status(args) => identify_database_status(*args),
+            IdentifyDatabaseCommands::Path(args) => identify_database_path(*args),
+            IdentifyDatabaseCommands::Remove(args) => identify_database_remove(*args),
+            IdentifyDatabaseCommands::ImportRedump(args) => identify_database_import_redump(*args),
+            IdentifyDatabaseCommands::InstallAll(args) => identify_database_install_all(*args),
+            IdentifyDatabaseCommands::InstallGroup(args) => identify_database_install_group(*args),
+            IdentifyDatabaseCommands::Install(args) => identify_database_install(*args),
+            IdentifyDatabaseCommands::Update(args) => identify_database_update(*args),
         }
     }
 }
@@ -1277,10 +988,6 @@ fn import_report(
     report
 }
 
-#[cfg(all(test, not(target_arch = "wasm32")))]
-#[path = "../tests/unit/identify_database.rs"]
-mod tests;
-
 impl CliApp {
     /// `rom-weaver setup`: put the identify database in place for an install
     /// that shipped only the executable.
@@ -1357,3 +1064,309 @@ impl CliApp {
         Ok(report)
     }
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+fn identify_database_list(args: IdentifyDatabaseDirCommand) -> Result<OperationReport> {
+    let provider = IdentifyPackProvider::new(args.database_dir)?;
+    let entries: Vec<Value> = provider
+        .catalog_entries()
+        .iter()
+        .map(|entry| {
+            json!({
+                "platform": entry.canonical_platform,
+                "source": entry.source,
+                "installed": provider.pack_installed(&entry.pack_slug),
+                "pack_format": entry.pack_format,
+                "pack_slug": entry.pack_slug,
+            })
+        })
+        .collect();
+    let installed = entries
+        .iter()
+        .filter(|entry| entry["installed"] == json!(true))
+        .count();
+    let mut report = OperationReport::succeeded(
+        OperationFamily::Command,
+        Some("identify-database".to_string()),
+        "list",
+        format!("{} platform(s), {installed} installed", entries.len()),
+        Some(100.0),
+        None,
+    );
+    report.details = Some(json!({
+        "database_dir": provider.database_dir().to_string_lossy(),
+        "platforms": entries,
+    }));
+    Ok(report)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn identify_database_status(args: IdentifyDatabaseDirCommand) -> Result<OperationReport> {
+    let provider = IdentifyPackProvider::new(args.database_dir)?;
+    let mut packs = Vec::new();
+    let dir = provider.database_dir();
+    if dir.is_dir() {
+        let mut names: Vec<String> = fs::read_dir(dir)
+            .map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "failed to read identify database dir `{}`: {error}",
+                    dir.display()
+                ))
+            })?
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.ends_with(".pack"))
+            .collect();
+        names.sort();
+        for name in names {
+            let path = dir.join(&name);
+            let bytes = fs::read(&path).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "failed to read ROM identify pack `{}`: {error}",
+                    path.display()
+                ))
+            })?;
+            let format = match IdentifyPackFile::parse(&bytes) {
+                Ok(IdentifyPackFile::V1(_)) => "RWFP1",
+                Err(_) => "invalid",
+            };
+            packs.push(json!({
+                "slug": name.trim_end_matches(".pack"),
+                "format": format,
+                "bytes": bytes.len(),
+                "sha256": sha256_hex(&bytes),
+            }));
+        }
+    }
+    let mut report = OperationReport::succeeded(
+        OperationFamily::Command,
+        Some("identify-database".to_string()),
+        "status",
+        format!("{} installed pack(s)", packs.len()),
+        Some(100.0),
+        None,
+    );
+    report.details = Some(json!({
+        "database_dir": dir.to_string_lossy(),
+        "packs": packs,
+    }));
+    Ok(report)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn identify_database_path(args: IdentifyDatabaseDirCommand) -> Result<OperationReport> {
+    let provider = IdentifyPackProvider::new(args.database_dir)?;
+    let dir = provider.database_dir().to_string_lossy().into_owned();
+    let mut report = OperationReport::succeeded(
+        OperationFamily::Command,
+        Some("identify-database".to_string()),
+        "path",
+        dir.clone(),
+        Some(100.0),
+        None,
+    );
+    report.details = Some(json!({ "database_dir": dir }));
+    Ok(report)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn identify_database_remove(args: IdentifyDatabaseSystemCommand) -> Result<OperationReport> {
+    let provider = IdentifyPackProvider::new(args.database_dir)?;
+    let entry = provider.resolve_entry(&args.system).ok_or_else(|| {
+        RomWeaverError::Validation(format!(
+            "unknown system `{}`; run `rom-weaver identify database list` for the catalog",
+            args.system
+        ))
+    })?;
+    let path = provider
+        .database_dir()
+        .join(format!("{}.pack", entry.pack_slug));
+    if !path.is_file() {
+        return Err(RomWeaverError::Validation(format!(
+            "no installed pack for `{}` at `{}`",
+            entry.canonical_platform,
+            path.display()
+        )));
+    }
+    fs::remove_file(&path).map_err(|error| {
+        RomWeaverError::Validation(format!("failed to remove `{}`: {error}", path.display()))
+    })?;
+    // The platform's cheat shard installs beside its pack and leaves with it.
+    // Its index row stays, as the pack's own `systems` row does: nothing
+    // native reads the rows, and a reinstall replaces them by slug.
+    let shard = provider
+        .database_dir()
+        .join("cheats")
+        .join(format!("{}.json.br", entry.pack_slug));
+    if shard.is_file() {
+        fs::remove_file(&shard).map_err(|error| {
+            RomWeaverError::Validation(format!("failed to remove `{}`: {error}", shard.display()))
+        })?;
+    }
+    let mut report = OperationReport::succeeded(
+        OperationFamily::Command,
+        Some("identify-database".to_string()),
+        "remove",
+        format!("removed the {} pack", entry.canonical_platform),
+        Some(100.0),
+        None,
+    );
+    report.details = Some(json!({
+        "platform": entry.canonical_platform,
+        "removed": path.to_string_lossy(),
+    }));
+    Ok(report)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn identify_database_import_redump(args: IdentifyDatabaseImportCommand) -> Result<OperationReport> {
+    let provider = IdentifyPackProvider::new(args.database_dir)?;
+    let (imported, skipped, over_caps) =
+        import_redump_dat(&args.input, provider.database_dir(), None)?;
+    Ok(import_report(
+        provider.database_dir(),
+        &imported,
+        &skipped,
+        over_caps,
+    ))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn identify_database_install_all(args: IdentifyDatabaseDirCommand) -> Result<OperationReport> {
+    let provider = IdentifyPackProvider::new(args.database_dir)?;
+    let count = super::identify_builtin::install_all(provider.database_dir(), None)?;
+    let mut report = OperationReport::succeeded(
+        OperationFamily::Command,
+        Some("identify-database".to_string()),
+        "install-all",
+        format!("installed {count} identify pack(s)"),
+        Some(100.0),
+        None,
+    );
+    report.details = Some(json!({
+        "database_dir": provider.database_dir().to_string_lossy(),
+        "packs": count,
+        "version": env!("CARGO_PKG_VERSION"),
+    }));
+    Ok(report)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn identify_database_install_group(args: IdentifyDatabaseGroupCommand) -> Result<OperationReport> {
+    let provider = IdentifyPackProvider::new(args.database_dir)?;
+    let count = super::identify_builtin::install_group(
+        provider.database_dir(),
+        &args.group,
+        args.from.as_deref(),
+    )?;
+    let mut report = OperationReport::succeeded(
+        OperationFamily::Command,
+        Some("identify-database".to_string()),
+        "install-group",
+        format!(
+            "installed {count} identify pack(s) from group `{}`",
+            args.group
+        ),
+        Some(100.0),
+        None,
+    );
+    report.details = Some(json!({
+        "database_dir": provider.database_dir().to_string_lossy(),
+        "group": args.group,
+        "packs": count,
+        "version": env!("CARGO_PKG_VERSION"),
+    }));
+    Ok(report)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn identify_database_install(args: IdentifyDatabaseInstallCommand) -> Result<OperationReport> {
+    let provider = IdentifyPackProvider::new(args.database_dir)?;
+    if let Some(from) = args.from {
+        let only_platform = if args.all {
+            None
+        } else if let Some(system) = args.system.as_deref() {
+            Some(resolve_install_platform(&provider, system)?)
+        } else {
+            return Err(RomWeaverError::Validation(
+                "pass a system name or --all to `identify database install`".to_string(),
+            ));
+        };
+        let (imported, skipped, over_caps) =
+            import_redump_dat(&from, provider.database_dir(), only_platform.as_deref())?;
+        return Ok(import_report(
+            provider.database_dir(),
+            &imported,
+            &skipped,
+            over_caps,
+        ));
+    }
+    let platforms: Vec<String> = if args.all {
+        REDUMP_SYSTEMS
+            .iter()
+            .map(|(name, _)| (*name).to_string())
+            .collect()
+    } else if let Some(system) = args.system {
+        vec![resolve_install_platform(&provider, &system)?]
+    } else {
+        return Err(RomWeaverError::Validation(
+            "pass a system name or --all to `identify database install`".to_string(),
+        ));
+    };
+    let (imported, skipped, over_caps) =
+        download_and_import_redump(&platforms, provider.database_dir())?;
+    Ok(import_report(
+        provider.database_dir(),
+        &imported,
+        &skipped,
+        over_caps,
+    ))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn identify_database_update(args: IdentifyDatabaseUpdateCommand) -> Result<OperationReport> {
+    let provider = IdentifyPackProvider::new(args.database_dir)?;
+    if let Some(from) = args.from {
+        let only_platform = args
+            .system
+            .as_deref()
+            .map(|system| resolve_install_platform(&provider, system))
+            .transpose()?;
+        let (imported, skipped, over_caps) =
+            import_redump_dat(&from, provider.database_dir(), only_platform.as_deref())?;
+        return Ok(import_report(
+            provider.database_dir(),
+            &imported,
+            &skipped,
+            over_caps,
+        ));
+    }
+    let platforms = match args.system {
+        Some(system) => vec![resolve_install_platform(&provider, &system)?],
+        None => provider
+            .catalog_entries()
+            .into_iter()
+            .filter(|entry| {
+                entry.source == IdentifySource::Redump && provider.pack_installed(&entry.pack_slug)
+            })
+            .map(|entry| entry.canonical_platform)
+            .collect(),
+    };
+    if platforms.is_empty() {
+        return Err(RomWeaverError::Validation(
+            "no installed Redump packs to update".to_string(),
+        ));
+    }
+    let (imported, skipped, over_caps) =
+        download_and_import_redump(&platforms, provider.database_dir())?;
+    Ok(import_report(
+        provider.database_dir(),
+        &imported,
+        &skipped,
+        over_caps,
+    ))
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[path = "../tests/unit/identify_database.rs"]
+mod tests;

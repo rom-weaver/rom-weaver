@@ -545,23 +545,15 @@ impl ChdContainerHandler {
             let mut remaining = logical_bytes;
             let mut scratch = ChdCompressionScratch::default();
             for hunk_index in 0..hunk_count_usize {
-                let read_len =
-                    usize::try_from(remaining.min(u64::from(hunk_bytes))).map_err(|_| {
-                        RomWeaverError::Validation(
-                            "decoded CHD chunk exceeded addressable memory".to_string(),
-                        )
-                    })?;
-                let mut hunk = vec![0_u8; hunk_bytes_usize];
-                source.read_exact(&mut hunk[..read_len]).map_err(|error| {
-                    RomWeaverError::Validation(format!(
-                        "failed to read source `{source_label}`: {error}",
-                    ))
-                })?;
-                raw_sha1.update(&hunk[..read_len]);
-                remaining = remaining.saturating_sub(read_len as u64);
-                if let Some(on_progress) = on_progress {
-                    on_progress(read_len as u64);
-                }
+                let hunk = read_source_hunk(
+                    source,
+                    source_label,
+                    &mut remaining,
+                    &mut raw_sha1,
+                    hunk_bytes,
+                    hunk_bytes_usize,
+                    on_progress,
+                )?;
                 let (hash_key, compression_type, payload) = self.compress_pipeline_hunk(
                     create_kind,
                     primary_codec,
@@ -606,23 +598,15 @@ impl ChdContainerHandler {
                     result_closed: "chd compression pipeline ended before all hunks were produced",
                 },
                 |hunk_index, _| {
-                    let read_len =
-                        usize::try_from(remaining.min(u64::from(hunk_bytes))).map_err(|_| {
-                            RomWeaverError::Validation(
-                                "decoded CHD chunk exceeded addressable memory".to_string(),
-                            )
-                        })?;
-                    let mut hunk = vec![0_u8; hunk_bytes_usize];
-                    source.read_exact(&mut hunk[..read_len]).map_err(|error| {
-                        RomWeaverError::Validation(format!(
-                            "failed to read source `{source_label}`: {error}",
-                        ))
-                    })?;
-                    raw_sha1.update(&hunk[..read_len]);
-                    remaining = remaining.saturating_sub(read_len as u64);
-                    if let Some(on_progress) = on_progress {
-                        on_progress(read_len as u64);
-                    }
+                    let hunk = read_source_hunk(
+                        source,
+                        source_label,
+                        &mut remaining,
+                        &mut raw_sha1,
+                        hunk_bytes,
+                        hunk_bytes_usize,
+                        on_progress,
+                    )?;
                     Ok((hunk_index, hunk))
                 },
                 ChdCompressionScratch::default,
@@ -751,3 +735,29 @@ impl ChdContainerHandler {
 #[cfg(test)]
 #[path = "../../tests/unit/create_pipeline.rs"]
 mod create_pipeline_tests;
+
+/// Reads the next hunk of the create source into a zero-padded hunk buffer,
+/// feeding the raw SHA-1 and progress callback with only the bytes read.
+fn read_source_hunk(
+    source: &mut (dyn Read + Send),
+    source_label: &str,
+    remaining: &mut u64,
+    raw_sha1: &mut Sha1,
+    hunk_bytes: u32,
+    hunk_bytes_usize: usize,
+    on_progress: Option<&Arc<dyn Fn(u64) + Send + Sync>>,
+) -> Result<Vec<u8>> {
+    let read_len = usize::try_from((*remaining).min(u64::from(hunk_bytes))).map_err(|_| {
+        RomWeaverError::Validation("decoded CHD chunk exceeded addressable memory".to_string())
+    })?;
+    let mut hunk = vec![0_u8; hunk_bytes_usize];
+    source.read_exact(&mut hunk[..read_len]).map_err(|error| {
+        RomWeaverError::Validation(format!("failed to read source `{source_label}`: {error}",))
+    })?;
+    raw_sha1.update(&hunk[..read_len]);
+    *remaining = remaining.saturating_sub(read_len as u64);
+    if let Some(on_progress) = on_progress {
+        on_progress(read_len as u64);
+    }
+    Ok(hunk)
+}

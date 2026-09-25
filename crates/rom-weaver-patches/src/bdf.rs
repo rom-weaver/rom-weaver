@@ -531,6 +531,30 @@ impl ParallelBsdiffSource {
     }
 }
 
+/// Returns `len` bytes of a BSDIFF40 delta or extra payload starting at
+/// `offset`; `kind` names the payload in error messages.
+fn bsdiff_payload_range<'a>(
+    payload: &'a [u8],
+    offset: u64,
+    len: u64,
+    kind: &str,
+) -> Result<&'a [u8]> {
+    let start = usize::try_from(offset).map_err(|_| {
+        RomWeaverError::Validation(format!(
+            "BSDIFF40 {kind} offset exceeded addressable memory"
+        ))
+    })?;
+    let range_len = usize::try_from(len).map_err(|_| {
+        RomWeaverError::Validation("BSDIFF40 segment length exceeded addressable memory".into())
+    })?;
+    let end = start
+        .checked_add(range_len)
+        .ok_or_else(|| RomWeaverError::Validation(format!("BSDIFF40 {kind} range overflowed")))?;
+    payload.get(start..end).ok_or_else(|| {
+        RomWeaverError::Validation(format!("BSDIFF40 {kind} range exceeded patch bounds"))
+    })
+}
+
 fn prepare_bsdiff_writes_parallel(
     plans: &[BsdiffWritePlan],
     source: &ParallelBsdiffSource,
@@ -548,48 +572,13 @@ fn prepare_bsdiff_writes_parallel(
                 delta_offset,
                 len,
             } => {
-                let delta_start = usize::try_from(*delta_offset).map_err(|_| {
-                    RomWeaverError::Validation(
-                        "BSDIFF40 delta offset exceeded addressable memory".into(),
-                    )
-                })?;
-                let range_len = usize::try_from(*len).map_err(|_| {
-                    RomWeaverError::Validation(
-                        "BSDIFF40 segment length exceeded addressable memory".into(),
-                    )
-                })?;
-                let delta_end = delta_start.checked_add(range_len).ok_or_else(|| {
-                    RomWeaverError::Validation("BSDIFF40 delta range overflowed".into())
-                })?;
-                let delta_slice = delta_payload.get(delta_start..delta_end).ok_or_else(|| {
-                    RomWeaverError::Validation("BSDIFF40 delta range exceeded patch bounds".into())
-                })?;
-                let mut data = delta_slice.to_vec();
+                let mut data =
+                    bsdiff_payload_range(delta_payload, *delta_offset, *len, "delta")?.to_vec();
                 add_source_overlap_shared(source, source_len, *source_offset, data.as_mut_slice())?;
                 data
             }
             BsdiffWritePlanKind::Copy { extra_offset, len } => {
-                let extra_start = usize::try_from(*extra_offset).map_err(|_| {
-                    RomWeaverError::Validation(
-                        "BSDIFF40 extra offset exceeded addressable memory".into(),
-                    )
-                })?;
-                let range_len = usize::try_from(*len).map_err(|_| {
-                    RomWeaverError::Validation(
-                        "BSDIFF40 segment length exceeded addressable memory".into(),
-                    )
-                })?;
-                let extra_end = extra_start.checked_add(range_len).ok_or_else(|| {
-                    RomWeaverError::Validation("BSDIFF40 extra range overflowed".into())
-                })?;
-                extra_payload
-                    .get(extra_start..extra_end)
-                    .ok_or_else(|| {
-                        RomWeaverError::Validation(
-                            "BSDIFF40 extra range exceeded patch bounds".into(),
-                        )
-                    })?
-                    .to_vec()
+                bsdiff_payload_range(extra_payload, *extra_offset, *len, "extra")?.to_vec()
             }
         };
         Ok(PreparedWrite {
@@ -634,46 +623,13 @@ fn prepare_bsdiff_write(
             delta_offset,
             len,
         } => {
-            let delta_start = usize::try_from(*delta_offset).map_err(|_| {
-                RomWeaverError::Validation(
-                    "BSDIFF40 delta offset exceeded addressable memory".into(),
-                )
-            })?;
-            let range_len = usize::try_from(*len).map_err(|_| {
-                RomWeaverError::Validation(
-                    "BSDIFF40 segment length exceeded addressable memory".into(),
-                )
-            })?;
-            let delta_end = delta_start.checked_add(range_len).ok_or_else(|| {
-                RomWeaverError::Validation("BSDIFF40 delta range overflowed".into())
-            })?;
-            let delta_slice = delta_payload.get(delta_start..delta_end).ok_or_else(|| {
-                RomWeaverError::Validation("BSDIFF40 delta range exceeded patch bounds".into())
-            })?;
-            let mut data = delta_slice.to_vec();
+            let mut data =
+                bsdiff_payload_range(delta_payload, *delta_offset, *len, "delta")?.to_vec();
             add_source_overlap(source, source_len, *source_offset, data.as_mut_slice())?;
             data
         }
         BsdiffWritePlanKind::Copy { extra_offset, len } => {
-            let extra_start = usize::try_from(*extra_offset).map_err(|_| {
-                RomWeaverError::Validation(
-                    "BSDIFF40 extra offset exceeded addressable memory".into(),
-                )
-            })?;
-            let range_len = usize::try_from(*len).map_err(|_| {
-                RomWeaverError::Validation(
-                    "BSDIFF40 segment length exceeded addressable memory".into(),
-                )
-            })?;
-            let extra_end = extra_start.checked_add(range_len).ok_or_else(|| {
-                RomWeaverError::Validation("BSDIFF40 extra range overflowed".into())
-            })?;
-            extra_payload
-                .get(extra_start..extra_end)
-                .ok_or_else(|| {
-                    RomWeaverError::Validation("BSDIFF40 extra range exceeded patch bounds".into())
-                })?
-                .to_vec()
+            bsdiff_payload_range(extra_payload, *extra_offset, *len, "extra")?.to_vec()
         }
     };
     Ok(PreparedWrite {

@@ -129,17 +129,7 @@ impl WriteArchive {
         value: &str,
         context: &str,
     ) -> Result<()> {
-        let module = optional_cstring(module, "format option module", context)?;
-        let option = cstring(option, "format option key", context)?;
-        let value = cstring(value, "format option value", context)?;
-        let status = unsafe {
-            archive_write_set_format_option(
-                self.as_ptr(),
-                module.as_ref().map_or(ptr::null(), |value| value.as_ptr()),
-                option.as_ptr(),
-                value.as_ptr(),
-            )
-        };
+        let status = self.write_format_option(module, option, value, context)?;
         self.check_status(status, context)
     }
 
@@ -150,17 +140,7 @@ impl WriteArchive {
         value: &str,
         context: &str,
     ) -> Result<()> {
-        let module = optional_cstring(module, "format option module", context)?;
-        let option = cstring(option, "format option key", context)?;
-        let value = cstring(value, "format option value", context)?;
-        let status = unsafe {
-            archive_write_set_format_option(
-                self.as_ptr(),
-                module.as_ref().map_or(ptr::null(), |value| value.as_ptr()),
-                option.as_ptr(),
-                value.as_ptr(),
-            )
-        };
+        let status = self.write_format_option(module, option, value, context)?;
         self.check_optional_status(status, context)
     }
 
@@ -364,6 +344,29 @@ impl WriteArchive {
         );
         let free_status = unsafe { archive_write_free(ptr.as_ptr()) };
         close_result.and(check_free_status(free_status, free_context))
+    }
+
+    /// Passes one format option to libarchive and returns its raw status so
+    /// each caller can choose how strictly to treat an unsupported option.
+    fn write_format_option(
+        &mut self,
+        module: Option<&str>,
+        option: &str,
+        value: &str,
+        context: &str,
+    ) -> Result<i32> {
+        let module = optional_cstring(module, "format option module", context)?;
+        let option = cstring(option, "format option key", context)?;
+        let value = cstring(value, "format option value", context)?;
+        let status = unsafe {
+            archive_write_set_format_option(
+                self.as_ptr(),
+                module.as_ref().map_or(ptr::null(), |value| value.as_ptr()),
+                option.as_ptr(),
+                value.as_ptr(),
+            )
+        };
+        Ok(status)
     }
 
     fn check_status(&self, status: i32, context: &str) -> Result<()> {

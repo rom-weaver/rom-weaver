@@ -430,6 +430,9 @@ test("selection plumbing stays fail-open", () => {
 test("the dependency policy moved under .config/", () =>
   assert.equal(classify(".config/deny.toml").rust, "true"));
 
+test("alias man page changes run the Rust manifest check", () =>
+  assert.equal(classifyFor("pull_request", "packages/rom-weaver-alias/package.json").rust, "true"));
+
 // The release pull request's diff is version strings and a changelog, which
 // classifies as documentation - and merging it is what ships. Classifying it
 // like any other pull request gave the shipping commit less coverage than the

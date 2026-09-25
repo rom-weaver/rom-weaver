@@ -16,7 +16,7 @@ const listFiles = (directory) =>
     return entry.isDirectory() ? listFiles(entryPath) : [entryPath];
   });
 
-// The worker runtime chunk guard. `rom-weaver-share-worker-runtime-chunks` (vite.config.mjs) emits
+// The worker runtime chunk guard. `rom-weaver-share-worker-runtime-chunks` (scripts/vite-config/worker-chunks.mjs) emits
 // each `?worker&url` entry into the main rollup graph so the `wasm-runtime` codeSplitting group can
 // hoist the modules only worker entries reach into one chunk both workers import. The grouping leans
 // on two rolldown behaviours that a Vite/rolldown upgrade can silently change: `ctx.getModuleInfo`
