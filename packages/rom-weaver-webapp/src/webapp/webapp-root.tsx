@@ -1,4 +1,3 @@
-import { isReactWebappDevelopmentMode } from "./development-defaults.ts";
 import {
   BookOpen,
   Gamepad2,
@@ -46,28 +45,21 @@ import { scheduleBrowserRuntimePreload } from "./browser-runtime-preload.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
-import type { LogDialogTab, SettingsFocusHint } from "./components/log-dialog.tsx";
 import { RelatedStrip } from "./components/related-strip.tsx";
 import { Masthead, UpdateBanner } from "./components/shell.tsx";
-import type { OfflineWarmupDisplayProgress, RuntimeState, WorkflowTab } from "./components/shell.tsx";
+import type { WorkflowTab } from "./components/shell.tsx";
 import { useScreenWakeLock } from "./components/wake-lock-notice.tsx";
 import { resolveHostIngestFiles, subscribeHostIngest } from "./host-ingest.ts";
 import { ABOUT_URL, DONATE_URL, GITHUB_URL, PRIVACY_URL } from "./project-links.ts";
-import {
-  createOfflineWarmupProgressGate,
-  listenForOfflinePrecacheProgress,
-  listenForServiceWorkerLog,
-  persistOfflineReady,
-  getOfflineCopyState,
-  queryOfflineReadyState,
-  readPersistedOfflineReady,
-  scheduleOfflineWarmup,
-} from "./pwa/offline-warmup-client.ts";
 import { getSettingsUiState, SETTINGS_FIELD_METADATA } from "./settings/settings-state.ts";
 import { shouldWarnBeforeUnload } from "./unload-guard.ts";
 import type { WebappView } from "./webapp-state-types.ts";
 import { UrlSessionBanner } from "./url-session/url-session-banner.tsx";
 import { useUrlSessionBoot } from "./url-session/use-url-session-boot.ts";
+import { readUpdateDismissed, writeUpdateDismissed } from "./update-dismissal.ts";
+import { useOfflineStatus } from "./use-offline-status.ts";
+import { isFileDragTransfer, isInsideLocalDropZone, usePageDragging } from "./use-page-drag.ts";
+import { loadLogDialog, loadSettingsPanel, useUnifiedDialog } from "./use-unified-dialog.ts";
 import type { WebappRootProps } from "./webapp-root-types.ts";
 import {
   ApplyPatchRoute,
@@ -161,9 +153,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
 
 // Keep the trace inspector out of the initial bundle, but share its loader so
 // the masthead and idle post-boot preload can fetch the same promise.
-const loadLogDialog = () => import("./components/log-dialog.tsx").then((module) => ({ default: module.LogDialog }));
 const LogDialog = lazy(loadLogDialog);
-const loadSettingsPanel = () => import("./webapp-settings.tsx").then((module) => ({ default: module.SettingsPanel }));
 const SettingsPanel = lazy(loadSettingsPanel);
 type BrowserApiModule = typeof import("../platform/browser/browser-api.ts");
 const preloadBrowserRuntime = (options: Parameters<BrowserApiModule["preloadBrowserRuntime"]>[0] = {}) =>
@@ -206,49 +196,10 @@ const syncWorkflowSeoMetadata = (view: WebappView) => {
   document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.setAttribute("href", canonicalUrl);
 };
 
-// Dismissing the update banner is remembered per running build: the same
-// pending update never re-prompts on reload, while an actual update changes
-// APP_BUILD_VERSION and re-arms the banner for the next one.
-const UPDATE_DISMISSED_STORAGE_KEY = "rom-weaver-update-dismissed-build";
-
-const readUpdateDismissed = () => {
-  if (typeof localStorage === "undefined") return false;
-  try {
-    return localStorage.getItem(UPDATE_DISMISSED_STORAGE_KEY) === APP_BUILD_VERSION;
-  } catch (error) {
-    logger.trace("Unable to read update banner dismissal", {
-      message: error instanceof Error ? error.message : String(error || ""),
-    });
-    return false;
-  }
-};
-
-const writeUpdateDismissed = () => {
-  if (typeof localStorage === "undefined") return;
-  try {
-    localStorage.setItem(UPDATE_DISMISSED_STORAGE_KEY, APP_BUILD_VERSION);
-    logger.debug("Update banner dismissed", { build: APP_BUILD_VERSION });
-  } catch (error) {
-    logger.trace("Unable to persist update banner dismissal", {
-      message: error instanceof Error ? error.message : String(error || ""),
-    });
-  }
-};
-
 type WebappRootPageDrop = {
   drop: PageFileDrop;
   view: WebappRootProps["state"]["currentView"];
 };
-
-const hasDataTransferType = (types: readonly string[], type: string) => types.includes(type);
-
-const hasFileDataTransferItem = (items: DataTransferItemList) => Array.from(items).some((item) => item.kind === "file");
-
-const isFileDragTransfer = (dataTransfer: DataTransfer | null) =>
-  !!dataTransfer && (hasDataTransferType(dataTransfer.types, "Files") || hasFileDataTransferItem(dataTransfer.items));
-
-const isInsideLocalDropZone = (target: EventTarget | null) =>
-  target instanceof Element && !!target.closest(".rw-app .drop");
 
 /* "auto" must resolve exactly the way the runtime and the Threads setting's
    `auto (N)` placeholder resolve it - raw hardwareConcurrency disagrees with
@@ -428,45 +379,13 @@ function WebappRoot({
     if (notFound) return;
     syncWorkflowSeoMetadata(state.currentView);
   }, [notFound, state.currentView]);
-  // Offline readiness requires the app, EmulatorJS, and required or selected identify groups to be cached.
-  // Unknown or incomplete progress keeps the status at installing.
-  const [offlineProgress, setOfflineProgress] = useState<OfflineWarmupDisplayProgress | null>(() =>
-    readPersistedOfflineReady() ? { cachedBytes: 0, ready: true, totalBytes: 0 } : null,
-  );
-  const [previewUpdateDismissed, setPreviewUpdateDismissed] = useState(false);
-  const [previewRuntimeState, setPreviewRuntimeState] = useState<RuntimeState | null>(null);
-  const changePreviewRuntimeState = useCallback((state: RuntimeState | null) => {
-    if (!isReactWebappDevelopmentMode()) return;
-    setPreviewRuntimeState(state);
-    setPreviewUpdateDismissed(false);
-  }, []);
-  const previewOfflineProgress =
-    previewRuntimeState === "installing" ? { cachedBytes: 40, ready: false, totalBytes: 100 } : offlineProgress;
-  const onWarmupProgress = useCallback((progress: OfflineWarmupDisplayProgress) => {
-    const next = { ...progress, ready: getOfflineCopyState().enabled && progress.ready };
-    setOfflineProgress(next);
-    persistOfflineReady(next.ready);
-  }, []);
-  useEffect(() => {
-    const progressGate = createOfflineWarmupProgressGate(onWarmupProgress);
-    // A page that loads after the warm-up finished gets no progress events;
-    // ask the worker once so the chip does not stay "installing" forever.
-    void queryOfflineReadyState().then((state) => {
-      if (state) progressGate.acceptSnapshot(state);
-    });
-    // First visit: the installing worker broadcasts precache progress before
-    // it controls the page, long before the warm-up can pump.
-    const stopPrecacheProgress = listenForOfflinePrecacheProgress(progressGate.acceptPrecache);
-    // The worker logs to a console the exported page log never sees, so relay
-    // its lines here for the whole life of the page.
-    const stopWorkerLog = listenForServiceWorkerLog();
-    const cancelWarmup = scheduleOfflineWarmup({ onProgress: progressGate.acceptLive });
-    return () => {
-      stopPrecacheProgress();
-      stopWorkerLog();
-      cancelWarmup();
-    };
-  }, [onWarmupProgress]);
+  const {
+    changePreviewRuntimeState,
+    previewOfflineProgress,
+    previewRuntimeState,
+    previewUpdateDismissed,
+    setPreviewUpdateDismissed,
+  } = useOfflineStatus();
   // Route mid-command wasm host selection prompts to the visible tab's form. All
   // forms stay mounted, so without this the last-mounted form would own prompts.
   useEffect(() => {
@@ -476,13 +395,6 @@ function WebappRoot({
     );
   }, [notFound, state.currentView]);
   const [updateDismissed, setUpdateDismissed] = useState(readUpdateDismissed);
-  const [logOpen, setLogOpen] = useState(false);
-  const [logTab, setLogTab] = useState<LogDialogTab>("status");
-  const [settingsFocusHint, setSettingsFocusHint] = useState<SettingsFocusHint | null>(null);
-  // The settings tab owns a draft, so closing it runs the controller's
-  // discard-confirmation flow first; the dialog itself only closes once that
-  // flow actually clears `settingsDialogOpen`.
-  const settingsCloseArmedRef = useRef(false);
   const pendingViewRef = useRef<WebappView | null>(null);
   // Workflow forms keep their local state (staged files, validated patches,
   // finished outputs) in component state, so unmounting on tab switch would
@@ -499,7 +411,6 @@ function WebappRoot({
   const currentViewRef = useRef(state.currentView);
   currentViewRef.current = state.currentView;
   const [pageDrop, setPageDrop] = useState<WebappRootPageDrop | null>(null);
-  const [pageDragging, setPageDragging] = useState(false);
   const pageDropIdRef = useRef(0);
   const threads = state.settings.threads;
   const threadCount = resolveThreads(threads);
@@ -546,76 +457,31 @@ function WebappRoot({
       cancelPreload();
     };
   }, [notFound, state.currentView, threads]);
-  const preloadSettingsPanel = useCallback(() => {
-    void loadSettingsPanel().catch(() => undefined);
-  }, []);
-  // The panel is lazy, but the dialog opens immediately: its tab rail is the
-  // header, so a still-loading panel shows a usable frame rather than a bare
-  // one. Hover/focus/idle preloads mean it is almost always already resident.
-  const openSettingsTab = useCallback(
-    (fieldId?: string) => {
-      preloadSettingsPanel();
-      settingsCloseArmedRef.current = false;
-      setSettingsFocusHint(fieldId ? { fieldId, token: Date.now() } : null);
-      setLogTab("settings");
-      setLogOpen(true);
-      actions.onOpenSettings();
-    },
-    [actions, preloadSettingsPanel],
-  );
-  const handleDialogTabChange = useCallback(
-    (tab: LogDialogTab) => {
-      setLogTab(tab);
-      // Reaching Settings from inside the dialog must stage a draft exactly the
-      // way the gear does, or the panel would edit a stale one.
-      if (tab === "settings") {
-        preloadSettingsPanel();
-        actions.onOpenSettings();
-      }
-    },
-    [actions, preloadSettingsPanel],
-  );
-  const closeDialog = useCallback(() => {
-    if (!state.settingsDialogOpen) {
-      setLogOpen(false);
-      return;
-    }
-    settingsCloseArmedRef.current = true;
-    actions.onCloseSettings();
-  }, [actions, state.settingsDialogOpen]);
-  const saveSettings = useCallback(() => {
-    settingsCloseArmedRef.current = true;
-    actions.onSaveClose();
-  }, [actions]);
-  useEffect(() => {
-    if (state.settingsDialogOpen || !settingsCloseArmedRef.current) return;
-    settingsCloseArmedRef.current = false;
-    logger.trace("unified dialog closing after the settings draft settled");
-    setLogOpen(false);
-  }, [state.settingsDialogOpen]);
+  const {
+    closeDialog,
+    handleDialogTabChange,
+    logOpen,
+    logTab,
+    openSettingsTab,
+    openStatusTab,
+    openStorageTab,
+    preloadLogDialog,
+    preloadSettingsPanel,
+    saveSettings,
+    setLogOpen,
+    setLogTab,
+    settingsFocusHint,
+  } = useUnifiedDialog(actions, state);
   /* Every workflow the user has visited stays mounted, so a single page drop
      would otherwise reach all of them at once - two forms staging the same file
      and overwriting each other's activity-store entry. The drop goes ONLY to the
      view it was made on, and only while that view is still the current one. */
   const pageDropFor = (view: WebappView) =>
     pageDrop && pageDrop.view === view && state.currentView === view ? pageDrop.drop : null;
-  const preloadLogDialog = useCallback(() => {
-    void loadLogDialog().catch(() => undefined);
-  }, []);
   const openWhatsNew = useCallback(() => {
     pendingViewRef.current = null;
     selectViewWithTransition(() => actions.onSelectView("whats-new"));
   }, [actions]);
-  const openStatusTab = useCallback(() => {
-    preloadLogDialog();
-    setLogTab("status");
-    setLogOpen(true);
-  }, [preloadLogDialog]);
-  const openStorageTab = useCallback(() => {
-    preloadLogDialog();
-    setLogTab("storage");
-    setLogOpen(true);
-  }, [preloadLogDialog]);
   // One identity per shell, so Find's index is not rebuilt on every render of the 404 page.
   const mastheadTabs = useMemo(
     () => (notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS),
@@ -710,34 +576,7 @@ function WebappRoot({
     setApplyRomLookupRequest({ id: applyRomLookupIdRef.current, result });
   }, []);
 
-  // Arm the dropzones while a file is dragged anywhere over the page. `dragover`
-  // fires continuously, so a short debounce clears the flag once it stops (drag
-  // left the window or dropped) - `dragleave`/`dragend` are unreliable here.
-  useEffect(() => {
-    if (notFound || state.currentView === "docs" || state.currentView === "whats-new") {
-      setPageDragging(false);
-      return undefined;
-    }
-    let clearTimer: ReturnType<typeof setTimeout> | undefined;
-    const onDragOver = (event: DragEvent) => {
-      if (!isFileDragTransfer(event.dataTransfer)) return;
-      setPageDragging(true);
-      clearTimeout(clearTimer);
-      clearTimer = setTimeout(() => setPageDragging(false), 140);
-    };
-    const stop = () => {
-      clearTimeout(clearTimer);
-      setPageDragging(false);
-    };
-    document.addEventListener("dragover", onDragOver);
-    document.addEventListener("drop", stop);
-    return () => {
-      clearTimeout(clearTimer);
-      document.removeEventListener("dragover", onDragOver);
-      document.removeEventListener("drop", stop);
-    };
-  }, [notFound, state.currentView]);
-
+  const pageDragging = usePageDragging(notFound, state);
   // Page-level drag: dropping a file anywhere on the page (outside a dropzone
   // box) forwards it to the active tab's unified drop handler via `pageDrop`.
   useEffect(() => {
