@@ -78,29 +78,8 @@ impl CliApp {
         let context = self.context(threads);
         let thread_execution =
             Some(context.plan_threads(ThreadCapability::parallel(Some(algo.len().max(1)))));
-        if let Some(report) = self.require_readable_path(
-            "checksum",
-            OperationFamily::Checksum,
-            Some(self.checksum.name().to_string()),
-            &source,
-            thread_execution.clone(),
-        ) {
+        if let Some(report) = self.validate_checksum_request(&source, &algo, &thread_execution) {
             return report;
-        }
-
-        let invalid = algo.iter().find(|algo| {
-            !supported_algorithms()
-                .iter()
-                .any(|supported| supported.eq_ignore_ascii_case(algo))
-        });
-        if let Some(invalid) = invalid {
-            return OperationReport::failed(
-                OperationFamily::Checksum,
-                Some(self.checksum.name().to_string()),
-                "validate",
-                unsupported_checksum_algorithm_message(invalid),
-                thread_execution,
-            );
         }
 
         let checksum_options = ChecksumStreamOptions {
@@ -113,82 +92,16 @@ impl CliApp {
             start,
             length,
         };
-
-        match self.try_run_checksum_chd_raw_sha1_fast_path(
+        let chd_raw_sha1 = match self.run_checksum_fast_paths(
             &source,
             &checksum_options,
             &context,
-            thread_execution.clone(),
+            &thread_execution,
+            allow_streaming_fast_paths,
         ) {
-            Ok(Some(report)) => return report,
-            Ok(None) => {}
-            Err(error) => {
-                return OperationReport::failed_with_error(
-                    OperationFamily::Checksum,
-                    Some(self.checksum.name().to_string()),
-                    "checksum",
-                    error,
-                    thread_execution.clone(),
-                );
-            }
-        }
-
-        let chd_raw_sha1 = match self.try_get_chd_raw_sha1(&source, &checksum_options, &context) {
-            Ok(raw_sha1) => raw_sha1,
-            Err(error) => {
-                return OperationReport::failed_with_error(
-                    OperationFamily::Checksum,
-                    Some(self.checksum.name().to_string()),
-                    "checksum",
-                    error,
-                    thread_execution.clone(),
-                );
-            }
+            ChecksumFastPath::Finished(report) => return report,
+            ChecksumFastPath::Continue { chd_raw_sha1 } => chd_raw_sha1,
         };
-
-        if allow_streaming_fast_paths {
-            match self.try_run_checksum_tar_stream_auto_extract(
-                &source,
-                &checksum_options,
-                &context,
-                thread_execution.clone(),
-            ) {
-                Ok(Some(report)) => return report,
-                Ok(None) => {}
-                Err(error) => {
-                    return OperationReport::failed_with_error(
-                        OperationFamily::Checksum,
-                        Some(self.checksum.name().to_string()),
-                        "checksum",
-                        error,
-                        thread_execution.clone(),
-                    );
-                }
-            }
-        }
-
-        if allow_streaming_fast_paths
-            && let Some(stream_format) =
-                self.select_streamed_checksum_auto_extract_format(&source, &checksum_options)
-        {
-            return self
-                .run_checksum_stream_auto_extract(
-                    &source,
-                    stream_format,
-                    &algo,
-                    &context,
-                    thread_execution.clone(),
-                )
-                .unwrap_or_else(|error| {
-                    OperationReport::failed_with_error(
-                        OperationFamily::Checksum,
-                        Some(self.checksum.name().to_string()),
-                        "checksum",
-                        error,
-                        thread_execution.clone(),
-                    )
-                });
-        }
 
         let resolved = match self.resolve_source_with_auto_extract(
             &source,
@@ -210,42 +123,11 @@ impl CliApp {
         ) {
             Ok(resolved) => resolved,
             Err(error) => {
-                return OperationReport::failed_with_error(
-                    OperationFamily::Checksum,
-                    Some(self.checksum.name().to_string()),
-                    "prepare",
-                    error,
-                    thread_execution,
-                );
+                return self.checksum_error_report("prepare", error, thread_execution);
             }
         };
-        let ResolvedChecksumSource {
-            source: resolved_source,
-            extracted_archives,
-            mut cleanup_paths,
-        } = resolved;
-
-        self.emit_running(
-            OperationLabel {
-                command: "checksum",
-                family: OperationFamily::Checksum,
-                format: Some(self.checksum.name()),
-            },
-            "checksum",
-            format!("computing {} checksum algorithm(s)", algo.len()),
-            Some(0.0),
-            thread_execution.clone(),
-        );
-
-        let mut temp_paths = Vec::new();
-        // The checksum command always hashes the full file so its output matches the inline checksum
-        // computed during extract (extract has no trim step). A trimmed-boundary checksum is a
-        // separate concern handled by the `trim` command, not folded into the primary value here.
-        let user_requested_range = start.is_some() || length.is_some();
-        let checksum_source = resolved_source.clone();
-        temp_paths.append(&mut cleanup_paths);
         let request = ChecksumRequest {
-            source: checksum_source,
+            source: resolved.source.clone(),
             algorithms: algo
                 .into_iter()
                 .map(|algorithm| algorithm.to_ascii_lowercase())
@@ -253,6 +135,174 @@ impl CliApp {
             start,
             length,
         };
+        self.compute_resolved_checksum(resolved, request, chd_raw_sha1, &context, thread_execution)
+    }
+
+    fn checksum_error_report(
+        &self,
+        stage: &str,
+        error: RomWeaverError,
+        thread_execution: Option<ThreadExecution>,
+    ) -> OperationReport {
+        OperationReport::failed_with_error(
+            OperationFamily::Checksum,
+            Some(self.checksum.name().to_string()),
+            stage,
+            error,
+            thread_execution,
+        )
+    }
+
+    /// Rejects an unreadable source or an unknown algorithm before any work starts.
+    fn validate_checksum_request(
+        &self,
+        source: &Path,
+        algo: &[String],
+        thread_execution: &Option<ThreadExecution>,
+    ) -> Option<OperationReport> {
+        if let Some(report) = self.require_readable_path(
+            "checksum",
+            OperationFamily::Checksum,
+            Some(self.checksum.name().to_string()),
+            source,
+            thread_execution.clone(),
+        ) {
+            return Some(report);
+        }
+
+        let invalid = algo.iter().find(|algo| {
+            !supported_algorithms()
+                .iter()
+                .any(|supported| supported.eq_ignore_ascii_case(algo))
+        })?;
+        Some(OperationReport::failed(
+            OperationFamily::Checksum,
+            Some(self.checksum.name().to_string()),
+            "validate",
+            unsupported_checksum_algorithm_message(invalid),
+            thread_execution.clone(),
+        ))
+    }
+
+    /// Tries the CHD raw-sha1 and streaming fast paths in order. When none of them finishes
+    /// the command, returns the CHD raw sha1 metadata (if any) for the materialized path.
+    fn run_checksum_fast_paths(
+        &self,
+        source: &Path,
+        checksum_options: &ChecksumStreamOptions,
+        context: &OperationContext,
+        thread_execution: &Option<ThreadExecution>,
+        allow_streaming_fast_paths: bool,
+    ) -> ChecksumFastPath {
+        match self.try_run_checksum_chd_raw_sha1_fast_path(
+            source,
+            checksum_options,
+            context,
+            thread_execution.clone(),
+        ) {
+            Ok(Some(report)) => return ChecksumFastPath::Finished(report),
+            Ok(None) => {}
+            Err(error) => {
+                return ChecksumFastPath::Finished(self.checksum_error_report(
+                    "checksum",
+                    error,
+                    thread_execution.clone(),
+                ));
+            }
+        }
+
+        let chd_raw_sha1 = match self.try_get_chd_raw_sha1(source, checksum_options, context) {
+            Ok(raw_sha1) => raw_sha1,
+            Err(error) => {
+                return ChecksumFastPath::Finished(self.checksum_error_report(
+                    "checksum",
+                    error,
+                    thread_execution.clone(),
+                ));
+            }
+        };
+
+        if allow_streaming_fast_paths {
+            match self.try_run_checksum_tar_stream_auto_extract(
+                source,
+                checksum_options,
+                context,
+                thread_execution.clone(),
+            ) {
+                Ok(Some(report)) => return ChecksumFastPath::Finished(report),
+                Ok(None) => {}
+                Err(error) => {
+                    return ChecksumFastPath::Finished(self.checksum_error_report(
+                        "checksum",
+                        error,
+                        thread_execution.clone(),
+                    ));
+                }
+            }
+        }
+
+        if allow_streaming_fast_paths
+            && let Some(stream_format) =
+                self.select_streamed_checksum_auto_extract_format(source, checksum_options)
+        {
+            return ChecksumFastPath::Finished(
+                self.run_checksum_stream_auto_extract(
+                    source,
+                    stream_format,
+                    checksum_options.algo,
+                    context,
+                    thread_execution.clone(),
+                )
+                .unwrap_or_else(|error| {
+                    self.checksum_error_report("checksum", error, thread_execution.clone())
+                }),
+            );
+        }
+        ChecksumFastPath::Continue { chd_raw_sha1 }
+    }
+
+    fn emit_checksum_progress(
+        &self,
+        algorithm_count: usize,
+        percent: f32,
+        thread_execution: &Option<ThreadExecution>,
+    ) {
+        self.emit_running(
+            OperationLabel {
+                command: "checksum",
+                family: OperationFamily::Checksum,
+                format: Some(self.checksum.name()),
+            },
+            "checksum",
+            format!("computing {} checksum algorithm(s)", algorithm_count),
+            Some(percent),
+            thread_execution.clone(),
+        );
+    }
+
+    /// Hashes the resolved (possibly extracted) source and removes its temp paths.
+    fn compute_resolved_checksum(
+        &self,
+        resolved: ResolvedChecksumSource,
+        request: ChecksumRequest,
+        chd_raw_sha1: Option<String>,
+        context: &OperationContext,
+        thread_execution: Option<ThreadExecution>,
+    ) -> OperationReport {
+        let ResolvedChecksumSource {
+            source: resolved_source,
+            extracted_archives,
+            mut cleanup_paths,
+        } = resolved;
+
+        self.emit_checksum_progress(request.algorithms.len(), 0.0, &thread_execution);
+
+        let mut temp_paths = Vec::new();
+        // The checksum command always hashes the full file so its output matches the inline checksum
+        // computed during extract (extract has no trim step). A trimmed-boundary checksum is a
+        // separate concern handled by the `trim` command, not folded into the primary value here.
+        let user_requested_range = request.start.is_some() || request.length.is_some();
+        temp_paths.append(&mut cleanup_paths);
         let checksum_stage = if request.start.is_some() || request.length.is_some() {
             "checksum-range"
         } else {
@@ -273,54 +323,34 @@ impl CliApp {
         let mut report = if variants_enabled {
             self.run_checksum_variants_with_progress(
                 &request,
-                &context,
+                context,
                 "checksum",
                 checksum_stage,
                 precomputed_raw_checksums.as_ref(),
                 &mut |progress| {
-                    self.emit_running(
-                        OperationLabel {
-                            command: "checksum",
-                            family: OperationFamily::Checksum,
-                            format: Some(self.checksum.name()),
-                        },
-                        "checksum",
-                        format!(
-                            "computing {} checksum algorithm(s)",
-                            checksum_algorithm_count
-                        ),
-                        Some(progress.percent()),
-                        thread_execution.clone(),
+                    self.emit_checksum_progress(
+                        checksum_algorithm_count,
+                        progress.percent(),
+                        &thread_execution,
                     );
                 },
             )
         } else {
             self.checksum.checksum_report_with_progress(
                 &request,
-                &context,
+                context,
                 checksum_stage,
                 &mut |progress| {
-                    self.emit_running(
-                        OperationLabel {
-                            command: "checksum",
-                            family: OperationFamily::Checksum,
-                            format: Some(self.checksum.name()),
-                        },
-                        "checksum",
-                        format!(
-                            "computing {} checksum algorithm(s)",
-                            checksum_algorithm_count
-                        ),
-                        Some(progress.percent()),
-                        thread_execution.clone(),
+                    self.emit_checksum_progress(
+                        checksum_algorithm_count,
+                        progress.percent(),
+                        &thread_execution,
                     );
                 },
             )
         }
         .unwrap_or_else(|error| {
-            OperationReport::failed_with_error(
-                OperationFamily::Checksum,
-                Some(self.checksum.name().to_string()),
+            self.checksum_error_report(
                 "checksum",
                 error,
                 Some(
@@ -402,4 +432,11 @@ impl CliApp {
         identity.write_into(&mut details);
         report.details = Some(serde_json::Value::Object(details));
     }
+}
+
+/// Outcome of the checksum fast paths: a finished report, or the CHD raw sha1 metadata to
+/// carry into the materialized hashing path.
+enum ChecksumFastPath {
+    Finished(OperationReport),
+    Continue { chd_raw_sha1: Option<String> },
 }
