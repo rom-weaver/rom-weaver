@@ -685,8 +685,18 @@ msgstr "Edición en bloque"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.step.bundle"
+msgstr "Paquete"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.bundleTutorial.bundlePatches"
 msgstr "Paquete + parches (.zip)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.outputFilename"
+msgstr "Nombre de salida del paquete (sin extensión)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2372,6 +2382,11 @@ msgstr "Formato de salida"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.header.title"
 msgstr "Encabezado de salida"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.headerNotSaved"
+msgstr "Los cambios del encabezado de salida solo se aplican a esta sesión."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

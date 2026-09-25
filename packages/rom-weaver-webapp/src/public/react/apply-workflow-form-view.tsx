@@ -61,6 +61,7 @@ import {
   ApplyOutputAction,
   buildRomActualsById,
   getBundleActionLabel,
+  BundleOutputStep,
   BundleSecondaryJob,
 } from "./apply-output-fields.tsx";
 import { type RomRowDeps, groupRomInputs, renderRomInputRow, renderDiscGroup } from "./apply-rom-input-rows.tsx";
@@ -565,11 +566,12 @@ function ApplyWorkflowFormView({
   const compressionTypeOptions = createCompressionTypeOptions(outputState.options, "none");
   const outputDisabled = outputState.disabled || bundleExport?.busy === true;
   const header = resolveOutputHeaderOptions(romInputs);
-  const outputHeaderField = (
+  const renderOutputHeaderField = (id?: string) => (
     <OutputHeaderField
       disabled={outputDisabled}
       headeredExtension={header.headeredExtension}
       headerlessExtension={header.headerlessExtension}
+      id={id}
       onChange={(value) => controllers.output.setOutputHeader?.(value)}
       retained={header.retained}
       value={outputState.outputHeader}
@@ -588,7 +590,7 @@ function ApplyWorkflowFormView({
     : bundleCreateLabel;
   const outputExtraFields = (
     <>
-      {outputHeaderField}
+      {renderOutputHeaderField()}
       <PostApplyBehaviorFields
         disabled={outputDisabled}
         downloadSetting={settings.postApplyDownloadBehavior}
@@ -678,16 +680,15 @@ function ApplyWorkflowFormView({
       uiState={uiState}
     />
   );
-  // Keep the sharing job available once the bench has content. Its position is
-  // route-specific: Bundle presents it before Apply, while Apply follows it.
+  // Keep the optional sharing job available after Apply once the bench has content.
+  const showBundleJob = bundleExport && bundleTools && (romInputs.length > 0 || patches.length > 0 || applyDone);
   const bundleSecondaryJob =
-    bundleExport && bundleTools && (romInputs.length > 0 || patches.length > 0 || applyDone) ? (
+    showBundleJob && !bundlePage ? (
       <BundleSecondaryJob
         bundleActionLabel={bundleActionLabel}
         bundleExport={bundleExport}
         bundleTools={bundleTools}
         disabled={outputState.disabled || !bundleExport.ready || !romInputs.length || !patches.length}
-        primary={bundlePage}
       />
     ) : null;
 
@@ -742,7 +743,6 @@ function ApplyWorkflowFormView({
                 line1: "ui.hero.bundleThesis",
                 line2: "ui.hero.bundleThesis2",
                 description: "ui.hero.bundleDescription",
-                guide: { href: "/docs/create-bundles", label: "ui.hero.bundleGuide" },
               }
             : {
                 line1: "ui.hero.thesis",
@@ -764,7 +764,7 @@ function ApplyWorkflowFormView({
             },
             ...(bundlePage
               ? [
-                  { num: "0x04", title: localizer.message("ui.bundleExport.shareTitle") },
+                  { num: "0x04", title: localizer.message("ui.step.bundle") },
                   { num: "0x05", title: localizer.message("ui.step.apply") },
                 ]
               : [{ num: "0x04", title: localizer.message("ui.step.apply") }]),
@@ -879,7 +879,19 @@ function ApplyWorkflowFormView({
               : renderPatchStep();
           })()}
 
-          {bundlePage ? bundleSecondaryJob : null}
+          {bundleExport && bundleTools && showBundleJob && bundlePage ? (
+            <BundleOutputStep
+              bundleActionLabel={bundleActionLabel}
+              bundleExport={bundleExport}
+              bundleTools={bundleTools}
+              disabled={outputDisabled || !bundleExport.ready || !romInputs.length || !patches.length}
+              fileName={outputState.displayFileName}
+              headerField={
+                header.visible ? renderOutputHeaderField("rom-weaver-select-bundle-output-header") : undefined
+              }
+              onFileNameChange={(value) => controllers.output.setDisplayFileName(value)}
+            />
+          ) : null}
 
           <WorkflowOutputStep
             action={renderOutputAction}

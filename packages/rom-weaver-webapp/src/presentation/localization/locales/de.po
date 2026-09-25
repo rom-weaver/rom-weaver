@@ -685,8 +685,18 @@ msgstr "Mehrere bearbeiten"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.step.bundle"
+msgstr "Bundle"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.bundleTutorial.bundlePatches"
 msgstr "Bundle + Patches (.zip)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.outputFilename"
+msgstr "Bundle-Ausgabename (ohne Erweiterung)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2372,6 +2382,11 @@ msgstr "Ausgabeformat"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.header.title"
 msgstr "Ausgabe-Header"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.headerNotSaved"
+msgstr "Änderungen am Ausgabe-Header gelten nur für diese Sitzung."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

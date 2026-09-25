@@ -253,16 +253,22 @@ describe("apply workflow view - empty bench", () => {
     const { container } = renderView({ mode, ui: createEmptyPatcherUiState() });
     fireEvent.click(container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement);
     const actions = container.querySelectorAll(".sample-tutorial-start-action");
-    expect(actions).toHaveLength(3);
+    expect(actions).toHaveLength(mode === "bundle" ? 4 : 3);
     expect(actions[0].getAttribute("href")).toBe(href);
     expect(actions[0].textContent).toContain(label);
-    expect(container.querySelector(".sample-tutorial-start-guide")).toBeNull();
+    if (mode === "bundle") {
+      expect(container.querySelector(".sample-tutorial-start-guide")?.getAttribute("href")).toBe(
+        "/docs/create-bundles",
+      );
+      expect(container.querySelector(".sample-tutorial-start-guide")?.textContent).toContain("Read the Bundle guide");
+    } else {
+      expect(container.querySelector(".sample-tutorial-start-guide")).toBeNull();
+    }
     expect(container.querySelector(".sample-tutorial-start-download")?.getAttribute("href")).toContain(
       "first-weave.zip",
     );
     expect(container.querySelector(".sample-tutorial-start-dismiss")).toBeTruthy();
-    if (mode === "bundle") expect(container.querySelector(".hero-guide")).toBeTruthy();
-    else expect(container.querySelector(".hero-guide")).toBeNull();
+    expect(container.querySelector(".hero-guide")).toBeNull();
   });
 
   it("keeps file input hooks unique when Apply and Bundle stay mounted", () => {
@@ -1633,6 +1639,8 @@ describe("apply workflow view - bundle controls", () => {
     const romOptionRule = BUNDLE_FIELDS_CSS.match(/\.rw-app \.bundle-rom-option\s*\{([^}]*)\}/)?.[1];
 
     expect(romOptionRule).toContain("align-self: end");
+    expect(BUNDLE_FIELDS_CSS).not.toContain("grid-template-columns: minmax(160px, 0.85fr)");
+    expect(BUNDLE_RESPONSIVE_CSS).not.toContain(".bundle-job-fields");
     expect(fullRowRule).toContain("width: 100%");
     expect(shareRule).toContain("min-height: 40px");
     expect(BUNDLE_RESPONSIVE_CSS).not.toContain(".bundle-job .bundle-share");
@@ -1799,8 +1807,17 @@ describe("apply workflow view - bundle controls", () => {
     expect(job?.querySelector("#rom-weaver-button-export-bundle")).toBeTruthy();
   });
 
-  it("leads bundle pages with an open export job and keeps Apply collapsed", () => {
-    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+  it("presents Bundle as 0x04 with output controls and keeps Apply collapsed as 0x05", () => {
+    const rom = romRow("game.nes");
+    rom.info.checksumVariants = [
+      {
+        applyCompatibility: { removeHeader: true },
+        checksums: { crc32: "C6FB1252" },
+        id: "raw",
+        transforms: { removeHeader: { retainOnOutput: false } },
+      },
+    ];
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [rom] };
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
         <ApplyWorkflowFormView
@@ -1818,10 +1835,30 @@ describe("apply workflow view - bundle controls", () => {
 
     const job = container.querySelector("#rom-weaver-bundle-job");
     const applyStep = container.querySelector("#rom-weaver-row-output-file-name");
-    expect(job?.querySelector(".bundle-job")?.classList).toContain("is-open");
+    expect(job?.querySelector(".step-num")?.textContent).toBe("0x04");
+    expect(job?.querySelector(".step-title")?.textContent).toBe("Bundle");
+    expect(job?.querySelector("#rom-weaver-input-bundle-file-name")).toBeTruthy();
+    expect(job?.querySelector("#rom-weaver-bundle-export-format")).toBeTruthy();
+    expect(job?.querySelector("#rom-weaver-button-export-bundle")).toBeTruthy();
+    fireEvent.click(job?.querySelector(".outopts .cks-head") as HTMLButtonElement);
+    expect(job?.querySelector("#rom-weaver-bundle-export-bundle-rom")).toBeTruthy();
+    expect(job?.querySelector(".optsnote")?.textContent).toBe("Output header changes apply only to this session.");
+    expect(job?.querySelectorAll("#rom-weaver-select-bundle-output-header")).toHaveLength(1);
     expect(job?.compareDocumentPosition(applyStep || container)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(applyStep?.querySelector(".step-num")?.textContent).toBe("0x05");
     expect(applyStep?.classList).toContain("is-collapsed");
     expect(container.querySelector("#rom-weaver-button-apply")).toBeNull();
+    fireEvent.click(applyStep?.querySelector(".step-collapse") as HTMLButtonElement);
+    expect(container.querySelectorAll("#rom-weaver-select-output-header")).toHaveLength(1);
+    expect(container.querySelectorAll('[id="rom-weaver-select-bundle-output-header"]')).toHaveLength(1);
+  });
+
+  it("labels Bundle as 0x04 in the empty route outline", () => {
+    const { container } = renderView({ mode: "bundle", ui: createEmptyPatcherUiState() });
+    const bundleStep = Array.from(container.querySelectorAll(".ghost-next-step")).find(
+      (step) => step.querySelector(".ghost-next-num")?.textContent === "0x04",
+    );
+    expect(bundleStep?.querySelector(".ghost-next-title")?.textContent).toBe("Bundle");
   });
 
   it("opens the optional Apply section on bundle pages", () => {

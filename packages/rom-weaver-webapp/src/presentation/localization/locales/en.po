@@ -685,8 +685,18 @@ msgstr "Bulk edit"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.step.bundle"
+msgstr "Bundle"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.bundleTutorial.bundlePatches"
 msgstr "Bundle + patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.outputFilename"
+msgstr "Bundle output name (without extension)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2372,6 +2382,11 @@ msgstr "Output format"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.header.title"
 msgstr "Output Header"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.headerNotSaved"
+msgstr "Output header changes apply only to this session."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

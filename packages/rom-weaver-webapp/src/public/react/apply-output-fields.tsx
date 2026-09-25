@@ -1,5 +1,5 @@
 import { Download, Share2, TriangleAlert } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   postApplyDownloadBehaviorOption,
   postApplyTestBehaviorOption,
@@ -14,6 +14,7 @@ import { FieldInfoToggle } from "./components/ds/compress-panel.tsx";
 import { Drawer, DrawerReadout } from "./components/ds/drawer.tsx";
 import { Notice } from "./components/ds/feedback.tsx";
 import { OutputField } from "./components/ds/output-card.tsx";
+import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { PatcherPrimaryAction } from "./components/patcher-output-controls.tsx";
 import { ProgressActionButton } from "./components/progress-action-button.tsx";
 import type { NoticeController, PatcherOutputController, PatcherUiController } from "./patcher-form.ts";
@@ -58,6 +59,7 @@ export const OutputHeaderField = ({
   disabled,
   headeredExtension,
   headerlessExtension,
+  id = "rom-weaver-select-output-header",
   onChange,
   retained,
   value,
@@ -66,6 +68,7 @@ export const OutputHeaderField = ({
   disabled: boolean;
   headeredExtension?: string;
   headerlessExtension?: string;
+  id?: string;
   onChange: (value: "auto" | "keep" | "strip") => void;
   retained: boolean;
   value?: "auto" | "keep" | "strip";
@@ -95,7 +98,7 @@ export const OutputHeaderField = ({
         aria-label={localizer.message("ui.apply.header.title")}
         className="select"
         disabled={disabled}
-        id="rom-weaver-select-output-header"
+        id={id}
         onChange={(event) => onChange(event.currentTarget.value as "auto" | "keep" | "strip")}
         value={value || "auto"}
       >
@@ -409,29 +412,79 @@ const BundleOutputFields = ({
   );
 };
 
+export const BundleOutputStep = ({
+  bundleActionLabel,
+  bundleExport,
+  bundleTools,
+  disabled,
+  fileName,
+  headerField,
+  onFileNameChange,
+}: {
+  bundleActionLabel: string;
+  bundleExport: BundleExportState;
+  bundleTools: BundleToolsState;
+  disabled: boolean;
+  fileName: string;
+  headerField?: ReactNode;
+  onFileNameChange: (value: string) => void;
+}) => {
+  const localizer = useUiLocalizer();
+  return (
+    <WorkflowOutputStep
+      action={
+        <>
+          {bundleExport.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
+          <BundleExportAction bundleActionLabel={bundleActionLabel} bundleExport={bundleExport} disabled={disabled} />
+        </>
+      }
+      compress={{
+        children: null,
+        extraChildren: (
+          <>
+            <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} />
+            {headerField}
+          </>
+        ),
+        optionsNote: headerField ? localizer.message("ui.bundleExport.headerNotSaved") : false,
+      }}
+      disabled={bundleExport.busy}
+      fault={!!bundleExport.error}
+      fileName={fileName}
+      fileNameId="rom-weaver-input-bundle-file-name"
+      fileNamePlaceholder={localizer.message("ui.bundleExport.outputFilename")}
+      format={bundleExport.format}
+      formatId="rom-weaver-bundle-export-format"
+      formatOptions={[
+        { label: ".zip", value: "zip" },
+        { label: ".7z", value: "7z" },
+      ]}
+      id="rom-weaver-bundle-job"
+      num="0x04"
+      onFileNameChange={onFileNameChange}
+      onFormatChange={bundleExport.setFormat}
+      title={localizer.message("ui.step.bundle")}
+    />
+  );
+};
+
 /**
- * Bundle export is a separate job from Apply. The Bundle route presents it
- * first, while the Apply route keeps it after the primary action.
+ * Bundle export is a separate optional job on the Apply route.
  */
 export const BundleSecondaryJob = ({
   bundleActionLabel,
   bundleExport,
   bundleTools,
   disabled,
-  primary = false,
 }: {
   bundleActionLabel: string;
   bundleExport: BundleExportState;
   bundleTools: BundleToolsState;
   disabled: boolean;
-  primary?: boolean;
 }) => {
   const localizer = useUiLocalizer();
-  const [open, setOpen] = useState(primary);
+  const [open, setOpen] = useState(false);
   const headingRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (primary && !disabled) setOpen(true);
-  }, [disabled, primary]);
   useEffect(() => {
     if (typeof window === "undefined") return;
     let frameId: number | undefined;
@@ -460,9 +513,7 @@ export const BundleSecondaryJob = ({
         label={localizer.message("ui.bundleExport.shareTitle")}
         onToggle={setOpen}
         open={open}
-        readouts={
-          primary ? undefined : <DrawerReadout muted>{localizer.message("ui.bundleExport.optional")}</DrawerReadout>
-        }
+        readouts={<DrawerReadout muted>{localizer.message("ui.bundleExport.optional")}</DrawerReadout>}
       >
         <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} />
         {bundleExport.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
