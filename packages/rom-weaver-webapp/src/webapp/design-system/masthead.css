@@ -905,8 +905,7 @@
 }
 
 /* ── the phone dock ──
-   Runtime status spans the top row, so its wording stays readable above the
-   three workflows, Find, and Menu. */
+   One row: the three workflows, Find, and Menu. */
 .rw-app .dock {
   position: fixed;
   inset-block-end: 0;
@@ -921,17 +920,6 @@
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
-.rw-app .dock-runtime {
-  display: flex;
-  grid-row: 1;
-  grid-column: 1 / -1;
-  align-items: center;
-  justify-content: center;
-  min-block-size: 30px;
-}
-.rw-app .dock-runtime:empty {
-  display: none;
-}
 .rw-app .header-runtime .sub-status-text {
   display: none;
 }
@@ -945,25 +933,6 @@
 }
 .rw-app .header-runtime .sub-status::after {
   inset: 0;
-}
-.rw-app .dock-runtime .sub-status {
-  block-size: 30px;
-  padding-inline: 10px;
-  font-size: 0.68rem;
-  background: var(--well);
-  border: 1px solid var(--seam);
-  border-radius: 999px;
-}
-.rw-app .dock-runtime .sub-status::after {
-  inset: 0;
-}
-.rw-app .sidebar-runtime:empty {
-  display: none;
-}
-.rw-app .sidebar-runtime {
-  padding: 0 4px var(--sp-s);
-  margin-block-end: var(--sp-s);
-  border-block-end: 1px solid var(--seam-strong);
 }
 .rw-app .phone-overlay-runtime {
   display: none;
@@ -992,163 +961,6 @@
   border-radius: var(--r-s);
 }
 
-@media (max-width: 999px) {
-  html[data-offline-layout="title"] .rw-app {
-    --dock-h: calc(53px + max(3px, var(--safe-b)));
-  }
-  html[data-offline-layout="title"] .rw-app .dock {
-    row-gap: 0;
-  }
-  html[data-offline-layout="title"] .rw-app .dock-tab {
-    grid-row: 1;
-  }
-  html[data-offline-layout="title"] .rw-app .dock-runtime {
-    display: none;
-  }
-  html[data-offline-layout="title"] .rw-app .menu-sheet,
-  html[data-offline-layout="strip"] .rw-app .menu-sheet {
-    inset-block-end: var(--dock-h);
-    max-block-size: calc(100dvh - var(--dock-h));
-  }
-  html[data-offline-layout="edge"] .rw-app,
-  html[data-offline-layout="quiet"] .rw-app {
-    --dock-h: calc(53px + max(3px, var(--safe-b)));
-  }
-  html[data-offline-layout="edge"] .rw-app .dock,
-  html[data-offline-layout="quiet"] .rw-app .dock {
-    row-gap: 0;
-  }
-  html[data-offline-layout="edge"] .rw-app .dock-tab,
-  html[data-offline-layout="quiet"] .rw-app .dock-tab {
-    grid-row: 1;
-  }
-  html[data-offline-layout="edge"] .rw-app .dock-runtime,
-  html[data-offline-layout="quiet"] .rw-app .dock-runtime {
-    display: none;
-  }
-  html[data-offline-layout="edge"] .rw-app .phone-overlay-runtime:not([hidden]) {
-    position: fixed;
-    inset-block-end: calc(var(--dock-h) + 10px);
-    inset-inline-end: max(12px, var(--safe-r));
-    z-index: 998;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  html[data-offline-layout="quiet"] .rw-app .phone-overlay-runtime:not([hidden])[data-sw="installing"],
-  html[data-offline-layout="quiet"] .rw-app .phone-overlay-runtime:not([hidden])[data-sw="update"] {
-    display: flex;
-    align-items: center;
-    min-block-size: 42px;
-    padding: 4px var(--gutter);
-    background: var(--plate-2);
-    border-block-end: 1px solid var(--seam);
-  }
-  html[data-offline-layout="edge"] .rw-app .phone-overlay-runtime .sub-status {
-    min-block-size: 36px;
-    padding-inline: 12px;
-    font-size: 0.68rem;
-    background: var(--plate);
-    border: 1px solid var(--seam-strong);
-    border-radius: 999px;
-    box-shadow: 0 2px 10px color-mix(in oklab, var(--chassis) 30%, transparent);
-  }
-  html[data-offline-layout="quiet"] .rw-app .phone-overlay-runtime .sub-status {
-    min-block-size: 34px;
-    padding-inline: 4px;
-    font-size: 0.68rem;
-    background: transparent;
-    border: 0;
-    border-radius: var(--r-s);
-  }
-  html[data-offline-layout="tab"] .rw-app {
-    --dock-h: calc(53px + max(3px, var(--safe-b)));
-  }
-  html[data-offline-layout="strip"] .rw-app {
-    --dock-h: calc(53px + max(3px, var(--safe-b)));
-  }
-  html[data-offline-layout="strip"] .rw-app:has(.dock-runtime .update-ready) {
-    --dock-h: calc(86px + max(3px, var(--safe-b)));
-  }
-
-  html[data-offline-layout="tab"] .rw-app .dock {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    row-gap: 0;
-  }
-  html[data-offline-layout="tab"] .rw-app .dock-tab,
-  html[data-offline-layout="tab"] .rw-app .dock-runtime {
-    grid-row: 1;
-  }
-  html[data-offline-layout="tab"] .rw-app .dock-runtime {
-    grid-column: 6;
-    min-block-size: 49px;
-  }
-  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    justify-content: center;
-    inline-size: 100%;
-    block-size: 49px;
-    padding: 5px 2px;
-    background: transparent;
-    border: 0;
-    border-radius: var(--r-s);
-  }
-  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status svg {
-    width: 20px;
-    height: 20px;
-  }
-  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status-text,
-  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status-percent {
-    display: none;
-  }
-  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status::before {
-    order: 3;
-    font-size: 0.62rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    content: "STATUS";
-  }
-  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status[data-sw="active"]::before,
-  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status[data-sw="ready"]::before {
-    content: "OFFLINE";
-  }
-  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status[data-sw="update"]::before {
-    content: "UPDATE";
-  }
-  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status[data-sw="installing"]::before {
-    content: "LOADING";
-  }
-  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status[data-sw="online"]::before {
-    content: "ONLINE";
-  }
-  html[data-offline-layout="tab"] .rw-app .dock-runtime .sub-status[data-sw="disabled"]::before {
-    content: "OFF";
-  }
-
-  html[data-offline-layout="strip"] .rw-app .dock {
-    row-gap: 0;
-  }
-  html[data-offline-layout="strip"] .rw-app .dock-tab {
-    grid-row: 1;
-  }
-  html[data-offline-layout="strip"] .rw-app .dock:has(.update-ready) .dock-tab {
-    grid-row: 2;
-  }
-  html[data-offline-layout="strip"] .rw-app .dock-runtime {
-    grid-row: 1;
-    min-block-size: 24px;
-    border-block-end: 1px solid var(--seam-soft);
-  }
-  html[data-offline-layout="strip"] .rw-app .dock-runtime .sub-status {
-    block-size: 24px;
-    padding-inline: 4px;
-    background: transparent;
-    border: 0;
-    border-radius: 0;
-  }
-}
 .rw-app .dock-tab svg {
   width: 20px;
   height: 20px;
@@ -1208,11 +1020,11 @@
 }
 .rw-app .menu-sheet {
   position: fixed;
-  inset: auto 0 calc(var(--dock-h) - 1px);
+  inset: auto 0 var(--dock-h);
   z-index: 1001;
   display: none;
   flex-direction: column;
-  max-block-size: calc(100dvh - var(--dock-h) + 1px);
+  max-block-size: calc(100dvh - var(--dock-h));
   background: var(--plate);
   border-block-start: 1px solid var(--seam-strong);
 }
@@ -1276,9 +1088,6 @@
   .rw-app {
     --rail-w: 220px;
   }
-  html[data-offline-layout="title"] .rw-app .sidebar-runtime {
-    display: none;
-  }
   /* The sidebar is a column of the app grid rather than a fixed overlay, so it
      scrolls with nothing and the content column keeps its own max width. */
   .rw-app .app {
@@ -1327,7 +1136,6 @@
     --dock-h: calc(53px + max(3px, var(--safe-b)));
   }
   .rw-app .side-rail,
-  .rw-app .sidebar-runtime,
   .rw-app .topbar {
     display: none;
   }

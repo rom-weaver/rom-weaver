@@ -225,6 +225,15 @@ test("bots are exempt without any signature", async () => {
   assert.equal(statusState(calls), "success");
 });
 
+test("Claude integration commits are exempt without any signature", async () => {
+  const { calls } = await run({
+    prAuthor: "brandonocasey",
+    commitAuthors: ["claude"],
+    signatures: [{ login: "brandonocasey" }],
+  });
+  assert.equal(statusState(calls), "success");
+});
+
 test("a bot pull request carrying a human's commit still needs that human", async () => {
   const { calls } = await run({
     prAuthor: "dependabot[bot]",
