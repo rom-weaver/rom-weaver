@@ -43,6 +43,8 @@ describe("ExtractForm", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Download 2 files as ZIP" }));
     await waitFor(() => expect(archive.saveAs).toHaveBeenCalledWith({ fileName: "game.zip", interactive: true }));
+    // The ZIP MUST outlive saveAs: the browser reads it after saveAs returns.
+    expect(archive.dispose).not.toHaveBeenCalled();
     expect(runtime.create).toHaveBeenCalledWith(
       expect.objectContaining({
         entries: [
@@ -56,6 +58,29 @@ describe("ExtractForm", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Download 1 file" }));
     await waitFor(() => expect(outputs[0]?.saveAs).toHaveBeenCalledWith({ fileName: "game.sfc", interactive: true }));
     expect(runtime.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows ZIP progress with a readable label and the runtime percent", async () => {
+    runtime.extract.mockResolvedValue({ outputs: [output("a.bin"), output("b.bin")] });
+    let finish: (value: unknown) => void = () => undefined;
+    runtime.create.mockImplementation(
+      ({ options }: { options: { onProgress: (event: object) => void } }) =>
+        new Promise((resolve) => {
+          options.onProgress({ label: "creating `zip`", percent: 40, stage: "output" });
+          options.onProgress({ label: "finalizing `zip` archive", percent: null, stage: "output" });
+          finish = resolve;
+        }),
+    );
+    render(<ExtractForm />);
+
+    addFile(new File(["zip"], "set.zip"));
+    fireEvent.click(await screen.findByRole("button", { name: "Download 2 files as ZIP" }));
+
+    expect(await screen.findByText("Creating set.zip…")).toBeTruthy();
+    expect(screen.getByText("40%")).toBeTruthy();
+    expect(screen.queryByText(/finalizing/)).toBeNull();
+    finish({ output: output("set.zip") });
+    await waitFor(() => expect(screen.queryByText("Creating set.zip…")).toBeNull());
   });
 
   it("asks how to write a multi-track CD CHD before it extracts", async () => {
