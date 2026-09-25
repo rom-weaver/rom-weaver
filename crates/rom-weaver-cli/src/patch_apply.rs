@@ -792,7 +792,10 @@ impl CliApp {
         let Some(emit_steps) = emit_steps else {
             return;
         };
-        if emit_steps.len() != steps.len() {
+        // A synthesized `--code` cheat patch runs after the user patches, so the
+        // applied steps MAY outnumber the emitted patch list; its leading steps
+        // still map one-to-one onto the emitted patches.
+        if emit_steps.len() > steps.len() {
             return;
         }
         let Some(bases) = steps
