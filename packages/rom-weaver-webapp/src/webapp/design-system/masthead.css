@@ -1020,11 +1020,11 @@
 }
 .rw-app .menu-sheet {
   position: fixed;
-  inset: auto 0 calc(var(--dock-h) - 1px);
+  inset: auto 0 var(--dock-h);
   z-index: 1001;
   display: none;
   flex-direction: column;
-  max-block-size: calc(100dvh - var(--dock-h) + 1px);
+  max-block-size: calc(100dvh - var(--dock-h));
   background: var(--plate);
   border-block-start: 1px solid var(--seam-strong);
 }
