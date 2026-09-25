@@ -98,6 +98,10 @@ impl SaveContainer {
         self.outer[self.inner.clone()].to_vec()
     }
 
+    pub fn inner_offset(&self) -> usize {
+        self.inner.start
+    }
+
     pub fn wrap(&self, inner: &[u8]) -> Result<Vec<u8>> {
         if inner.len() != self.inner.len() {
             return Err(RomWeaverError::ValidationCode(

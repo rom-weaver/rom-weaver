@@ -1,4 +1,4 @@
-import { ArrowLeft, Maximize, Minimize } from "lucide-react";
+import { ArrowLeft, Maximize, Minimize, Save, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   createProgressViewModel,
@@ -6,11 +6,25 @@ import {
   formatByteSize,
   type ProgressViewModel,
 } from "../../presentation/workflow-presentation.ts";
-import { configureEmulatorSaveStorage, ensureEmulatorSaveBridge } from "../../storage/browser/emulator-saves.ts";
+import {
+  clearPendingTestSave,
+  configureEmulatorSaveStorage,
+  ensureEmulatorSaveBridge,
+  readPendingTestSave,
+  setEmulatorSavePreview,
+  type PendingTestSave,
+} from "../../storage/browser/emulator-saves.ts";
 import { bumpOfflineWarmupPriority } from "../../webapp/pwa/offline-warmup-client.ts";
 import { resolveAssetUrl } from "./asset-url.ts";
-import { addEntry, disposeEntry, prepareEntry, useEmulatorSession } from "./emulator-session-store.ts";
+import {
+  addEntry,
+  disposeEntry,
+  prepareEntry,
+  restartCurrentGameWithSave,
+  useEmulatorSession,
+} from "./emulator-session-store.ts";
 import { createEmulatorDocument, createEmulatorGameIdentity } from "./components/emulator-document.ts";
+import { join } from "./components/ds/cx.ts";
 import { FileProgress, Notice } from "./components/ds/feedback.tsx";
 import { prefersReducedMotion } from "./components/ds/flat-transition.ts";
 import { GhostSteps } from "./components/ds/ghost-steps.tsx";
@@ -104,6 +118,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   const sampleAbortControllerRef = useRef<AbortController | null>(null);
   const playerFrameRef = useRef<HTMLDivElement>(null);
   const fullscreenDialogRef = useRef<HTMLDialogElement>(null);
+  const pendingReadRevisionRef = useRef(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<EmulatorError | null>(null);
   const [loadProgress, setLoadProgress] = useState<ProgressViewModel | null>(null);
@@ -111,6 +126,12 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   const [sampleError, setSampleError] = useState("");
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleTutorialActive, setSampleTutorialActive] = useState(false);
+  const [pendingSave, setPendingSave] = useState<PendingTestSave>();
+  const [saveLoadResult, setSaveLoadResult] = useState<{
+    gameName: string;
+    revision: number;
+    status: "loaded" | "failed";
+  }>();
   const [fullscreen, setFullscreen] = useState(false);
   const [pseudoFullscreen, setPseudoFullscreen] = useState(false);
   const currentGame = entries.find((entry) => entry.id === currentGameId) || null;
@@ -135,6 +156,27 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
     // this session.
     bumpOfflineWarmupPriority({ kind: "emulatorjs" });
   }, []);
+
+  useEffect(() => {
+    if (!active) return;
+    let current = true;
+    const revision = pendingReadRevisionRef.current;
+    void readPendingTestSave()
+      .then((save) => {
+        if (current && revision === pendingReadRevisionRef.current) setPendingSave(save);
+      })
+      .catch((reason) => {
+        if (current && revision === pendingReadRevisionRef.current) {
+          setError({
+            detail: errorDetail(reason, "The saved upload could not be read."),
+            summary: "Could not load the saved upload.",
+          });
+        }
+      });
+    return () => {
+      current = false;
+    };
+  }, [active]);
 
   useLayoutEffect(() => {
     configureEmulatorSaveStorage(settings.emulatorSaveStorageEnabled !== false);
@@ -188,19 +230,49 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   // handed after reading it, so a URL stored on the entry would be dead by the
   // second play.
   const currentBlob = currentGame?.blob || null;
-  const [gameUrl, setGameUrl] = useState<string | null>(null);
+  const savePreviewRevision = currentGame?.savePreviewRevision ?? 0;
+  useEffect(() => {
+    if (!currentIdentity) return undefined;
+    if (!savePreviewRevision) return undefined;
+    const handleSaveLoad = (event: MessageEvent<unknown>) => {
+      if (event.source !== iframeRef.current?.contentWindow) return;
+      if (!event.data || typeof event.data !== "object") return;
+      const message = event.data as { source?: unknown; gameId?: unknown; kind?: unknown };
+      if (message.source !== "rom-weaver-emulator" || message.gameId !== currentIdentity.gameName) return;
+      if (message.kind !== "sram-loaded" && message.kind !== "sram-load-failed") return;
+      setSaveLoadResult({
+        gameName: currentIdentity.gameName,
+        revision: savePreviewRevision,
+        status: message.kind === "sram-loaded" ? "loaded" : "failed",
+      });
+    };
+    window.addEventListener("message", handleSaveLoad);
+    return () => window.removeEventListener("message", handleSaveLoad);
+  }, [currentIdentity, savePreviewRevision]);
+  const saveLoadStatus =
+    saveLoadResult?.gameName === currentIdentity?.gameName && saveLoadResult?.revision === savePreviewRevision
+      ? saveLoadResult.status
+      : undefined;
+  let saveLoadMessage = "Waiting for EmulatorJS to load the save bytes.";
+  if (saveLoadStatus === "loaded") {
+    saveLoadMessage = "Save loaded and game restarted. Check the game's Continue menu.";
+  } else if (saveLoadStatus === "failed") {
+    saveLoadMessage = "EmulatorJS could not load the save bytes. Try a save made by this game.";
+  }
+  const [gameUrlState, setGameUrlState] = useState<{ url: string; revision: number } | null>(null);
   useEffect(() => {
     if (!currentBlob || typeof URL === "undefined" || typeof URL.createObjectURL !== "function") {
-      setGameUrl(null);
+      setGameUrlState(null);
       return undefined;
     }
     const url = URL.createObjectURL(currentBlob);
-    setGameUrl(url);
+    setGameUrlState({ revision: savePreviewRevision, url });
     return () => {
-      setGameUrl(null);
+      setGameUrlState(null);
       URL.revokeObjectURL(url);
     };
-  }, [currentBlob]);
+  }, [currentBlob, savePreviewRevision]);
+  const gameUrl = gameUrlState?.revision === savePreviewRevision ? gameUrlState.url : null;
 
   useEffect(() => {
     if (!currentGame || currentGame.blob || !currentGame.artifact) return;
@@ -332,8 +404,28 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
           sizeBytes: loaded.blob.size,
           source: "local" as const,
         };
+        const staged = await readPendingTestSave();
+        pendingReadRevisionRef.current += 1;
+        setPendingSave(staged);
+        const stagedMatches =
+          !!staged &&
+          getEmulatorJsCore(staged.platform) === core &&
+          (!staged.romSha1 || staged.romSha1.toLowerCase() === loaded.checksum.toLowerCase());
+        if (stagedMatches) await clearPendingTestSave();
         if (prepareAudio) prepareEmulatorAudioContext(createEmulatorGameIdentity(entry).gameName);
         addEntry(entry);
+        if (staged && stagedMatches) {
+          setEmulatorSavePreview(loaded.checksum, staged.bytes);
+          restartCurrentGameWithSave(entry.id);
+          setPendingSave(undefined);
+        } else if (staged) {
+          setError({
+            detail: staged.romSha1
+              ? "Choose the ROM linked to the uploaded save."
+              : "Choose a ROM for the save's game system.",
+            summary: `${loaded.fileName} does not match ${staged.fileName}.`,
+          });
+        }
         return true;
       } catch (reason) {
         if (abortController.signal.aborted || loadAbortControllerRef.current !== abortController) return false;
@@ -468,6 +560,19 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
     setLoadProgress(null);
   };
 
+  const discardPendingSave = async () => {
+    try {
+      await clearPendingTestSave();
+      pendingReadRevisionRef.current += 1;
+      setPendingSave(undefined);
+    } catch (reason) {
+      setError({
+        detail: errorDetail(reason, "The saved upload could not be removed."),
+        summary: "Could not remove the saved upload.",
+      });
+    }
+  };
+
   return (
     <div className="emulator-test-view">
       {sampleTutorialActive ? (
@@ -482,28 +587,53 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
         accept={getFileInputAcceptAttributes().unifiedRom}
         addLabel="Choose another ROM"
         afterDropZone={
-          loadProgress ? (
-            <div aria-live="polite" className="emulator-load-progress">
-              <FileProgress
-                indeterminate={loadProgress.indeterminate}
-                label={loadProgress.label || "Preparing the ROM..."}
-                percent={loadProgress.visualPercent}
-                value={progressValue(loadProgress)}
+          <>
+            {pendingSave ? (
+              <div className="drop-tray emulator-pending-save">
+                <div className="drop-tray-row">
+                  <span className="drop-tray-label">
+                    <Save aria-hidden="true" /> Save to load
+                  </span>
+                  <div className="drop-tray-control">
+                    <span className="emulator-pending-file">
+                      <span className="mono">{pendingSave.fileName}</span>
+                      <button
+                        aria-label="Discard save"
+                        className="emulator-pending-discard"
+                        onClick={() => void discardPendingSave()}
+                        type="button"
+                      >
+                        <X aria-hidden="true" />
+                      </button>
+                    </span>
+                    <p className="save-status">Add the ROM of the game that made this save.</p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            {loadProgress ? (
+              <div aria-live="polite" className="emulator-load-progress">
+                <FileProgress
+                  indeterminate={loadProgress.indeterminate}
+                  label={loadProgress.label || "Preparing the ROM..."}
+                  percent={loadProgress.visualPercent}
+                  value={progressValue(loadProgress)}
+                />
+              </div>
+            ) : workflowEmpty ? (
+              <SampleTutorialStart
+                downloadHref={resolveAssetUrl(assetBaseUrl, TEST_SAMPLE_ASSET)}
+                downloadLabel="Download the sample ROM"
+                downloadName={TEST_SAMPLE_ASSET}
+                error={sampleError}
+                guideHref={resolveGuidedSampleHref(assetBaseUrl, "test")}
+                label="Start guided Test"
+                loading={sampleLoading}
+                onStart={startTestSample}
+                startAction="play"
               />
-            </div>
-          ) : workflowEmpty ? (
-            <SampleTutorialStart
-              downloadHref={resolveAssetUrl(assetBaseUrl, TEST_SAMPLE_ASSET)}
-              downloadLabel="Download the sample ROM"
-              downloadName={TEST_SAMPLE_ASSET}
-              error={sampleError}
-              guideHref={resolveGuidedSampleHref(assetBaseUrl, "test")}
-              label="Start guided Test"
-              loading={sampleLoading}
-              onStart={startTestSample}
-              startAction="play"
-            />
-          ) : undefined
+            ) : null}
+          </>
         }
         beforeDropZone={
           error ? (
@@ -580,6 +710,18 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                   </div>
                 </div>
               ) : null}
+              {currentGame?.savePreviewRevision ? (
+                <p
+                  className={join(
+                    "save-status emulator-save-status",
+                    saveLoadStatus === "loaded" && "is-ready",
+                    saveLoadStatus === "failed" && "is-failed",
+                  )}
+                  role="status"
+                >
+                  {saveLoadMessage}
+                </p>
+              ) : null}
               {currentGame && currentCore && gameUrl && currentIdentity && !webglBlocked ? (
                 <dialog className="emulator-fullscreen-dialog" ref={fullscreenDialogRef}>
                   <div
@@ -592,7 +734,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                     <iframe
                       allow="autoplay; fullscreen; gamepad"
                       allowFullScreen
-                      key={`${currentGame.id}:${gameUrl}`}
+                      key={`${currentGame.id}:${gameUrl}:${currentGame.savePreviewRevision ?? 0}`}
                       ref={iframeRef}
                       referrerPolicy="no-referrer"
                       srcDoc={createEmulatorDocument(dataUrl, gameUrl, currentIdentity.gameName, currentCore, {

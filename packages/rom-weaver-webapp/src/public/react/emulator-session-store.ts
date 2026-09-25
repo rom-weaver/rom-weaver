@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { RetainedRuntimeOutput } from "../../storage/vfs/types.ts";
+import { clearEmulatorSavePreview } from "../../storage/browser/emulator-saves.ts";
 import { createStore } from "../../webapp/vanilla-store.ts";
 import { loadEmulatorRom } from "./components/emulator-load-rom.ts";
 
@@ -14,6 +15,7 @@ type EmulatorSessionEntry = {
   artifact?: Pick<RetainedRuntimeOutput, "dispose" | "getBlob">;
   source: EmulatorSessionSource;
   sizeBytes: number;
+  savePreviewRevision?: number;
   /**
    * The playable bytes. The player mints a fresh object URL per mount from
    * this blob: EmulatorJS revokes the game URL it is given once it has read
@@ -34,7 +36,16 @@ const store = createStore<EmulatorSessionState>(() => ({
 }));
 
 const disposeEntryResources = (entry: EmulatorSessionEntry) => {
+  if (entry.checksum) clearEmulatorSavePreview(entry.checksum);
   void Promise.resolve(entry.artifact?.dispose()).catch(() => undefined);
+};
+
+const restartCurrentGameWithSave = (id: string) => {
+  store.setState((state) => ({
+    entries: state.entries.map((entry) =>
+      entry.id === id ? { ...entry, savePreviewRevision: (entry.savePreviewRevision ?? 0) + 1 } : entry,
+    ),
+  }));
 };
 
 const addEntry = (entry: EmulatorSessionEntry) => {
@@ -115,6 +126,7 @@ export {
   getApplyEntry,
   getEmulatorSessionState,
   prepareEntry,
+  restartCurrentGameWithSave,
   setCurrentGame,
   useEmulatorSession,
 };

@@ -461,6 +461,16 @@ PPF3 format. Without it there is nothing to reverse from."
 pub enum SaveCommands {
     #[cfg_attr(
         not(target_arch = "wasm32"),
+        command(about = "List supported games and fresh save generation support")
+    )]
+    ListGames(SaveListGamesCommand),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(about = "Create a fresh save or a copy of an existing save template")
+    )]
+    Create(SaveCreateCommand),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
         command(about = "Identify a supported game save without changing it")
     )]
     Identify(SaveIdentifyCommand),
@@ -1689,9 +1699,9 @@ pub use command_args::{
     IdentifyDatabaseImportCommand, IdentifyDatabaseInstallCommand, IdentifyDatabaseSystemCommand,
     IdentifyDatabaseUpdateCommand, IdentifySubcommands, IngestCommand, PATCH_APPLY_ABOUT,
     PATCH_APPLY_AFTER_HELP, PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand,
-    PatchValidateCommand, PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand,
+    PatchValidateCommand, PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, SaveCreateCommand,
     SaveExportSchemaCommand, SaveGetCommand, SaveIdentifyCommand, SaveInspectCommand,
-    SaveSetCommand, SetupCommand, TrimCommand,
+    SaveListGamesCommand, SaveSetCommand, SetupCommand, TrimCommand,
 };
 
 mod expect_tokens;

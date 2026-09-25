@@ -1010,6 +1010,7 @@ function WebappRoot({
                   "save-editor",
                   <SaveEditorRouteForm
                     onSessionChange={actions.onSaveEditorSessionChange}
+                    onSelectTab={handleSelectTab}
                     pageDrop={pageDropFor("save-editor")}
                   />,
                 )}

@@ -632,6 +632,7 @@
   padding: var(--sp-m);
 }
 .rw-app .identify-search--hero,
+.rw-app .drop-tray,
 .rw-app .identify-search--section {
   padding: var(--sp-m);
   margin-block-start: -1px;
@@ -648,9 +649,126 @@
   }
 }
 /* Apply's hero hands its bottom corners to the shared footer. */
-.rw-app .step.is-input:has(> .step-body > .identify-search--hero) .drop.hero {
+.rw-app .step.is-input:has(> .step-body > .identify-search--hero) .drop.hero,
+.rw-app .step.is-input:has(> .step-body > .drop-tray) .drop.hero {
   border-end-start-radius: 0;
   border-end-end-radius: 0;
+}
+/* The hero MUST reserve space for its attached tray, as it does for the checksum form. */
+.rw-app .step.is-input.is-empty:has(> .step-body > .drop-tray) {
+  --hero-extra-h: 120px;
+}
+/* The same attached footer, holding one or more labelled rows: the save
+   editor's emulator saves and new-save generator, or Test's staged save. */
+.rw-app .drop-tray {
+  display: grid;
+  padding: 0;
+}
+.rw-app .drop-tray-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-s) var(--sp-l);
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  padding: var(--sp-m);
+}
+.rw-app .drop-tray-row + .drop-tray-row {
+  border-block-start: 1px solid var(--seam-soft);
+}
+.rw-app .drop-tray-label {
+  display: inline-flex;
+  flex: 0 1 11rem;
+  gap: var(--sp-s);
+  align-items: center;
+  min-width: 0;
+  font-weight: 650;
+}
+.rw-app .drop-tray-label svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--ink-3);
+}
+.rw-app .drop-tray-control {
+  display: flex;
+  flex: 1 1 20rem;
+  flex-wrap: wrap;
+  gap: var(--sp-s);
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+.rw-app .drop-tray-control > .select {
+  flex: 1 1 12rem;
+  min-width: 0;
+  max-width: 24rem;
+}
+.rw-app .emulator-pending-file {
+  display: inline-flex;
+  flex: 0 1 auto;
+  gap: var(--sp-xs);
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  padding-block: 2px;
+  padding-inline: 10px 2px;
+  font-size: 0.82rem;
+  background: var(--well);
+  border: 1px solid var(--seam-soft);
+  border-radius: 999px;
+}
+.rw-app .emulator-pending-file .mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rw-app .emulator-pending-discard {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--ctrl-h);
+  height: var(--ctrl-h);
+  color: var(--ink-3);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+}
+.rw-app .emulator-pending-discard svg {
+  width: 14px;
+  height: 14px;
+}
+@media (hover: hover) {
+  .rw-app .emulator-pending-discard:hover {
+    color: var(--ink);
+    background: var(--plate-2);
+  }
+}
+.rw-app .emulator-pending-discard:active {
+  color: var(--ink);
+  background: var(--plate-2);
+}
+.rw-app .save-editor-records {
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.rw-app .drop-tray-note {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--ink-3);
+  text-align: end;
+}
+/* Narrow rows wrap their control under the label, so it starts at the label's edge. */
+@media (max-width: 720px) {
+  .rw-app .drop-tray-control {
+    justify-content: flex-start;
+  }
+  .rw-app .drop-tray-note {
+    text-align: start;
+  }
 }
 .rw-app .identify-search--compact {
   margin-block-start: -1px;

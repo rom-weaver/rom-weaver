@@ -167,17 +167,26 @@ const createEmulatorBridgeScript = (gameName: string, gameLabel: string) => `
           if (event.data.kind === "load-state") {
             emulator.gameManager.loadState(bytes);
           } else if (event.data.kind === "load-sram") {
-            const path = emulator.gameManager.getSaveFilePath();
-            const parts = path.split("/");
-            let current = "";
-            for (let index = 0; index < parts.length - 1; index += 1) {
-              if (!parts[index]) continue;
-              current += "/" + parts[index];
-              if (!emulator.gameManager.FS.analyzePath(current).exists) emulator.gameManager.FS.mkdir(current);
+            try {
+              const path = emulator.gameManager.getSaveFilePath();
+              if (!path) throw new Error("EmulatorJS did not provide a save file path.");
+              const parts = path.split("/");
+              let current = "";
+              for (let index = 0; index < parts.length - 1; index += 1) {
+                if (!parts[index]) continue;
+                current += "/" + parts[index];
+                if (!emulator.gameManager.FS.analyzePath(current).exists) emulator.gameManager.FS.mkdir(current);
+              }
+              if (emulator.gameManager.FS.analyzePath(path).exists) emulator.gameManager.FS.unlink(path);
+              emulator.gameManager.FS.writeFile(path, bytes);
+              emulator.gameManager.loadSaveFiles();
+              // EmulatorJS starts the core before it asks us for SRAM. The game MUST reset so its boot menu reads the imported save.
+              emulator.gameManager.restart();
+              request("sram-loaded");
+            } catch (error) {
+              console.error("Could not load SRAM into EmulatorJS", error);
+              request("sram-load-failed");
             }
-            if (emulator.gameManager.FS.analyzePath(path).exists) emulator.gameManager.FS.unlink(path);
-            emulator.gameManager.FS.writeFile(path, bytes);
-            emulator.gameManager.loadSaveFiles();
           }
         });
       })();`;

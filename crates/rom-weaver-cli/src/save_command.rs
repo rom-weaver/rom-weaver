@@ -13,12 +13,85 @@ const MAX_SAVE_INPUT_SIZE: u64 = 128 * 1024 * 1024;
 impl CliApp {
     pub(super) fn run_save(&self, command: SaveCommands) -> AppRunOutcome {
         match command {
+            SaveCommands::ListGames(_) => self.run_save_list_games(),
+            SaveCommands::Create(args) => self.run_save_create(args),
             SaveCommands::Identify(args) => self.run_save_identify(args),
             SaveCommands::Inspect(args) => self.run_save_inspect(args),
             SaveCommands::Get(args) => self.run_save_get(args),
             SaveCommands::Set(args) => self.run_save_set(args),
             SaveCommands::ExportSchema(args) => self.run_save_export_schema(args),
         }
+    }
+
+    fn run_save_list_games(&self) -> AppRunOutcome {
+        let registry = rom_weaver_core::SaveGameRegistry::default();
+        let games = registry.definitions();
+        let generation_games = registry
+            .generation_definitions()
+            .into_iter()
+            .map(|definition| definition.identity.id)
+            .collect::<Vec<_>>();
+        let label = games
+            .iter()
+            .map(|definition| {
+                let generation = if generation_games.contains(&definition.identity.id) {
+                    "fresh or template"
+                } else {
+                    "template"
+                };
+                format!(
+                    "{}: {} ({generation})",
+                    definition.identity.id, definition.identity.name
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        self.finish("save-list-games", save_report(OperationStatus::Succeeded, "list-games", label,
+            Some(json!({ SAVE_DETAILS_KEY: { "games": games, "generation_games": generation_games } }))))
+    }
+
+    fn run_save_create(&self, args: SaveCreateCommand) -> AppRunOutcome {
+        let command = "save-create";
+        if !args.dry_run && args.output.is_none() {
+            return self.finish(
+                command,
+                save_error_report(
+                    "validate",
+                    RomWeaverError::Validation(
+                        "save create requires --output unless --dry-run is set".to_string(),
+                    ),
+                ),
+            );
+        }
+        let input = if let Some(template) = &args.template {
+            match self.load_save_input(command, template, args.game.clone(), None) {
+                Ok(input) => input,
+                Err(report) => return self.finish(command, *report),
+            }
+        } else {
+            let Some(game) = &args.game else {
+                return self.finish(command, save_error_report("validate", RomWeaverError::Validation(
+                    "fresh save generation requires --game; use save list-games to list supported games".to_string())));
+            };
+            match rom_weaver_core::SaveGameRegistry::default().generate(game) {
+                Ok(input) => input,
+                Err(error) => return self.finish(command, save_error_report("generate", error)),
+            }
+        };
+        self.run_save_write(
+            command,
+            input,
+            SaveSetCommand {
+                input: args.template.unwrap_or_default(),
+                assignments: args.assignments,
+                output: args.output,
+                game: args.game,
+                rom_sha1: None,
+                dry_run: args.dry_run,
+                force: args.force,
+            },
+            true,
+        )
     }
 
     fn run_save_identify(&self, args: SaveIdentifyCommand) -> AppRunOutcome {
@@ -126,6 +199,8 @@ impl CliApp {
                     Some(json!({ SAVE_DETAILS_KEY: {
                         "recognition": recognition,
                         "document": document,
+                        "raw_offset": rom_weaver_core::save::unwrap_save_container(&input.bytes)
+                            .map_or(0, |(container, _)| container.inner_offset()),
                     }})),
                 ),
             ),
@@ -187,10 +262,25 @@ impl CliApp {
 
     pub(super) fn run_save_set(&self, args: SaveSetCommand) -> AppRunOutcome {
         let command = "save-set";
-        let input = match self.load_save_input(command, &args.input, args.game, args.rom_sha1) {
+        let input = match self.load_save_input(
+            command,
+            &args.input,
+            args.game.clone(),
+            args.rom_sha1.clone(),
+        ) {
             Ok(input) => input,
             Err(report) => return self.finish(command, *report),
         };
+        self.run_save_write(command, input, args, false)
+    }
+
+    fn run_save_write(
+        &self,
+        command: &str,
+        input: SaveDetectionInput,
+        args: SaveSetCommand,
+        create: bool,
+    ) -> AppRunOutcome {
         let (recognition, identity) = match detect_for_edit(&input) {
             Ok(result) => result,
             Err(failure) => {
@@ -220,7 +310,10 @@ impl CliApp {
         };
 
         let mut output = None;
-        if !args.dry_run && result.preview.changed {
+        if !args.dry_run && (result.preview.changed || create) {
+            if create && !result.preview.changed {
+                result.bytes = Some(input.bytes.clone());
+            }
             let Some(bytes) = result.bytes.take() else {
                 return self.finish(
                     command,
@@ -237,7 +330,9 @@ impl CliApp {
                 Ok(path) => path,
                 Err(error) => return self.finish(command, save_error_report("output", error)),
             };
-            if paths_refer_to_same_file(&args.input, &output_path) {
+            if !args.input.as_os_str().is_empty()
+                && paths_refer_to_same_file(&args.input, &output_path)
+            {
                 return self.finish(
                     command,
                     save_error_report(
@@ -258,9 +353,17 @@ impl CliApp {
         let report_result = result;
         let mut report = save_report(
             OperationStatus::Succeeded,
-            if args.dry_run { "preview" } else { "set" },
+            if args.dry_run {
+                "preview"
+            } else if create {
+                "create"
+            } else {
+                "set"
+            },
             if args.dry_run {
                 "Save edit preview is valid".to_string()
+            } else if create {
+                "Created save is valid".to_string()
             } else if report_result.preview.changed {
                 "Edited save is valid".to_string()
             } else {
@@ -653,6 +756,13 @@ fn paths_refer_to_same_file(input: &Path, output: &Path) -> bool {
 
 #[cfg(target_arch = "wasm32")]
 fn write_save_output(path: &Path, bytes: &[u8], force: bool) -> Result<()> {
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent).map_err(|error| {
+            RomWeaverError::io_path(rom_weaver_core::IoOp::CreateDir, parent, error)
+        })?;
+    }
     ensure_output_available(path, force)?;
     process_cancellation_token().check()?;
     let mut file = OpenOptions::new()

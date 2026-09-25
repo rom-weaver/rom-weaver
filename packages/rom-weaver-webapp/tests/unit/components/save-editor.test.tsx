@@ -3,17 +3,39 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SaveEditor } from "../../../src/webapp/components/save-editor.tsx";
 
-const { identifySave, inspectSave, previewSaveFields, setSaveFields, listEmulatorSaves, replaceEmulatorSaveSram } =
-  vi.hoisted(() => ({
-    identifySave: vi.fn(),
-    inspectSave: vi.fn(),
-    previewSaveFields: vi.fn(),
-    setSaveFields: vi.fn(),
-    listEmulatorSaves: vi.fn(),
-    replaceEmulatorSaveSram: vi.fn(),
-  }));
+const {
+  createSave,
+  listSaveGames,
+  identifySave,
+  inspectSave,
+  previewSaveFields,
+  setSaveFields,
+  listEmulatorSaves,
+  replaceEmulatorSaveSram,
+  setEmulatorSavePreview,
+  clearPendingTestSave,
+  stagePendingTestSave,
+  restartCurrentGameWithSave,
+  useEmulatorSession,
+} = vi.hoisted(() => ({
+  identifySave: vi.fn(),
+  createSave: vi.fn(),
+  listSaveGames: vi.fn(),
+  inspectSave: vi.fn(),
+  previewSaveFields: vi.fn(),
+  setSaveFields: vi.fn(),
+  listEmulatorSaves: vi.fn(),
+  replaceEmulatorSaveSram: vi.fn(),
+  setEmulatorSavePreview: vi.fn(),
+  clearPendingTestSave: vi.fn(),
+  stagePendingTestSave: vi.fn(),
+  restartCurrentGameWithSave: vi.fn(),
+  useEmulatorSession: vi.fn(),
+}));
 
 vi.mock("../../../src/platform/browser/browser-save-api.ts", () => ({
+  createSave,
+  listSaveGames,
   identifySave,
   inspectSave,
   previewSaveFields,
@@ -22,6 +44,13 @@ vi.mock("../../../src/platform/browser/browser-save-api.ts", () => ({
 vi.mock("../../../src/storage/browser/emulator-saves.ts", () => ({
   listEmulatorSaves,
   replaceEmulatorSaveSram,
+  setEmulatorSavePreview,
+  clearPendingTestSave,
+  stagePendingTestSave,
+}));
+vi.mock("../../../src/public/react/emulator-session-store.ts", () => ({
+  restartCurrentGameWithSave,
+  useEmulatorSession,
 }));
 
 afterEach(cleanup);
@@ -103,7 +132,18 @@ const genericFields = [
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useEmulatorSession.mockReturnValue({ currentGameId: null, entries: [] });
+  listSaveGames.mockResolvedValue({
+    games: [
+      { identity: { id: "zelda-a-link-to-the-past", name: "Zelda" } },
+      { identity: { id: "pokemon-ruby", name: "Ruby" } },
+    ],
+    generationGames: ["zelda-a-link-to-the-past"],
+  });
+  createSave.mockResolvedValue(new File(["fresh save"], "zelda.sav"));
   listEmulatorSaves.mockResolvedValue([]);
+  clearPendingTestSave.mockResolvedValue(undefined);
+  stagePendingTestSave.mockResolvedValue(undefined);
   identifySave.mockResolvedValue({
     recognition: {
       candidates: [{ identity: { family: "gen3", id: "pokemon-ruby", name: "Ruby" } }],
@@ -133,6 +173,113 @@ const chooseFile = async (name = "game.sav") => {
 };
 
 describe("SaveEditor", () => {
+  it("tests the raw bytes of a wrapped save in the ROM on Test", async () => {
+    const checksum = "a".repeat(40);
+    useEmulatorSession.mockReturnValue({
+      currentGameId: "rom-1",
+      entries: [{ id: "rom-1", checksum, core: "gba", fileName: "Ruby.gba" }],
+    });
+    inspectSave.mockResolvedValueOnce({
+      ...documentResult([textField()]),
+      document: { ...documentResult([textField()]).document, save_size: 4 },
+      rawOffset: 2,
+    });
+    const onSelectTab = vi.fn();
+    render(<SaveEditor onSessionChange={vi.fn()} onSelectTab={onSelectTab} />);
+    const input = document.querySelector("input[type=file]");
+    if (!(input instanceof HTMLInputElement)) throw new Error("save input missing");
+    fireEvent.change(input, {
+      target: { files: [new File([new Uint8Array([9, 9, 1, 2, 3, 4])], "save.sps")] },
+    });
+    await waitFor(() =>
+      expect((screen.getByRole("button", { name: "Test save in ROM" }) as HTMLButtonElement).disabled).toBe(false),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Test save in ROM" }));
+    await waitFor(() => expect(clearPendingTestSave).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(setEmulatorSavePreview).toHaveBeenCalledWith(checksum, new Uint8Array([1, 2, 3, 4])));
+    expect(restartCurrentGameWithSave).toHaveBeenCalledWith("rom-1");
+    expect(onSelectTab).toHaveBeenCalledWith("test");
+  });
+  it("keeps a save ready while the user chooses a ROM on Test", async () => {
+    inspectSave.mockResolvedValueOnce({
+      document: { ...documentResult([textField()]).document, save_size: 4 },
+    });
+    const onSelectTab = vi.fn();
+    render(<SaveEditor onSessionChange={vi.fn()} onSelectTab={onSelectTab} />);
+    await chooseFile();
+    fireEvent.click(screen.getByRole("button", { name: "Choose ROM and test" }));
+    await waitFor(() =>
+      expect(stagePendingTestSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: new Uint8Array([115, 97, 118, 101]),
+          fileName: "game.sav",
+          gameId: "pokemon-ruby",
+          platform: "gba",
+        }),
+      ),
+    );
+    expect(onSelectTab).toHaveBeenCalledWith("test");
+  });
+  it("generates supported fresh saves and downloads unchanged defaults", async () => {
+    inspectSave.mockResolvedValueOnce({
+      document: {
+        ...documentResult([textField(), moneyField()]).document,
+        identity: { id: "zelda-a-link-to-the-past", name: "Zelda", family: "zelda" },
+      },
+    });
+    render(<SaveEditor onSessionChange={vi.fn()} />);
+    expect(listSaveGames).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Choose a game" }));
+    await waitFor(() => expect(screen.getByLabelText("Game for the new save")).toBeTruthy());
+    expect(screen.queryByRole("option", { name: "Ruby" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Create save" }));
+    await waitFor(() => expect(screen.getByLabelText("Name")).toBeTruthy());
+    expect(createSave).toHaveBeenCalledWith(expect.objectContaining({ game: "zelda-a-link-to-the-past" }));
+    fireEvent.click(screen.getByRole("button", { name: "Download edited copy" }));
+    await waitFor(() => expect(setSaveFields).toHaveBeenCalled());
+    expect(setSaveFields).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: true,
+        assignments: [],
+        game: "zelda-a-link-to-the-past",
+      }),
+    );
+  });
+
+  it("shows only editable properties for a fresh save", async () => {
+    inspectSave.mockResolvedValueOnce({
+      document: {
+        ...documentResult(genericFields).document,
+        identity: { id: "zelda-a-link-to-the-past", name: "Zelda", family: "zelda" },
+      },
+    });
+    render(<SaveEditor onSessionChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Choose a game" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Create save" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Create save" }));
+    await waitFor(() => expect(screen.getByLabelText("Name")).toBeTruthy());
+    expect(screen.queryByLabelText("Badge 1")).toBeNull();
+    expect(screen.queryByRole("group", { name: "progress" })).toBeNull();
+  });
+
+  it("shows generation errors without hiding the generator", async () => {
+    createSave.mockRejectedValueOnce(new Error("Generation failed"));
+    render(<SaveEditor onSessionChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Choose a game" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Create save" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Create save" }));
+    await waitFor(() => expect(screen.getByText("Generation failed")).toBeTruthy());
+    expect(screen.getByRole("button", { name: "Create save" })).toBeTruthy();
+  });
+  it("clears a game-list error when the retry succeeds", async () => {
+    listSaveGames.mockRejectedValueOnce(new Error("List failed"));
+    render(<SaveEditor onSessionChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Choose a game" }));
+    await waitFor(() => expect(screen.getByText("List failed")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Choose a game" }));
+    await waitFor(() => expect(screen.getByLabelText("Game for the new save")).toBeTruthy());
+    expect(screen.queryByText("List failed")).toBeNull();
+  });
   it("renders generated text and integer controls", async () => {
     render(<SaveEditor onSessionChange={vi.fn()} />);
     await chooseFile();
@@ -157,6 +304,48 @@ describe("SaveEditor", () => {
     fireEvent.change(screen.getByLabelText("Money"), { target: { value: "1000000" } });
     expect(screen.getByRole("alert").textContent).toContain("allowed range");
     expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("5000");
+  });
+
+  it("filters properties without losing hidden edits", async () => {
+    inspectSave.mockResolvedValueOnce(documentResult(genericFields));
+    render(<SaveEditor onSessionChange={vi.fn()} />);
+    await chooseFile();
+    fireEvent.change(screen.getByLabelText("Money"), { target: { value: "12345" } });
+    const search = screen.getByRole("searchbox", { name: "Find a property" });
+    fireEvent.change(search, { target: { value: "  NAME " } });
+    expect(screen.queryByLabelText("Money")).toBeNull();
+    expect(screen.getByLabelText("Name")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
+    await waitFor(() => expect(previewSaveFields).toHaveBeenCalled());
+    expect(previewSaveFields.mock.calls[0][0].assignments).toEqual(["trainer.money=12345"]);
+    fireEvent.change(search, { target: { value: "missing property" } });
+    expect(screen.getByText("No properties match this search.")).toBeTruthy();
+    fireEvent.change(search, { target: { value: "" } });
+    expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("12345");
+  });
+
+  it("keeps nested properties in their group and real file slots in tabs", async () => {
+    inspectSave.mockResolvedValueOnce(
+      documentResult([textField({ id: "trainer.name" }), moneyField({ id: "options.audio.volume" })]),
+    );
+    const first = render(<SaveEditor onSessionChange={vi.fn()} />);
+    await chooseFile();
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.getByRole("group", { name: "options" })).toBeTruthy();
+    first.unmount();
+
+    inspectSave.mockResolvedValueOnce(
+      documentResult([
+        textField({ id: "slot_1.player.name" }),
+        moneyField({ id: "slot_1.resources.money" }),
+        moneyField({ id: "slot_2.resources.money", value: { u32: 42 } }),
+      ]),
+    );
+    render(<SaveEditor onSessionChange={vi.fn()} />);
+    await chooseFile();
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "money" } });
+    fireEvent.click(screen.getByRole("tab", { name: "File 2" }));
+    expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("42");
   });
 
   it("shows pending changes, supports one-field reset, all reset, and dry-run preview", async () => {

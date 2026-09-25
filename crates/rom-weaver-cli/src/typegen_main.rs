@@ -18,9 +18,10 @@ use rom_weaver_app::{
     PatchCommands, PatchCreateCommand, PatchDescriptor, PatchInputBasis, PatchInputMatch,
     PatchInputVerdict, PatchN64ByteOrderMode, PatchPlanVerdict, PatchValidateCommand,
     PatchValidationPlan, PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, RomWeaverBundle,
-    RomWeaverRunOutputOptions, RomWeaverRunRequest, SaveCommands, SaveExportSchemaCommand,
-    SaveGetCommand, SaveIdentifyCommand, SaveInspectCommand, SaveSetCommand, ToolsCommands,
-    TrimCommand, compression_metadata, patch_create_format_policy_metadata,
+    RomWeaverRunOutputOptions, RomWeaverRunRequest, SaveCommands, SaveCreateCommand,
+    SaveExportSchemaCommand, SaveGetCommand, SaveIdentifyCommand, SaveInspectCommand,
+    SaveListGamesCommand, SaveSetCommand, ToolsCommands, TrimCommand, compression_metadata,
+    patch_create_format_policy_metadata,
 };
 use rom_weaver_containers::{
     ArchiveExtensionAlias, ArchiveFormatMetadata, ContainerDefaultOutputMetadata,
@@ -273,6 +274,8 @@ fn render_types() -> String {
         export_decl::<SaveChangePreview>(&config),
         export_decl::<SaveEditResult>(&config),
         export_decl::<SaveIdentifyCommand>(&config),
+        export_decl::<SaveCreateCommand>(&config),
+        export_decl::<SaveListGamesCommand>(&config),
         export_decl::<SaveInspectCommand>(&config),
         export_decl::<SaveGetCommand>(&config),
         export_decl::<SaveSetCommand>(&config),

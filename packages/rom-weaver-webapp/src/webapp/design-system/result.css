@@ -133,6 +133,11 @@
   overflow: clip;
   background: var(--well);
 }
+.rw-app .emulator-save-status {
+  display: flex;
+  padding: var(--sp-s) var(--sp-m);
+  border-block-end: 1px solid var(--seam-soft);
+}
 .rw-app .emulator-player-actions {
   display: flex;
   flex: 0 0 auto;

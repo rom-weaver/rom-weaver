@@ -1,5 +1,6 @@
 mod container;
 pub mod formats;
+mod pokemon_gen1;
 mod pokemon_gen2;
 mod pokemon_gen3;
 mod pokemon_gen4;
@@ -18,6 +19,7 @@ pub use container::{SaveContainer, SaveContainerKind, unwrap_save_container};
 pub use formats::{
     SaveFormatCandidate, SaveFormatDefinition, all_save_formats, candidate_save_formats,
 };
+pub use pokemon_gen1::PokemonGen1Handler;
 pub use pokemon_gen2::PokemonGen2Handler;
 pub use pokemon_gen3::PokemonGen3Handler;
 pub use pokemon_gen4::PokemonGen4Handler;
@@ -277,6 +279,15 @@ pub struct SaveDetectionInput {
 
 pub trait SaveGameHandler: Send + Sync {
     fn definitions(&self) -> Vec<SaveGameDefinition>;
+    fn supports_generation(&self, _game: &SaveGameIdentity) -> bool {
+        false
+    }
+    fn generate(&self, _game: &SaveGameIdentity) -> Result<Vec<u8>> {
+        Err(validation(
+            "save_generation_unsupported",
+            "fresh save generation is unsupported for this game; use an existing save as a template",
+        ))
+    }
     fn recognize(&self, input: &SaveDetectionInput) -> SaveRecognition;
     fn parse(&self, input: &SaveDetectionInput, game: &SaveGameIdentity) -> Result<SaveDocument>;
     fn apply(
@@ -300,6 +311,7 @@ impl Default for SaveGameRegistry {
                 Box::new(PokemonGen3Handler),
                 Box::new(PokemonGen4Handler),
                 Box::new(ZeldaAlttpHandler),
+                Box::new(PokemonGen1Handler),
             ],
         }
     }
@@ -320,6 +332,56 @@ impl SaveGameRegistry {
             .iter()
             .flat_map(|handler| handler.definitions())
             .collect()
+    }
+
+    pub fn generation_definitions(&self) -> Vec<SaveGameDefinition> {
+        self.handlers
+            .iter()
+            .flat_map(|handler| {
+                handler
+                    .definitions()
+                    .into_iter()
+                    .filter(|definition| handler.supports_generation(&definition.identity))
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
+
+    pub fn generate(&self, game_id: &str) -> Result<SaveDetectionInput> {
+        for handler in &self.handlers {
+            if let Some(definition) = handler
+                .definitions()
+                .into_iter()
+                .find(|definition| definition.identity.id == game_id)
+            {
+                if !handler.supports_generation(&definition.identity) {
+                    return Err(validation(
+                        "save_generation_unsupported",
+                        "fresh save generation is unsupported for this game; use an existing save as a template",
+                    ));
+                }
+                let input = SaveDetectionInput {
+                    bytes: handler.generate(&definition.identity)?,
+                    selected_game: Some(game_id.to_string()),
+                    rom_sha1: None,
+                };
+                let document = handler.parse(&input, &definition.identity)?;
+                if !matches!(
+                    document.integrity.state,
+                    SaveIntegrityState::Valid | SaveIntegrityState::ValidWithWarnings
+                ) {
+                    return Err(validation(
+                        "save_generation_invalid",
+                        "the generated save failed its integrity checks",
+                    ));
+                }
+                return Ok(input);
+            }
+        }
+        Err(validation(
+            "save_game_unsupported",
+            "the selected save game is unsupported",
+        ))
     }
 
     pub fn detect(&self, input: &SaveDetectionInput) -> SaveRecognition {

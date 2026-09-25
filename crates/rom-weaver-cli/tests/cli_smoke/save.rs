@@ -74,6 +74,23 @@ fn alttp_fixture() -> Vec<u8> {
     bytes
 }
 
+fn pokemon_gen1_fixture() -> Vec<u8> {
+    let mut bytes = vec![0u8; 0x8000];
+    bytes[0x2598..0x259c].copy_from_slice(&[0x80, 0x81, 0x82, 0x50]);
+    bytes[0x25f6..0x25fa].copy_from_slice(&[0x86, 0x80, 0x93, 0x50]);
+    bytes[0x25f3..0x25f6].copy_from_slice(&[0x01, 0x23, 0x45]);
+    bytes[0x2850..0x2852].copy_from_slice(&[0x06, 0x78]);
+    bytes[0x2601] = 3;
+    bytes[0x25c9] = 0;
+    bytes[0x25ca] = 0xff;
+    bytes[0x7000] = 0xa5;
+    let checksum = bytes[0x2598..0x3523]
+        .iter()
+        .fold(0u8, |sum, byte| sum.wrapping_add(*byte));
+    bytes[0x3523] = !checksum;
+    bytes
+}
+
 #[test]
 fn save_identify_rejects_oversized_input_before_reading_it() {
     let temp = setup_temp_dir();
@@ -458,6 +475,243 @@ fn save_set_rejects_bad_values_and_source_collisions() {
 }
 
 #[test]
+fn save_gen1_identify_and_set_preserve_unknown_bytes_and_checksum() {
+    let temp = setup_temp_dir();
+    let source = temp.child("red.sav");
+    let output = temp.child("red-edited.sav");
+    let original = pokemon_gen1_fixture();
+    fs::write(source.path(), &original).unwrap();
+
+    let identify = run_single_json_event(
+        &[
+            "save",
+            "identify",
+            source.path().to_str().unwrap(),
+            "--game",
+            "pokemon-red",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(
+        identify["details"]["save_editor"]["document"]["identity"]["id"],
+        "pokemon-red"
+    );
+
+    let set = run_single_json_event(
+        &[
+            "save",
+            "set",
+            source.path().to_str().unwrap(),
+            "trainer.money=999999",
+            "progress.badge_8=true",
+            "--game",
+            "pokemon-red",
+            "--output",
+            output.path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(set["status"], "succeeded");
+    let edited = fs::read(output.path()).unwrap();
+    assert_eq!(edited.len(), 0x8000);
+    assert_eq!(edited[0x7000], 0xa5);
+    let checksum = edited[0x2598..0x3523]
+        .iter()
+        .fold(0u8, |sum, byte| sum.wrapping_add(*byte));
+    assert_eq!(edited[0x3523], !checksum);
+
+    let get = run_single_json_event(
+        &[
+            "save",
+            "get",
+            output.path().to_str().unwrap(),
+            "trainer.money",
+            "--game",
+            "pokemon-red",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(get["label"], "999999");
+}
+
+#[test]
+fn save_create_generates_zelda_and_requires_a_pokemon_template() {
+    let temp = setup_temp_dir();
+    let zelda = temp.child("zelda.srm");
+    let created = run_single_json_event(
+        &[
+            "save",
+            "create",
+            "--game",
+            "zelda-a-link-to-the-past",
+            "--output",
+            zelda.path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(created["command"], "save-create");
+    assert_eq!(created["status"], "succeeded");
+    assert_eq!(fs::metadata(zelda.path()).unwrap().len(), 0x2000);
+
+    let edited = temp.child("zelda-edited.srm");
+    let edit = run_single_json_event(
+        &[
+            "save",
+            "create",
+            "--game",
+            "zelda-a-link-to-the-past",
+            "slot_1.resources.rupees=999",
+            "--output",
+            edited.path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(edit["status"], "succeeded");
+    let get = run_single_json_event(
+        &[
+            "save",
+            "get",
+            edited.path().to_str().unwrap(),
+            "slot_1.resources.rupees",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(get["label"], "999");
+
+    let dry_run = temp.child("zelda-dry-run.srm");
+    let preview = run_single_json_event(
+        &[
+            "save",
+            "create",
+            "--game",
+            "zelda-a-link-to-the-past",
+            "slot_1.resources.rupees=999",
+            "--output",
+            dry_run.path().to_str().unwrap(),
+            "--dry-run",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(preview["stage"], "preview");
+    assert!(!dry_run.path().exists());
+
+    let red = temp.child("red-fresh.sav");
+    let rejected = run_single_json_event(
+        &[
+            "save",
+            "create",
+            "--game",
+            "pokemon-red",
+            "--output",
+            red.path().to_str().unwrap(),
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(rejected["status"], "failed");
+    assert_eq!(
+        rejected["details"]["save_editor"]["error"]["code"],
+        "save_generation_unsupported"
+    );
+    assert!(!red.path().exists());
+}
+
+#[test]
+fn save_create_templates_copy_edit_wrapped_data_and_reject_collisions() {
+    let temp = setup_temp_dir();
+    let source = temp.child("template.sav");
+    let original = pokemon_gen1_fixture();
+    fs::write(source.path(), &original).unwrap();
+    let copy = temp.child("copy.sav");
+    run_single_json_event(
+        &[
+            "save",
+            "create",
+            "--template",
+            source.path().to_str().unwrap(),
+            "--game",
+            "pokemon-red",
+            "--output",
+            copy.path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(fs::read(copy.path()).unwrap(), original);
+
+    let wrapped_source = temp.child("wrapped.sps");
+    let wrapped = shark_port_wrap(&emerald_fixture());
+    fs::write(wrapped_source.path(), &wrapped).unwrap();
+    let wrapped_output = temp.child("wrapped-edited.sps");
+    run_single_json_event(
+        &[
+            "save",
+            "create",
+            "--template",
+            wrapped_source.path().to_str().unwrap(),
+            "--game",
+            "pokemon-emerald",
+            "trainer.money=777",
+            "--output",
+            wrapped_output.path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    let wrapped_edited = fs::read(wrapped_output.path()).unwrap();
+    assert_eq!(
+        wrapped_edited[..wrapped.len() - 0x20_000 - 4],
+        wrapped[..wrapped.len() - 0x20_000 - 4]
+    );
+
+    let collision = run_single_json_event(
+        &[
+            "save",
+            "create",
+            "--template",
+            source.path().to_str().unwrap(),
+            "--game",
+            "pokemon-red",
+            "--output",
+            source.path().to_str().unwrap(),
+            "--force",
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(
+        collision["details"]["save_editor"]["error"]["code"],
+        "save_output_is_source"
+    );
+    assert_eq!(fs::read(source.path()).unwrap(), original);
+
+    let invalid = temp.child("invalid.sav");
+    fs::write(invalid.path(), vec![0xa5; 0x8000]).unwrap();
+    let invalid_result = run_single_json_event(
+        &[
+            "save",
+            "create",
+            "--template",
+            invalid.path().to_str().unwrap(),
+            "--game",
+            "pokemon-red",
+            "--output",
+            temp.child("invalid-output.sav").path().to_str().unwrap(),
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(invalid_result["status"], "failed");
+}
+
+#[test]
 fn unsupported_save_stays_untouched() {
     let temp = setup_temp_dir();
     let save = temp.child("unknown.sav");
@@ -602,6 +856,21 @@ fn save_set_round_trips_a_shark_port_wrapper() {
     assert_eq!(details["save_size"], 131_072);
     assert_eq!(details["file_size"], wrapped.len());
     assert_eq!(details["container"]["kind"], "shark_port_save");
+    let inspected = run_single_json_event(
+        &[
+            "save",
+            "inspect",
+            path.to_str().unwrap(),
+            "--game",
+            "pokemon-emerald",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(
+        inspected["details"]["save_editor"]["raw_offset"],
+        wrapped.len() - 131_072 - 4
+    );
     assert_eq!(
         details["potential_format"],
         "Flash 128 KiB (Game Boy Advance)"

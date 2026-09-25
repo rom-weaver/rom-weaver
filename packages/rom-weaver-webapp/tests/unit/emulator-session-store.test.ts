@@ -12,6 +12,7 @@ import {
   disposeEntry,
   getEmulatorSessionState,
   prepareEntry,
+  restartCurrentGameWithSave,
   setCurrentGame,
   type EmulatorSessionEntry,
 } from "../../src/public/react/emulator-session-store.ts";
@@ -85,6 +86,19 @@ describe("emulator session store", () => {
     expect(loadEmulatorRom).toHaveBeenCalledWith(retained, "game.nes");
     expect(await prepareEntry("game")).toBe(retained);
     expect(getBlob).toHaveBeenCalledOnce();
+  });
+
+  it("restarts the loaded ROM when a new test save is staged", () => {
+    const blob = new Blob(["rom"]);
+    addEntry(entry({ blob, checksum: "a".repeat(40) }));
+
+    restartCurrentGameWithSave("game");
+    restartCurrentGameWithSave("game");
+
+    expect(getEmulatorSessionState()).toMatchObject({
+      currentGameId: "game",
+      entries: [{ blob, savePreviewRevision: 2 }],
+    });
   });
 
   it("clears the current Apply entry", () => {

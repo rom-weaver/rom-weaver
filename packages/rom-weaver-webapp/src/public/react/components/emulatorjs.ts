@@ -1,4 +1,9 @@
 const PLATFORM_CORES: Readonly<Record<string, string>> = {
+  "game-boy": "gb",
+  "game-boy-color": "gb",
+  gba: "gba",
+  nds: "nds",
+  snes: "snes",
   "Atari 7800": "atari7800",
   "Atari Lynx": "lynx",
   "Nintendo 64": "n64",

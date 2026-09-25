@@ -48,6 +48,16 @@ const DOC_SOURCES = Object.freeze([
     label: "Edit Generation III saves",
     slug: "docs/edit-gen3-saves",
   }),
+  Object.freeze({
+    file: "how-to/create-game-saves-browser.md",
+    label: "Create game saves (browser)",
+    slug: "docs/create-game-saves-browser",
+  }),
+  Object.freeze({
+    file: "how-to/create-game-saves-cli.md",
+    label: "Create game saves (CLI)",
+    slug: "docs/create-game-saves-cli",
+  }),
   Object.freeze({ file: "how-to/install-cli.md", label: "Install the CLI", slug: "docs/install" }),
   Object.freeze({
     file: "how-to/verify-downloads.md",

@@ -7,8 +7,10 @@ import { createLogger } from "../../lib/logging.ts";
 
 const logger = createLogger("emulator-saves");
 const DATABASE_NAME = "rom-weaver-emulator-saves";
-const DATABASE_VERSION = 3;
+const DATABASE_VERSION = 4;
 const STORE_NAME = "games";
+const PENDING_TEST_SAVE_STORE_NAME = "pending-test-save";
+const PENDING_TEST_SAVE_KEY = "current";
 const MESSAGE_SOURCE = "rom-weaver-emulator";
 const SAVE_FORMAT = "rom-weaver-emulator-save";
 const SAVE_FORMAT_VERSION = 3;
@@ -16,6 +18,15 @@ const SUPPORTED_SAVE_FORMAT_VERSIONS: readonly number[] = [1, 2, SAVE_FORMAT_VER
 const MAX_IMPORT_BYTES = 128 * 1024 * 1024;
 const MAX_LABEL_LENGTH = 255;
 const IMPORTED_SAVE_LABEL = "Imported save";
+const savePreviews = new Map<string, Uint8Array>();
+
+const setEmulatorSavePreview = (gameId: string, bytes: Uint8Array) => {
+  savePreviews.set(gameId, new Uint8Array(bytes));
+};
+
+const clearEmulatorSavePreview = (gameId: string) => {
+  savePreviews.delete(gameId);
+};
 
 /**
  * `gameId` and `gameName` hold the ROM SHA-1. `label` is display metadata only.
@@ -42,6 +53,15 @@ type EmulatorSavePartImport = {
   data: Blob | ArrayBuffer | ArrayBufferView;
   part: EmulatorSavePart;
   sha1: string;
+};
+
+type PendingTestSave = {
+  bytes: Uint8Array;
+  fileName: string;
+  platform: string;
+  gameId: string;
+  romSha1?: string;
+  updatedAt: number;
 };
 
 type SerializedEmulatorSave = {
@@ -89,7 +109,9 @@ const openDatabase = (): Promise<IDBDatabase> => {
     request.onupgradeneeded = () => {
       if (!request.result.objectStoreNames.contains(STORE_NAME)) {
         request.result.createObjectStore(STORE_NAME);
-        return;
+      }
+      if (!request.result.objectStoreNames.contains(PENDING_TEST_SAVE_STORE_NAME)) {
+        request.result.createObjectStore(PENDING_TEST_SAVE_STORE_NAME);
       }
     };
     let settled = false;
@@ -180,13 +202,14 @@ const deleteBuiltinRecords = async (gameName: string): Promise<void> => {
 const runTransaction = async <T>(
   mode: IDBTransactionMode,
   operation: (store: IDBObjectStore) => IDBRequest<T> | void,
+  storeName = STORE_NAME,
 ): Promise<T | undefined> => {
   const database = await openDatabase();
   return new Promise((resolve, reject) => {
     let transaction: IDBTransaction;
     try {
-      transaction = database.transaction(STORE_NAME, mode);
-      const request = operation(transaction.objectStore(STORE_NAME));
+      transaction = database.transaction(storeName, mode);
+      const request = operation(transaction.objectStore(storeName));
       if (request) {
         request.onerror = () => reject(requestError(request));
         request.onsuccess = () => undefined;
@@ -205,14 +228,17 @@ const runTransaction = async <T>(
   });
 };
 
-const readTransaction = async <T>(operation: (store: IDBObjectStore) => IDBRequest<T>): Promise<T | undefined> => {
+const readTransaction = async <T>(
+  operation: (store: IDBObjectStore) => IDBRequest<T>,
+  storeName = STORE_NAME,
+): Promise<T | undefined> => {
   const database = await openDatabase();
   return new Promise((resolve, reject) => {
     let transaction: IDBTransaction;
     let request: IDBRequest<T>;
     try {
-      transaction = database.transaction(STORE_NAME, "readonly");
-      request = operation(transaction.objectStore(STORE_NAME));
+      transaction = database.transaction(storeName, "readonly");
+      request = operation(transaction.objectStore(storeName));
     } catch (error) {
       database.close();
       reject(error instanceof Error ? error : new Error(String(error)));
@@ -512,6 +538,89 @@ const readImportBytes = async (value: unknown): Promise<Uint8Array> => {
   return bytes;
 };
 
+const normalizePendingText = (value: unknown, label: string, maxLength: number): string => {
+  if (typeof value !== "string" || !value.trim()) throw new Error(`The pending test save requires a ${label}.`);
+  const normalized = value.trim();
+  if (normalized.length > maxLength) throw new Error(`The pending test save ${label} is too long.`);
+  return normalized;
+};
+
+const copyPendingTestSave = (save: PendingTestSave): PendingTestSave => ({
+  bytes: new Uint8Array(save.bytes),
+  fileName: save.fileName,
+  platform: save.platform,
+  gameId: save.gameId,
+  ...(save.romSha1 ? { romSha1: save.romSha1 } : {}),
+  updatedAt: save.updatedAt,
+});
+
+const normalizePendingTestSave = (value: unknown): PendingTestSave | undefined => {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as Partial<PendingTestSave>;
+  const bytes = copyBytes(candidate.bytes);
+  if (!bytes || bytes.byteLength === 0 || bytes.byteLength > MAX_IMPORT_BYTES) return undefined;
+  if (
+    typeof candidate.fileName !== "string" ||
+    !candidate.fileName ||
+    candidate.fileName.length > MAX_LABEL_LENGTH ||
+    typeof candidate.platform !== "string" ||
+    !candidate.platform ||
+    candidate.platform.length > 128 ||
+    typeof candidate.gameId !== "string" ||
+    !candidate.gameId ||
+    candidate.gameId.length > MAX_LABEL_LENGTH ||
+    (candidate.romSha1 !== undefined && !/^[a-f0-9]{40}$/.test(candidate.romSha1)) ||
+    typeof candidate.updatedAt !== "number" ||
+    !Number.isFinite(candidate.updatedAt)
+  ) {
+    return undefined;
+  }
+  return {
+    bytes,
+    fileName: candidate.fileName,
+    platform: candidate.platform,
+    gameId: candidate.gameId,
+    ...(candidate.romSha1 ? { romSha1: candidate.romSha1 } : {}),
+    updatedAt: candidate.updatedAt,
+  };
+};
+
+const stagePendingTestSave = async (input: {
+  data: Blob | ArrayBuffer | ArrayBufferView;
+  fileName: string;
+  platform: string;
+  gameId: string;
+  romSha1?: string;
+}): Promise<PendingTestSave> => {
+  const save: PendingTestSave = {
+    bytes: await readImportBytes(input.data),
+    fileName: normalizePendingText(input.fileName, "file name", MAX_LABEL_LENGTH),
+    platform: normalizePendingText(input.platform, "platform", 128),
+    gameId: normalizePendingText(input.gameId, "game ID", MAX_LABEL_LENGTH),
+    ...(input.romSha1 === undefined ? {} : { romSha1: normalizeSha1(input.romSha1) }),
+    updatedAt: Date.now(),
+  };
+  await runTransaction(
+    "readwrite",
+    (store) => store.put(copyPendingTestSave(save), PENDING_TEST_SAVE_KEY),
+    PENDING_TEST_SAVE_STORE_NAME,
+  );
+  return copyPendingTestSave(save);
+};
+
+const readPendingTestSave = async (): Promise<PendingTestSave | undefined> => {
+  const value = await readTransaction<unknown>(
+    (store) => store.get(PENDING_TEST_SAVE_KEY),
+    PENDING_TEST_SAVE_STORE_NAME,
+  );
+  const save = normalizePendingTestSave(value);
+  return save ? copyPendingTestSave(save) : undefined;
+};
+
+const clearPendingTestSave = async (): Promise<void> => {
+  await runTransaction("readwrite", (store) => store.delete(PENDING_TEST_SAVE_KEY), PENDING_TEST_SAVE_STORE_NAME);
+};
+
 const importEmulatorSavePart = async ({ part, sha1, data }: EmulatorSavePartImport): Promise<EmulatorSaveRecord> => {
   if (part !== "sram" && part !== "state") throw new Error("The emulator save part is not supported.");
   const gameId = normalizeSha1(sha1);
@@ -542,6 +651,17 @@ const postToSource = (source: MessageEventSource | null, message: unknown) => {
 const handleSaveMessage = async (event: MessageEvent<unknown>) => {
   if (!isSaveMessage(event.data)) return;
   const message = event.data;
+  const preview = savePreviews.get(message.gameId);
+  if (preview && message.kind === "request-load-sram") {
+    postToSource(event.source, {
+      data: new Uint8Array(preview),
+      gameId: message.gameId,
+      kind: "load-sram",
+      source: MESSAGE_SOURCE,
+    });
+    return;
+  }
+  if (preview && message.kind === "save-sram") return;
   if (!saveStorageEnabled) {
     if (message.kind === "request-load-state" || message.kind === "request-load-sram") {
       postToSource(event.source, {
@@ -593,8 +713,10 @@ const configureEmulatorSaveStorage = (enabled: boolean) => {
   saveStorageEnabled = enabled;
 };
 
-export type { EmulatorSaveRecord };
+export type { EmulatorSaveRecord, PendingTestSave };
 export {
+  clearPendingTestSave,
+  clearEmulatorSavePreview,
   createEmulatorSaveExport,
   configureEmulatorSaveStorage,
   deleteEmulatorSave,
@@ -603,7 +725,10 @@ export {
   importEmulatorSavePart,
   listEmulatorSaves,
   parseSerializedEmulatorSave,
+  readPendingTestSave,
   replaceEmulatorSaveSram,
+  setEmulatorSavePreview,
+  stagePendingTestSave,
   serializeEmulatorSave,
   writeEmulatorSave,
 };

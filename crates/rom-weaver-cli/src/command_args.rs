@@ -3297,6 +3297,67 @@ pub struct PpfUndoCommand {
     pub output: PathBuf,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct SaveListGamesCommand {}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct SaveCreateCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            value_name = "GAME_ID",
+            help = "Game to generate or use with a template"
+        )
+    )]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub game: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            value_name = "SAVE",
+            help = "Existing save to copy before setting fields"
+        )
+    )]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub template: Option<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            value_name = "FIELD=VALUE",
+            help = "Save property to set in the new file"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub assignments: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(short, long, value_name = "PATH", help = "Where to write the new save")
+    )]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub output: Option<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(short = 'n', long, help = "Check the new save without writing it")
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub dry_run: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(long, help = "Replace an existing output file")
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub force: bool,
+}
+
 /// `identify` subcommands. Today only `database`; a plain `identify --input`
 /// run has no subcommand.
 #[derive(Clone, Debug, Serialize, Deserialize)]

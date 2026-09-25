@@ -412,8 +412,7 @@
   font-size: 0.84rem;
   color: var(--ink-2);
 }
-.rw-app .save-editor-candidate-list,
-.rw-app .save-editor-emulator-list {
+.rw-app .save-editor-candidate-list {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-s);
@@ -449,25 +448,6 @@
 .rw-app .save-editor-record:disabled {
   opacity: 0.55;
 }
-.rw-app .save-editor-stash {
-  display: grid;
-  gap: var(--sp-s);
-  padding: var(--sp-m);
-  margin-block-start: var(--sp-l);
-  background: var(--plate);
-  border: 1px solid var(--seam);
-  border-radius: var(--r-m);
-}
-.rw-app .save-editor-stash-title {
-  margin: 0;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--ink);
-}
-.rw-app .save-editor-stash .save-editor-empty {
-  line-height: 1.5;
-  color: var(--ink-2);
-}
 .rw-app .save-editor-empty,
 .rw-app .save-editor-description {
   margin: 0;
@@ -478,6 +458,32 @@
   display: grid;
   gap: var(--sp-m);
   min-width: 0;
+}
+/* Slot tabs and the property search share one row; the search takes what the tabs leave. */
+.rw-app .save-editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-s);
+  align-items: stretch;
+  min-width: 0;
+}
+.rw-app .save-editor-toolbar .save-editor-slots {
+  flex: 1 1 auto;
+}
+.rw-app .save-editor-search {
+  position: relative;
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+.rw-app .save-editor-search svg {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-start: 11px;
+  width: 15px;
+  height: 15px;
+  color: var(--ink-3);
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 .rw-app .save-editor-slots {
   display: flex;
@@ -512,6 +518,8 @@
   min-width: 0;
   padding: 0;
   margin: 0;
+  overflow: hidden;
+  background: var(--plate);
   border: 1px solid var(--seam);
   border-radius: var(--r-m);
 }
@@ -521,6 +529,7 @@
   align-items: baseline;
   width: 100%;
   padding: 9px 14px;
+  background: var(--plate-2);
   border-bottom: 1px solid var(--seam-soft);
 }
 .rw-app .save-editor-group-title {
@@ -748,6 +757,41 @@
   border: 1px solid color-mix(in oklab, var(--verified) 35%, var(--seam));
   border-radius: var(--r-s);
 }
+/* Testing is the second way to finish, so it sits beside the download at the same height. */
+.rw-app .save-editor-run-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sp-s);
+  margin-block-start: var(--sp-m);
+}
+/* `.btn` sits in a later layer and owns height and padding; min-height is the one size it leaves free. */
+.rw-app .save-editor-test {
+  min-height: 46px;
+}
+.rw-app .save-status {
+  display: inline-flex;
+  flex: 1 1 16rem;
+  gap: var(--sp-s);
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--ink-2);
+}
+.rw-app .save-status::before {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  content: "";
+  background: var(--care);
+  border-radius: 50%;
+}
+.rw-app .save-status.is-ready::before {
+  background: var(--offline-active);
+}
+.rw-app .save-status.is-failed::before {
+  background: var(--fault);
+}
 .rw-app .save-editor-actions,
 .rw-app .save-editor-replace {
   display: flex;
@@ -758,6 +802,9 @@
   margin-block-start: var(--sp-m);
 }
 @media (max-width: 720px) {
+  .rw-app .save-editor-run-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .rw-app .save-editor-field {
     grid-template-columns: minmax(0, 1fr) auto;
   }

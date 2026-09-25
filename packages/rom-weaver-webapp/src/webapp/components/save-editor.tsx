@@ -1,10 +1,14 @@
-import { Download, RotateCcw, Undo2 } from "lucide-react";
+import { Download, Gamepad2, RotateCcw, Save, Search, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
+  clearPendingTestSave,
   listEmulatorSaves,
   replaceEmulatorSaveSram,
+  setEmulatorSavePreview,
+  stagePendingTestSave,
   type EmulatorSaveRecord,
 } from "../../storage/browser/emulator-saves.ts";
+import { readRuntimeOutputBlob } from "../../storage/vfs/runtime-output.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 import {
   saveValueFromText,
@@ -23,9 +27,16 @@ import { FileCard } from "../../public/react/components/ds/file-card.tsx";
 import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
 import { StepSection } from "../../public/react/components/ds/layout.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
+import { getEmulatorJsCore } from "../../public/react/components/emulatorjs.ts";
+import { restartCurrentGameWithSave, useEmulatorSession } from "../../public/react/emulator-session-store.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
+import { SaveGenerator } from "./save-generator.tsx";
 
-type SaveEditorProps = { onSessionChange: (active: boolean) => void; pageDrop?: PageFileDrop | null };
+type SaveEditorProps = {
+  onSessionChange: (active: boolean) => void;
+  onSelectTab?: (tab: string) => void;
+  pageDrop?: PageFileDrop | null;
+};
 type FieldErrors = Record<string, string>;
 type FieldGroup = { id: string; title: string; fields: SaveField[] };
 type FieldSlot = { id: string; title: string; groups: FieldGroup[] };
@@ -88,6 +99,8 @@ const titleFor = (segment: string) =>
   GROUP_TITLES[segment] ?? segment.charAt(0).toUpperCase() + segment.slice(1).replaceAll("_", " ");
 const isReadOnly = (field: SaveField) => !field.editable || field.kind.startsWith("read_only");
 const isToggle = (field: SaveField) => field.kind === "boolean" || field.kind === "bitfield_boolean";
+const groupCount = (editable: number, total: number) =>
+  total > editable ? `${editable} editable · ${total - editable} read-only` : `${editable} editable`;
 const formatNumber = (value: number) => value.toLocaleString("en-US");
 const displayValue = (value: SaveValue) => {
   const text = saveValueToText(value);
@@ -105,8 +118,9 @@ const groupFields = (fields: readonly SaveField[]): FieldSlot[] => {
   const slots = new Map<string, Map<string, SaveField[]>>();
   for (const field of fields) {
     const parts = field.id.split(".");
-    const slotId = parts.length >= 3 ? (parts[0] ?? "") : "";
-    const groupId = parts.length >= 3 ? (parts[1] ?? "") : (parts[0] ?? "");
+    const hasSlot = /^slot_\d+$/.test(parts[0] ?? "");
+    const slotId = hasSlot ? (parts[0] ?? "") : "";
+    const groupId = hasSlot ? (parts[1] ?? "") : (parts[0] ?? "");
     const groups = slots.get(slotId) ?? new Map<string, SaveField[]>();
     const members = groups.get(groupId) ?? [];
     members.push(field);
@@ -214,11 +228,14 @@ const SaveFieldControl = ({
   );
 };
 
-const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
+const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps) => {
+  const { currentGameId, entries } = useEmulatorSession();
+  const testGame = entries.find((entry) => entry.id === currentGameId);
   const [source, setSource] = useState<File | null>(null);
   const [document, setDocument] = useState<SaveDocument | null>(null);
   const [recognition, setRecognition] = useState<SaveRecognition | undefined>();
   const [saveSize, setSaveSize] = useState<number>();
+  const [rawOffset, setRawOffset] = useState(0);
   const [potentialFormat, setPotentialFormat] = useState<string>();
   const [containerName, setContainerName] = useState<string>();
   const [sourceRomSha1, setSourceRomSha1] = useState<string>();
@@ -230,6 +247,8 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
   const [saves, setSaves] = useState<EmulatorSaveRecord[]>([]);
   const [selectedSaveId, setSelectedSaveId] = useState<string>();
   const [selectedSlot, setSelectedSlot] = useState("");
+  const [fieldQuery, setFieldQuery] = useState("");
+  const [generated, setGenerated] = useState(false);
   const [originalSram, setOriginalSram] = useState<Uint8Array | null>(null);
   const [replacementSram, setReplacementSram] = useState<Uint8Array | null>(null);
   const [pendingReplacement, setPendingReplacement] = useState(false);
@@ -264,6 +283,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
     setDocument(null);
     setRecognition(undefined);
     setSaveSize(undefined);
+    setRawOffset(0);
     setPotentialFormat(undefined);
     setContainerName(undefined);
     setSourceRomSha1(undefined);
@@ -273,6 +293,8 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
     setPreview(null);
     setSelectedSaveId(undefined);
     setSelectedSlot("");
+    setFieldQuery("");
+    setGenerated(false);
     setOriginalSram(null);
     setReplacementSram(null);
     setPendingReplacement(false);
@@ -306,6 +328,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
       if (request !== requestRef.current) return;
       if (!result.document) throw new Error("Save inspection returned no document.");
       setRecognition(result.recognition);
+      setRawOffset(result.rawOffset ?? 0);
       const nextValues = Object.fromEntries(result.document.fields.map((field) => [field.id, field.value]));
       setDocument(result.document);
       setValues(nextValues);
@@ -350,6 +373,24 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
     void identifySelected(file, romSha1, activeRequest);
   };
   selectSourceRef.current = selectSource;
+  const generateSave = async (game: string) => {
+    resetEditor();
+    const activeRequest = startRequest();
+    setBusy(true);
+    try {
+      const { createSave } = await loadSaveApi();
+      const file = await createSave({ game, signal: activeRequest.signal });
+      if (activeRequest.request !== requestRef.current) return;
+      setSource(file);
+      setGenerated(true);
+      await inspectSelected(file, game, undefined, activeRequest);
+    } catch (cause) {
+      if (activeRequest.request === requestRef.current)
+        setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      if (activeRequest.request === requestRef.current) setBusy(false);
+    }
+  };
   useEffect(() => {
     if (!(pageDrop && pageDrop.id !== handledDropRef.current)) return;
     handledDropRef.current = pageDrop.id;
@@ -420,14 +461,15 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
       if (request === requestRef.current) setBusy(false);
     }
   };
-  const writeEditedSave = async () => {
-    if (!source || assignments.length === 0 || hasErrors) return;
+  const writeEditedSave = async (download = true): Promise<PublicOutput | undefined> => {
+    if (!source || (!generated && assignments.length === 0) || hasErrors) return undefined;
     const { request, signal } = startRequest();
     setBusy(true);
     setError("");
     try {
       const { setSaveFields } = await loadSaveApi();
       const result = await setSaveFields({
+        create: generated,
         assignments,
         fileName: source.name,
         game: document?.identity.id,
@@ -438,15 +480,51 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
       });
       if (request !== requestRef.current) {
         await result.output.dispose();
-        return;
+        return undefined;
       }
       outputRef.current = result.output;
       setOutput(result.output);
-      await result.output.saveAs();
+      if (download) await result.output.saveAs();
+      return result.output;
     } catch (cause) {
       if (request === requestRef.current) setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       if (request === requestRef.current) setBusy(false);
+    }
+    return undefined;
+  };
+  const testSave = async () => {
+    if (!(source && document && onSelectTab) || hasErrors) return;
+    setBusy(true);
+    setError("");
+    try {
+      const currentOutput = output ?? (assignments.length ? await writeEditedSave(false) : undefined);
+      if (assignments.length && !currentOutput) return;
+      const saveBlob = currentOutput ? await readRuntimeOutputBlob(currentOutput) : source;
+      const bytes = new Uint8Array(await saveBlob.arrayBuffer());
+      const end = rawOffset + document.save_size;
+      if (rawOffset < 0 || end > bytes.byteLength || !Number.isSafeInteger(end)) {
+        throw new Error("The edited save no longer contains the expected raw game data.");
+      }
+      const rawSave = bytes.subarray(rawOffset, end);
+      if (canTest && testGame?.checksum) {
+        await clearPendingTestSave();
+        setEmulatorSavePreview(testGame.checksum, rawSave);
+        restartCurrentGameWithSave(testGame.id);
+      } else {
+        await stagePendingTestSave({
+          data: rawSave,
+          fileName: source.name,
+          gameId: document.identity.id,
+          platform: document.platform,
+          romSha1: sourceRomSha1,
+        });
+      }
+      onSelectTab("test");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
     }
   };
   const downloadEditedSave = async () => {
@@ -521,11 +599,34 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
   };
 
   const kind = outcomeKind(recognition);
-  const slots = document ? groupFields(document.fields) : [];
+  const slots = document ? groupFields(document.fields.filter((field) => !(generated && isReadOnly(field)))) : [];
   const hasSlotTabs = slots.length > 1;
   const activeSlot = slots.find((slot) => slot.id === selectedSlot) ?? slots[0];
+  const query = fieldQuery.trim().toLowerCase();
+  const visibleGroups = (activeSlot?.groups ?? [])
+    .map((group) => ({
+      ...group,
+      fields: group.fields.filter((field) =>
+        `${group.title} ${field.label} ${field.id} ${field.description}`.toLowerCase().includes(query),
+      ),
+    }))
+    .filter((group) => group.fields.length > 0);
   const sramSaves = saves.filter((record) => record.sram);
   const integrity = document ? INTEGRITY_STATE[document.integrity.state] : undefined;
+  const testCore = testGame?.core ?? getEmulatorJsCore(testGame?.platform, testGame?.fileName);
+  const canTest = Boolean(
+    onSelectTab &&
+    testGame?.checksum &&
+    document &&
+    getEmulatorJsCore(document.platform) === testCore &&
+    (!sourceRomSha1 || sourceRomSha1 === testGame.checksum),
+  );
+  let testStatus = "No ROM is loaded in Test. You choose one next.";
+  if (testGame && canTest) {
+    testStatus = `Tests with ${testGame.fileName}. Make sure it is the game that made this save.`;
+  } else if (testGame) {
+    testStatus = `${testGame.fileName} does not match this save. You choose another ROM next.`;
+  }
   const slotName = (slot: FieldSlot) => {
     const name = slot.groups.flatMap((group) => group.fields).find((field) => field.id.endsWith(".player.name"));
     const text = name ? saveValueToText(name.value).trim() : "";
@@ -617,9 +718,7 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
         <legend className="save-editor-group-head">
           <span className="save-editor-group-title">{group.title}</span>
           <span className="save-editor-group-count mono">
-            {toggles.length && !rows.length
-              ? `${on} / ${toggles.length}`
-              : `${editable} editable · ${group.fields.length - editable} read-only`}
+            {toggles.length && !rows.length ? `${on} / ${toggles.length}` : groupCount(editable, group.fields.length)}
           </span>
         </legend>
         {rows.length ? <div className="save-editor-rows">{rows.map(renderField)}</div> : null}
@@ -702,10 +801,12 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
   ) : null;
 
   const sramList = (
-    <div className="save-editor-stash">
-      <p className="save-editor-stash-title">Emulator saves</p>
+    <div className="drop-tray-row save-editor-stash">
+      <span className="drop-tray-label" id="save-editor-emulator-title">
+        <Save aria-hidden="true" /> Emulator saves
+      </span>
       {sramSaves.length ? (
-        <div className="save-editor-emulator-list">
+        <fieldset aria-labelledby="save-editor-emulator-title" className="drop-tray-control save-editor-records">
           {sramSaves.map((record) => (
             <button
               className="save-editor-record"
@@ -718,9 +819,11 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
               <span className="mono">{formatByteSize(record.sram?.byteLength)}</span>
             </button>
           ))}
-        </div>
+        </fieldset>
       ) : (
-        <p className="save-editor-empty">No emulator saves yet. Save a game in Test to open its SRAM here.</p>
+        <div className="drop-tray-control">
+          <p className="drop-tray-note">No emulator saves yet. Save a game in Test to open its SRAM here.</p>
+        </div>
       )}
     </div>
   );
@@ -730,14 +833,27 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
       <UnifiedDropZone
         accept={SAVE_ACCEPT}
         addLabel="Replace the save"
-        afterDropZone={source ? fileCard : sramList}
+        afterDropZone={
+          source ? (
+            fileCard
+          ) : (
+            <>
+              <div className="drop-tray save-editor-sources">
+                {sramList}
+                <SaveGenerator disabled={busy} onError={setError} onGenerate={generateSave} />
+              </div>
+              {error ? <Notice level="error">{error}</Notice> : null}
+            </>
+          )
+        }
         big={!source}
         disabled={busy}
         heroLabel="Drop a game save to edit it"
         heroLabelCoarse="Tap to add a game save"
         info={
           <p>
-            Editing runs locally and never changes the file you add. Use a raw game save, not an emulator save state.
+            Editing runs locally and never changes the file you add. Use a raw game save, not an emulator save state. A
+            new Pokémon save needs a save made by the game as its template.
           </p>
         }
         inputId="save-editor-input-picker"
@@ -762,23 +878,42 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
           >
             {document && activeSlot ? (
               <div className="save-editor-fields">
-                {hasSlotTabs ? (
-                  <div aria-label="Save files" className="save-editor-slots" role="tablist">
-                    {slots.map((slot) => (
-                      <button
-                        aria-selected={slot.id === activeSlot.id}
-                        className="save-editor-slot"
-                        key={slot.id}
-                        onClick={() => setSelectedSlot(slot.id)}
-                        role="tab"
-                        type="button"
-                      >
-                        {slotName(slot)}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-                {activeSlot.groups.map(renderGroup)}
+                <div className="save-editor-toolbar">
+                  {hasSlotTabs ? (
+                    <div aria-label="Save files" className="save-editor-slots" role="tablist">
+                      {slots.map((slot) => (
+                        <button
+                          aria-selected={slot.id === activeSlot.id}
+                          className="save-editor-slot"
+                          key={slot.id}
+                          onClick={() => setSelectedSlot(slot.id)}
+                          role="tab"
+                          type="button"
+                        >
+                          {slotName(slot)}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  <label className="save-editor-search">
+                    <Search aria-hidden="true" />
+                    <input
+                      aria-label="Find a property"
+                      className="input"
+                      onChange={(event) => setFieldQuery(event.currentTarget.value)}
+                      placeholder="Find a property"
+                      type="search"
+                      value={fieldQuery}
+                    />
+                  </label>
+                </div>
+                {visibleGroups.length ? (
+                  visibleGroups.map(renderGroup)
+                ) : (
+                  <p className="save-editor-empty" role="status">
+                    No properties match this search.
+                  </p>
+                )}
               </div>
             ) : (
               <p className="save-editor-empty">
@@ -804,7 +939,11 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
                 ))}
               </ul>
             ) : (
-              <p className="save-editor-empty">No changes yet. Edit a field above to build the edited copy.</p>
+              <p className="save-editor-empty">
+                {generated
+                  ? "The fresh save is ready. Edit its properties or download it."
+                  : "No changes yet. Edit a field above to build the edited copy."}
+              </p>
             )}
             {preview ? (
               <div aria-live="polite" className="save-editor-preview mono">
@@ -812,6 +951,35 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
                 {preview.touched_sections?.length ? ` · sections ${preview.touched_sections.join(", ")}` : ""}
               </div>
             ) : null}
+            <div className="save-editor-run-row">
+              {output ? (
+                <RunButton
+                  disabled={busy}
+                  icon={<Download aria-hidden="true" />}
+                  onClick={() => void downloadEditedSave()}
+                >
+                  Download edited copy
+                </RunButton>
+              ) : (
+                <RunButton
+                  disabled={!(pendingChanges.length || generated) || busy || hasErrors || !document}
+                  icon={<Download aria-hidden="true" />}
+                  onClick={() => void writeEditedSave()}
+                >
+                  Download edited copy
+                </RunButton>
+              )}
+              {onSelectTab ? (
+                <button
+                  className="btn save-editor-test"
+                  disabled={!document || busy || hasErrors}
+                  onClick={() => void testSave()}
+                  type="button"
+                >
+                  <Gamepad2 aria-hidden="true" /> {canTest ? "Test save in ROM" : "Choose ROM and test"}
+                </button>
+              ) : null}
+            </div>
             <div className="save-editor-actions">
               <button
                 className="btn slim ghost"
@@ -829,23 +997,9 @@ const SaveEditor = ({ onSessionChange, pageDrop }: SaveEditorProps) => {
               >
                 Preview changes
               </button>
-              {output ? (
-                <RunButton
-                  disabled={busy}
-                  icon={<Download aria-hidden="true" />}
-                  onClick={() => void downloadEditedSave()}
-                >
-                  Download edited copy
-                </RunButton>
-              ) : (
-                <RunButton
-                  disabled={!pendingChanges.length || busy || hasErrors}
-                  icon={<Download aria-hidden="true" />}
-                  onClick={() => void writeEditedSave()}
-                >
-                  Download edited copy
-                </RunButton>
-              )}
+              {onSelectTab && document ? (
+                <p className={join("save-status", canTest ? "is-ready" : "is-waiting")}>{testStatus}</p>
+              ) : null}
             </div>
             {selectedSaveId && output ? (
               <div className="save-editor-replace">

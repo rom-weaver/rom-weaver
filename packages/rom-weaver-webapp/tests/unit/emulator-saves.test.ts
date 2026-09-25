@@ -2,13 +2,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createEmulatorSaveExport,
   configureEmulatorSaveStorage,
+  clearPendingTestSave,
+  clearEmulatorSavePreview,
   deleteEmulatorSave,
   importEmulatorSave,
   importEmulatorSavePart,
   ensureEmulatorSaveBridge,
   listEmulatorSaves,
   parseSerializedEmulatorSave,
+  readPendingTestSave,
   replaceEmulatorSaveSram,
+  setEmulatorSavePreview,
+  stagePendingTestSave,
   serializeEmulatorSave,
   writeEmulatorSave,
   type EmulatorSaveRecord,
@@ -117,26 +122,28 @@ class FakeObjectStore {
 }
 
 class FakeDatabase {
-  readonly objectStoreNames = { contains: (name: string) => name === "games" };
-  private readonly values = new Map<string, unknown>();
+  readonly objectStoreNames = { contains: (name: string) => this.stores.has(name) };
+  private readonly stores = new Map<string, Map<string, unknown>>([["games", new Map()]]);
 
-  createObjectStore() {
-    return new FakeObjectStore(this.values, this.createTransaction("readwrite"));
+  createObjectStore(name: string) {
+    const values = new Map<string, unknown>();
+    this.stores.set(name, values);
+    return new FakeObjectStore(values, this.createTransaction(name, "readwrite"));
   }
 
   seed(key: string, value: unknown) {
-    this.values.set(key, value);
+    this.stores.get("games")?.set(key, value);
   }
 
   stored(key: string) {
-    return this.values.get(key);
+    return this.stores.get("games")?.get(key);
   }
 
-  transaction() {
-    return this.createTransaction("readonly");
+  transaction(name = "games", mode: IDBTransactionMode = "readonly") {
+    return this.createTransaction(name, mode);
   }
 
-  private createTransaction(_mode: IDBTransactionMode): FakeTransaction {
+  private createTransaction(name: string, _mode: IDBTransactionMode): FakeTransaction {
     const transaction = {} as FakeTransaction;
     transaction.error = null;
     transaction.aborted = false;
@@ -147,7 +154,11 @@ class FakeDatabase {
     transaction.onabort = null;
     transaction.onerror = null;
     transaction.oncomplete = null;
-    transaction.objectStore = () => new FakeObjectStore(this.values, transaction);
+    transaction.objectStore = () => {
+      const values = this.stores.get(name);
+      if (!values) throw new Error(`Missing fake object store: ${name}`);
+      return new FakeObjectStore(values, transaction);
+    };
     return transaction;
   }
 
@@ -199,6 +210,74 @@ beforeEach(() => {
 });
 
 describe("emulator saves", () => {
+  it("stages and reads a defensive copy of one pending test save", async () => {
+    const data = new Uint8Array([1, 2, 3]);
+    const staged = await stagePendingTestSave({
+      data,
+      fileName: "  Zelda.srm  ",
+      platform: " nes ",
+      gameId: " zelda ",
+      romSha1: ` ${sha1.toUpperCase()} `,
+    });
+    data[0] = 9;
+    staged.bytes[1] = 9;
+
+    expect(staged).toMatchObject({ fileName: "Zelda.srm", platform: "nes", gameId: "zelda", romSha1: sha1 });
+    expect((await readPendingTestSave())?.bytes).toEqual(new Uint8Array([1, 2, 3]));
+
+    const read = await readPendingTestSave();
+    if (!read) throw new Error("Expected a staged pending test save.");
+    read.bytes[2] = 9;
+    expect((await readPendingTestSave())?.bytes).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it("replaces and clears the fixed pending test save", async () => {
+    await stagePendingTestSave({ data: new Uint8Array([1]), fileName: "first.sav", platform: "gba", gameId: "first" });
+    await stagePendingTestSave({
+      data: new Blob([new Uint8Array([7, 8])]),
+      fileName: "second.sav",
+      platform: "gba",
+      gameId: "second",
+    });
+
+    expect(await readPendingTestSave()).toMatchObject({
+      bytes: new Uint8Array([7, 8]),
+      fileName: "second.sav",
+      gameId: "second",
+    });
+    await clearPendingTestSave();
+    expect(await readPendingTestSave()).toBeUndefined();
+  });
+
+  it("adds pending-save storage without changing existing game records", async () => {
+    const database = new FakeDatabase();
+    database.seed(record.gameId, record);
+    vi.stubGlobal("indexedDB", createFakeIndexedDb(database));
+
+    await stagePendingTestSave({ data: new Uint8Array([7]), fileName: "save.srm", platform: "nes", gameId: "game" });
+
+    expect(await listEmulatorSaves()).toEqual([record]);
+    expect(database.stored(record.gameId)).toEqual(record);
+  });
+
+  it("rejects invalid pending test saves before writing", async () => {
+    await expect(
+      stagePendingTestSave({ data: new Uint8Array(), fileName: "save.srm", platform: "nes", gameId: "game" }),
+    ).rejects.toThrow("uploaded emulator save is empty");
+    await expect(
+      stagePendingTestSave({ data: new Uint8Array([1]), fileName: " ", platform: "nes", gameId: "game" }),
+    ).rejects.toThrow("requires a file name");
+    await expect(
+      stagePendingTestSave({
+        data: new Uint8Array([1]),
+        fileName: "save.srm",
+        platform: "nes",
+        gameId: "game",
+        romSha1: "invalid",
+      }),
+    ).rejects.toThrow("40-character SHA-1 checksum");
+  });
+
   it("round-trips the export format and app-owned IndexedDB record", async () => {
     const serialized = serializeEmulatorSave(record);
     const parsed = parseSerializedEmulatorSave(serialized);
@@ -423,6 +502,32 @@ describe("emulator saves", () => {
       }),
       "*",
     );
+
+    const preview = new Uint8Array([4, 5]);
+    setEmulatorSavePreview(record.gameId, preview);
+    preview[0] = 99;
+    source.postMessage.mockClear();
+    listeners[0]?.({
+      data: { gameId: record.gameId, kind: "request-load-sram", source: "rom-weaver-emulator" },
+      source,
+    } as unknown as MessageEvent<unknown>);
+    await vi.waitFor(() =>
+      expect(source.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ data: new Uint8Array([4, 5]), kind: "load-sram" }),
+        "*",
+      ),
+    );
+    listeners[0]?.({
+      data: {
+        data: new Uint8Array([1, 2]),
+        gameId: record.gameId,
+        kind: "save-sram",
+        source: "rom-weaver-emulator",
+      },
+      source,
+    } as unknown as MessageEvent<unknown>);
+    expect((await listEmulatorSaves())[0]?.sram).toEqual(record.sram);
+    clearEmulatorSavePreview(record.gameId);
 
     source.postMessage.mockClear();
     listeners[0]?.({

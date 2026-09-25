@@ -257,7 +257,7 @@ Native `checksum --digest --algo ALGO` prints only the primary checksum in lower
 
 ## Save Editor
 
-All five `save` commands take a save path. `identify`, `inspect`, `get`, and `export-schema` do not write a file. `get` also takes one field ID.
+`save identify`, `inspect`, `get`, `set`, and `export-schema` take a save path. `identify`, `inspect`, `get`, and `export-schema` do not write a file. `get` also takes one field ID.
 
 `save set` takes one or more `FIELD=VALUE` assignments. It checks all assignments before it changes a copy. `-n` or `--dry-run` returns the change preview and writes nothing.
 
@@ -266,6 +266,8 @@ Without `-o` or `--output`, `save set` writes a free sibling name such as `game-
 `--game GAME_ID` selects a compatible handler when recognition is ambiguous. `--rom-sha1 SHA1` supplies a known ROM identity to recognition. The SHA-1 value contains 40 hexadecimal characters.
 
 [Save Editor support](save-editor.md) lists the accepted game IDs, input layouts, and fields.
+
+`save list-games` returns all supported game definitions and fresh-generation game IDs. `save create` accepts `--game`, `--template`, optional `FIELD=VALUE` assignments, `--output`, `--dry-run`, and `--force`. Without a template, `--game` selects a supported fresh initializer. Output is required unless `--dry-run` is set. [Create saves with the CLI](../how-to/create-game-saves-cli.md) gives the procedures.
 
 ## Cheats
 
