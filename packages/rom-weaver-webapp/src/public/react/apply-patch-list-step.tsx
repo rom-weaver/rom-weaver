@@ -352,7 +352,14 @@ const ApplyPatchListStep = ({
           onCancel={closeBulkEditor}
         />
       ) : null}
-      {total === 0 ? emptyState : null}
+      {visibleEntries.length === 0 && cheats ? (
+        <div className="patch-cheat-empty-actions">
+          {emptyState}
+          {cheats.controls}
+        </div>
+      ) : total === 0 ? (
+        emptyState
+      ) : null}
       <div
         className="cards patch-cards workflow-file-list"
         id="rom-weaver-list-patch-stack"
@@ -429,7 +436,7 @@ const ApplyPatchListStep = ({
           );
         })}
       </div>
-      {cheats?.controls}
+      {visibleEntries.length > 0 ? cheats?.controls : null}
       {(() => {
         // One list-level order warning: the first enabled patch whose input matches a patch it
         // does not follow. Fixing one link re-plans the chain; any remaining break surfaces next.

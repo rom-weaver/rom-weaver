@@ -9,6 +9,28 @@
     margin-block-start: var(--sp-s);
   }
 
+  .rw-app .patch-cheat-empty-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--sp-s);
+    min-width: 0;
+  }
+
+  .rw-app .patch-cheat-empty-actions > .needs-input,
+  .rw-app .patch-cheat-empty-actions .cheat-add {
+    min-height: 64px;
+    margin: 0;
+  }
+
+  .rw-app .patch-cheat-empty-actions .cheat-card-body {
+    height: 100%;
+    margin: 0;
+  }
+
+  .rw-app .patch-cheat-empty-actions .cheat-add {
+    height: 100%;
+  }
+
   .rw-app .cheat-download-menu summary {
     display: grid;
     place-items: center;
@@ -172,6 +194,19 @@
     font-size: 0.8rem;
     font-weight: 400;
     color: var(--ink-4);
+  }
+
+  .rw-app #rom-weaver-row-patch-stack > .step-body > .cheat-card-body .cheat-add {
+    min-height: 44px;
+    padding-block: var(--sp-xs);
+  }
+
+  .rw-app #rom-weaver-row-patch-stack > .step-body > .cheat-card-body .cheat-add-copy {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-xs) var(--sp-m);
+    align-items: baseline;
+    justify-content: center;
   }
 
   .rw-app .cheat-output-summary p {
@@ -466,6 +501,15 @@
   }
 
   @media (max-width: 40rem) {
+    .rw-app .patch-cheat-empty-actions .cheat-add-copy small,
+    .rw-app #rom-weaver-row-patch-stack > .step-body > .cheat-card-body .cheat-add-copy small {
+      display: none;
+    }
+
+    .rw-app .patch-cheat-empty-actions .cheat-add-label {
+      gap: var(--sp-s);
+    }
+
     .rw-app .cheat-database-options {
       grid-template-columns: minmax(0, 1fr);
     }
@@ -521,6 +565,16 @@
       grid-column: 1;
       width: 100%;
       margin-block-start: var(--sp-xs);
+    }
+  }
+
+  @media (max-width: 22rem) {
+    .rw-app .patch-cheat-empty-actions > .needs-input,
+    .rw-app .patch-cheat-empty-actions .cheat-add-label {
+      flex-direction: column;
+      gap: var(--sp-2xs);
+      text-align: center;
+      white-space: normal;
     }
   }
 }

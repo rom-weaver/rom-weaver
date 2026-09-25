@@ -106,6 +106,41 @@ describe("ApplyPatchListStep", () => {
     expect(container.querySelector(".step-num")?.textContent).toBe("0x03");
   });
 
+  it("groups empty patch and cheat actions into one compact choice row", () => {
+    const cheats = {
+      cards: [],
+      controls: <button type="button">Add cheats</button>,
+      onOrderChange: vi.fn(),
+      renderCard: vi.fn(),
+    } satisfies CheatStackRenderState;
+    const { container } = renderList({
+      cheats,
+      emptyState: <button type="button">Add patches</button>,
+      patches: [],
+    });
+
+    const choices = container.querySelector(".patch-cheat-empty-actions");
+    expect(choices?.children).toHaveLength(2);
+    expect(choices?.textContent).toContain("Add patches");
+    expect(choices?.textContent).toContain("Add cheats");
+  });
+
+  it("keeps cheat-only cards before their controls", () => {
+    const cheat = { record: { id: "cheat-one" } } as CheatStackRenderState["cards"][number];
+    const cheats: CheatStackRenderState = {
+      cards: [cheat],
+      controls: <p>Cheat controls</p>,
+      onOrderChange: vi.fn(),
+      renderCard: () => <div className="cheat-test-card">Cheat card</div>,
+    };
+    const { container } = renderList({ cheats, emptyState: <p>Add patches</p>, patches: [] });
+
+    const card = screen.getByText("Cheat card");
+    const controls = screen.getByText("Cheat controls");
+    expect(container.querySelector(".patch-cheat-empty-actions")).toBeNull();
+    expect(card.compareDocumentPosition(controls) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("renders patch metadata, verification details, chain warnings, and disabled totals", () => {
     const first = item(0, {
       chainVerdict: {
