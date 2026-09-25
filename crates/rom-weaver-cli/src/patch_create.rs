@@ -1,7 +1,7 @@
 use super::cheats_apply::CheatApplySummary;
 use super::*;
 
-use rom_weaver_core::format_human_bytes;
+use rom_weaver_core::{PatchHandler, format_human_bytes};
 
 use super::patch_commands::{
     CREATE_PATCH_ARCHIVE_DEFAULT_EXTENSIONS, CREATE_PATCH_ARCHIVE_DEFAULT_LIMIT_BYTES,
@@ -12,6 +12,14 @@ use super::patch_commands::{
     PatchCreateFormatCandidates, PatchCreateInputInfo, PatchCreateInputSizes,
     PatchCreateSourceInfo, SMALL_CREATE_PATCH_FORMATS,
 };
+
+/// Validated output, context, and format for a non-plan `patch create`.
+struct PatchCreateSetup {
+    output: PathBuf,
+    context: OperationContext,
+    requested_format: String,
+    format_warning: Option<String>,
+}
 
 fn solid_create_options(args: &PatchCreateCommand) -> Option<PatchCreateFormatOptions> {
     let extended = args.solid_extended
@@ -299,219 +307,28 @@ impl CliApp {
         let base_context = self.context(args.threads);
         let probe_threads = base_context.single_thread_execution();
         if args.plan {
-            if solid_options.is_some() {
-                return self.finish(
-                    "patch-create",
-                    OperationReport::failed(
-                        OperationFamily::Patch,
-                        args.format.clone(),
-                        "validate",
-                        "SOLID metadata options cannot be combined with --plan".to_string(),
-                        probe_threads,
-                    ),
-                );
-            }
-            let modified = match args.modified.as_ref() {
-                Some(path) => path,
-                None => {
-                    return self.finish(
-                        "patch-create",
-                        OperationReport::failed(
-                            OperationFamily::Patch,
-                            None,
-                            "validate",
-                            "patch create --plan requires --modified".to_string(),
-                            probe_threads,
-                        ),
-                    );
-                }
-            };
-            if let Some(report) = self.require_readable_path(
-                "patch-create",
-                OperationFamily::Patch,
-                None,
-                &args.original,
-                base_context.single_thread_execution(),
-            ) {
-                return self.finish("patch-create", report);
-            }
-            if let Some(report) = self.require_readable_path(
-                "patch-create",
-                OperationFamily::Patch,
-                None,
-                modified,
-                base_context.single_thread_execution(),
-            ) {
-                return self.finish("patch-create", report);
-            }
-            let input_info = match self.inspect_patch_create_input_info(
-                "patch-create",
-                None,
-                &args.original,
-                modified,
-                base_context.single_thread_execution(),
-            ) {
-                Ok(input_info) => input_info,
-                Err(report) => return self.finish("patch-create", *report),
-            };
-            let sizes = create_patch_input_sizes(&input_info);
-            let candidates = create_patch_format_candidates_for_sources(&input_info);
-            let formats = candidates.formats.to_vec();
-            let mut report = OperationReport::succeeded(
-                OperationFamily::Patch,
-                Some(candidates.default_format.to_string()),
-                "recommend",
-                format!(
-                    "recommended patch create format {}; candidates={}",
-                    candidates.default_format,
-                    formats.join(",")
-                ),
-                Some(100.0),
-                base_context.single_thread_execution(),
+            let report = self.run_patch_create_plan(
+                &args,
+                solid_options.is_some(),
+                &base_context,
+                probe_threads,
             );
-            report.details = Some(json!({
-                "patch_create_format_candidates": {
-                    "default": candidates.default_format,
-                    "formats": formats,
-                    "limits": {
-                        "archive_default_size_bytes": CREATE_PATCH_ARCHIVE_DEFAULT_LIMIT_BYTES,
-                        "bps_default_size_bytes": CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES,
-                        "ips_size_limit_bytes": CREATE_PATCH_IPS_SIZE_LIMIT_BYTES,
-                        "legacy_size_limit_bytes": CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES,
-                    },
-                    "source_values": {
-                        "original": {
-                            "path": args.original.display().to_string(),
-                            "archive": input_info.original.archive,
-                            "size": sizes.original,
-                            "special_compression": input_info.original.special_compression,
-                        },
-                        "modified": {
-                            "path": modified.display().to_string(),
-                            "archive": input_info.modified.archive,
-                            "size": sizes.modified,
-                            "special_compression": input_info.modified.special_compression,
-                        },
-                    },
-                }
-            }));
             return self.finish("patch-create", report);
         }
-        let output = match args.output.clone() {
-            Some(output) => output,
-            None => {
-                return self.finish(
-                    "patch-create",
-                    OperationReport::failed(
-                        OperationFamily::Patch,
-                        args.format.clone(),
-                        "validate",
-                        "patch create requires --output unless --plan is used".to_string(),
-                        probe_threads.clone(),
-                    ),
-                );
-            }
-        };
-        let fail = |format: Option<String>, stage: &str, message: String| {
-            OperationReport::failed(
-                OperationFamily::Patch,
-                format,
-                stage,
-                message,
-                probe_threads.clone(),
-            )
-        };
-        let fail_error = |format: Option<String>, stage: &str, error: RomWeaverError| {
-            OperationReport::failed_with_error(
-                OperationFamily::Patch,
-                format,
-                stage,
-                error,
-                probe_threads.clone(),
-            )
-        };
-        let xdelta_secondary_mode = match args.xdelta_secondary.parse::<XdeltaSecondaryMode>() {
-            Ok(mode) => mode,
-            Err(error) => {
-                return self.finish(
-                    "patch-create",
-                    fail(args.format.clone(), "validate", error.to_string()),
-                );
-            }
-        };
-        let context = base_context
-            .with_patch_checksum_validation(if args.ignore_checksum_validation {
-                PatchChecksumValidation::Ignore
-            } else {
-                PatchChecksumValidation::Strict
-            })
-            .with_xdelta_secondary_mode(xdelta_secondary_mode);
-        let resolution = match self.resolve_patch_create_format(args.format.as_deref(), &output) {
-            Ok(resolution) => resolution,
-            Err(error) => {
-                return self.finish(
-                    "patch-create",
-                    fail_error(args.format.clone(), "validate", error),
-                );
-            }
-        };
-        let requested_format = resolution.format;
-        let format_warning = resolution.warning;
-        if solid_options.is_some() && !requested_format.eq_ignore_ascii_case("solid") {
-            return self.finish(
-                "patch-create",
-                fail(
-                    Some(requested_format),
-                    "validate",
-                    "SOLID metadata options require --format solid or a .solid output".to_string(),
-                ),
-            );
-        }
-        if let Some(warning) = format_warning.as_deref() {
-            warn!(
-                command = "patch-create",
-                format = %requested_format,
-                output = %output.display(),
-                "{warning}"
-            );
-        }
-        if let Some(report) = self.require_readable_path(
-            "patch-create",
-            OperationFamily::Patch,
-            Some(requested_format.clone()),
-            &args.original,
-            probe_threads.clone(),
+        let PatchCreateSetup {
+            output,
+            context,
+            requested_format,
+            format_warning,
+        } = match self.prepare_patch_create(
+            &args,
+            solid_options.is_some(),
+            base_context,
+            &probe_threads,
         ) {
-            return self.finish("patch-create", report);
-        }
-        if let Some(report) = self.require_writable_output_parent(
-            "patch-create",
-            OperationFamily::Patch,
-            Some(requested_format.clone()),
-            &output,
-            probe_threads.clone(),
-        ) {
-            return self.finish("patch-create", report);
-        }
-
-        if let Some(report) = self.require_readable_path(
-            "patch-create",
-            OperationFamily::Patch,
-            Some(requested_format.clone()),
-            &args.original,
-            probe_threads.clone(),
-        ) {
-            return self.finish("patch-create", report);
-        }
-        if let Some(report) = self.require_writable_output_parent(
-            "patch-create",
-            OperationFamily::Patch,
-            Some(requested_format.clone()),
-            &output,
-            probe_threads.clone(),
-        ) {
-            return self.finish("patch-create", report);
-        }
+            Ok(setup) => setup,
+            Err(report) => return self.finish("patch-create", *report),
+        };
 
         // Derive the modified ROM from cheat codes when `--code` or `--cheat` is
         // given, otherwise require an explicit `--modified`. A synthesized ROM is
@@ -534,147 +351,33 @@ impl CliApp {
             Err(report) => return self.finish("patch-create", *report),
         };
         fill_solid_comment_with_codes(solid_options.as_mut(), cheat_summary.as_ref(), &args.codes);
-        if let Some(report) = self.require_readable_path(
-            "patch-create",
-            OperationFamily::Patch,
-            Some(requested_format.clone()),
-            &modified_path,
-            probe_threads.clone(),
-        ) {
-            return self.finish("patch-create", report);
-        }
-
-        let Some(handler) = self.patches.find_by_name(&requested_format) else {
-            let label = explicitly_unsupported_patch_reason_for_name(&requested_format)
-                .map(|reason| {
-                    format!(
-                        "requested patch format `{requested_format}` is explicitly not supported: {reason}"
-                    )
-                })
-                .unwrap_or_else(|| self.patches.unregistered_create_format_message(&requested_format));
-            return self.finish("patch-create", fail(Some(requested_format), "probe", label));
-        };
-        let sizes = match self.inspect_patch_create_input_sizes(
-            "patch-create",
-            Some(handler.descriptor().name.to_string()),
+        let handler = match self.resolve_patch_create_handler(
             &args.original,
             &modified_path,
-            probe_threads.clone(),
+            requested_format,
+            &probe_threads,
         ) {
-            Ok(sizes) => sizes,
+            Ok(handler) => handler,
             Err(report) => return self.finish("patch-create", *report),
         };
-        if let Some(label) =
-            create_patch_format_size_error_message(handler.descriptor().name, sizes)
-        {
-            return self.finish(
-                "patch-create",
-                fail(
-                    Some(handler.descriptor().name.to_string()),
-                    "validate",
-                    label,
-                ),
-            );
-        }
-
-        let mut create_output = output;
-        if args.checksum_name {
-            // Prefer a caller-supplied source crc32 (the browser already hashes the
-            // original during input prep) to avoid re-reading the original here; fall
-            // back to computing it only when no crc32 assumption was supplied. A
-            // malformed or conflicting --assume-in is a hard error, not a silent
-            // recompute, so an invalid trusted value never passes unnoticed.
-            let provided_crc32 = match parse_expect_tokens(&args.assume_in, "--assume-in", false) {
-                Ok(spec) => spec.checksums.get("crc32").cloned(),
-                Err(error) => {
-                    return self.finish(
-                        "patch-create",
-                        fail_error(
-                            Some(handler.descriptor().name.to_string()),
-                            "validate",
-                            error,
-                        ),
-                    );
-                }
-            };
-            let crc32 = match provided_crc32 {
-                Some(crc32) => Some(crc32),
-                None => match checksum_file_values(&args.original, &["crc32"], &context) {
-                    Ok(values) => values.get("crc32").cloned(),
-                    Err(error) => {
-                        return self.finish(
-                            "patch-create",
-                            fail_error(
-                                Some(handler.descriptor().name.to_string()),
-                                "validate",
-                                error,
-                            ),
-                        );
-                    }
-                },
-            };
-            if let Some(crc32) = crc32 {
-                let embedded = embed_checksum_in_filename(&create_output, "crc32", &crc32);
-                if embedded != create_output {
-                    trace!(
-                        output = %embedded.display(),
-                        crc32 = %crc32,
-                        "embedded source crc32 into patch file name"
-                    );
-                }
-                create_output = embedded;
-            }
-        }
-
-        // Guarded after --checksum-name has settled the final file name, so the
-        // path checked is the path written.
-        if let Err(error) = ensure_output_available(&create_output, args.force) {
-            return self.finish(
-                "patch-create",
-                OperationReport::failed_with_error(
-                    OperationFamily::Patch,
-                    Some(handler.descriptor().name.to_string()),
-                    "validate",
-                    error,
-                    probe_threads.clone(),
-                ),
-            );
-        }
+        let create_output = match self.patch_create_output_path(
+            &args,
+            handler.descriptor().name,
+            output,
+            &context,
+            &probe_threads,
+        ) {
+            Ok(create_output) => create_output,
+            Err(report) => return self.finish("patch-create", *report),
+        };
         let request = PatchCreateRequest {
             original: args.original,
             modified: modified_path,
             output: create_output.clone(),
             format: handler.descriptor().name.to_string(),
         };
-        self.emit_running(
-            OperationLabel {
-                command: "patch-create",
-                family: OperationFamily::Patch,
-                format: Some(handler.descriptor().name),
-            },
-            "create",
-            format!("creating {} patch", handler.descriptor().name),
-            Some(0.0),
-            None,
-        );
-        let report = match handler.create_with_options(&request, solid_options.as_ref(), &context) {
-            Ok(report) => report,
-            Err(RomWeaverError::Unsupported(op)) => OperationReport::unsupported(
-                OperationFamily::Patch,
-                Some(handler.descriptor().name.to_string()),
-                "create",
-                op.to_string(),
-                context.single_thread_execution(),
-            ),
-            Err(error) => OperationReport::failed_with_error(
-                OperationFamily::Patch,
-                Some(handler.descriptor().name.to_string()),
-                "create",
-                error,
-                context.single_thread_execution(),
-            ),
-        };
-        let mut report = report;
+        let mut report =
+            self.create_patch_with_handler(handler.as_ref(), &request, solid_options, &context);
         if report.status == OperationStatus::Succeeded
             && let Some(warning) = format_warning.as_deref()
         {
@@ -694,6 +397,349 @@ impl CliApp {
             report = Self::attach_emitted_files_details(report, vec![create_output.clone()], None);
         }
         self.finish("patch-create", report)
+    }
+
+    /// `patch create --plan`: recommend a format for the two inputs without writing a patch.
+    fn run_patch_create_plan(
+        &self,
+        args: &PatchCreateCommand,
+        has_solid_options: bool,
+        base_context: &OperationContext,
+        probe_threads: Option<ThreadExecution>,
+    ) -> OperationReport {
+        if has_solid_options {
+            return OperationReport::failed(
+                OperationFamily::Patch,
+                args.format.clone(),
+                "validate",
+                "SOLID metadata options cannot be combined with --plan".to_string(),
+                probe_threads,
+            );
+        }
+        let modified = match args.modified.as_ref() {
+            Some(path) => path,
+            None => {
+                return OperationReport::failed(
+                    OperationFamily::Patch,
+                    None,
+                    "validate",
+                    "patch create --plan requires --modified".to_string(),
+                    probe_threads,
+                );
+            }
+        };
+        if let Some(report) = self.require_readable_path(
+            "patch-create",
+            OperationFamily::Patch,
+            None,
+            &args.original,
+            base_context.single_thread_execution(),
+        ) {
+            return report;
+        }
+        if let Some(report) = self.require_readable_path(
+            "patch-create",
+            OperationFamily::Patch,
+            None,
+            modified,
+            base_context.single_thread_execution(),
+        ) {
+            return report;
+        }
+        let input_info = match self.inspect_patch_create_input_info(
+            "patch-create",
+            None,
+            &args.original,
+            modified,
+            base_context.single_thread_execution(),
+        ) {
+            Ok(input_info) => input_info,
+            Err(report) => return *report,
+        };
+        let sizes = create_patch_input_sizes(&input_info);
+        let candidates = create_patch_format_candidates_for_sources(&input_info);
+        let formats = candidates.formats.to_vec();
+        let mut report = OperationReport::succeeded(
+            OperationFamily::Patch,
+            Some(candidates.default_format.to_string()),
+            "recommend",
+            format!(
+                "recommended patch create format {}; candidates={}",
+                candidates.default_format,
+                formats.join(",")
+            ),
+            Some(100.0),
+            base_context.single_thread_execution(),
+        );
+        report.details = Some(json!({
+            "patch_create_format_candidates": {
+                "default": candidates.default_format,
+                "formats": formats,
+                "limits": {
+                    "archive_default_size_bytes": CREATE_PATCH_ARCHIVE_DEFAULT_LIMIT_BYTES,
+                    "bps_default_size_bytes": CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES,
+                    "ips_size_limit_bytes": CREATE_PATCH_IPS_SIZE_LIMIT_BYTES,
+                    "legacy_size_limit_bytes": CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES,
+                },
+                "source_values": {
+                    "original": {
+                        "path": args.original.display().to_string(),
+                        "archive": input_info.original.archive,
+                        "size": sizes.original,
+                        "special_compression": input_info.original.special_compression,
+                    },
+                    "modified": {
+                        "path": modified.display().to_string(),
+                        "archive": input_info.modified.archive,
+                        "size": sizes.modified,
+                        "special_compression": input_info.modified.special_compression,
+                    },
+                },
+            }
+        }));
+        report
+    }
+
+    /// Validates the output, xdelta mode, and format flags, and builds the create context.
+    fn prepare_patch_create(
+        &self,
+        args: &PatchCreateCommand,
+        has_solid_options: bool,
+        base_context: OperationContext,
+        probe_threads: &Option<ThreadExecution>,
+    ) -> std::result::Result<PatchCreateSetup, Box<OperationReport>> {
+        let output = match args.output.clone() {
+            Some(output) => output,
+            None => {
+                return Err(Box::new(OperationReport::failed(
+                    OperationFamily::Patch,
+                    args.format.clone(),
+                    "validate",
+                    "patch create requires --output unless --plan is used".to_string(),
+                    probe_threads.clone(),
+                )));
+            }
+        };
+        let fail = |format: Option<String>, stage: &str, message: String| {
+            Box::new(OperationReport::failed(
+                OperationFamily::Patch,
+                format,
+                stage,
+                message,
+                probe_threads.clone(),
+            ))
+        };
+        let xdelta_secondary_mode = args
+            .xdelta_secondary
+            .parse::<XdeltaSecondaryMode>()
+            .map_err(|error| fail(args.format.clone(), "validate", error.to_string()))?;
+        let context = base_context
+            .with_patch_checksum_validation(if args.ignore_checksum_validation {
+                PatchChecksumValidation::Ignore
+            } else {
+                PatchChecksumValidation::Strict
+            })
+            .with_xdelta_secondary_mode(xdelta_secondary_mode);
+        let resolution = self
+            .resolve_patch_create_format(args.format.as_deref(), &output)
+            .map_err(|error| {
+                Box::new(OperationReport::failed_with_error(
+                    OperationFamily::Patch,
+                    args.format.clone(),
+                    "validate",
+                    error,
+                    probe_threads.clone(),
+                ))
+            })?;
+        let requested_format = resolution.format;
+        let format_warning = resolution.warning;
+        if has_solid_options && !requested_format.eq_ignore_ascii_case("solid") {
+            return Err(fail(
+                Some(requested_format),
+                "validate",
+                "SOLID metadata options require --format solid or a .solid output".to_string(),
+            ));
+        }
+        if let Some(warning) = format_warning.as_deref() {
+            warn!(
+                command = "patch-create",
+                format = %requested_format,
+                output = %output.display(),
+                "{warning}"
+            );
+        }
+        if let Some(report) = self.require_readable_path(
+            "patch-create",
+            OperationFamily::Patch,
+            Some(requested_format.clone()),
+            &args.original,
+            probe_threads.clone(),
+        ) {
+            return Err(Box::new(report));
+        }
+        if let Some(report) = self.require_writable_output_parent(
+            "patch-create",
+            OperationFamily::Patch,
+            Some(requested_format.clone()),
+            &output,
+            probe_threads.clone(),
+        ) {
+            return Err(Box::new(report));
+        }
+        Ok(PatchCreateSetup {
+            output,
+            context,
+            requested_format,
+            format_warning,
+        })
+    }
+
+    /// Checks the modified input, finds the create handler, and enforces its size limits.
+    fn resolve_patch_create_handler(
+        &self,
+        original: &Path,
+        modified_path: &Path,
+        requested_format: String,
+        probe_threads: &Option<ThreadExecution>,
+    ) -> std::result::Result<Arc<dyn PatchHandler>, Box<OperationReport>> {
+        if let Some(report) = self.require_readable_path(
+            "patch-create",
+            OperationFamily::Patch,
+            Some(requested_format.clone()),
+            modified_path,
+            probe_threads.clone(),
+        ) {
+            return Err(Box::new(report));
+        }
+
+        let Some(handler) = self.patches.find_by_name(&requested_format) else {
+            let label = explicitly_unsupported_patch_reason_for_name(&requested_format)
+                .map(|reason| {
+                    format!(
+                        "requested patch format `{requested_format}` is explicitly not supported: {reason}"
+                    )
+                })
+                .unwrap_or_else(|| self.patches.unregistered_create_format_message(&requested_format));
+            return Err(Box::new(OperationReport::failed(
+                OperationFamily::Patch,
+                Some(requested_format),
+                "probe",
+                label,
+                probe_threads.clone(),
+            )));
+        };
+        let sizes = self.inspect_patch_create_input_sizes(
+            "patch-create",
+            Some(handler.descriptor().name.to_string()),
+            original,
+            modified_path,
+            probe_threads.clone(),
+        )?;
+        if let Some(label) =
+            create_patch_format_size_error_message(handler.descriptor().name, sizes)
+        {
+            return Err(Box::new(OperationReport::failed(
+                OperationFamily::Patch,
+                Some(handler.descriptor().name.to_string()),
+                "validate",
+                label,
+                probe_threads.clone(),
+            )));
+        }
+        Ok(handler)
+    }
+
+    /// Settles the final patch file name (with `--checksum-name`) and checks it is writable.
+    fn patch_create_output_path(
+        &self,
+        args: &PatchCreateCommand,
+        format_name: &str,
+        output: PathBuf,
+        context: &OperationContext,
+        probe_threads: &Option<ThreadExecution>,
+    ) -> std::result::Result<PathBuf, Box<OperationReport>> {
+        let fail_error = |error: RomWeaverError| {
+            Box::new(OperationReport::failed_with_error(
+                OperationFamily::Patch,
+                Some(format_name.to_string()),
+                "validate",
+                error,
+                probe_threads.clone(),
+            ))
+        };
+        let mut create_output = output;
+        if args.checksum_name {
+            // Prefer a caller-supplied source crc32 (the browser already hashes the
+            // original during input prep) to avoid re-reading the original here; fall
+            // back to computing it only when no crc32 assumption was supplied. A
+            // malformed or conflicting --assume-in is a hard error, not a silent
+            // recompute, so an invalid trusted value never passes unnoticed.
+            let provided_crc32 = parse_expect_tokens(&args.assume_in, "--assume-in", false)
+                .map_err(fail_error)?
+                .checksums
+                .get("crc32")
+                .cloned();
+            let crc32 = match provided_crc32 {
+                Some(crc32) => Some(crc32),
+                None => checksum_file_values(&args.original, &["crc32"], context)
+                    .map_err(fail_error)?
+                    .get("crc32")
+                    .cloned(),
+            };
+            if let Some(crc32) = crc32 {
+                let embedded = embed_checksum_in_filename(&create_output, "crc32", &crc32);
+                if embedded != create_output {
+                    trace!(
+                        output = %embedded.display(),
+                        crc32 = %crc32,
+                        "embedded source crc32 into patch file name"
+                    );
+                }
+                create_output = embedded;
+            }
+        }
+
+        // Guarded after --checksum-name has settled the final file name, so the
+        // path checked is the path written.
+        ensure_output_available(&create_output, args.force).map_err(fail_error)?;
+        Ok(create_output)
+    }
+
+    fn create_patch_with_handler(
+        &self,
+        handler: &dyn PatchHandler,
+        request: &PatchCreateRequest,
+        solid_options: Option<PatchCreateFormatOptions>,
+        context: &OperationContext,
+    ) -> OperationReport {
+        self.emit_running(
+            OperationLabel {
+                command: "patch-create",
+                family: OperationFamily::Patch,
+                format: Some(handler.descriptor().name),
+            },
+            "create",
+            format!("creating {} patch", handler.descriptor().name),
+            Some(0.0),
+            None,
+        );
+        match handler.create_with_options(request, solid_options.as_ref(), context) {
+            Ok(report) => report,
+            Err(RomWeaverError::Unsupported(op)) => OperationReport::unsupported(
+                OperationFamily::Patch,
+                Some(handler.descriptor().name.to_string()),
+                "create",
+                op.to_string(),
+                context.single_thread_execution(),
+            ),
+            Err(error) => OperationReport::failed_with_error(
+                OperationFamily::Patch,
+                Some(handler.descriptor().name.to_string()),
+                "create",
+                error,
+                context.single_thread_execution(),
+            ),
+        }
     }
 
     /// Decide which ROM the patch is diffed against, and what the cheat

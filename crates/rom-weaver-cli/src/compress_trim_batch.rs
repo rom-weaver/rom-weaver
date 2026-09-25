@@ -28,6 +28,27 @@ struct TrimBatchState {
     emitted_outputs: Vec<PathBuf>,
 }
 
+/// The resolved output format, codec, level, and handler for one `compress` run.
+struct CompressPlan {
+    handler: Arc<dyn ContainerHandler>,
+    resolved_format: String,
+    format_warning: Option<String>,
+    codec: Option<String>,
+    level: Option<i32>,
+    create_threads: Option<ThreadExecution>,
+}
+
+/// Batch-level totals that the final trim report needs.
+struct TrimSummary {
+    report_format: String,
+    processed: usize,
+    skipped_unsupported: usize,
+    dry_run: bool,
+    operation: TrimOperation,
+    irreversible_warning: &'static str,
+    thread_execution: Option<ThreadExecution>,
+}
+
 impl CliApp {
     pub(super) fn run_compress(&self, args: CompressCommand) -> AppRunOutcome {
         trace!(
@@ -71,25 +92,45 @@ impl CliApp {
 
         let context = self.context(threads);
         let probe_threads = context.single_thread_execution();
-        let fail = |format: Option<String>, stage: &str, message: String| {
-            OperationReport::failed(
-                OperationFamily::Container,
-                format,
-                stage,
-                message,
-                probe_threads.clone(),
-            )
+        if let Some(report) = self.validate_compress_paths(
+            &input,
+            &output,
+            &requested_format,
+            dry_run,
+            force,
+            &probe_threads,
+        ) {
+            return self.finish("compress", report);
+        }
+        let plan = match self.plan_compress(
+            requested_format,
+            &output,
+            codec,
+            level_profile,
+            &context,
+            &probe_threads,
+        ) {
+            Ok(plan) => plan,
+            Err(report) => return self.finish("compress", *report),
         };
-        let fail_error = |format: Option<String>, stage: &str, error: RomWeaverError| {
-            OperationReport::failed_with_error(
-                OperationFamily::Container,
-                format,
-                stage,
-                error,
-                probe_threads.clone(),
-            )
+        let report = if dry_run {
+            Self::compress_dry_run(&plan, &input, &output, level_profile, &context)
+        } else {
+            self.compress_create(plan, input, output, &context)
         };
-        for input in &input {
+        self.finish("compress", report)
+    }
+
+    fn validate_compress_paths(
+        &self,
+        input: &[PathBuf],
+        output: &Path,
+        requested_format: &Option<String>,
+        dry_run: bool,
+        force: bool,
+        probe_threads: &Option<ThreadExecution>,
+    ) -> Option<OperationReport> {
+        for input in input {
             if let Some(report) = self.require_readable_path(
                 "compress",
                 OperationFamily::Container,
@@ -97,7 +138,7 @@ impl CliApp {
                 input,
                 probe_threads.clone(),
             ) {
-                return self.finish("compress", report);
+                return Some(report);
             }
         }
         if !dry_run
@@ -105,35 +146,58 @@ impl CliApp {
                 "compress",
                 OperationFamily::Container,
                 requested_format.clone(),
-                &output,
+                output,
                 probe_threads.clone(),
             )
         {
-            return self.finish("compress", report);
+            return Some(report);
         }
-        if !dry_run && let Err(error) = ensure_output_available(&output, force) {
-            return self.finish(
-                "compress",
-                fail_error(requested_format.clone(), "validate", error),
-            );
+        if !dry_run && let Err(error) = ensure_output_available(output, force) {
+            return Some(OperationReport::failed_with_error(
+                OperationFamily::Container,
+                requested_format.clone(),
+                "validate",
+                error,
+                probe_threads.clone(),
+            ));
         }
+        None
+    }
+
+    /// Resolves the output format, codec, level, and create-capable handler for `compress`.
+    fn plan_compress(
+        &self,
+        requested_format: Option<String>,
+        output: &Path,
+        codec: Vec<String>,
+        level_profile: CompressionLevelProfile,
+        context: &OperationContext,
+        probe_threads: &Option<ThreadExecution>,
+    ) -> std::result::Result<CompressPlan, Box<OperationReport>> {
+        let fail = |format: Option<String>, stage: &str, message: String| {
+            Box::new(OperationReport::failed(
+                OperationFamily::Container,
+                format,
+                stage,
+                message,
+                probe_threads.clone(),
+            ))
+        };
+        let fail_error = |format: Option<String>, stage: &str, error: RomWeaverError| {
+            Box::new(OperationReport::failed_with_error(
+                OperationFamily::Container,
+                format,
+                stage,
+                error,
+                probe_threads.clone(),
+            ))
+        };
         // The output format is derived from the output filename's extension; an explicit --format
         // overrides it (with a warning when they disagree) and is required when the output has no
         // extension. There is no auto selection.
-        let resolution = match self.resolve_container_output_format(
-            requested_format.as_deref(),
-            &output,
-            "--format",
-            "",
-        ) {
-            Ok(resolution) => resolution,
-            Err(error) => {
-                return self.finish(
-                    "compress",
-                    fail_error(requested_format.clone(), "validate", error),
-                );
-            }
-        };
+        let resolution = self
+            .resolve_container_output_format(requested_format.as_deref(), output, "--format", "")
+            .map_err(|error| fail_error(requested_format.clone(), "validate", error))?;
         let resolved_format = resolution.format;
         let format_warning = resolution.warning;
         if let Some(warning) = format_warning.as_deref() {
@@ -144,15 +208,8 @@ impl CliApp {
                 "{warning}"
             );
         }
-        let (codec, explicit_level) = match Self::resolve_codec_level(codec, "--codec") {
-            Ok(value) => value,
-            Err(error) => {
-                return self.finish(
-                    "compress",
-                    fail_error(Some(resolved_format.clone()), "validate", error),
-                );
-            }
-        };
+        let (codec, explicit_level) = Self::resolve_codec_level(codec, "--codec")
+            .map_err(|error| fail_error(Some(resolved_format.clone()), "validate", error))?;
         let level = Self::resolve_compression_level_for_profile(
             &resolved_format,
             Self::primary_codec_name(codec.as_deref()),
@@ -161,62 +218,85 @@ impl CliApp {
         );
 
         let Some(handler) = self.containers.find_by_name(&resolved_format) else {
-            return self.finish(
-                "compress",
-                fail(
-                    Some(resolved_format.clone()),
-                    "probe",
-                    unregistered_output_format_message(&resolved_format),
-                ),
-            );
+            return Err(fail(
+                Some(resolved_format.clone()),
+                "probe",
+                unregistered_output_format_message(&resolved_format),
+            ));
         };
         let capabilities = handler.capabilities();
         if !capabilities.probe_details && !capabilities.extract && !capabilities.create {
-            return self.finish(
-                "compress",
-                fail(
-                    Some(resolved_format.clone()),
-                    "probe",
-                    unregistered_output_format_message(&resolved_format),
-                ),
-            );
+            return Err(fail(
+                Some(resolved_format.clone()),
+                "probe",
+                unregistered_output_format_message(&resolved_format),
+            ));
         }
         if !capabilities.create {
-            return self.finish(
-                "compress",
-                fail(
-                    Some(handler.descriptor().name.to_string()),
-                    "validate",
-                    extract_only_create_validation_message(handler.descriptor().name),
-                ),
-            );
+            return Err(fail(
+                Some(handler.descriptor().name.to_string()),
+                "validate",
+                extract_only_create_validation_message(handler.descriptor().name),
+            ));
         }
         let create_threads = Some(context.plan_threads(capabilities.create_threads.clone()));
-        if dry_run {
-            let request = ContainerCreateRequest {
-                inputs: input.clone(),
-                output: output.clone(),
-                format: resolved_format.clone(),
-                codec: codec.clone(),
-                level,
-                parent: None,
-            };
-            let estimated = handler.create_dry_run_size(&request, &context).ok();
-            let mut report = Self::compress_dry_run_report(
-                &input,
-                &output,
-                &resolved_format,
-                codec.as_deref(),
-                level_profile,
-                estimated,
-                create_threads.clone(),
-            );
-            if let Some(warning) = format_warning.as_deref() {
-                report.label = format!("{}; warning: {warning}", report.label);
-                Self::append_report_warnings(&mut report, [warning.to_string()]);
-            }
-            return self.finish("compress", report);
+        Ok(CompressPlan {
+            handler,
+            resolved_format,
+            format_warning,
+            codec,
+            level,
+            create_threads,
+        })
+    }
+
+    fn compress_dry_run(
+        plan: &CompressPlan,
+        input: &[PathBuf],
+        output: &Path,
+        level_profile: CompressionLevelProfile,
+        context: &OperationContext,
+    ) -> OperationReport {
+        let request = ContainerCreateRequest {
+            inputs: input.to_vec(),
+            output: output.to_path_buf(),
+            format: plan.resolved_format.clone(),
+            codec: plan.codec.clone(),
+            level: plan.level,
+            parent: None,
+        };
+        let estimated = plan.handler.create_dry_run_size(&request, context).ok();
+        let mut report = Self::compress_dry_run_report(
+            input,
+            output,
+            &plan.resolved_format,
+            plan.codec.as_deref(),
+            level_profile,
+            estimated,
+            plan.create_threads.clone(),
+        );
+        if let Some(warning) = plan.format_warning.as_deref() {
+            report.label = format!("{}; warning: {warning}", report.label);
+            Self::append_report_warnings(&mut report, [warning.to_string()]);
         }
+        report
+    }
+
+    fn compress_create(
+        &self,
+        plan: CompressPlan,
+        input: Vec<PathBuf>,
+        output: PathBuf,
+        context: &OperationContext,
+    ) -> OperationReport {
+        let CompressPlan {
+            handler,
+            resolved_format,
+            format_warning,
+            codec,
+            level,
+            create_threads,
+        } = plan;
         self.emit_running(
             OperationLabel {
                 command: "compress",
@@ -253,7 +333,7 @@ impl CliApp {
             level,
             parent: None,
         };
-        let mut report = handler.create(&request, &context).unwrap_or_else(|error| {
+        let mut report = handler.create(&request, context).unwrap_or_else(|error| {
             OperationReport::failed_with_error(
                 OperationFamily::Container,
                 Some(handler.descriptor().name.to_string()),
@@ -288,7 +368,7 @@ impl CliApp {
             report =
                 Self::attach_emitted_files_details(report, vec![expected_output], Some("archive"));
         }
-        self.finish("compress", report)
+        report
     }
 
     /// The `--dry-run` answer for `compress`: everything that was resolved, and
@@ -389,15 +469,6 @@ impl CliApp {
         // too many sources for --output) have no determined trim kind yet, so
         // they carry no format. Kind-specific reports below use the format
         // derived from the collected sources.
-        let fail = |stage: &str, message: String| {
-            OperationReport::failed(
-                OperationFamily::Command,
-                None,
-                stage,
-                message,
-                thread_execution.clone(),
-            )
-        };
         let fail_error = |stage: &str, error: RomWeaverError| {
             OperationReport::failed_with_error(
                 OperationFamily::Command,
@@ -444,52 +515,26 @@ impl CliApp {
 
         if trim_sources.is_empty() {
             Self::cleanup_temp_paths(&cleanup_paths);
-            let mut report = OperationReport::succeeded(
-                OperationFamily::Command,
-                Some(report_format.clone()),
-                "trim",
-                format!("no trim-eligible inputs found; skipped_unsupported={skipped_unsupported}"),
-                Some(100.0),
-                thread_execution,
-            );
-            if dry_run {
-                report.details = Some(json!({
-                    "dry_run": true,
-                    "command": "trim",
-                    "writes": [],
-                    "downloads": [],
-                    "read_only": false,
-                    "processed": 0,
-                    "skipped_unsupported": skipped_unsupported,
-                }));
-            }
-            return self.finish("trim", report);
-        }
-
-        if !dry_run
-            && let Some(report) = output.as_deref().and_then(|output| {
-                self.require_writable_output_parent(
-                    "trim",
-                    OperationFamily::Container,
-                    Some(report_format.clone()),
-                    output,
-                    thread_execution.clone(),
-                )
-            })
-        {
-            Self::cleanup_temp_paths(&cleanup_paths);
-            return self.finish("trim", report);
-        }
-
-        if output.is_some() && trim_sources.len() != 1 {
-            Self::cleanup_temp_paths(&cleanup_paths);
             return self.finish(
                 "trim",
-                fail(
-                    "validate",
-                    "--output requires exactly one trim-eligible source file".to_string(),
+                Self::trim_empty_report(
+                    report_format,
+                    skipped_unsupported,
+                    dry_run,
+                    thread_execution,
                 ),
             );
+        }
+
+        if let Some(report) = self.validate_trim_output(
+            output.as_deref(),
+            trim_sources.len(),
+            &report_format,
+            dry_run,
+            &thread_execution,
+        ) {
+            Self::cleanup_temp_paths(&cleanup_paths);
+            return self.finish("trim", report);
         }
 
         let config = TrimBatchConfig {
@@ -509,7 +554,88 @@ impl CliApp {
             self.process_trim_source(trim_source, &config, &mut state);
         }
 
-        let irreversible_warning = if operation != TrimOperation::Trim {
+        let summary = TrimSummary {
+            report_format,
+            processed: trim_sources.len(),
+            skipped_unsupported,
+            dry_run,
+            operation,
+            irreversible_warning: Self::irreversible_trim_warning(operation, &state),
+            thread_execution,
+        };
+        Self::cleanup_temp_paths(&cleanup_paths);
+        let report = if state.failed_count > 0 {
+            Self::trim_failure_report(summary, state)
+        } else {
+            Self::trim_success_report(summary, state)
+        };
+        self.finish("trim", report)
+    }
+
+    fn trim_empty_report(
+        report_format: String,
+        skipped_unsupported: usize,
+        dry_run: bool,
+        thread_execution: Option<ThreadExecution>,
+    ) -> OperationReport {
+        let mut report = OperationReport::succeeded(
+            OperationFamily::Command,
+            Some(report_format),
+            "trim",
+            format!("no trim-eligible inputs found; skipped_unsupported={skipped_unsupported}"),
+            Some(100.0),
+            thread_execution,
+        );
+        if dry_run {
+            report.details = Some(json!({
+                "dry_run": true,
+                "command": "trim",
+                "writes": [],
+                "downloads": [],
+                "read_only": false,
+                "processed": 0,
+                "skipped_unsupported": skipped_unsupported,
+            }));
+        }
+        report
+    }
+
+    fn validate_trim_output(
+        &self,
+        output: Option<&Path>,
+        source_count: usize,
+        report_format: &str,
+        dry_run: bool,
+        thread_execution: &Option<ThreadExecution>,
+    ) -> Option<OperationReport> {
+        if !dry_run
+            && let Some(report) = output.and_then(|output| {
+                self.require_writable_output_parent(
+                    "trim",
+                    OperationFamily::Container,
+                    Some(report_format.to_string()),
+                    output,
+                    thread_execution.clone(),
+                )
+            })
+        {
+            return Some(report);
+        }
+
+        if output.is_some() && source_count != 1 {
+            return Some(OperationReport::failed(
+                OperationFamily::Command,
+                None,
+                "validate",
+                "--output requires exactly one trim-eligible source file".to_string(),
+                thread_execution.clone(),
+            ));
+        }
+        None
+    }
+
+    fn irreversible_trim_warning(operation: TrimOperation, state: &TrimBatchState) -> &'static str {
+        if operation != TrimOperation::Trim {
             ""
         } else if state.irreversible_xiso && !state.irreversible_rvz_scrub {
             "; warning=trimmed xiso output cannot be reverted to original padding; keep backup"
@@ -519,70 +645,88 @@ impl CliApp {
             "; warning=some trimmed outputs cannot be reverted to original source format; keep backups"
         } else {
             ""
-        };
-
-        if state.failed_count > 0 {
-            Self::cleanup_temp_paths(&cleanup_paths);
-            let first_error_kind = state.first_error_kind;
-            let mut report = OperationReport::failed(
-                OperationFamily::Command,
-                Some(report_format.clone()),
-                "trim",
-                format!(
-                    "{} completed with failures; processed={} trimmed={} already_trimmed={} failed={} skipped_unsupported={}; first_error={}",
-                    if dry_run {
-                        if operation == TrimOperation::Trim {
-                            "trim simulation"
-                        } else {
-                            "trim revert simulation"
-                        }
-                    } else if operation == TrimOperation::Trim {
-                        "trim"
-                    } else {
-                        "trim revert"
-                    },
-                    trim_sources.len(),
-                    state.trimmed_count,
-                    state.already_trimmed_count,
-                    state.failed_count,
-                    skipped_unsupported,
-                    state.first_error.unwrap_or_else(|| "(none)".to_string()),
-                ),
-                thread_execution.clone(),
-            );
-            report.error_kind = first_error_kind;
-            report.details = Some(json!({
-                "processed": trim_sources.len(),
-                "changed": state.trimmed_count,
-                "already_target": state.already_trimmed_count,
-                "failed": state.failed_count,
-                "skipped_unsupported": skipped_unsupported,
-                "mode_counts": state.mode_counts,
-                "dry_run": dry_run,
-                "writes": state.planned_outputs,
-            }));
-            let emitted = Self::build_emitted_file_detail_values(
-                report.details.as_ref(),
-                &state.emitted_outputs,
-                None,
-            );
-            report = Self::set_emitted_files_detail(report, emitted);
-            if let Some(warning) = irreversible_warning.strip_prefix("; warning=") {
-                Self::append_report_warnings(&mut report, [warning.to_string()]);
-            }
-            return self.finish("trim", report);
         }
+    }
 
-        Self::cleanup_temp_paths(&cleanup_paths);
+    fn trim_failure_report(summary: TrimSummary, state: TrimBatchState) -> OperationReport {
+        let TrimSummary {
+            report_format,
+            processed,
+            skipped_unsupported,
+            dry_run,
+            operation,
+            irreversible_warning,
+            thread_execution,
+        } = summary;
+        let first_error_kind = state.first_error_kind;
+        let mut report = OperationReport::failed(
+            OperationFamily::Command,
+            Some(report_format),
+            "trim",
+            format!(
+                "{} completed with failures; processed={} trimmed={} already_trimmed={} failed={} skipped_unsupported={}; first_error={}",
+                if dry_run {
+                    if operation == TrimOperation::Trim {
+                        "trim simulation"
+                    } else {
+                        "trim revert simulation"
+                    }
+                } else if operation == TrimOperation::Trim {
+                    "trim"
+                } else {
+                    "trim revert"
+                },
+                processed,
+                state.trimmed_count,
+                state.already_trimmed_count,
+                state.failed_count,
+                skipped_unsupported,
+                state.first_error.unwrap_or_else(|| "(none)".to_string()),
+            ),
+            thread_execution,
+        );
+        report.error_kind = first_error_kind;
+        report.details = Some(json!({
+            "processed": processed,
+            "changed": state.trimmed_count,
+            "already_target": state.already_trimmed_count,
+            "failed": state.failed_count,
+            "skipped_unsupported": skipped_unsupported,
+            "mode_counts": state.mode_counts,
+            "dry_run": dry_run,
+            "writes": state.planned_outputs,
+        }));
+        let emitted = Self::build_emitted_file_detail_values(
+            report.details.as_ref(),
+            &state.emitted_outputs,
+            None,
+        );
+        report = Self::set_emitted_files_detail(report, emitted);
+        if let Some(warning) = irreversible_warning.strip_prefix("; warning=") {
+            Self::append_report_warnings(&mut report, [warning.to_string()]);
+        }
+        report
+    }
+
+    fn trim_success_report(summary: TrimSummary, state: TrimBatchState) -> OperationReport {
+        let TrimSummary {
+            report_format,
+            processed,
+            skipped_unsupported,
+            dry_run,
+            operation,
+            irreversible_warning,
+            thread_execution,
+        } = summary;
         let mut report = OperationReport::succeeded(
             OperationFamily::Command,
-            Some(report_format.clone()),
+            Some(report_format),
             "trim",
             match state.single_detail {
                 Some(single_detail) => format!(
                     "{single_detail}; {}; processed={} trimmed={} already_trimmed={} changed={} already_target={} skipped_unsupported={} mode_counts={}{}",
                     operation.summary_label(dry_run),
-                    trim_sources.len(),
+                    processed,
                     state.trimmed_count,
                     state.already_trimmed_count,
                     state.trimmed_count,
@@ -594,7 +738,7 @@ impl CliApp {
                 None => format!(
                     "{}; processed={} trimmed={} already_trimmed={} changed={} already_target={} skipped_unsupported={} mode_counts={}{}",
                     operation.summary_label(dry_run),
-                    trim_sources.len(),
+                    processed,
                     state.trimmed_count,
                     state.already_trimmed_count,
                     state.trimmed_count,
@@ -614,7 +758,7 @@ impl CliApp {
                 "writes": state.planned_outputs,
                 "downloads": [],
                 "read_only": false,
-                "processed": trim_sources.len(),
+                "processed": processed,
                 "notes": ["destination write access is not validated during dry run"],
                 "would_change": state.trimmed_count,
                 "already_target": state.already_trimmed_count,
@@ -622,7 +766,7 @@ impl CliApp {
             }));
         } else {
             report.details = Some(json!({
-                "processed": trim_sources.len(),
+                "processed": processed,
                 "changed": state.trimmed_count,
                 "already_target": state.already_trimmed_count,
                 "skipped_unsupported": skipped_unsupported,
@@ -633,7 +777,7 @@ impl CliApp {
         if let Some(warning) = irreversible_warning.strip_prefix("; warning=") {
             Self::append_report_warnings(&mut report, [warning.to_string()]);
         }
-        self.finish("trim", report)
+        report
     }
 
     fn process_trim_source(

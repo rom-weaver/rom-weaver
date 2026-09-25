@@ -22,7 +22,7 @@ pub(super) struct BundleApplyResolution {
     /// version 2 supplies `patchBasis`; an explicit CLI shared rule wins.
     pub patch_basis: PatchBasisMode,
     /// `(source label, requirements)`, merged in order after CLI flags.
-    pub checks: Vec<(String, FilenameRequirements)>,
+    pub checks: Vec<NamedCheck>,
     /// Advisory file-name expectation for a ROM supplied separately from the
     /// bundle. Compared after auto-extraction resolves the logical ROM leaf.
     pub expected_rom_name: Option<String>,
@@ -67,6 +67,15 @@ struct ResolveBundleApplyEntryInputs<'a> {
     extract_root: &'a mut Option<PathBuf>,
     context: &'a OperationContext,
     entry_label: &'a str,
+}
+
+type NamedCheck = (String, FilenameRequirements);
+
+/// Mutable state that bundle patch selection adds to.
+struct BundleApplyAccumulators<'a> {
+    extract_root: &'a mut Option<PathBuf>,
+    checks: &'a mut Vec<NamedCheck>,
+    warnings: &'a mut Vec<String>,
 }
 
 impl CliApp {
@@ -122,7 +131,7 @@ impl CliApp {
         // Lazily-created root for archive-member extraction, inside the
         // caller-owned temp namespace.
         let mut extract_root: Option<PathBuf> = None;
-        let mut checks: Vec<(String, FilenameRequirements)> = Vec::new();
+        let mut checks: Vec<NamedCheck> = Vec::new();
 
         self.merge_bundle_apply_rom(
             args,
@@ -138,204 +147,17 @@ impl CliApp {
         let mut output_checks: Option<(String, FilenameRequirements)> = None;
         let mut steps: Vec<patch_apply::PatchApplyStepMetadata> = Vec::new();
         if args.patches.is_empty() {
-            let selected =
-                self.select_bundle_patches(&bundle, &args.with_patches, &args.without_patches)?;
-            let selected_set: BTreeSet<usize> = selected.iter().copied().collect();
-            // A cheats-only bundle legitimately selects no patch - unless the
-            // caller dropped the cheats too, leaving nothing to run.
-            if selected.is_empty() && (bundle.cheats.is_empty() || args.without_cheats) {
-                return Err(RomWeaverError::Validation(
-                    "no bundle patches selected (all are optional or disabled); pass --with <glob> to include some"
-                        .to_string(),
-                ));
-            }
-            let selected_ids: BTreeMap<&str, usize> = selected
-                .iter()
-                .enumerate()
-                .filter_map(|(position, index)| {
-                    bundle.patches[*index]
-                        .id
-                        .as_deref()
-                        .map(|id| (id, position))
-                })
-                .collect();
-            for (position, index) in selected.iter().enumerate() {
-                for (selector_name, selector) in [
-                    ("input", bundle.patches[*index].input.as_ref()),
-                    ("target", bundle.patches[*index].target.as_ref()),
-                ] {
-                    let Some(BundlePatchInput::Patch {
-                        patch: producer, ..
-                    }) = selector
-                    else {
-                        continue;
-                    };
-                    if selected_ids
-                        .get(producer.as_str())
-                        .is_none_or(|producer_position| *producer_position >= position)
-                    {
-                        return Err(RomWeaverError::ValidationCode(
-                            ValidationCodeError::new(match selector_name {
-                                "input" => "bundle.patch.input.patch.unavailable",
-                                "target" => "bundle.patch.target.patch.unavailable",
-                                _ => unreachable!("only input and target selectors are checked"),
-                            })
-                            .with_message(
-                                "patch selector references an earlier patch that is not selected",
-                            )
-                            .with_field("entry", format!("patches[{index}]"))
-                            .with_field("patch", producer.clone()),
-                        ));
-                    }
-                }
-            }
-            for (position, index) in selected.iter().enumerate() {
-                let entry = &bundle.patches[*index];
-                let entry_label = format!("patches[{index}]");
-                let resolved = self
-                    .resolve_bundle_apply_entry(ResolveBundleApplyEntryInputs {
-                        url: entry.url.as_deref(),
-                        path: entry.path.as_deref(),
-                        loaded: &source.loaded,
-                        archive_source: &source.archive_source,
-                        bundle_dir: &source.bundle_dir,
-                        bundle_base_url: source.bundle_base_url.as_deref(),
-                        extract_root: &mut extract_root,
-                        context,
-                        entry_label: &entry_label,
-                    })?
-                    .expect("patch entries always carry a source");
-                // Only the FIRST applied patch's input state describes the
-                // supplied ROM; without its own inputChecks it relies on
-                // rom.checks (already merged). Later patches' inputChecks are
-                // mid-chain states, validated by construction of the chain.
-                let input_checks = resolve_bundle_checks(
-                    &bundle,
-                    entry.input_checks.as_ref(),
-                    entry.input_checks_ref.as_deref(),
-                )?;
-                let input_is_root_rom = entry.target.is_none()
-                    && match entry.input.as_ref() {
-                        None => true,
-                        Some(BundlePatchInput::Rom { member, .. }) => {
-                            member == &bundle.rom.as_ref().and_then(|rom| rom.member.clone())
-                        }
-                        Some(BundlePatchInput::Patch { .. }) => false,
-                    };
-                if position == 0
-                    && input_is_root_rom
-                    && let Some(entry_checks) = &input_checks
-                {
-                    checks.push((
-                        format!("bundle {entry_label}.inputChecks"),
-                        FilenameRequirements {
-                            checksums: entry_checks.checksums.clone(),
-                            size: entry_checks.size,
-                        },
-                    ));
-                }
-                // A skipped chain step is detectable when both sides declare
-                // their state: warn instead of failing so intentionally
-                // reordered/partial selections still run.
-                if position > 0
-                    && let Some(previous_output) = selected
-                        .get(position - 1)
-                        .map(|previous| &bundle.patches[*previous])
-                        .map(|previous| {
-                            resolve_bundle_checks(
-                                &bundle,
-                                previous.output_checks.as_ref(),
-                                previous.output_checks_ref.as_deref(),
-                            )
-                        })
-                        .transpose()?
-                        .flatten()
-                    && let Some(entry_input) = resolve_bundle_checks(
-                        &bundle,
-                        entry.input_checks.as_ref(),
-                        entry.input_checks_ref.as_deref(),
-                    )?
-                    && !bundle_checks_agree(&previous_output, &entry_input)
-                {
-                    warn!(
-                        entry = %entry_label,
-                        "bundle chain mismatch: this patch's inputChecks differ from the previous selected patch's outputChecks"
-                    );
-                    warnings.push(format!(
-                        "bundle chain mismatch at {entry_label}: this patch's inputChecks differ from the previous selected patch's outputChecks"
-                    ));
-                }
-                // A declared state gates only when every earlier entry in its
-                // own execution lane is selected. Other ROM/member lanes do
-                // not change these bytes.
-                let is_chain_prefix = (0..=*index)
-                    .filter(|candidate| bundle.patches[*candidate].target == entry.target)
-                    .all(|candidate| selected_set.contains(&candidate));
-                let entry_basis = entry.basis.map(|basis| match basis {
-                    PatchInputBasis::Base => PatchBasisMode::Base,
-                    PatchInputBasis::Previous => PatchBasisMode::Previous,
-                });
-                let bundle_basis = (bundle.version != 1)
-                    .then_some(bundle.patch_basis)
-                    .flatten();
-                let effective_basis = args
-                    .default_patch_basis
-                    .or(entry_basis)
-                    .or(bundle_basis)
-                    .unwrap_or(PatchBasisMode::Auto);
-                let output_checks = resolve_bundle_checks(
-                    &bundle,
-                    entry.output_checks.as_ref(),
-                    entry.output_checks_ref.as_deref(),
-                )?;
-                let verification = patch_plan::PatchStepVerification {
-                    execution: None,
-                    base_variant: None,
-                    base_representation: None,
-                    basis: effective_basis.declared(),
-                    basis_source: effective_basis
-                        .declared()
-                        .map(|_| PatchBasisSource::Declared),
-                    declared_input: input_checks
-                        .as_ref()
-                        .map(patch_plan::PlanState::from_bundle_checks),
-                    declared_output: output_checks
-                        .as_ref()
-                        .map(patch_plan::PlanState::from_bundle_checks),
-                    is_chain_prefix,
-                    lane_source_input: false,
-                };
-                steps.push(patch_apply::PatchApplyStepMetadata {
-                    input: entry.input.clone(),
-                    target: entry.target.clone(),
-                    id: entry.id.clone(),
-                    verification: Some(verification),
-                    header_mode: entry.header.unwrap_or_default(),
-                    ..patch_apply::PatchApplyStepMetadata::default()
-                });
-                trace!(
-                    patch = %resolved.display(),
-                    optional = entry.optional,
-                    header = ?entry.header,
-                    basis = ?effective_basis,
-                    is_chain_prefix,
-                    "selected bundle patch"
-                );
-                args.patches.push(resolved);
-            }
-            fill_member_lane_checks(&bundle, &mut steps)?;
-            output_checks =
-                resolve_selected_bundle_output_check(&bundle, &selected, &selected_set)?;
-            // Only pin per-patch header modes when the bundle sets any;
-            // otherwise the all-auto default (empty list) applies. Explicit
-            // --patch-header flags win untouched.
-            if args.patch_header.is_empty()
-                && steps
-                    .iter()
-                    .any(|step| step.header_mode != PatchApplyHeaderMode::Auto)
-            {
-                args.patch_header = steps.iter().map(|step| step.header_mode).collect();
-            }
+            (steps, output_checks) = self.select_bundle_apply_patches(
+                args,
+                &bundle,
+                &source,
+                BundleApplyAccumulators {
+                    extract_root: &mut extract_root,
+                    checks: &mut checks,
+                    warnings: &mut warnings,
+                },
+                context,
+            )?;
         } else {
             trace!(
                 explicit_patches = args.patches.len(),
@@ -372,6 +194,119 @@ impl CliApp {
         }))
     }
 
+    /// Resolves the selected bundle patches into `args.patches` and returns their step
+    /// metadata and the selected output check.
+    fn select_bundle_apply_patches(
+        &self,
+        args: &mut PatchApplyCommand,
+        bundle: &RomWeaverBundle,
+        source: &BundleApplySourceContext,
+        acc: BundleApplyAccumulators<'_>,
+        context: &OperationContext,
+    ) -> Result<(Vec<patch_apply::PatchApplyStepMetadata>, Option<NamedCheck>)> {
+        let mut steps: Vec<patch_apply::PatchApplyStepMetadata> = Vec::new();
+        let selected =
+            self.select_bundle_patches(bundle, &args.with_patches, &args.without_patches)?;
+        let selected_set: BTreeSet<usize> = selected.iter().copied().collect();
+        // A cheats-only bundle legitimately selects no patch - unless the
+        // caller dropped the cheats too, leaving nothing to run.
+        if selected.is_empty() && (bundle.cheats.is_empty() || args.without_cheats) {
+            return Err(RomWeaverError::Validation(
+                "no bundle patches selected (all are optional or disabled); pass --with <glob> to include some"
+                    .to_string(),
+            ));
+        }
+        validate_bundle_patch_producers(bundle, &selected)?;
+        for (position, index) in selected.iter().enumerate() {
+            let entry = &bundle.patches[*index];
+            let entry_label = format!("patches[{index}]");
+            let resolved = self
+                .resolve_bundle_apply_entry(ResolveBundleApplyEntryInputs {
+                    url: entry.url.as_deref(),
+                    path: entry.path.as_deref(),
+                    loaded: &source.loaded,
+                    archive_source: &source.archive_source,
+                    bundle_dir: &source.bundle_dir,
+                    bundle_base_url: source.bundle_base_url.as_deref(),
+                    extract_root: acc.extract_root,
+                    context,
+                    entry_label: &entry_label,
+                })?
+                .expect("patch entries always carry a source");
+            // Only the FIRST applied patch's input state describes the
+            // supplied ROM; without its own inputChecks it relies on
+            // rom.checks (already merged). Later patches' inputChecks are
+            // mid-chain states, validated by construction of the chain.
+            let input_checks = resolve_bundle_checks(
+                bundle,
+                entry.input_checks.as_ref(),
+                entry.input_checks_ref.as_deref(),
+            )?;
+            let input_is_root_rom = entry.target.is_none()
+                && match entry.input.as_ref() {
+                    None => true,
+                    Some(BundlePatchInput::Rom { member, .. }) => {
+                        member == &bundle.rom.as_ref().and_then(|rom| rom.member.clone())
+                    }
+                    Some(BundlePatchInput::Patch { .. }) => false,
+                };
+            if position == 0
+                && input_is_root_rom
+                && let Some(entry_checks) = &input_checks
+            {
+                acc.checks.push((
+                    format!("bundle {entry_label}.inputChecks"),
+                    FilenameRequirements {
+                        checksums: entry_checks.checksums.clone(),
+                        size: entry_checks.size,
+                    },
+                ));
+            }
+            // Warn instead of failing so intentionally reordered/partial
+            // selections still run.
+            if position > 0 && bundle_chain_mismatch(bundle, &selected, position, entry)? {
+                warn!(
+                    entry = %entry_label,
+                    "bundle chain mismatch: this patch's inputChecks differ from the previous selected patch's outputChecks"
+                );
+                acc.warnings.push(format!(
+                    "bundle chain mismatch at {entry_label}: this patch's inputChecks differ from the previous selected patch's outputChecks"
+                ));
+            }
+            let (step, effective_basis, is_chain_prefix) = bundle_patch_step_metadata(
+                bundle,
+                entry,
+                *index,
+                &selected_set,
+                input_checks.as_ref(),
+                args.default_patch_basis,
+            )?;
+            steps.push(step);
+            trace!(
+                patch = %resolved.display(),
+                optional = entry.optional,
+                header = ?entry.header,
+                basis = ?effective_basis,
+                is_chain_prefix,
+                "selected bundle patch"
+            );
+            args.patches.push(resolved);
+        }
+        fill_member_lane_checks(bundle, &mut steps)?;
+        // Only pin per-patch header modes when the bundle sets any;
+        // otherwise the all-auto default (empty list) applies. Explicit
+        // --patch-header flags win untouched.
+        if args.patch_header.is_empty()
+            && steps
+                .iter()
+                .any(|step| step.header_mode != PatchApplyHeaderMode::Auto)
+        {
+            args.patch_header = steps.iter().map(|step| step.header_mode).collect();
+        }
+        let output_checks = resolve_selected_bundle_output_check(bundle, &selected, &selected_set)?;
+        Ok((steps, output_checks))
+    }
+
     fn merge_bundle_apply_rom(
         &self,
         args: &mut PatchApplyCommand,
@@ -379,7 +314,7 @@ impl CliApp {
         source: &BundleApplySourceContext,
         extract_root: &mut Option<PathBuf>,
         context: &OperationContext,
-        checks: &mut Vec<(String, FilenameRequirements)>,
+        checks: &mut Vec<NamedCheck>,
     ) -> Result<()> {
         let Some(rom) = &bundle.rom else {
             if matches!(source.mode, BundleApplySourceKind::InputIsBundle) {
@@ -729,6 +664,139 @@ impl CliApp {
         }
         Ok(selected)
     }
+}
+
+fn validate_bundle_patch_producers(bundle: &RomWeaverBundle, selected: &[usize]) -> Result<()> {
+    let selected_ids: BTreeMap<&str, usize> = selected
+        .iter()
+        .enumerate()
+        .filter_map(|(position, index)| {
+            bundle.patches[*index]
+                .id
+                .as_deref()
+                .map(|id| (id, position))
+        })
+        .collect();
+    for (position, index) in selected.iter().enumerate() {
+        for (selector_name, selector) in [
+            ("input", bundle.patches[*index].input.as_ref()),
+            ("target", bundle.patches[*index].target.as_ref()),
+        ] {
+            let Some(BundlePatchInput::Patch {
+                patch: producer, ..
+            }) = selector
+            else {
+                continue;
+            };
+            if selected_ids
+                .get(producer.as_str())
+                .is_none_or(|producer_position| *producer_position >= position)
+            {
+                return Err(RomWeaverError::ValidationCode(
+                    ValidationCodeError::new(match selector_name {
+                        "input" => "bundle.patch.input.patch.unavailable",
+                        "target" => "bundle.patch.target.patch.unavailable",
+                        _ => unreachable!("only input and target selectors are checked"),
+                    })
+                    .with_message("patch selector references an earlier patch that is not selected")
+                    .with_field("entry", format!("patches[{index}]"))
+                    .with_field("patch", producer.clone()),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A skipped chain step is detectable when both sides declare their state.
+fn bundle_chain_mismatch(
+    bundle: &RomWeaverBundle,
+    selected: &[usize],
+    position: usize,
+    entry: &BundlePatchEntry,
+) -> Result<bool> {
+    let Some(previous_output) = selected
+        .get(position - 1)
+        .map(|previous| &bundle.patches[*previous])
+        .map(|previous| {
+            resolve_bundle_checks(
+                bundle,
+                previous.output_checks.as_ref(),
+                previous.output_checks_ref.as_deref(),
+            )
+        })
+        .transpose()?
+        .flatten()
+    else {
+        return Ok(false);
+    };
+    let Some(entry_input) = resolve_bundle_checks(
+        bundle,
+        entry.input_checks.as_ref(),
+        entry.input_checks_ref.as_deref(),
+    )?
+    else {
+        return Ok(false);
+    };
+    Ok(!bundle_checks_agree(&previous_output, &entry_input))
+}
+
+/// Builds one selected patch's step metadata, with its effective basis and whether it
+/// is a chain prefix.
+fn bundle_patch_step_metadata(
+    bundle: &RomWeaverBundle,
+    entry: &BundlePatchEntry,
+    index: usize,
+    selected_set: &BTreeSet<usize>,
+    input_checks: Option<&BundleChecks>,
+    default_patch_basis: Option<PatchBasisMode>,
+) -> Result<(patch_apply::PatchApplyStepMetadata, PatchBasisMode, bool)> {
+    // A declared state gates only when every earlier entry in its
+    // own execution lane is selected. Other ROM/member lanes do
+    // not change these bytes.
+    let is_chain_prefix = (0..=index)
+        .filter(|candidate| bundle.patches[*candidate].target == entry.target)
+        .all(|candidate| selected_set.contains(&candidate));
+    let entry_basis = entry.basis.map(|basis| match basis {
+        PatchInputBasis::Base => PatchBasisMode::Base,
+        PatchInputBasis::Previous => PatchBasisMode::Previous,
+    });
+    let bundle_basis = (bundle.version != 1)
+        .then_some(bundle.patch_basis)
+        .flatten();
+    let effective_basis = default_patch_basis
+        .or(entry_basis)
+        .or(bundle_basis)
+        .unwrap_or(PatchBasisMode::Auto);
+    let output_checks = resolve_bundle_checks(
+        bundle,
+        entry.output_checks.as_ref(),
+        entry.output_checks_ref.as_deref(),
+    )?;
+    let verification = patch_plan::PatchStepVerification {
+        execution: None,
+        base_variant: None,
+        base_representation: None,
+        basis: effective_basis.declared(),
+        basis_source: effective_basis
+            .declared()
+            .map(|_| PatchBasisSource::Declared),
+        declared_input: input_checks.map(patch_plan::PlanState::from_bundle_checks),
+        declared_output: output_checks
+            .as_ref()
+            .map(patch_plan::PlanState::from_bundle_checks),
+        is_chain_prefix,
+        lane_source_input: false,
+    };
+    let step = patch_apply::PatchApplyStepMetadata {
+        input: entry.input.clone(),
+        target: entry.target.clone(),
+        id: entry.id.clone(),
+        verification: Some(verification),
+        header_mode: entry.header.unwrap_or_default(),
+        ..patch_apply::PatchApplyStepMetadata::default()
+    };
+    Ok((step, effective_basis, is_chain_prefix))
 }
 
 fn resolve_bundle_checks(
