@@ -166,6 +166,10 @@ fn attach_compression_details(
     report
 }
 
+#[path = "handlers/regular_archive.rs"]
+mod regular_archive;
+use regular_archive::regular_archive_probe_report;
+
 #[path = "handlers/zip.rs"]
 mod zip;
 #[cfg(test)]
