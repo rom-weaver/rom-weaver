@@ -961,25 +961,6 @@
   border-radius: var(--r-s);
 }
 
-@media (max-width: 999px) {
-  html[data-offline-layout="strip"] .rw-app .menu-sheet {
-    inset-block-end: var(--dock-h);
-    max-block-size: calc(100dvh - var(--dock-h));
-  }
-  html[data-offline-layout="strip"] .rw-app {
-    --dock-h: calc(53px + max(3px, var(--safe-b)));
-  }
-
-  html[data-offline-layout="strip"] .rw-app .dock {
-    row-gap: 0;
-  }
-  html[data-offline-layout="strip"] .rw-app .dock-tab {
-    grid-row: 1;
-  }
-  html[data-offline-layout="strip"] .rw-app .dock:has(.update-ready) .dock-tab {
-    grid-row: 2;
-  }
-}
 .rw-app .dock-tab svg {
   width: 20px;
   height: 20px;
