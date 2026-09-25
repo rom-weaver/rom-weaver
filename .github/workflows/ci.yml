@@ -724,6 +724,9 @@ jobs:
       - name: Rust typegen
         run: mise run typegen-check
 
+      - name: CLI man page manifests
+        run: cargo run --locked -p rom-weaver-cli --example generate_manpages -- --check-manifests
+
       - name: Whitespace
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}

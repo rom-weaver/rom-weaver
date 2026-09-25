@@ -112,7 +112,11 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
       result.webapp = true;
     }
 
-    if (path === "scripts/ci/cli-platform-matrix.mjs") result.rust = true;
+    if (
+      path === "scripts/ci/cli-platform-matrix.mjs" ||
+      path === "packages/rom-weaver-alias/package.json"
+    )
+      result.rust = true;
     if (path === "scripts/ci/docker-matrix.mjs") {
       result.webapp = true;
       result.docker_cli = true;
