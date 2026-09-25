@@ -83,6 +83,24 @@ describe("ExtractForm", () => {
     await waitFor(() => expect(screen.queryByText("Creating set.zip…")).toBeNull());
   });
 
+  it("cancels a ZIP without an error or a save and lets the user try again", async () => {
+    runtime.extract.mockResolvedValue({ outputs: [output("a.bin"), output("b.bin")] });
+    const late = output("set.zip");
+    let finish: (value: unknown) => void = () => undefined;
+    runtime.create.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+    render(<ExtractForm />);
+
+    addFile(new File(["zip"], "set.zip"));
+    fireEvent.click(await screen.findByRole("button", { name: "Download 2 files as ZIP" }));
+    fireEvent.click(await screen.findByRole("button", { name: /cancel/i }));
+    finish({ output: late });
+
+    await waitFor(() => expect(late.dispose).toHaveBeenCalled());
+    expect(late.saveAs).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect((screen.getByRole("button", { name: "Download 2 files as ZIP" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("asks how to write a multi-track CD CHD before it extracts", async () => {
     runtime.probe.mockImplementation(async ({ options }: { options: { chdSplitBin?: boolean } }) => ({
       entries: options.chdSplitBin

@@ -246,6 +246,11 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
       if (!result) throw new Error("ZIP downloads are not available in this browser.");
       const archive = "output" in result ? result.output : result;
       if (!archive) throw new Error("The ZIP file was not created.");
+      // The runtime can finish after a cancel or an unmount aborted the signal.
+      if (abort.signal.aborted) {
+        void archive.dispose();
+        return;
+      }
       zipRef.current = archive;
       setZipProgress(null);
       await archive.saveAs({ fileName: zipName(source), interactive: true });
