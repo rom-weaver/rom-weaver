@@ -164,6 +164,7 @@ describe("HomePage", () => {
     expect(links).toEqual(["/tools/apply-patches", "/tools/create-patch", "/tools/bundle-patches", "/tools/test-rom"]);
     expect(container.querySelector("#home-title")?.textContent).toContain("Your ROM workflow.");
     expect(container.querySelectorAll("a[href='/tools/apply-patches']")).toHaveLength(1);
+    expect(container.querySelector("a[href='/tools/docs/features']")?.textContent).toContain("See what");
     expect(container.textContent).toContain("One toolkit.");
     expect(container.querySelector(".home-try")?.textContent).toContain("Walk through a sample");
     expect(container.querySelector(".home-loom-caption")?.textContent).toContain("One pass");

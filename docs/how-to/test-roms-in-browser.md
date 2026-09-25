@@ -21,13 +21,30 @@ If you need a practice file, open [guided Test](https://rom-weaver.com/test-rom?
 
 1. Open [Test](https://rom-weaver.com/test).
 2. Drop a ROM onto **0x01 Load a game**, or choose **Choose a ROM file**.
-3. Use the controls inside the emulator player.
+3. If the player shows **START GAME**, select it. Touch devices can require this tap before playback starts.
+4. Use the controls inside the emulator player.
 
 You can also add a ZIP or 7z archive. rom-weaver shows the extraction progress, then opens a supported ROM from the archive.
 
 A PlayStation or Saturn disc image in CHD opens without extraction. The emulator core reads the CHD directly, so a multi-track CD plays as one file. Add the `.chd` file itself, not an archive that contains it. A CHD for any other platform is extracted first.
 
 [Browser emulator support](../reference/formats.md#browser-emulator-support) lists the platforms with bundled cores.
+
+<figure class="docs-screenshot">
+  <picture data-docs-screenshot-theme="light">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/test-player-mobile-light.avif" width="1170" height="2356">
+    <source type="image/avif" srcset="../screenshots/test-player-desktop-light.avif" width="1770" height="1489">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/test-player-mobile-light.webp" width="1170" height="2356">
+    <img src="../screenshots/test-player-desktop-light.webp" alt="Test player showing the HELLO WORLD homebrew ROM and its SHA-1 fingerprint in the light theme" width="1770" height="1489">
+  </picture>
+  <picture data-docs-screenshot-theme="dark">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/test-player-mobile-dark.avif" width="1170" height="2356">
+    <source type="image/avif" srcset="../screenshots/test-player-desktop-dark.avif" width="1770" height="1489">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/test-player-mobile-dark.webp" width="1170" height="2356">
+    <img src="../screenshots/test-player-desktop-dark.webp" alt="Test player showing the HELLO WORLD homebrew ROM and its SHA-1 fingerprint in the dark theme" width="1770" height="1489">
+  </picture>
+  <figcaption>The supplied homebrew ROM runs in Test. The fingerprint identifies the file used for stored saves.</figcaption>
+</figure>
 
 ## Test an Apply result
 

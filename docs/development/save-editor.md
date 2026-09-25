@@ -110,7 +110,7 @@ Run the documentation checks for Markdown and route coverage. Regenerate the tab
 
 ## Related
 
-- [Edit a Generation III save](../how-to/edit-gen3-saves.md): browser and CLI tasks, support limits, and user-visible safety behavior.
+- [Edit a game save in the browser](../how-to/edit-gen3-saves.md): browser steps, previews, downloads, and testing.
 - [Save Editor support](../reference/save-editor.md): supported games, fields, recognition, and integrity rules.
 - [Architecture](ARCHITECTURE.md): crate graph, registry traits, WASM workers, OPFS, and the Rust-TypeScript boundary.
 - [Development guide](development.md): setup, worktrees, tests, and full local checks.

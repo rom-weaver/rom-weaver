@@ -39,6 +39,36 @@ const DOCS_SCREENSHOT_CASES = [
     target: "#rom-weaver-bundle-job",
     waitFor: "Changes HELLO to ROM in the message displayed by the NES ROM.",
   },
+  {
+    docsRoute: "docs/identify-roms-browser",
+    name: "identify-checks",
+    route: "/identify-rom",
+    target: "#identify-container",
+    waitFor: "Identify by checksum or game name",
+  },
+  {
+    docsRoute: "docs/edit-gen3-saves",
+    name: "save-editor",
+    route: "/save-editor",
+    target: "#save-editor-container",
+    waitFor: "New save",
+  },
+  {
+    dismissGuide: true,
+    docsRoute: "docs/test-roms",
+    name: "test-player",
+    route: "/test-rom?guide=test",
+    target: "#emulator-test-player",
+    waitFor: "Stop",
+  },
+  {
+    dismissGuide: true,
+    docsRoute: "docs/use-cheats",
+    name: "cheat-step",
+    route: "/apply-patches?guide=apply",
+    target: "#rom-weaver-row-patch-stack",
+    waitFor: "Changes HELLO to ROM in the message displayed by the NES ROM.",
+  },
 ];
 const DOCS_SCREENSHOT_VIEWPORTS = [
   { name: "desktop", viewport: { width: 1164, height: 900 }, deviceScaleFactor: 2, isMobile: false },

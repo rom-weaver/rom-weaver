@@ -24,7 +24,7 @@ Remote bundles and their sources are downloaded from their hosts. Identify packs
 
 ## Where files live while a job runs
 
-Large intermediate files are written to browser-managed local storage while a job runs, because a multi-gigabyte disc image does not fit in memory. That storage belongs to your browser and stays on your disk. **Reset** clears the current workbench.
+Large intermediate files are written to browser-managed local storage while a job runs, because a multi-gigabyte disc image does not fit in memory. That storage belongs to your browser and stays on your disk. Workbench files and stored emulator saves serve different purposes; clearing a workbench is not a save backup.
 
 [Privacy](../legal/privacy.md) documents browser storage, logs, analytics, and every network request the site makes.
 
@@ -46,7 +46,9 @@ When a browser cannot finish a large job, the CLI is the same engine without the
 
 ## Offline
 
-Cached app code and local files can be used offline. Uncached identify packs, emulator cores, sample files, and remote bundle sources still need a connection. Browser storage eviction can remove cached assets. [Test a ROM](../how-to/test-roms-in-browser.md) covers preparing the emulator for offline use.
+Cached app code and local files can be used offline. Uncached identify packs, emulator cores, sample files, and remote bundle sources still need a connection. Browser storage eviction can remove cached assets.
+
+[Set up offline use](../how-to/browser-settings.md#prepare-for-offline-use) covers preparation. [Back up emulator saves](../how-to/test-roms-in-browser.md#export-and-restore-a-save) covers progress stored in the browser.
 
 ## Related
 

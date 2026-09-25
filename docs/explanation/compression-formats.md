@@ -21,7 +21,7 @@ There are two different things people mean by "compressing a ROM," and they beha
 
 A general archive such as ZIP or 7z wraps any file. To play the game, the bytes usually have to come back out first, either by extracting or by an emulator unpacking the archive itself.
 
-A compressed disc image such as CHD or RVZ is a purpose-built container for one disc. Emulators that support it read it directly, so the file stays small on disk and still boots. Check the emulator and platform you use before converting a collection.
+A compressed disc image such as CHD or RVZ is a purpose-built container for one disc. Compatible emulators read it directly, without a separate extracted copy. That compatibility depends on the emulator and platform.
 
 ## Compressed disc images: CHD and RVZ
 
@@ -41,11 +41,17 @@ rom-weaver reads GCZ, WIA, WBFS, and CSO but does not create them. [Extract, con
 
 Many emulators load cartridge ROMs straight from a ZIP, making it a practical default when your emulator supports it. Depending on the data and settings, 7z can produce a smaller archive, but direct emulator support is less consistent, so it fits long-term storage more than a play library. rom-weaver creates both, and the [archive formats guide](../how-to/work-with-archives.md) covers everyday extract and convert workflows.
 
-Avoid double-wrapping: a CHD inside a 7z usually gains little, and most setups must extract the outer archive before booting it.
+Double-wrapping adds another extraction step: most setups must unpack a CHD from its surrounding 7z before booting it.
 
 ## Trim, compress, or both
 
-Some cartridge and disc formats carry padding rather than data. Trimming cuts it off instead of squeezing it. rom-weaver trims NDS, GBA, and 3DS ROMs, Xbox XISO images, and RVZ scrub candidates. NDS, GBA, and 3DS can be padded back out. Their optional revert footer stores the original length and one padding byte. It can restore uniformly padded bytes exactly when trimming to a separate output; in-place trims and mixed padding do not have that guarantee. XISO and RVZ scrub trims cannot be reverted, so keep the source. For flashcarts and tight storage, a trimmed cartridge ROM needs no decompression. The [trim support](../reference/formats.md#trim-support) list has the details.
+Some cartridge and disc formats carry padding rather than useful data. Trimming removes supported padding; compression encodes bytes in less space.
+
+A trimmed cartridge ROM needs no decompression. It can also be compressed afterward if the output container supports it.
+
+Restoration is a separate capability. Recording the original length and one padding byte cannot preserve every possible padding pattern. The [trim reference](../reference/formats.md#trim-support) lists exact restoration limits.
+
+Procedures: [Trim in the browser](../how-to/trim-roms-browser.md) and [trim or restore from the CLI](../how-to/cli-trim.md).
 
 ## Compression changes your checksums
 

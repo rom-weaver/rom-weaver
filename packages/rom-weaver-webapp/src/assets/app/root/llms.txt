@@ -1,6 +1,6 @@
 # rom-weaver
 
-> A local-first ROM toolkit. Apply and create BPS, IPS, UPS, xdelta, and other patches in the browser; identify ROMs; and use the CLI for compression and bundles. Files are processed on-device without uploads or accounts.
+> A local-first ROM toolkit. Apply and create patches, identify files, extract or compress ROMs, share bundles, bake supported cheats, and edit game saves in the browser or CLI. The browser also plays supported games. Files stay on-device without uploads or accounts.
 
 ## Web app
 
@@ -8,6 +8,12 @@
 - [Create ROM patches](https://rom-weaver.com/create-patch): Create patches with format-aware settings and distributable bundles.
 - [Identify a ROM](https://rom-weaver.com/identify-rom): Match a ROM's game, region, revision, and known dump name by checksum, locally in the browser.
 - [Documentation](https://rom-weaver.com/docs): Tutorials, how-to guides, reference tables, and explanation, for the browser app and the CLI.
+- [What rom-weaver supports](https://rom-weaver.com/docs/features): Plain-language feature map, browser and CLI availability, and links to exact support limits.
+- [Identify ROMs in the browser](https://rom-weaver.com/docs/identify-roms-browser): Look up files, search names or checksums, and compare fingerprints.
+- [Convert ROMs in the browser](https://rom-weaver.com/docs/convert-roms-browser): Extract a ROM or change its container without applying a patch.
+- [Trim ROMs in the browser](https://rom-weaver.com/docs/trim-roms-browser): Remove supported padding and download a separate copy.
+- [Undo PPF in the browser](https://rom-weaver.com/docs/undo-ppf-browser): Restore bytes recorded in a PPF3 patch with undo data.
+- [Settings and offline use](https://rom-weaver.com/docs/browser-settings): Preferences, beta tools, offline preparation, and local storage.
 - [Markdown documentation index](https://rom-weaver.com/docs.md): Generated Markdown index for every published documentation page.
 - [Your first patch](https://rom-weaver.com/docs/get-started): Tutorial that patches a homebrew ROM in the browser and verifies the result.
 - [Apply patches guide](https://rom-weaver.com/docs/apply-rom-patches): Use the browser's Apply workflow with loose patches, patch chains, archives, or bundles.
@@ -37,7 +43,7 @@
 - [Save Editor support](https://rom-weaver.com/docs/game-save-support): Supported games, editable fields, recognition rules, and integrity checks.
 - [Self-hosting](https://rom-weaver.com/docs/self-hosting): Deploy and configure the static webapp.
 - [Architecture](https://rom-weaver.com/docs/architecture): Understand the Rust command core, browser workers, and TypeScript boundary.
-- [Edit Generation III saves](https://rom-weaver.com/docs/edit-gen3-saves): Inspect and safely edit supported English retail Pokémon Ruby, Sapphire, Emerald, FireRed, and LeafGreen game saves in the browser.
+- [Edit a game save in the browser](https://rom-weaver.com/docs/edit-gen3-saves): Inspect a supported game save, preview changes, download a copy, and test it with a matching ROM.
 - [Create game saves in the browser](https://rom-weaver.com/docs/create-game-saves-browser): Generate fresh Zelda saves and edit their properties before download.
 - [Create game saves with the CLI](https://rom-weaver.com/docs/create-game-saves-cli): Generate fresh saves or validated copies from existing save templates.
 - [Save Editor development](https://rom-weaver.com/docs/game-save-development): Shared save handler architecture, integrity boundary, and contributor flow.
@@ -52,7 +58,7 @@
 - [Web app integration](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/webapp-integration.md): Preloaded URLs and same-origin OPFS integration.
 - [Self-hosting](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/self-hosting.md): Docker, static hosting, reverse proxies, subpaths, HTTPS, and browser isolation headers.
 - [Architecture](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/development/ARCHITECTURE.md): Crate graph, registries, browser workers, OPFS, and the Rust-TypeScript boundary.
-- [Edit Generation III saves](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/how-to/edit-gen3-saves.md): Supported English retail layouts, recognition outcomes, editable fields, and safe browser workflows.
+- [Edit a game save in the browser](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/how-to/edit-gen3-saves.md): Recognition, editing, previews, downloads, and testing with a matching ROM.
 - [Save Editor development](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/development/save-editor.md): Handler architecture, integrity rules, and the eight-step contributor flow.
 - [Release guide](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/.github/RELEASING.md): Release automation, publishing channels, and retry procedures.
 

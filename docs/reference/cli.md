@@ -30,6 +30,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 - [Patch creation metadata](#patch-creation-metadata)
 - [Bundles](#bundles)
   - [Bundle cheats](#bundle-cheats)
+- [Tools](#tools)
 - [Supported formats](#supported-formats)
 - [JSON output](#json-output)
   - [Exit codes](#exit-codes)
@@ -62,6 +63,8 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 | `save get` | Read one field by its stable field ID. |
 | `save set` | Check and apply one or more atomic `FIELD=VALUE` edits. |
 | `save export-schema` | Report the generic field schema for a checked save. |
+| `save list-games` | List supported games, stable game IDs, and fresh-generation support. |
+| `save create` | Write a fresh supported save or a checked copy of an existing template. |
 | `tools ppf-undo` | Undo a PPF3 patch, using the undo data stored inside it. |
 | `setup` | Install the offline identify and cheat databases. |
 | `completions` | Print a tab-completion script for your shell. |
@@ -416,6 +419,12 @@ When every recorded cheat is `optional` and none resolves, a bundle with no patc
 `bundle parse` names each cheat and whether it is optional.
 
 `bundle parse` accepts archive selection options for packaged bundles. A plain JSON recipe references paths and has no archive members to unpack. [Bundles from the CLI](../how-to/cli-bundles.md) gives creation, parsing, and apply examples.
+
+## Tools
+
+`tools ppf-undo` accepts `--input` (the patched ROM), `--patch` (a PPF3 patch with undo data), and `--output`. It restores the bytes recorded in that patch. It cannot undo arbitrary patch formats or later unrelated edits.
+
+Procedures: [Undo PPF in the browser](../how-to/undo-ppf-browser.md) and [Undo PPF from the CLI](../how-to/cli-apply.md#undo-a-ppf-patch).
 
 ## Supported formats
 

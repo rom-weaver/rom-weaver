@@ -1,10 +1,11 @@
 # Screenshots and sample assets
 
-The documentation uses focused captures of real sample workflows. The committed images live in `docs/screenshots/`, with desktop and mobile versions in both light and dark themes.
+Documentation images show real app controls with homebrew samples or a generated save. The committed files live in `docs/screenshots/`.
 
 <!-- START doctoc -->
 ## Table of contents
 
+- [Screenshot inventory](#screenshot-inventory)
 - [Apply patches](#apply-patches)
   - [Ordered patch stack](#ordered-patch-stack)
   - [Apply output](#apply-output)
@@ -17,86 +18,86 @@ The documentation uses focused captures of real sample workflows. The committed 
 
 <!-- END doctoc -->
 
+## Screenshot inventory
+
+| Subject | Owning guide | What the image explains |
+| --- | --- | --- |
+| `apply-patches` | [Apply patches](../how-to/apply-rom-patches.md#read-the-rom-and-patch-cards) | Patch order, input basis, and checks |
+| `apply-output` | [Apply output](../how-to/apply-rom-patches.md#choose-the-output-and-apply) | File name, container, and download action |
+| `create-inputs` | [Create a patch](../how-to/create-rom-patches.md) | Original and Modified inputs |
+| `create-output` | [Create output](../how-to/create-rom-patches.md) | Patch format and output controls |
+| `bundle-output` | [Share a bundle](../how-to/create-bundles.md#turn-on-bundle-output-and-download-it) | ROM inclusion and the separate sharing action |
+| `identify-checks` | [Identify a ROM](../how-to/identify-roms-browser.md) | An unknown homebrew ROM with usable checksums |
+| `cheat-step` | [Use cheats](../how-to/use-browser-cheats.md) | A manual ROM-write step in the patch order |
+| `save-editor` | [Edit a save](../how-to/edit-gen3-saves.md) | Filtered fields and a checked edit preview |
+| `test-player` | [Test a ROM](../how-to/test-roms-in-browser.md) | The homebrew player and its ROM fingerprint |
+
+Each subject has desktop and mobile captures in light and dark themes. AVIF is the preferred image format; WebP is the fallback. These are delivery variants, not duplicate examples.
+
+The manual cheat capture demonstrates the controls, not a useful cheat for the homebrew ROM. The save capture changes a generated Zelda save; it includes no game ROM.
+
 ## Apply patches
 
 ### Ordered patch stack
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../screenshots/apply-patches-desktop-dark.avif">
-  <source type="image/avif" srcset="../screenshots/apply-patches-desktop-light.avif">
-  <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../screenshots/apply-patches-desktop-dark.webp">
-  <img src="../screenshots/apply-patches-desktop-light.webp" width="2242" alt="Focused Apply patch stack with two ordered practice patches on desktop">
-</picture>
+The [Apply guide](../how-to/apply-rom-patches.md#read-the-rom-and-patch-cards) owns the patch-stack images.
 
 ### Apply output
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../screenshots/apply-output-desktop-dark.avif">
-  <source type="image/avif" srcset="../screenshots/apply-output-desktop-light.avif">
-  <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../screenshots/apply-output-desktop-dark.webp">
-  <img src="../screenshots/apply-output-desktop-light.webp" width="2242" alt="Focused Apply output card on desktop">
-</picture>
-
-Mobile versions: [patch stack](../screenshots/apply-patches-mobile-light.webp) and [Apply output](../screenshots/apply-output-mobile-light.webp). The web guide selects these automatically on narrow screens and switches to their dark variants with the site theme.
+The [output section](../how-to/apply-rom-patches.md#choose-the-output-and-apply) owns the output images. Conversion uses the same controls, so its guide links here.
 
 ## Create a patch
 
 ### Original and Modified
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../screenshots/create-inputs-desktop-dark.avif">
-  <source type="image/avif" srcset="../screenshots/create-inputs-desktop-light.avif">
-  <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../screenshots/create-inputs-desktop-dark.webp">
-  <img src="../screenshots/create-inputs-desktop-light.webp" width="2242" alt="Focused Create Original and Modified cards on desktop">
-</picture>
+The [Create guide](../how-to/create-rom-patches.md) owns both input and output captures.
 
 ### Patch output
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../screenshots/create-output-desktop-dark.avif">
-  <source type="image/avif" srcset="../screenshots/create-output-desktop-light.avif">
-  <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../screenshots/create-output-desktop-dark.webp">
-  <img src="../screenshots/create-output-desktop-light.webp" width="2242" alt="Focused Create patch output card on desktop">
-</picture>
-
-Mobile versions: [Original and Modified](../screenshots/create-inputs-mobile-light.webp) and [patch output](../screenshots/create-output-mobile-light.webp).
+The output capture shows format selection. It does not show a second workflow.
 
 ## Create a bundle
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="../screenshots/bundle-output-desktop-dark.avif">
-  <source type="image/avif" srcset="../screenshots/bundle-output-desktop-light.avif">
-  <source media="(prefers-color-scheme: dark)" type="image/webp" srcset="../screenshots/bundle-output-desktop-dark.webp">
-  <img src="../screenshots/bundle-output-desktop-light.webp" width="2242" alt="Focused patch-only bundle options and Create ZIP Bundle action on desktop">
-</picture>
-
-The [mobile capture](../screenshots/bundle-output-mobile-light.webp) keeps the entire expanded Output Options card readable.
+The [bundle guide](../how-to/create-bundles.md#turn-on-bundle-output-and-download-it) owns the sharing-control images.
 
 ## Sample ROMs
 
-| Original ROM | After the first patch | After both patches |
-| :---: | :---: | :---: |
-| ![The original sample ROM displaying HELLO WORLD in an NES emulator](../screenshots/first-sample-hello-world.webp) | ![The sample ROM displaying ROM WORLD after the first patch](../screenshots/first-sample-rom-world.webp) | ![The sample ROM displaying ROM WEAVER after both patches](../screenshots/first-sample-rom-weaver.webp) |
+The three `first-sample-*.webp` images show `HELLO WORLD`, `ROM WORLD`, and `ROM WEAVER`. The [first-patch tutorial](../tutorials/first-patch.md) uses the before-and-after pair.
 
-The webapp generates `first-weave.zip`, `first-create.zip`, and the loose homebrew ROMs from [`first-sample-assets.mjs`](../../packages/rom-weaver-webapp/scripts/first-sample-assets.mjs). The guided tours and automated tests use the same assets.
+The app generates its homebrew ROMs and sample archives from [first-sample-assets.mjs](../../packages/rom-weaver-webapp/scripts/first-sample-assets.mjs). Tours, tests, and captures use these same bytes.
 
 ## Regenerate the captures
 
-Build and serve the production webapp, then run:
+Build and serve the production webapp as described in [Development](development.md). From the repository root, set the preview URL:
 
-```bash
-ROM_WEAVER_SCREENSHOT_BASE_URL=http://127.0.0.1:4173/ \
-  npm --prefix packages/rom-weaver-webapp run capture:screenshots
+```sh
+export ROM_WEAVER_SCREENSHOT_BASE_URL=https://192.168.1.10:45443/
 ```
 
-The capture script opens the generated samples, waits for reading and checksum work to settle, and crops to the controls each guide explains. It renders desktop at 2x and mobile at 3x, then saves AVIF images with lossless WebP fallbacks.
+Replace the example address and port with your preview server's address and port. Then capture all subjects:
 
-To regenerate one subject while adjusting its crop:
-
-```bash
-ROM_WEAVER_SCREENSHOT_BASE_URL=http://127.0.0.1:4173/ \
-ROM_WEAVER_SCREENSHOT_CASE=bundle-output \
-  npm --prefix packages/rom-weaver-webapp run capture:screenshots
+```sh
+npm --prefix packages/rom-weaver-webapp run capture:screenshots
 ```
 
-The build verifies that every documented device and theme variant exists and is referenced by its guide.
+To capture one subject, set its inventory name first:
+
+```sh
+export ROM_WEAVER_SCREENSHOT_CASE=save-editor
+```
+
+Clear that filter before the next full capture:
+
+```sh
+unset ROM_WEAVER_SCREENSHOT_CASE
+```
+
+The capture script waits for the displayed result and crops the relevant controls. Desktop uses 2x resolution; mobile uses 3x. Playback is muted.
+
+The crop hides the floating navigation dock so it cannot cover tool controls. ImageMagick crops images and encodes WebP; the bundled WebAssembly encoder creates AVIF.
+
+Keep image paths relative to the Markdown page. The documentation renderer rewrites Markdown images and HTML picture sources for the published site.
+
+After regeneration, update each image's `width` and `height` to its measured pixel size. Keep alt text and captions specific to the state shown.
+
+The build checks that each subject has every required format, viewport, and theme variant, and that its owning guide references them.
