@@ -809,8 +809,6 @@ fn resolve_spec_checks(
         })
 }
 
-/// Normalize per-patch specs for the wasm JSON path: metadata vectors must be
-/// index-aligned with `patch` (same length) or omitted entirely.
 fn bundle_create_algorithms(args: &BundleCreateCommand) -> Result<Vec<String>> {
     let algorithms: Vec<String> = if args.checksum.is_empty() {
         BUNDLE_CREATE_DEFAULT_ALGORITHMS
@@ -923,6 +921,8 @@ fn write_bundle_create_output(
     Ok(bytes)
 }
 
+/// Normalize per-patch specs for the wasm JSON path: metadata vectors must be
+/// index-aligned with `patch` (same length) or omitted entirely.
 fn bundle_create_patch_specs(args: &BundleCreateCommand) -> Result<Vec<BundleCreatePatchSpec>> {
     if !args.patch_specs.is_empty() {
         return Ok(args.patch_specs.clone());

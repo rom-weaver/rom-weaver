@@ -1795,8 +1795,6 @@ impl CliApp {
     }
 }
 
-/// Per-patch plan flags handed from `run_patch_validate` into plan mode,
-/// index-aligned with `patches` (native argv alignment or wasm vectors).
 /// Borrowed `patch validate` arguments that source resolution needs.
 struct PatchValidateSourceArgs<'a> {
     input: &'a Path,
@@ -1884,6 +1882,8 @@ fn patch_validate_passed_report(
     report
 }
 
+/// Per-patch plan flags handed from `run_patch_validate` into plan mode,
+/// index-aligned with `patches` (native argv alignment or wasm vectors).
 struct PlanFlagInputs {
     basis: Vec<PatchBasisMode>,
     default_basis: PatchBasisMode,

@@ -22,7 +22,7 @@ pub(super) struct BundleApplyResolution {
     /// version 2 supplies `patchBasis`; an explicit CLI shared rule wins.
     pub patch_basis: PatchBasisMode,
     /// `(source label, requirements)`, merged in order after CLI flags.
-    pub checks: Vec<(String, FilenameRequirements)>,
+    pub checks: Vec<NamedCheck>,
     /// Advisory file-name expectation for a ROM supplied separately from the
     /// bundle. Compared after auto-extraction resolves the logical ROM leaf.
     pub expected_rom_name: Option<String>,
@@ -74,7 +74,7 @@ type NamedCheck = (String, FilenameRequirements);
 /// Mutable state that bundle patch selection adds to.
 struct BundleApplyAccumulators<'a> {
     extract_root: &'a mut Option<PathBuf>,
-    checks: &'a mut Vec<(String, FilenameRequirements)>,
+    checks: &'a mut Vec<NamedCheck>,
     warnings: &'a mut Vec<String>,
 }
 
@@ -131,7 +131,7 @@ impl CliApp {
         // Lazily-created root for archive-member extraction, inside the
         // caller-owned temp namespace.
         let mut extract_root: Option<PathBuf> = None;
-        let mut checks: Vec<(String, FilenameRequirements)> = Vec::new();
+        let mut checks: Vec<NamedCheck> = Vec::new();
 
         self.merge_bundle_apply_rom(
             args,
@@ -314,7 +314,7 @@ impl CliApp {
         source: &BundleApplySourceContext,
         extract_root: &mut Option<PathBuf>,
         context: &OperationContext,
-        checks: &mut Vec<(String, FilenameRequirements)>,
+        checks: &mut Vec<NamedCheck>,
     ) -> Result<()> {
         let Some(rom) = &bundle.rom else {
             if matches!(source.mode, BundleApplySourceKind::InputIsBundle) {
