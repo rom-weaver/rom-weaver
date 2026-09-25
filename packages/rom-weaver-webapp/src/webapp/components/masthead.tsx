@@ -347,7 +347,7 @@ const Masthead = ({
         onExternalClick: (event) => guardExternalClick(event, donateHref, confirmExternalNavigation),
       });
     }
-    return [project, workflowGroup("patches"), workflowGroup("roms"), device];
+    return [project, workflowGroup("patches"), workflowGroup("roms"), workflowGroup("files"), device];
   }, [
     betaVisible,
     confirmExternalNavigation,
