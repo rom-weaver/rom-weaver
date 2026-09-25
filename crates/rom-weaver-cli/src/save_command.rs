@@ -174,11 +174,39 @@ impl CliApp {
             Ok(input) => input,
             Err(report) => return self.finish(command, *report),
         };
-        let (recognition, identity) = match detect_for_edit(&input) {
+        let (recognition, identity, document) = match self.load_save_document(command, &input) {
+            Ok(loaded) => loaded,
+            Err(outcome) => return *outcome,
+        };
+        self.finish(
+            command,
+            save_report(
+                OperationStatus::Succeeded,
+                "inspect",
+                format!("{} save is valid", identity.name),
+                Some(json!({ SAVE_DETAILS_KEY: {
+                    "recognition": recognition,
+                    "document": document,
+                    "raw_offset": rom_weaver_core::save::unwrap_save_container(&input.bytes)
+                        .map_or(0, |(container, _)| container.inner_offset()),
+                }})),
+            ),
+        )
+    }
+
+    /// Recognizes an editable save and parses it, turning either failure into
+    /// the finished report the edit commands return.
+    fn load_save_document(
+        &self,
+        command: &str,
+        input: &SaveDetectionInput,
+    ) -> std::result::Result<(SaveRecognition, SaveGameIdentity, SaveDocument), Box<AppRunOutcome>>
+    {
+        let (recognition, identity) = match detect_for_edit(input) {
             Ok(result) => result,
             Err(failure) => {
                 let (recognition, message) = *failure;
-                return self.finish(
+                return Err(Box::new(self.finish(
                     command,
                     save_report(
                         OperationStatus::Failed,
@@ -186,25 +214,14 @@ impl CliApp {
                         message,
                         Some(json!({ SAVE_DETAILS_KEY: { "recognition": recognition } })),
                     ),
-                );
+                )));
             }
         };
-        match parse_save(&input, &identity) {
-            Ok(document) => self.finish(
-                command,
-                save_report(
-                    OperationStatus::Succeeded,
-                    "inspect",
-                    format!("{} save is valid", identity.name),
-                    Some(json!({ SAVE_DETAILS_KEY: {
-                        "recognition": recognition,
-                        "document": document,
-                        "raw_offset": rom_weaver_core::save::unwrap_save_container(&input.bytes)
-                            .map_or(0, |(container, _)| container.inner_offset()),
-                    }})),
-                ),
-            ),
-            Err(error) => self.finish(command, save_error_report("validate", error)),
+        match parse_save(input, &identity) {
+            Ok(document) => Ok((recognition, identity, document)),
+            Err(error) => Err(Box::new(
+                self.finish(command, save_error_report("validate", error)),
+            )),
         }
     }
 
@@ -214,24 +231,9 @@ impl CliApp {
             Ok(input) => input,
             Err(report) => return self.finish(command, *report),
         };
-        let (recognition, identity) = match detect_for_edit(&input) {
-            Ok(result) => result,
-            Err(failure) => {
-                let (recognition, message) = *failure;
-                return self.finish(
-                    command,
-                    save_report(
-                        OperationStatus::Failed,
-                        "recognize",
-                        message,
-                        Some(json!({ SAVE_DETAILS_KEY: { "recognition": recognition } })),
-                    ),
-                );
-            }
-        };
-        let document = match parse_save(&input, &identity) {
-            Ok(document) => document,
-            Err(error) => return self.finish(command, save_error_report("validate", error)),
+        let (recognition, _identity, document) = match self.load_save_document(command, &input) {
+            Ok(loaded) => loaded,
+            Err(outcome) => return *outcome,
         };
         let Some(field) = document.fields.iter().find(|field| field.id == args.field) else {
             return self.finish(
@@ -281,24 +283,9 @@ impl CliApp {
         args: SaveSetCommand,
         create: bool,
     ) -> AppRunOutcome {
-        let (recognition, identity) = match detect_for_edit(&input) {
-            Ok(result) => result,
-            Err(failure) => {
-                let (recognition, message) = *failure;
-                return self.finish(
-                    command,
-                    save_report(
-                        OperationStatus::Failed,
-                        "recognize",
-                        message,
-                        Some(json!({ SAVE_DETAILS_KEY: { "recognition": recognition } })),
-                    ),
-                );
-            }
-        };
-        let document = match parse_save(&input, &identity) {
-            Ok(document) => document,
-            Err(error) => return self.finish(command, save_error_report("validate", error)),
+        let (recognition, identity, document) = match self.load_save_document(command, &input) {
+            Ok(loaded) => loaded,
+            Err(outcome) => return *outcome,
         };
         let edits = match parse_save_assignments(&document, &args.assignments) {
             Ok(edits) => edits,
@@ -399,39 +386,25 @@ impl CliApp {
             Ok(input) => input,
             Err(report) => return self.finish(command, *report),
         };
-        let (recognition, identity) = match detect_for_edit(&input) {
-            Ok(result) => result,
-            Err(failure) => {
-                let (recognition, message) = *failure;
-                return self.finish(
-                    command,
-                    save_report(
-                        OperationStatus::Failed,
-                        "recognize",
-                        message,
-                        Some(json!({ SAVE_DETAILS_KEY: { "recognition": recognition } })),
-                    ),
-                );
-            }
+        let (recognition, identity, document) = match self.load_save_document(command, &input) {
+            Ok(loaded) => loaded,
+            Err(outcome) => return *outcome,
         };
-        match parse_save(&input, &identity) {
-            Ok(document) => self.finish(
-                command,
-                save_report(
-                    OperationStatus::Succeeded,
-                    "schema",
-                    format!("{} save field schema", identity.name),
-                    Some(json!({ SAVE_DETAILS_KEY: {
-                        "recognition": recognition,
-                        "schema": {
-                            "game": document.identity,
-                            "fields": document.fields,
-                        },
-                    }})),
-                ),
+        self.finish(
+            command,
+            save_report(
+                OperationStatus::Succeeded,
+                "schema",
+                format!("{} save field schema", identity.name),
+                Some(json!({ SAVE_DETAILS_KEY: {
+                    "recognition": recognition,
+                    "schema": {
+                        "game": document.identity,
+                        "fields": document.fields,
+                    },
+                }})),
             ),
-            Err(error) => self.finish(command, save_error_report("validate", error)),
-        }
+        )
     }
 
     fn load_save_input(
