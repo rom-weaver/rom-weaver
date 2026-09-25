@@ -285,12 +285,6 @@
   letter-spacing: -0.018em;
   text-wrap: balance;
 }
-.rw-app .hero-lead .lead-line {
-  display: block;
-}
-.rw-app .hero-lead .lead-accent {
-  color: var(--thread-text);
-}
 .rw-app .hero-lead .lead-description {
   max-width: 48ch;
   font-size: clamp(0.85rem, 1.2vw, 1rem);
@@ -298,40 +292,6 @@
   line-height: 1.45;
   color: var(--ink-2);
   text-wrap: pretty;
-}
-.rw-app .hero-lead .lead-guide {
-  font-size: var(--badge-fs);
-  font-weight: 700;
-  color: var(--thread-text);
-}
-@media (hover: hover) {
-  .rw-app .hero-lead .lead-guide:hover {
-    color: var(--thread);
-  }
-}
-.rw-app .hero-lead .lead-guide:active {
-  color: var(--thread);
-}
-.rw-app .hero-lead .lead-sub {
-  display: inline-flex;
-  gap: var(--sp-s);
-  align-items: center;
-  padding: 3px 11px;
-  font-size: var(--badge-fs);
-  font-stretch: 86%;
-  color: var(--ink-2);
-  letter-spacing: 0.01em;
-  background: var(--well);
-  border: 1px solid var(--seam-soft);
-  border-radius: 99px;
-}
-.rw-app .hero-lead .lead-sub::before {
-  flex: none;
-  width: 6px;
-  height: 6px;
-  content: "";
-  background: var(--thread-text);
-  border-radius: 50%;
 }
 .rw-app .drop.hero .main svg {
   width: 24px;
