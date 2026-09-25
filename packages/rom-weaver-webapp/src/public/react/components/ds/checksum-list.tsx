@@ -1,6 +1,6 @@
 import { Check, Copy, ListChecks, X } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
-import { useUiLocalizer } from "../../settings-context.tsx";
+import { useRomWeaverSettings, useUiLocalizer } from "../../settings-context.tsx";
 import { join } from "./cx.ts";
 import { Drawer, DrawerMark, DrawerReadout } from "./drawer.tsx";
 import { useClipboardCopy } from "./use-clipboard-copy.ts";
@@ -145,46 +145,51 @@ const ChecksumList = ({
   bodyClassName?: string;
   className?: string;
   children: ReactNode;
-}) => (
-  <Drawer
-    action={action}
-    bodyClassName={bodyClassName}
-    className={className}
-    defaultOpen={defaultOpen}
-    label={label}
-    labelIcon={<ListChecks aria-hidden="true" />}
-    onToggle={onToggle}
-    open={open}
-    readouts={
-      summary || sublabel || timing || match || verifying ? (
-        <>
-          {summary}
-          {sublabel ? <DrawerReadout muted>{sublabel}</DrawerReadout> : null}
-          {verifying ? (
-            <DrawerReadout muted>Verifying…</DrawerReadout>
-          ) : (
-            <>
-              {timing ? <DrawerReadout time>{timing}</DrawerReadout> : null}
-              {match ? (
-                <DrawerMark
-                  className={match.ok ? "cks-match" : "cks-match bad"}
-                  ok={match.ok}
-                  title={match.ok ? "Verified" : "Verification failed"}
-                >
-                  {match.ok ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
-                  {match.label ? <span className="sr-only">{match.label}</span> : null}
-                </DrawerMark>
-              ) : null}
-            </>
-          )}
-        </>
-      ) : undefined
-    }
-  >
-    {lead}
-    {children}
-  </Drawer>
-);
+}) => {
+  // Timings are diagnostic; only the detailed view shows them.
+  const { detailedViewEnabled = false } = useRomWeaverSettings();
+  const shownTiming = detailedViewEnabled ? timing : undefined;
+  return (
+    <Drawer
+      action={action}
+      bodyClassName={bodyClassName}
+      className={className}
+      defaultOpen={defaultOpen}
+      label={label}
+      labelIcon={<ListChecks aria-hidden="true" />}
+      onToggle={onToggle}
+      open={open}
+      readouts={
+        summary || sublabel || shownTiming || match || verifying ? (
+          <>
+            {summary}
+            {sublabel ? <DrawerReadout muted>{sublabel}</DrawerReadout> : null}
+            {verifying ? (
+              <DrawerReadout muted>Verifying…</DrawerReadout>
+            ) : (
+              <>
+                {shownTiming ? <DrawerReadout time>{shownTiming}</DrawerReadout> : null}
+                {match ? (
+                  <DrawerMark
+                    className={match.ok ? "cks-match" : "cks-match bad"}
+                    ok={match.ok}
+                    title={match.ok ? "Verified" : "Verification failed"}
+                  >
+                    {match.ok ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
+                    {match.label ? <span className="sr-only">{match.label}</span> : null}
+                  </DrawerMark>
+                ) : null}
+              </>
+            )}
+          </>
+        ) : undefined
+      }
+    >
+      {lead}
+      {children}
+    </Drawer>
+  );
+};
 
 /**
  * The set of checksum groups + rows a still-staging file WILL produce, surfaced
