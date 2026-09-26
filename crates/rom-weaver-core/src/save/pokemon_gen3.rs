@@ -3,9 +3,10 @@ use tracing::{debug, trace};
 use super::formats::GBA_FLASH_128K;
 use super::{
     SaveConstraint, SaveDetectionInput, SaveDocument, SaveEdit, SaveEditResult, SaveField,
-    SaveFieldKind, SaveGameCandidate, SaveGameDefinition, SaveGameHandler, SaveGameIdentity,
-    SaveIntegrity, SaveIntegrityState, SaveRecognition, SaveRecognitionConfidence,
-    SaveRecognitionOutcome, SaveRecognitionReason, SaveSection, SaveValue, validate_save_edits,
+    SaveFieldChange, SaveFieldKind, SaveGameCandidate, SaveGameDefinition, SaveGameHandler,
+    SaveGameIdentity, SaveIntegrity, SaveIntegrityState, SaveRecognition,
+    SaveRecognitionConfidence, SaveRecognitionOutcome, SaveRecognitionReason, SaveSection,
+    SaveValue, validate_save_edits,
 };
 use crate::{Result, RomWeaverError, ValidationCodeError};
 
@@ -213,7 +214,7 @@ impl SaveGameHandler for PokemonGen3Handler {
                 "normal edits need two valid Pokémon save slots",
             ));
         }
-        let preview = validate_save_edits(&document, edits)?;
+        let mut preview = validate_save_edits(&document, edits)?;
         if !preview.changed {
             return Ok(SaveEditResult {
                 preview,
@@ -223,6 +224,14 @@ impl SaveGameHandler for PokemonGen3Handler {
         }
         let mut bytes = input.bytes.clone();
         apply_to_active(&mut bytes, family, &active, edits)?;
+        for id in 0..14u8 {
+            if section_data(&bytes, &active, id) != section_data(&input.bytes, &active, id)
+                && !preview.touched_sections.contains(&id)
+            {
+                preview.touched_sections.push(id);
+            }
+        }
+        preview.touched_sections.sort_unstable();
         for id in preview.touched_sections.iter().copied() {
             recompute_checksum(
                 &mut bytes,
@@ -238,6 +247,18 @@ impl SaveGameHandler for PokemonGen3Handler {
                     "save_edit_reparse_mismatch",
                     "the edited save did not produce the requested value",
                 ));
+            }
+        }
+        for field in &reparsed.fields {
+            if let Some(old_value) = field_value(&document, &field.id)
+                && old_value != &field.value
+                && !edits.iter().any(|edit| edit.field == field.id)
+            {
+                preview.changes.push(SaveFieldChange {
+                    field: field.id.clone(),
+                    old_value: old_value.clone(),
+                    new_value: field.value.clone(),
+                });
             }
         }
         Ok(SaveEditResult {
@@ -597,10 +618,14 @@ fn build_document(
             label: "Trainer ID".into(),
             section_id: 0,
             offset: 10,
-            kind: SaveFieldKind::ReadOnlyInteger,
+            kind: SaveFieldKind::UnsignedInteger,
             value: SaveValue::U32(u16::from_le_bytes([small[10], small[11]]) as u32),
-            editable: false,
-            constraints: SaveConstraint::default(),
+            editable,
+            constraints: SaveConstraint {
+                min: Some(0),
+                max: Some(65_535),
+                ..Default::default()
+            },
             description: "Public trainer identifier".into(),
             warnings: Vec::new(),
             step: None,
@@ -611,10 +636,14 @@ fn build_document(
             label: "Secret ID".into(),
             section_id: 0,
             offset: 12,
-            kind: SaveFieldKind::ReadOnlyInteger,
+            kind: SaveFieldKind::UnsignedInteger,
             value: SaveValue::U32(u16::from_le_bytes([small[12], small[13]]) as u32),
-            editable: false,
-            constraints: SaveConstraint::default(),
+            editable,
+            constraints: SaveConstraint {
+                min: Some(0),
+                max: Some(65_535),
+                ..Default::default()
+            },
             description: "Hidden trainer identifier".into(),
             warnings: Vec::new(),
             step: None,
@@ -671,6 +700,7 @@ fn build_document(
     append_play_time_fields(&mut fields, small, editable)?;
     append_option_fields(&mut fields, small, editable)?;
     append_inventory_fields(&mut fields, family, &large, security_key, editable)?;
+    append_pokedex_fields(&mut fields, small, editable);
     if matches!(family, Family::Emerald) {
         let battle_points = u16::from_le_bytes([small[0xEB8], small[0xEB9]]) as u32;
         if battle_points > MAX_BATTLE_POINTS {
@@ -991,6 +1021,15 @@ fn append_play_time_fields(
         (0, 59),
         "Seconds in the current minute",
     ));
+    fields.push(scalar_field(
+        "trainer.play_time_frames",
+        "Play time frames",
+        (0, 18),
+        SaveValue::U32(u32::from(small[18])),
+        editable,
+        (0, 59),
+        "Frames in the current second",
+    ));
     Ok(())
 }
 
@@ -1118,31 +1157,46 @@ fn append_inventory_fields(
     security_key: Option<u32>,
     editable: bool,
 ) -> Result<()> {
-    let pockets = inventory_pockets(family);
-    let key = security_key.unwrap_or(0) as u16;
-    for (pocket, base, count, max) in pockets {
+    // PC quantities are plain integers; bag quantities use the save's security key.
+    // https://github.com/pret/pokeemerald/blob/master/src/item.c
+    for (pocket, base, count, max) in inventory_pockets(family) {
+        let key = if *pocket == "pc" {
+            0
+        } else {
+            security_key.unwrap_or(0) as u16
+        };
         for index in 0..*count {
-            let offset = base + index * 4 + 2;
-            let item_id = u16::from_le_bytes([large[offset - 2], large[offset - 1]]);
-            if item_id == 0 {
-                continue;
-            }
-            let raw = u16::from_le_bytes([large[offset], large[offset + 1]]);
-            let quantity = u32::from(raw ^ key);
-            if quantity == 0 || quantity > *max {
+            let offset = base + index * 4;
+            let item_id = u16::from_le_bytes([large[offset], large[offset + 1]]);
+            let raw = u16::from_le_bytes([large[offset + 2], large[offset + 3]]);
+            let quantity = if item_id == 0 {
+                0
+            } else {
+                u32::from(raw ^ key)
+            };
+            if item_id != 0 && (quantity == 0 || quantity > *max) {
                 return Err(validation(
                     "save_inventory_quantity",
                     "an occupied inventory slot has an invalid quantity",
                 ));
             }
             fields.push(scalar_field(
+                &format!("inventory.{pocket}_{}.item_id", index + 1),
+                &format!("{} slot {} item ID", pocket.replace('_', " "), index + 1),
+                (1, offset),
+                SaveValue::U32(u32::from(item_id)),
+                editable,
+                (0, max_item_id(family)),
+                "Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.",
+            ));
+            fields.push(scalar_field(
                 &format!("inventory.{pocket}_{}.quantity", index + 1),
                 &format!("{} slot {} quantity", pocket.replace('_', " "), index + 1),
-                (1, offset),
+                (1, offset + 2),
                 SaveValue::U32(quantity),
                 editable,
-                (1, *max),
-                &format!("Quantity of item ID {item_id}. The item ID stays unchanged."),
+                (0, *max),
+                "Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.",
             ));
         }
     }
@@ -1152,6 +1206,7 @@ fn append_inventory_fields(
 fn inventory_pockets(family: Family) -> &'static [(&'static str, usize, usize, u32)] {
     match family {
         Family::Rs => &[
+            ("pc", 0x498, 50, 999),
             ("items", 0x560, 20, 99),
             ("key_items", 0x5b0, 20, 1),
             ("balls", 0x600, 16, 99),
@@ -1159,6 +1214,7 @@ fn inventory_pockets(family: Family) -> &'static [(&'static str, usize, usize, u
             ("berries", 0x740, 46, 999),
         ],
         Family::Emerald => &[
+            ("pc", 0x498, 50, 999),
             ("items", 0x560, 30, 99),
             ("key_items", 0x5d8, 30, 1),
             ("balls", 0x650, 16, 99),
@@ -1166,6 +1222,7 @@ fn inventory_pockets(family: Family) -> &'static [(&'static str, usize, usize, u
             ("berries", 0x790, 46, 999),
         ],
         Family::Frlg => &[
+            ("pc", 0x298, 30, 999),
             ("items", 0x310, 42, 999),
             ("key_items", 0x3b8, 30, 1),
             ("balls", 0x430, 13, 999),
@@ -1175,14 +1232,121 @@ fn inventory_pockets(family: Family) -> &'static [(&'static str, usize, usize, u
     }
 }
 
-fn inventory_location(family: Family, field: &str) -> Option<(usize, u32)> {
+// The Pokédex contains 386 national entries and three copies of the seen flags.
+// https://github.com/pret/pokeemerald/blob/master/include/global.h
+// https://github.com/pret/pokeemerald/blob/master/src/pokedex.c
+fn append_pokedex_fields(fields: &mut Vec<SaveField>, small: &[u8], editable: bool) {
+    for (prefix, base) in [("owned", 0x28), ("seen", 0x5c)] {
+        for index in 0..386 {
+            fields.push(SaveField {
+                id: format!("pokedex.{prefix}_{:03}", index + 1),
+                label: format!("Pokédex {prefix} #{:03}", index + 1),
+                section_id: 0,
+                offset: (base + index / 8) as u16,
+                kind: SaveFieldKind::BitfieldBoolean,
+                value: SaveValue::Bool(small[base + index / 8] & (1 << (index % 8)) != 0),
+                editable,
+                constraints: SaveConstraint::default(),
+                description: "Owned entries are also seen. Clearing seen also clears owned.".into(),
+                warnings: Vec::new(),
+                step: None,
+                encoding: None,
+            });
+        }
+    }
+}
+
+fn set_dex_bit(
+    bytes: &mut [u8],
+    active: &ParsedSlot,
+    section: u8,
+    offset: usize,
+    mask: u8,
+    value: bool,
+) {
+    let byte = &mut section_data_mut(bytes, active, section)[offset];
+    *byte = (*byte & !mask) | if value { mask } else { 0 };
+}
+
+fn apply_pokedex_edit(
+    bytes: &mut [u8],
+    family: Family,
+    active: &ParsedSlot,
+    edit: &SaveEdit,
+) -> Result<()> {
+    let (prefix, number) = edit
+        .field
+        .strip_prefix("pokedex.")
+        .and_then(|value| value.split_once('_'))
+        .ok_or_else(|| validation("save_field_unknown", "unknown Pokédex field"))?;
+    let index = number
+        .parse::<usize>()
+        .ok()
+        .and_then(|value| value.checked_sub(1))
+        .filter(|value| *value < 386)
+        .ok_or_else(|| validation("save_field_unknown", "unknown Pokédex entry"))?;
+    let SaveValue::Bool(value) = edit.value else {
+        return Err(validation(
+            "save_value_kind",
+            "Pokédex flags require boolean values",
+        ));
+    };
+    let mask = 1 << (index % 8);
+    if prefix == "owned" || !value {
+        set_dex_bit(bytes, active, 0, 0x28 + index / 8, mask, value);
+    }
+    if prefix == "seen" || value {
+        set_dex_bit(bytes, active, 0, 0x5c + index / 8, mask, value);
+        let mirrors = match family {
+            Family::Rs => [0x938, 0x3a8c],
+            Family::Emerald => [0x988, 0x3b24],
+            Family::Frlg => [0x5f8, 0x3a18],
+        };
+        for base in mirrors {
+            let offset = base + index / 8;
+            set_dex_bit(
+                bytes,
+                active,
+                (1 + offset / SECTION_DATA_SIZE) as u8,
+                offset % SECTION_DATA_SIZE,
+                mask,
+                value,
+            );
+        }
+    }
+    Ok(())
+}
+
+fn max_item_id(family: Family) -> u32 {
+    // IDs below ITEMS_COUNT index each game's item table, including unused entries.
+    // https://github.com/pret/pokefirered/blob/master/include/constants/items.h
+    match family {
+        Family::Rs => 348,
+        Family::Emerald => 376,
+        Family::Frlg => 374,
+    }
+}
+
+fn inventory_location(family: Family, field: &str) -> Option<(usize, bool, bool)> {
     let remainder = field.strip_prefix("inventory.")?;
-    let (pocket, slot) = remainder.rsplit_once("_")?;
-    let slot = slot.strip_suffix(".quantity")?.parse::<usize>().ok()?;
+    let (slot_id, member) = remainder.rsplit_once('.')?;
+    let quantity = match member {
+        "quantity" => true,
+        "item_id" => false,
+        _ => return None,
+    };
+    let (pocket, slot) = slot_id.rsplit_once('_')?;
+    let slot = slot.parse::<usize>().ok()?;
     inventory_pockets(family)
         .iter()
         .find(|(name, _, count, _)| *name == pocket && (1..=*count).contains(&slot))
-        .map(|(_, base, _, max)| (base + (slot - 1) * 4 + 2, *max))
+        .map(|(_, base, _, _)| {
+            (
+                base + (slot - 1) * 4 + if quantity { 2 } else { 0 },
+                quantity,
+                pocket == "pc",
+            )
+        })
 }
 
 fn apply_to_active(
@@ -1214,6 +1378,17 @@ fn apply_to_active(
         match (edit.field.as_str(), &edit.value) {
             ("trainer.name", SaveValue::Text(value)) => {
                 section_data_mut(bytes, active, 0)[..7].copy_from_slice(&encode_text(value)?)
+            }
+            ("trainer.id", SaveValue::U32(value)) => {
+                section_data_mut(bytes, active, 0)[10..12]
+                    .copy_from_slice(&(*value as u16).to_le_bytes());
+            }
+            ("trainer.secret_id", SaveValue::U32(value)) => {
+                section_data_mut(bytes, active, 0)[12..14]
+                    .copy_from_slice(&(*value as u16).to_le_bytes());
+            }
+            ("trainer.play_time_frames", SaveValue::U32(value)) => {
+                section_data_mut(bytes, active, 0)[18] = *value as u8;
             }
             ("trainer.gender", SaveValue::Enum(value)) => {
                 section_data_mut(bytes, active, 0)[8] = match value.as_str() {
@@ -1308,20 +1483,19 @@ fn apply_to_active(
                 update_options_config(section_data_mut(bytes, active, 0), 1, 11, u32::from(*value))?
             }
             (field, SaveValue::U32(value)) if field.starts_with("inventory.") => {
-                let (offset, max) = inventory_location(family, field).ok_or_else(|| {
-                    validation(
-                        "save_field_unknown",
-                        "the requested inventory field is unknown",
-                    )
-                })?;
-                if *value > max {
-                    return Err(validation(
-                        "save_value_range",
-                        "the requested item quantity is outside its allowed range",
-                    ));
-                }
+                let (offset, quantity, pc) =
+                    inventory_location(family, field).ok_or_else(|| {
+                        validation(
+                            "save_field_unknown",
+                            "the requested inventory field is unknown",
+                        )
+                    })?;
+                let encoded = *value as u16 ^ if quantity && !pc { key as u16 } else { 0 };
                 section_data_mut(bytes, active, 1)[offset..offset + 2]
-                    .copy_from_slice(&((*value as u16 ^ key as u16).to_le_bytes()));
+                    .copy_from_slice(&encoded.to_le_bytes());
+            }
+            (field, SaveValue::Bool(_)) if field.starts_with("pokedex.") => {
+                apply_pokedex_edit(bytes, family, active, edit)?;
             }
             (field, SaveValue::Bool(value)) if field.starts_with("progress.badge_") => {
                 let index = field[15..]

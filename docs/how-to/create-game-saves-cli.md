@@ -1,16 +1,16 @@
 # Create game saves with the CLI
 
-Use `save create` to write a fresh Zelda save or a copy of an existing save template. Use a game-made template for Pokémon. The command validates the save structure before it writes the output.
+Use `save create` to write a fresh Super Mario World or Zelda save or a copy of an existing save template. Use a game-made template for Pokémon. The command validates the save structure before it writes the output.
 
 <!-- START doctoc -->
 ## Table of contents
 
-- [Create a fresh Zelda save](#create-a-fresh-zelda-save)
+- [Create a fresh Super Mario World or Zelda save](#create-a-fresh-super-mario-world-or-zelda-save)
 - [Use an existing save as a template](#use-an-existing-save-as-a-template)
 
 <!-- END doctoc -->
 
-## Create a fresh Zelda save
+## Create a fresh Super Mario World or Zelda save
 
 List the supported game IDs and their generation support:
 
@@ -31,6 +31,12 @@ rom-weaver save inspect link.srm
 ```
 
 The file contains one `LINK` slot with three hearts and no acquired equipment. The other two slots are empty. Fresh generation is unavailable for games that have no verified initializer.
+
+Create a fresh Super Mario World file with its checked initial overworld state:
+
+```bash
+rom-weaver save create --game super-mario-world -o mario.srm
+```
 
 ## Use an existing save as a template
 

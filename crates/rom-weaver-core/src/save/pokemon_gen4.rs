@@ -518,10 +518,14 @@ fn build_document(
             label: "Trainer ID".into(),
             section_id: 0,
             offset: profile_id_offset as u16,
-            kind: SaveFieldKind::ReadOnlyInteger,
+            kind: SaveFieldKind::UnsignedInteger,
             value: SaveValue::U32(trainer_id & 0xffff),
-            editable: false,
-            constraints: SaveConstraint::default(),
+            editable,
+            constraints: SaveConstraint {
+                min: Some(0),
+                max: Some(65_535),
+                ..Default::default()
+            },
             description: "Public trainer identifier".into(),
             warnings: Vec::new(),
             step: None,
@@ -531,11 +535,15 @@ fn build_document(
             id: "trainer.secret_id".into(),
             label: "Secret ID".into(),
             section_id: 0,
-            offset: profile_id_offset as u16,
-            kind: SaveFieldKind::ReadOnlyInteger,
+            offset: (profile_id_offset + 2) as u16,
+            kind: SaveFieldKind::UnsignedInteger,
             value: SaveValue::U32(trainer_id >> 16),
-            editable: false,
-            constraints: SaveConstraint::default(),
+            editable,
+            constraints: SaveConstraint {
+                min: Some(0),
+                max: Some(65_535),
+                ..Default::default()
+            },
             description: "Hidden trainer identifier".into(),
             warnings: Vec::new(),
             step: None,
@@ -754,6 +762,14 @@ fn apply_to_active(
     let trainer = layout.trainer_offset;
     for edit in edits {
         match (edit.field.as_str(), &edit.value) {
+            ("trainer.id", SaveValue::U32(value)) => {
+                copy[trainer + 0x10..trainer + 0x12]
+                    .copy_from_slice(&(*value as u16).to_le_bytes());
+            }
+            ("trainer.secret_id", SaveValue::U32(value)) => {
+                copy[trainer + 0x12..trainer + 0x14]
+                    .copy_from_slice(&(*value as u16).to_le_bytes());
+            }
             ("trainer.gender", SaveValue::Enum(value)) => {
                 copy[trainer + 0x18] = match value.as_str() {
                     "male" => 0,

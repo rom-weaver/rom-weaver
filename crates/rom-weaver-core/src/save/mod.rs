@@ -4,6 +4,8 @@ mod pokemon_gen1;
 mod pokemon_gen2;
 mod pokemon_gen3;
 mod pokemon_gen4;
+mod pokemon_gen5;
+mod super_mario_world;
 mod zelda_alttp;
 
 use std::borrow::Cow;
@@ -23,6 +25,8 @@ pub use pokemon_gen1::PokemonGen1Handler;
 pub use pokemon_gen2::PokemonGen2Handler;
 pub use pokemon_gen3::PokemonGen3Handler;
 pub use pokemon_gen4::PokemonGen4Handler;
+pub use pokemon_gen5::PokemonGen5Handler;
+pub use super_mario_world::SuperMarioWorldHandler;
 pub use zelda_alttp::ZeldaAlttpHandler;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -312,6 +316,8 @@ impl Default for SaveGameRegistry {
                 Box::new(PokemonGen4Handler),
                 Box::new(ZeldaAlttpHandler),
                 Box::new(PokemonGen1Handler),
+                Box::new(PokemonGen5Handler),
+                Box::new(SuperMarioWorldHandler),
             ],
         }
     }

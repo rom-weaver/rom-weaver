@@ -17,6 +17,7 @@ const MAX_MONEY: u32 = 999_999;
 const MAX_COINS: u32 = 9_999;
 const OPTIONS_PRIMARY: usize = 0x2000;
 const OPTIONS_BACKUP: usize = 0x1200;
+const TM_HM_COUNT: usize = 57;
 
 // These offsets are assembled from pret's linked layouts. The main save starts in
 // SRAM bank 1. Gold/Silver's backup spans banks 0, 1, and 3.
@@ -267,6 +268,9 @@ fn generate(family: Family, game: &SaveGameIdentity) -> Result<Vec<u8>> {
         bytes[layout.check_value_two] = CHECK_VALUE_2;
         read_mut(&mut bytes, layout.player_one, 2)[..7]
             .copy_from_slice(&[0x8f, 0x8b, 0x80, 0x98, 0x84, 0x91, 0x50]);
+        for (base, _, _, _) in inventory_offsets(family) {
+            bytes[slot_offset(family, layout, base + 1)] = 0xFF;
+        }
         repair_checksum(&mut bytes, layout);
     }
 
@@ -387,29 +391,27 @@ fn build_document(
             "the save has a money value above the game limit",
         ));
     }
-    let mut fields = vec![read_only_text(
+    let editable = slots.main && slots.backup;
+    let warnings = edit_warning(slots);
+    let mut fields = vec![text_field(
         "trainer.name",
         "Trainer name",
         2,
         name,
-        "Trainer text. This layout does not edit names.",
+        editable,
+        warnings.clone(),
+        "Use { for the PK glyph and } for the MN glyph. Each uses one game character.",
     )];
-    fields.push(read_only_integer(
+    fields.push(integer_field(
         "trainer.id",
         "Trainer ID",
         0,
         read_u16_be(bytes, layout.player_one, 0) as u32,
+        (editable, warnings.clone()),
+        (0, 65_535),
         "Public trainer identifier",
     ));
-    if family == Family::Crystal {
-        fields.push(read_only_integer(
-            "trainer.secret_id",
-            "Secret ID",
-            0x3CF,
-            read_u16_be(bytes, layout.player_three, 0x3CF) as u32,
-            "Hidden trainer identifier",
-        ));
-    }
+    fields.last_mut().unwrap().encoding = Some("big_endian_u16".into());
     fields.push(SaveField {
         id: "trainer.money".into(),
         label: "Money".into(),
@@ -497,6 +499,9 @@ fn build_document(
             encoding: None,
         });
     }
+    add_pokedex_fields(&mut fields, bytes, family, layout, slots);
+    add_tm_hm_fields(&mut fields, bytes, family, layout, slots);
+    add_inventory_fields(&mut fields, bytes, family, layout, slots)?;
     let sections = slot_layouts(family)
         .into_iter()
         .enumerate()
@@ -559,6 +564,13 @@ fn apply_to_slot(
 ) -> Result<()> {
     for edit in edits {
         match (&*edit.field, &edit.value) {
+            ("trainer.name", SaveValue::Text(value)) => {
+                write_name(&mut read_mut(bytes, layout.player_one, 2)[..11], value)?;
+            }
+            ("trainer.id", SaveValue::U32(value)) => {
+                read_mut(bytes, layout.player_one, 0)[..2]
+                    .copy_from_slice(&(*value as u16).to_be_bytes());
+            }
             ("trainer.money", SaveValue::U32(value)) => {
                 write_u24(bytes, layout.player_three, money_offset(family), *value)
             }
@@ -568,6 +580,17 @@ fn apply_to_slot(
             }
             ("trainer.stored_money", SaveValue::U32(value)) => {
                 write_u24(bytes, layout.player_three, money_offset(family) + 3, *value)
+            }
+            (field, SaveValue::U32(value)) if field.starts_with("inventory.") => {
+                if let Some(index) = field
+                    .strip_prefix("inventory.tm_hm.")
+                    .and_then(|suffix| suffix.strip_suffix(".quantity"))
+                {
+                    let index = parse_index(index, TM_HM_COUNT)?;
+                    bytes[slot_offset(family, layout, tm_hm_offset(family) + index)] = *value as u8;
+                } else {
+                    apply_inventory_edit(bytes, family, layout, field, *value)?;
+                }
             }
             (field, SaveValue::Bool(value)) if field.starts_with("progress.badge_") => {
                 let index = field[15..]
@@ -584,6 +607,27 @@ fn apply_to_slot(
                     *byte |= 1 << (index % 8);
                 } else {
                     *byte &= !(1 << (index % 8));
+                }
+            }
+            (field, SaveValue::Bool(value))
+                if field.starts_with("progress.pokedex_owned_")
+                    || field.starts_with("progress.pokedex_seen_") =>
+            {
+                let (base, suffix) =
+                    if let Some(suffix) = field.strip_prefix("progress.pokedex_owned_") {
+                        (pokedex_offsets(family).0, suffix)
+                    } else {
+                        (
+                            pokedex_offsets(family).1,
+                            field.strip_prefix("progress.pokedex_seen_").unwrap(),
+                        )
+                    };
+                let index = parse_index(suffix, 251)?;
+                let offset = slot_offset(family, layout, base + index / 8);
+                if *value {
+                    bytes[offset] |= 1 << (index % 8);
+                } else {
+                    bytes[offset] &= !(1 << (index % 8));
                 }
             }
             ("options.text_speed", SaveValue::Enum(value)) => {
@@ -947,6 +991,233 @@ fn badge_offset(family: Family) -> usize {
     }
 }
 
+fn pokedex_offsets(family: Family) -> (usize, usize) {
+    match family {
+        Family::GoldSilver => (0x2A4C, 0x2A6C),
+        Family::Crystal => (0x2A27, 0x2A47),
+    }
+}
+
+fn inventory_offsets(family: Family) -> [(usize, &'static str, usize, bool); 4] {
+    let shift = usize::from(family == Family::Crystal);
+    [
+        (0x241F + shift, "items", 20, true),
+        (0x2449 + shift, "key_items", 25, false),
+        (0x2464 + shift, "balls", 12, true),
+        (0x247E + shift, "pc", 50, true),
+    ]
+}
+
+fn tm_hm_offset(family: Family) -> usize {
+    0x23E6 + usize::from(family == Family::Crystal)
+}
+
+fn add_tm_hm_fields(
+    fields: &mut Vec<SaveField>,
+    bytes: &[u8],
+    family: Family,
+    layout: SlotLayout,
+    slots: Slots,
+) {
+    let base = tm_hm_offset(family);
+    let status = (slots.main && slots.backup, edit_warning(slots));
+    for index in 0..TM_HM_COUNT {
+        let label = if index < 50 {
+            format!("TM{:02} quantity", index + 1)
+        } else {
+            format!("HM{:02} quantity", index - 49)
+        };
+        fields.push(integer_field(
+            &format!("inventory.tm_hm.{}.quantity", index + 1),
+            &label,
+            (base + index) as u16,
+            u32::from(bytes[slot_offset(family, layout, base + index)]),
+            status.clone(),
+            (0, 99),
+            "Stored TM or HM quantity",
+        ));
+    }
+}
+
+fn add_inventory_fields(
+    fields: &mut Vec<SaveField>,
+    bytes: &[u8],
+    family: Family,
+    layout: SlotLayout,
+    slots: Slots,
+) -> Result<()> {
+    let editable = slots.main && slots.backup;
+    let warnings = edit_warning(slots);
+    for (base, pocket, capacity, has_quantity) in inventory_offsets(family) {
+        let count_offset = slot_offset(family, layout, base);
+        let count = usize::from(bytes[count_offset]);
+        let stride = if has_quantity { 2 } else { 1 };
+        if count > capacity || bytes[slot_offset(family, layout, base + 1 + count * stride)] != 0xFF
+        {
+            return Err(validation(
+                "save_inventory",
+                "the save contains an invalid inventory pocket",
+            ));
+        }
+        for slot in 0..count {
+            let offset = slot_offset(family, layout, base + 1 + slot * stride);
+            fields.push(integer_field(
+                &format!("inventory.{pocket}.{}.item_id", slot + 1),
+                &format!("{} slot {} item ID", pocket.replace('_', " "), slot + 1),
+                (base + 1 + slot * stride) as u16,
+                u32::from(bytes[offset]),
+                (editable, warnings.clone()),
+                (1, 255),
+                "Inventory item identifier",
+            ));
+            if has_quantity {
+                fields.push(integer_field(
+                    &format!("inventory.{pocket}.{}.quantity", slot + 1),
+                    &format!("{} slot {} quantity", pocket.replace('_', " "), slot + 1),
+                    (base + 2 + slot * stride) as u16,
+                    u32::from(bytes[offset + 1]),
+                    (editable, warnings.clone()),
+                    (1, 99),
+                    "Inventory item quantity",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn apply_inventory_edit(
+    bytes: &mut [u8],
+    family: Family,
+    layout: SlotLayout,
+    field: &str,
+    value: u32,
+) -> Result<()> {
+    let mut parts = field.split('.');
+    let _ = parts.next();
+    let pocket = parts.next().ok_or_else(|| {
+        validation(
+            "save_field_unknown",
+            "the requested inventory field is unknown",
+        )
+    })?;
+    let (base, _, capacity, has_quantity) = inventory_offsets(family)
+        .into_iter()
+        .find(|entry| entry.1 == pocket)
+        .ok_or_else(|| {
+            validation(
+                "save_field_unknown",
+                "the requested inventory field is unknown",
+            )
+        })?;
+    let count = usize::from(bytes[slot_offset(family, layout, base)]).min(capacity);
+    let slot = parts
+        .next()
+        .and_then(|part| part.parse::<usize>().ok())
+        .and_then(|slot| slot.checked_sub(1))
+        .filter(|slot| *slot < count)
+        .ok_or_else(|| {
+            validation(
+                "save_field_unknown",
+                "the requested inventory field is unknown",
+            )
+        })?;
+    let relative = match parts.next() {
+        Some("item_id") => 0,
+        Some("quantity") if has_quantity => 1,
+        _ => {
+            return Err(validation(
+                "save_field_unknown",
+                "the requested inventory field is unknown",
+            ));
+        }
+    };
+    let stride = if has_quantity { 2 } else { 1 };
+    let offset = slot_offset(family, layout, base + 1 + slot * stride + relative);
+    bytes[offset] = value as u8;
+    Ok(())
+}
+
+fn slot_offset(family: Family, layout: SlotLayout, main_offset: usize) -> usize {
+    match family {
+        Family::Crystal => {
+            layout.player_three.offset + (main_offset - CRYSTAL_MAIN.player_three.offset)
+        }
+        Family::GoldSilver if layout.player_one.offset == GS_MAIN.player_one.offset => main_offset,
+        Family::GoldSilver => match main_offset {
+            0x2009..=0x222E => 0x15C7 + (main_offset - 0x2009),
+            0x222F..=0x23D8 => 0x3D96 + (main_offset - 0x222F),
+            0x23D9..=0x2855 => 0x0C6B + (main_offset - 0x23D9),
+            0x2856..=0x2D34 => 0x10E8 + (main_offset - 0x2856),
+            0x2D35..=0x2D68 => 0x7E39 + (main_offset - 0x2D35),
+            _ => unreachable!("Gold/Silver save offset is outside the checksummed data"),
+        },
+    }
+}
+
+fn add_pokedex_fields(
+    fields: &mut Vec<SaveField>,
+    bytes: &[u8],
+    family: Family,
+    layout: SlotLayout,
+    slots: Slots,
+) {
+    let editable = slots.main && slots.backup;
+    let warnings = edit_warning(slots);
+    for (base, prefix, description) in [
+        (
+            pokedex_offsets(family).0,
+            "pokedex_owned",
+            "Pokédex owned flag",
+        ),
+        (
+            pokedex_offsets(family).1,
+            "pokedex_seen",
+            "Pokédex seen flag",
+        ),
+    ] {
+        for index in 0..251 {
+            let offset = slot_offset(family, layout, base + index / 8);
+            fields.push(SaveField {
+                id: format!("progress.{}_{:03}", prefix, index + 1),
+                label: format!(
+                    "Pokédex {} #{:03}",
+                    if prefix.ends_with("owned") {
+                        "owned"
+                    } else {
+                        "seen"
+                    },
+                    index + 1
+                ),
+                section_id: 0,
+                offset: (base + index / 8) as u16,
+                kind: SaveFieldKind::BitfieldBoolean,
+                value: SaveValue::Bool(bytes[offset] & (1 << (index % 8)) != 0),
+                editable,
+                constraints: SaveConstraint::default(),
+                description: description.into(),
+                warnings: warnings.clone(),
+                step: None,
+                encoding: None,
+            });
+        }
+    }
+}
+
+fn parse_index(value: &str, count: usize) -> Result<usize> {
+    value
+        .parse::<usize>()
+        .ok()
+        .and_then(|value| value.checked_sub(1))
+        .filter(|value| *value < count)
+        .ok_or_else(|| {
+            validation(
+                "save_field_unknown",
+                "the requested progress field is unknown",
+            )
+        })
+}
+
 fn read(bytes: &[u8], span: Span, relative: usize) -> &[u8] {
     &bytes[span.offset + relative..span.offset + span.len]
 }
@@ -1016,6 +1287,8 @@ fn decode_name(bytes: &[u8]) -> String {
             0xC5 => 'ü',
             0xDF => '←',
             0xE0 => '\'',
+            0xE1 => '{',
+            0xE2 => '}',
             0xE3 => '-',
             0xE6 => '?',
             0xE7 => '!',
@@ -1034,6 +1307,58 @@ fn decode_name(bytes: &[u8]) -> String {
         output.push(character);
     }
     "Trainer name has no terminator".into()
+}
+
+fn encode_name_character(character: char) -> Option<u8> {
+    match character {
+        'A'..='Z' => Some(character as u8 - b'A' + 0x80),
+        'a'..='z' => Some(character as u8 - b'a' + 0xA0),
+        '0'..='9' => Some(character as u8 - b'0' + 0xF6),
+        ' ' => Some(0x7F),
+        '(' => Some(0x9A),
+        ')' => Some(0x9B),
+        ':' => Some(0x9C),
+        ';' => Some(0x9D),
+        '[' => Some(0x9E),
+        ']' => Some(0x9F),
+        'Ä' => Some(0xC0),
+        'Ö' => Some(0xC1),
+        'Ü' => Some(0xC2),
+        'ä' => Some(0xC3),
+        'ö' => Some(0xC4),
+        'ü' => Some(0xC5),
+        '←' => Some(0xDF),
+        '\'' => Some(0xE0),
+        '{' => Some(0xE1),
+        '}' => Some(0xE2),
+        '-' => Some(0xE3),
+        '?' => Some(0xE6),
+        '!' => Some(0xE7),
+        '.' => Some(0xE8),
+        '&' => Some(0xE9),
+        'é' => Some(0xEA),
+        '→' => Some(0xEB),
+        '♂' => Some(0xEF),
+        '¥' => Some(0xF0),
+        '×' => Some(0xF1),
+        '/' => Some(0xF3),
+        ',' => Some(0xF4),
+        '♀' => Some(0xF5),
+        _ => None,
+    }
+}
+
+fn write_name(target: &mut [u8], value: &str) -> Result<()> {
+    target.fill(0x50);
+    for (index, character) in value.chars().enumerate() {
+        target[index] = encode_name_character(character).ok_or_else(|| {
+            validation(
+                "save_name_character",
+                "the requested name contains a character unsupported by the English save encoding",
+            )
+        })?;
+    }
+    Ok(())
 }
 
 fn read_only_text(
@@ -1059,11 +1384,13 @@ fn read_only_text(
     }
 }
 
-fn read_only_integer(
+fn text_field(
     id: &str,
     label: &str,
     offset: u16,
-    value: u32,
+    value: String,
+    editable: bool,
+    warnings: Vec<String>,
     description: &str,
 ) -> SaveField {
     SaveField {
@@ -1071,13 +1398,45 @@ fn read_only_integer(
         label: label.into(),
         section_id: 0,
         offset,
-        kind: SaveFieldKind::ReadOnlyInteger,
-        value: SaveValue::U32(value),
-        editable: false,
-        constraints: SaveConstraint::default(),
+        kind: SaveFieldKind::Text,
+        value: SaveValue::Text(value),
+        editable,
+        constraints: SaveConstraint {
+            max_length: Some(7),
+            ..Default::default()
+        },
         description: description.into(),
-        warnings: vec!["Read-only".into()],
+        warnings,
         step: None,
+        encoding: Some("pokemon_gen2_english".into()),
+    }
+}
+
+fn integer_field(
+    id: &str,
+    label: &str,
+    offset: u16,
+    value: u32,
+    status: (bool, Vec<String>),
+    range: (i64, i64),
+    description: &str,
+) -> SaveField {
+    SaveField {
+        id: id.into(),
+        label: label.into(),
+        section_id: 0,
+        offset,
+        kind: SaveFieldKind::UnsignedInteger,
+        value: SaveValue::U32(value),
+        editable: status.0,
+        constraints: SaveConstraint {
+            min: Some(range.0),
+            max: Some(range.1),
+            ..Default::default()
+        },
+        description: description.into(),
+        warnings: status.1,
+        step: Some(1),
         encoding: None,
     }
 }
@@ -1149,6 +1508,16 @@ mod tests {
                 read_mut(&mut bytes, layout.player_three, 0x3CF)[..2]
                     .copy_from_slice(&0x5678u16.to_be_bytes());
             }
+            for (base, _, _, _) in inventory_offsets(family) {
+                bytes[slot_offset(family, layout, base + 1)] = 0xFF;
+            }
+            bytes[slot_offset(family, layout, tm_hm_offset(family))] = 3;
+            bytes[slot_offset(family, layout, tm_hm_offset(family) + TM_HM_COUNT - 1)] = 4;
+            let item_base = inventory_offsets(family)[0].0;
+            bytes[slot_offset(family, layout, item_base)] = 1;
+            bytes[slot_offset(family, layout, item_base + 1)] = 1;
+            bytes[slot_offset(family, layout, item_base + 2)] = 10;
+            bytes[slot_offset(family, layout, item_base + 3)] = 0xFF;
             repair_checksum(&mut bytes, layout);
         }
         bytes
@@ -1290,7 +1659,7 @@ mod tests {
     }
 
     #[test]
-    fn crystal_save_exposes_the_secret_id() {
+    fn crystal_does_not_expose_unrelated_bytes_as_a_secret_id() {
         let handler = PokemonGen2Handler;
         let input = SaveDetectionInput {
             bytes: save(Family::Crystal),
@@ -1298,12 +1667,145 @@ mod tests {
             rom_sha1: None,
         };
         let document = handler.parse(&input, &identity("pokemon-crystal")).unwrap();
-        assert_eq!(
-            field_value(&document, "trainer.secret_id"),
-            Some(&SaveValue::U32(0x5678))
-        );
+        assert_eq!(field_value(&document, "trainer.secret_id"), None);
         assert!(valid_slot(&input.bytes, &CRYSTAL_MAIN));
         assert!(valid_slot(&input.bytes, &CRYSTAL_BACKUP));
+    }
+
+    #[test]
+    fn trainer_name_id_and_dex_boundaries_update_both_gold_silver_copies() {
+        let mut bytes = save(Family::GoldSilver);
+        bytes[0x5000] = 0xA5;
+        let input = SaveDetectionInput {
+            bytes,
+            selected_game: Some("pokemon-gold".into()),
+            rom_sha1: None,
+        };
+        let edits = [
+            SaveEdit {
+                field: "trainer.name".into(),
+                value: SaveValue::Text("Äzé→♂♀!".into()),
+            },
+            SaveEdit {
+                field: "trainer.id".into(),
+                value: SaveValue::U32(65_535),
+            },
+            SaveEdit {
+                field: "progress.pokedex_owned_001".into(),
+                value: SaveValue::Bool(true),
+            },
+            SaveEdit {
+                field: "progress.pokedex_owned_251".into(),
+                value: SaveValue::Bool(true),
+            },
+            SaveEdit {
+                field: "progress.pokedex_seen_001".into(),
+                value: SaveValue::Bool(true),
+            },
+            SaveEdit {
+                field: "progress.pokedex_seen_251".into(),
+                value: SaveValue::Bool(true),
+            },
+        ];
+        let result = PokemonGen2Handler
+            .apply(&input, &identity("pokemon-gold"), &edits, false)
+            .unwrap();
+        let output = result.bytes.unwrap();
+        assert_eq!(output[0x5000], 0xA5);
+        assert_eq!(&read(&output, GS_MAIN.player_one, 0)[..2], &[0xFF, 0xFF]);
+        assert_eq!(&read(&output, GS_BACKUP.player_one, 0)[..2], &[0xFF, 0xFF]);
+        for (base, index) in [(0x2A4C, 0), (0x2A4C, 250), (0x2A6C, 0), (0x2A6C, 250)] {
+            for layout in slot_layouts(Family::GoldSilver) {
+                let offset = slot_offset(Family::GoldSilver, layout, base + index / 8);
+                assert_ne!(output[offset] & (1 << (index % 8)), 0);
+            }
+        }
+        assert!(valid_slot(&output, &GS_MAIN));
+        assert!(valid_slot(&output, &GS_BACKUP));
+    }
+
+    #[test]
+    fn crystal_public_id_edit_does_not_touch_the_old_false_secret_id_offset() {
+        let input = SaveDetectionInput {
+            bytes: save(Family::Crystal),
+            selected_game: Some("pokemon-crystal".into()),
+            rom_sha1: None,
+        };
+        let before = [
+            read(&input.bytes, CRYSTAL_MAIN.player_three, 0x3CF)[0],
+            read(&input.bytes, CRYSTAL_MAIN.player_three, 0x3CF)[1],
+            read(&input.bytes, CRYSTAL_BACKUP.player_three, 0x3CF)[0],
+            read(&input.bytes, CRYSTAL_BACKUP.player_three, 0x3CF)[1],
+        ];
+        let result = PokemonGen2Handler
+            .apply(
+                &input,
+                &identity("pokemon-crystal"),
+                &[SaveEdit {
+                    field: "trainer.id".into(),
+                    value: SaveValue::U32(1),
+                }],
+                false,
+            )
+            .unwrap();
+        let output = result.bytes.unwrap();
+        assert_eq!(read_u16_be(&output, CRYSTAL_MAIN.player_one, 0), 1);
+        assert_eq!(read_u16_be(&output, CRYSTAL_BACKUP.player_one, 0), 1);
+        assert_eq!(
+            before,
+            [
+                read(&output, CRYSTAL_MAIN.player_three, 0x3CF)[0],
+                read(&output, CRYSTAL_MAIN.player_three, 0x3CF)[1],
+                read(&output, CRYSTAL_BACKUP.player_three, 0x3CF)[0],
+                read(&output, CRYSTAL_BACKUP.player_three, 0x3CF)[1],
+            ]
+        );
+    }
+
+    #[test]
+    fn gen2_names_reject_unsupported_and_overlong_text() {
+        let input = SaveDetectionInput {
+            bytes: save(Family::GoldSilver),
+            selected_game: Some("pokemon-gold".into()),
+            rom_sha1: None,
+        };
+        for name in ["AzÄÖÜäö", "üé←→{}&", "()[]:; ", "'-,./?!"] {
+            let result = PokemonGen2Handler
+                .apply(
+                    &input,
+                    &identity("pokemon-gold"),
+                    &[SaveEdit {
+                        field: "trainer.name".into(),
+                        value: SaveValue::Text(name.into()),
+                    }],
+                    false,
+                )
+                .unwrap();
+            assert_eq!(
+                field_value(&result.document, "trainer.name"),
+                Some(&SaveValue::Text(name.into()))
+            );
+            if name.contains("{}") {
+                let output = result.bytes.as_ref().unwrap();
+                assert_eq!(&read(output, GS_MAIN.player_one, 6)[..2], &[0xE1, 0xE2]);
+                assert_eq!(&read(output, GS_BACKUP.player_one, 6)[..2], &[0xE1, 0xE2]);
+            }
+        }
+        for name in ["ABCDEFGH", "ABC☃"] {
+            assert!(
+                PokemonGen2Handler
+                    .apply(
+                        &input,
+                        &identity("pokemon-gold"),
+                        &[SaveEdit {
+                            field: "trainer.name".into(),
+                            value: SaveValue::Text(name.into())
+                        }],
+                        false,
+                    )
+                    .is_err()
+            );
+        }
     }
 
     #[test]
@@ -1374,6 +1876,10 @@ mod tests {
                         field: "trainer.play_time.hours".into(),
                         value: SaveValue::U32(999),
                     },
+                    SaveEdit {
+                        field: "inventory.items.1.quantity".into(),
+                        value: SaveValue::U32(99),
+                    },
                 ],
                 false,
             )
@@ -1392,6 +1898,10 @@ mod tests {
                 play_time_cap_offset(Family::GoldSilver) + 1
             ),
             999
+        );
+        assert_eq!(
+            field_value(&result.document, "inventory.items.1.quantity"),
+            Some(&SaveValue::U32(99))
         );
         assert!(valid_slot(&bytes, &GS_MAIN));
         assert!(valid_slot(&bytes, &GS_BACKUP));
@@ -1430,6 +1940,67 @@ mod tests {
                 )
                 .is_err()
         );
+    }
+
+    #[test]
+    fn tm_hm_quantity_boundaries_update_both_copies_and_preserve_neighbors() {
+        for (family, game_id) in [
+            (Family::GoldSilver, "pokemon-gold"),
+            (Family::Crystal, "pokemon-crystal"),
+        ] {
+            let mut source = save(family);
+            source[0x5000] = 0xA5;
+            let input = SaveDetectionInput {
+                bytes: source,
+                selected_game: Some(game_id.into()),
+                rom_sha1: None,
+            };
+            let result = PokemonGen2Handler
+                .apply(
+                    &input,
+                    &identity(game_id),
+                    &[
+                        SaveEdit {
+                            field: "inventory.tm_hm.1.quantity".into(),
+                            value: SaveValue::U32(0),
+                        },
+                        SaveEdit {
+                            field: "inventory.tm_hm.57.quantity".into(),
+                            value: SaveValue::U32(99),
+                        },
+                    ],
+                    false,
+                )
+                .unwrap();
+            let output = result.bytes.unwrap();
+            assert_eq!(output[0x5000], 0xA5);
+            for layout in slot_layouts(family) {
+                let base = tm_hm_offset(family);
+                assert_eq!(output[slot_offset(family, layout, base)], 0);
+                assert_eq!(
+                    output[slot_offset(family, layout, base + TM_HM_COUNT - 1)],
+                    99
+                );
+                assert_eq!(
+                    output[slot_offset(family, layout, inventory_offsets(family)[0].0)],
+                    1
+                );
+                assert!(valid_slot(&output, &layout));
+            }
+            assert!(
+                PokemonGen2Handler
+                    .apply(
+                        &input,
+                        &identity(game_id),
+                        &[SaveEdit {
+                            field: "inventory.tm_hm.1.quantity".into(),
+                            value: SaveValue::U32(100),
+                        }],
+                        false,
+                    )
+                    .is_err()
+            );
+        }
     }
 
     #[test]

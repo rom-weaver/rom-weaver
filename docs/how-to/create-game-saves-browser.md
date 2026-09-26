@@ -1,6 +1,6 @@
 # Create game saves in the browser
 
-Create a Zelda save, edit its properties, and download a copy. To edit a Pokémon save, start with a save made by the game. Earlier fresh Pokémon files passed editor checks but did not have a confirmed playable game state.
+Create a Super Mario World or Zelda save, edit its properties, and download a copy. To edit a Pokémon save, start with a save made by the game. Earlier fresh Pokémon files passed editor checks but did not have a confirmed playable game state.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -13,13 +13,15 @@ Create a Zelda save, edit its properties, and download a copy. To edit a Pokémo
 ## Create a fresh save
 
 1. Open **Saves**. Enable beta tools in Settings if needed.
-2. Select **Create a fresh save**, then choose **The Legend of Zelda: A Link to the Past**.
-3. Select **Generate save**. The editor opens the new file.
+2. In **New save**, select **Choose a game**, then select the game.
+3. Select **Create save**. The editor opens the new file.
 4. Change the properties you need. **Find a property** filters the fields. Fields outside the filter keep their pending edits.
 5. Select **Download edited copy**. The default save can also be downloaded without edits.
 6. Select **Choose ROM and test**. On Test, add the ROM for that game. The editor opens the ROM with the save.
 
 A new Zelda save has one file named `LINK`, three hearts, and two empty slots. Change **File 1 player name** to give the file a different name.
+
+A new Super Mario World save has one file at Yoshi's House and two empty slots.
 
 ## Start from an existing save
 

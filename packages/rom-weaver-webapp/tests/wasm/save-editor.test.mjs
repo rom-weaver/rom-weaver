@@ -88,6 +88,7 @@ const pokemonGen1Fixture = () => {
   bytes.set([0x06, 0x78], 0x2850);
   bytes[0x2601] = 3;
   bytes[0x25ca] = 0xff;
+  bytes[0x27e7] = 0xff;
   bytes[0x7000] = 0xa5;
   let sum = 0;
   for (let offset = 0x2598; offset < 0x3523; offset += 1) sum = (sum + bytes[offset]) & 0xff;
@@ -285,5 +286,37 @@ test("the real WASM command path creates and edits a fresh Zelda save", async ()
     const previewEvent = assertRunJsonSucceeded(preview, { command: "save-create" });
     expect(previewEvent.stage).toBe("preview");
     expect(Array.from(await opfsHandle.keys())).not.toContain("zelda-dry-run.srm");
+  });
+});
+
+test("the real WASM command path creates and edits Super Mario World SRAM", async () => {
+  await withTempFixture(async ({ opfsHandle, worker }) => {
+    const sourcePath = "/work/mario-created.srm";
+    const created = await worker.runJson({
+      args: { args: { game: "super-mario-world", output: sourcePath }, type: "create" },
+      type: "save",
+    });
+    const event = assertRunJsonSucceeded(created, { command: "save-create" });
+    expect(event.details.save_editor.result.document.identity.id).toBe("super-mario-world");
+    const source = new Uint8Array(await readGuestFile(opfsHandle, sourcePath));
+    expect(source.byteLength).toBe(2048);
+    const outputPath = "/work/mario-edited.srm";
+    const edited = await worker.runJson({
+      args: {
+        args: {
+          assignments: ["slot_1.progress.exits_completed=96", "slot_1.events.event_000=true"],
+          input: sourcePath,
+          output: outputPath,
+        },
+        type: "set",
+      },
+      type: "save",
+    });
+    assertRunJsonSucceeded(edited, { command: "save-set" });
+    const output = new Uint8Array(await readGuestFile(opfsHandle, outputPath));
+    expect(output[140]).toBe(96);
+    expect(output[96]).toBe(0x80);
+    expect(output.slice(0, 143)).toEqual(output.slice(429, 572));
+    expect(new Uint8Array(await readGuestFile(opfsHandle, sourcePath))).toEqual(source);
   });
 });
