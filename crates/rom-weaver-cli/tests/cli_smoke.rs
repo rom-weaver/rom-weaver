@@ -73,6 +73,9 @@ mod formats;
 
 #[path = "cli_smoke/format_coverage.rs"]
 mod format_coverage;
+#[cfg(all(target_os = "linux", target_arch = "x86_64", target_env = "gnu"))]
+#[path = "cli_smoke/emulator.rs"]
+mod emulator;
 
 #[path = "cli_smoke/dry_run.rs"]
 mod dry_run;
