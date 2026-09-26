@@ -1809,6 +1809,7 @@ dependencies = [
  "dialoguer",
  "flate2",
  "indicatif",
+ "libc",
  "miniz_oxide",
  "owo-colors",
  "quick-xml",
