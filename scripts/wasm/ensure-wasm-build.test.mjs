@@ -56,6 +56,12 @@ test("WASM source fingerprints change with compiler inputs", () => {
     fs.writeFileSync(path.join(root, "crates/example/tests/integration.rs"), "test only");
     assert.equal(createWasmSourceFingerprint(root), sourceFingerprint);
 
+    fs.writeFileSync(path.join(root, "crates/example/.lib.rs.swp"), "editor swap");
+    fs.writeFileSync(path.join(root, "crates/example/.DS_Store"), "finder");
+    fs.mkdirSync(path.join(root, "crates/example/target/debug"), { recursive: true });
+    fs.writeFileSync(path.join(root, "crates/example/target/debug/build.rs"), "build output");
+    assert.equal(createWasmSourceFingerprint(root), sourceFingerprint);
+
     fs.mkdirSync(path.join(root, "crates/example/src"), { recursive: true });
     fs.writeFileSync(path.join(root, "crates/example/src/embedded.json"), '{"value":1}');
     assert.notEqual(createWasmSourceFingerprint(root), sourceFingerprint);

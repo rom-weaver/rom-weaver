@@ -6,7 +6,15 @@ import { isWasmCompilerInput } from "./wasm-compiler-inputs.mjs";
 const SOURCE_ROOTS = ["crates", "scripts/wasm"];
 const SOURCE_FILES = ["Cargo.lock", "Cargo.toml", ".cargo/config.toml", ".config/mise.toml"];
 
+// Dotfiles (editor swap files, .DS_Store) and crate-local target/ trees are never compiler inputs;
+// hashing them would force a full WASM rebuild whenever a tool leaves one behind.
+const isLocalNoise = (path) => {
+  const name = posix.basename(path);
+  return name.startsWith(".") || name === "target";
+};
+
 const collectFiles = (root, path, files) => {
+  if (isLocalNoise(path)) return;
   const entry = join(root, path);
   let stats;
   try {
