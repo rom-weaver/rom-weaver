@@ -71,10 +71,12 @@ const browserCores = Object.keys(browserLock.files).flatMap((filename) => {
   const match = /^cores\/(.+)-thread-wasm\.data$/.exec(filename);
   return match ? [match[1]] : [];
 });
+const nativeCores = new Set(catalog.cores.map((core) => core.id));
+assert.equal(nativeCores.size, catalog.cores.length, "native core IDs are unique");
 assert.deepEqual(
-  catalog.cores.map((core) => core.id).sort(),
-  browserCores.sort(),
-  "native runtime covers the browser core catalog",
+  browserCores.filter((core) => !nativeCores.has(core)),
+  [],
+  "native runtime covers every browser core",
 );
 const assets = createFirstSampleAssets();
 fs.writeFileSync(path.join(scratch, "original.nes"), assets.originalRom);
@@ -93,15 +95,41 @@ run([
 ]);
 assert.deepEqual(fs.readFileSync(path.join(scratch, "patched.nes")), assets.firstPatchResult);
 
-const capture = (rom, screenshot, extra = []) => {
+const capture = (rom, screenshot, extra = [], expectedCore) => {
   const report = run(["test", rom, "--frames", "600", "--screenshot", screenshot, ...extra]);
   assert.equal(report.details.status, "smoke-tested");
   assert.equal(report.details.requested_frames, 600);
+  if (expectedCore) assert.equal(report.details.core, expectedCore);
   const bytes = fs.readFileSync(path.join(scratch, screenshot));
   assert.ok(bytes.length > 100, "screenshot has image content");
   assert.equal(bytes.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
   assert.equal(report.details.screenshot_sha256, sha256(bytes));
   return report.details.screenshot_sha256;
+};
+const downloadFixture = (filename, url, expectedDigest, maxBytes = 16 * 1024 * 1024) => {
+  const destination = path.join(scratch, filename);
+  // Upstream test inputs MUST remain outside distributed runtime and source archives.
+  const download = spawnSync(
+    "curl",
+    [
+      "--fail",
+      "--location",
+      "--silent",
+      "--show-error",
+      "--max-time",
+      "60",
+      "--max-filesize",
+      String(maxBytes),
+      "--output",
+      destination,
+      url,
+    ],
+    { encoding: "utf8", timeout: 65_000 },
+  );
+  assert.ifError(download.error);
+  assert.equal(download.status, 0, download.stderr);
+  assert.equal(sha256(fs.readFileSync(destination)), expectedDigest);
+  return destination;
 };
 const original = capture("original.nes", "original.png");
 const repeated = capture("original.nes", "repeated.png");
@@ -124,35 +152,38 @@ if (values["source-dir"]) {
   }
   const ds = new URL("../../tests/fixtures/trim/nds-downloadplay.input.nds", import.meta.url);
   capture(fileURLToPath(ds), "melonds.png", ["--core", "melonds"]);
-  const psp = path.join(scratch, "complex.prx");
   const fixtureRevision = "2c804f5cb3cd97b5ca3e11242060fee73e50bc47";
   const fixtureUrl = `https://raw.githubusercontent.com/hrydgard/pspautotests/${fixtureRevision}/tests/gpu/complex/complex.prx`;
-  // The upstream test fixture MUST stay outside the distributed runtime and source archives.
-  const download = spawnSync(
-    "curl",
-    [
-      "--fail",
-      "--location",
-      "--silent",
-      "--show-error",
-      "--max-time",
-      "60",
-      "--max-filesize",
-      "1048576",
-      "--output",
-      psp,
-      fixtureUrl,
-    ],
-    { encoding: "utf8", timeout: 65_000 },
-  );
-  assert.ifError(download.error);
-  assert.equal(download.status, 0, download.stderr);
-  assert.equal(
-    sha256(fs.readFileSync(psp)),
+  const psp = downloadFixture(
+    "complex.prx",
+    fixtureUrl,
     "c7fe00619e634b23042828836390c5e8812579b0b1f290864b64e37919a84e71",
+    1024 * 1024,
   );
   capture(psp, "ppsspp.png", ["--core", "ppsspp"]);
   run(["test", psp, "--core", "ppsspp", "--frames", "1"]);
+  const fixtures = JSON.parse(
+    fs.readFileSync(new URL("./emulator-fixtures.json", import.meta.url), "utf8"),
+  );
+  for (const fixture of fixtures) {
+    const input = downloadFixture(fixture.filename, fixture.url, fixture.sha256);
+    const extra = ["--core", fixture.core];
+    let rom = input;
+    if (fixture.select) {
+      extra.push("--select", fixture.select);
+      const output = path.join(scratch, `${fixture.core}-extracted`);
+      run(["extract", "--input", input, "--output", output, "--select", fixture.select]);
+      rom = path.join(output, fixture.select);
+    }
+    if (fixture.extension) {
+      const renamed = path.join(scratch, `${fixture.core}.${fixture.extension}`);
+      fs.copyFileSync(rom, renamed);
+      rom = renamed;
+    }
+    const selected = capture(input, `${fixture.core}.png`, extra, fixture.core);
+    const automatic = capture(rom, `${fixture.core}-auto.png`, [], fixture.core);
+    assert.equal(selected, automatic, `${fixture.core} selection produces the same frame`);
+  }
 }
 const preserved = fs.readFileSync(path.join(scratch, "original.png"));
 run(["test", "original.nes", "--screenshot", "original.png"], 1);
