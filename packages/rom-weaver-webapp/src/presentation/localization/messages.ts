@@ -867,6 +867,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "settings.betaToolsEnabled",
     message: "Enable beta tools (Trim, PPF undo, Save Editor, and cheats)",
   }),
+  "settings.accent": msg({ id: "settings.accent", message: "Accent" }),
+  "settings.bundlePackage": msg({ id: "settings.bundlePackage", message: "Bundle" }),
   "settings.byteUnits": msg({ id: "settings.byteUnits", message: "File size units" }),
   "settings.chdCreateCdCodecs": msg({ id: "settings.chdCreateCdCodecs", message: "CD Codecs" }),
   "settings.chdCreateDvdCodecs": msg({ id: "settings.chdCreateDvdCodecs", message: "DVD Codecs" }),
@@ -875,7 +877,16 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "settings.detailedViewEnabled",
     message: "Show detailed file information",
   }),
+  "settings.defaultCompression": msg({ id: "settings.defaultCompression", message: "Type" }),
+  "settings.emulatorSaveStorageEnabled": msg({
+    id: "settings.emulatorSaveStorageEnabled",
+    message: "Store emulator saves on this device",
+  }),
   "settings.fixChecksum": msg({ id: "settings.fixChecksum", message: "Fix ROM header" }),
+  "settings.identifiedOutputName": msg({
+    id: "settings.identifiedOutputName",
+    message: "Name outputs after the identified title",
+  }),
   "settings.language": msg({ id: "settings.language", message: "Language" }),
   "settings.levelOverride": msg({ id: "settings.levelOverride", message: "Level override" }),
   "settings.logLevel": msg({ id: "settings.logLevel", message: "Log level" }),
@@ -887,6 +898,14 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "settings.offlineCopyHelp": msg({
     id: "settings.offlineCopyHelp",
     message: "Automatically download the app for offline use unless data saver is on.",
+  }),
+  "settings.postApplyDownloadBehavior": msg({
+    id: "settings.postApplyDownloadBehavior",
+    message: "Post Apply Download",
+  }),
+  "settings.postApplyTestBehavior": msg({
+    id: "settings.postApplyTestBehavior",
+    message: "Post Apply Test",
   }),
   "settings.requireInputChecksumMatch": msg({
     id: "settings.requireInputChecksumMatch",

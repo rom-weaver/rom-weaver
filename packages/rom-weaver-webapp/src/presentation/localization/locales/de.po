@@ -355,6 +355,11 @@ msgstr "Über rom-weaver, seine Lizenz und seinen Datenschutz"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.accent"
+msgstr "Akzentfarbe"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.accent"
 msgstr "Akzentfarbe"
 
@@ -682,6 +687,11 @@ msgstr "Patch-Stapel erstellen"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkEdit"
 msgstr "Mehrere bearbeiten"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.bundlePackage"
+msgstr "Bundle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1062,11 +1072,6 @@ msgstr "{format}-Bundle erstellen"
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.createRom"
 msgstr "{format}-ROM-Bundle erstellen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.createBundle"
-msgstr "Geführtes Bundle starten"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2095,6 +2100,11 @@ msgstr "Name aus erkanntem Titel"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.identifiedOutputName"
+msgstr "Ausgaben nach erkanntem Titel benennen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.names"
 msgstr "Namen"
 
@@ -2600,8 +2610,18 @@ msgstr "Mögliche Plattformen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.postApplyDownloadBehavior"
+msgstr "Download nach Anwenden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.postDownload"
 msgstr "Download nach Anwenden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.postApplyTestBehavior"
+msgstr "Test nach Anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3160,6 +3180,11 @@ msgstr "Geführtes Anwenden starten"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.tutorial.createBundle"
+msgstr "Geführtes Bundle starten"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.rom.title"
 msgstr "Mit dem ROM beginnen"
 
@@ -3177,6 +3202,11 @@ msgstr "Speicher"
 #: src/presentation/localization/messages.ts
 msgid "error.STORAGE_UNAVAILABLE"
 msgstr "Speicher ist nicht verfügbar."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.emulatorSaveStorageEnabled"
+msgstr "Emulator-Spielstände auf diesem Gerät speichern"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3602,6 +3632,11 @@ msgstr "Alle einschalten"
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.instructions"
 msgstr "Anleitungsschritte"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.defaultCompression"
+msgstr "Typ"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

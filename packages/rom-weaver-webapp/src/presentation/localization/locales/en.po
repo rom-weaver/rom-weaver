@@ -355,6 +355,11 @@ msgstr "About rom-weaver, its licence and its privacy"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.accent"
+msgstr "Accent"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.accent"
 msgstr "Accent"
 
@@ -682,6 +687,11 @@ msgstr "Build the patch stack"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkEdit"
 msgstr "Bulk edit"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.bundlePackage"
+msgstr "Bundle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1062,11 +1072,6 @@ msgstr "Create {format} Bundle"
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.createRom"
 msgstr "Create {format} ROM Bundle"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.createBundle"
-msgstr "Start guided bundle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2095,6 +2100,11 @@ msgstr "Name from identified title"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.identifiedOutputName"
+msgstr "Name outputs after the identified title"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.names"
 msgstr "Names"
 
@@ -2600,8 +2610,18 @@ msgstr "Platform candidates"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.postApplyDownloadBehavior"
+msgstr "Post Apply Download"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.postDownload"
 msgstr "Post Apply Download"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.postApplyTestBehavior"
+msgstr "Post Apply Test"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3160,6 +3180,11 @@ msgstr "Start guided Apply"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.tutorial.createBundle"
+msgstr "Start guided bundle"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.rom.title"
 msgstr "Start with the ROM"
 
@@ -3177,6 +3202,11 @@ msgstr "Storage"
 #: src/presentation/localization/messages.ts
 msgid "error.STORAGE_UNAVAILABLE"
 msgstr "Storage is unavailable."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.emulatorSaveStorageEnabled"
+msgstr "Store emulator saves on this device"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3602,6 +3632,11 @@ msgstr "Turn all on"
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.instructions"
 msgstr "Tutorial instructions"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.defaultCompression"
+msgstr "Type"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
