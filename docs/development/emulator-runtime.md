@@ -25,7 +25,7 @@ The first runtime target is `linux-x64-gnu`: Linux x86-64 with GNU libc 2.39 or 
 
 The source lock is `scripts/emulator-runtime/sources.json`. It pins the upstream archive URL, revision, and SHA-256 for each component.
 
-Each component retains its upstream license. Snes9x and Genesis Plus GX restrict commercial redistribution; their source-lock entries record `redistribution: "noncommercial-only"`. The runtime and source archives include their license notices.
+Each component retains its upstream license. Snes9x, Genesis Plus GX, and PicoDrive restrict commercial redistribution; their source-lock entries record `redistribution: "noncommercial-only"`. The runtime and source archives include their license notices. The full GPLv3 text used by PokeMini is also included in `licenses/RetroArch-COPYING`.
 
 ## Build the release artifacts
 
@@ -75,7 +75,11 @@ $smoke --runtime-dir PATH_TO_RUNTIME --scratch-dir "$root/smoke"
 
 The smoke script uses isolated configuration, data, cache, save, and state directories. It requires a nonempty PNG with the PNG signature. It checks the baseline FCEUmm path; it does not prove every packaged core or game.
 
-The build loads all core libraries. The CI integration check checks that the installed catalog matches the browser catalog. It runs NES, Game Boy, GBA, DS, and PSP inputs through the CLI. The PSP fixture downloads from a pinned upstream revision, passes a SHA-256 check, and remains outside distributed archives.
+The build loads all core libraries. The CI integration check requires the installed catalog to match the native source lock and contain every browser core. The native catalog also includes Atari 2600, PC Engine, SuperGrafx, Virtual Boy, Neo Geo Pocket, WonderSwan, Pokémon Mini, and Sega 32X cores.
+
+CI captures frames from NES, Game Boy, GBA, DS, PSP, and all eight additional cores. The additional core fixtures also check automatic selection against explicit core selection. Downloaded inputs have SHA-256 checks and remain outside distributed archives. Their pinned URLs and hashes are in `scripts/ci/emulator-fixtures.json`; the PSP fixture is pinned in the check script.
+
+The SuperGrafx fixture runs the PC Engine 240p Test Suite with forced SuperGrafx mode. It checks startup and rendering through that core, not SuperGrafx-specific graphics features.
 
 The PPSSPP source recipe waits for asynchronous startup before it returns the first frame. Without this patch, a short frame budget can unload the core while its loader thread still writes to emulated memory.
 

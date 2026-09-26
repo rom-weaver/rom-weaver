@@ -219,8 +219,18 @@ The multi-core runtime uses these core and platform IDs. `rom-weaver emulator in
 | `pcsx_rearmed` | `psx` | PlayStation |
 | `ppsspp` | `psp` | PlayStation Portable |
 | `yabause` | `saturn` | Sega Saturn |
+| `stella` | `atari2600` | Atari 2600 |
+| `beetle_pce_fast` | `pce` | PC Engine and TurboGrafx-16 |
+| `beetle_supergrafx` | `supergrafx` | PC Engine SuperGrafx |
+| `beetle_vb` | `virtualboy` | Virtual Boy |
+| `beetle_ngp` | `ngp` | Neo Geo Pocket and Neo Geo Pocket Color |
+| `beetle_wswan` | `wonderswan` | WonderSwan and WonderSwan Color |
+| `pokemini` | `pokemon-mini` | Pokémon Mini |
+| `picodrive` | `sega32x` | Sega 32X |
 
 Sega CD inputs need the BIOS for their region: `bios_CD_E.bin`, `bios_CD_U.bin`, or `bios_CD_J.bin`. Famicom Disk System inputs need `disksys.rom`. These conditional files are user-supplied through `--system-dir`; cartridge inputs do not need them.
+
+PC Engine CD inputs use `syscard3.pce` with the packaged Beetle defaults. The SuperGrafx core forces SuperGrafx mode, including for homebrew ROMs without a known game checksum. PicoDrive advertises `.32x` for automatic selection; `.md`, `.gen`, and `.smd` continue to select Genesis Plus GX.
 
 ## Identify
 
