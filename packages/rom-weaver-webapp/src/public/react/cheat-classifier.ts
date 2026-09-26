@@ -17,12 +17,12 @@ type CheatClassifiers = {
 };
 
 const createCheatClassifiers = (
-  getCheatSource: () => SourceRef,
+  getCheatSource: () => SourceRef | Promise<SourceRef>,
   loadApi: CheatBrowserApiLoader = loadBrowserApi,
 ): CheatClassifiers => {
   const classifyDatabaseCheats: DatabaseCheatClassifier = async (records) => {
     const { runBrowserCheats } = await loadApi();
-    return (await runBrowserCheats({ records, rom: getCheatSource() })).records;
+    return (await runBrowserCheats({ records, rom: await getCheatSource() })).records;
   };
 
   const classifyManualCode: ManualCheatClassifier = async ({ code, description, kind, system }) => {
@@ -39,7 +39,7 @@ const createCheatClassifiers = (
       system,
     };
     const { runBrowserCheats } = await loadApi();
-    const classified = (await runBrowserCheats({ records: [record], rom: getCheatSource() })).records[0];
+    const classified = (await runBrowserCheats({ records: [record], rom: await getCheatSource() })).records[0];
     if (!classified) throw new Error("ROMWeaver did not return a cheat classification");
     return {
       detectedSystem: system,
