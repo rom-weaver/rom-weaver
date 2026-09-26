@@ -572,6 +572,61 @@ jobs:
         with:
           subject-path: rom-weaver-webapp.tar.gz
 
+  emulator-runtime:
+    name: Build emulator runtime
+    needs: release
+    if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.release.outputs.release_created == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/emulator-runtime.yml
+    with:
+      sha: ${{ needs.release.outputs.sha }}
+
+  publish-emulator-runtime:
+    name: Publish emulator runtime
+    needs: [release, emulator-runtime]
+    if: >-
+      !cancelled() &&
+      needs.release.result == 'success' &&
+      needs.emulator-runtime.result == 'success' &&
+      needs.release.outputs.release_created == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      artifact-metadata: write
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release.outputs.sha }}
+
+      - name: Download emulator runtime
+        uses: actions/download-artifact@v8
+        with:
+          name: emulator-runtime-linux-x64-gnu
+          path: target/emulator-release
+
+      - name: Upload emulator runtime release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "v${{ needs.release.outputs.version }}" \
+            target/emulator-release/rom-weaver-emulator-linux-x64-gnu.tar.gz \
+            target/emulator-release/rom-weaver-emulator-linux-x64-gnu.tar.gz.sha256 \
+            target/emulator-release/rom-weaver-emulator-sources.tar.gz \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Attest emulator runtime archives
+        uses: ./.github/actions/attest-retry
+        with:
+          subject-path: target/emulator-release/*.tar.gz
+
   publish-npm:
     needs: [release, cargo-publish-dry-run]
     if: >-
@@ -781,7 +836,15 @@ jobs:
   publish-release:
     name: Publish draft release
     needs:
-      [release, semver-check, cargo-publish-dry-run, static-webapp, publish-npm, publish-containers]
+      [
+        release,
+        semver-check,
+        cargo-publish-dry-run,
+        static-webapp,
+        publish-npm,
+        publish-containers,
+        publish-emulator-runtime,
+      ]
     if: >-
       always() &&
       needs.release.outputs.release_created == 'true' &&
@@ -789,7 +852,8 @@ jobs:
       needs.cargo-publish-dry-run.result == 'success' &&
       needs.static-webapp.result == 'success' &&
       needs.publish-npm.result == 'success' &&
-      needs.publish-containers.result == 'success'
+      needs.publish-containers.result == 'success' &&
+      needs.publish-emulator-runtime.result == 'success'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
