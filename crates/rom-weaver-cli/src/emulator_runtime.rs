@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     fs::{self, File, OpenOptions},
     io::{Read, Write},
     path::{Component, Path, PathBuf},
@@ -15,8 +15,8 @@ use sha2::{Digest, Sha256};
 
 const PLATFORM: &str = "linux-x64-gnu";
 const ARCHIVE_NAME: &str = "rom-weaver-emulator-linux-x64-gnu.tar.gz";
-const MAX_ARCHIVE_BYTES: u64 = 128 * 1024 * 1024;
-const MAX_UNPACKED_BYTES: u64 = 256 * 1024 * 1024;
+const MAX_ARCHIVE_BYTES: u64 = 256 * 1024 * 1024;
+const MAX_UNPACKED_BYTES: u64 = 512 * 1024 * 1024;
 
 #[derive(Debug, Args)]
 pub(crate) struct EmulatorCommand {
@@ -26,7 +26,7 @@ pub(crate) struct EmulatorCommand {
 
 #[derive(Debug, Subcommand)]
 enum EmulatorSubcommand {
-    /// Install the optional NES runtime for this release (Linux x64/glibc).
+    /// Install the optional emulator runtime for this release (Linux x64/glibc).
     Install(InstallCommand),
     /// Check the installed runtime and show its source revisions.
     Info {
@@ -53,9 +53,20 @@ struct InstallCommand {
 pub(crate) struct EmulatorRuntime {
     pub(crate) root: PathBuf,
     pub(crate) retroarch: PathBuf,
-    pub(crate) core: PathBuf,
     pub(crate) retroarch_revision: String,
-    pub(crate) core_revision: String,
+    pub(crate) cores: Vec<EmulatorCore>,
+    pub(crate) system_files: Vec<PathBuf>,
+}
+
+#[derive(Debug)]
+pub(crate) struct EmulatorCore {
+    pub(crate) id: String,
+    pub(crate) platform: String,
+    pub(crate) path: PathBuf,
+    pub(crate) revision: String,
+    pub(crate) extensions: Vec<String>,
+    pub(crate) options: BTreeMap<String, String>,
+    pub(crate) firmware: Vec<PathBuf>,
 }
 
 #[derive(Deserialize)]
@@ -65,6 +76,8 @@ struct Manifest {
     platform: String,
     retroarch: RuntimeFile,
     cores: Vec<CoreFile>,
+    #[serde(default)]
+    system_files: Vec<SystemFile>,
 }
 
 #[derive(Deserialize)]
@@ -82,6 +95,19 @@ struct CoreFile {
     platform: String,
     path: String,
     revision: String,
+    sha256: String,
+    #[serde(default)]
+    extensions: Vec<String>,
+    #[serde(default)]
+    options: BTreeMap<String, String>,
+    #[serde(default)]
+    firmware: Vec<PathBuf>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SystemFile {
+    path: String,
     sha256: String,
 }
 
@@ -197,27 +223,70 @@ pub(crate) fn resolve(directory: Option<&Path>) -> Result<EmulatorRuntime> {
     }
     let root = fs::canonicalize(&directory).io_op(IoOp::Inspect, &directory)?;
     let manifest_path = checked_file(&root, "manifest.json")?;
-    let manifest: Manifest = serde_json::from_slice(&read_bounded(&manifest_path, 64 * 1024)?)
+    let manifest: Manifest = serde_json::from_slice(&read_bounded(&manifest_path, 1024 * 1024)?)
         .map_err(|error| invalid(format!("invalid runtime manifest: {error}")))?;
-    if manifest.schema_version != 1 || manifest.platform != PLATFORM || manifest.cores.len() != 1 {
+    if !matches!(manifest.schema_version, 1 | 2)
+        || manifest.platform != PLATFORM
+        || manifest.cores.is_empty()
+        || manifest.cores.len() > 256
+    {
         return Err(invalid(
-            "unsupported emulator runtime manifest; expected v1 Linux x64/glibc NES runtime",
+            "unsupported emulator runtime manifest; expected v1 or v2 Linux x64/glibc runtime",
         ));
     }
-    let core = &manifest.cores[0];
-    if core.id != "fceumm" || core.platform != "nes" {
-        return Err(invalid("emulator runtime must contain the FCEUmm NES core"));
-    }
     let retroarch = verify_file(&root, &manifest.retroarch, "bin/retroarch")?;
-    let core_path = verify_file(
-        &root,
-        &RuntimeFile {
-            path: core.path.clone(),
-            revision: core.revision.clone(),
-            sha256: core.sha256.clone(),
-        },
-        "cores/fceumm_libretro.so",
-    )?;
+    let mut ids = HashSet::new();
+    let mut cores = Vec::new();
+    for mut core in manifest.cores {
+        if !safe_identifier(&core.id)
+            || !safe_identifier(&core.platform)
+            || !ids.insert(core.id.clone())
+        {
+            return Err(invalid("runtime core identifiers must be safe and unique"));
+        }
+        if manifest.schema_version == 1 && core.id == "fceumm" && core.extensions.is_empty() {
+            core.extensions.push("nes".into());
+        }
+        validate_core_metadata(&core)?;
+        let path = verify_file(
+            &root,
+            &RuntimeFile {
+                path: core.path,
+                revision: core.revision.clone(),
+                sha256: core.sha256,
+            },
+            &format!("cores/{}_libretro.so", core.id),
+        )?;
+        cores.push(EmulatorCore {
+            id: core.id,
+            platform: core.platform,
+            path,
+            revision: core.revision,
+            extensions: core.extensions,
+            options: core.options,
+            firmware: core.firmware,
+        });
+    }
+    let mut system_paths = HashSet::new();
+    if manifest.system_files.len() > 4096 {
+        return Err(invalid("runtime contains too many system assets"));
+    }
+    for asset in manifest.system_files {
+        if !asset.path.starts_with("system/") || !system_paths.insert(PathBuf::from(&asset.path)) {
+            return Err(invalid(
+                "system assets must have unique paths inside system/",
+            ));
+        }
+        verify_file(
+            &root,
+            &RuntimeFile {
+                path: asset.path.clone(),
+                revision: manifest.retroarch.revision.clone(),
+                sha256: asset.sha256,
+            },
+            &asset.path,
+        )?;
+    }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -228,14 +297,61 @@ pub(crate) fn resolve(directory: Option<&Path>) -> Result<EmulatorRuntime> {
             )));
         }
     }
-    tracing::debug!(path = %root.display(), core = core.id, "verified emulator runtime");
+    tracing::debug!(path = %root.display(), cores = cores.len(), "verified emulator runtime");
     Ok(EmulatorRuntime {
         root,
         retroarch,
-        core: core_path,
         retroarch_revision: manifest.retroarch.revision,
-        core_revision: core.revision.clone(),
+        cores,
+        system_files: system_paths.into_iter().collect(),
     })
+}
+
+fn safe_identifier(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value
+            .bytes()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, b'_' | b'-'))
+}
+
+fn validate_core_metadata(core: &CoreFile) -> Result<()> {
+    if core.extensions.len() > 128
+        || core.extensions.iter().any(|ext| {
+            ext.is_empty()
+                || ext.len() > 16
+                || !ext
+                    .bytes()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+        })
+    {
+        return Err(invalid("invalid core extensions"));
+    }
+    if core.options.len() > 128
+        || core.options.iter().any(|(key, value)| {
+            !safe_identifier(key)
+                || value.len() > 256
+                || value
+                    .chars()
+                    .any(|c| c.is_control() || matches!(c, '"' | '\\'))
+        })
+    {
+        return Err(invalid("invalid core option"));
+    }
+    if core.firmware.len() > 64 || core.firmware.iter().any(|path| !safe_relative_path(path)) {
+        return Err(invalid(
+            "firmware paths must stay inside the system directory",
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn safe_relative_path(path: &Path) -> bool {
+    !path.as_os_str().is_empty()
+        && !path.to_string_lossy().contains('\\')
+        && path
+            .components()
+            .all(|part| matches!(part, Component::Normal(_)))
 }
 
 fn download(url: &str, limit: u64) -> Result<Vec<u8>> {
@@ -290,7 +406,8 @@ fn unpack(bytes: &[u8], destination: &Path) -> Result<()> {
         if relative.as_os_str().is_empty() && kind.is_dir() {
             continue;
         }
-        if relative.as_os_str().is_empty() || !paths.insert(relative.clone()) || paths.len() > 256 {
+        if relative.as_os_str().is_empty() || !paths.insert(relative.clone()) || paths.len() > 8192
+        {
             return Err(invalid(
                 "runtime archive contains duplicate or excessive entries",
             ));
@@ -344,7 +461,7 @@ fn install(args: &InstallCommand, dry_run: bool) -> Result<Value> {
     }
     if dry_run {
         return Ok(
-            json!({"message": format!("Would install the NES runtime in {}", directory.display()),
+            json!({"message": format!("Would install the emulator runtime in {}", directory.display()),
             "dry_run": true, "runtime_dir": directory, "writes": [directory],
             "downloads": if args.archive.is_none() { vec![url.clone(), format!("{url}.sha256")] } else { vec![] }}),
         );
@@ -406,17 +523,25 @@ fn install(args: &InstallCommand, dry_run: bool) -> Result<Value> {
     }
     fs::rename(&staging, &directory).io_op(IoOp::Write, &directory)?;
     let runtime = resolve(Some(&directory))?;
-    tracing::info!(path = %runtime.root.display(), "installed NES emulator runtime");
-    Ok(runtime_report(
-        &runtime,
-        "Installed the NES emulator runtime",
-    ))
+    tracing::info!(path = %runtime.root.display(), "installed emulator runtime");
+    Ok(runtime_report(&runtime, "Installed the emulator runtime"))
 }
 
 fn runtime_report(runtime: &EmulatorRuntime, message: &str) -> Value {
-    json!({"message": format!("{message}: {}", runtime.root.display()),
-        "runtime_dir": runtime.root, "platform": PLATFORM, "core": "fceumm",
-        "retroarch_revision": runtime.retroarch_revision, "core_revision": runtime.core_revision})
+    let cores = runtime
+        .cores
+        .iter()
+        .map(|core| {
+            json!({
+                "id": core.id, "platform": core.platform, "revision": core.revision,
+                "extensions": core.extensions, "firmware": core.firmware,
+            })
+        })
+        .collect::<Vec<_>>();
+    json!({"message": format!("{message}: {} ({} cores)", runtime.root.display(), cores.len()),
+        "runtime_dir": runtime.root, "platform": PLATFORM,
+        "core": if runtime.cores.len() == 1 { Some(&runtime.cores[0].id) } else { None },
+        "retroarch_revision": runtime.retroarch_revision, "cores": cores})
 }
 
 pub(crate) fn run(command: &EmulatorCommand, dry_run: bool) -> Result<Value> {
@@ -424,10 +549,7 @@ pub(crate) fn run(command: &EmulatorCommand, dry_run: bool) -> Result<Value> {
         EmulatorSubcommand::Install(args) => install(args, dry_run),
         EmulatorSubcommand::Info { runtime_dir } => {
             let runtime = resolve(runtime_dir.as_deref())?;
-            Ok(runtime_report(
-                &runtime,
-                "Verified the NES emulator runtime",
-            ))
+            Ok(runtime_report(&runtime, "Verified the emulator runtime"))
         }
     }
 }

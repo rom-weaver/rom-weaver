@@ -10,17 +10,19 @@ use std::{
 
 use clap::Args;
 use rom_weaver_core::{
-    ArchiveEntryKindFilter, IoOp, IoResultExt, NoninteractivePrompter, NoopProgressSink,
-    OperationContext, OperationFamily, Result, RomWeaverError, ThreadBudget,
-    process_cancellation_token,
+    IoOp, IoResultExt, NoninteractivePrompter, NoopProgressSink, OperationContext, Result,
+    RomWeaverError, ThreadBudget, process_cancellation_token,
 };
 use serde_json::{Value, json};
 use tracing::{debug, trace};
 
 use crate::{
     CliApp,
-    source_resolution::{AutoExtractResolutionFlags, AutoExtractResolutionLabels},
+    emulator_runtime::{EmulatorCore, EmulatorRuntime},
 };
+
+#[path = "rom_test/input.rs"]
+mod input;
 
 const MAX_CAPTURE_BYTES: u64 = 64 * 1024;
 const PNG_SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
@@ -32,7 +34,7 @@ pub(crate) struct TestCommand {
     /// Emulated frames before RetroArch captures the screenshot and exits.
     #[arg(long, default_value_t = 600, value_parser = clap::value_parser!(u32).range(1..=10_000_000))]
     pub(crate) frames: u32,
-    /// Maximum wall-clock runtime in seconds.
+    /// Maximum emulator process runtime in seconds, after input preparation.
     #[arg(long, default_value_t = 30, value_parser = clap::value_parser!(u64).range(1..=3_600))]
     pub(crate) timeout: u64,
     /// Save the captured frame at this path.
@@ -41,6 +43,12 @@ pub(crate) struct TestCommand {
     /// Use an installed emulator runtime from this directory.
     #[arg(long)]
     pub(crate) runtime_dir: Option<PathBuf>,
+    /// Select an installed core by ID; otherwise choose from the ROM extension.
+    #[arg(long)]
+    pub(crate) core: Option<String>,
+    /// Copy BIOS and core assets from this directory into the isolated test workspace.
+    #[arg(long)]
+    pub(crate) system_dir: Option<PathBuf>,
     /// Pick one file from an archive by exact name, prefix, or glob.
     #[arg(long)]
     pub(crate) select: Option<String>,
@@ -56,6 +64,8 @@ pub(crate) fn run(command: &TestCommand, dry_run: bool) -> Result<Value> {
             "timeout_seconds": command.timeout,
             "screenshot": command.screenshot,
             "runtime_dir": command.runtime_dir,
+            "core": command.core,
+            "system_dir": command.system_dir,
             "select": command.select,
             "status": "planned",
             "writes": command.screenshot.iter().collect::<Vec<_>>(),
@@ -81,34 +91,45 @@ pub(crate) fn run(command: &TestCommand, dry_run: bool) -> Result<Value> {
         false,
     );
     let selections = command.select.iter().cloned().collect::<Vec<_>>();
-    let resolved = app.resolve_source_with_auto_extract(
-        &command.input,
-        &selections,
-        &context,
-        AutoExtractResolutionLabels {
-            command: "test",
-            family: OperationFamily::Command,
-            format: None,
-            source_label: "ROM",
-            temp_prefix: "test-extract",
-        },
-        AutoExtractResolutionFlags {
-            no_extract: false,
-            no_ignore: false,
-            kind_filter: ArchiveEntryKindFilter::new(true, false),
-            stop_on_single_payload_codec: false,
-        },
+    let extensions = runtime
+        .cores
+        .iter()
+        .flat_map(|core| core.extensions.iter().cloned())
+        .collect();
+    let resolved =
+        app.resolve_emulator_source(&command.input, &selections, &context, &extensions)?;
+    let core = select_core(&runtime, &resolved.source, command.core.as_deref())?;
+    if core.id == "fceumm" && input::extension(&resolved.source) == "nes" {
+        validate_nes(&resolved.source)?;
+    }
+    let rom = input::stage_rom(&resolved.source, &workspace.path.join("content"))?;
+    input::stage_system(
+        &runtime,
+        core,
+        command.system_dir.as_deref(),
+        &workspace.path.join("system"),
     )?;
-    validate_nes(&resolved.source)?;
-    // Keep sidecar patches, saves, and core files away from the source ROM.
-    let rom = workspace.path.join("game.nes");
-    fs::copy(&resolved.source, &rom).io_op(IoOp::Write, &rom)?;
+    let options = workspace.path.join("core-options.cfg");
+    let settings = core
+        .options
+        .iter()
+        .map(|(key, value)| format!("{key} = \"{value}\"\n"))
+        .collect::<String>();
+    fs::write(&options, settings).io_op(IoOp::Write, &options)?;
 
     let captured = workspace.path.join("captured.png");
     let config = workspace.path.join("retroarch.cfg");
     write_config(&config)?;
     let started = Instant::now();
-    let process = execute(&runtime, &rom, &captured, &config, &workspace.path, command)?;
+    let process = execute(
+        &runtime,
+        core,
+        &rom,
+        &captured,
+        &config,
+        &workspace.path,
+        command,
+    )?;
     let elapsed_ms = started.elapsed().as_millis().min(u64::MAX as u128) as u64;
     if !process.status.success() {
         return Err(RomWeaverError::Validation(format!(
@@ -132,20 +153,54 @@ pub(crate) fn run(command: &TestCommand, dry_run: bool) -> Result<Value> {
         let _ = fs::remove_file(cleanup);
     }
     Ok(json!({
-        "message": format!("smoke-tested {} frame(s) with FCEUmm", command.frames),
+        "message": format!("smoke-tested {} frame(s) with {}", command.frames, core.id),
         "requested_frames": command.frames,
         "timeout_seconds": command.timeout,
         "status": "smoke-tested",
-        "platform": "nes",
-        "core": "fceumm",
+        "platform": core.platform,
+        "core": core.id,
         "retroarch_revision": runtime.retroarch_revision,
-        "core_revision": runtime.core_revision,
+        "core_revision": core.revision,
         "screenshot": screenshot,
         "screenshot_sha256": sha256,
         "elapsed_ms": elapsed_ms,
         "stdout": String::from_utf8_lossy(&process.stdout),
         "stderr": String::from_utf8_lossy(&process.stderr),
     }))
+}
+
+fn select_core<'a>(
+    runtime: &'a EmulatorRuntime,
+    rom: &Path,
+    requested: Option<&str>,
+) -> Result<&'a EmulatorCore> {
+    if let Some(id) = requested {
+        return runtime.cores.iter().find(|core| core.id == id).ok_or_else(|| RomWeaverError::Validation(format!(
+            "core `{id}` is not installed; run `rom-weaver emulator info` to list installed cores"
+        )));
+    }
+    let extension = input::extension(rom);
+    let candidates = runtime
+        .cores
+        .iter()
+        .filter(|core| core.extensions.contains(&extension))
+        .collect::<Vec<_>>();
+    if candidates.len() == 1 {
+        return Ok(candidates[0]);
+    }
+    let ids = if candidates.is_empty() {
+        runtime.cores.iter().collect::<Vec<_>>()
+    } else {
+        candidates
+    };
+    Err(RomWeaverError::Validation(format!(
+        "cannot choose one core for `{}`; pass --core with one of: {}",
+        rom.display(),
+        ids.iter()
+            .map(|core| core.id.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    )))
 }
 
 struct ProcessOutput {
@@ -155,7 +210,8 @@ struct ProcessOutput {
 }
 
 fn execute(
-    runtime: &crate::emulator_runtime::EmulatorRuntime,
+    runtime: &EmulatorRuntime,
+    core: &EmulatorCore,
     rom: &Path,
     screenshot: &Path,
     config: &Path,
@@ -179,7 +235,7 @@ fn execute(
         .arg("--config")
         .arg(config)
         .arg("-L")
-        .arg(&runtime.core)
+        .arg(&core.path)
         .arg(format!("--max-frames={frames}"))
         .arg("--max-frames-ss")
         .arg(format!("--max-frames-ss-path={}", screenshot.display()))
@@ -288,7 +344,7 @@ fn validate_nes(path: &Path) -> Result<()> {
         .io_op(IoOp::Open, path)?;
     if &header[..4] != b"NES\x1a" {
         return Err(RomWeaverError::Validation(format!(
-            "`{}` is not an iNES or NES 2.0 ROM; only NES is supported",
+            "`{}` is not an iNES or NES 2.0 ROM",
             path.display()
         )));
     }
@@ -320,6 +376,10 @@ input_driver = "null"
 network_cmd_enable = "false"
 network_remote_enable = "false"
 config_save_on_exit = "false"
+core_options_path = "./core-options.cfg"
+system_directory = "./system"
+savefile_directory = "./saves"
+savestate_directory = "./states"
 video_vsync = "false"
 audio_enable = "false"
 history_list_enable = "false"
