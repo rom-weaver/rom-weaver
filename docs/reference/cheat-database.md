@@ -59,8 +59,8 @@ The browser's **Save as patch** action exports one supported ROM cheat. Its auto
 | ROM size | Patch format |
 | --- | --- |
 | Less than 16 MiB | IPS |
-| 16 MiB to less than 256 MiB | BPS |
-| 256 MiB or more | xdelta |
+| 16 MiB through 256 MiB | BPS |
+| More than 256 MiB | xdelta |
 
 The 256 MiB cutoff is rom-weaver's creation policy, not a limit of the BPS format.
 
