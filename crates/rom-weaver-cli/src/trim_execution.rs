@@ -35,6 +35,13 @@ impl CliApp {
             return Self::revert_with_footer(source, destination, in_place, dry_run, kind, footer);
         }
 
+        // The source fill MUST be captured before an in-place trim removes its padding.
+        let restore_fill = if operation == TrimOperation::Trim && revert_marker && !dry_run {
+            Some(Self::detect_trailing_pad_byte(source)?.unwrap_or(0xFF))
+        } else {
+            None
+        };
+
         let outcome = match kind {
             TrimInputKind::NdsFamily => {
                 Self::trim_nds_file(source, destination, in_place, dry_run, operation)
@@ -56,12 +63,9 @@ impl CliApp {
         }?;
 
         // Unchanged files need no restoration metadata.
-        if operation == TrimOperation::Trim
-            && revert_marker
-            && !dry_run
+        if let Some(pad_byte) = restore_fill
             && !outcome.already_target_size
         {
-            let pad_byte = Self::detect_trailing_pad_byte(source)?.unwrap_or(0xFF);
             Self::write_revert_footer(&outcome.output_path, outcome.original_size, pad_byte)?;
         }
 
