@@ -111,9 +111,9 @@
   content: "";
   border-block-start: 1px dashed var(--seam);
 }
-.rw-app .step-head > .step-meta,
-.rw-app .step-head > .step-collapse,
-.rw-app .step-head > .step-head-action {
+/* Meta, header extras (Bulk edit, emulator actions, toggles) and the collapse
+   control all sit right of the rule; only the info toggle stays with the title. */
+.rw-app .step-head > :not(.step-num, .step-title, .info) {
   order: 2;
 }
 .rw-app .step-num {
