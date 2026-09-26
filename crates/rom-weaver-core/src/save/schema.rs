@@ -293,6 +293,10 @@ struct RawField {
     min: Option<i64>,
     max: Option<i64>,
     editable: Option<bool>,
+    #[serde(default)]
+    inverted: bool,
+    #[serde(default)]
+    copies: Vec<usize>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -301,6 +305,8 @@ enum Storage {
     U8,
     U16Le,
     U16Be,
+    U24Le,
+    U24Be,
     U32Le,
     U32Be,
     I8,
@@ -311,6 +317,8 @@ enum Storage {
     Bool,
     Bit,
     Ascii,
+    BcdLe,
+    BcdBe,
 }
 
 #[derive(Deserialize)]
@@ -324,10 +332,16 @@ struct RawSignature {
 #[serde(deny_unknown_fields)]
 struct RawChecksum {
     algorithm: ChecksumAlgorithm,
-    start: usize,
-    length: usize,
+    start: Option<usize>,
+    length: Option<usize>,
+    #[serde(default)]
+    spans: Vec<ChecksumSpan>,
     offset: usize,
-    target: Option<u16>,
+    target: Option<u32>,
+    #[serde(default)]
+    unit: ChecksumUnit,
+    #[serde(default)]
+    exclude: Vec<ChecksumExclusion>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -335,7 +349,46 @@ struct RawChecksum {
 enum ChecksumAlgorithm {
     Sum8,
     Sum16Le,
+    Sum16Be,
+    Sum32Le,
+    Sum32Be,
+    Add8,
+    Add16Le,
+    Add16Be,
+    Add32Le,
+    Add32Be,
+    Xor8,
+    Xor16Le,
+    Xor16Be,
+    Xor32Le,
+    Xor32Be,
+    Sum8Mod255Complement,
     Crc16CcittFalseLe,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum ChecksumUnit {
+    #[default]
+    U8,
+    U16Le,
+    U16Be,
+    U32Le,
+    U32Be,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ChecksumExclusion {
+    offset: usize,
+    length: usize,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ChecksumSpan {
+    start: usize,
+    length: usize,
 }
 
 #[derive(Deserialize)]
@@ -344,6 +397,8 @@ struct RawMirror {
     source: usize,
     target: usize,
     length: usize,
+    #[serde(default)]
+    validate: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -386,6 +441,8 @@ struct FieldSchema {
     min: i64,
     max: i64,
     editable: bool,
+    inverted: bool,
+    copies: Vec<usize>,
 }
 
 #[derive(Clone, Debug)]
@@ -396,16 +453,19 @@ struct SpanBytes {
 #[derive(Clone, Debug)]
 struct Checksum {
     algorithm: ChecksumAlgorithm,
-    start: usize,
+    spans: Vec<ChecksumSpan>,
     length: usize,
     offset: usize,
-    target: u16,
+    target: u32,
+    unit: ChecksumUnit,
+    exclude: Vec<ChecksumExclusion>,
 }
 #[derive(Clone, Debug)]
 struct Mirror {
     source: usize,
     target: usize,
     length: usize,
+    validate: bool,
 }
 #[derive(Clone, Debug)]
 struct Generation {
@@ -448,7 +508,21 @@ impl GameSchema {
             }
             fields.push(FieldSchema::build(field, raw.save_size)?);
         }
-        validate_field_overlaps(&fields)?;
+        let mut storage_fields = Vec::new();
+        for field in &fields {
+            if storage_fields.len() + field.copies.len() + 1 > MAX_FIELDS {
+                return Err(invalid(
+                    "fields and their copies exceed 4096 storage locations",
+                ));
+            }
+            for offset in std::iter::once(&field.offset).chain(&field.copies) {
+                let mut stored = field.clone();
+                stored.offset = *offset;
+                stored.copies.clear();
+                storage_fields.push(stored);
+            }
+        }
+        validate_field_overlaps(&storage_fields)?;
         let signatures = raw
             .signatures
             .into_iter()
@@ -470,7 +544,7 @@ impl GameSchema {
             .into_iter()
             .map(|value| Mirror::build(value, raw.save_size))
             .collect::<Result<Vec<_>>>()?;
-        validate_reserved_overlaps(&fields, &signatures, &checksums, &mirrors)?;
+        validate_reserved_overlaps(&storage_fields, &signatures, &checksums, &mirrors)?;
         let generation = raw
             .generation
             .map(|value| Generation::build(value, raw.save_size))
@@ -642,9 +716,10 @@ impl GameSchema {
         self.checksums.iter().all(|c| c.valid(bytes))
     }
     fn mirrors_valid(&self, bytes: &[u8]) -> bool {
-        self.mirrors
-            .iter()
-            .all(|m| bytes[m.source..m.source + m.length] == bytes[m.target..m.target + m.length])
+        self.mirrors.iter().all(|m| {
+            !m.validate
+                || bytes[m.source..m.source + m.length] == bytes[m.target..m.target + m.length]
+        })
     }
     fn repair_integrity(&self, bytes: &mut [u8]) {
         for checksum in &self.checksums {
@@ -667,8 +742,15 @@ impl FieldSchema {
         {
             return Err(invalid("only bit fields require a bit value from 0 to 7"));
         }
-        if !matches!(raw.storage, Storage::Ascii) && raw.length.is_some() {
-            return Err(invalid("only ascii fields accept length"));
+        if !matches!(
+            raw.storage,
+            Storage::Ascii | Storage::BcdLe | Storage::BcdBe
+        ) && raw.length.is_some()
+        {
+            return Err(invalid("only ascii and BCD fields accept length"));
+        }
+        if raw.inverted && !matches!(raw.storage, Storage::Bool | Storage::Bit) {
+            return Err(invalid("only boolean and bit fields accept inverted"));
         }
         if matches!(raw.storage, Storage::Bool | Storage::Bit | Storage::Ascii)
             && (raw.min.is_some() || raw.max.is_some())
@@ -678,6 +760,12 @@ impl FieldSchema {
             ));
         }
         check_span(raw.offset, storage_len, save_size, "field")?;
+        if raw.copies.len() > MAX_FIELDS {
+            return Err(invalid("field copies exceed 4096 entries"));
+        }
+        for offset in &raw.copies {
+            check_span(*offset, storage_len, save_size, "field copy")?;
+        }
         let min = raw.min.unwrap_or(intrinsic_min);
         let max = raw.max.unwrap_or(intrinsic_max);
         if min < intrinsic_min || max > intrinsic_max || min > max {
@@ -694,6 +782,8 @@ impl FieldSchema {
             min,
             max,
             editable: raw.editable.unwrap_or(true),
+            inverted: raw.inverted,
+            copies: raw.copies,
         })
     }
     fn span(&self) -> (usize, usize) {
@@ -754,6 +844,8 @@ impl FieldSchema {
             Storage::U8 => SaveValue::U32(b[0].into()),
             Storage::U16Le => SaveValue::U32(u16::from_le_bytes([b[0], b[1]]).into()),
             Storage::U16Be => SaveValue::U32(u16::from_be_bytes([b[0], b[1]]).into()),
+            Storage::U24Le => SaveValue::U32(u32::from_le_bytes([b[0], b[1], b[2], 0])),
+            Storage::U24Be => SaveValue::U32(u32::from_be_bytes([0, b[0], b[1], b[2]])),
             Storage::U32Le => SaveValue::U32(u32::from_le_bytes(b.try_into().expect("four bytes"))),
             Storage::U32Be => SaveValue::U32(u32::from_be_bytes(b.try_into().expect("four bytes"))),
             Storage::I8 => SaveValue::I32((b[0] as i8).into()),
@@ -761,8 +853,28 @@ impl FieldSchema {
             Storage::I16Be => SaveValue::I32(i16::from_be_bytes([b[0], b[1]]).into()),
             Storage::I32Le => SaveValue::I32(i32::from_le_bytes(b.try_into().expect("four bytes"))),
             Storage::I32Be => SaveValue::I32(i32::from_be_bytes(b.try_into().expect("four bytes"))),
-            Storage::Bool => SaveValue::Bool(b[0] != 0),
-            Storage::Bit => SaveValue::Bool(b[0] & (1 << self.bit.expect("validated bit")) != 0),
+            Storage::Bool => SaveValue::Bool((b[0] != 0) ^ self.inverted),
+            Storage::Bit => SaveValue::Bool(
+                (b[0] & (1 << self.bit.expect("validated bit")) != 0) ^ self.inverted,
+            ),
+            Storage::BcdLe | Storage::BcdBe => {
+                let mut value = 0;
+                for index in 0..b.len() {
+                    let byte = b[if matches!(self.storage, Storage::BcdLe) {
+                        b.len() - 1 - index
+                    } else {
+                        index
+                    }];
+                    if byte >> 4 > 9 || byte & 15 > 9 {
+                        return Err(validation(
+                            "save_bcd_encoding",
+                            "the save contains an invalid BCD digit",
+                        ));
+                    }
+                    value = value * 100 + u32::from(byte >> 4) * 10 + u32::from(byte & 15);
+                }
+                SaveValue::U32(value)
+            }
             Storage::Ascii => {
                 let end = b.iter().position(|byte| *byte == 0).unwrap_or(b.len());
                 if !b[..end].iter().all(|byte| (0x20..=0x7e).contains(byte)) {
@@ -776,11 +888,18 @@ impl FieldSchema {
         })
     }
     fn write(&self, bytes: &mut [u8], value: &SaveValue) -> Result<()> {
-        let dst = &mut bytes[self.offset..self.offset + self.length];
+        for offset in std::iter::once(&self.offset).chain(&self.copies) {
+            self.write_at(&mut bytes[*offset..*offset + self.length], value)?;
+        }
+        Ok(())
+    }
+    fn write_at(&self, dst: &mut [u8], value: &SaveValue) -> Result<()> {
         match (self.storage, value) {
             (Storage::U8, SaveValue::U32(v)) => dst[0] = *v as u8,
             (Storage::U16Le, SaveValue::U32(v)) => dst.copy_from_slice(&(*v as u16).to_le_bytes()),
             (Storage::U16Be, SaveValue::U32(v)) => dst.copy_from_slice(&(*v as u16).to_be_bytes()),
+            (Storage::U24Le, SaveValue::U32(v)) => dst.copy_from_slice(&v.to_le_bytes()[..3]),
+            (Storage::U24Be, SaveValue::U32(v)) => dst.copy_from_slice(&v.to_be_bytes()[1..]),
             (Storage::U32Le, SaveValue::U32(v)) => dst.copy_from_slice(&v.to_le_bytes()),
             (Storage::U32Be, SaveValue::U32(v)) => dst.copy_from_slice(&v.to_be_bytes()),
             (Storage::I8, SaveValue::I32(v)) => dst[0] = *v as i8 as u8,
@@ -788,10 +907,26 @@ impl FieldSchema {
             (Storage::I16Be, SaveValue::I32(v)) => dst.copy_from_slice(&(*v as i16).to_be_bytes()),
             (Storage::I32Le, SaveValue::I32(v)) => dst.copy_from_slice(&v.to_le_bytes()),
             (Storage::I32Be, SaveValue::I32(v)) => dst.copy_from_slice(&v.to_be_bytes()),
-            (Storage::Bool, SaveValue::Bool(v)) => dst[0] = u8::from(*v),
+            (Storage::Bool, SaveValue::Bool(v)) => dst[0] = u8::from(*v ^ self.inverted),
             (Storage::Bit, SaveValue::Bool(v)) => {
                 let mask = 1 << self.bit.expect("validated bit");
-                if *v { dst[0] |= mask } else { dst[0] &= !mask }
+                if *v ^ self.inverted {
+                    dst[0] |= mask
+                } else {
+                    dst[0] &= !mask
+                }
+            }
+            (Storage::BcdLe | Storage::BcdBe, SaveValue::U32(v)) => {
+                let mut value = *v;
+                for index in 0..dst.len() {
+                    let offset = if matches!(self.storage, Storage::BcdLe) {
+                        index
+                    } else {
+                        dst.len() - 1 - index
+                    };
+                    dst[offset] = (((value / 10 % 10) << 4) | (value % 10)) as u8;
+                    value /= 100;
+                }
             }
             (Storage::Ascii, SaveValue::Text(v)) => {
                 if !v.bytes().all(|byte| (0x20..=0x7e).contains(&byte)) {
@@ -822,11 +957,18 @@ impl Storage {
         Ok(match self {
             Self::U8 => (1, 0, u8::MAX.into()),
             Self::U16Le | Self::U16Be => (2, 0, u16::MAX.into()),
+            Self::U24Le | Self::U24Be => (3, 0, 0xff_ffff),
             Self::U32Le | Self::U32Be => (4, 0, u32::MAX.into()),
             Self::I8 => (1, i8::MIN.into(), i8::MAX.into()),
             Self::I16Le | Self::I16Be => (2, i16::MIN.into(), i16::MAX.into()),
             Self::I32Le | Self::I32Be => (4, i32::MIN.into(), i32::MAX.into()),
             Self::Bool | Self::Bit => (1, 0, 1),
+            Self::BcdLe | Self::BcdBe => {
+                let length = length
+                    .filter(|length| (1..=4).contains(length))
+                    .ok_or_else(|| invalid("BCD fields require a length from 1 to 4"))?;
+                (length.into(), 0, 10i64.pow(u32::from(length) * 2) - 1)
+            }
             Self::Ascii => {
                 let value = length.ok_or_else(|| invalid("ascii fields require length"))?;
                 if value == 0 {
@@ -838,77 +980,255 @@ impl Storage {
     }
 }
 
+impl ChecksumUnit {
+    fn width(self) -> usize {
+        match self {
+            Self::U8 => 1,
+            Self::U16Le | Self::U16Be => 2,
+            Self::U32Le | Self::U32Be => 4,
+        }
+    }
+    fn read(self, bytes: [u8; 4]) -> u32 {
+        match self {
+            Self::U8 => u32::from(bytes[0]),
+            Self::U16Le => u16::from_le_bytes([bytes[0], bytes[1]]).into(),
+            Self::U16Be => u16::from_be_bytes([bytes[0], bytes[1]]).into(),
+            Self::U32Le => u32::from_le_bytes(bytes),
+            Self::U32Be => u32::from_be_bytes(bytes),
+        }
+    }
+}
+
+impl ChecksumAlgorithm {
+    fn width(self) -> usize {
+        match self {
+            Self::Sum8 | Self::Add8 | Self::Xor8 | Self::Sum8Mod255Complement => 1,
+            Self::Sum32Le
+            | Self::Sum32Be
+            | Self::Add32Le
+            | Self::Add32Be
+            | Self::Xor32Le
+            | Self::Xor32Be => 4,
+            _ => 2,
+        }
+    }
+    fn big_endian(self) -> bool {
+        matches!(
+            self,
+            Self::Sum16Be
+                | Self::Sum32Be
+                | Self::Add16Be
+                | Self::Add32Be
+                | Self::Xor16Be
+                | Self::Xor32Be
+        )
+    }
+    fn mask(self) -> u32 {
+        u32::MAX >> (8 * (4 - self.width()))
+    }
+}
+
 impl Checksum {
     fn build(raw: RawChecksum, size: usize) -> Result<Self> {
-        check_nonempty_span(raw.start, raw.length, size, "checksum input")?;
-        let width = match raw.algorithm {
-            ChecksumAlgorithm::Sum8 => 1,
-            _ => 2,
+        let spans = match (raw.start, raw.length, raw.spans.is_empty()) {
+            (Some(start), Some(length), true) => vec![ChecksumSpan { start, length }],
+            (None, None, false) => raw.spans,
+            _ => {
+                return Err(invalid(
+                    "checksum requires start/length or nonempty spans, exclusively",
+                ));
+            }
         };
-        check_span(raw.offset, width, size, "checksum output")?;
-        if matches!(raw.algorithm, ChecksumAlgorithm::Crc16CcittFalseLe) && raw.target.is_some() {
-            return Err(invalid("crc16_ccitt_false_le does not accept target"));
+        if spans.len() > MAX_COMPONENTS {
+            return Err(invalid("checksum input spans exceed 4096 entries"));
         }
-        if matches!(raw.algorithm, ChecksumAlgorithm::Sum8) && raw.target.is_some_and(|v| v > 255) {
-            return Err(invalid("sum8 target must fit in u8"));
+        let mut length = 0usize;
+        let mut sorted_spans = Vec::new();
+        for span in &spans {
+            check_nonempty_span(span.start, span.length, size, "checksum input")?;
+            if !span.length.is_multiple_of(raw.unit.width()) {
+                return Err(invalid("checksum spans must contain complete input units"));
+            }
+            length = length
+                .checked_add(span.length)
+                .filter(|total| *total <= MAX_INTEGRITY_BYTES)
+                .ok_or_else(|| invalid("checksum integrity work exceeds 64 MiB"))?;
+            sorted_spans.push((span.start, span.start + span.length));
+        }
+        sorted_spans.sort_unstable();
+        if sorted_spans.windows(2).any(|pair| pair[0].1 > pair[1].0) {
+            return Err(invalid("checksum input spans must not overlap"));
+        }
+        check_span(raw.offset, raw.algorithm.width(), size, "checksum output")?;
+        if matches!(
+            raw.algorithm,
+            ChecksumAlgorithm::Crc16CcittFalseLe | ChecksumAlgorithm::Sum8Mod255Complement
+        ) && (raw.target.is_some() || !matches!(raw.unit, ChecksumUnit::U8))
+        {
+            return Err(invalid(
+                "this checksum requires byte inputs and does not accept target",
+            ));
+        }
+        if raw
+            .target
+            .is_some_and(|target| target > raw.algorithm.mask())
+        {
+            return Err(invalid("checksum target must fit its output width"));
+        }
+        if raw.exclude.len() > MAX_COMPONENTS {
+            return Err(invalid("checksum exclusions exceed 4096 entries"));
+        }
+        let mut exclude = raw.exclude;
+        exclude.sort_by_key(|span| span.offset);
+        let mut previous_end = 0;
+        for span in &exclude {
+            check_nonempty_span(span.offset, span.length, size, "checksum exclusion")?;
+            if span.offset < previous_end
+                || !spans.iter().any(|input| {
+                    span.offset >= input.start
+                        && span.offset + span.length <= input.start + input.length
+                })
+            {
+                return Err(invalid(
+                    "checksum exclusions must be disjoint and inside its input",
+                ));
+            }
+            previous_end = span.offset + span.length;
         }
         Ok(Self {
             algorithm: raw.algorithm,
-            start: raw.start,
-            length: raw.length,
+            spans,
+            length,
             offset: raw.offset,
             target: raw.target.unwrap_or(0),
+            unit: raw.unit,
+            exclude,
         })
     }
     fn width(&self) -> usize {
-        if matches!(self.algorithm, ChecksumAlgorithm::Sum8) {
-            1
-        } else {
-            2
-        }
+        self.algorithm.width()
     }
-    fn expected(&self, bytes: &[u8]) -> u16 {
-        match self.algorithm {
-            ChecksumAlgorithm::Sum8 => (self.target as u8).wrapping_sub(
-                bytes[self.start..self.start + self.length]
-                    .iter()
-                    .fold(0u8, |a, b| a.wrapping_add(*b)),
-            ) as u16,
-            ChecksumAlgorithm::Sum16Le => self.target.wrapping_sub(
-                bytes[self.start..self.start + self.length]
-                    .iter()
-                    .fold(0u16, |a, b| a.wrapping_add((*b).into())),
-            ),
-            ChecksumAlgorithm::Crc16CcittFalseLe => bytes[self.start..self.start + self.length]
+    fn reads_span(&self, span: (usize, usize)) -> bool {
+        self.spans.iter().any(|input| {
+            let mut cursor = input.start.max(span.0);
+            let end = (input.start + input.length).min(span.1);
+            if cursor >= end {
+                return false;
+            }
+            for excluded in &self.exclude {
+                if excluded.offset > cursor {
+                    return true;
+                }
+                cursor = cursor.max(excluded.offset + excluded.length);
+                if cursor >= end {
+                    return false;
+                }
+            }
+            true
+        })
+    }
+    fn expected(&self, bytes: &[u8]) -> u32 {
+        let input = self.spans.iter().flat_map(|span| {
+            let mut excluded = self.exclude.iter().peekable();
+            bytes[span.start..span.start + span.length]
                 .iter()
+                .enumerate()
+                .map(move |(index, byte)| {
+                    let offset = span.start + index;
+                    while excluded
+                        .peek()
+                        .is_some_and(|span| span.offset + span.length <= offset)
+                    {
+                        excluded.next();
+                    }
+                    if excluded.peek().is_some_and(|span| span.offset <= offset) {
+                        0
+                    } else {
+                        *byte
+                    }
+                })
+        });
+        if matches!(self.algorithm, ChecksumAlgorithm::Crc16CcittFalseLe) {
+            return input
                 .fold(0xffffu16, |mut crc, byte| {
-                    crc ^= u16::from(*byte) << 8;
+                    crc ^= u16::from(byte) << 8;
                     for _ in 0..8 {
                         crc = if crc & 0x8000 != 0 {
                             (crc << 1) ^ 0x1021
                         } else {
                             crc << 1
-                        }
+                        };
                     }
                     crc
-                }),
+                })
+                .into();
         }
+        if matches!(self.algorithm, ChecksumAlgorithm::Sum8Mod255Complement) {
+            return input.fold(0u32, |sum, byte| (sum + u32::from(byte)) % 255) ^ 255;
+        }
+        let xor = matches!(
+            self.algorithm,
+            ChecksumAlgorithm::Xor8
+                | ChecksumAlgorithm::Xor16Le
+                | ChecksumAlgorithm::Xor16Be
+                | ChecksumAlgorithm::Xor32Le
+                | ChecksumAlgorithm::Xor32Be
+        );
+        let mut input = input;
+        let mut accumulated = 0u32;
+        for _ in 0..self.length / self.unit.width() {
+            let mut value = [0u8; 4];
+            for byte in &mut value[..self.unit.width()] {
+                *byte = input.next().expect("validated input unit");
+            }
+            let value = self.unit.read(value);
+            accumulated = if xor {
+                accumulated ^ value
+            } else {
+                accumulated.wrapping_add(value)
+            };
+        }
+        let value = match self.algorithm {
+            ChecksumAlgorithm::Sum8
+            | ChecksumAlgorithm::Sum16Le
+            | ChecksumAlgorithm::Sum16Be
+            | ChecksumAlgorithm::Sum32Le
+            | ChecksumAlgorithm::Sum32Be => self.target.wrapping_sub(accumulated),
+            _ if xor => self.target ^ accumulated,
+            _ => self.target.wrapping_add(accumulated),
+        };
+        value & self.algorithm.mask()
     }
     fn valid(&self, bytes: &[u8]) -> bool {
-        let stored = if self.width() == 1 {
-            bytes[self.offset] as u16
+        let mut stored = [0u8; 4];
+        let start = if self.algorithm.big_endian() {
+            4 - self.width()
         } else {
-            u16::from_le_bytes([bytes[self.offset], bytes[self.offset + 1]])
+            0
         };
-        stored == self.expected(bytes)
+        stored[start..start + self.width()]
+            .copy_from_slice(&bytes[self.offset..self.offset + self.width()]);
+        let value = if self.algorithm.big_endian() {
+            u32::from_be_bytes(stored)
+        } else {
+            u32::from_le_bytes(stored)
+        };
+        value == self.expected(bytes)
     }
     fn repair(&self, bytes: &mut [u8]) {
         let value = self.expected(bytes);
-        if self.width() == 1 {
-            bytes[self.offset] = value as u8
+        let stored = if self.algorithm.big_endian() {
+            value.to_be_bytes()
         } else {
-            bytes[self.offset..self.offset + 2].copy_from_slice(&value.to_le_bytes())
-        }
+            value.to_le_bytes()
+        };
+        let start = if self.algorithm.big_endian() {
+            4 - self.width()
+        } else {
+            0
+        };
+        bytes[self.offset..self.offset + self.width()]
+            .copy_from_slice(&stored[start..start + self.width()]);
     }
 }
 impl Mirror {
@@ -925,6 +1245,7 @@ impl Mirror {
             source: raw.source,
             target: raw.target,
             length: raw.length,
+            validate: raw.validate.unwrap_or(true),
         })
     }
 }
@@ -970,10 +1291,6 @@ fn validate_reserved_overlaps(
     checksums: &[Checksum],
     mirrors: &[Mirror],
 ) -> Result<()> {
-    let checksum_inputs: Vec<_> = checksums
-        .iter()
-        .map(|c| (c.start, c.start + c.length))
-        .collect();
     let checksum_outputs: Vec<_> = checksums
         .iter()
         .map(|c| (c.offset, c.offset + c.width()))
@@ -983,7 +1300,7 @@ fn validate_reserved_overlaps(
             || signatures
                 .iter()
                 .any(|s| overlaps(*out, (s.offset, s.offset + s.bytes.len())))
-            || checksum_inputs.iter().any(|span| overlaps(*out, *span))
+            || checksums.iter().any(|checksum| checksum.reads_span(*out))
             || checksum_outputs
                 .iter()
                 .enumerate()
@@ -1005,7 +1322,7 @@ fn validate_reserved_overlaps(
         let target = (m.target, m.target + m.length);
         if fields.iter().any(|f| overlaps(target, f.span()))
             || checksum_outputs.iter().any(|span| overlaps(target, *span))
-            || checksum_inputs.iter().any(|span| overlaps(target, *span))
+            || checksums.iter().any(|checksum| checksum.reads_span(target))
             || mirrors.iter().enumerate().any(|(j, other)| {
                 i != j
                     && (overlaps(target, (other.target, other.target + other.length))
@@ -1050,7 +1367,7 @@ fn validate_game_id(value: &str) -> Result<()> {
     let bytes = value.as_bytes();
     if bytes.is_empty()
         || bytes.len() > MAX_GAME_ID
-        || !bytes[0].is_ascii_lowercase()
+        || !(bytes[0].is_ascii_lowercase() || bytes[0].is_ascii_digit())
         || !bytes.iter().all(|byte| {
             byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'_' || *byte == b'-'
         })
@@ -1353,5 +1670,150 @@ mod tests {
         let document = handler.parse(&input, &identity(&handler)).unwrap();
         assert_eq!(document.integrity.state, SaveIntegrityState::Invalid);
         assert!(!document.fields[0].editable);
+    }
+
+    #[test]
+    fn checksum_algorithms_match_independent_byte_vectors() {
+        for (algorithm, unit, target, expected) in [
+            ("add8", "u8", 0, vec![10]),
+            ("sum8", "u8", 255, vec![245]),
+            ("xor8", "u8", 0, vec![4]),
+            ("add16_le", "u16_le", 0, vec![4, 6]),
+            ("add16_be", "u16_be", 0, vec![4, 6]),
+            ("sum16_le", "u16_le", 65535, vec![251, 249]),
+            ("sum16_be", "u16_be", 65535, vec![251, 249]),
+            ("xor16_le", "u16_le", 0, vec![2, 6]),
+            ("xor16_be", "u16_be", 0, vec![2, 6]),
+            ("add32_le", "u32_be", 0, vec![4, 3, 2, 1]),
+            ("add32_be", "u32_le", 0, vec![4, 3, 2, 1]),
+            ("sum32_le", "u32_be", u32::MAX, vec![251, 252, 253, 254]),
+            ("sum32_be", "u32_le", u32::MAX, vec![251, 252, 253, 254]),
+            ("xor32_le", "u32_be", 0, vec![4, 3, 2, 1]),
+            ("xor32_be", "u32_le", 0, vec![4, 3, 2, 1]),
+        ] {
+            let raw = serde_json::from_value(serde_json::json!({
+                "algorithm": algorithm, "unit": unit, "target": target,
+                "start": 0, "length": 4, "offset": 8
+            }))
+            .unwrap();
+            let checksum = Checksum::build(raw, 12).unwrap();
+            let mut bytes = vec![1, 2, 3, 4, 77, 88, 99, 111, 0, 0, 0, 0];
+            checksum.repair(&mut bytes);
+            assert_eq!(
+                &bytes[8..8 + expected.len()],
+                expected,
+                "{algorithm}/{unit}"
+            );
+            assert!(checksum.valid(&bytes));
+            bytes[0] = 2;
+            assert!(!checksum.valid(&bytes));
+        }
+        let raw = serde_json::from_value(serde_json::json!({
+            "algorithm":"add32_le", "unit":"u32_le", "start":0,"length":8,"offset":8
+        }))
+        .unwrap();
+        let checksum = Checksum::build(raw, 12).unwrap();
+        let mut bytes = vec![255, 255, 255, 255, 1, 0, 0, 0, 9, 9, 9, 9];
+        checksum.repair(&mut bytes);
+        assert_eq!(&bytes[8..], &[0; 4]);
+    }
+
+    #[test]
+    fn exclusions_zero_storage_and_mod255_checksum_matches_vectors() {
+        let raw = serde_json::from_value(serde_json::json!({
+            "algorithm":"sum8_mod255_complement", "start":0,"length":4,
+            "offset":1,"exclude":[{"offset":1,"length":1}]
+        }))
+        .unwrap();
+        let checksum = Checksum::build(raw, 4).unwrap();
+        let mut bytes = vec![255, 77, 2, 3];
+        checksum.repair(&mut bytes);
+        assert_eq!(bytes, [255, 250, 2, 3]);
+        assert!(!checksum.reads_span((1, 2)));
+        assert!(checksum.reads_span((1, 3)));
+        assert!(checksum.valid(&bytes));
+    }
+
+    #[test]
+    fn copies_preserve_other_backup_data_and_repair_disjoint_checksums() {
+        let handler = handler(
+            r#"{"id":"value","label":"Value","offset":1,"type":"u8","copies":[9]}"#,
+            r#""checksums":[{"algorithm":"add8","start":0,"length":3,"offset":3},{"algorithm":"add8","spans":[{"start":8,"length":2},{"start":12,"length":2}],"offset":15}],"generation":{"fill":0,"patches":[{"offset":1,"bytes":[2]},{"offset":8,"bytes":[11,3]},{"offset":12,"bytes":[13]}]}"#,
+        );
+        let game = identity(&handler);
+        let input = SaveDetectionInput {
+            bytes: handler.generate(&game).unwrap(),
+            selected_game: Some(game.id.clone()),
+            rom_sha1: None,
+        };
+        let result = handler
+            .apply(
+                &input,
+                &game,
+                &[SaveEdit {
+                    field: "value".into(),
+                    value: SaveValue::U32(7),
+                }],
+                false,
+            )
+            .unwrap();
+        let bytes = result.bytes.unwrap();
+        assert_eq!((bytes[1], bytes[3], bytes[9], bytes[15]), (7, 7, 7, 31));
+        assert_eq!((bytes[8], bytes[12], input.bytes[9]), (11, 13, 3));
+    }
+
+    #[test]
+    fn bcd_u24_and_inverted_bits_cover_boundaries() {
+        for (storage, encoded) in [
+            ("bcd_be", vec![0x12, 0x34, 0x56]),
+            ("bcd_le", vec![0x56, 0x34, 0x12]),
+        ] {
+            let raw = serde_json::from_value(serde_json::json!({"id":"money","label":"Money","offset":0,"type":storage,"length":3})).unwrap();
+            let field = FieldSchema::build(raw, 3).unwrap();
+            let mut bytes = vec![0; 3];
+            field.write(&mut bytes, &SaveValue::U32(123456)).unwrap();
+            assert_eq!(bytes, encoded);
+            assert_eq!(field.read(&bytes).unwrap(), SaveValue::U32(123456));
+            field.write(&mut bytes, &SaveValue::U32(999999)).unwrap();
+            assert_eq!(bytes, [0x99; 3]);
+            bytes[1] = 0xfa;
+            assert!(field.read(&bytes).is_err());
+        }
+        for storage in ["u24_le", "u24_be"] {
+            let raw = serde_json::from_value(
+                serde_json::json!({"id":"value","label":"Value","offset":0,"type":storage}),
+            )
+            .unwrap();
+            let field = FieldSchema::build(raw, 3).unwrap();
+            let mut bytes = vec![0; 3];
+            field.write(&mut bytes, &SaveValue::U32(0xffffff)).unwrap();
+            assert_eq!(bytes, [255; 3]);
+            assert_eq!(field.read(&bytes).unwrap(), SaveValue::U32(0xffffff));
+        }
+        let raw=serde_json::from_value(serde_json::json!({"id":"flag","label":"Flag","offset":0,"type":"bit","bit":2,"inverted":true})).unwrap();
+        let field = FieldSchema::build(raw, 1).unwrap();
+        let mut bytes = vec![255];
+        field.write(&mut bytes, &SaveValue::Bool(true)).unwrap();
+        assert_eq!(bytes, [251]);
+        assert_eq!(field.read(&bytes).unwrap(), SaveValue::Bool(true));
+    }
+
+    #[test]
+    fn rejects_invalid_checksum_spans_exclusions_and_copy_collisions() {
+        for checksum in [
+            serde_json::json!({"algorithm":"add16_le","unit":"u16_le","start":0,"length":3,"offset":8}),
+            serde_json::json!({"algorithm":"add8","start":0,"length":3,"spans":[{"start":4,"length":2}],"offset":8}),
+            serde_json::json!({"algorithm":"add8","spans":[{"start":0,"length":3},{"start":2,"length":3}],"offset":8}),
+            serde_json::json!({"algorithm":"add8","start":2,"length":3,"offset":8,"exclude":[{"offset":1,"length":1}]}),
+            serde_json::json!({"algorithm":"add8","start":0,"length":3,"offset":8,"target":256}),
+        ] {
+            assert!(Checksum::build(serde_json::from_value(checksum).unwrap(), 16).is_err());
+        }
+        let mut pack = serde_json::json!({"schema_version":1,"games":[{"id":"copy","name":"Copy","platform":"test","save_size":16,"fields":[{"id":"value","label":"Value","offset":1,"type":"u8","copies":[1]}]}]});
+        assert!(SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap()).is_err());
+        pack["games"][0]["fields"][0]["copies"] = serde_json::json!([8]);
+        pack["games"][0]["checksums"] =
+            serde_json::json!([{"algorithm":"add8","start":0,"length":3,"offset":8}]);
+        assert!(SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap()).is_err());
     }
 }

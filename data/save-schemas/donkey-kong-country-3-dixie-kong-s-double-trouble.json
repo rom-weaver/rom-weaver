@@ -1,0 +1,351 @@
+{
+  "$schema": "./schema-v1.schema.json",
+  "schema_version": 1,
+  "games": [
+    {
+      "id": "donkey-kong-country-3-dixie-kong-s-double-trouble-slot-1",
+      "name": "Donkey Kong Country 3: Dixie Kong's Double Trouble! (Slot 1)",
+      "platform": "snes",
+      "description": "Edits independent counters in Slot 1; preserves other slots. Coupled progression, completion, inventory and location updates remain unsupported. Numeric values use full storage ranges; playable states are not guaranteed. EUR/USA/JPN layouts.",
+      "save_size": 2048,
+      "fields": [
+        {
+          "id": "slot_1.player_1.play_time",
+          "label": "Play-time ticks",
+          "offset": 114,
+          "type": "u32_le"
+        },
+        {
+          "id": "slot_1.player_1.bear_coins",
+          "label": "Bear Coins",
+          "offset": 123,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.player_1.bonus_coins",
+          "label": "Bonus Coins",
+          "offset": 125,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.player_1.dk_coins",
+          "label": "DK Coins",
+          "offset": 129,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.player_1.banana_birds",
+          "label": "Banana Birds",
+          "offset": 127,
+          "type": "u16_le",
+          "editable": false
+        },
+        {
+          "id": "slot_1.player_1.completion",
+          "label": "Completion percentage",
+          "offset": 118,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_1.player_1.location",
+          "label": "Location code",
+          "offset": 135,
+          "type": "u32_le",
+          "editable": false
+        },
+        {
+          "id": "slot_1.player_2.play_time",
+          "label": "Play-time ticks",
+          "offset": 436,
+          "type": "u32_le"
+        },
+        {
+          "id": "slot_1.player_2.bear_coins",
+          "label": "Bear Coins",
+          "offset": 445,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.player_2.bonus_coins",
+          "label": "Bonus Coins",
+          "offset": 447,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.player_2.dk_coins",
+          "label": "DK Coins",
+          "offset": 451,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.player_2.banana_birds",
+          "label": "Banana Birds",
+          "offset": 449,
+          "type": "u16_le",
+          "editable": false
+        },
+        {
+          "id": "slot_1.player_2.completion",
+          "label": "Completion percentage",
+          "offset": 440,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_1.player_2.location",
+          "label": "Location code",
+          "offset": 457,
+          "type": "u32_le",
+          "editable": false
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 104,
+          "length": 644,
+          "offset": 98
+        },
+        {
+          "algorithm": "xor16_le",
+          "unit": "u16_le",
+          "start": 104,
+          "length": 644,
+          "offset": 100
+        }
+      ]
+    },
+    {
+      "id": "donkey-kong-country-3-dixie-kong-s-double-trouble-slot-2",
+      "name": "Donkey Kong Country 3: Dixie Kong's Double Trouble! (Slot 2)",
+      "platform": "snes",
+      "description": "Edits independent counters in Slot 2; preserves other slots. Coupled progression, completion, inventory and location updates remain unsupported. Numeric values use full storage ranges; playable states are not guaranteed. EUR/USA/JPN layouts.",
+      "save_size": 2048,
+      "fields": [
+        {
+          "id": "slot_2.player_1.play_time",
+          "label": "Play-time ticks",
+          "offset": 764,
+          "type": "u32_le"
+        },
+        {
+          "id": "slot_2.player_1.bear_coins",
+          "label": "Bear Coins",
+          "offset": 773,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.player_1.bonus_coins",
+          "label": "Bonus Coins",
+          "offset": 775,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.player_1.dk_coins",
+          "label": "DK Coins",
+          "offset": 779,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.player_1.banana_birds",
+          "label": "Banana Birds",
+          "offset": 777,
+          "type": "u16_le",
+          "editable": false
+        },
+        {
+          "id": "slot_2.player_1.completion",
+          "label": "Completion percentage",
+          "offset": 768,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_2.player_1.location",
+          "label": "Location code",
+          "offset": 785,
+          "type": "u32_le",
+          "editable": false
+        },
+        {
+          "id": "slot_2.player_2.play_time",
+          "label": "Play-time ticks",
+          "offset": 1086,
+          "type": "u32_le"
+        },
+        {
+          "id": "slot_2.player_2.bear_coins",
+          "label": "Bear Coins",
+          "offset": 1095,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.player_2.bonus_coins",
+          "label": "Bonus Coins",
+          "offset": 1097,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.player_2.dk_coins",
+          "label": "DK Coins",
+          "offset": 1101,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.player_2.banana_birds",
+          "label": "Banana Birds",
+          "offset": 1099,
+          "type": "u16_le",
+          "editable": false
+        },
+        {
+          "id": "slot_2.player_2.completion",
+          "label": "Completion percentage",
+          "offset": 1090,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_2.player_2.location",
+          "label": "Location code",
+          "offset": 1107,
+          "type": "u32_le",
+          "editable": false
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 754,
+          "length": 644,
+          "offset": 748
+        },
+        {
+          "algorithm": "xor16_le",
+          "unit": "u16_le",
+          "start": 754,
+          "length": 644,
+          "offset": 750
+        }
+      ]
+    },
+    {
+      "id": "donkey-kong-country-3-dixie-kong-s-double-trouble-slot-3",
+      "name": "Donkey Kong Country 3: Dixie Kong's Double Trouble! (Slot 3)",
+      "platform": "snes",
+      "description": "Edits independent counters in Slot 3; preserves other slots. Coupled progression, completion, inventory and location updates remain unsupported. Numeric values use full storage ranges; playable states are not guaranteed. EUR/USA/JPN layouts.",
+      "save_size": 2048,
+      "fields": [
+        {
+          "id": "slot_3.player_1.play_time",
+          "label": "Play-time ticks",
+          "offset": 1414,
+          "type": "u32_le"
+        },
+        {
+          "id": "slot_3.player_1.bear_coins",
+          "label": "Bear Coins",
+          "offset": 1423,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.player_1.bonus_coins",
+          "label": "Bonus Coins",
+          "offset": 1425,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.player_1.dk_coins",
+          "label": "DK Coins",
+          "offset": 1429,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.player_1.banana_birds",
+          "label": "Banana Birds",
+          "offset": 1427,
+          "type": "u16_le",
+          "editable": false
+        },
+        {
+          "id": "slot_3.player_1.completion",
+          "label": "Completion percentage",
+          "offset": 1418,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_3.player_1.location",
+          "label": "Location code",
+          "offset": 1435,
+          "type": "u32_le",
+          "editable": false
+        },
+        {
+          "id": "slot_3.player_2.play_time",
+          "label": "Play-time ticks",
+          "offset": 1736,
+          "type": "u32_le"
+        },
+        {
+          "id": "slot_3.player_2.bear_coins",
+          "label": "Bear Coins",
+          "offset": 1745,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.player_2.bonus_coins",
+          "label": "Bonus Coins",
+          "offset": 1747,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.player_2.dk_coins",
+          "label": "DK Coins",
+          "offset": 1751,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.player_2.banana_birds",
+          "label": "Banana Birds",
+          "offset": 1749,
+          "type": "u16_le",
+          "editable": false
+        },
+        {
+          "id": "slot_3.player_2.completion",
+          "label": "Completion percentage",
+          "offset": 1740,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_3.player_2.location",
+          "label": "Location code",
+          "offset": 1757,
+          "type": "u32_le",
+          "editable": false
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 1404,
+          "length": 644,
+          "offset": 1398
+        },
+        {
+          "algorithm": "xor16_le",
+          "unit": "u16_le",
+          "start": 1404,
+          "length": 644,
+          "offset": 1400
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,145 @@
+{
+  "$schema": "./schema-v1.schema.json",
+  "schema_version": 1,
+  "games": [
+    {
+      "id": "solatorobo-red-the-hunter-desmume",
+      "name": "Solatorobo: Red the Hunter (DeSmuME raw save)",
+      "platform": "nintendo-ds",
+      "description": "Edits the normalized 8 KiB Nintendo DS save payload. The container layer preserves a DeSmuME .dsv footer.",
+      "save_size": 8192,
+      "fields": [
+        {
+          "id": "general.play_time_seconds",
+          "label": "Play time (seconds)",
+          "offset": 92,
+          "type": "u32_le",
+          "copies": [76, 28],
+          "description": "Total play time in seconds; updates both save previews"
+        },
+        {
+          "id": "general.level",
+          "label": "Level",
+          "offset": 114,
+          "type": "u8",
+          "copies": [84, 36],
+          "description": "Current level; updates both save previews"
+        },
+        {
+          "id": "general.experience",
+          "label": "Experience",
+          "offset": 116,
+          "type": "u32_le"
+        },
+        {
+          "id": "general.rings",
+          "label": "Rings",
+          "offset": 120,
+          "type": "u32_le",
+          "copies": [80, 32],
+          "description": "Current rings; updates both save previews"
+        },
+        {
+          "id": "general.p_crystals",
+          "label": "P Crystals",
+          "offset": 124,
+          "type": "u16_le"
+        },
+        {
+          "id": "general.hunter_rank",
+          "label": "Hunter rank",
+          "offset": 1598,
+          "type": "u16_le"
+        },
+        {
+          "id": "general.quest_points",
+          "label": "Quest points",
+          "offset": 1600,
+          "type": "u16_le"
+        },
+        {
+          "id": "general.new_game_plus_bit_0",
+          "label": "New Game Plus raw bit 0",
+          "offset": 1395,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "general.new_game_plus_bit_1",
+          "label": "New Game Plus raw bit 1",
+          "offset": 1395,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "position.red.x",
+          "label": "Red position X",
+          "offset": 404,
+          "type": "i32_le"
+        },
+        {
+          "id": "position.red.y",
+          "label": "Red position Y",
+          "offset": 408,
+          "type": "i32_le"
+        },
+        {
+          "id": "position.red.z",
+          "label": "Red position Z",
+          "offset": 412,
+          "type": "i32_le"
+        },
+        {
+          "id": "position.red.orientation",
+          "label": "Red orientation",
+          "offset": 416,
+          "type": "i16_le"
+        },
+        {
+          "id": "position.dahak.x",
+          "label": "Dahak position X",
+          "offset": 420,
+          "type": "i32_le"
+        },
+        {
+          "id": "position.dahak.y",
+          "label": "Dahak position Y",
+          "offset": 424,
+          "type": "i32_le"
+        },
+        {
+          "id": "position.dahak.z",
+          "label": "Dahak position Z",
+          "offset": 428,
+          "type": "i32_le"
+        }
+      ],
+      "signatures": [
+        {
+          "offset": 0,
+          "bytes": [67, 79, 68, 65, 83, 65, 86, 69, 95, 48, 48, 48, 48, 48, 98]
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "xor8",
+          "start": 21,
+          "length": 19,
+          "offset": 20
+        },
+        {
+          "algorithm": "xor8",
+          "start": 88,
+          "length": 1608,
+          "offset": 65
+        },
+        {
+          "algorithm": "xor8",
+          "start": 69,
+          "length": 19,
+          "offset": 68
+        }
+      ]
+    }
+  ]
+}

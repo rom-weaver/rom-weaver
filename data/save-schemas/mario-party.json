@@ -1,0 +1,137 @@
+{
+  "$schema": "./schema-v1.schema.json",
+  "schema_version": 1,
+  "games": [
+    {
+      "id": "mario-party-canonical-eeprom",
+      "name": "Mario Party (canonical EEPROM)",
+      "platform": "n64",
+      "description": "Edits global progression in a canonical 2 KiB EEPROM. Board records, minigame records, and byte-swapped emulator images are omitted.",
+      "save_size": 2048,
+      "fields": [
+        {
+          "id": "coins",
+          "label": "Coins",
+          "offset": 72,
+          "type": "u32_be"
+        },
+        {
+          "id": "stars",
+          "label": "Stars",
+          "offset": 76,
+          "type": "u16_be"
+        },
+        {
+          "id": "title_background",
+          "label": "Title screen background",
+          "offset": 78,
+          "type": "u8"
+        },
+        {
+          "id": "coin_box",
+          "label": "Coin box",
+          "offset": 79,
+          "type": "u8"
+        },
+        {
+          "id": "events.rules_heard",
+          "label": "Game rules heard",
+          "offset": 80,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "events.toad_first_talk",
+          "label": "Toad first talk",
+          "offset": 80,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "events.bowser_note",
+          "label": "Bowser note read",
+          "offset": 80,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "unlocked.plus_block",
+          "label": "Plus Block unlocked",
+          "offset": 83,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "unlocked.minus_block",
+          "label": "Minus Block unlocked",
+          "offset": 83,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "unlocked.speed_block",
+          "label": "Speed Block unlocked",
+          "offset": 83,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "unlocked.slow_block",
+          "label": "Slow Block unlocked",
+          "offset": 83,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "unlocked.warp_block",
+          "label": "Warp Block unlocked",
+          "offset": 83,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "unlocked.event_block",
+          "label": "Event Block unlocked",
+          "offset": 83,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "unlocked.magma_mountain",
+          "label": "Magma Mountain unlocked",
+          "offset": 84,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "unlocked.credits",
+          "label": "Credits unlocked",
+          "offset": 85,
+          "type": "bit",
+          "bit": 0
+        }
+      ],
+      "signatures": [
+        {
+          "offset": 0,
+          "bytes": [72, 85, 68, 83, 79, 78]
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "add16_be",
+          "unit": "u8",
+          "start": 8,
+          "length": 498,
+          "offset": 504,
+          "exclude": [
+            {
+              "offset": 504,
+              "length": 2
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

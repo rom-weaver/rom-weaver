@@ -131,7 +131,11 @@
             "i32_be",
             "bool",
             "bit",
-            "ascii"
+            "ascii",
+            "u24_le",
+            "u24_be",
+            "bcd_le",
+            "bcd_be"
           ]
         },
         "bit": {
@@ -156,6 +160,18 @@
         },
         "editable": {
           "type": ["boolean", "null"]
+        },
+        "inverted": {
+          "type": "boolean"
+        },
+        "copies": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8388608
+          }
         }
       },
       "required": ["id", "label", "offset", "type"],
@@ -188,7 +204,7 @@
           "if": {
             "properties": {
               "type": {
-                "const": "ascii"
+                "enum": ["ascii", "bcd_le", "bcd_be"]
               }
             }
           },
@@ -226,6 +242,40 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": ["bcd_le", "bcd_be"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "length": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": ["bit", "bool"]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "inverted": {
+                "const": false
+              }
+            }
+          }
         }
       ]
     },
@@ -256,7 +306,25 @@
       "additionalProperties": false,
       "properties": {
         "algorithm": {
-          "enum": ["sum8", "sum16_le", "crc16_ccitt_false_le"]
+          "enum": [
+            "sum8",
+            "sum16_le",
+            "crc16_ccitt_false_le",
+            "sum16_be",
+            "sum32_le",
+            "sum32_be",
+            "add8",
+            "add16_le",
+            "add16_be",
+            "add32_le",
+            "add32_be",
+            "xor8",
+            "xor16_le",
+            "xor16_be",
+            "xor32_le",
+            "xor32_be",
+            "sum8_mod255_complement"
+          ]
         },
         "start": {
           "type": "integer",
@@ -276,16 +344,34 @@
         "target": {
           "type": ["integer", "null"],
           "minimum": 0,
-          "maximum": 65535
+          "maximum": 4294967295
+        },
+        "unit": {
+          "enum": ["u8", "u16_le", "u16_be", "u32_le", "u32_be"]
+        },
+        "exclude": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/exclusion"
+          }
+        },
+        "spans": {
+          "type": "array",
+          "maxItems": 4096,
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/checksum_span"
+          }
         }
       },
-      "required": ["algorithm", "start", "length", "offset"],
+      "required": ["algorithm", "offset"],
       "allOf": [
         {
           "if": {
             "properties": {
               "algorithm": {
-                "const": "crc16_ccitt_false_le"
+                "enum": ["crc16_ccitt_false_le", "sum8_mod255_complement"]
               }
             }
           },
@@ -293,6 +379,9 @@
             "properties": {
               "target": {
                 "type": "null"
+              },
+              "unit": {
+                "const": "u8"
               }
             }
           }
@@ -301,7 +390,7 @@
           "if": {
             "properties": {
               "algorithm": {
-                "const": "sum8"
+                "enum": ["sum8", "add8", "xor8"]
               }
             }
           },
@@ -311,6 +400,43 @@
                 "maximum": 255
               }
             }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "algorithm": {
+                "enum": ["sum16_le", "sum16_be", "add16_le", "add16_be", "xor16_le", "xor16_be"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "target": {
+                "maximum": 65535
+              }
+            }
+          }
+        }
+      ],
+      "oneOf": [
+        {
+          "required": ["start", "length"],
+          "not": {
+            "required": ["spans"]
+          }
+        },
+        {
+          "required": ["spans"],
+          "not": {
+            "anyOf": [
+              {
+                "required": ["start"]
+              },
+              {
+                "required": ["length"]
+              }
+            ]
           }
         }
       ]
@@ -333,6 +459,10 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 8388608
+        },
+        "validate": {
+          "type": ["boolean", "null"],
+          "default": true
         }
       },
       "required": ["source", "target", "length"]
@@ -355,6 +485,40 @@
         }
       },
       "required": ["fill"]
+    },
+    "exclusion": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8388608
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8388608
+        }
+      },
+      "required": ["offset", "length"]
+    },
+    "checksum_span": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8388608
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8388608
+        }
+      },
+      "required": ["start", "length"]
     }
   }
 }

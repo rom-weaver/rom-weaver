@@ -1,0 +1,1925 @@
+{
+  "$schema": "./schema-v1.schema.json",
+  "schema_version": 1,
+  "games": [
+    {
+      "id": "final-fantasy-nes",
+      "name": "Final Fantasy",
+      "platform": "nes",
+      "description": "Edits the shared world state and four party members in the 0x400-0x7FF save block. Repairs the modulo-255 complemented checksum at 0x4FD. Character names use a game-specific codec and are omitted; equipment exposes the full stored byte including its equipped flag.",
+      "save_size": 8192,
+      "fields": [
+        {
+          "id": "world.ship.obtained",
+          "label": "Ship obtained",
+          "offset": 1024,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "world.ship.x",
+          "label": "Ship position X",
+          "offset": 1025,
+          "type": "u8"
+        },
+        {
+          "id": "world.ship.y",
+          "label": "Ship position Y",
+          "offset": 1026,
+          "type": "u8"
+        },
+        {
+          "id": "world.airship.obtained",
+          "label": "Airship obtained",
+          "offset": 1028,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "world.airship.x",
+          "label": "Airship position X",
+          "offset": 1029,
+          "type": "u8"
+        },
+        {
+          "id": "world.airship.y",
+          "label": "Airship position Y",
+          "offset": 1030,
+          "type": "u8"
+        },
+        {
+          "id": "world.bridge.enabled",
+          "label": "Bridge enabled",
+          "offset": 1032,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "world.bridge.x",
+          "label": "Bridge position X",
+          "offset": 1033,
+          "type": "u8"
+        },
+        {
+          "id": "world.bridge.y",
+          "label": "Bridge position Y",
+          "offset": 1034,
+          "type": "u8"
+        },
+        {
+          "id": "world.grass_path.enabled",
+          "label": "Grass Path enabled",
+          "offset": 1036,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "world.grass_path.x",
+          "label": "Grass Path position X",
+          "offset": 1037,
+          "type": "u8"
+        },
+        {
+          "id": "world.grass_path.y",
+          "label": "Grass Path position Y",
+          "offset": 1038,
+          "type": "u8"
+        },
+        {
+          "id": "world.party.x",
+          "label": "Party position X",
+          "offset": 1040,
+          "type": "u8"
+        },
+        {
+          "id": "world.party.y",
+          "label": "Party position Y",
+          "offset": 1041,
+          "type": "u8"
+        },
+        {
+          "id": "world.canoe_enabled",
+          "label": "Canoe enabled",
+          "offset": 1042,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "party.gil",
+          "label": "Gil",
+          "offset": 1052,
+          "type": "u32_le"
+        },
+        {
+          "id": "items.key.lute",
+          "label": "Lute obtained",
+          "offset": 1057,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "items.key.crown",
+          "label": "Crown obtained",
+          "offset": 1058,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "items.key.crystal",
+          "label": "Crystal obtained",
+          "offset": 1059,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "items.key.herb",
+          "label": "Herb obtained",
+          "offset": 1060,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "items.key.key",
+          "label": "Key obtained",
+          "offset": 1061,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "items.key.tnt",
+          "label": "Tnt obtained",
+          "offset": 1062,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "items.key.adamant",
+          "label": "Adamant obtained",
+          "offset": 1063,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "items.key.slab",
+          "label": "Slab obtained",
+          "offset": 1064,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "items.key.ruby",
+          "label": "Ruby obtained",
+          "offset": 1065,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "items.key.rod",
+          "label": "Rod obtained",
+          "offset": 1066,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "items.key.floater",
+          "label": "Floater obtained",
+          "offset": 1067,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "items.key.chime",
+          "label": "Chime obtained",
+          "offset": 1068,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "items.key.tail",
+          "label": "Tail obtained",
+          "offset": 1069,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "items.key.cube",
+          "label": "Cube obtained",
+          "offset": 1070,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "items.key.bottle",
+          "label": "Bottle obtained",
+          "offset": 1071,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "items.key.oxyale",
+          "label": "Oxyale obtained",
+          "offset": 1072,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "items.key.canoe",
+          "label": "Canoe obtained",
+          "offset": 1073,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "orbs.fire",
+          "label": "Fire Orb revived",
+          "offset": 1074,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "orbs.water",
+          "label": "Water Orb revived",
+          "offset": 1075,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "orbs.air",
+          "label": "Air Orb revived",
+          "offset": 1076,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "orbs.earth",
+          "label": "Earth Orb revived",
+          "offset": 1077,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "items.tent",
+          "label": "Tent count",
+          "offset": 1078,
+          "type": "u8"
+        },
+        {
+          "id": "items.cabin",
+          "label": "Cabin count",
+          "offset": 1079,
+          "type": "u8"
+        },
+        {
+          "id": "items.house",
+          "label": "House count",
+          "offset": 1080,
+          "type": "u8"
+        },
+        {
+          "id": "items.heal",
+          "label": "Heal count",
+          "offset": 1081,
+          "type": "u8"
+        },
+        {
+          "id": "items.pure",
+          "label": "Pure count",
+          "offset": 1082,
+          "type": "u8"
+        },
+        {
+          "id": "items.soft",
+          "label": "Soft count",
+          "offset": 1083,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.class",
+          "label": "Party member 1 class",
+          "offset": 1280,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.condition",
+          "label": "Party member 1 condition",
+          "offset": 1281,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.experience",
+          "label": "Party member 1 experience",
+          "offset": 1287,
+          "type": "u24_le"
+        },
+        {
+          "id": "party.member_1.hp_current",
+          "label": "Party member 1 hp current",
+          "offset": 1290,
+          "type": "u16_le"
+        },
+        {
+          "id": "party.member_1.hp_max",
+          "label": "Party member 1 hp max",
+          "offset": 1292,
+          "type": "u16_le"
+        },
+        {
+          "id": "party.member_1.strength",
+          "label": "Party member 1 strength",
+          "offset": 1296,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.agility",
+          "label": "Party member 1 agility",
+          "offset": 1297,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.intelligence",
+          "label": "Party member 1 intelligence",
+          "offset": 1298,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.vitality",
+          "label": "Party member 1 vitality",
+          "offset": 1299,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.luck",
+          "label": "Party member 1 luck",
+          "offset": 1300,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.unknown_516",
+          "label": "Party member 1 unknown 516",
+          "offset": 1302,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.unknown_517",
+          "label": "Party member 1 unknown 517",
+          "offset": 1303,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.weapon_1",
+          "label": "Party member 1 weapon 1",
+          "offset": 1304,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.weapon_2",
+          "label": "Party member 1 weapon 2",
+          "offset": 1305,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.weapon_3",
+          "label": "Party member 1 weapon 3",
+          "offset": 1306,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.weapon_4",
+          "label": "Party member 1 weapon 4",
+          "offset": 1307,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.armor_1",
+          "label": "Party member 1 armor 1",
+          "offset": 1308,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.armor_2",
+          "label": "Party member 1 armor 2",
+          "offset": 1309,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.armor_3",
+          "label": "Party member 1 armor 3",
+          "offset": 1310,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.armor_4",
+          "label": "Party member 1 armor 4",
+          "offset": 1311,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.damage",
+          "label": "Party member 1 damage",
+          "offset": 1312,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.hit",
+          "label": "Party member 1 hit",
+          "offset": 1313,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.absorb",
+          "label": "Party member 1 absorb",
+          "offset": 1314,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.evade",
+          "label": "Party member 1 evade",
+          "offset": 1315,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.unknown_524",
+          "label": "Party member 1 unknown 524",
+          "offset": 1316,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.unknown_525",
+          "label": "Party member 1 unknown 525",
+          "offset": 1317,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.level_stored",
+          "label": "Party member 1 level stored",
+          "offset": 1318,
+          "type": "u8",
+          "description": "Raw stored level; displayed level is this value plus one."
+        },
+        {
+          "id": "party.member_1.magic.level_1.current",
+          "label": "Party member 1 level 1 current spell charges",
+          "offset": 1824,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_1.max",
+          "label": "Party member 1 level 1 maximum spell charges",
+          "offset": 1832,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_1.spell_1",
+          "label": "Party member 1 level 1 spell 1",
+          "offset": 1792,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_1.spell_2",
+          "label": "Party member 1 level 1 spell 2",
+          "offset": 1793,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_1.spell_3",
+          "label": "Party member 1 level 1 spell 3",
+          "offset": 1794,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_2.current",
+          "label": "Party member 1 level 2 current spell charges",
+          "offset": 1825,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_2.max",
+          "label": "Party member 1 level 2 maximum spell charges",
+          "offset": 1833,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_2.spell_1",
+          "label": "Party member 1 level 2 spell 1",
+          "offset": 1796,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_2.spell_2",
+          "label": "Party member 1 level 2 spell 2",
+          "offset": 1797,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_2.spell_3",
+          "label": "Party member 1 level 2 spell 3",
+          "offset": 1798,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_3.current",
+          "label": "Party member 1 level 3 current spell charges",
+          "offset": 1826,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_3.max",
+          "label": "Party member 1 level 3 maximum spell charges",
+          "offset": 1834,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_3.spell_1",
+          "label": "Party member 1 level 3 spell 1",
+          "offset": 1800,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_3.spell_2",
+          "label": "Party member 1 level 3 spell 2",
+          "offset": 1801,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_3.spell_3",
+          "label": "Party member 1 level 3 spell 3",
+          "offset": 1802,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_4.current",
+          "label": "Party member 1 level 4 current spell charges",
+          "offset": 1827,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_4.max",
+          "label": "Party member 1 level 4 maximum spell charges",
+          "offset": 1835,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_4.spell_1",
+          "label": "Party member 1 level 4 spell 1",
+          "offset": 1804,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_4.spell_2",
+          "label": "Party member 1 level 4 spell 2",
+          "offset": 1805,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_4.spell_3",
+          "label": "Party member 1 level 4 spell 3",
+          "offset": 1806,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_5.current",
+          "label": "Party member 1 level 5 current spell charges",
+          "offset": 1828,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_5.max",
+          "label": "Party member 1 level 5 maximum spell charges",
+          "offset": 1836,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_5.spell_1",
+          "label": "Party member 1 level 5 spell 1",
+          "offset": 1808,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_5.spell_2",
+          "label": "Party member 1 level 5 spell 2",
+          "offset": 1809,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_5.spell_3",
+          "label": "Party member 1 level 5 spell 3",
+          "offset": 1810,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_6.current",
+          "label": "Party member 1 level 6 current spell charges",
+          "offset": 1829,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_6.max",
+          "label": "Party member 1 level 6 maximum spell charges",
+          "offset": 1837,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_6.spell_1",
+          "label": "Party member 1 level 6 spell 1",
+          "offset": 1812,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_6.spell_2",
+          "label": "Party member 1 level 6 spell 2",
+          "offset": 1813,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_6.spell_3",
+          "label": "Party member 1 level 6 spell 3",
+          "offset": 1814,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_7.current",
+          "label": "Party member 1 level 7 current spell charges",
+          "offset": 1830,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_7.max",
+          "label": "Party member 1 level 7 maximum spell charges",
+          "offset": 1838,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_7.spell_1",
+          "label": "Party member 1 level 7 spell 1",
+          "offset": 1816,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_7.spell_2",
+          "label": "Party member 1 level 7 spell 2",
+          "offset": 1817,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_7.spell_3",
+          "label": "Party member 1 level 7 spell 3",
+          "offset": 1818,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_8.current",
+          "label": "Party member 1 level 8 current spell charges",
+          "offset": 1831,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_8.max",
+          "label": "Party member 1 level 8 maximum spell charges",
+          "offset": 1839,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_8.spell_1",
+          "label": "Party member 1 level 8 spell 1",
+          "offset": 1820,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_8.spell_2",
+          "label": "Party member 1 level 8 spell 2",
+          "offset": 1821,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_1.magic.level_8.spell_3",
+          "label": "Party member 1 level 8 spell 3",
+          "offset": 1822,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.class",
+          "label": "Party member 2 class",
+          "offset": 1344,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.condition",
+          "label": "Party member 2 condition",
+          "offset": 1345,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.experience",
+          "label": "Party member 2 experience",
+          "offset": 1351,
+          "type": "u24_le"
+        },
+        {
+          "id": "party.member_2.hp_current",
+          "label": "Party member 2 hp current",
+          "offset": 1354,
+          "type": "u16_le"
+        },
+        {
+          "id": "party.member_2.hp_max",
+          "label": "Party member 2 hp max",
+          "offset": 1356,
+          "type": "u16_le"
+        },
+        {
+          "id": "party.member_2.strength",
+          "label": "Party member 2 strength",
+          "offset": 1360,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.agility",
+          "label": "Party member 2 agility",
+          "offset": 1361,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.intelligence",
+          "label": "Party member 2 intelligence",
+          "offset": 1362,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.vitality",
+          "label": "Party member 2 vitality",
+          "offset": 1363,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.luck",
+          "label": "Party member 2 luck",
+          "offset": 1364,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.unknown_516",
+          "label": "Party member 2 unknown 516",
+          "offset": 1366,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.unknown_517",
+          "label": "Party member 2 unknown 517",
+          "offset": 1367,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.weapon_1",
+          "label": "Party member 2 weapon 1",
+          "offset": 1368,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.weapon_2",
+          "label": "Party member 2 weapon 2",
+          "offset": 1369,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.weapon_3",
+          "label": "Party member 2 weapon 3",
+          "offset": 1370,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.weapon_4",
+          "label": "Party member 2 weapon 4",
+          "offset": 1371,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.armor_1",
+          "label": "Party member 2 armor 1",
+          "offset": 1372,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.armor_2",
+          "label": "Party member 2 armor 2",
+          "offset": 1373,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.armor_3",
+          "label": "Party member 2 armor 3",
+          "offset": 1374,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.armor_4",
+          "label": "Party member 2 armor 4",
+          "offset": 1375,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.damage",
+          "label": "Party member 2 damage",
+          "offset": 1376,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.hit",
+          "label": "Party member 2 hit",
+          "offset": 1377,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.absorb",
+          "label": "Party member 2 absorb",
+          "offset": 1378,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.evade",
+          "label": "Party member 2 evade",
+          "offset": 1379,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.unknown_524",
+          "label": "Party member 2 unknown 524",
+          "offset": 1380,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.unknown_525",
+          "label": "Party member 2 unknown 525",
+          "offset": 1381,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.level_stored",
+          "label": "Party member 2 level stored",
+          "offset": 1382,
+          "type": "u8",
+          "description": "Raw stored level; displayed level is this value plus one."
+        },
+        {
+          "id": "party.member_2.magic.level_1.current",
+          "label": "Party member 2 level 1 current spell charges",
+          "offset": 1888,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_1.max",
+          "label": "Party member 2 level 1 maximum spell charges",
+          "offset": 1896,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_1.spell_1",
+          "label": "Party member 2 level 1 spell 1",
+          "offset": 1856,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_1.spell_2",
+          "label": "Party member 2 level 1 spell 2",
+          "offset": 1857,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_1.spell_3",
+          "label": "Party member 2 level 1 spell 3",
+          "offset": 1858,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_2.current",
+          "label": "Party member 2 level 2 current spell charges",
+          "offset": 1889,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_2.max",
+          "label": "Party member 2 level 2 maximum spell charges",
+          "offset": 1897,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_2.spell_1",
+          "label": "Party member 2 level 2 spell 1",
+          "offset": 1860,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_2.spell_2",
+          "label": "Party member 2 level 2 spell 2",
+          "offset": 1861,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_2.spell_3",
+          "label": "Party member 2 level 2 spell 3",
+          "offset": 1862,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_3.current",
+          "label": "Party member 2 level 3 current spell charges",
+          "offset": 1890,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_3.max",
+          "label": "Party member 2 level 3 maximum spell charges",
+          "offset": 1898,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_3.spell_1",
+          "label": "Party member 2 level 3 spell 1",
+          "offset": 1864,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_3.spell_2",
+          "label": "Party member 2 level 3 spell 2",
+          "offset": 1865,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_3.spell_3",
+          "label": "Party member 2 level 3 spell 3",
+          "offset": 1866,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_4.current",
+          "label": "Party member 2 level 4 current spell charges",
+          "offset": 1891,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_4.max",
+          "label": "Party member 2 level 4 maximum spell charges",
+          "offset": 1899,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_4.spell_1",
+          "label": "Party member 2 level 4 spell 1",
+          "offset": 1868,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_4.spell_2",
+          "label": "Party member 2 level 4 spell 2",
+          "offset": 1869,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_4.spell_3",
+          "label": "Party member 2 level 4 spell 3",
+          "offset": 1870,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_5.current",
+          "label": "Party member 2 level 5 current spell charges",
+          "offset": 1892,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_5.max",
+          "label": "Party member 2 level 5 maximum spell charges",
+          "offset": 1900,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_5.spell_1",
+          "label": "Party member 2 level 5 spell 1",
+          "offset": 1872,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_5.spell_2",
+          "label": "Party member 2 level 5 spell 2",
+          "offset": 1873,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_5.spell_3",
+          "label": "Party member 2 level 5 spell 3",
+          "offset": 1874,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_6.current",
+          "label": "Party member 2 level 6 current spell charges",
+          "offset": 1893,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_6.max",
+          "label": "Party member 2 level 6 maximum spell charges",
+          "offset": 1901,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_6.spell_1",
+          "label": "Party member 2 level 6 spell 1",
+          "offset": 1876,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_6.spell_2",
+          "label": "Party member 2 level 6 spell 2",
+          "offset": 1877,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_6.spell_3",
+          "label": "Party member 2 level 6 spell 3",
+          "offset": 1878,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_7.current",
+          "label": "Party member 2 level 7 current spell charges",
+          "offset": 1894,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_7.max",
+          "label": "Party member 2 level 7 maximum spell charges",
+          "offset": 1902,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_7.spell_1",
+          "label": "Party member 2 level 7 spell 1",
+          "offset": 1880,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_7.spell_2",
+          "label": "Party member 2 level 7 spell 2",
+          "offset": 1881,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_7.spell_3",
+          "label": "Party member 2 level 7 spell 3",
+          "offset": 1882,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_8.current",
+          "label": "Party member 2 level 8 current spell charges",
+          "offset": 1895,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_8.max",
+          "label": "Party member 2 level 8 maximum spell charges",
+          "offset": 1903,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_8.spell_1",
+          "label": "Party member 2 level 8 spell 1",
+          "offset": 1884,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_8.spell_2",
+          "label": "Party member 2 level 8 spell 2",
+          "offset": 1885,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_2.magic.level_8.spell_3",
+          "label": "Party member 2 level 8 spell 3",
+          "offset": 1886,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.class",
+          "label": "Party member 3 class",
+          "offset": 1408,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.condition",
+          "label": "Party member 3 condition",
+          "offset": 1409,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.experience",
+          "label": "Party member 3 experience",
+          "offset": 1415,
+          "type": "u24_le"
+        },
+        {
+          "id": "party.member_3.hp_current",
+          "label": "Party member 3 hp current",
+          "offset": 1418,
+          "type": "u16_le"
+        },
+        {
+          "id": "party.member_3.hp_max",
+          "label": "Party member 3 hp max",
+          "offset": 1420,
+          "type": "u16_le"
+        },
+        {
+          "id": "party.member_3.strength",
+          "label": "Party member 3 strength",
+          "offset": 1424,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.agility",
+          "label": "Party member 3 agility",
+          "offset": 1425,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.intelligence",
+          "label": "Party member 3 intelligence",
+          "offset": 1426,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.vitality",
+          "label": "Party member 3 vitality",
+          "offset": 1427,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.luck",
+          "label": "Party member 3 luck",
+          "offset": 1428,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.unknown_516",
+          "label": "Party member 3 unknown 516",
+          "offset": 1430,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.unknown_517",
+          "label": "Party member 3 unknown 517",
+          "offset": 1431,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.weapon_1",
+          "label": "Party member 3 weapon 1",
+          "offset": 1432,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.weapon_2",
+          "label": "Party member 3 weapon 2",
+          "offset": 1433,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.weapon_3",
+          "label": "Party member 3 weapon 3",
+          "offset": 1434,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.weapon_4",
+          "label": "Party member 3 weapon 4",
+          "offset": 1435,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.armor_1",
+          "label": "Party member 3 armor 1",
+          "offset": 1436,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.armor_2",
+          "label": "Party member 3 armor 2",
+          "offset": 1437,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.armor_3",
+          "label": "Party member 3 armor 3",
+          "offset": 1438,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.armor_4",
+          "label": "Party member 3 armor 4",
+          "offset": 1439,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.damage",
+          "label": "Party member 3 damage",
+          "offset": 1440,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.hit",
+          "label": "Party member 3 hit",
+          "offset": 1441,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.absorb",
+          "label": "Party member 3 absorb",
+          "offset": 1442,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.evade",
+          "label": "Party member 3 evade",
+          "offset": 1443,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.unknown_524",
+          "label": "Party member 3 unknown 524",
+          "offset": 1444,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.unknown_525",
+          "label": "Party member 3 unknown 525",
+          "offset": 1445,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.level_stored",
+          "label": "Party member 3 level stored",
+          "offset": 1446,
+          "type": "u8",
+          "description": "Raw stored level; displayed level is this value plus one."
+        },
+        {
+          "id": "party.member_3.magic.level_1.current",
+          "label": "Party member 3 level 1 current spell charges",
+          "offset": 1952,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_1.max",
+          "label": "Party member 3 level 1 maximum spell charges",
+          "offset": 1960,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_1.spell_1",
+          "label": "Party member 3 level 1 spell 1",
+          "offset": 1920,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_1.spell_2",
+          "label": "Party member 3 level 1 spell 2",
+          "offset": 1921,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_1.spell_3",
+          "label": "Party member 3 level 1 spell 3",
+          "offset": 1922,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_2.current",
+          "label": "Party member 3 level 2 current spell charges",
+          "offset": 1953,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_2.max",
+          "label": "Party member 3 level 2 maximum spell charges",
+          "offset": 1961,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_2.spell_1",
+          "label": "Party member 3 level 2 spell 1",
+          "offset": 1924,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_2.spell_2",
+          "label": "Party member 3 level 2 spell 2",
+          "offset": 1925,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_2.spell_3",
+          "label": "Party member 3 level 2 spell 3",
+          "offset": 1926,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_3.current",
+          "label": "Party member 3 level 3 current spell charges",
+          "offset": 1954,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_3.max",
+          "label": "Party member 3 level 3 maximum spell charges",
+          "offset": 1962,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_3.spell_1",
+          "label": "Party member 3 level 3 spell 1",
+          "offset": 1928,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_3.spell_2",
+          "label": "Party member 3 level 3 spell 2",
+          "offset": 1929,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_3.spell_3",
+          "label": "Party member 3 level 3 spell 3",
+          "offset": 1930,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_4.current",
+          "label": "Party member 3 level 4 current spell charges",
+          "offset": 1955,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_4.max",
+          "label": "Party member 3 level 4 maximum spell charges",
+          "offset": 1963,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_4.spell_1",
+          "label": "Party member 3 level 4 spell 1",
+          "offset": 1932,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_4.spell_2",
+          "label": "Party member 3 level 4 spell 2",
+          "offset": 1933,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_4.spell_3",
+          "label": "Party member 3 level 4 spell 3",
+          "offset": 1934,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_5.current",
+          "label": "Party member 3 level 5 current spell charges",
+          "offset": 1956,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_5.max",
+          "label": "Party member 3 level 5 maximum spell charges",
+          "offset": 1964,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_5.spell_1",
+          "label": "Party member 3 level 5 spell 1",
+          "offset": 1936,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_5.spell_2",
+          "label": "Party member 3 level 5 spell 2",
+          "offset": 1937,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_5.spell_3",
+          "label": "Party member 3 level 5 spell 3",
+          "offset": 1938,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_6.current",
+          "label": "Party member 3 level 6 current spell charges",
+          "offset": 1957,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_6.max",
+          "label": "Party member 3 level 6 maximum spell charges",
+          "offset": 1965,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_6.spell_1",
+          "label": "Party member 3 level 6 spell 1",
+          "offset": 1940,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_6.spell_2",
+          "label": "Party member 3 level 6 spell 2",
+          "offset": 1941,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_6.spell_3",
+          "label": "Party member 3 level 6 spell 3",
+          "offset": 1942,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_7.current",
+          "label": "Party member 3 level 7 current spell charges",
+          "offset": 1958,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_7.max",
+          "label": "Party member 3 level 7 maximum spell charges",
+          "offset": 1966,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_7.spell_1",
+          "label": "Party member 3 level 7 spell 1",
+          "offset": 1944,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_7.spell_2",
+          "label": "Party member 3 level 7 spell 2",
+          "offset": 1945,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_7.spell_3",
+          "label": "Party member 3 level 7 spell 3",
+          "offset": 1946,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_8.current",
+          "label": "Party member 3 level 8 current spell charges",
+          "offset": 1959,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_8.max",
+          "label": "Party member 3 level 8 maximum spell charges",
+          "offset": 1967,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_8.spell_1",
+          "label": "Party member 3 level 8 spell 1",
+          "offset": 1948,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_8.spell_2",
+          "label": "Party member 3 level 8 spell 2",
+          "offset": 1949,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_3.magic.level_8.spell_3",
+          "label": "Party member 3 level 8 spell 3",
+          "offset": 1950,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.class",
+          "label": "Party member 4 class",
+          "offset": 1472,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.condition",
+          "label": "Party member 4 condition",
+          "offset": 1473,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.experience",
+          "label": "Party member 4 experience",
+          "offset": 1479,
+          "type": "u24_le"
+        },
+        {
+          "id": "party.member_4.hp_current",
+          "label": "Party member 4 hp current",
+          "offset": 1482,
+          "type": "u16_le"
+        },
+        {
+          "id": "party.member_4.hp_max",
+          "label": "Party member 4 hp max",
+          "offset": 1484,
+          "type": "u16_le"
+        },
+        {
+          "id": "party.member_4.strength",
+          "label": "Party member 4 strength",
+          "offset": 1488,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.agility",
+          "label": "Party member 4 agility",
+          "offset": 1489,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.intelligence",
+          "label": "Party member 4 intelligence",
+          "offset": 1490,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.vitality",
+          "label": "Party member 4 vitality",
+          "offset": 1491,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.luck",
+          "label": "Party member 4 luck",
+          "offset": 1492,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.unknown_516",
+          "label": "Party member 4 unknown 516",
+          "offset": 1494,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.unknown_517",
+          "label": "Party member 4 unknown 517",
+          "offset": 1495,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.weapon_1",
+          "label": "Party member 4 weapon 1",
+          "offset": 1496,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.weapon_2",
+          "label": "Party member 4 weapon 2",
+          "offset": 1497,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.weapon_3",
+          "label": "Party member 4 weapon 3",
+          "offset": 1498,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.weapon_4",
+          "label": "Party member 4 weapon 4",
+          "offset": 1499,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.armor_1",
+          "label": "Party member 4 armor 1",
+          "offset": 1500,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.armor_2",
+          "label": "Party member 4 armor 2",
+          "offset": 1501,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.armor_3",
+          "label": "Party member 4 armor 3",
+          "offset": 1502,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.armor_4",
+          "label": "Party member 4 armor 4",
+          "offset": 1503,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.damage",
+          "label": "Party member 4 damage",
+          "offset": 1504,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.hit",
+          "label": "Party member 4 hit",
+          "offset": 1505,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.absorb",
+          "label": "Party member 4 absorb",
+          "offset": 1506,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.evade",
+          "label": "Party member 4 evade",
+          "offset": 1507,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.unknown_524",
+          "label": "Party member 4 unknown 524",
+          "offset": 1508,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.unknown_525",
+          "label": "Party member 4 unknown 525",
+          "offset": 1509,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.level_stored",
+          "label": "Party member 4 level stored",
+          "offset": 1510,
+          "type": "u8",
+          "description": "Raw stored level; displayed level is this value plus one."
+        },
+        {
+          "id": "party.member_4.magic.level_1.current",
+          "label": "Party member 4 level 1 current spell charges",
+          "offset": 2016,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_1.max",
+          "label": "Party member 4 level 1 maximum spell charges",
+          "offset": 2024,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_1.spell_1",
+          "label": "Party member 4 level 1 spell 1",
+          "offset": 1984,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_1.spell_2",
+          "label": "Party member 4 level 1 spell 2",
+          "offset": 1985,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_1.spell_3",
+          "label": "Party member 4 level 1 spell 3",
+          "offset": 1986,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_2.current",
+          "label": "Party member 4 level 2 current spell charges",
+          "offset": 2017,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_2.max",
+          "label": "Party member 4 level 2 maximum spell charges",
+          "offset": 2025,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_2.spell_1",
+          "label": "Party member 4 level 2 spell 1",
+          "offset": 1988,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_2.spell_2",
+          "label": "Party member 4 level 2 spell 2",
+          "offset": 1989,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_2.spell_3",
+          "label": "Party member 4 level 2 spell 3",
+          "offset": 1990,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_3.current",
+          "label": "Party member 4 level 3 current spell charges",
+          "offset": 2018,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_3.max",
+          "label": "Party member 4 level 3 maximum spell charges",
+          "offset": 2026,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_3.spell_1",
+          "label": "Party member 4 level 3 spell 1",
+          "offset": 1992,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_3.spell_2",
+          "label": "Party member 4 level 3 spell 2",
+          "offset": 1993,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_3.spell_3",
+          "label": "Party member 4 level 3 spell 3",
+          "offset": 1994,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_4.current",
+          "label": "Party member 4 level 4 current spell charges",
+          "offset": 2019,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_4.max",
+          "label": "Party member 4 level 4 maximum spell charges",
+          "offset": 2027,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_4.spell_1",
+          "label": "Party member 4 level 4 spell 1",
+          "offset": 1996,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_4.spell_2",
+          "label": "Party member 4 level 4 spell 2",
+          "offset": 1997,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_4.spell_3",
+          "label": "Party member 4 level 4 spell 3",
+          "offset": 1998,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_5.current",
+          "label": "Party member 4 level 5 current spell charges",
+          "offset": 2020,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_5.max",
+          "label": "Party member 4 level 5 maximum spell charges",
+          "offset": 2028,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_5.spell_1",
+          "label": "Party member 4 level 5 spell 1",
+          "offset": 2000,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_5.spell_2",
+          "label": "Party member 4 level 5 spell 2",
+          "offset": 2001,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_5.spell_3",
+          "label": "Party member 4 level 5 spell 3",
+          "offset": 2002,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_6.current",
+          "label": "Party member 4 level 6 current spell charges",
+          "offset": 2021,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_6.max",
+          "label": "Party member 4 level 6 maximum spell charges",
+          "offset": 2029,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_6.spell_1",
+          "label": "Party member 4 level 6 spell 1",
+          "offset": 2004,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_6.spell_2",
+          "label": "Party member 4 level 6 spell 2",
+          "offset": 2005,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_6.spell_3",
+          "label": "Party member 4 level 6 spell 3",
+          "offset": 2006,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_7.current",
+          "label": "Party member 4 level 7 current spell charges",
+          "offset": 2022,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_7.max",
+          "label": "Party member 4 level 7 maximum spell charges",
+          "offset": 2030,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_7.spell_1",
+          "label": "Party member 4 level 7 spell 1",
+          "offset": 2008,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_7.spell_2",
+          "label": "Party member 4 level 7 spell 2",
+          "offset": 2009,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_7.spell_3",
+          "label": "Party member 4 level 7 spell 3",
+          "offset": 2010,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_8.current",
+          "label": "Party member 4 level 8 current spell charges",
+          "offset": 2023,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_8.max",
+          "label": "Party member 4 level 8 maximum spell charges",
+          "offset": 2031,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_8.spell_1",
+          "label": "Party member 4 level 8 spell 1",
+          "offset": 2012,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_8.spell_2",
+          "label": "Party member 4 level 8 spell 2",
+          "offset": 2013,
+          "type": "u8"
+        },
+        {
+          "id": "party.member_4.magic.level_8.spell_3",
+          "label": "Party member 4 level 8 spell 3",
+          "offset": 2014,
+          "type": "u8"
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "sum8_mod255_complement",
+          "start": 1024,
+          "length": 1024,
+          "offset": 1277,
+          "exclude": [
+            {
+              "offset": 1277,
+              "length": 1
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

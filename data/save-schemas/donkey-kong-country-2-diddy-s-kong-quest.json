@@ -1,0 +1,279 @@
+{
+  "$schema": "./schema-v1.schema.json",
+  "schema_version": 1,
+  "games": [
+    {
+      "id": "donkey-kong-country-2-diddy-s-kong-quest-slot-1",
+      "name": "Donkey Kong Country 2: Diddy's Kong Quest (Slot 1)",
+      "platform": "snes",
+      "description": "Edits independent counters in Slot 1; preserves other slots. Coupled progression, completion, inventory and location updates remain unsupported. Numeric values use full storage ranges; playable states are not guaranteed. EUR/USA/JPN layouts.",
+      "save_size": 2048,
+      "fields": [
+        {
+          "id": "slot_1.player_1.kremkoins",
+          "label": "Kremkoins",
+          "offset": 19,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.player_1.play_time",
+          "label": "Play-time ticks",
+          "offset": 14,
+          "type": "u32_le"
+        },
+        {
+          "id": "slot_1.player_1.completion",
+          "label": "Completion percentage",
+          "offset": 18,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_1.player_1.hero_coins",
+          "label": "Hero's Coins",
+          "offset": 20,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_1.player_1.location",
+          "label": "Location code",
+          "offset": 189,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_1.player_2.kremkoins",
+          "label": "Kremkoins",
+          "offset": 353,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.player_2.play_time",
+          "label": "Play-time ticks",
+          "offset": 348,
+          "type": "u32_le"
+        },
+        {
+          "id": "slot_1.player_2.completion",
+          "label": "Completion percentage",
+          "offset": 352,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_1.player_2.hero_coins",
+          "label": "Hero's Coins",
+          "offset": 354,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_1.player_2.location",
+          "label": "Location code",
+          "offset": 523,
+          "type": "u8",
+          "editable": false
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 14,
+          "length": 674,
+          "offset": 8
+        },
+        {
+          "algorithm": "xor16_le",
+          "unit": "u16_le",
+          "start": 14,
+          "length": 674,
+          "offset": 10
+        }
+      ]
+    },
+    {
+      "id": "donkey-kong-country-2-diddy-s-kong-quest-slot-2",
+      "name": "Donkey Kong Country 2: Diddy's Kong Quest (Slot 2)",
+      "platform": "snes",
+      "description": "Edits independent counters in Slot 2; preserves other slots. Coupled progression, completion, inventory and location updates remain unsupported. Numeric values use full storage ranges; playable states are not guaranteed. EUR/USA/JPN layouts.",
+      "save_size": 2048,
+      "fields": [
+        {
+          "id": "slot_2.player_1.kremkoins",
+          "label": "Kremkoins",
+          "offset": 699,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.player_1.play_time",
+          "label": "Play-time ticks",
+          "offset": 694,
+          "type": "u32_le"
+        },
+        {
+          "id": "slot_2.player_1.completion",
+          "label": "Completion percentage",
+          "offset": 698,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_2.player_1.hero_coins",
+          "label": "Hero's Coins",
+          "offset": 700,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_2.player_1.location",
+          "label": "Location code",
+          "offset": 869,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_2.player_2.kremkoins",
+          "label": "Kremkoins",
+          "offset": 1033,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.player_2.play_time",
+          "label": "Play-time ticks",
+          "offset": 1028,
+          "type": "u32_le"
+        },
+        {
+          "id": "slot_2.player_2.completion",
+          "label": "Completion percentage",
+          "offset": 1032,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_2.player_2.hero_coins",
+          "label": "Hero's Coins",
+          "offset": 1034,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_2.player_2.location",
+          "label": "Location code",
+          "offset": 1203,
+          "type": "u8",
+          "editable": false
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 694,
+          "length": 674,
+          "offset": 688
+        },
+        {
+          "algorithm": "xor16_le",
+          "unit": "u16_le",
+          "start": 694,
+          "length": 674,
+          "offset": 690
+        }
+      ]
+    },
+    {
+      "id": "donkey-kong-country-2-diddy-s-kong-quest-slot-3",
+      "name": "Donkey Kong Country 2: Diddy's Kong Quest (Slot 3)",
+      "platform": "snes",
+      "description": "Edits independent counters in Slot 3; preserves other slots. Coupled progression, completion, inventory and location updates remain unsupported. Numeric values use full storage ranges; playable states are not guaranteed. EUR/USA/JPN layouts.",
+      "save_size": 2048,
+      "fields": [
+        {
+          "id": "slot_3.player_1.kremkoins",
+          "label": "Kremkoins",
+          "offset": 1379,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.player_1.play_time",
+          "label": "Play-time ticks",
+          "offset": 1374,
+          "type": "u32_le"
+        },
+        {
+          "id": "slot_3.player_1.completion",
+          "label": "Completion percentage",
+          "offset": 1378,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_3.player_1.hero_coins",
+          "label": "Hero's Coins",
+          "offset": 1380,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_3.player_1.location",
+          "label": "Location code",
+          "offset": 1549,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_3.player_2.kremkoins",
+          "label": "Kremkoins",
+          "offset": 1713,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.player_2.play_time",
+          "label": "Play-time ticks",
+          "offset": 1708,
+          "type": "u32_le"
+        },
+        {
+          "id": "slot_3.player_2.completion",
+          "label": "Completion percentage",
+          "offset": 1712,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_3.player_2.hero_coins",
+          "label": "Hero's Coins",
+          "offset": 1714,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_3.player_2.location",
+          "label": "Location code",
+          "offset": 1883,
+          "type": "u8",
+          "editable": false
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 1374,
+          "length": 674,
+          "offset": 1368
+        },
+        {
+          "algorithm": "xor16_le",
+          "unit": "u16_le",
+          "start": 1374,
+          "length": 674,
+          "offset": 1370
+        }
+      ]
+    }
+  ]
+}

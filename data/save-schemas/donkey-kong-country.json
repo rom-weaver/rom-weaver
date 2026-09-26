@@ -1,0 +1,348 @@
+{
+  "$schema": "./schema-v1.schema.json",
+  "schema_version": 1,
+  "games": [
+    {
+      "id": "donkey-kong-country-slot-1-player-1",
+      "name": "Donkey Kong Country (Slot 1, Player 1)",
+      "platform": "snes",
+      "description": "Edits independent counters in Slot 1, Player 1; preserves other slots. Coupled progression, completion, inventory and location updates remain unsupported. Numeric values use full storage ranges; playable states are not guaranteed. EUR/USA/JPN layouts.",
+      "save_size": 2048,
+      "fields": [
+        {
+          "id": "slot_1.player_1.location",
+          "label": "Location code",
+          "offset": 21,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.player_1.play_time",
+          "label": "Play-time counter",
+          "offset": 19,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.player_1.completion",
+          "label": "Completion percentage",
+          "offset": 22,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_1.player_1.mode",
+          "label": "Mode code",
+          "offset": 16,
+          "type": "u8",
+          "editable": false
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "xor16_le",
+          "unit": "u16_le",
+          "start": 12,
+          "length": 274,
+          "offset": 8
+        },
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 12,
+          "length": 274,
+          "offset": 10
+        }
+      ],
+      "signatures": [
+        {
+          "offset": 12,
+          "bytes": [65, 82, 69, 82]
+        }
+      ]
+    },
+    {
+      "id": "donkey-kong-country-slot-1-player-2",
+      "name": "Donkey Kong Country (Slot 1, Player 2)",
+      "platform": "snes",
+      "description": "Edits independent counters in Slot 1, Player 2; preserves other slots. Coupled progression, completion, inventory and location updates remain unsupported. Numeric values use full storage ranges; playable states are not guaranteed. EUR/USA/JPN layouts.",
+      "save_size": 2048,
+      "fields": [
+        {
+          "id": "slot_1.player_2.location",
+          "label": "Location code",
+          "offset": 361,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.player_2.play_time",
+          "label": "Play-time counter",
+          "offset": 359,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.player_2.completion",
+          "label": "Completion percentage",
+          "offset": 362,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_1.player_2.mode",
+          "label": "Mode code",
+          "offset": 356,
+          "type": "u8",
+          "editable": false
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "xor16_le",
+          "unit": "u16_le",
+          "start": 352,
+          "length": 274,
+          "offset": 348
+        },
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 352,
+          "length": 274,
+          "offset": 350
+        }
+      ],
+      "signatures": [
+        {
+          "offset": 352,
+          "bytes": [65, 82, 69, 82]
+        }
+      ]
+    },
+    {
+      "id": "donkey-kong-country-slot-2-player-1",
+      "name": "Donkey Kong Country (Slot 2, Player 1)",
+      "platform": "snes",
+      "description": "Edits independent counters in Slot 2, Player 1; preserves other slots. Coupled progression, completion, inventory and location updates remain unsupported. Numeric values use full storage ranges; playable states are not guaranteed. EUR/USA/JPN layouts.",
+      "save_size": 2048,
+      "fields": [
+        {
+          "id": "slot_2.player_1.location",
+          "label": "Location code",
+          "offset": 701,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.player_1.play_time",
+          "label": "Play-time counter",
+          "offset": 699,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.player_1.completion",
+          "label": "Completion percentage",
+          "offset": 702,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_2.player_1.mode",
+          "label": "Mode code",
+          "offset": 696,
+          "type": "u8",
+          "editable": false
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "xor16_le",
+          "unit": "u16_le",
+          "start": 692,
+          "length": 274,
+          "offset": 688
+        },
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 692,
+          "length": 274,
+          "offset": 690
+        }
+      ],
+      "signatures": [
+        {
+          "offset": 692,
+          "bytes": [65, 82, 69, 82]
+        }
+      ]
+    },
+    {
+      "id": "donkey-kong-country-slot-2-player-2",
+      "name": "Donkey Kong Country (Slot 2, Player 2)",
+      "platform": "snes",
+      "description": "Edits independent counters in Slot 2, Player 2; preserves other slots. Coupled progression, completion, inventory and location updates remain unsupported. Numeric values use full storage ranges; playable states are not guaranteed. EUR/USA/JPN layouts.",
+      "save_size": 2048,
+      "fields": [
+        {
+          "id": "slot_2.player_2.location",
+          "label": "Location code",
+          "offset": 1041,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.player_2.play_time",
+          "label": "Play-time counter",
+          "offset": 1039,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.player_2.completion",
+          "label": "Completion percentage",
+          "offset": 1042,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_2.player_2.mode",
+          "label": "Mode code",
+          "offset": 1036,
+          "type": "u8",
+          "editable": false
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "xor16_le",
+          "unit": "u16_le",
+          "start": 1032,
+          "length": 274,
+          "offset": 1028
+        },
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 1032,
+          "length": 274,
+          "offset": 1030
+        }
+      ],
+      "signatures": [
+        {
+          "offset": 1032,
+          "bytes": [65, 82, 69, 82]
+        }
+      ]
+    },
+    {
+      "id": "donkey-kong-country-slot-3-player-1",
+      "name": "Donkey Kong Country (Slot 3, Player 1)",
+      "platform": "snes",
+      "description": "Edits independent counters in Slot 3, Player 1; preserves other slots. Coupled progression, completion, inventory and location updates remain unsupported. Numeric values use full storage ranges; playable states are not guaranteed. EUR/USA/JPN layouts.",
+      "save_size": 2048,
+      "fields": [
+        {
+          "id": "slot_3.player_1.location",
+          "label": "Location code",
+          "offset": 1381,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.player_1.play_time",
+          "label": "Play-time counter",
+          "offset": 1379,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.player_1.completion",
+          "label": "Completion percentage",
+          "offset": 1382,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_3.player_1.mode",
+          "label": "Mode code",
+          "offset": 1376,
+          "type": "u8",
+          "editable": false
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "xor16_le",
+          "unit": "u16_le",
+          "start": 1372,
+          "length": 274,
+          "offset": 1368
+        },
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 1372,
+          "length": 274,
+          "offset": 1370
+        }
+      ],
+      "signatures": [
+        {
+          "offset": 1372,
+          "bytes": [65, 82, 69, 82]
+        }
+      ]
+    },
+    {
+      "id": "donkey-kong-country-slot-3-player-2",
+      "name": "Donkey Kong Country (Slot 3, Player 2)",
+      "platform": "snes",
+      "description": "Edits independent counters in Slot 3, Player 2; preserves other slots. Coupled progression, completion, inventory and location updates remain unsupported. Numeric values use full storage ranges; playable states are not guaranteed. EUR/USA/JPN layouts.",
+      "save_size": 2048,
+      "fields": [
+        {
+          "id": "slot_3.player_2.location",
+          "label": "Location code",
+          "offset": 1721,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.player_2.play_time",
+          "label": "Play-time counter",
+          "offset": 1719,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.player_2.completion",
+          "label": "Completion percentage",
+          "offset": 1722,
+          "type": "u8",
+          "editable": false
+        },
+        {
+          "id": "slot_3.player_2.mode",
+          "label": "Mode code",
+          "offset": 1716,
+          "type": "u8",
+          "editable": false
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "xor16_le",
+          "unit": "u16_le",
+          "start": 1712,
+          "length": 274,
+          "offset": 1708
+        },
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 1712,
+          "length": 274,
+          "offset": 1710
+        }
+      ],
+      "signatures": [
+        {
+          "offset": 1712,
+          "bytes": [65, 82, 69, 82]
+        }
+      ]
+    }
+  ]
+}

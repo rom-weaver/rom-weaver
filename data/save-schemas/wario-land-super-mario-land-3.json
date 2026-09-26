@@ -1,0 +1,1763 @@
+{
+  "$schema": "./schema-v1.schema.json",
+  "schema_version": 1,
+  "games": [
+    {
+      "id": "wario-land-super-mario-land-3",
+      "name": "Wario Land: Super Mario Land 3",
+      "platform": "game-boy",
+      "description": "Edits three 0x40-byte slots and repairs their independent additive checksums at 0xC0-0xC2. Course completion is read-only because its derived packed-BCD count is not refreshed. Gold, lives, hearts, and completion count expose raw packed-BCD storage; decoded three-byte gold is omitted.",
+      "save_size": 8192,
+      "fields": [
+        {
+          "id": "slot_1.current_course",
+          "label": "Slot 1 Current Course",
+          "offset": 4,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.gold_bcd_byte_1",
+          "label": "Slot 1 Gold packed-BCD byte 1",
+          "offset": 5,
+          "type": "u8",
+          "description": "Raw big-endian packed-BCD storage byte; the three-byte decoded value is not available in schema v1."
+        },
+        {
+          "id": "slot_1.gold_bcd_byte_2",
+          "label": "Slot 1 Gold packed-BCD byte 2",
+          "offset": 6,
+          "type": "u8",
+          "description": "Raw big-endian packed-BCD storage byte; the three-byte decoded value is not available in schema v1."
+        },
+        {
+          "id": "slot_1.gold_bcd_byte_3",
+          "label": "Slot 1 Gold packed-BCD byte 3",
+          "offset": 7,
+          "type": "u8",
+          "description": "Raw big-endian packed-BCD storage byte; the three-byte decoded value is not available in schema v1."
+        },
+        {
+          "id": "slot_1.hearts_bcd",
+          "label": "Slot 1 Hearts packed BCD",
+          "offset": 8,
+          "type": "u8",
+          "description": "Raw packed-BCD storage byte."
+        },
+        {
+          "id": "slot_1.lives_bcd",
+          "label": "Slot 1 Lives packed BCD",
+          "offset": 9,
+          "type": "u8",
+          "description": "Raw packed-BCD storage byte."
+        },
+        {
+          "id": "slot_1.power_up",
+          "label": "Slot 1 Power Up",
+          "offset": 10,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.completed_level_count_bcd",
+          "label": "Slot 1 Completed Level Count packed BCD",
+          "offset": 13,
+          "type": "u8",
+          "description": "Derived raw packed-BCD count. Course flags are read-only because schema v1 cannot refresh this value.",
+          "editable": false
+        },
+        {
+          "id": "slot_1.checkpoint_enabled",
+          "label": "Slot 1 Checkpoint Enabled",
+          "offset": 21,
+          "type": "bool"
+        },
+        {
+          "id": "slot_1.checkpoint_course",
+          "label": "Slot 1 Checkpoint Course",
+          "offset": 22,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.progression",
+          "label": "Slot 1 Progression",
+          "offset": 23,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.treasures.a",
+          "label": "Slot 1 Treasure A: Golden Horn",
+          "offset": 14,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.treasures.b",
+          "label": "Slot 1 Treasure B: Harp",
+          "offset": 15,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.treasures.c",
+          "label": "Slot 1 Treasure C: Crown",
+          "offset": 14,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.treasures.d",
+          "label": "Slot 1 Treasure D: Shield",
+          "offset": 15,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.treasures.e",
+          "label": "Slot 1 Treasure E: Bell",
+          "offset": 15,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.treasures.f",
+          "label": "Slot 1 Treasure F: Lamp",
+          "offset": 14,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.treasures.g",
+          "label": "Slot 1 Treasure G: Crystal Ball",
+          "offset": 15,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.treasures.h",
+          "label": "Slot 1 Treasure H: Chalice",
+          "offset": 14,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.treasures.i",
+          "label": "Slot 1 Treasure I: Dagger",
+          "offset": 14,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.treasures.j",
+          "label": "Slot 1 Treasure J: Axe",
+          "offset": 15,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.treasures.k",
+          "label": "Slot 1 Treasure K: Football",
+          "offset": 15,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.treasures.l",
+          "label": "Slot 1 Treasure L: Idol",
+          "offset": 15,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.treasures.m",
+          "label": "Slot 1 Treasure M: Golden Glove",
+          "offset": 15,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.treasures.n",
+          "label": "Slot 1 Treasure N: Whale",
+          "offset": 14,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.treasures.o",
+          "label": "Slot 1 Treasure O: Diamond Ring",
+          "offset": 14,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.completed.course_01",
+          "label": "Slot 1 Course 01 completed",
+          "offset": 11,
+          "type": "bit",
+          "bit": 0,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_02",
+          "label": "Slot 1 Course 02 completed",
+          "offset": 11,
+          "type": "bit",
+          "bit": 1,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_03",
+          "label": "Slot 1 Course 03 completed",
+          "offset": 11,
+          "type": "bit",
+          "bit": 2,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_03_alt",
+          "label": "Slot 1 Course 03' completed",
+          "offset": 11,
+          "type": "bit",
+          "bit": 3,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_04",
+          "label": "Slot 1 Course 04 completed",
+          "offset": 11,
+          "type": "bit",
+          "bit": 4,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_05",
+          "label": "Slot 1 Course 05 completed",
+          "offset": 11,
+          "type": "bit",
+          "bit": 5,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_06",
+          "label": "Slot 1 Course 06 completed",
+          "offset": 11,
+          "type": "bit",
+          "bit": 6,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_07",
+          "label": "Slot 1 Course 07 completed",
+          "offset": 12,
+          "type": "bit",
+          "bit": 0,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_08",
+          "label": "Slot 1 Course 08 completed",
+          "offset": 12,
+          "type": "bit",
+          "bit": 1,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_08_alt",
+          "label": "Slot 1 Course 08' completed",
+          "offset": 12,
+          "type": "bit",
+          "bit": 2,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_09",
+          "label": "Slot 1 Course 09 completed",
+          "offset": 12,
+          "type": "bit",
+          "bit": 3,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_10",
+          "label": "Slot 1 Course 10 completed",
+          "offset": 12,
+          "type": "bit",
+          "bit": 4,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_11",
+          "label": "Slot 1 Course 11 completed",
+          "offset": 12,
+          "type": "bit",
+          "bit": 5,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_12",
+          "label": "Slot 1 Course 12 completed",
+          "offset": 12,
+          "type": "bit",
+          "bit": 6,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_13",
+          "label": "Slot 1 Course 13 completed",
+          "offset": 12,
+          "type": "bit",
+          "bit": 7,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_14",
+          "label": "Slot 1 Course 14 completed",
+          "offset": 19,
+          "type": "bit",
+          "bit": 0,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_15",
+          "label": "Slot 1 Course 15 completed",
+          "offset": 19,
+          "type": "bit",
+          "bit": 1,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_15_alt",
+          "label": "Slot 1 Course 15' completed",
+          "offset": 19,
+          "type": "bit",
+          "bit": 2,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_16",
+          "label": "Slot 1 Course 16 completed",
+          "offset": 19,
+          "type": "bit",
+          "bit": 3,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_16_alt",
+          "label": "Slot 1 Course 16' completed",
+          "offset": 19,
+          "type": "bit",
+          "bit": 4,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_17",
+          "label": "Slot 1 Course 17 completed",
+          "offset": 19,
+          "type": "bit",
+          "bit": 5,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_18",
+          "label": "Slot 1 Course 18 completed",
+          "offset": 19,
+          "type": "bit",
+          "bit": 6,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_19",
+          "label": "Slot 1 Course 19 completed",
+          "offset": 19,
+          "type": "bit",
+          "bit": 7,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_20",
+          "label": "Slot 1 Course 20 completed",
+          "offset": 16,
+          "type": "bit",
+          "bit": 0,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_21",
+          "label": "Slot 1 Course 21 completed",
+          "offset": 16,
+          "type": "bit",
+          "bit": 1,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_22",
+          "label": "Slot 1 Course 22 completed",
+          "offset": 16,
+          "type": "bit",
+          "bit": 2,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_23",
+          "label": "Slot 1 Course 23 completed",
+          "offset": 16,
+          "type": "bit",
+          "bit": 3,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_23_alt",
+          "label": "Slot 1 Course 23' completed",
+          "offset": 16,
+          "type": "bit",
+          "bit": 4,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_24",
+          "label": "Slot 1 Course 24 completed",
+          "offset": 16,
+          "type": "bit",
+          "bit": 5,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_25",
+          "label": "Slot 1 Course 25 completed",
+          "offset": 16,
+          "type": "bit",
+          "bit": 6,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_26",
+          "label": "Slot 1 Course 26 completed",
+          "offset": 17,
+          "type": "bit",
+          "bit": 0,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_27",
+          "label": "Slot 1 Course 27 completed",
+          "offset": 17,
+          "type": "bit",
+          "bit": 1,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_28",
+          "label": "Slot 1 Course 28 completed",
+          "offset": 17,
+          "type": "bit",
+          "bit": 2,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_29",
+          "label": "Slot 1 Course 29 completed",
+          "offset": 17,
+          "type": "bit",
+          "bit": 3,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_30",
+          "label": "Slot 1 Course 30 completed",
+          "offset": 17,
+          "type": "bit",
+          "bit": 4,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_31",
+          "label": "Slot 1 Course 31 completed",
+          "offset": 18,
+          "type": "bit",
+          "bit": 0,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_32",
+          "label": "Slot 1 Course 32 completed",
+          "offset": 18,
+          "type": "bit",
+          "bit": 1,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_33",
+          "label": "Slot 1 Course 33 completed",
+          "offset": 18,
+          "type": "bit",
+          "bit": 2,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_34",
+          "label": "Slot 1 Course 34 completed",
+          "offset": 18,
+          "type": "bit",
+          "bit": 3,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_35",
+          "label": "Slot 1 Course 35 completed",
+          "offset": 18,
+          "type": "bit",
+          "bit": 4,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_36",
+          "label": "Slot 1 Course 36 completed",
+          "offset": 18,
+          "type": "bit",
+          "bit": 5,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_37",
+          "label": "Slot 1 Course 37 completed",
+          "offset": 20,
+          "type": "bit",
+          "bit": 0,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_38",
+          "label": "Slot 1 Course 38 completed",
+          "offset": 20,
+          "type": "bit",
+          "bit": 1,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_1.completed.course_39",
+          "label": "Slot 1 Course 39 completed",
+          "offset": 20,
+          "type": "bit",
+          "bit": 2,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.current_course",
+          "label": "Slot 2 Current Course",
+          "offset": 68,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.gold_bcd_byte_1",
+          "label": "Slot 2 Gold packed-BCD byte 1",
+          "offset": 69,
+          "type": "u8",
+          "description": "Raw big-endian packed-BCD storage byte; the three-byte decoded value is not available in schema v1."
+        },
+        {
+          "id": "slot_2.gold_bcd_byte_2",
+          "label": "Slot 2 Gold packed-BCD byte 2",
+          "offset": 70,
+          "type": "u8",
+          "description": "Raw big-endian packed-BCD storage byte; the three-byte decoded value is not available in schema v1."
+        },
+        {
+          "id": "slot_2.gold_bcd_byte_3",
+          "label": "Slot 2 Gold packed-BCD byte 3",
+          "offset": 71,
+          "type": "u8",
+          "description": "Raw big-endian packed-BCD storage byte; the three-byte decoded value is not available in schema v1."
+        },
+        {
+          "id": "slot_2.hearts_bcd",
+          "label": "Slot 2 Hearts packed BCD",
+          "offset": 72,
+          "type": "u8",
+          "description": "Raw packed-BCD storage byte."
+        },
+        {
+          "id": "slot_2.lives_bcd",
+          "label": "Slot 2 Lives packed BCD",
+          "offset": 73,
+          "type": "u8",
+          "description": "Raw packed-BCD storage byte."
+        },
+        {
+          "id": "slot_2.power_up",
+          "label": "Slot 2 Power Up",
+          "offset": 74,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.completed_level_count_bcd",
+          "label": "Slot 2 Completed Level Count packed BCD",
+          "offset": 77,
+          "type": "u8",
+          "description": "Derived raw packed-BCD count. Course flags are read-only because schema v1 cannot refresh this value.",
+          "editable": false
+        },
+        {
+          "id": "slot_2.checkpoint_enabled",
+          "label": "Slot 2 Checkpoint Enabled",
+          "offset": 85,
+          "type": "bool"
+        },
+        {
+          "id": "slot_2.checkpoint_course",
+          "label": "Slot 2 Checkpoint Course",
+          "offset": 86,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.progression",
+          "label": "Slot 2 Progression",
+          "offset": 87,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.treasures.a",
+          "label": "Slot 2 Treasure A: Golden Horn",
+          "offset": 78,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.treasures.b",
+          "label": "Slot 2 Treasure B: Harp",
+          "offset": 79,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.treasures.c",
+          "label": "Slot 2 Treasure C: Crown",
+          "offset": 78,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.treasures.d",
+          "label": "Slot 2 Treasure D: Shield",
+          "offset": 79,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.treasures.e",
+          "label": "Slot 2 Treasure E: Bell",
+          "offset": 79,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.treasures.f",
+          "label": "Slot 2 Treasure F: Lamp",
+          "offset": 78,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.treasures.g",
+          "label": "Slot 2 Treasure G: Crystal Ball",
+          "offset": 79,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.treasures.h",
+          "label": "Slot 2 Treasure H: Chalice",
+          "offset": 78,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.treasures.i",
+          "label": "Slot 2 Treasure I: Dagger",
+          "offset": 78,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.treasures.j",
+          "label": "Slot 2 Treasure J: Axe",
+          "offset": 79,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.treasures.k",
+          "label": "Slot 2 Treasure K: Football",
+          "offset": 79,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.treasures.l",
+          "label": "Slot 2 Treasure L: Idol",
+          "offset": 79,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.treasures.m",
+          "label": "Slot 2 Treasure M: Golden Glove",
+          "offset": 79,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.treasures.n",
+          "label": "Slot 2 Treasure N: Whale",
+          "offset": 78,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.treasures.o",
+          "label": "Slot 2 Treasure O: Diamond Ring",
+          "offset": 78,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.completed.course_01",
+          "label": "Slot 2 Course 01 completed",
+          "offset": 75,
+          "type": "bit",
+          "bit": 0,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_02",
+          "label": "Slot 2 Course 02 completed",
+          "offset": 75,
+          "type": "bit",
+          "bit": 1,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_03",
+          "label": "Slot 2 Course 03 completed",
+          "offset": 75,
+          "type": "bit",
+          "bit": 2,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_03_alt",
+          "label": "Slot 2 Course 03' completed",
+          "offset": 75,
+          "type": "bit",
+          "bit": 3,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_04",
+          "label": "Slot 2 Course 04 completed",
+          "offset": 75,
+          "type": "bit",
+          "bit": 4,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_05",
+          "label": "Slot 2 Course 05 completed",
+          "offset": 75,
+          "type": "bit",
+          "bit": 5,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_06",
+          "label": "Slot 2 Course 06 completed",
+          "offset": 75,
+          "type": "bit",
+          "bit": 6,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_07",
+          "label": "Slot 2 Course 07 completed",
+          "offset": 76,
+          "type": "bit",
+          "bit": 0,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_08",
+          "label": "Slot 2 Course 08 completed",
+          "offset": 76,
+          "type": "bit",
+          "bit": 1,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_08_alt",
+          "label": "Slot 2 Course 08' completed",
+          "offset": 76,
+          "type": "bit",
+          "bit": 2,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_09",
+          "label": "Slot 2 Course 09 completed",
+          "offset": 76,
+          "type": "bit",
+          "bit": 3,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_10",
+          "label": "Slot 2 Course 10 completed",
+          "offset": 76,
+          "type": "bit",
+          "bit": 4,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_11",
+          "label": "Slot 2 Course 11 completed",
+          "offset": 76,
+          "type": "bit",
+          "bit": 5,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_12",
+          "label": "Slot 2 Course 12 completed",
+          "offset": 76,
+          "type": "bit",
+          "bit": 6,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_13",
+          "label": "Slot 2 Course 13 completed",
+          "offset": 76,
+          "type": "bit",
+          "bit": 7,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_14",
+          "label": "Slot 2 Course 14 completed",
+          "offset": 83,
+          "type": "bit",
+          "bit": 0,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_15",
+          "label": "Slot 2 Course 15 completed",
+          "offset": 83,
+          "type": "bit",
+          "bit": 1,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_15_alt",
+          "label": "Slot 2 Course 15' completed",
+          "offset": 83,
+          "type": "bit",
+          "bit": 2,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_16",
+          "label": "Slot 2 Course 16 completed",
+          "offset": 83,
+          "type": "bit",
+          "bit": 3,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_16_alt",
+          "label": "Slot 2 Course 16' completed",
+          "offset": 83,
+          "type": "bit",
+          "bit": 4,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_17",
+          "label": "Slot 2 Course 17 completed",
+          "offset": 83,
+          "type": "bit",
+          "bit": 5,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_18",
+          "label": "Slot 2 Course 18 completed",
+          "offset": 83,
+          "type": "bit",
+          "bit": 6,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_19",
+          "label": "Slot 2 Course 19 completed",
+          "offset": 83,
+          "type": "bit",
+          "bit": 7,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_20",
+          "label": "Slot 2 Course 20 completed",
+          "offset": 80,
+          "type": "bit",
+          "bit": 0,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_21",
+          "label": "Slot 2 Course 21 completed",
+          "offset": 80,
+          "type": "bit",
+          "bit": 1,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_22",
+          "label": "Slot 2 Course 22 completed",
+          "offset": 80,
+          "type": "bit",
+          "bit": 2,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_23",
+          "label": "Slot 2 Course 23 completed",
+          "offset": 80,
+          "type": "bit",
+          "bit": 3,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_23_alt",
+          "label": "Slot 2 Course 23' completed",
+          "offset": 80,
+          "type": "bit",
+          "bit": 4,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_24",
+          "label": "Slot 2 Course 24 completed",
+          "offset": 80,
+          "type": "bit",
+          "bit": 5,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_25",
+          "label": "Slot 2 Course 25 completed",
+          "offset": 80,
+          "type": "bit",
+          "bit": 6,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_26",
+          "label": "Slot 2 Course 26 completed",
+          "offset": 81,
+          "type": "bit",
+          "bit": 0,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_27",
+          "label": "Slot 2 Course 27 completed",
+          "offset": 81,
+          "type": "bit",
+          "bit": 1,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_28",
+          "label": "Slot 2 Course 28 completed",
+          "offset": 81,
+          "type": "bit",
+          "bit": 2,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_29",
+          "label": "Slot 2 Course 29 completed",
+          "offset": 81,
+          "type": "bit",
+          "bit": 3,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_30",
+          "label": "Slot 2 Course 30 completed",
+          "offset": 81,
+          "type": "bit",
+          "bit": 4,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_31",
+          "label": "Slot 2 Course 31 completed",
+          "offset": 82,
+          "type": "bit",
+          "bit": 0,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_32",
+          "label": "Slot 2 Course 32 completed",
+          "offset": 82,
+          "type": "bit",
+          "bit": 1,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_33",
+          "label": "Slot 2 Course 33 completed",
+          "offset": 82,
+          "type": "bit",
+          "bit": 2,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_34",
+          "label": "Slot 2 Course 34 completed",
+          "offset": 82,
+          "type": "bit",
+          "bit": 3,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_35",
+          "label": "Slot 2 Course 35 completed",
+          "offset": 82,
+          "type": "bit",
+          "bit": 4,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_36",
+          "label": "Slot 2 Course 36 completed",
+          "offset": 82,
+          "type": "bit",
+          "bit": 5,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_37",
+          "label": "Slot 2 Course 37 completed",
+          "offset": 84,
+          "type": "bit",
+          "bit": 0,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_38",
+          "label": "Slot 2 Course 38 completed",
+          "offset": 84,
+          "type": "bit",
+          "bit": 1,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_2.completed.course_39",
+          "label": "Slot 2 Course 39 completed",
+          "offset": 84,
+          "type": "bit",
+          "bit": 2,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.current_course",
+          "label": "Slot 3 Current Course",
+          "offset": 132,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.gold_bcd_byte_1",
+          "label": "Slot 3 Gold packed-BCD byte 1",
+          "offset": 133,
+          "type": "u8",
+          "description": "Raw big-endian packed-BCD storage byte; the three-byte decoded value is not available in schema v1."
+        },
+        {
+          "id": "slot_3.gold_bcd_byte_2",
+          "label": "Slot 3 Gold packed-BCD byte 2",
+          "offset": 134,
+          "type": "u8",
+          "description": "Raw big-endian packed-BCD storage byte; the three-byte decoded value is not available in schema v1."
+        },
+        {
+          "id": "slot_3.gold_bcd_byte_3",
+          "label": "Slot 3 Gold packed-BCD byte 3",
+          "offset": 135,
+          "type": "u8",
+          "description": "Raw big-endian packed-BCD storage byte; the three-byte decoded value is not available in schema v1."
+        },
+        {
+          "id": "slot_3.hearts_bcd",
+          "label": "Slot 3 Hearts packed BCD",
+          "offset": 136,
+          "type": "u8",
+          "description": "Raw packed-BCD storage byte."
+        },
+        {
+          "id": "slot_3.lives_bcd",
+          "label": "Slot 3 Lives packed BCD",
+          "offset": 137,
+          "type": "u8",
+          "description": "Raw packed-BCD storage byte."
+        },
+        {
+          "id": "slot_3.power_up",
+          "label": "Slot 3 Power Up",
+          "offset": 138,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.completed_level_count_bcd",
+          "label": "Slot 3 Completed Level Count packed BCD",
+          "offset": 141,
+          "type": "u8",
+          "description": "Derived raw packed-BCD count. Course flags are read-only because schema v1 cannot refresh this value.",
+          "editable": false
+        },
+        {
+          "id": "slot_3.checkpoint_enabled",
+          "label": "Slot 3 Checkpoint Enabled",
+          "offset": 149,
+          "type": "bool"
+        },
+        {
+          "id": "slot_3.checkpoint_course",
+          "label": "Slot 3 Checkpoint Course",
+          "offset": 150,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.progression",
+          "label": "Slot 3 Progression",
+          "offset": 151,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.treasures.a",
+          "label": "Slot 3 Treasure A: Golden Horn",
+          "offset": 142,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.treasures.b",
+          "label": "Slot 3 Treasure B: Harp",
+          "offset": 143,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.treasures.c",
+          "label": "Slot 3 Treasure C: Crown",
+          "offset": 142,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.treasures.d",
+          "label": "Slot 3 Treasure D: Shield",
+          "offset": 143,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.treasures.e",
+          "label": "Slot 3 Treasure E: Bell",
+          "offset": 143,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.treasures.f",
+          "label": "Slot 3 Treasure F: Lamp",
+          "offset": 142,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.treasures.g",
+          "label": "Slot 3 Treasure G: Crystal Ball",
+          "offset": 143,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.treasures.h",
+          "label": "Slot 3 Treasure H: Chalice",
+          "offset": 142,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.treasures.i",
+          "label": "Slot 3 Treasure I: Dagger",
+          "offset": 142,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.treasures.j",
+          "label": "Slot 3 Treasure J: Axe",
+          "offset": 143,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.treasures.k",
+          "label": "Slot 3 Treasure K: Football",
+          "offset": 143,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.treasures.l",
+          "label": "Slot 3 Treasure L: Idol",
+          "offset": 143,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.treasures.m",
+          "label": "Slot 3 Treasure M: Golden Glove",
+          "offset": 143,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.treasures.n",
+          "label": "Slot 3 Treasure N: Whale",
+          "offset": 142,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.treasures.o",
+          "label": "Slot 3 Treasure O: Diamond Ring",
+          "offset": 142,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.completed.course_01",
+          "label": "Slot 3 Course 01 completed",
+          "offset": 139,
+          "type": "bit",
+          "bit": 0,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_02",
+          "label": "Slot 3 Course 02 completed",
+          "offset": 139,
+          "type": "bit",
+          "bit": 1,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_03",
+          "label": "Slot 3 Course 03 completed",
+          "offset": 139,
+          "type": "bit",
+          "bit": 2,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_03_alt",
+          "label": "Slot 3 Course 03' completed",
+          "offset": 139,
+          "type": "bit",
+          "bit": 3,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_04",
+          "label": "Slot 3 Course 04 completed",
+          "offset": 139,
+          "type": "bit",
+          "bit": 4,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_05",
+          "label": "Slot 3 Course 05 completed",
+          "offset": 139,
+          "type": "bit",
+          "bit": 5,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_06",
+          "label": "Slot 3 Course 06 completed",
+          "offset": 139,
+          "type": "bit",
+          "bit": 6,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_07",
+          "label": "Slot 3 Course 07 completed",
+          "offset": 140,
+          "type": "bit",
+          "bit": 0,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_08",
+          "label": "Slot 3 Course 08 completed",
+          "offset": 140,
+          "type": "bit",
+          "bit": 1,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_08_alt",
+          "label": "Slot 3 Course 08' completed",
+          "offset": 140,
+          "type": "bit",
+          "bit": 2,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_09",
+          "label": "Slot 3 Course 09 completed",
+          "offset": 140,
+          "type": "bit",
+          "bit": 3,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_10",
+          "label": "Slot 3 Course 10 completed",
+          "offset": 140,
+          "type": "bit",
+          "bit": 4,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_11",
+          "label": "Slot 3 Course 11 completed",
+          "offset": 140,
+          "type": "bit",
+          "bit": 5,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_12",
+          "label": "Slot 3 Course 12 completed",
+          "offset": 140,
+          "type": "bit",
+          "bit": 6,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_13",
+          "label": "Slot 3 Course 13 completed",
+          "offset": 140,
+          "type": "bit",
+          "bit": 7,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_14",
+          "label": "Slot 3 Course 14 completed",
+          "offset": 147,
+          "type": "bit",
+          "bit": 0,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_15",
+          "label": "Slot 3 Course 15 completed",
+          "offset": 147,
+          "type": "bit",
+          "bit": 1,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_15_alt",
+          "label": "Slot 3 Course 15' completed",
+          "offset": 147,
+          "type": "bit",
+          "bit": 2,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_16",
+          "label": "Slot 3 Course 16 completed",
+          "offset": 147,
+          "type": "bit",
+          "bit": 3,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_16_alt",
+          "label": "Slot 3 Course 16' completed",
+          "offset": 147,
+          "type": "bit",
+          "bit": 4,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_17",
+          "label": "Slot 3 Course 17 completed",
+          "offset": 147,
+          "type": "bit",
+          "bit": 5,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_18",
+          "label": "Slot 3 Course 18 completed",
+          "offset": 147,
+          "type": "bit",
+          "bit": 6,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_19",
+          "label": "Slot 3 Course 19 completed",
+          "offset": 147,
+          "type": "bit",
+          "bit": 7,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_20",
+          "label": "Slot 3 Course 20 completed",
+          "offset": 144,
+          "type": "bit",
+          "bit": 0,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_21",
+          "label": "Slot 3 Course 21 completed",
+          "offset": 144,
+          "type": "bit",
+          "bit": 1,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_22",
+          "label": "Slot 3 Course 22 completed",
+          "offset": 144,
+          "type": "bit",
+          "bit": 2,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_23",
+          "label": "Slot 3 Course 23 completed",
+          "offset": 144,
+          "type": "bit",
+          "bit": 3,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_23_alt",
+          "label": "Slot 3 Course 23' completed",
+          "offset": 144,
+          "type": "bit",
+          "bit": 4,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_24",
+          "label": "Slot 3 Course 24 completed",
+          "offset": 144,
+          "type": "bit",
+          "bit": 5,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_25",
+          "label": "Slot 3 Course 25 completed",
+          "offset": 144,
+          "type": "bit",
+          "bit": 6,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_26",
+          "label": "Slot 3 Course 26 completed",
+          "offset": 145,
+          "type": "bit",
+          "bit": 0,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_27",
+          "label": "Slot 3 Course 27 completed",
+          "offset": 145,
+          "type": "bit",
+          "bit": 1,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_28",
+          "label": "Slot 3 Course 28 completed",
+          "offset": 145,
+          "type": "bit",
+          "bit": 2,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_29",
+          "label": "Slot 3 Course 29 completed",
+          "offset": 145,
+          "type": "bit",
+          "bit": 3,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_30",
+          "label": "Slot 3 Course 30 completed",
+          "offset": 145,
+          "type": "bit",
+          "bit": 4,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_31",
+          "label": "Slot 3 Course 31 completed",
+          "offset": 146,
+          "type": "bit",
+          "bit": 0,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_32",
+          "label": "Slot 3 Course 32 completed",
+          "offset": 146,
+          "type": "bit",
+          "bit": 1,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_33",
+          "label": "Slot 3 Course 33 completed",
+          "offset": 146,
+          "type": "bit",
+          "bit": 2,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_34",
+          "label": "Slot 3 Course 34 completed",
+          "offset": 146,
+          "type": "bit",
+          "bit": 3,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_35",
+          "label": "Slot 3 Course 35 completed",
+          "offset": 146,
+          "type": "bit",
+          "bit": 4,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_36",
+          "label": "Slot 3 Course 36 completed",
+          "offset": 146,
+          "type": "bit",
+          "bit": 5,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_37",
+          "label": "Slot 3 Course 37 completed",
+          "offset": 148,
+          "type": "bit",
+          "bit": 0,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_38",
+          "label": "Slot 3 Course 38 completed",
+          "offset": 148,
+          "type": "bit",
+          "bit": 1,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        },
+        {
+          "id": "slot_3.completed.course_39",
+          "label": "Slot 3 Course 39 completed",
+          "offset": 148,
+          "type": "bit",
+          "bit": 2,
+          "editable": false,
+          "description": "Read-only because changing course completion also requires recomputing the derived packed-BCD completion count."
+        }
+      ],
+      "signatures": [
+        {
+          "offset": 0,
+          "bytes": [25, 100, 57, 87]
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "add8",
+          "start": 0,
+          "length": 32,
+          "offset": 192
+        },
+        {
+          "algorithm": "add8",
+          "start": 64,
+          "length": 32,
+          "offset": 193
+        },
+        {
+          "algorithm": "add8",
+          "start": 128,
+          "length": 32,
+          "offset": 194
+        }
+      ]
+    }
+  ]
+}

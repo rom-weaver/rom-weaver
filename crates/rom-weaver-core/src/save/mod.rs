@@ -661,3 +661,19 @@ fn validation(code: &'static str, message: &'static str) -> RomWeaverError {
 #[cfg(test)]
 #[path = "../../tests/unit/save.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "../../tests/unit/schema_catalog_existing.rs"]
+mod schema_catalog_existing_tests;
+
+#[cfg(test)]
+#[path = "../../tests/unit/schema_catalog_handheld.rs"]
+mod schema_catalog_handheld_tests;
+
+#[cfg(test)]
+#[path = "../../tests/unit/schema_catalog_console.rs"]
+mod schema_catalog_console_tests;
+
+#[cfg(test)]
+#[path = "../../tests/unit/schema_catalog.rs"]
+mod schema_catalog_tests;
