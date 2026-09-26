@@ -95,6 +95,8 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
       }
     }
 
+    if (path.startsWith("data/save-schemas/")) result.rust = true;
+
     if (
       /^(?:Cargo\.toml|Cargo\.lock|\.config\/deny\.toml|package\.json|package-lock\.json)$/.test(
         path,

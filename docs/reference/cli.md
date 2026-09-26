@@ -269,6 +269,8 @@ Without `-o` or `--output`, `save set` writes a free sibling name such as `game-
 
 `save list-games` returns all supported game definitions and fresh-generation game IDs. `save create` accepts `--game`, `--template`, optional `FIELD=VALUE` assignments, `--output`, `--dry-run`, and `--force`. Without a template, `--game` selects a supported fresh initializer. Output is required unless `--dry-run` is set. [Create saves with the CLI](../how-to/create-game-saves-cli.md) gives the procedures.
 
+Every `save` command accepts `--schema PATH` to load a local versioned JSON layout pack. The pack adds games for that command; it cannot replace a built-in game ID. [Runtime schema packs](save-editor.md#runtime-schema-packs) defines its fields and limits.
+
 ## Cheats
 
 `cheat list --input ROM` detects the ROM's system, reads that system's shard from the cheat-database directory, matches the game, and prints one row per cheat: ID, delivery, raw code, description. `--json` puts the same data in `details.cheat_list`.

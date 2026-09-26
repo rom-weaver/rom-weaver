@@ -1,0 +1,2723 @@
+{
+  "$schema": "./schema-v1.schema.json",
+  "schema_version": 1,
+  "games": [
+    {
+      "id": "zelda-a-link-to-the-past-file-1-schema",
+      "name": "The Legend of Zelda: A Link to the Past (File 1 schema)",
+      "platform": "snes",
+      "description": "Edits File 1 and its backup, including raw name glyphs and inventory/equipment/progression codes. Preserves other files. Numeric storage ranges do not prove playable combinations.",
+      "save_size": 8192,
+      "fields": [
+        {
+          "id": "slot_1.resources.bombs",
+          "label": "Bombs",
+          "offset": 835,
+          "type": "u8",
+          "description": "Bombs carried by the player"
+        },
+        {
+          "id": "slot_1.resources.arrows",
+          "label": "Arrows",
+          "offset": 887,
+          "type": "u8",
+          "description": "Arrows carried by the player"
+        },
+        {
+          "id": "slot_1.hearts.capacity_eighths",
+          "label": "Heart capacity (eighths)",
+          "offset": 876,
+          "type": "u8",
+          "description": "Maximum health; eight units equal one heart"
+        },
+        {
+          "id": "slot_1.hearts.current_eighths",
+          "label": "Current health (eighths)",
+          "offset": 877,
+          "type": "u8",
+          "description": "Current health; eight units equal one heart"
+        },
+        {
+          "id": "slot_1.magic.current",
+          "label": "Current magic",
+          "offset": 878,
+          "type": "u8",
+          "description": "Current magic power"
+        },
+        {
+          "id": "slot_1.resources.bomb_capacity_upgrades",
+          "label": "Bomb capacity upgrades",
+          "offset": 880,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.resources.arrow_capacity_upgrades",
+          "label": "Arrow capacity upgrades",
+          "offset": 881,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.progress.heart_pieces",
+          "label": "Heart pieces toward next container",
+          "offset": 875,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.inventory.hookshot",
+          "label": "Hookshot",
+          "offset": 834,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_1.inventory.fire_rod",
+          "label": "Fire Rod",
+          "offset": 837,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_1.inventory.ice_rod",
+          "label": "Ice Rod",
+          "offset": 838,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_1.inventory.bombos",
+          "label": "Bombos",
+          "offset": 839,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_1.inventory.ether",
+          "label": "Ether",
+          "offset": 840,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_1.inventory.quake",
+          "label": "Quake",
+          "offset": 841,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_1.inventory.lantern",
+          "label": "Lantern",
+          "offset": 842,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_1.inventory.hammer",
+          "label": "Hammer",
+          "offset": 843,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_1.inventory.bug_net",
+          "label": "Bug-Catching Net",
+          "offset": 845,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_1.inventory.book_of_mudora",
+          "label": "Book of Mudora",
+          "offset": 846,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_1.inventory.cane_of_somaria",
+          "label": "Cane of Somaria",
+          "offset": 848,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_1.inventory.cane_of_byrna",
+          "label": "Cane of Byrna",
+          "offset": 849,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_1.inventory.cape",
+          "label": "Magic Cape",
+          "offset": 850,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_1.inventory.pegasus_boots",
+          "label": "Pegasus Boots",
+          "offset": 853,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_1.inventory.flippers",
+          "label": "Zora's Flippers",
+          "offset": 854,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_1.inventory.moon_pearl",
+          "label": "Moon Pearl",
+          "offset": 855,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_1.progress.pendant_1",
+          "label": "Pendant 1",
+          "offset": 884,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.progress.pendant_2",
+          "label": "Pendant 2",
+          "offset": 884,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.progress.pendant_3",
+          "label": "Pendant 3",
+          "offset": 884,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.progress.crystal_1",
+          "label": "Crystal 1",
+          "offset": 890,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.progress.crystal_2",
+          "label": "Crystal 2",
+          "offset": 890,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.progress.crystal_3",
+          "label": "Crystal 3",
+          "offset": 890,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.progress.crystal_4",
+          "label": "Crystal 4",
+          "offset": 890,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.progress.crystal_5",
+          "label": "Crystal 5",
+          "offset": 890,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.progress.crystal_6",
+          "label": "Crystal 6",
+          "offset": 890,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.progress.crystal_7",
+          "label": "Crystal 7",
+          "offset": 890,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.progress.dungeons.sewers.compass",
+          "label": "sewers compass",
+          "offset": 868,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.progress.dungeons.sewers.big_key",
+          "label": "sewers big_key",
+          "offset": 870,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.progress.dungeons.sewers.map",
+          "label": "sewers map",
+          "offset": 872,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.progress.dungeons.sewers.keys_earned",
+          "label": "sewers keys earned",
+          "offset": 892,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.progress.dungeons.hyrule_castle.compass",
+          "label": "hyrule_castle compass",
+          "offset": 868,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.progress.dungeons.hyrule_castle.big_key",
+          "label": "hyrule_castle big_key",
+          "offset": 870,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.progress.dungeons.hyrule_castle.map",
+          "label": "hyrule_castle map",
+          "offset": 872,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.progress.dungeons.hyrule_castle.keys_earned",
+          "label": "hyrule_castle keys earned",
+          "offset": 893,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.progress.dungeons.eastern_palace.compass",
+          "label": "eastern_palace compass",
+          "offset": 868,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.progress.dungeons.eastern_palace.big_key",
+          "label": "eastern_palace big_key",
+          "offset": 870,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.progress.dungeons.eastern_palace.map",
+          "label": "eastern_palace map",
+          "offset": 872,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.progress.dungeons.eastern_palace.keys_earned",
+          "label": "eastern_palace keys earned",
+          "offset": 894,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.progress.dungeons.desert_palace.compass",
+          "label": "desert_palace compass",
+          "offset": 868,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.progress.dungeons.desert_palace.big_key",
+          "label": "desert_palace big_key",
+          "offset": 870,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.progress.dungeons.desert_palace.map",
+          "label": "desert_palace map",
+          "offset": 872,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.progress.dungeons.desert_palace.keys_earned",
+          "label": "desert_palace keys earned",
+          "offset": 895,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.progress.dungeons.agahnims_tower.compass",
+          "label": "agahnims_tower compass",
+          "offset": 868,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.progress.dungeons.agahnims_tower.big_key",
+          "label": "agahnims_tower big_key",
+          "offset": 870,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.progress.dungeons.agahnims_tower.map",
+          "label": "agahnims_tower map",
+          "offset": 872,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.progress.dungeons.agahnims_tower.keys_earned",
+          "label": "agahnims_tower keys earned",
+          "offset": 896,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.progress.dungeons.swamp_palace.compass",
+          "label": "swamp_palace compass",
+          "offset": 868,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.progress.dungeons.swamp_palace.big_key",
+          "label": "swamp_palace big_key",
+          "offset": 870,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.progress.dungeons.swamp_palace.map",
+          "label": "swamp_palace map",
+          "offset": 872,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.progress.dungeons.swamp_palace.keys_earned",
+          "label": "swamp_palace keys earned",
+          "offset": 897,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.progress.dungeons.palace_of_darkness.compass",
+          "label": "palace_of_darkness compass",
+          "offset": 868,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.progress.dungeons.palace_of_darkness.big_key",
+          "label": "palace_of_darkness big_key",
+          "offset": 870,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.progress.dungeons.palace_of_darkness.map",
+          "label": "palace_of_darkness map",
+          "offset": 872,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.progress.dungeons.palace_of_darkness.keys_earned",
+          "label": "palace_of_darkness keys earned",
+          "offset": 898,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.progress.dungeons.misery_mire.compass",
+          "label": "misery_mire compass",
+          "offset": 868,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.progress.dungeons.misery_mire.big_key",
+          "label": "misery_mire big_key",
+          "offset": 870,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.progress.dungeons.misery_mire.map",
+          "label": "misery_mire map",
+          "offset": 872,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.progress.dungeons.misery_mire.keys_earned",
+          "label": "misery_mire keys earned",
+          "offset": 899,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.progress.dungeons.skull_woods.compass",
+          "label": "skull_woods compass",
+          "offset": 869,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.progress.dungeons.skull_woods.big_key",
+          "label": "skull_woods big_key",
+          "offset": 871,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.progress.dungeons.skull_woods.map",
+          "label": "skull_woods map",
+          "offset": 873,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.progress.dungeons.skull_woods.keys_earned",
+          "label": "skull_woods keys earned",
+          "offset": 900,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.progress.dungeons.ice_palace.compass",
+          "label": "ice_palace compass",
+          "offset": 869,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.progress.dungeons.ice_palace.big_key",
+          "label": "ice_palace big_key",
+          "offset": 871,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.progress.dungeons.ice_palace.map",
+          "label": "ice_palace map",
+          "offset": 873,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.progress.dungeons.ice_palace.keys_earned",
+          "label": "ice_palace keys earned",
+          "offset": 901,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.progress.dungeons.tower_of_hera.compass",
+          "label": "tower_of_hera compass",
+          "offset": 869,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.progress.dungeons.tower_of_hera.big_key",
+          "label": "tower_of_hera big_key",
+          "offset": 871,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.progress.dungeons.tower_of_hera.map",
+          "label": "tower_of_hera map",
+          "offset": 873,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.progress.dungeons.tower_of_hera.keys_earned",
+          "label": "tower_of_hera keys earned",
+          "offset": 902,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.progress.dungeons.thieves_town.compass",
+          "label": "thieves_town compass",
+          "offset": 869,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.progress.dungeons.thieves_town.big_key",
+          "label": "thieves_town big_key",
+          "offset": 871,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.progress.dungeons.thieves_town.map",
+          "label": "thieves_town map",
+          "offset": 873,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.progress.dungeons.thieves_town.keys_earned",
+          "label": "thieves_town keys earned",
+          "offset": 903,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.progress.dungeons.turtle_rock.compass",
+          "label": "turtle_rock compass",
+          "offset": 869,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.progress.dungeons.turtle_rock.big_key",
+          "label": "turtle_rock big_key",
+          "offset": 871,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.progress.dungeons.turtle_rock.map",
+          "label": "turtle_rock map",
+          "offset": 873,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.progress.dungeons.turtle_rock.keys_earned",
+          "label": "turtle_rock keys earned",
+          "offset": 904,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.progress.dungeons.ganons_tower.compass",
+          "label": "ganons_tower compass",
+          "offset": 869,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.progress.dungeons.ganons_tower.big_key",
+          "label": "ganons_tower big_key",
+          "offset": 871,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.progress.dungeons.ganons_tower.map",
+          "label": "ganons_tower map",
+          "offset": 873,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.progress.dungeons.ganons_tower.keys_earned",
+          "label": "ganons_tower keys earned",
+          "offset": 905,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.progress.early_story.uncle_secret_passage",
+          "label": "uncle_secret_passage",
+          "offset": 966,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.progress.early_story.sanctuary_priest",
+          "label": "sanctuary_priest",
+          "offset": 966,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.progress.early_story.zelda_sanctuary",
+          "label": "zelda_sanctuary",
+          "offset": 966,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.progress.early_story.uncle_left_house",
+          "label": "uncle_left_house",
+          "offset": 966,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.progress.early_story.book_progress",
+          "label": "book_progress",
+          "offset": 966,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.progress.early_story.fortune_teller_variant",
+          "label": "fortune_teller_variant",
+          "offset": 966,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.progress.side_quests.smith_tempering",
+          "label": "smith_tempering",
+          "offset": 969,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.progress.side_quests.swordsmith_rescued",
+          "label": "swordsmith_rescued",
+          "offset": 969,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.progress.side_quests.purple_chest_opened",
+          "label": "purple_chest_opened",
+          "offset": 969,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.progress.side_quests.stumpy_stumped",
+          "label": "stumpy_stumped",
+          "offset": 969,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.progress.side_quests.bottle_purchased",
+          "label": "bottle_purchased",
+          "offset": 969,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.progress.side_quests.hobo_bottle",
+          "label": "hobo_bottle",
+          "offset": 969,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.resources.rupees",
+          "label": "Rupees",
+          "offset": 866,
+          "copies": [864],
+          "type": "u16_le",
+          "description": "Updates both rupee values stored by the game."
+        },
+        {
+          "id": "slot_1.raw_inventory.bow",
+          "label": "Bow code",
+          "offset": 832,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_1.raw_inventory.boomerang",
+          "label": "Boomerang code",
+          "offset": 833,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_1.raw_inventory.mushroom_powder",
+          "label": "Mushroom or powder code",
+          "offset": 836,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_1.raw_inventory.flute",
+          "label": "Flute code",
+          "offset": 844,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_1.raw_inventory.mirror",
+          "label": "Magic mirror code",
+          "offset": 851,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_1.raw_magic.consumption",
+          "label": "Magic consumption code",
+          "offset": 891,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_1.raw_equipment.sword",
+          "label": "Sword code",
+          "offset": 857,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_1.raw_equipment.shield",
+          "label": "Shield code",
+          "offset": 858,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_1.raw_equipment.armor",
+          "label": "Armor code",
+          "offset": 859,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_1.raw_equipment.gloves",
+          "label": "Gloves code",
+          "offset": 852,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_1.raw_progress.game_state",
+          "label": "Game state code",
+          "offset": 965,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_1.raw_progress.map_icon",
+          "label": "Map guidance icon code",
+          "offset": 967,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_1.raw_progress.spawn_point",
+          "label": "Spawn point code",
+          "offset": 968,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_1.raw_progress.save_world",
+          "label": "Saved world code",
+          "offset": 970,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_1.raw_inventory.bottle_1",
+          "label": "Bottle 1 contents code",
+          "offset": 860,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.raw_inventory.bottle_2",
+          "label": "Bottle 2 contents code",
+          "offset": 861,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.raw_inventory.bottle_3",
+          "label": "Bottle 3 contents code",
+          "offset": 862,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.raw_inventory.bottle_4",
+          "label": "Bottle 4 contents code",
+          "offset": 863,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.raw_name.glyph_1",
+          "label": "Name glyph 1 code",
+          "offset": 985,
+          "type": "u16_le",
+          "description": "Original English naming-screen glyph code, not Unicode."
+        },
+        {
+          "id": "slot_1.raw_name.glyph_2",
+          "label": "Name glyph 2 code",
+          "offset": 987,
+          "type": "u16_le",
+          "description": "Original English naming-screen glyph code, not Unicode."
+        },
+        {
+          "id": "slot_1.raw_name.glyph_3",
+          "label": "Name glyph 3 code",
+          "offset": 989,
+          "type": "u16_le",
+          "description": "Original English naming-screen glyph code, not Unicode."
+        },
+        {
+          "id": "slot_1.raw_name.glyph_4",
+          "label": "Name glyph 4 code",
+          "offset": 991,
+          "type": "u16_le",
+          "description": "Original English naming-screen glyph code, not Unicode."
+        },
+        {
+          "id": "slot_1.raw_name.glyph_5",
+          "label": "Name glyph 5 code",
+          "offset": 993,
+          "type": "u16_le",
+          "description": "Original English naming-screen glyph code, not Unicode."
+        },
+        {
+          "id": "slot_1.raw_name.glyph_6",
+          "label": "Name glyph 6 code",
+          "offset": 995,
+          "type": "u16_le",
+          "description": "Original English naming-screen glyph code, not Unicode."
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "sum16_le",
+          "unit": "u16_le",
+          "start": 0,
+          "length": 1278,
+          "offset": 1278,
+          "target": 23130
+        }
+      ],
+      "mirrors": [
+        {
+          "source": 0,
+          "target": 3840,
+          "length": 1280,
+          "validate": false
+        }
+      ],
+      "generation": {
+        "fill": 0,
+        "patches": [
+          {
+            "offset": 524,
+            "bytes": [0, 240, 0, 240]
+          },
+          {
+            "offset": 876,
+            "bytes": [24, 24]
+          },
+          {
+            "offset": 889,
+            "bytes": [248]
+          },
+          {
+            "offset": 985,
+            "bytes": [11, 0, 8, 0, 13, 0, 10, 0, 169, 0, 169, 0]
+          },
+          {
+            "offset": 997,
+            "bytes": [170, 85]
+          },
+          {
+            "offset": 1029,
+            "bytes": [255, 255]
+          }
+        ]
+      }
+    },
+    {
+      "id": "zelda-a-link-to-the-past-file-2-schema",
+      "name": "The Legend of Zelda: A Link to the Past (File 2 schema)",
+      "platform": "snes",
+      "description": "Edits File 2 and its backup, including raw name glyphs and inventory/equipment/progression codes. Preserves other files. Numeric storage ranges do not prove playable combinations.",
+      "save_size": 8192,
+      "fields": [
+        {
+          "id": "slot_2.resources.bombs",
+          "label": "Bombs",
+          "offset": 2115,
+          "type": "u8",
+          "description": "Bombs carried by the player"
+        },
+        {
+          "id": "slot_2.resources.arrows",
+          "label": "Arrows",
+          "offset": 2167,
+          "type": "u8",
+          "description": "Arrows carried by the player"
+        },
+        {
+          "id": "slot_2.hearts.capacity_eighths",
+          "label": "Heart capacity (eighths)",
+          "offset": 2156,
+          "type": "u8",
+          "description": "Maximum health; eight units equal one heart"
+        },
+        {
+          "id": "slot_2.hearts.current_eighths",
+          "label": "Current health (eighths)",
+          "offset": 2157,
+          "type": "u8",
+          "description": "Current health; eight units equal one heart"
+        },
+        {
+          "id": "slot_2.magic.current",
+          "label": "Current magic",
+          "offset": 2158,
+          "type": "u8",
+          "description": "Current magic power"
+        },
+        {
+          "id": "slot_2.resources.bomb_capacity_upgrades",
+          "label": "Bomb capacity upgrades",
+          "offset": 2160,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.resources.arrow_capacity_upgrades",
+          "label": "Arrow capacity upgrades",
+          "offset": 2161,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.progress.heart_pieces",
+          "label": "Heart pieces toward next container",
+          "offset": 2155,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.inventory.hookshot",
+          "label": "Hookshot",
+          "offset": 2114,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_2.inventory.fire_rod",
+          "label": "Fire Rod",
+          "offset": 2117,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_2.inventory.ice_rod",
+          "label": "Ice Rod",
+          "offset": 2118,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_2.inventory.bombos",
+          "label": "Bombos",
+          "offset": 2119,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_2.inventory.ether",
+          "label": "Ether",
+          "offset": 2120,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_2.inventory.quake",
+          "label": "Quake",
+          "offset": 2121,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_2.inventory.lantern",
+          "label": "Lantern",
+          "offset": 2122,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_2.inventory.hammer",
+          "label": "Hammer",
+          "offset": 2123,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_2.inventory.bug_net",
+          "label": "Bug-Catching Net",
+          "offset": 2125,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_2.inventory.book_of_mudora",
+          "label": "Book of Mudora",
+          "offset": 2126,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_2.inventory.cane_of_somaria",
+          "label": "Cane of Somaria",
+          "offset": 2128,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_2.inventory.cane_of_byrna",
+          "label": "Cane of Byrna",
+          "offset": 2129,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_2.inventory.cape",
+          "label": "Magic Cape",
+          "offset": 2130,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_2.inventory.pegasus_boots",
+          "label": "Pegasus Boots",
+          "offset": 2133,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_2.inventory.flippers",
+          "label": "Zora's Flippers",
+          "offset": 2134,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_2.inventory.moon_pearl",
+          "label": "Moon Pearl",
+          "offset": 2135,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_2.progress.pendant_1",
+          "label": "Pendant 1",
+          "offset": 2164,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.progress.pendant_2",
+          "label": "Pendant 2",
+          "offset": 2164,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.progress.pendant_3",
+          "label": "Pendant 3",
+          "offset": 2164,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.progress.crystal_1",
+          "label": "Crystal 1",
+          "offset": 2170,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.progress.crystal_2",
+          "label": "Crystal 2",
+          "offset": 2170,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.progress.crystal_3",
+          "label": "Crystal 3",
+          "offset": 2170,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.progress.crystal_4",
+          "label": "Crystal 4",
+          "offset": 2170,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.progress.crystal_5",
+          "label": "Crystal 5",
+          "offset": 2170,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.progress.crystal_6",
+          "label": "Crystal 6",
+          "offset": 2170,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.progress.crystal_7",
+          "label": "Crystal 7",
+          "offset": 2170,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.progress.dungeons.sewers.compass",
+          "label": "sewers compass",
+          "offset": 2148,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.progress.dungeons.sewers.big_key",
+          "label": "sewers big_key",
+          "offset": 2150,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.progress.dungeons.sewers.map",
+          "label": "sewers map",
+          "offset": 2152,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.progress.dungeons.sewers.keys_earned",
+          "label": "sewers keys earned",
+          "offset": 2172,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.progress.dungeons.hyrule_castle.compass",
+          "label": "hyrule_castle compass",
+          "offset": 2148,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.progress.dungeons.hyrule_castle.big_key",
+          "label": "hyrule_castle big_key",
+          "offset": 2150,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.progress.dungeons.hyrule_castle.map",
+          "label": "hyrule_castle map",
+          "offset": 2152,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.progress.dungeons.hyrule_castle.keys_earned",
+          "label": "hyrule_castle keys earned",
+          "offset": 2173,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.progress.dungeons.eastern_palace.compass",
+          "label": "eastern_palace compass",
+          "offset": 2148,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.progress.dungeons.eastern_palace.big_key",
+          "label": "eastern_palace big_key",
+          "offset": 2150,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.progress.dungeons.eastern_palace.map",
+          "label": "eastern_palace map",
+          "offset": 2152,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.progress.dungeons.eastern_palace.keys_earned",
+          "label": "eastern_palace keys earned",
+          "offset": 2174,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.progress.dungeons.desert_palace.compass",
+          "label": "desert_palace compass",
+          "offset": 2148,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.progress.dungeons.desert_palace.big_key",
+          "label": "desert_palace big_key",
+          "offset": 2150,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.progress.dungeons.desert_palace.map",
+          "label": "desert_palace map",
+          "offset": 2152,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.progress.dungeons.desert_palace.keys_earned",
+          "label": "desert_palace keys earned",
+          "offset": 2175,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.progress.dungeons.agahnims_tower.compass",
+          "label": "agahnims_tower compass",
+          "offset": 2148,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.progress.dungeons.agahnims_tower.big_key",
+          "label": "agahnims_tower big_key",
+          "offset": 2150,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.progress.dungeons.agahnims_tower.map",
+          "label": "agahnims_tower map",
+          "offset": 2152,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.progress.dungeons.agahnims_tower.keys_earned",
+          "label": "agahnims_tower keys earned",
+          "offset": 2176,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.progress.dungeons.swamp_palace.compass",
+          "label": "swamp_palace compass",
+          "offset": 2148,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.progress.dungeons.swamp_palace.big_key",
+          "label": "swamp_palace big_key",
+          "offset": 2150,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.progress.dungeons.swamp_palace.map",
+          "label": "swamp_palace map",
+          "offset": 2152,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.progress.dungeons.swamp_palace.keys_earned",
+          "label": "swamp_palace keys earned",
+          "offset": 2177,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.progress.dungeons.palace_of_darkness.compass",
+          "label": "palace_of_darkness compass",
+          "offset": 2148,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.progress.dungeons.palace_of_darkness.big_key",
+          "label": "palace_of_darkness big_key",
+          "offset": 2150,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.progress.dungeons.palace_of_darkness.map",
+          "label": "palace_of_darkness map",
+          "offset": 2152,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.progress.dungeons.palace_of_darkness.keys_earned",
+          "label": "palace_of_darkness keys earned",
+          "offset": 2178,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.progress.dungeons.misery_mire.compass",
+          "label": "misery_mire compass",
+          "offset": 2148,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.progress.dungeons.misery_mire.big_key",
+          "label": "misery_mire big_key",
+          "offset": 2150,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.progress.dungeons.misery_mire.map",
+          "label": "misery_mire map",
+          "offset": 2152,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.progress.dungeons.misery_mire.keys_earned",
+          "label": "misery_mire keys earned",
+          "offset": 2179,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.progress.dungeons.skull_woods.compass",
+          "label": "skull_woods compass",
+          "offset": 2149,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.progress.dungeons.skull_woods.big_key",
+          "label": "skull_woods big_key",
+          "offset": 2151,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.progress.dungeons.skull_woods.map",
+          "label": "skull_woods map",
+          "offset": 2153,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.progress.dungeons.skull_woods.keys_earned",
+          "label": "skull_woods keys earned",
+          "offset": 2180,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.progress.dungeons.ice_palace.compass",
+          "label": "ice_palace compass",
+          "offset": 2149,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.progress.dungeons.ice_palace.big_key",
+          "label": "ice_palace big_key",
+          "offset": 2151,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.progress.dungeons.ice_palace.map",
+          "label": "ice_palace map",
+          "offset": 2153,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.progress.dungeons.ice_palace.keys_earned",
+          "label": "ice_palace keys earned",
+          "offset": 2181,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.progress.dungeons.tower_of_hera.compass",
+          "label": "tower_of_hera compass",
+          "offset": 2149,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.progress.dungeons.tower_of_hera.big_key",
+          "label": "tower_of_hera big_key",
+          "offset": 2151,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.progress.dungeons.tower_of_hera.map",
+          "label": "tower_of_hera map",
+          "offset": 2153,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.progress.dungeons.tower_of_hera.keys_earned",
+          "label": "tower_of_hera keys earned",
+          "offset": 2182,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.progress.dungeons.thieves_town.compass",
+          "label": "thieves_town compass",
+          "offset": 2149,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.progress.dungeons.thieves_town.big_key",
+          "label": "thieves_town big_key",
+          "offset": 2151,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.progress.dungeons.thieves_town.map",
+          "label": "thieves_town map",
+          "offset": 2153,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.progress.dungeons.thieves_town.keys_earned",
+          "label": "thieves_town keys earned",
+          "offset": 2183,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.progress.dungeons.turtle_rock.compass",
+          "label": "turtle_rock compass",
+          "offset": 2149,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.progress.dungeons.turtle_rock.big_key",
+          "label": "turtle_rock big_key",
+          "offset": 2151,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.progress.dungeons.turtle_rock.map",
+          "label": "turtle_rock map",
+          "offset": 2153,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.progress.dungeons.turtle_rock.keys_earned",
+          "label": "turtle_rock keys earned",
+          "offset": 2184,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.progress.dungeons.ganons_tower.compass",
+          "label": "ganons_tower compass",
+          "offset": 2149,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.progress.dungeons.ganons_tower.big_key",
+          "label": "ganons_tower big_key",
+          "offset": 2151,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.progress.dungeons.ganons_tower.map",
+          "label": "ganons_tower map",
+          "offset": 2153,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.progress.dungeons.ganons_tower.keys_earned",
+          "label": "ganons_tower keys earned",
+          "offset": 2185,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.progress.early_story.uncle_secret_passage",
+          "label": "uncle_secret_passage",
+          "offset": 2246,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.progress.early_story.sanctuary_priest",
+          "label": "sanctuary_priest",
+          "offset": 2246,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.progress.early_story.zelda_sanctuary",
+          "label": "zelda_sanctuary",
+          "offset": 2246,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.progress.early_story.uncle_left_house",
+          "label": "uncle_left_house",
+          "offset": 2246,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.progress.early_story.book_progress",
+          "label": "book_progress",
+          "offset": 2246,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.progress.early_story.fortune_teller_variant",
+          "label": "fortune_teller_variant",
+          "offset": 2246,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.progress.side_quests.smith_tempering",
+          "label": "smith_tempering",
+          "offset": 2249,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.progress.side_quests.swordsmith_rescued",
+          "label": "swordsmith_rescued",
+          "offset": 2249,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.progress.side_quests.purple_chest_opened",
+          "label": "purple_chest_opened",
+          "offset": 2249,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.progress.side_quests.stumpy_stumped",
+          "label": "stumpy_stumped",
+          "offset": 2249,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.progress.side_quests.bottle_purchased",
+          "label": "bottle_purchased",
+          "offset": 2249,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.progress.side_quests.hobo_bottle",
+          "label": "hobo_bottle",
+          "offset": 2249,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.resources.rupees",
+          "label": "Rupees",
+          "offset": 2146,
+          "copies": [2144],
+          "type": "u16_le",
+          "description": "Updates both rupee values stored by the game."
+        },
+        {
+          "id": "slot_2.raw_inventory.bow",
+          "label": "Bow code",
+          "offset": 2112,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_2.raw_inventory.boomerang",
+          "label": "Boomerang code",
+          "offset": 2113,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_2.raw_inventory.mushroom_powder",
+          "label": "Mushroom or powder code",
+          "offset": 2116,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_2.raw_inventory.flute",
+          "label": "Flute code",
+          "offset": 2124,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_2.raw_inventory.mirror",
+          "label": "Magic mirror code",
+          "offset": 2131,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_2.raw_magic.consumption",
+          "label": "Magic consumption code",
+          "offset": 2171,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_2.raw_equipment.sword",
+          "label": "Sword code",
+          "offset": 2137,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_2.raw_equipment.shield",
+          "label": "Shield code",
+          "offset": 2138,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_2.raw_equipment.armor",
+          "label": "Armor code",
+          "offset": 2139,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_2.raw_equipment.gloves",
+          "label": "Gloves code",
+          "offset": 2132,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_2.raw_progress.game_state",
+          "label": "Game state code",
+          "offset": 2245,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_2.raw_progress.map_icon",
+          "label": "Map guidance icon code",
+          "offset": 2247,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_2.raw_progress.spawn_point",
+          "label": "Spawn point code",
+          "offset": 2248,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_2.raw_progress.save_world",
+          "label": "Saved world code",
+          "offset": 2250,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_2.raw_inventory.bottle_1",
+          "label": "Bottle 1 contents code",
+          "offset": 2140,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.raw_inventory.bottle_2",
+          "label": "Bottle 2 contents code",
+          "offset": 2141,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.raw_inventory.bottle_3",
+          "label": "Bottle 3 contents code",
+          "offset": 2142,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.raw_inventory.bottle_4",
+          "label": "Bottle 4 contents code",
+          "offset": 2143,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.raw_name.glyph_1",
+          "label": "Name glyph 1 code",
+          "offset": 2265,
+          "type": "u16_le",
+          "description": "Original English naming-screen glyph code, not Unicode."
+        },
+        {
+          "id": "slot_2.raw_name.glyph_2",
+          "label": "Name glyph 2 code",
+          "offset": 2267,
+          "type": "u16_le",
+          "description": "Original English naming-screen glyph code, not Unicode."
+        },
+        {
+          "id": "slot_2.raw_name.glyph_3",
+          "label": "Name glyph 3 code",
+          "offset": 2269,
+          "type": "u16_le",
+          "description": "Original English naming-screen glyph code, not Unicode."
+        },
+        {
+          "id": "slot_2.raw_name.glyph_4",
+          "label": "Name glyph 4 code",
+          "offset": 2271,
+          "type": "u16_le",
+          "description": "Original English naming-screen glyph code, not Unicode."
+        },
+        {
+          "id": "slot_2.raw_name.glyph_5",
+          "label": "Name glyph 5 code",
+          "offset": 2273,
+          "type": "u16_le",
+          "description": "Original English naming-screen glyph code, not Unicode."
+        },
+        {
+          "id": "slot_2.raw_name.glyph_6",
+          "label": "Name glyph 6 code",
+          "offset": 2275,
+          "type": "u16_le",
+          "description": "Original English naming-screen glyph code, not Unicode."
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "sum16_le",
+          "unit": "u16_le",
+          "start": 1280,
+          "length": 1278,
+          "offset": 2558,
+          "target": 23130
+        }
+      ],
+      "mirrors": [
+        {
+          "source": 1280,
+          "target": 5120,
+          "length": 1280,
+          "validate": false
+        }
+      ]
+    },
+    {
+      "id": "zelda-a-link-to-the-past-file-3-schema",
+      "name": "The Legend of Zelda: A Link to the Past (File 3 schema)",
+      "platform": "snes",
+      "description": "Edits File 3 and its backup, including raw name glyphs and inventory/equipment/progression codes. Preserves other files. Numeric storage ranges do not prove playable combinations.",
+      "save_size": 8192,
+      "fields": [
+        {
+          "id": "slot_3.resources.bombs",
+          "label": "Bombs",
+          "offset": 3395,
+          "type": "u8",
+          "description": "Bombs carried by the player"
+        },
+        {
+          "id": "slot_3.resources.arrows",
+          "label": "Arrows",
+          "offset": 3447,
+          "type": "u8",
+          "description": "Arrows carried by the player"
+        },
+        {
+          "id": "slot_3.hearts.capacity_eighths",
+          "label": "Heart capacity (eighths)",
+          "offset": 3436,
+          "type": "u8",
+          "description": "Maximum health; eight units equal one heart"
+        },
+        {
+          "id": "slot_3.hearts.current_eighths",
+          "label": "Current health (eighths)",
+          "offset": 3437,
+          "type": "u8",
+          "description": "Current health; eight units equal one heart"
+        },
+        {
+          "id": "slot_3.magic.current",
+          "label": "Current magic",
+          "offset": 3438,
+          "type": "u8",
+          "description": "Current magic power"
+        },
+        {
+          "id": "slot_3.resources.bomb_capacity_upgrades",
+          "label": "Bomb capacity upgrades",
+          "offset": 3440,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.resources.arrow_capacity_upgrades",
+          "label": "Arrow capacity upgrades",
+          "offset": 3441,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.progress.heart_pieces",
+          "label": "Heart pieces toward next container",
+          "offset": 3435,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.inventory.hookshot",
+          "label": "Hookshot",
+          "offset": 3394,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_3.inventory.fire_rod",
+          "label": "Fire Rod",
+          "offset": 3397,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_3.inventory.ice_rod",
+          "label": "Ice Rod",
+          "offset": 3398,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_3.inventory.bombos",
+          "label": "Bombos",
+          "offset": 3399,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_3.inventory.ether",
+          "label": "Ether",
+          "offset": 3400,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_3.inventory.quake",
+          "label": "Quake",
+          "offset": 3401,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_3.inventory.lantern",
+          "label": "Lantern",
+          "offset": 3402,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_3.inventory.hammer",
+          "label": "Hammer",
+          "offset": 3403,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_3.inventory.bug_net",
+          "label": "Bug-Catching Net",
+          "offset": 3405,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_3.inventory.book_of_mudora",
+          "label": "Book of Mudora",
+          "offset": 3406,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_3.inventory.cane_of_somaria",
+          "label": "Cane of Somaria",
+          "offset": 3408,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_3.inventory.cane_of_byrna",
+          "label": "Cane of Byrna",
+          "offset": 3409,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_3.inventory.cape",
+          "label": "Magic Cape",
+          "offset": 3410,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_3.inventory.pegasus_boots",
+          "label": "Pegasus Boots",
+          "offset": 3413,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_3.inventory.flippers",
+          "label": "Zora's Flippers",
+          "offset": 3414,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_3.inventory.moon_pearl",
+          "label": "Moon Pearl",
+          "offset": 3415,
+          "type": "bool",
+          "description": "Inventory item"
+        },
+        {
+          "id": "slot_3.progress.pendant_1",
+          "label": "Pendant 1",
+          "offset": 3444,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.progress.pendant_2",
+          "label": "Pendant 2",
+          "offset": 3444,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.progress.pendant_3",
+          "label": "Pendant 3",
+          "offset": 3444,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.progress.crystal_1",
+          "label": "Crystal 1",
+          "offset": 3450,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.progress.crystal_2",
+          "label": "Crystal 2",
+          "offset": 3450,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.progress.crystal_3",
+          "label": "Crystal 3",
+          "offset": 3450,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.progress.crystal_4",
+          "label": "Crystal 4",
+          "offset": 3450,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.progress.crystal_5",
+          "label": "Crystal 5",
+          "offset": 3450,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.progress.crystal_6",
+          "label": "Crystal 6",
+          "offset": 3450,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.progress.crystal_7",
+          "label": "Crystal 7",
+          "offset": 3450,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.progress.dungeons.sewers.compass",
+          "label": "sewers compass",
+          "offset": 3428,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.progress.dungeons.sewers.big_key",
+          "label": "sewers big_key",
+          "offset": 3430,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.progress.dungeons.sewers.map",
+          "label": "sewers map",
+          "offset": 3432,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.progress.dungeons.sewers.keys_earned",
+          "label": "sewers keys earned",
+          "offset": 3452,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.progress.dungeons.hyrule_castle.compass",
+          "label": "hyrule_castle compass",
+          "offset": 3428,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.progress.dungeons.hyrule_castle.big_key",
+          "label": "hyrule_castle big_key",
+          "offset": 3430,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.progress.dungeons.hyrule_castle.map",
+          "label": "hyrule_castle map",
+          "offset": 3432,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.progress.dungeons.hyrule_castle.keys_earned",
+          "label": "hyrule_castle keys earned",
+          "offset": 3453,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.progress.dungeons.eastern_palace.compass",
+          "label": "eastern_palace compass",
+          "offset": 3428,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.progress.dungeons.eastern_palace.big_key",
+          "label": "eastern_palace big_key",
+          "offset": 3430,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.progress.dungeons.eastern_palace.map",
+          "label": "eastern_palace map",
+          "offset": 3432,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.progress.dungeons.eastern_palace.keys_earned",
+          "label": "eastern_palace keys earned",
+          "offset": 3454,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.progress.dungeons.desert_palace.compass",
+          "label": "desert_palace compass",
+          "offset": 3428,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.progress.dungeons.desert_palace.big_key",
+          "label": "desert_palace big_key",
+          "offset": 3430,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.progress.dungeons.desert_palace.map",
+          "label": "desert_palace map",
+          "offset": 3432,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.progress.dungeons.desert_palace.keys_earned",
+          "label": "desert_palace keys earned",
+          "offset": 3455,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.progress.dungeons.agahnims_tower.compass",
+          "label": "agahnims_tower compass",
+          "offset": 3428,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.progress.dungeons.agahnims_tower.big_key",
+          "label": "agahnims_tower big_key",
+          "offset": 3430,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.progress.dungeons.agahnims_tower.map",
+          "label": "agahnims_tower map",
+          "offset": 3432,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.progress.dungeons.agahnims_tower.keys_earned",
+          "label": "agahnims_tower keys earned",
+          "offset": 3456,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.progress.dungeons.swamp_palace.compass",
+          "label": "swamp_palace compass",
+          "offset": 3428,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.progress.dungeons.swamp_palace.big_key",
+          "label": "swamp_palace big_key",
+          "offset": 3430,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.progress.dungeons.swamp_palace.map",
+          "label": "swamp_palace map",
+          "offset": 3432,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.progress.dungeons.swamp_palace.keys_earned",
+          "label": "swamp_palace keys earned",
+          "offset": 3457,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.progress.dungeons.palace_of_darkness.compass",
+          "label": "palace_of_darkness compass",
+          "offset": 3428,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.progress.dungeons.palace_of_darkness.big_key",
+          "label": "palace_of_darkness big_key",
+          "offset": 3430,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.progress.dungeons.palace_of_darkness.map",
+          "label": "palace_of_darkness map",
+          "offset": 3432,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.progress.dungeons.palace_of_darkness.keys_earned",
+          "label": "palace_of_darkness keys earned",
+          "offset": 3458,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.progress.dungeons.misery_mire.compass",
+          "label": "misery_mire compass",
+          "offset": 3428,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.progress.dungeons.misery_mire.big_key",
+          "label": "misery_mire big_key",
+          "offset": 3430,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.progress.dungeons.misery_mire.map",
+          "label": "misery_mire map",
+          "offset": 3432,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.progress.dungeons.misery_mire.keys_earned",
+          "label": "misery_mire keys earned",
+          "offset": 3459,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.progress.dungeons.skull_woods.compass",
+          "label": "skull_woods compass",
+          "offset": 3429,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.progress.dungeons.skull_woods.big_key",
+          "label": "skull_woods big_key",
+          "offset": 3431,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.progress.dungeons.skull_woods.map",
+          "label": "skull_woods map",
+          "offset": 3433,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.progress.dungeons.skull_woods.keys_earned",
+          "label": "skull_woods keys earned",
+          "offset": 3460,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.progress.dungeons.ice_palace.compass",
+          "label": "ice_palace compass",
+          "offset": 3429,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.progress.dungeons.ice_palace.big_key",
+          "label": "ice_palace big_key",
+          "offset": 3431,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.progress.dungeons.ice_palace.map",
+          "label": "ice_palace map",
+          "offset": 3433,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.progress.dungeons.ice_palace.keys_earned",
+          "label": "ice_palace keys earned",
+          "offset": 3461,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.progress.dungeons.tower_of_hera.compass",
+          "label": "tower_of_hera compass",
+          "offset": 3429,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.progress.dungeons.tower_of_hera.big_key",
+          "label": "tower_of_hera big_key",
+          "offset": 3431,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.progress.dungeons.tower_of_hera.map",
+          "label": "tower_of_hera map",
+          "offset": 3433,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.progress.dungeons.tower_of_hera.keys_earned",
+          "label": "tower_of_hera keys earned",
+          "offset": 3462,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.progress.dungeons.thieves_town.compass",
+          "label": "thieves_town compass",
+          "offset": 3429,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.progress.dungeons.thieves_town.big_key",
+          "label": "thieves_town big_key",
+          "offset": 3431,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.progress.dungeons.thieves_town.map",
+          "label": "thieves_town map",
+          "offset": 3433,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.progress.dungeons.thieves_town.keys_earned",
+          "label": "thieves_town keys earned",
+          "offset": 3463,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.progress.dungeons.turtle_rock.compass",
+          "label": "turtle_rock compass",
+          "offset": 3429,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.progress.dungeons.turtle_rock.big_key",
+          "label": "turtle_rock big_key",
+          "offset": 3431,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.progress.dungeons.turtle_rock.map",
+          "label": "turtle_rock map",
+          "offset": 3433,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.progress.dungeons.turtle_rock.keys_earned",
+          "label": "turtle_rock keys earned",
+          "offset": 3464,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.progress.dungeons.ganons_tower.compass",
+          "label": "ganons_tower compass",
+          "offset": 3429,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.progress.dungeons.ganons_tower.big_key",
+          "label": "ganons_tower big_key",
+          "offset": 3431,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.progress.dungeons.ganons_tower.map",
+          "label": "ganons_tower map",
+          "offset": 3433,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.progress.dungeons.ganons_tower.keys_earned",
+          "label": "ganons_tower keys earned",
+          "offset": 3465,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.progress.early_story.uncle_secret_passage",
+          "label": "uncle_secret_passage",
+          "offset": 3526,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.progress.early_story.sanctuary_priest",
+          "label": "sanctuary_priest",
+          "offset": 3526,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.progress.early_story.zelda_sanctuary",
+          "label": "zelda_sanctuary",
+          "offset": 3526,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.progress.early_story.uncle_left_house",
+          "label": "uncle_left_house",
+          "offset": 3526,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.progress.early_story.book_progress",
+          "label": "book_progress",
+          "offset": 3526,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.progress.early_story.fortune_teller_variant",
+          "label": "fortune_teller_variant",
+          "offset": 3526,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.progress.side_quests.smith_tempering",
+          "label": "smith_tempering",
+          "offset": 3529,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.progress.side_quests.swordsmith_rescued",
+          "label": "swordsmith_rescued",
+          "offset": 3529,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.progress.side_quests.purple_chest_opened",
+          "label": "purple_chest_opened",
+          "offset": 3529,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.progress.side_quests.stumpy_stumped",
+          "label": "stumpy_stumped",
+          "offset": 3529,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.progress.side_quests.bottle_purchased",
+          "label": "bottle_purchased",
+          "offset": 3529,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.progress.side_quests.hobo_bottle",
+          "label": "hobo_bottle",
+          "offset": 3529,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.resources.rupees",
+          "label": "Rupees",
+          "offset": 3426,
+          "copies": [3424],
+          "type": "u16_le",
+          "description": "Updates both rupee values stored by the game."
+        },
+        {
+          "id": "slot_3.raw_inventory.bow",
+          "label": "Bow code",
+          "offset": 3392,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_3.raw_inventory.boomerang",
+          "label": "Boomerang code",
+          "offset": 3393,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_3.raw_inventory.mushroom_powder",
+          "label": "Mushroom or powder code",
+          "offset": 3396,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_3.raw_inventory.flute",
+          "label": "Flute code",
+          "offset": 3404,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_3.raw_inventory.mirror",
+          "label": "Magic mirror code",
+          "offset": 3411,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_3.raw_magic.consumption",
+          "label": "Magic consumption code",
+          "offset": 3451,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_3.raw_equipment.sword",
+          "label": "Sword code",
+          "offset": 3417,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_3.raw_equipment.shield",
+          "label": "Shield code",
+          "offset": 3418,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_3.raw_equipment.armor",
+          "label": "Armor code",
+          "offset": 3419,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_3.raw_equipment.gloves",
+          "label": "Gloves code",
+          "offset": 3412,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_3.raw_progress.game_state",
+          "label": "Game state code",
+          "offset": 3525,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_3.raw_progress.map_icon",
+          "label": "Map guidance icon code",
+          "offset": 3527,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_3.raw_progress.spawn_point",
+          "label": "Spawn point code",
+          "offset": 3528,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_3.raw_progress.save_world",
+          "label": "Saved world code",
+          "offset": 3530,
+          "type": "u8",
+          "description": "Raw stored code; not every numeric value is a playable game state."
+        },
+        {
+          "id": "slot_3.raw_inventory.bottle_1",
+          "label": "Bottle 1 contents code",
+          "offset": 3420,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.raw_inventory.bottle_2",
+          "label": "Bottle 2 contents code",
+          "offset": 3421,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.raw_inventory.bottle_3",
+          "label": "Bottle 3 contents code",
+          "offset": 3422,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.raw_inventory.bottle_4",
+          "label": "Bottle 4 contents code",
+          "offset": 3423,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.raw_name.glyph_1",
+          "label": "Name glyph 1 code",
+          "offset": 3545,
+          "type": "u16_le",
+          "description": "Original English naming-screen glyph code, not Unicode."
+        },
+        {
+          "id": "slot_3.raw_name.glyph_2",
+          "label": "Name glyph 2 code",
+          "offset": 3547,
+          "type": "u16_le",
+          "description": "Original English naming-screen glyph code, not Unicode."
+        },
+        {
+          "id": "slot_3.raw_name.glyph_3",
+          "label": "Name glyph 3 code",
+          "offset": 3549,
+          "type": "u16_le",
+          "description": "Original English naming-screen glyph code, not Unicode."
+        },
+        {
+          "id": "slot_3.raw_name.glyph_4",
+          "label": "Name glyph 4 code",
+          "offset": 3551,
+          "type": "u16_le",
+          "description": "Original English naming-screen glyph code, not Unicode."
+        },
+        {
+          "id": "slot_3.raw_name.glyph_5",
+          "label": "Name glyph 5 code",
+          "offset": 3553,
+          "type": "u16_le",
+          "description": "Original English naming-screen glyph code, not Unicode."
+        },
+        {
+          "id": "slot_3.raw_name.glyph_6",
+          "label": "Name glyph 6 code",
+          "offset": 3555,
+          "type": "u16_le",
+          "description": "Original English naming-screen glyph code, not Unicode."
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "sum16_le",
+          "unit": "u16_le",
+          "start": 2560,
+          "length": 1278,
+          "offset": 3838,
+          "target": 23130
+        }
+      ],
+      "mirrors": [
+        {
+          "source": 2560,
+          "target": 6400,
+          "length": 1280,
+          "validate": false
+        }
+      ]
+    }
+  ]
+}

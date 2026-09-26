@@ -4,6 +4,9 @@ mod pokemon_gen1;
 mod pokemon_gen2;
 mod pokemon_gen3;
 mod pokemon_gen4;
+mod pokemon_gen5;
+mod schema;
+mod super_mario_world;
 mod zelda_alttp;
 
 use std::borrow::Cow;
@@ -23,6 +26,9 @@ pub use pokemon_gen1::PokemonGen1Handler;
 pub use pokemon_gen2::PokemonGen2Handler;
 pub use pokemon_gen3::PokemonGen3Handler;
 pub use pokemon_gen4::PokemonGen4Handler;
+pub use pokemon_gen5::PokemonGen5Handler;
+pub use schema::{SaveSchemaPack, SchemaSaveHandler};
+pub use super_mario_world::SuperMarioWorldHandler;
 pub use zelda_alttp::ZeldaAlttpHandler;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -312,6 +318,8 @@ impl Default for SaveGameRegistry {
                 Box::new(PokemonGen4Handler),
                 Box::new(ZeldaAlttpHandler),
                 Box::new(PokemonGen1Handler),
+                Box::new(PokemonGen5Handler),
+                Box::new(SuperMarioWorldHandler),
             ],
         }
     }
@@ -325,6 +333,28 @@ impl SaveGameRegistry {
     pub fn with_handler(mut self, handler: impl SaveGameHandler + 'static) -> Self {
         self.handlers.push(Box::new(handler));
         self
+    }
+
+    /// Loads a data-only schema pack without replacing registered game handlers.
+    pub fn with_schema_pack_json(mut self, bytes: &[u8]) -> Result<Self> {
+        let pack = SaveSchemaPack::from_json(bytes)?;
+        let mut ids = self
+            .definitions()
+            .into_iter()
+            .map(|definition| definition.identity.id)
+            .collect::<std::collections::HashSet<_>>();
+        for handler in pack.into_handlers() {
+            for definition in handler.definitions() {
+                if !ids.insert(definition.identity.id) {
+                    return Err(validation(
+                        "save_schema_duplicate_game",
+                        "the schema pack repeats a registered game ID; use a distinct ID",
+                    ));
+                }
+            }
+            self.handlers.push(Box::new(handler));
+        }
+        Ok(self)
     }
 
     pub fn definitions(&self) -> Vec<SaveGameDefinition> {
@@ -631,3 +661,19 @@ fn validation(code: &'static str, message: &'static str) -> RomWeaverError {
 #[cfg(test)]
 #[path = "../../tests/unit/save.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "../../tests/unit/schema_catalog_existing.rs"]
+mod schema_catalog_existing_tests;
+
+#[cfg(test)]
+#[path = "../../tests/unit/schema_catalog_handheld.rs"]
+mod schema_catalog_handheld_tests;
+
+#[cfg(test)]
+#[path = "../../tests/unit/schema_catalog_console.rs"]
+mod schema_catalog_console_tests;
+
+#[cfg(test)]
+#[path = "../../tests/unit/schema_catalog.rs"]
+mod schema_catalog_tests;

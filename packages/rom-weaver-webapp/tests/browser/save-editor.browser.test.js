@@ -8,6 +8,7 @@ import "../../src/webapp/design-system/index.css";
 const mocks = vi.hoisted(() => ({
   identifySave: vi.fn(),
   inspectSave: vi.fn(),
+  listSaveGames: vi.fn(),
   listEmulatorSaves: vi.fn(),
   previewSaveFields: vi.fn(),
   replaceEmulatorSaveSram: vi.fn(),
@@ -122,6 +123,7 @@ beforeEach(() => {
   mocks.listEmulatorSaves.mockResolvedValue([]);
   mocks.identifySave.mockResolvedValue(recognized());
   mocks.inspectSave.mockResolvedValue(documentResult());
+  mocks.listSaveGames.mockResolvedValue({ games: [], generationGames: [] });
   mocks.previewSaveFields.mockResolvedValue({
     preview: {
       changed: true,
@@ -151,6 +153,16 @@ test("loads a recognized local save with generic grouped fields", async () => {
   await expect.element(page.getByRole("group", { name: "progress" })).toBeInTheDocument();
   await expect.element(page.getByLabelText("Money", { exact: true })).toHaveValue(5000);
   await expect.element(page.getByLabelText("Badge 1", { exact: true })).toHaveTextContent("1");
+});
+
+test("loads and clears a local save schema pack", async () => {
+  await expect.element(page.getByRole("button", { name: "Load schema pack" })).toBeVisible();
+  const schema = new File(["{}"], "custom-saves.json", { type: "application/json" });
+  await page.getByLabelText("Save schema pack").upload(schema);
+  await expect.element(page.getByText("custom-saves.json")).toBeInTheDocument();
+  expect(mocks.listSaveGames).toHaveBeenCalledWith(expect.any(AbortSignal), schema);
+  await page.getByRole("button", { name: "Clear schema pack" }).click();
+  await expect.element(page.getByText("custom-saves.json")).not.toBeInTheDocument();
 });
 
 test("finds properties while retaining pending changes", async () => {

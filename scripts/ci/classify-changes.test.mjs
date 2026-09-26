@@ -28,6 +28,12 @@ const REPO_LINT_ONLY = {
   full: "false",
 };
 
+test("save schema data changes run the Rust catalog validation", () => {
+  const result = classifyFor("pull_request", "data/save-schemas/new-game.json");
+  assert.equal(result.rust, "true");
+  assert.equal(result.webapp, "false");
+});
+
 test("documentation changes skip compiled stacks", () =>
   assert.deepEqual(classify("README.md", "docs/development/ci.md"), {
     rust: "false",

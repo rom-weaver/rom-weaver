@@ -3314,12 +3314,27 @@ pub struct PpfUndoCommand {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
-pub struct SaveListGamesCommand {}
+pub struct SaveListGamesCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(long, value_name = "PATH", help = "Custom save schema pack")
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub schema: Option<PathBuf>,
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct SaveCreateCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(long, value_name = "PATH", help = "Custom save schema pack")
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub schema: Option<PathBuf>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -3675,6 +3690,13 @@ pub struct IdentifyDatabaseUpdateCommand {
 pub struct SaveIdentifyCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
+        arg(long, value_name = "PATH", help = "Custom save schema pack")
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub schema: Option<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
         arg(value_name = "SAVE", help = "Save file to read")
     )]
     pub input: PathBuf,
@@ -3706,6 +3728,13 @@ pub struct SaveIdentifyCommand {
 pub struct SaveInspectCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
+        arg(long, value_name = "PATH", help = "Custom save schema pack")
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub schema: Option<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
         arg(value_name = "SAVE", help = "Save file to read")
     )]
     pub input: PathBuf,
@@ -3735,6 +3764,13 @@ pub struct SaveInspectCommand {
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct SaveGetCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(long, value_name = "PATH", help = "Custom save schema pack")
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub schema: Option<PathBuf>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(value_name = "SAVE", help = "Save file to read")
@@ -3771,6 +3807,13 @@ pub struct SaveGetCommand {
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct SaveSetCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(long, value_name = "PATH", help = "Custom save schema pack")
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub schema: Option<PathBuf>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(value_name = "SAVE", help = "Save file to read")
@@ -3841,6 +3884,13 @@ pub struct SaveSetCommand {
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct SaveExportSchemaCommand {
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(long, value_name = "PATH", help = "Custom save schema pack")
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub schema: Option<PathBuf>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(

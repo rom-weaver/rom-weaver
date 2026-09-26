@@ -1,0 +1,112 @@
+{
+  "$schema": "./schema-v1.schema.json",
+  "schema_version": 1,
+  "games": [
+    {
+      "id": "mario-party-2-canonical-eeprom",
+      "name": "Mario Party 2 (canonical EEPROM)",
+      "platform": "n64",
+      "description": "Edits global progression and board play counts in a canonical 2 KiB EEPROM. Minigame records, Mini-Game Coaster state, and byte-swapped emulator images are omitted.",
+      "save_size": 2048,
+      "fields": [
+        {
+          "id": "coins",
+          "label": "Coins",
+          "offset": 120,
+          "type": "u32_be"
+        },
+        {
+          "id": "bowser_land",
+          "label": "Bowser Land unlocked",
+          "offset": 128,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "credits_machine",
+          "label": "Credits Machine unlocked",
+          "offset": 129,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "boards.western_land",
+          "label": "Western Land played",
+          "offset": 128,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "boards.pirate_land",
+          "label": "Pirate Land played",
+          "offset": 128,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "boards.horror_land",
+          "label": "Horror Land played",
+          "offset": 128,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "boards.space_land",
+          "label": "Space Land played",
+          "offset": 129,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "boards.mystery_land",
+          "label": "Mystery Land played",
+          "offset": 129,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "boards.bowser_land",
+          "label": "Bowser Land played",
+          "offset": 129,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "drivers_ed.played",
+          "label": "Driver's Ed played",
+          "offset": 43,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "drivers_ed.unlocked",
+          "label": "Driver's Ed unlocked",
+          "offset": 52,
+          "type": "bit",
+          "bit": 0
+        }
+      ],
+      "signatures": [
+        {
+          "offset": 0,
+          "bytes": [72, 85, 68, 83, 79, 78]
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "add16_be",
+          "unit": "u8",
+          "start": 8,
+          "length": 498,
+          "offset": 504,
+          "exclude": [
+            {
+              "offset": 504,
+              "length": 2
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

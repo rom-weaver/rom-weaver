@@ -1,0 +1,888 @@
+{
+  "$schema": "./schema-v1.schema.json",
+  "schema_version": 1,
+  "games": [
+    {
+      "id": "super-metroid-samus-a",
+      "name": "Super Metroid (Samus A, madadameyohn footer)",
+      "platform": "snes",
+      "description": "Edits documented scalar Samus A fields for the madadameyohn footer signature. Repairs both checksum pairs and preserves other slots. Map/event arrays and coupled equipment/reserve changes are omitted.",
+      "save_size": 8192,
+      "fields": [
+        {
+          "id": "slot_1.energy.current",
+          "label": "Current energy",
+          "offset": 48,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.energy.maximum",
+          "label": "Maximum energy",
+          "offset": 50,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.missiles.current",
+          "label": "Current missiles",
+          "offset": 52,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.missiles.maximum",
+          "label": "Maximum missiles",
+          "offset": 54,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.super_missiles.current",
+          "label": "Current super missiles",
+          "offset": 56,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.super_missiles.maximum",
+          "label": "Maximum super missiles",
+          "offset": 58,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.power_bombs.current",
+          "label": "Current power bombs",
+          "offset": 60,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.power_bombs.maximum",
+          "label": "Maximum power bombs",
+          "offset": 62,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.reserve.current",
+          "label": "Current reserve energy",
+          "offset": 64,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.reserve.maximum",
+          "label": "Maximum reserve energy",
+          "description": "Read-only because changing zero/nonzero state requires a coupled supply-mode update.",
+          "offset": 66,
+          "type": "u16_le",
+          "editable": false
+        },
+        {
+          "id": "slot_1.playtime.milliseconds",
+          "label": "Playtime milliseconds",
+          "offset": 72,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.playtime.seconds",
+          "label": "Playtime seconds",
+          "offset": 74,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.playtime.minutes",
+          "label": "Playtime minutes",
+          "offset": 76,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.playtime.hours",
+          "label": "Playtime hours",
+          "offset": 78,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.location.raw",
+          "label": "Raw location words",
+          "description": "Read-only pair packed as a u32. The source editor transforms the two u16 values.",
+          "offset": 358,
+          "type": "u32_le",
+          "editable": false
+        },
+        {
+          "id": "slot_1.brinstar_rooms_count",
+          "label": "Brinstar rooms count",
+          "offset": 362,
+          "type": "u16_le"
+        }
+      ],
+      "signatures": [
+        {
+          "offset": 8160,
+          "bytes": [109, 97, 100, 97, 100, 97, 109, 101, 121, 111, 104, 110]
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 16,
+          "length": 1628,
+          "offset": 0
+        },
+        {
+          "algorithm": "sum16_le",
+          "unit": "u16_le",
+          "start": 16,
+          "length": 1628,
+          "offset": 8,
+          "target": 65535
+        },
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 16,
+          "length": 1628,
+          "offset": 8176
+        },
+        {
+          "algorithm": "sum16_le",
+          "unit": "u16_le",
+          "start": 16,
+          "length": 1628,
+          "offset": 8184,
+          "target": 65535
+        }
+      ]
+    },
+    {
+      "id": "super-metroid-samus-b",
+      "name": "Super Metroid (Samus B, madadameyohn footer)",
+      "platform": "snes",
+      "description": "Edits documented scalar Samus B fields for the madadameyohn footer signature. Repairs both checksum pairs and preserves other slots. Map/event arrays and coupled equipment/reserve changes are omitted.",
+      "save_size": 8192,
+      "fields": [
+        {
+          "id": "slot_2.energy.current",
+          "label": "Current energy",
+          "offset": 1676,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.energy.maximum",
+          "label": "Maximum energy",
+          "offset": 1678,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.missiles.current",
+          "label": "Current missiles",
+          "offset": 1680,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.missiles.maximum",
+          "label": "Maximum missiles",
+          "offset": 1682,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.super_missiles.current",
+          "label": "Current super missiles",
+          "offset": 1684,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.super_missiles.maximum",
+          "label": "Maximum super missiles",
+          "offset": 1686,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.power_bombs.current",
+          "label": "Current power bombs",
+          "offset": 1688,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.power_bombs.maximum",
+          "label": "Maximum power bombs",
+          "offset": 1690,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.reserve.current",
+          "label": "Current reserve energy",
+          "offset": 1692,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.reserve.maximum",
+          "label": "Maximum reserve energy",
+          "description": "Read-only because changing zero/nonzero state requires a coupled supply-mode update.",
+          "offset": 1694,
+          "type": "u16_le",
+          "editable": false
+        },
+        {
+          "id": "slot_2.playtime.milliseconds",
+          "label": "Playtime milliseconds",
+          "offset": 1700,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.playtime.seconds",
+          "label": "Playtime seconds",
+          "offset": 1702,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.playtime.minutes",
+          "label": "Playtime minutes",
+          "offset": 1704,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.playtime.hours",
+          "label": "Playtime hours",
+          "offset": 1706,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.location.raw",
+          "label": "Raw location words",
+          "description": "Read-only pair packed as a u32. The source editor transforms the two u16 values.",
+          "offset": 1986,
+          "type": "u32_le",
+          "editable": false
+        },
+        {
+          "id": "slot_2.brinstar_rooms_count",
+          "label": "Brinstar rooms count",
+          "offset": 1990,
+          "type": "u16_le"
+        }
+      ],
+      "signatures": [
+        {
+          "offset": 8160,
+          "bytes": [109, 97, 100, 97, 100, 97, 109, 101, 121, 111, 104, 110]
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 1644,
+          "length": 1628,
+          "offset": 2
+        },
+        {
+          "algorithm": "sum16_le",
+          "unit": "u16_le",
+          "start": 1644,
+          "length": 1628,
+          "offset": 10,
+          "target": 65535
+        },
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 1644,
+          "length": 1628,
+          "offset": 8178
+        },
+        {
+          "algorithm": "sum16_le",
+          "unit": "u16_le",
+          "start": 1644,
+          "length": 1628,
+          "offset": 8186,
+          "target": 65535
+        }
+      ]
+    },
+    {
+      "id": "super-metroid-samus-c",
+      "name": "Super Metroid (Samus C, madadameyohn footer)",
+      "platform": "snes",
+      "description": "Edits documented scalar Samus C fields for the madadameyohn footer signature. Repairs both checksum pairs and preserves other slots. Map/event arrays and coupled equipment/reserve changes are omitted.",
+      "save_size": 8192,
+      "fields": [
+        {
+          "id": "slot_3.energy.current",
+          "label": "Current energy",
+          "offset": 3304,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.energy.maximum",
+          "label": "Maximum energy",
+          "offset": 3306,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.missiles.current",
+          "label": "Current missiles",
+          "offset": 3308,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.missiles.maximum",
+          "label": "Maximum missiles",
+          "offset": 3310,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.super_missiles.current",
+          "label": "Current super missiles",
+          "offset": 3312,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.super_missiles.maximum",
+          "label": "Maximum super missiles",
+          "offset": 3314,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.power_bombs.current",
+          "label": "Current power bombs",
+          "offset": 3316,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.power_bombs.maximum",
+          "label": "Maximum power bombs",
+          "offset": 3318,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.reserve.current",
+          "label": "Current reserve energy",
+          "offset": 3320,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.reserve.maximum",
+          "label": "Maximum reserve energy",
+          "description": "Read-only because changing zero/nonzero state requires a coupled supply-mode update.",
+          "offset": 3322,
+          "type": "u16_le",
+          "editable": false
+        },
+        {
+          "id": "slot_3.playtime.milliseconds",
+          "label": "Playtime milliseconds",
+          "offset": 3328,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.playtime.seconds",
+          "label": "Playtime seconds",
+          "offset": 3330,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.playtime.minutes",
+          "label": "Playtime minutes",
+          "offset": 3332,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.playtime.hours",
+          "label": "Playtime hours",
+          "offset": 3334,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.location.raw",
+          "label": "Raw location words",
+          "description": "Read-only pair packed as a u32. The source editor transforms the two u16 values.",
+          "offset": 3614,
+          "type": "u32_le",
+          "editable": false
+        },
+        {
+          "id": "slot_3.brinstar_rooms_count",
+          "label": "Brinstar rooms count",
+          "offset": 3618,
+          "type": "u16_le"
+        }
+      ],
+      "signatures": [
+        {
+          "offset": 8160,
+          "bytes": [109, 97, 100, 97, 100, 97, 109, 101, 121, 111, 104, 110]
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 3272,
+          "length": 1628,
+          "offset": 4
+        },
+        {
+          "algorithm": "sum16_le",
+          "unit": "u16_le",
+          "start": 3272,
+          "length": 1628,
+          "offset": 12,
+          "target": 65535
+        },
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 3272,
+          "length": 1628,
+          "offset": 8180
+        },
+        {
+          "algorithm": "sum16_le",
+          "unit": "u16_le",
+          "start": 3272,
+          "length": 1628,
+          "offset": 8188,
+          "target": 65535
+        }
+      ]
+    },
+    {
+      "id": "super-metroid-samus-a-supermetroid",
+      "name": "Super Metroid (Samus A, supermetroid footer)",
+      "platform": "snes",
+      "description": "Edits documented scalar Samus A fields for the supermetroid footer signature. Repairs both checksum pairs and preserves other slots. Map/event arrays and coupled equipment/reserve changes are omitted.",
+      "save_size": 8192,
+      "fields": [
+        {
+          "id": "slot_1.energy.current",
+          "label": "Current energy",
+          "offset": 48,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.energy.maximum",
+          "label": "Maximum energy",
+          "offset": 50,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.missiles.current",
+          "label": "Current missiles",
+          "offset": 52,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.missiles.maximum",
+          "label": "Maximum missiles",
+          "offset": 54,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.super_missiles.current",
+          "label": "Current super missiles",
+          "offset": 56,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.super_missiles.maximum",
+          "label": "Maximum super missiles",
+          "offset": 58,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.power_bombs.current",
+          "label": "Current power bombs",
+          "offset": 60,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.power_bombs.maximum",
+          "label": "Maximum power bombs",
+          "offset": 62,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.reserve.current",
+          "label": "Current reserve energy",
+          "offset": 64,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.reserve.maximum",
+          "label": "Maximum reserve energy",
+          "description": "Read-only because changing zero/nonzero state requires a coupled supply-mode update.",
+          "offset": 66,
+          "type": "u16_le",
+          "editable": false
+        },
+        {
+          "id": "slot_1.playtime.milliseconds",
+          "label": "Playtime milliseconds",
+          "offset": 72,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.playtime.seconds",
+          "label": "Playtime seconds",
+          "offset": 74,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.playtime.minutes",
+          "label": "Playtime minutes",
+          "offset": 76,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.playtime.hours",
+          "label": "Playtime hours",
+          "offset": 78,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.location.raw",
+          "label": "Raw location words",
+          "description": "Read-only pair packed as a u32. The source editor transforms the two u16 values.",
+          "offset": 358,
+          "type": "u32_le",
+          "editable": false
+        },
+        {
+          "id": "slot_1.brinstar_rooms_count",
+          "label": "Brinstar rooms count",
+          "offset": 362,
+          "type": "u16_le"
+        }
+      ],
+      "signatures": [
+        {
+          "offset": 8160,
+          "bytes": [115, 117, 112, 101, 114, 109, 101, 116, 114, 111, 105, 100]
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 16,
+          "length": 1628,
+          "offset": 0
+        },
+        {
+          "algorithm": "sum16_le",
+          "unit": "u16_le",
+          "start": 16,
+          "length": 1628,
+          "offset": 8,
+          "target": 65535
+        },
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 16,
+          "length": 1628,
+          "offset": 8176
+        },
+        {
+          "algorithm": "sum16_le",
+          "unit": "u16_le",
+          "start": 16,
+          "length": 1628,
+          "offset": 8184,
+          "target": 65535
+        }
+      ]
+    },
+    {
+      "id": "super-metroid-samus-b-supermetroid",
+      "name": "Super Metroid (Samus B, supermetroid footer)",
+      "platform": "snes",
+      "description": "Edits documented scalar Samus B fields for the supermetroid footer signature. Repairs both checksum pairs and preserves other slots. Map/event arrays and coupled equipment/reserve changes are omitted.",
+      "save_size": 8192,
+      "fields": [
+        {
+          "id": "slot_2.energy.current",
+          "label": "Current energy",
+          "offset": 1676,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.energy.maximum",
+          "label": "Maximum energy",
+          "offset": 1678,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.missiles.current",
+          "label": "Current missiles",
+          "offset": 1680,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.missiles.maximum",
+          "label": "Maximum missiles",
+          "offset": 1682,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.super_missiles.current",
+          "label": "Current super missiles",
+          "offset": 1684,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.super_missiles.maximum",
+          "label": "Maximum super missiles",
+          "offset": 1686,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.power_bombs.current",
+          "label": "Current power bombs",
+          "offset": 1688,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.power_bombs.maximum",
+          "label": "Maximum power bombs",
+          "offset": 1690,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.reserve.current",
+          "label": "Current reserve energy",
+          "offset": 1692,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.reserve.maximum",
+          "label": "Maximum reserve energy",
+          "description": "Read-only because changing zero/nonzero state requires a coupled supply-mode update.",
+          "offset": 1694,
+          "type": "u16_le",
+          "editable": false
+        },
+        {
+          "id": "slot_2.playtime.milliseconds",
+          "label": "Playtime milliseconds",
+          "offset": 1700,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.playtime.seconds",
+          "label": "Playtime seconds",
+          "offset": 1702,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.playtime.minutes",
+          "label": "Playtime minutes",
+          "offset": 1704,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.playtime.hours",
+          "label": "Playtime hours",
+          "offset": 1706,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.location.raw",
+          "label": "Raw location words",
+          "description": "Read-only pair packed as a u32. The source editor transforms the two u16 values.",
+          "offset": 1986,
+          "type": "u32_le",
+          "editable": false
+        },
+        {
+          "id": "slot_2.brinstar_rooms_count",
+          "label": "Brinstar rooms count",
+          "offset": 1990,
+          "type": "u16_le"
+        }
+      ],
+      "signatures": [
+        {
+          "offset": 8160,
+          "bytes": [115, 117, 112, 101, 114, 109, 101, 116, 114, 111, 105, 100]
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 1644,
+          "length": 1628,
+          "offset": 2
+        },
+        {
+          "algorithm": "sum16_le",
+          "unit": "u16_le",
+          "start": 1644,
+          "length": 1628,
+          "offset": 10,
+          "target": 65535
+        },
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 1644,
+          "length": 1628,
+          "offset": 8178
+        },
+        {
+          "algorithm": "sum16_le",
+          "unit": "u16_le",
+          "start": 1644,
+          "length": 1628,
+          "offset": 8186,
+          "target": 65535
+        }
+      ]
+    },
+    {
+      "id": "super-metroid-samus-c-supermetroid",
+      "name": "Super Metroid (Samus C, supermetroid footer)",
+      "platform": "snes",
+      "description": "Edits documented scalar Samus C fields for the supermetroid footer signature. Repairs both checksum pairs and preserves other slots. Map/event arrays and coupled equipment/reserve changes are omitted.",
+      "save_size": 8192,
+      "fields": [
+        {
+          "id": "slot_3.energy.current",
+          "label": "Current energy",
+          "offset": 3304,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.energy.maximum",
+          "label": "Maximum energy",
+          "offset": 3306,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.missiles.current",
+          "label": "Current missiles",
+          "offset": 3308,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.missiles.maximum",
+          "label": "Maximum missiles",
+          "offset": 3310,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.super_missiles.current",
+          "label": "Current super missiles",
+          "offset": 3312,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.super_missiles.maximum",
+          "label": "Maximum super missiles",
+          "offset": 3314,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.power_bombs.current",
+          "label": "Current power bombs",
+          "offset": 3316,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.power_bombs.maximum",
+          "label": "Maximum power bombs",
+          "offset": 3318,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.reserve.current",
+          "label": "Current reserve energy",
+          "offset": 3320,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.reserve.maximum",
+          "label": "Maximum reserve energy",
+          "description": "Read-only because changing zero/nonzero state requires a coupled supply-mode update.",
+          "offset": 3322,
+          "type": "u16_le",
+          "editable": false
+        },
+        {
+          "id": "slot_3.playtime.milliseconds",
+          "label": "Playtime milliseconds",
+          "offset": 3328,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.playtime.seconds",
+          "label": "Playtime seconds",
+          "offset": 3330,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.playtime.minutes",
+          "label": "Playtime minutes",
+          "offset": 3332,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.playtime.hours",
+          "label": "Playtime hours",
+          "offset": 3334,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.location.raw",
+          "label": "Raw location words",
+          "description": "Read-only pair packed as a u32. The source editor transforms the two u16 values.",
+          "offset": 3614,
+          "type": "u32_le",
+          "editable": false
+        },
+        {
+          "id": "slot_3.brinstar_rooms_count",
+          "label": "Brinstar rooms count",
+          "offset": 3618,
+          "type": "u16_le"
+        }
+      ],
+      "signatures": [
+        {
+          "offset": 8160,
+          "bytes": [115, 117, 112, 101, 114, 109, 101, 116, 114, 111, 105, 100]
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 3272,
+          "length": 1628,
+          "offset": 4
+        },
+        {
+          "algorithm": "sum16_le",
+          "unit": "u16_le",
+          "start": 3272,
+          "length": 1628,
+          "offset": 12,
+          "target": 65535
+        },
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 3272,
+          "length": 1628,
+          "offset": 8180
+        },
+        {
+          "algorithm": "sum16_le",
+          "unit": "u16_le",
+          "start": 3272,
+          "length": 1628,
+          "offset": 8188,
+          "target": 65535
+        }
+      ]
+    }
+  ]
+}

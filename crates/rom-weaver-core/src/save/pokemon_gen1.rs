@@ -15,6 +15,7 @@ const TRAINER_NAME: usize = 0x2598;
 const DEX_OWNED: usize = 0x25A3;
 const DEX_SEEN: usize = 0x25B6;
 const BAG_COUNT: usize = 0x25C9;
+const PC_ITEM_COUNT: usize = 0x27E6;
 const MONEY: usize = 0x25F3;
 const RIVAL_NAME: usize = 0x25F6;
 const OPTIONS: usize = 0x2601;
@@ -32,6 +33,7 @@ const CHECKSUM_END: usize = CHECKSUM;
 const YELLOW_STARTER: usize = 0x29C3;
 const YELLOW_STARTER_ID: u8 = 0x54;
 const BAG_CAPACITY: u8 = 20;
+const PC_ITEM_CAPACITY: u8 = 50;
 const MAX_MONEY: u32 = 999_999;
 const MAX_COINS: u32 = 9_999;
 
@@ -163,6 +165,7 @@ fn generate(game: Game) -> Result<Vec<u8>> {
         .copy_from_slice(&[0x8f, 0x8b, 0x80, 0x98, 0x84, 0x91, 0x50]);
     bytes[RIVAL_NAME..RIVAL_NAME + 6].copy_from_slice(&[0x91, 0x88, 0x95, 0x80, 0x8b, 0x50]);
     bytes[BAG_COUNT + 1] = 0xff;
+    bytes[PC_ITEM_COUNT + 1] = 0xff;
     bytes[OPTIONS] = 3;
     if game == Game::Yellow {
         bytes[YELLOW_STARTER] = YELLOW_STARTER_ID;
@@ -279,6 +282,8 @@ fn valid_structure(bytes: &[u8]) -> bool {
     let bag_count = usize::from(bytes[BAG_COUNT]);
     bag_count <= usize::from(BAG_CAPACITY)
         && bytes[BAG_COUNT + 1 + bag_count * 2] == 0xff
+        && usize::from(bytes[PC_ITEM_COUNT]) <= usize::from(PC_ITEM_CAPACITY)
+        && bytes[PC_ITEM_COUNT + 1 + usize::from(bytes[PC_ITEM_COUNT]) * 2] == 0xff
         && bytes[CURRENT_BOX] & 0x7f < 12
         && read_bcd(bytes, MONEY, 3).is_ok_and(|value| value <= MAX_MONEY)
         && read_bcd(bytes, COINS, 2).is_ok_and(|value| value <= MAX_COINS)
@@ -306,19 +311,19 @@ fn build_document(bytes: &[u8], game: Game, identity: &SaveGameIdentity) -> Resu
             "the save has a coin value above the game limit",
         ));
     }
-    let mut fields = vec![read_only_text(
+    let mut fields = vec![text_field(
         "trainer.name",
         "Trainer name",
         TRAINER_NAME,
         decode_name(&bytes[TRAINER_NAME..TRAINER_NAME + 11]),
-        "Trainer text. This layout does not edit names.",
+        "Use { for the PK glyph and } for the MN glyph. Each uses one game character.",
     )];
-    fields.push(read_only_text(
+    fields.push(text_field(
         "trainer.rival_name",
         "Rival name",
         RIVAL_NAME,
         decode_name(&bytes[RIVAL_NAME..RIVAL_NAME + 11]),
-        "Rival text. This layout does not edit names.",
+        "Use { for the PK glyph and } for the MN glyph. Each uses one game character.",
     ));
     fields.push(integer_field(
         "trainer.id",
@@ -355,6 +360,7 @@ fn build_document(bytes: &[u8], game: Game, identity: &SaveGameIdentity) -> Resu
     add_play_time_fields(&mut fields, bytes);
     add_option_fields(&mut fields, bytes, game);
     add_progress_fields(&mut fields, bytes);
+    add_inventory_fields(&mut fields, bytes);
     fields.push(integer_field(
         "storage.current_box",
         "Current PC box",
@@ -429,11 +435,20 @@ fn build_document(bytes: &[u8], game: Game, identity: &SaveGameIdentity) -> Resu
 
 fn apply_edit(bytes: &mut [u8], edit: &SaveEdit) -> Result<()> {
     match (&*edit.field, &edit.value) {
+        ("trainer.name", SaveValue::Text(value)) => {
+            write_name(&mut bytes[TRAINER_NAME..TRAINER_NAME + 11], value)?;
+        }
+        ("trainer.rival_name", SaveValue::Text(value)) => {
+            write_name(&mut bytes[RIVAL_NAME..RIVAL_NAME + 11], value)?;
+        }
         ("trainer.id", SaveValue::U32(value)) => {
             bytes[TRAINER_ID..TRAINER_ID + 2].copy_from_slice(&(*value as u16).to_be_bytes());
         }
         ("trainer.money", SaveValue::U32(value)) => write_bcd(bytes, MONEY, 3, *value),
         ("trainer.coins", SaveValue::U32(value)) => write_bcd(bytes, COINS, 2, *value),
+        (field, SaveValue::U32(value)) if field.starts_with("inventory.") => {
+            apply_inventory_edit(bytes, field, *value)?;
+        }
         ("trainer.play_time.hours", SaveValue::U32(value)) => {
             bytes[PLAY_TIME] = *value as u8;
             bytes[PLAY_TIME + 1] = if *value == 255 { 0xff } else { 0 };
@@ -492,6 +507,71 @@ fn apply_edit(bytes: &mut [u8], edit: &SaveEdit) -> Result<()> {
             ));
         }
     }
+    Ok(())
+}
+
+fn add_inventory_fields(fields: &mut Vec<SaveField>, bytes: &[u8]) {
+    for (pocket, base) in [("bag", BAG_COUNT), ("pc", PC_ITEM_COUNT)] {
+        for slot in 0..usize::from(bytes[base]) {
+            let offset = base + 1 + slot * 2;
+            for (suffix, label, relative, value, range) in [
+                ("item_id", "Item ID", 0, bytes[offset], (1, 255)),
+                ("quantity", "Quantity", 1, bytes[offset + 1], (1, 99)),
+            ] {
+                fields.push(integer_field(
+                    &format!("inventory.{pocket}.{}.{}", slot + 1, suffix),
+                    &format!(
+                        "{} slot {} {}",
+                        if pocket == "bag" { "Bag" } else { "PC" },
+                        slot + 1,
+                        label
+                    ),
+                    offset + relative,
+                    u32::from(value),
+                    true,
+                    range,
+                    "Inventory item slot value",
+                ));
+            }
+        }
+    }
+}
+
+fn apply_inventory_edit(bytes: &mut [u8], field: &str, value: u32) -> Result<()> {
+    let mut parts = field.split('.');
+    let _ = parts.next();
+    let (base, count) = match parts.next() {
+        Some("bag") => (BAG_COUNT, usize::from(bytes[BAG_COUNT])),
+        Some("pc") => (PC_ITEM_COUNT, usize::from(bytes[PC_ITEM_COUNT])),
+        _ => {
+            return Err(validation(
+                "save_field_unknown",
+                "the requested inventory field is unknown",
+            ));
+        }
+    };
+    let slot = parts
+        .next()
+        .and_then(|part| part.parse::<usize>().ok())
+        .and_then(|slot| slot.checked_sub(1))
+        .filter(|slot| *slot < count)
+        .ok_or_else(|| {
+            validation(
+                "save_field_unknown",
+                "the requested inventory field is unknown",
+            )
+        })?;
+    let relative = match parts.next() {
+        Some("item_id") => 0,
+        Some("quantity") => 1,
+        _ => {
+            return Err(validation(
+                "save_field_unknown",
+                "the requested inventory field is unknown",
+            ));
+        }
+    };
+    bytes[base + 1 + slot * 2 + relative] = value as u8;
     Ok(())
 }
 
@@ -818,6 +898,69 @@ fn read_only_text(
     }
 }
 
+fn text_field(id: &str, label: &str, offset: usize, value: String, description: &str) -> SaveField {
+    SaveField {
+        id: id.into(),
+        label: label.into(),
+        section_id: 0,
+        offset: offset as u16,
+        kind: SaveFieldKind::Text,
+        value: SaveValue::Text(value),
+        editable: true,
+        constraints: SaveConstraint {
+            max_length: Some(7),
+            ..Default::default()
+        },
+        description: description.into(),
+        warnings: Vec::new(),
+        step: None,
+        encoding: Some("pokemon_gen1_english".into()),
+    }
+}
+
+fn encode_name_character(character: char) -> Option<u8> {
+    match character {
+        'A'..='Z' => Some(character as u8 - b'A' + 0x80),
+        'a'..='z' => Some(character as u8 - b'a' + 0xA0),
+        '0'..='9' => Some(character as u8 - b'0' + 0xF6),
+        ' ' => Some(0x7F),
+        '(' => Some(0x9A),
+        ')' => Some(0x9B),
+        ':' => Some(0x9C),
+        ';' => Some(0x9D),
+        '[' => Some(0x9E),
+        ']' => Some(0x9F),
+        'é' => Some(0xBA),
+        '\'' => Some(0xE0),
+        '{' => Some(0xE1),
+        '}' => Some(0xE2),
+        '-' => Some(0xE3),
+        '?' => Some(0xE6),
+        '!' => Some(0xE7),
+        '.' => Some(0xE8),
+        '♂' => Some(0xEF),
+        '¥' => Some(0xF0),
+        '×' => Some(0xF1),
+        '/' => Some(0xF3),
+        ',' => Some(0xF4),
+        '♀' => Some(0xF5),
+        _ => None,
+    }
+}
+
+fn write_name(target: &mut [u8], value: &str) -> Result<()> {
+    target.fill(0x50);
+    for (index, character) in value.chars().enumerate() {
+        target[index] = encode_name_character(character).ok_or_else(|| {
+            validation(
+                "save_name_character",
+                "the requested name contains a character unsupported by the English save encoding",
+            )
+        })?;
+    }
+    Ok(())
+}
+
 fn decode_name(bytes: &[u8]) -> String {
     let mut output = String::new();
     for byte in bytes {
@@ -829,10 +972,26 @@ fn decode_name(bytes: &[u8]) -> String {
             0xA0..=0xB9 => (*byte - 0xA0 + b'a') as char,
             0xF6..=0xFF => (*byte - 0xF6 + b'0') as char,
             0x7F => ' ',
+            0x9A => '(',
+            0x9B => ')',
+            0x9C => ':',
+            0x9D => ';',
+            0x9E => '[',
+            0x9F => ']',
+            0xBA => 'é',
+            0xE0 => '\'',
+            0xE1 => '{',
+            0xE2 => '}',
             0xE3 => '-',
             0xE6 => '?',
             0xE7 => '!',
             0xE8 => '.',
+            0xEF => '♂',
+            0xF0 => '¥',
+            0xF1 => '×',
+            0xF3 => '/',
+            0xF4 => ',',
+            0xF5 => '♀',
             _ => return format!("Unsupported Gen I character byte {byte:#04x}"),
         };
         output.push(character);
@@ -875,7 +1034,9 @@ mod tests {
         bytes[OPTIONS] = 3;
         bytes[PLAY_TIME..PLAY_TIME + 5].copy_from_slice(&[12, 0, 34, 56, 7]);
         bytes[BAG_COUNT] = 2;
+        bytes[BAG_COUNT + 1..BAG_COUNT + 5].copy_from_slice(&[1, 10, 2, 20]);
         bytes[BAG_COUNT + 1 + 2 * 2] = 0xff;
+        bytes[PC_ITEM_COUNT + 1] = 0xff;
         if yellow {
             bytes[YELLOW_STARTER] = YELLOW_STARTER_ID;
             bytes[YELLOW_PIKACHU_FRIENDSHIP] = 72;
@@ -936,6 +1097,10 @@ mod tests {
                         field: "options.battle_scene".into(),
                         value: SaveValue::Bool(false),
                     },
+                    SaveEdit {
+                        field: "inventory.bag.2.quantity".into(),
+                        value: SaveValue::U32(99),
+                    },
                 ],
                 false,
             )
@@ -962,6 +1127,10 @@ mod tests {
         assert_eq!(
             value(&result.document, "options.battle_scene"),
             &SaveValue::Bool(false)
+        );
+        assert_eq!(
+            value(&result.document, "inventory.bag.2.quantity"),
+            &SaveValue::U32(99)
         );
     }
 
@@ -1061,6 +1230,56 @@ mod tests {
                             value: SaveValue::U32(value)
                         },],
                         false
+                    )
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn names_round_trip_keyboard_characters_and_reject_invalid_text() {
+        let handler = PokemonGen1Handler;
+        let source = input(save(false), "pokemon-red");
+        for name in ["Azé0♂♀!", "()[]:; ", "{}-,./?"] {
+            let result = handler
+                .apply(
+                    &source,
+                    &identity("pokemon-red"),
+                    &[
+                        SaveEdit {
+                            field: "trainer.name".into(),
+                            value: SaveValue::Text(name.into()),
+                        },
+                        SaveEdit {
+                            field: "trainer.rival_name".into(),
+                            value: SaveValue::Text(name.into()),
+                        },
+                    ],
+                    false,
+                )
+                .unwrap();
+            assert_eq!(
+                field_value(&result.document, "trainer.name"),
+                Some(&SaveValue::Text(name.into()))
+            );
+            assert_eq!(result.bytes.as_ref().unwrap()[TRAINER_NAME + 7], 0x50);
+            if name.starts_with("{}") {
+                let output = result.bytes.as_ref().unwrap();
+                assert_eq!(&output[TRAINER_NAME..TRAINER_NAME + 2], &[0xE1, 0xE2]);
+                assert_eq!(&output[RIVAL_NAME..RIVAL_NAME + 2], &[0xE1, 0xE2]);
+            }
+        }
+        for name in ["ABCDEFGH", "ABC☃"] {
+            assert!(
+                handler
+                    .apply(
+                        &source,
+                        &identity("pokemon-red"),
+                        &[SaveEdit {
+                            field: "trainer.name".into(),
+                            value: SaveValue::Text(name.into()),
+                        }],
+                        false,
                     )
                     .is_err()
             );

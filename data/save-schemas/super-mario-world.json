@@ -1,0 +1,4676 @@
+{
+  "$schema": "./schema-v1.schema.json",
+  "schema_version": 1,
+  "games": [
+    {
+      "id": "super-mario-world-schema",
+      "name": "Super Mario World (File 1 schema)",
+      "platform": "snes",
+      "description": "Edits File 1 and its backup. Preserves Files 2 and 3. Fresh saves use the original initial overworld state.",
+      "save_size": 2048,
+      "fields": [
+        {
+          "id": "slot_1.levels.level_00.flags",
+          "label": "Level 00 movement and completion flags",
+          "offset": 0,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_01.flags",
+          "label": "Level 01 movement and completion flags",
+          "offset": 1,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_02.flags",
+          "label": "Level 02 movement and completion flags",
+          "offset": 2,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_03.flags",
+          "label": "Level 03 movement and completion flags",
+          "offset": 3,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_04.flags",
+          "label": "Level 04 movement and completion flags",
+          "offset": 4,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_05.flags",
+          "label": "Level 05 movement and completion flags",
+          "offset": 5,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_06.flags",
+          "label": "Level 06 movement and completion flags",
+          "offset": 6,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_07.flags",
+          "label": "Level 07 movement and completion flags",
+          "offset": 7,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_08.flags",
+          "label": "Level 08 movement and completion flags",
+          "offset": 8,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_09.flags",
+          "label": "Level 09 movement and completion flags",
+          "offset": 9,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_0a.flags",
+          "label": "Level 0A movement and completion flags",
+          "offset": 10,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_0b.flags",
+          "label": "Level 0B movement and completion flags",
+          "offset": 11,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_0c.flags",
+          "label": "Level 0C movement and completion flags",
+          "offset": 12,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_0d.flags",
+          "label": "Level 0D movement and completion flags",
+          "offset": 13,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_0e.flags",
+          "label": "Level 0E movement and completion flags",
+          "offset": 14,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_0f.flags",
+          "label": "Level 0F movement and completion flags",
+          "offset": 15,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_10.flags",
+          "label": "Level 10 movement and completion flags",
+          "offset": 16,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_11.flags",
+          "label": "Level 11 movement and completion flags",
+          "offset": 17,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_12.flags",
+          "label": "Level 12 movement and completion flags",
+          "offset": 18,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_13.flags",
+          "label": "Level 13 movement and completion flags",
+          "offset": 19,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_14.flags",
+          "label": "Level 14 movement and completion flags",
+          "offset": 20,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_15.flags",
+          "label": "Level 15 movement and completion flags",
+          "offset": 21,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_16.flags",
+          "label": "Level 16 movement and completion flags",
+          "offset": 22,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_17.flags",
+          "label": "Level 17 movement and completion flags",
+          "offset": 23,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_18.flags",
+          "label": "Level 18 movement and completion flags",
+          "offset": 24,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_19.flags",
+          "label": "Level 19 movement and completion flags",
+          "offset": 25,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_1a.flags",
+          "label": "Level 1A movement and completion flags",
+          "offset": 26,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_1b.flags",
+          "label": "Level 1B movement and completion flags",
+          "offset": 27,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_1c.flags",
+          "label": "Level 1C movement and completion flags",
+          "offset": 28,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_1d.flags",
+          "label": "Level 1D movement and completion flags",
+          "offset": 29,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_1e.flags",
+          "label": "Level 1E movement and completion flags",
+          "offset": 30,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_1f.flags",
+          "label": "Level 1F movement and completion flags",
+          "offset": 31,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_20.flags",
+          "label": "Level 20 movement and completion flags",
+          "offset": 32,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_21.flags",
+          "label": "Level 21 movement and completion flags",
+          "offset": 33,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_22.flags",
+          "label": "Level 22 movement and completion flags",
+          "offset": 34,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_23.flags",
+          "label": "Level 23 movement and completion flags",
+          "offset": 35,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_24.flags",
+          "label": "Level 24 movement and completion flags",
+          "offset": 36,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_25.flags",
+          "label": "Level 25 movement and completion flags",
+          "offset": 37,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_26.flags",
+          "label": "Level 26 movement and completion flags",
+          "offset": 38,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_27.flags",
+          "label": "Level 27 movement and completion flags",
+          "offset": 39,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_28.flags",
+          "label": "Level 28 movement and completion flags",
+          "offset": 40,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_29.flags",
+          "label": "Level 29 movement and completion flags",
+          "offset": 41,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_2a.flags",
+          "label": "Level 2A movement and completion flags",
+          "offset": 42,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_2b.flags",
+          "label": "Level 2B movement and completion flags",
+          "offset": 43,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_2c.flags",
+          "label": "Level 2C movement and completion flags",
+          "offset": 44,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_2d.flags",
+          "label": "Level 2D movement and completion flags",
+          "offset": 45,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_2e.flags",
+          "label": "Level 2E movement and completion flags",
+          "offset": 46,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_2f.flags",
+          "label": "Level 2F movement and completion flags",
+          "offset": 47,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_30.flags",
+          "label": "Level 30 movement and completion flags",
+          "offset": 48,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_31.flags",
+          "label": "Level 31 movement and completion flags",
+          "offset": 49,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_32.flags",
+          "label": "Level 32 movement and completion flags",
+          "offset": 50,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_33.flags",
+          "label": "Level 33 movement and completion flags",
+          "offset": 51,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_34.flags",
+          "label": "Level 34 movement and completion flags",
+          "offset": 52,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_35.flags",
+          "label": "Level 35 movement and completion flags",
+          "offset": 53,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_36.flags",
+          "label": "Level 36 movement and completion flags",
+          "offset": 54,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_37.flags",
+          "label": "Level 37 movement and completion flags",
+          "offset": 55,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_38.flags",
+          "label": "Level 38 movement and completion flags",
+          "offset": 56,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_39.flags",
+          "label": "Level 39 movement and completion flags",
+          "offset": 57,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_3a.flags",
+          "label": "Level 3A movement and completion flags",
+          "offset": 58,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_3b.flags",
+          "label": "Level 3B movement and completion flags",
+          "offset": 59,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_3c.flags",
+          "label": "Level 3C movement and completion flags",
+          "offset": 60,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_3d.flags",
+          "label": "Level 3D movement and completion flags",
+          "offset": 61,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_3e.flags",
+          "label": "Level 3E movement and completion flags",
+          "offset": 62,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_3f.flags",
+          "label": "Level 3F movement and completion flags",
+          "offset": 63,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_40.flags",
+          "label": "Level 40 movement and completion flags",
+          "offset": 64,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_41.flags",
+          "label": "Level 41 movement and completion flags",
+          "offset": 65,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_42.flags",
+          "label": "Level 42 movement and completion flags",
+          "offset": 66,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_43.flags",
+          "label": "Level 43 movement and completion flags",
+          "offset": 67,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_44.flags",
+          "label": "Level 44 movement and completion flags",
+          "offset": 68,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_45.flags",
+          "label": "Level 45 movement and completion flags",
+          "offset": 69,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_46.flags",
+          "label": "Level 46 movement and completion flags",
+          "offset": 70,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_47.flags",
+          "label": "Level 47 movement and completion flags",
+          "offset": 71,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_48.flags",
+          "label": "Level 48 movement and completion flags",
+          "offset": 72,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_49.flags",
+          "label": "Level 49 movement and completion flags",
+          "offset": 73,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_4a.flags",
+          "label": "Level 4A movement and completion flags",
+          "offset": 74,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_4b.flags",
+          "label": "Level 4B movement and completion flags",
+          "offset": 75,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_4c.flags",
+          "label": "Level 4C movement and completion flags",
+          "offset": 76,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_4d.flags",
+          "label": "Level 4D movement and completion flags",
+          "offset": 77,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_4e.flags",
+          "label": "Level 4E movement and completion flags",
+          "offset": 78,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_4f.flags",
+          "label": "Level 4F movement and completion flags",
+          "offset": 79,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_50.flags",
+          "label": "Level 50 movement and completion flags",
+          "offset": 80,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_51.flags",
+          "label": "Level 51 movement and completion flags",
+          "offset": 81,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_52.flags",
+          "label": "Level 52 movement and completion flags",
+          "offset": 82,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_53.flags",
+          "label": "Level 53 movement and completion flags",
+          "offset": 83,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_54.flags",
+          "label": "Level 54 movement and completion flags",
+          "offset": 84,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_55.flags",
+          "label": "Level 55 movement and completion flags",
+          "offset": 85,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_56.flags",
+          "label": "Level 56 movement and completion flags",
+          "offset": 86,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_57.flags",
+          "label": "Level 57 movement and completion flags",
+          "offset": 87,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_58.flags",
+          "label": "Level 58 movement and completion flags",
+          "offset": 88,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_59.flags",
+          "label": "Level 59 movement and completion flags",
+          "offset": 89,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_5a.flags",
+          "label": "Level 5A movement and completion flags",
+          "offset": 90,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_5b.flags",
+          "label": "Level 5B movement and completion flags",
+          "offset": 91,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_5c.flags",
+          "label": "Level 5C movement and completion flags",
+          "offset": 92,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_5d.flags",
+          "label": "Level 5D movement and completion flags",
+          "offset": 93,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_5e.flags",
+          "label": "Level 5E movement and completion flags",
+          "offset": 94,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.levels.level_5f.flags",
+          "label": "Level 5F movement and completion flags",
+          "offset": 95,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.events.event_000",
+          "label": "Overworld event 0",
+          "offset": 96,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.events.event_001",
+          "label": "Overworld event 1",
+          "offset": 96,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.events.event_002",
+          "label": "Overworld event 2",
+          "offset": 96,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.events.event_003",
+          "label": "Overworld event 3",
+          "offset": 96,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.events.event_004",
+          "label": "Overworld event 4",
+          "offset": 96,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.events.event_005",
+          "label": "Overworld event 5",
+          "offset": 96,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.events.event_006",
+          "label": "Overworld event 6",
+          "offset": 96,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.events.event_007",
+          "label": "Overworld event 7",
+          "offset": 96,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.events.event_008",
+          "label": "Overworld event 8",
+          "offset": 97,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.events.event_009",
+          "label": "Overworld event 9",
+          "offset": 97,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.events.event_010",
+          "label": "Overworld event 10",
+          "offset": 97,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.events.event_011",
+          "label": "Overworld event 11",
+          "offset": 97,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.events.event_012",
+          "label": "Overworld event 12",
+          "offset": 97,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.events.event_013",
+          "label": "Overworld event 13",
+          "offset": 97,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.events.event_014",
+          "label": "Overworld event 14",
+          "offset": 97,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.events.event_015",
+          "label": "Overworld event 15",
+          "offset": 97,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.events.event_016",
+          "label": "Overworld event 16",
+          "offset": 98,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.events.event_017",
+          "label": "Overworld event 17",
+          "offset": 98,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.events.event_018",
+          "label": "Overworld event 18",
+          "offset": 98,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.events.event_019",
+          "label": "Overworld event 19",
+          "offset": 98,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.events.event_020",
+          "label": "Overworld event 20",
+          "offset": 98,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.events.event_021",
+          "label": "Overworld event 21",
+          "offset": 98,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.events.event_022",
+          "label": "Overworld event 22",
+          "offset": 98,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.events.event_023",
+          "label": "Overworld event 23",
+          "offset": 98,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.events.event_024",
+          "label": "Overworld event 24",
+          "offset": 99,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.events.event_025",
+          "label": "Overworld event 25",
+          "offset": 99,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.events.event_026",
+          "label": "Overworld event 26",
+          "offset": 99,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.events.event_027",
+          "label": "Overworld event 27",
+          "offset": 99,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.events.event_028",
+          "label": "Overworld event 28",
+          "offset": 99,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.events.event_029",
+          "label": "Overworld event 29",
+          "offset": 99,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.events.event_030",
+          "label": "Overworld event 30",
+          "offset": 99,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.events.event_031",
+          "label": "Overworld event 31",
+          "offset": 99,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.events.event_032",
+          "label": "Overworld event 32",
+          "offset": 100,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.events.event_033",
+          "label": "Overworld event 33",
+          "offset": 100,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.events.event_034",
+          "label": "Overworld event 34",
+          "offset": 100,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.events.event_035",
+          "label": "Overworld event 35",
+          "offset": 100,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.events.event_036",
+          "label": "Overworld event 36",
+          "offset": 100,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.events.event_037",
+          "label": "Overworld event 37",
+          "offset": 100,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.events.event_038",
+          "label": "Overworld event 38",
+          "offset": 100,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.events.event_039",
+          "label": "Overworld event 39",
+          "offset": 100,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.events.event_040",
+          "label": "Overworld event 40",
+          "offset": 101,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.events.event_041",
+          "label": "Overworld event 41",
+          "offset": 101,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.events.event_042",
+          "label": "Overworld event 42",
+          "offset": 101,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.events.event_043",
+          "label": "Overworld event 43",
+          "offset": 101,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.events.event_044",
+          "label": "Overworld event 44",
+          "offset": 101,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.events.event_045",
+          "label": "Overworld event 45",
+          "offset": 101,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.events.event_046",
+          "label": "Overworld event 46",
+          "offset": 101,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.events.event_047",
+          "label": "Overworld event 47",
+          "offset": 101,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.events.event_048",
+          "label": "Overworld event 48",
+          "offset": 102,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.events.event_049",
+          "label": "Overworld event 49",
+          "offset": 102,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.events.event_050",
+          "label": "Overworld event 50",
+          "offset": 102,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.events.event_051",
+          "label": "Overworld event 51",
+          "offset": 102,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.events.event_052",
+          "label": "Overworld event 52",
+          "offset": 102,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.events.event_053",
+          "label": "Overworld event 53",
+          "offset": 102,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.events.event_054",
+          "label": "Overworld event 54",
+          "offset": 102,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.events.event_055",
+          "label": "Overworld event 55",
+          "offset": 102,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.events.event_056",
+          "label": "Overworld event 56",
+          "offset": 103,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.events.event_057",
+          "label": "Overworld event 57",
+          "offset": 103,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.events.event_058",
+          "label": "Overworld event 58",
+          "offset": 103,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.events.event_059",
+          "label": "Overworld event 59",
+          "offset": 103,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.events.event_060",
+          "label": "Overworld event 60",
+          "offset": 103,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.events.event_061",
+          "label": "Overworld event 61",
+          "offset": 103,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.events.event_062",
+          "label": "Overworld event 62",
+          "offset": 103,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.events.event_063",
+          "label": "Overworld event 63",
+          "offset": 103,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.events.event_064",
+          "label": "Overworld event 64",
+          "offset": 104,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.events.event_065",
+          "label": "Overworld event 65",
+          "offset": 104,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.events.event_066",
+          "label": "Overworld event 66",
+          "offset": 104,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.events.event_067",
+          "label": "Overworld event 67",
+          "offset": 104,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.events.event_068",
+          "label": "Overworld event 68",
+          "offset": 104,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.events.event_069",
+          "label": "Overworld event 69",
+          "offset": 104,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.events.event_070",
+          "label": "Overworld event 70",
+          "offset": 104,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.events.event_071",
+          "label": "Overworld event 71",
+          "offset": 104,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.events.event_072",
+          "label": "Overworld event 72",
+          "offset": 105,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.events.event_073",
+          "label": "Overworld event 73",
+          "offset": 105,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.events.event_074",
+          "label": "Overworld event 74",
+          "offset": 105,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.events.event_075",
+          "label": "Overworld event 75",
+          "offset": 105,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.events.event_076",
+          "label": "Overworld event 76",
+          "offset": 105,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.events.event_077",
+          "label": "Overworld event 77",
+          "offset": 105,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.events.event_078",
+          "label": "Overworld event 78",
+          "offset": 105,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.events.event_079",
+          "label": "Overworld event 79",
+          "offset": 105,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.events.event_080",
+          "label": "Overworld event 80",
+          "offset": 106,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.events.event_081",
+          "label": "Overworld event 81",
+          "offset": 106,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.events.event_082",
+          "label": "Overworld event 82",
+          "offset": 106,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.events.event_083",
+          "label": "Overworld event 83",
+          "offset": 106,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.events.event_084",
+          "label": "Overworld event 84",
+          "offset": 106,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.events.event_085",
+          "label": "Overworld event 85",
+          "offset": 106,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.events.event_086",
+          "label": "Overworld event 86",
+          "offset": 106,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.events.event_087",
+          "label": "Overworld event 87",
+          "offset": 106,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.events.event_088",
+          "label": "Overworld event 88",
+          "offset": 107,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.events.event_089",
+          "label": "Overworld event 89",
+          "offset": 107,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.events.event_090",
+          "label": "Overworld event 90",
+          "offset": 107,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.events.event_091",
+          "label": "Overworld event 91",
+          "offset": 107,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.events.event_092",
+          "label": "Overworld event 92",
+          "offset": 107,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.events.event_093",
+          "label": "Overworld event 93",
+          "offset": 107,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.events.event_094",
+          "label": "Overworld event 94",
+          "offset": 107,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.events.event_095",
+          "label": "Overworld event 95",
+          "offset": 107,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.events.event_096",
+          "label": "Overworld event 96",
+          "offset": 108,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.events.event_097",
+          "label": "Overworld event 97",
+          "offset": 108,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.events.event_098",
+          "label": "Overworld event 98",
+          "offset": 108,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.events.event_099",
+          "label": "Overworld event 99",
+          "offset": 108,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.events.event_100",
+          "label": "Overworld event 100",
+          "offset": 108,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.events.event_101",
+          "label": "Overworld event 101",
+          "offset": 108,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.events.event_102",
+          "label": "Overworld event 102",
+          "offset": 108,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.events.event_103",
+          "label": "Overworld event 103",
+          "offset": 108,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.events.event_104",
+          "label": "Overworld event 104",
+          "offset": 109,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.events.event_105",
+          "label": "Overworld event 105",
+          "offset": 109,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.events.event_106",
+          "label": "Overworld event 106",
+          "offset": 109,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.events.event_107",
+          "label": "Overworld event 107",
+          "offset": 109,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.events.event_108",
+          "label": "Overworld event 108",
+          "offset": 109,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.events.event_109",
+          "label": "Overworld event 109",
+          "offset": 109,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.events.event_110",
+          "label": "Overworld event 110",
+          "offset": 109,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.events.event_111",
+          "label": "Overworld event 111",
+          "offset": 109,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.events.event_112",
+          "label": "Overworld event 112",
+          "offset": 110,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_1.events.event_113",
+          "label": "Overworld event 113",
+          "offset": 110,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_1.events.event_114",
+          "label": "Overworld event 114",
+          "offset": 110,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_1.events.event_115",
+          "label": "Overworld event 115",
+          "offset": 110,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_1.events.event_116",
+          "label": "Overworld event 116",
+          "offset": 110,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_1.events.event_117",
+          "label": "Overworld event 117",
+          "offset": 110,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_1.events.event_118",
+          "label": "Overworld event 118",
+          "offset": 110,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_1.events.event_119",
+          "label": "Overworld event 119",
+          "offset": 110,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_1.players.player_1.submap",
+          "label": "Player 1 submap",
+          "offset": 111,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.players.player_1.animation",
+          "label": "Player 1 overworld animation",
+          "offset": 113,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.players.player_1.x",
+          "label": "Player 1 X position",
+          "offset": 117,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.players.player_1.y",
+          "label": "Player 1 Y position",
+          "offset": 119,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.players.player_1.x_tile",
+          "label": "Player 1 X tile pointer",
+          "offset": 125,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.players.player_1.y_tile",
+          "label": "Player 1 Y tile pointer",
+          "offset": 127,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.players.player_2.submap",
+          "label": "Player 2 submap",
+          "offset": 112,
+          "type": "u8"
+        },
+        {
+          "id": "slot_1.players.player_2.animation",
+          "label": "Player 2 overworld animation",
+          "offset": 115,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.players.player_2.x",
+          "label": "Player 2 X position",
+          "offset": 121,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.players.player_2.y",
+          "label": "Player 2 Y position",
+          "offset": 123,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.players.player_2.x_tile",
+          "label": "Player 2 X tile pointer",
+          "offset": 129,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.players.player_2.y_tile",
+          "label": "Player 2 Y tile pointer",
+          "offset": 131,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_1.progress.switch_palaces.yellow",
+          "label": "Yellow Switch Palace",
+          "offset": 133,
+          "type": "bool"
+        },
+        {
+          "id": "slot_1.progress.switch_palaces.green",
+          "label": "Green Switch Palace",
+          "offset": 134,
+          "type": "bool"
+        },
+        {
+          "id": "slot_1.progress.switch_palaces.red",
+          "label": "Red Switch Palace",
+          "offset": 135,
+          "type": "bool"
+        },
+        {
+          "id": "slot_1.progress.switch_palaces.blue",
+          "label": "Blue Switch Palace",
+          "offset": 136,
+          "type": "bool"
+        },
+        {
+          "id": "slot_1.progress.exits_completed",
+          "label": "Exits completed",
+          "offset": 140,
+          "type": "u8"
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "sum16_le",
+          "start": 0,
+          "length": 141,
+          "offset": 141,
+          "target": 23130
+        }
+      ],
+      "mirrors": [
+        {
+          "source": 0,
+          "target": 429,
+          "length": 143
+        }
+      ],
+      "generation": {
+        "fill": 0,
+        "patches": [
+          {
+            "offset": 40,
+            "bytes": [3]
+          },
+          {
+            "offset": 77,
+            "bytes": [1]
+          },
+          {
+            "offset": 82,
+            "bytes": [1]
+          },
+          {
+            "offset": 83,
+            "bytes": [1]
+          },
+          {
+            "offset": 91,
+            "bytes": [8]
+          },
+          {
+            "offset": 92,
+            "bytes": [2]
+          },
+          {
+            "offset": 87,
+            "bytes": [4]
+          },
+          {
+            "offset": 48,
+            "bytes": [1]
+          },
+          {
+            "offset": 111,
+            "bytes": [1, 1, 2, 0, 2, 0, 104, 0, 120, 0, 104, 0, 120, 0, 6, 0, 7, 0, 6, 0, 7, 0]
+          }
+        ]
+      }
+    },
+    {
+      "id": "super-mario-world-file-2-schema",
+      "name": "Super Mario World (File 2 schema)",
+      "platform": "snes",
+      "description": "Edits File 2 and its backup; preserves other files. Requires a valid checksum and matching backup. Template only.",
+      "save_size": 2048,
+      "fields": [
+        {
+          "id": "slot_2.levels.level_00.flags",
+          "label": "Level 00 movement and completion flags",
+          "offset": 143,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_01.flags",
+          "label": "Level 01 movement and completion flags",
+          "offset": 144,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_02.flags",
+          "label": "Level 02 movement and completion flags",
+          "offset": 145,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_03.flags",
+          "label": "Level 03 movement and completion flags",
+          "offset": 146,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_04.flags",
+          "label": "Level 04 movement and completion flags",
+          "offset": 147,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_05.flags",
+          "label": "Level 05 movement and completion flags",
+          "offset": 148,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_06.flags",
+          "label": "Level 06 movement and completion flags",
+          "offset": 149,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_07.flags",
+          "label": "Level 07 movement and completion flags",
+          "offset": 150,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_08.flags",
+          "label": "Level 08 movement and completion flags",
+          "offset": 151,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_09.flags",
+          "label": "Level 09 movement and completion flags",
+          "offset": 152,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_0a.flags",
+          "label": "Level 0A movement and completion flags",
+          "offset": 153,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_0b.flags",
+          "label": "Level 0B movement and completion flags",
+          "offset": 154,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_0c.flags",
+          "label": "Level 0C movement and completion flags",
+          "offset": 155,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_0d.flags",
+          "label": "Level 0D movement and completion flags",
+          "offset": 156,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_0e.flags",
+          "label": "Level 0E movement and completion flags",
+          "offset": 157,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_0f.flags",
+          "label": "Level 0F movement and completion flags",
+          "offset": 158,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_10.flags",
+          "label": "Level 10 movement and completion flags",
+          "offset": 159,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_11.flags",
+          "label": "Level 11 movement and completion flags",
+          "offset": 160,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_12.flags",
+          "label": "Level 12 movement and completion flags",
+          "offset": 161,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_13.flags",
+          "label": "Level 13 movement and completion flags",
+          "offset": 162,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_14.flags",
+          "label": "Level 14 movement and completion flags",
+          "offset": 163,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_15.flags",
+          "label": "Level 15 movement and completion flags",
+          "offset": 164,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_16.flags",
+          "label": "Level 16 movement and completion flags",
+          "offset": 165,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_17.flags",
+          "label": "Level 17 movement and completion flags",
+          "offset": 166,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_18.flags",
+          "label": "Level 18 movement and completion flags",
+          "offset": 167,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_19.flags",
+          "label": "Level 19 movement and completion flags",
+          "offset": 168,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_1a.flags",
+          "label": "Level 1A movement and completion flags",
+          "offset": 169,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_1b.flags",
+          "label": "Level 1B movement and completion flags",
+          "offset": 170,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_1c.flags",
+          "label": "Level 1C movement and completion flags",
+          "offset": 171,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_1d.flags",
+          "label": "Level 1D movement and completion flags",
+          "offset": 172,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_1e.flags",
+          "label": "Level 1E movement and completion flags",
+          "offset": 173,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_1f.flags",
+          "label": "Level 1F movement and completion flags",
+          "offset": 174,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_20.flags",
+          "label": "Level 20 movement and completion flags",
+          "offset": 175,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_21.flags",
+          "label": "Level 21 movement and completion flags",
+          "offset": 176,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_22.flags",
+          "label": "Level 22 movement and completion flags",
+          "offset": 177,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_23.flags",
+          "label": "Level 23 movement and completion flags",
+          "offset": 178,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_24.flags",
+          "label": "Level 24 movement and completion flags",
+          "offset": 179,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_25.flags",
+          "label": "Level 25 movement and completion flags",
+          "offset": 180,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_26.flags",
+          "label": "Level 26 movement and completion flags",
+          "offset": 181,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_27.flags",
+          "label": "Level 27 movement and completion flags",
+          "offset": 182,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_28.flags",
+          "label": "Level 28 movement and completion flags",
+          "offset": 183,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_29.flags",
+          "label": "Level 29 movement and completion flags",
+          "offset": 184,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_2a.flags",
+          "label": "Level 2A movement and completion flags",
+          "offset": 185,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_2b.flags",
+          "label": "Level 2B movement and completion flags",
+          "offset": 186,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_2c.flags",
+          "label": "Level 2C movement and completion flags",
+          "offset": 187,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_2d.flags",
+          "label": "Level 2D movement and completion flags",
+          "offset": 188,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_2e.flags",
+          "label": "Level 2E movement and completion flags",
+          "offset": 189,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_2f.flags",
+          "label": "Level 2F movement and completion flags",
+          "offset": 190,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_30.flags",
+          "label": "Level 30 movement and completion flags",
+          "offset": 191,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_31.flags",
+          "label": "Level 31 movement and completion flags",
+          "offset": 192,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_32.flags",
+          "label": "Level 32 movement and completion flags",
+          "offset": 193,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_33.flags",
+          "label": "Level 33 movement and completion flags",
+          "offset": 194,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_34.flags",
+          "label": "Level 34 movement and completion flags",
+          "offset": 195,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_35.flags",
+          "label": "Level 35 movement and completion flags",
+          "offset": 196,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_36.flags",
+          "label": "Level 36 movement and completion flags",
+          "offset": 197,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_37.flags",
+          "label": "Level 37 movement and completion flags",
+          "offset": 198,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_38.flags",
+          "label": "Level 38 movement and completion flags",
+          "offset": 199,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_39.flags",
+          "label": "Level 39 movement and completion flags",
+          "offset": 200,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_3a.flags",
+          "label": "Level 3A movement and completion flags",
+          "offset": 201,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_3b.flags",
+          "label": "Level 3B movement and completion flags",
+          "offset": 202,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_3c.flags",
+          "label": "Level 3C movement and completion flags",
+          "offset": 203,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_3d.flags",
+          "label": "Level 3D movement and completion flags",
+          "offset": 204,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_3e.flags",
+          "label": "Level 3E movement and completion flags",
+          "offset": 205,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_3f.flags",
+          "label": "Level 3F movement and completion flags",
+          "offset": 206,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_40.flags",
+          "label": "Level 40 movement and completion flags",
+          "offset": 207,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_41.flags",
+          "label": "Level 41 movement and completion flags",
+          "offset": 208,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_42.flags",
+          "label": "Level 42 movement and completion flags",
+          "offset": 209,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_43.flags",
+          "label": "Level 43 movement and completion flags",
+          "offset": 210,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_44.flags",
+          "label": "Level 44 movement and completion flags",
+          "offset": 211,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_45.flags",
+          "label": "Level 45 movement and completion flags",
+          "offset": 212,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_46.flags",
+          "label": "Level 46 movement and completion flags",
+          "offset": 213,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_47.flags",
+          "label": "Level 47 movement and completion flags",
+          "offset": 214,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_48.flags",
+          "label": "Level 48 movement and completion flags",
+          "offset": 215,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_49.flags",
+          "label": "Level 49 movement and completion flags",
+          "offset": 216,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_4a.flags",
+          "label": "Level 4A movement and completion flags",
+          "offset": 217,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_4b.flags",
+          "label": "Level 4B movement and completion flags",
+          "offset": 218,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_4c.flags",
+          "label": "Level 4C movement and completion flags",
+          "offset": 219,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_4d.flags",
+          "label": "Level 4D movement and completion flags",
+          "offset": 220,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_4e.flags",
+          "label": "Level 4E movement and completion flags",
+          "offset": 221,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_4f.flags",
+          "label": "Level 4F movement and completion flags",
+          "offset": 222,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_50.flags",
+          "label": "Level 50 movement and completion flags",
+          "offset": 223,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_51.flags",
+          "label": "Level 51 movement and completion flags",
+          "offset": 224,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_52.flags",
+          "label": "Level 52 movement and completion flags",
+          "offset": 225,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_53.flags",
+          "label": "Level 53 movement and completion flags",
+          "offset": 226,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_54.flags",
+          "label": "Level 54 movement and completion flags",
+          "offset": 227,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_55.flags",
+          "label": "Level 55 movement and completion flags",
+          "offset": 228,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_56.flags",
+          "label": "Level 56 movement and completion flags",
+          "offset": 229,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_57.flags",
+          "label": "Level 57 movement and completion flags",
+          "offset": 230,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_58.flags",
+          "label": "Level 58 movement and completion flags",
+          "offset": 231,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_59.flags",
+          "label": "Level 59 movement and completion flags",
+          "offset": 232,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_5a.flags",
+          "label": "Level 5A movement and completion flags",
+          "offset": 233,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_5b.flags",
+          "label": "Level 5B movement and completion flags",
+          "offset": 234,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_5c.flags",
+          "label": "Level 5C movement and completion flags",
+          "offset": 235,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_5d.flags",
+          "label": "Level 5D movement and completion flags",
+          "offset": 236,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_5e.flags",
+          "label": "Level 5E movement and completion flags",
+          "offset": 237,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.levels.level_5f.flags",
+          "label": "Level 5F movement and completion flags",
+          "offset": 238,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.events.event_000",
+          "label": "Overworld event 0",
+          "offset": 239,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.events.event_001",
+          "label": "Overworld event 1",
+          "offset": 239,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.events.event_002",
+          "label": "Overworld event 2",
+          "offset": 239,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.events.event_003",
+          "label": "Overworld event 3",
+          "offset": 239,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.events.event_004",
+          "label": "Overworld event 4",
+          "offset": 239,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.events.event_005",
+          "label": "Overworld event 5",
+          "offset": 239,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.events.event_006",
+          "label": "Overworld event 6",
+          "offset": 239,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.events.event_007",
+          "label": "Overworld event 7",
+          "offset": 239,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.events.event_008",
+          "label": "Overworld event 8",
+          "offset": 240,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.events.event_009",
+          "label": "Overworld event 9",
+          "offset": 240,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.events.event_010",
+          "label": "Overworld event 10",
+          "offset": 240,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.events.event_011",
+          "label": "Overworld event 11",
+          "offset": 240,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.events.event_012",
+          "label": "Overworld event 12",
+          "offset": 240,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.events.event_013",
+          "label": "Overworld event 13",
+          "offset": 240,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.events.event_014",
+          "label": "Overworld event 14",
+          "offset": 240,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.events.event_015",
+          "label": "Overworld event 15",
+          "offset": 240,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.events.event_016",
+          "label": "Overworld event 16",
+          "offset": 241,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.events.event_017",
+          "label": "Overworld event 17",
+          "offset": 241,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.events.event_018",
+          "label": "Overworld event 18",
+          "offset": 241,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.events.event_019",
+          "label": "Overworld event 19",
+          "offset": 241,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.events.event_020",
+          "label": "Overworld event 20",
+          "offset": 241,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.events.event_021",
+          "label": "Overworld event 21",
+          "offset": 241,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.events.event_022",
+          "label": "Overworld event 22",
+          "offset": 241,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.events.event_023",
+          "label": "Overworld event 23",
+          "offset": 241,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.events.event_024",
+          "label": "Overworld event 24",
+          "offset": 242,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.events.event_025",
+          "label": "Overworld event 25",
+          "offset": 242,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.events.event_026",
+          "label": "Overworld event 26",
+          "offset": 242,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.events.event_027",
+          "label": "Overworld event 27",
+          "offset": 242,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.events.event_028",
+          "label": "Overworld event 28",
+          "offset": 242,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.events.event_029",
+          "label": "Overworld event 29",
+          "offset": 242,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.events.event_030",
+          "label": "Overworld event 30",
+          "offset": 242,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.events.event_031",
+          "label": "Overworld event 31",
+          "offset": 242,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.events.event_032",
+          "label": "Overworld event 32",
+          "offset": 243,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.events.event_033",
+          "label": "Overworld event 33",
+          "offset": 243,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.events.event_034",
+          "label": "Overworld event 34",
+          "offset": 243,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.events.event_035",
+          "label": "Overworld event 35",
+          "offset": 243,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.events.event_036",
+          "label": "Overworld event 36",
+          "offset": 243,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.events.event_037",
+          "label": "Overworld event 37",
+          "offset": 243,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.events.event_038",
+          "label": "Overworld event 38",
+          "offset": 243,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.events.event_039",
+          "label": "Overworld event 39",
+          "offset": 243,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.events.event_040",
+          "label": "Overworld event 40",
+          "offset": 244,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.events.event_041",
+          "label": "Overworld event 41",
+          "offset": 244,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.events.event_042",
+          "label": "Overworld event 42",
+          "offset": 244,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.events.event_043",
+          "label": "Overworld event 43",
+          "offset": 244,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.events.event_044",
+          "label": "Overworld event 44",
+          "offset": 244,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.events.event_045",
+          "label": "Overworld event 45",
+          "offset": 244,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.events.event_046",
+          "label": "Overworld event 46",
+          "offset": 244,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.events.event_047",
+          "label": "Overworld event 47",
+          "offset": 244,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.events.event_048",
+          "label": "Overworld event 48",
+          "offset": 245,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.events.event_049",
+          "label": "Overworld event 49",
+          "offset": 245,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.events.event_050",
+          "label": "Overworld event 50",
+          "offset": 245,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.events.event_051",
+          "label": "Overworld event 51",
+          "offset": 245,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.events.event_052",
+          "label": "Overworld event 52",
+          "offset": 245,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.events.event_053",
+          "label": "Overworld event 53",
+          "offset": 245,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.events.event_054",
+          "label": "Overworld event 54",
+          "offset": 245,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.events.event_055",
+          "label": "Overworld event 55",
+          "offset": 245,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.events.event_056",
+          "label": "Overworld event 56",
+          "offset": 246,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.events.event_057",
+          "label": "Overworld event 57",
+          "offset": 246,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.events.event_058",
+          "label": "Overworld event 58",
+          "offset": 246,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.events.event_059",
+          "label": "Overworld event 59",
+          "offset": 246,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.events.event_060",
+          "label": "Overworld event 60",
+          "offset": 246,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.events.event_061",
+          "label": "Overworld event 61",
+          "offset": 246,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.events.event_062",
+          "label": "Overworld event 62",
+          "offset": 246,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.events.event_063",
+          "label": "Overworld event 63",
+          "offset": 246,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.events.event_064",
+          "label": "Overworld event 64",
+          "offset": 247,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.events.event_065",
+          "label": "Overworld event 65",
+          "offset": 247,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.events.event_066",
+          "label": "Overworld event 66",
+          "offset": 247,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.events.event_067",
+          "label": "Overworld event 67",
+          "offset": 247,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.events.event_068",
+          "label": "Overworld event 68",
+          "offset": 247,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.events.event_069",
+          "label": "Overworld event 69",
+          "offset": 247,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.events.event_070",
+          "label": "Overworld event 70",
+          "offset": 247,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.events.event_071",
+          "label": "Overworld event 71",
+          "offset": 247,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.events.event_072",
+          "label": "Overworld event 72",
+          "offset": 248,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.events.event_073",
+          "label": "Overworld event 73",
+          "offset": 248,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.events.event_074",
+          "label": "Overworld event 74",
+          "offset": 248,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.events.event_075",
+          "label": "Overworld event 75",
+          "offset": 248,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.events.event_076",
+          "label": "Overworld event 76",
+          "offset": 248,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.events.event_077",
+          "label": "Overworld event 77",
+          "offset": 248,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.events.event_078",
+          "label": "Overworld event 78",
+          "offset": 248,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.events.event_079",
+          "label": "Overworld event 79",
+          "offset": 248,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.events.event_080",
+          "label": "Overworld event 80",
+          "offset": 249,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.events.event_081",
+          "label": "Overworld event 81",
+          "offset": 249,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.events.event_082",
+          "label": "Overworld event 82",
+          "offset": 249,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.events.event_083",
+          "label": "Overworld event 83",
+          "offset": 249,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.events.event_084",
+          "label": "Overworld event 84",
+          "offset": 249,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.events.event_085",
+          "label": "Overworld event 85",
+          "offset": 249,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.events.event_086",
+          "label": "Overworld event 86",
+          "offset": 249,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.events.event_087",
+          "label": "Overworld event 87",
+          "offset": 249,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.events.event_088",
+          "label": "Overworld event 88",
+          "offset": 250,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.events.event_089",
+          "label": "Overworld event 89",
+          "offset": 250,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.events.event_090",
+          "label": "Overworld event 90",
+          "offset": 250,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.events.event_091",
+          "label": "Overworld event 91",
+          "offset": 250,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.events.event_092",
+          "label": "Overworld event 92",
+          "offset": 250,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.events.event_093",
+          "label": "Overworld event 93",
+          "offset": 250,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.events.event_094",
+          "label": "Overworld event 94",
+          "offset": 250,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.events.event_095",
+          "label": "Overworld event 95",
+          "offset": 250,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.events.event_096",
+          "label": "Overworld event 96",
+          "offset": 251,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.events.event_097",
+          "label": "Overworld event 97",
+          "offset": 251,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.events.event_098",
+          "label": "Overworld event 98",
+          "offset": 251,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.events.event_099",
+          "label": "Overworld event 99",
+          "offset": 251,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.events.event_100",
+          "label": "Overworld event 100",
+          "offset": 251,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.events.event_101",
+          "label": "Overworld event 101",
+          "offset": 251,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.events.event_102",
+          "label": "Overworld event 102",
+          "offset": 251,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.events.event_103",
+          "label": "Overworld event 103",
+          "offset": 251,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.events.event_104",
+          "label": "Overworld event 104",
+          "offset": 252,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.events.event_105",
+          "label": "Overworld event 105",
+          "offset": 252,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.events.event_106",
+          "label": "Overworld event 106",
+          "offset": 252,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.events.event_107",
+          "label": "Overworld event 107",
+          "offset": 252,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.events.event_108",
+          "label": "Overworld event 108",
+          "offset": 252,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.events.event_109",
+          "label": "Overworld event 109",
+          "offset": 252,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.events.event_110",
+          "label": "Overworld event 110",
+          "offset": 252,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.events.event_111",
+          "label": "Overworld event 111",
+          "offset": 252,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.events.event_112",
+          "label": "Overworld event 112",
+          "offset": 253,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_2.events.event_113",
+          "label": "Overworld event 113",
+          "offset": 253,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_2.events.event_114",
+          "label": "Overworld event 114",
+          "offset": 253,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_2.events.event_115",
+          "label": "Overworld event 115",
+          "offset": 253,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_2.events.event_116",
+          "label": "Overworld event 116",
+          "offset": 253,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_2.events.event_117",
+          "label": "Overworld event 117",
+          "offset": 253,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_2.events.event_118",
+          "label": "Overworld event 118",
+          "offset": 253,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_2.events.event_119",
+          "label": "Overworld event 119",
+          "offset": 253,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_2.players.player_1.submap",
+          "label": "Player 1 submap",
+          "offset": 254,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.players.player_1.animation",
+          "label": "Player 1 overworld animation",
+          "offset": 256,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.players.player_1.x",
+          "label": "Player 1 X position",
+          "offset": 260,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.players.player_1.y",
+          "label": "Player 1 Y position",
+          "offset": 262,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.players.player_1.x_tile",
+          "label": "Player 1 X tile pointer",
+          "offset": 268,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.players.player_1.y_tile",
+          "label": "Player 1 Y tile pointer",
+          "offset": 270,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.players.player_2.submap",
+          "label": "Player 2 submap",
+          "offset": 255,
+          "type": "u8"
+        },
+        {
+          "id": "slot_2.players.player_2.animation",
+          "label": "Player 2 overworld animation",
+          "offset": 258,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.players.player_2.x",
+          "label": "Player 2 X position",
+          "offset": 264,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.players.player_2.y",
+          "label": "Player 2 Y position",
+          "offset": 266,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.players.player_2.x_tile",
+          "label": "Player 2 X tile pointer",
+          "offset": 272,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.players.player_2.y_tile",
+          "label": "Player 2 Y tile pointer",
+          "offset": 274,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_2.progress.switch_palaces.yellow",
+          "label": "Yellow Switch Palace",
+          "offset": 276,
+          "type": "bool"
+        },
+        {
+          "id": "slot_2.progress.switch_palaces.green",
+          "label": "Green Switch Palace",
+          "offset": 277,
+          "type": "bool"
+        },
+        {
+          "id": "slot_2.progress.switch_palaces.red",
+          "label": "Red Switch Palace",
+          "offset": 278,
+          "type": "bool"
+        },
+        {
+          "id": "slot_2.progress.switch_palaces.blue",
+          "label": "Blue Switch Palace",
+          "offset": 279,
+          "type": "bool"
+        },
+        {
+          "id": "slot_2.progress.exits_completed",
+          "label": "Exits completed",
+          "offset": 283,
+          "type": "u8"
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "sum16_le",
+          "start": 143,
+          "length": 141,
+          "offset": 284,
+          "target": 23130
+        }
+      ],
+      "mirrors": [
+        {
+          "source": 143,
+          "target": 572,
+          "length": 143
+        }
+      ]
+    },
+    {
+      "id": "super-mario-world-file-3-schema",
+      "name": "Super Mario World (File 3 schema)",
+      "platform": "snes",
+      "description": "Edits File 3 and its backup; preserves other files. Requires a valid checksum and matching backup. Template only.",
+      "save_size": 2048,
+      "fields": [
+        {
+          "id": "slot_3.levels.level_00.flags",
+          "label": "Level 00 movement and completion flags",
+          "offset": 286,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_01.flags",
+          "label": "Level 01 movement and completion flags",
+          "offset": 287,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_02.flags",
+          "label": "Level 02 movement and completion flags",
+          "offset": 288,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_03.flags",
+          "label": "Level 03 movement and completion flags",
+          "offset": 289,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_04.flags",
+          "label": "Level 04 movement and completion flags",
+          "offset": 290,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_05.flags",
+          "label": "Level 05 movement and completion flags",
+          "offset": 291,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_06.flags",
+          "label": "Level 06 movement and completion flags",
+          "offset": 292,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_07.flags",
+          "label": "Level 07 movement and completion flags",
+          "offset": 293,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_08.flags",
+          "label": "Level 08 movement and completion flags",
+          "offset": 294,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_09.flags",
+          "label": "Level 09 movement and completion flags",
+          "offset": 295,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_0a.flags",
+          "label": "Level 0A movement and completion flags",
+          "offset": 296,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_0b.flags",
+          "label": "Level 0B movement and completion flags",
+          "offset": 297,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_0c.flags",
+          "label": "Level 0C movement and completion flags",
+          "offset": 298,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_0d.flags",
+          "label": "Level 0D movement and completion flags",
+          "offset": 299,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_0e.flags",
+          "label": "Level 0E movement and completion flags",
+          "offset": 300,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_0f.flags",
+          "label": "Level 0F movement and completion flags",
+          "offset": 301,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_10.flags",
+          "label": "Level 10 movement and completion flags",
+          "offset": 302,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_11.flags",
+          "label": "Level 11 movement and completion flags",
+          "offset": 303,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_12.flags",
+          "label": "Level 12 movement and completion flags",
+          "offset": 304,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_13.flags",
+          "label": "Level 13 movement and completion flags",
+          "offset": 305,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_14.flags",
+          "label": "Level 14 movement and completion flags",
+          "offset": 306,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_15.flags",
+          "label": "Level 15 movement and completion flags",
+          "offset": 307,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_16.flags",
+          "label": "Level 16 movement and completion flags",
+          "offset": 308,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_17.flags",
+          "label": "Level 17 movement and completion flags",
+          "offset": 309,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_18.flags",
+          "label": "Level 18 movement and completion flags",
+          "offset": 310,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_19.flags",
+          "label": "Level 19 movement and completion flags",
+          "offset": 311,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_1a.flags",
+          "label": "Level 1A movement and completion flags",
+          "offset": 312,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_1b.flags",
+          "label": "Level 1B movement and completion flags",
+          "offset": 313,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_1c.flags",
+          "label": "Level 1C movement and completion flags",
+          "offset": 314,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_1d.flags",
+          "label": "Level 1D movement and completion flags",
+          "offset": 315,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_1e.flags",
+          "label": "Level 1E movement and completion flags",
+          "offset": 316,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_1f.flags",
+          "label": "Level 1F movement and completion flags",
+          "offset": 317,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_20.flags",
+          "label": "Level 20 movement and completion flags",
+          "offset": 318,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_21.flags",
+          "label": "Level 21 movement and completion flags",
+          "offset": 319,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_22.flags",
+          "label": "Level 22 movement and completion flags",
+          "offset": 320,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_23.flags",
+          "label": "Level 23 movement and completion flags",
+          "offset": 321,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_24.flags",
+          "label": "Level 24 movement and completion flags",
+          "offset": 322,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_25.flags",
+          "label": "Level 25 movement and completion flags",
+          "offset": 323,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_26.flags",
+          "label": "Level 26 movement and completion flags",
+          "offset": 324,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_27.flags",
+          "label": "Level 27 movement and completion flags",
+          "offset": 325,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_28.flags",
+          "label": "Level 28 movement and completion flags",
+          "offset": 326,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_29.flags",
+          "label": "Level 29 movement and completion flags",
+          "offset": 327,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_2a.flags",
+          "label": "Level 2A movement and completion flags",
+          "offset": 328,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_2b.flags",
+          "label": "Level 2B movement and completion flags",
+          "offset": 329,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_2c.flags",
+          "label": "Level 2C movement and completion flags",
+          "offset": 330,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_2d.flags",
+          "label": "Level 2D movement and completion flags",
+          "offset": 331,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_2e.flags",
+          "label": "Level 2E movement and completion flags",
+          "offset": 332,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_2f.flags",
+          "label": "Level 2F movement and completion flags",
+          "offset": 333,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_30.flags",
+          "label": "Level 30 movement and completion flags",
+          "offset": 334,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_31.flags",
+          "label": "Level 31 movement and completion flags",
+          "offset": 335,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_32.flags",
+          "label": "Level 32 movement and completion flags",
+          "offset": 336,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_33.flags",
+          "label": "Level 33 movement and completion flags",
+          "offset": 337,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_34.flags",
+          "label": "Level 34 movement and completion flags",
+          "offset": 338,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_35.flags",
+          "label": "Level 35 movement and completion flags",
+          "offset": 339,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_36.flags",
+          "label": "Level 36 movement and completion flags",
+          "offset": 340,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_37.flags",
+          "label": "Level 37 movement and completion flags",
+          "offset": 341,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_38.flags",
+          "label": "Level 38 movement and completion flags",
+          "offset": 342,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_39.flags",
+          "label": "Level 39 movement and completion flags",
+          "offset": 343,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_3a.flags",
+          "label": "Level 3A movement and completion flags",
+          "offset": 344,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_3b.flags",
+          "label": "Level 3B movement and completion flags",
+          "offset": 345,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_3c.flags",
+          "label": "Level 3C movement and completion flags",
+          "offset": 346,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_3d.flags",
+          "label": "Level 3D movement and completion flags",
+          "offset": 347,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_3e.flags",
+          "label": "Level 3E movement and completion flags",
+          "offset": 348,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_3f.flags",
+          "label": "Level 3F movement and completion flags",
+          "offset": 349,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_40.flags",
+          "label": "Level 40 movement and completion flags",
+          "offset": 350,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_41.flags",
+          "label": "Level 41 movement and completion flags",
+          "offset": 351,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_42.flags",
+          "label": "Level 42 movement and completion flags",
+          "offset": 352,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_43.flags",
+          "label": "Level 43 movement and completion flags",
+          "offset": 353,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_44.flags",
+          "label": "Level 44 movement and completion flags",
+          "offset": 354,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_45.flags",
+          "label": "Level 45 movement and completion flags",
+          "offset": 355,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_46.flags",
+          "label": "Level 46 movement and completion flags",
+          "offset": 356,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_47.flags",
+          "label": "Level 47 movement and completion flags",
+          "offset": 357,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_48.flags",
+          "label": "Level 48 movement and completion flags",
+          "offset": 358,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_49.flags",
+          "label": "Level 49 movement and completion flags",
+          "offset": 359,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_4a.flags",
+          "label": "Level 4A movement and completion flags",
+          "offset": 360,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_4b.flags",
+          "label": "Level 4B movement and completion flags",
+          "offset": 361,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_4c.flags",
+          "label": "Level 4C movement and completion flags",
+          "offset": 362,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_4d.flags",
+          "label": "Level 4D movement and completion flags",
+          "offset": 363,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_4e.flags",
+          "label": "Level 4E movement and completion flags",
+          "offset": 364,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_4f.flags",
+          "label": "Level 4F movement and completion flags",
+          "offset": 365,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_50.flags",
+          "label": "Level 50 movement and completion flags",
+          "offset": 366,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_51.flags",
+          "label": "Level 51 movement and completion flags",
+          "offset": 367,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_52.flags",
+          "label": "Level 52 movement and completion flags",
+          "offset": 368,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_53.flags",
+          "label": "Level 53 movement and completion flags",
+          "offset": 369,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_54.flags",
+          "label": "Level 54 movement and completion flags",
+          "offset": 370,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_55.flags",
+          "label": "Level 55 movement and completion flags",
+          "offset": 371,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_56.flags",
+          "label": "Level 56 movement and completion flags",
+          "offset": 372,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_57.flags",
+          "label": "Level 57 movement and completion flags",
+          "offset": 373,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_58.flags",
+          "label": "Level 58 movement and completion flags",
+          "offset": 374,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_59.flags",
+          "label": "Level 59 movement and completion flags",
+          "offset": 375,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_5a.flags",
+          "label": "Level 5A movement and completion flags",
+          "offset": 376,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_5b.flags",
+          "label": "Level 5B movement and completion flags",
+          "offset": 377,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_5c.flags",
+          "label": "Level 5C movement and completion flags",
+          "offset": 378,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_5d.flags",
+          "label": "Level 5D movement and completion flags",
+          "offset": 379,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_5e.flags",
+          "label": "Level 5E movement and completion flags",
+          "offset": 380,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.levels.level_5f.flags",
+          "label": "Level 5F movement and completion flags",
+          "offset": 381,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.events.event_000",
+          "label": "Overworld event 0",
+          "offset": 382,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.events.event_001",
+          "label": "Overworld event 1",
+          "offset": 382,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.events.event_002",
+          "label": "Overworld event 2",
+          "offset": 382,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.events.event_003",
+          "label": "Overworld event 3",
+          "offset": 382,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.events.event_004",
+          "label": "Overworld event 4",
+          "offset": 382,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.events.event_005",
+          "label": "Overworld event 5",
+          "offset": 382,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.events.event_006",
+          "label": "Overworld event 6",
+          "offset": 382,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.events.event_007",
+          "label": "Overworld event 7",
+          "offset": 382,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.events.event_008",
+          "label": "Overworld event 8",
+          "offset": 383,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.events.event_009",
+          "label": "Overworld event 9",
+          "offset": 383,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.events.event_010",
+          "label": "Overworld event 10",
+          "offset": 383,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.events.event_011",
+          "label": "Overworld event 11",
+          "offset": 383,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.events.event_012",
+          "label": "Overworld event 12",
+          "offset": 383,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.events.event_013",
+          "label": "Overworld event 13",
+          "offset": 383,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.events.event_014",
+          "label": "Overworld event 14",
+          "offset": 383,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.events.event_015",
+          "label": "Overworld event 15",
+          "offset": 383,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.events.event_016",
+          "label": "Overworld event 16",
+          "offset": 384,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.events.event_017",
+          "label": "Overworld event 17",
+          "offset": 384,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.events.event_018",
+          "label": "Overworld event 18",
+          "offset": 384,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.events.event_019",
+          "label": "Overworld event 19",
+          "offset": 384,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.events.event_020",
+          "label": "Overworld event 20",
+          "offset": 384,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.events.event_021",
+          "label": "Overworld event 21",
+          "offset": 384,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.events.event_022",
+          "label": "Overworld event 22",
+          "offset": 384,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.events.event_023",
+          "label": "Overworld event 23",
+          "offset": 384,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.events.event_024",
+          "label": "Overworld event 24",
+          "offset": 385,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.events.event_025",
+          "label": "Overworld event 25",
+          "offset": 385,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.events.event_026",
+          "label": "Overworld event 26",
+          "offset": 385,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.events.event_027",
+          "label": "Overworld event 27",
+          "offset": 385,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.events.event_028",
+          "label": "Overworld event 28",
+          "offset": 385,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.events.event_029",
+          "label": "Overworld event 29",
+          "offset": 385,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.events.event_030",
+          "label": "Overworld event 30",
+          "offset": 385,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.events.event_031",
+          "label": "Overworld event 31",
+          "offset": 385,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.events.event_032",
+          "label": "Overworld event 32",
+          "offset": 386,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.events.event_033",
+          "label": "Overworld event 33",
+          "offset": 386,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.events.event_034",
+          "label": "Overworld event 34",
+          "offset": 386,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.events.event_035",
+          "label": "Overworld event 35",
+          "offset": 386,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.events.event_036",
+          "label": "Overworld event 36",
+          "offset": 386,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.events.event_037",
+          "label": "Overworld event 37",
+          "offset": 386,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.events.event_038",
+          "label": "Overworld event 38",
+          "offset": 386,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.events.event_039",
+          "label": "Overworld event 39",
+          "offset": 386,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.events.event_040",
+          "label": "Overworld event 40",
+          "offset": 387,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.events.event_041",
+          "label": "Overworld event 41",
+          "offset": 387,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.events.event_042",
+          "label": "Overworld event 42",
+          "offset": 387,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.events.event_043",
+          "label": "Overworld event 43",
+          "offset": 387,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.events.event_044",
+          "label": "Overworld event 44",
+          "offset": 387,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.events.event_045",
+          "label": "Overworld event 45",
+          "offset": 387,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.events.event_046",
+          "label": "Overworld event 46",
+          "offset": 387,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.events.event_047",
+          "label": "Overworld event 47",
+          "offset": 387,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.events.event_048",
+          "label": "Overworld event 48",
+          "offset": 388,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.events.event_049",
+          "label": "Overworld event 49",
+          "offset": 388,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.events.event_050",
+          "label": "Overworld event 50",
+          "offset": 388,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.events.event_051",
+          "label": "Overworld event 51",
+          "offset": 388,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.events.event_052",
+          "label": "Overworld event 52",
+          "offset": 388,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.events.event_053",
+          "label": "Overworld event 53",
+          "offset": 388,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.events.event_054",
+          "label": "Overworld event 54",
+          "offset": 388,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.events.event_055",
+          "label": "Overworld event 55",
+          "offset": 388,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.events.event_056",
+          "label": "Overworld event 56",
+          "offset": 389,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.events.event_057",
+          "label": "Overworld event 57",
+          "offset": 389,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.events.event_058",
+          "label": "Overworld event 58",
+          "offset": 389,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.events.event_059",
+          "label": "Overworld event 59",
+          "offset": 389,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.events.event_060",
+          "label": "Overworld event 60",
+          "offset": 389,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.events.event_061",
+          "label": "Overworld event 61",
+          "offset": 389,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.events.event_062",
+          "label": "Overworld event 62",
+          "offset": 389,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.events.event_063",
+          "label": "Overworld event 63",
+          "offset": 389,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.events.event_064",
+          "label": "Overworld event 64",
+          "offset": 390,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.events.event_065",
+          "label": "Overworld event 65",
+          "offset": 390,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.events.event_066",
+          "label": "Overworld event 66",
+          "offset": 390,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.events.event_067",
+          "label": "Overworld event 67",
+          "offset": 390,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.events.event_068",
+          "label": "Overworld event 68",
+          "offset": 390,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.events.event_069",
+          "label": "Overworld event 69",
+          "offset": 390,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.events.event_070",
+          "label": "Overworld event 70",
+          "offset": 390,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.events.event_071",
+          "label": "Overworld event 71",
+          "offset": 390,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.events.event_072",
+          "label": "Overworld event 72",
+          "offset": 391,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.events.event_073",
+          "label": "Overworld event 73",
+          "offset": 391,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.events.event_074",
+          "label": "Overworld event 74",
+          "offset": 391,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.events.event_075",
+          "label": "Overworld event 75",
+          "offset": 391,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.events.event_076",
+          "label": "Overworld event 76",
+          "offset": 391,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.events.event_077",
+          "label": "Overworld event 77",
+          "offset": 391,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.events.event_078",
+          "label": "Overworld event 78",
+          "offset": 391,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.events.event_079",
+          "label": "Overworld event 79",
+          "offset": 391,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.events.event_080",
+          "label": "Overworld event 80",
+          "offset": 392,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.events.event_081",
+          "label": "Overworld event 81",
+          "offset": 392,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.events.event_082",
+          "label": "Overworld event 82",
+          "offset": 392,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.events.event_083",
+          "label": "Overworld event 83",
+          "offset": 392,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.events.event_084",
+          "label": "Overworld event 84",
+          "offset": 392,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.events.event_085",
+          "label": "Overworld event 85",
+          "offset": 392,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.events.event_086",
+          "label": "Overworld event 86",
+          "offset": 392,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.events.event_087",
+          "label": "Overworld event 87",
+          "offset": 392,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.events.event_088",
+          "label": "Overworld event 88",
+          "offset": 393,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.events.event_089",
+          "label": "Overworld event 89",
+          "offset": 393,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.events.event_090",
+          "label": "Overworld event 90",
+          "offset": 393,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.events.event_091",
+          "label": "Overworld event 91",
+          "offset": 393,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.events.event_092",
+          "label": "Overworld event 92",
+          "offset": 393,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.events.event_093",
+          "label": "Overworld event 93",
+          "offset": 393,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.events.event_094",
+          "label": "Overworld event 94",
+          "offset": 393,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.events.event_095",
+          "label": "Overworld event 95",
+          "offset": 393,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.events.event_096",
+          "label": "Overworld event 96",
+          "offset": 394,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.events.event_097",
+          "label": "Overworld event 97",
+          "offset": 394,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.events.event_098",
+          "label": "Overworld event 98",
+          "offset": 394,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.events.event_099",
+          "label": "Overworld event 99",
+          "offset": 394,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.events.event_100",
+          "label": "Overworld event 100",
+          "offset": 394,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.events.event_101",
+          "label": "Overworld event 101",
+          "offset": 394,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.events.event_102",
+          "label": "Overworld event 102",
+          "offset": 394,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.events.event_103",
+          "label": "Overworld event 103",
+          "offset": 394,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.events.event_104",
+          "label": "Overworld event 104",
+          "offset": 395,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.events.event_105",
+          "label": "Overworld event 105",
+          "offset": 395,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.events.event_106",
+          "label": "Overworld event 106",
+          "offset": 395,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.events.event_107",
+          "label": "Overworld event 107",
+          "offset": 395,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.events.event_108",
+          "label": "Overworld event 108",
+          "offset": 395,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.events.event_109",
+          "label": "Overworld event 109",
+          "offset": 395,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.events.event_110",
+          "label": "Overworld event 110",
+          "offset": 395,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.events.event_111",
+          "label": "Overworld event 111",
+          "offset": 395,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.events.event_112",
+          "label": "Overworld event 112",
+          "offset": 396,
+          "type": "bit",
+          "bit": 7
+        },
+        {
+          "id": "slot_3.events.event_113",
+          "label": "Overworld event 113",
+          "offset": 396,
+          "type": "bit",
+          "bit": 6
+        },
+        {
+          "id": "slot_3.events.event_114",
+          "label": "Overworld event 114",
+          "offset": 396,
+          "type": "bit",
+          "bit": 5
+        },
+        {
+          "id": "slot_3.events.event_115",
+          "label": "Overworld event 115",
+          "offset": 396,
+          "type": "bit",
+          "bit": 4
+        },
+        {
+          "id": "slot_3.events.event_116",
+          "label": "Overworld event 116",
+          "offset": 396,
+          "type": "bit",
+          "bit": 3
+        },
+        {
+          "id": "slot_3.events.event_117",
+          "label": "Overworld event 117",
+          "offset": 396,
+          "type": "bit",
+          "bit": 2
+        },
+        {
+          "id": "slot_3.events.event_118",
+          "label": "Overworld event 118",
+          "offset": 396,
+          "type": "bit",
+          "bit": 1
+        },
+        {
+          "id": "slot_3.events.event_119",
+          "label": "Overworld event 119",
+          "offset": 396,
+          "type": "bit",
+          "bit": 0
+        },
+        {
+          "id": "slot_3.players.player_1.submap",
+          "label": "Player 1 submap",
+          "offset": 397,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.players.player_1.animation",
+          "label": "Player 1 overworld animation",
+          "offset": 399,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.players.player_1.x",
+          "label": "Player 1 X position",
+          "offset": 403,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.players.player_1.y",
+          "label": "Player 1 Y position",
+          "offset": 405,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.players.player_1.x_tile",
+          "label": "Player 1 X tile pointer",
+          "offset": 411,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.players.player_1.y_tile",
+          "label": "Player 1 Y tile pointer",
+          "offset": 413,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.players.player_2.submap",
+          "label": "Player 2 submap",
+          "offset": 398,
+          "type": "u8"
+        },
+        {
+          "id": "slot_3.players.player_2.animation",
+          "label": "Player 2 overworld animation",
+          "offset": 401,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.players.player_2.x",
+          "label": "Player 2 X position",
+          "offset": 407,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.players.player_2.y",
+          "label": "Player 2 Y position",
+          "offset": 409,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.players.player_2.x_tile",
+          "label": "Player 2 X tile pointer",
+          "offset": 415,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.players.player_2.y_tile",
+          "label": "Player 2 Y tile pointer",
+          "offset": 417,
+          "type": "u16_le"
+        },
+        {
+          "id": "slot_3.progress.switch_palaces.yellow",
+          "label": "Yellow Switch Palace",
+          "offset": 419,
+          "type": "bool"
+        },
+        {
+          "id": "slot_3.progress.switch_palaces.green",
+          "label": "Green Switch Palace",
+          "offset": 420,
+          "type": "bool"
+        },
+        {
+          "id": "slot_3.progress.switch_palaces.red",
+          "label": "Red Switch Palace",
+          "offset": 421,
+          "type": "bool"
+        },
+        {
+          "id": "slot_3.progress.switch_palaces.blue",
+          "label": "Blue Switch Palace",
+          "offset": 422,
+          "type": "bool"
+        },
+        {
+          "id": "slot_3.progress.exits_completed",
+          "label": "Exits completed",
+          "offset": 426,
+          "type": "u8"
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "sum16_le",
+          "start": 286,
+          "length": 141,
+          "offset": 427,
+          "target": 23130
+        }
+      ],
+      "mirrors": [
+        {
+          "source": 286,
+          "target": 715,
+          "length": 143
+        }
+      ]
+    }
+  ]
+}

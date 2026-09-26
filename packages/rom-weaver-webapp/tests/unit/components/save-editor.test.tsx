@@ -173,6 +173,71 @@ const chooseFile = async (name = "game.sav") => {
 };
 
 describe("SaveEditor", () => {
+  it("validates, loads, and clears a local schema pack", async () => {
+    render(<SaveEditor onSessionChange={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Load schema pack" })).toBeTruthy();
+    const schemaInput = document.querySelector("#save-schema-pack-picker");
+    if (!(schemaInput instanceof HTMLInputElement)) throw new Error("schema input missing");
+    const schema = new File(["{}"], "custom-saves.json", { type: "application/json" });
+    fireEvent.change(schemaInput, { target: { files: [schema] } });
+    await waitFor(() => expect(screen.getByText("custom-saves.json")).toBeTruthy());
+    expect(listSaveGames).toHaveBeenCalledWith(expect.any(AbortSignal), schema);
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear schema pack" }));
+    await waitFor(() => expect(screen.queryByText("custom-saves.json")).toBeNull());
+  });
+
+  it("resets generated game choices when a same-name schema pack replaces the loaded file", async () => {
+    render(<SaveEditor onSessionChange={vi.fn()} />);
+    const firstInput = document.querySelector("#save-schema-pack-picker");
+    if (!(firstInput instanceof HTMLInputElement)) throw new Error("schema input missing");
+    fireEvent.change(firstInput, { target: { files: [new File(["first"], "custom.json")] } });
+    await waitFor(() => expect(screen.getByText("custom.json")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Choose a game" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Create save" })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: "Replace schema pack" }));
+    const replacementInput = document.querySelector("#save-schema-pack-picker");
+    if (!(replacementInput instanceof HTMLInputElement)) throw new Error("schema input missing");
+    fireEvent.change(replacementInput, { target: { files: [new File(["second"], "custom.json")] } });
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Choose a game" })).toBeTruthy());
+    expect(screen.queryByRole("button", { name: "Create save" })).toBeNull();
+  });
+
+  it("keeps the previous schema and open save when replacement validation fails", async () => {
+    render(<SaveEditor onSessionChange={vi.fn()} />);
+    const schemaInput = document.querySelector("#save-schema-pack-picker");
+    if (!(schemaInput instanceof HTMLInputElement)) throw new Error("schema input missing");
+    const valid = new File(["{}"], "valid.json", { type: "application/json" });
+    fireEvent.change(schemaInput, { target: { files: [valid] } });
+    await waitFor(() => expect(screen.getByText("valid.json")).toBeTruthy());
+    await chooseFile();
+    fireEvent.change(screen.getByLabelText("Money"), { target: { value: "7000" } });
+
+    listSaveGames.mockRejectedValueOnce(new Error("Invalid schema pack"));
+    const replacementInput = document.querySelector("#save-schema-pack-picker");
+    if (!(replacementInput instanceof HTMLInputElement)) throw new Error("schema input missing");
+    fireEvent.change(replacementInput, {
+      target: { files: [new File(["bad"], "invalid.json", { type: "application/json" })] },
+    });
+    await waitFor(() => expect(screen.getByText("Invalid schema pack")).toBeTruthy());
+    expect(screen.getByText("valid.json")).toBeTruthy();
+    expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("7000");
+  });
+
+  it("re-identifies an open save and clears edits when the schema changes", async () => {
+    render(<SaveEditor onSessionChange={vi.fn()} />);
+    await chooseFile();
+    fireEvent.change(screen.getByLabelText("Money"), { target: { value: "7000" } });
+    const schemaInput = document.querySelector("#save-schema-pack-picker");
+    if (!(schemaInput instanceof HTMLInputElement)) throw new Error("schema input missing");
+    const schema = new File(["{}"], "custom.json", { type: "application/json" });
+    fireEvent.change(schemaInput, { target: { files: [schema] } });
+    await waitFor(() => expect(identifySave).toHaveBeenLastCalledWith(expect.objectContaining({ schema })));
+    await waitFor(() => expect((screen.getByLabelText("Money") as HTMLInputElement).value).toBe("5000"));
+  });
+
   it("tests the raw bytes of a wrapped save in the ROM on Test", async () => {
     const checksum = "a".repeat(40);
     useEmulatorSession.mockReturnValue({

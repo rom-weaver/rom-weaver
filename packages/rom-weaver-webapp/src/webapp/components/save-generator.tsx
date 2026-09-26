@@ -7,10 +7,12 @@ export const SaveGenerator = ({
   disabled,
   onError,
   onGenerate,
+  schema,
 }: {
   disabled: boolean;
   onError: (message: string) => void;
   onGenerate: (game: string) => Promise<void>;
+  schema: File | null;
 }) => {
   const [games, setGames] = useState<SaveGameDefinition[] | null>(null);
   const [game, setGame] = useState("");
@@ -26,7 +28,7 @@ export const SaveGenerator = ({
     onError("");
     try {
       const { listSaveGames } = await import("../../platform/browser/browser-save-api.ts");
-      const result = await listSaveGames(controller.signal);
+      const result = await listSaveGames(controller.signal, schema);
       if (controller.signal.aborted) return;
       const supported = (result.games ?? []).filter((entry) => result.generationGames?.includes(entry.identity.id));
       setGames(supported);

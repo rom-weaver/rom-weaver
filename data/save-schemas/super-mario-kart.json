@@ -1,0 +1,2808 @@
+{
+  "$schema": "./schema-v1.schema.json",
+  "schema_version": 1,
+  "games": [
+    {
+      "id": "super-mario-kart-schema",
+      "name": "Super Mario Kart",
+      "platform": "snes",
+      "description": "All regions, 2 KiB SRAM. Edits all four packed GP trophy bytes and all six packed time/character records on each of 20 courses. Raw stored bytes preserve unset-record encodings; not every encoded value is a playable time.",
+      "save_size": 2048,
+      "fields": [
+        {
+          "id": "grand_prix.mushroom_cup",
+          "label": "Mushroom Cup packed trophy flags",
+          "offset": 2034,
+          "type": "u8"
+        },
+        {
+          "id": "grand_prix.flower_cup",
+          "label": "Flower Cup packed trophy flags",
+          "offset": 2035,
+          "type": "u8"
+        },
+        {
+          "id": "grand_prix.star_cup",
+          "label": "Star Cup packed trophy flags",
+          "offset": 2036,
+          "type": "u8"
+        },
+        {
+          "id": "grand_prix.special_cup",
+          "label": "Special Cup packed trophy flags",
+          "offset": 2037,
+          "type": "u8"
+        },
+        {
+          "id": "trial_1.record_1.hundredths",
+          "label": "Course 1 record 1: Hundredths BCD byte",
+          "offset": 1634,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_1.record_1.seconds",
+          "label": "Course 1 record 1: Seconds BCD byte",
+          "offset": 1635,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_1.record_1.minutes_character",
+          "label": "Course 1 record 1: Packed minutes and character byte",
+          "offset": 1636,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_1.record_2.hundredths",
+          "label": "Course 1 record 2: Hundredths BCD byte",
+          "offset": 1637,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_1.record_2.seconds",
+          "label": "Course 1 record 2: Seconds BCD byte",
+          "offset": 1638,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_1.record_2.minutes_character",
+          "label": "Course 1 record 2: Packed minutes and character byte",
+          "offset": 1639,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_1.record_3.hundredths",
+          "label": "Course 1 record 3: Hundredths BCD byte",
+          "offset": 1640,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_1.record_3.seconds",
+          "label": "Course 1 record 3: Seconds BCD byte",
+          "offset": 1641,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_1.record_3.minutes_character",
+          "label": "Course 1 record 3: Packed minutes and character byte",
+          "offset": 1642,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_1.record_4.hundredths",
+          "label": "Course 1 record 4: Hundredths BCD byte",
+          "offset": 1643,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_1.record_4.seconds",
+          "label": "Course 1 record 4: Seconds BCD byte",
+          "offset": 1644,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_1.record_4.minutes_character",
+          "label": "Course 1 record 4: Packed minutes and character byte",
+          "offset": 1645,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_1.record_5.hundredths",
+          "label": "Course 1 record 5: Hundredths BCD byte",
+          "offset": 1646,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_1.record_5.seconds",
+          "label": "Course 1 record 5: Seconds BCD byte",
+          "offset": 1647,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_1.record_5.minutes_character",
+          "label": "Course 1 record 5: Packed minutes and character byte",
+          "offset": 1648,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_1.record_6.hundredths",
+          "label": "Course 1 record 6: Hundredths BCD byte",
+          "offset": 1649,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_1.record_6.seconds",
+          "label": "Course 1 record 6: Seconds BCD byte",
+          "offset": 1650,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_1.record_6.minutes_character",
+          "label": "Course 1 record 6: Packed minutes and character byte",
+          "offset": 1651,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_2.record_1.hundredths",
+          "label": "Course 2 record 1: Hundredths BCD byte",
+          "offset": 1654,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_2.record_1.seconds",
+          "label": "Course 2 record 1: Seconds BCD byte",
+          "offset": 1655,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_2.record_1.minutes_character",
+          "label": "Course 2 record 1: Packed minutes and character byte",
+          "offset": 1656,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_2.record_2.hundredths",
+          "label": "Course 2 record 2: Hundredths BCD byte",
+          "offset": 1657,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_2.record_2.seconds",
+          "label": "Course 2 record 2: Seconds BCD byte",
+          "offset": 1658,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_2.record_2.minutes_character",
+          "label": "Course 2 record 2: Packed minutes and character byte",
+          "offset": 1659,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_2.record_3.hundredths",
+          "label": "Course 2 record 3: Hundredths BCD byte",
+          "offset": 1660,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_2.record_3.seconds",
+          "label": "Course 2 record 3: Seconds BCD byte",
+          "offset": 1661,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_2.record_3.minutes_character",
+          "label": "Course 2 record 3: Packed minutes and character byte",
+          "offset": 1662,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_2.record_4.hundredths",
+          "label": "Course 2 record 4: Hundredths BCD byte",
+          "offset": 1663,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_2.record_4.seconds",
+          "label": "Course 2 record 4: Seconds BCD byte",
+          "offset": 1664,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_2.record_4.minutes_character",
+          "label": "Course 2 record 4: Packed minutes and character byte",
+          "offset": 1665,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_2.record_5.hundredths",
+          "label": "Course 2 record 5: Hundredths BCD byte",
+          "offset": 1666,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_2.record_5.seconds",
+          "label": "Course 2 record 5: Seconds BCD byte",
+          "offset": 1667,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_2.record_5.minutes_character",
+          "label": "Course 2 record 5: Packed minutes and character byte",
+          "offset": 1668,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_2.record_6.hundredths",
+          "label": "Course 2 record 6: Hundredths BCD byte",
+          "offset": 1669,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_2.record_6.seconds",
+          "label": "Course 2 record 6: Seconds BCD byte",
+          "offset": 1670,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_2.record_6.minutes_character",
+          "label": "Course 2 record 6: Packed minutes and character byte",
+          "offset": 1671,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_3.record_1.hundredths",
+          "label": "Course 3 record 1: Hundredths BCD byte",
+          "offset": 1674,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_3.record_1.seconds",
+          "label": "Course 3 record 1: Seconds BCD byte",
+          "offset": 1675,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_3.record_1.minutes_character",
+          "label": "Course 3 record 1: Packed minutes and character byte",
+          "offset": 1676,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_3.record_2.hundredths",
+          "label": "Course 3 record 2: Hundredths BCD byte",
+          "offset": 1677,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_3.record_2.seconds",
+          "label": "Course 3 record 2: Seconds BCD byte",
+          "offset": 1678,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_3.record_2.minutes_character",
+          "label": "Course 3 record 2: Packed minutes and character byte",
+          "offset": 1679,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_3.record_3.hundredths",
+          "label": "Course 3 record 3: Hundredths BCD byte",
+          "offset": 1680,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_3.record_3.seconds",
+          "label": "Course 3 record 3: Seconds BCD byte",
+          "offset": 1681,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_3.record_3.minutes_character",
+          "label": "Course 3 record 3: Packed minutes and character byte",
+          "offset": 1682,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_3.record_4.hundredths",
+          "label": "Course 3 record 4: Hundredths BCD byte",
+          "offset": 1683,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_3.record_4.seconds",
+          "label": "Course 3 record 4: Seconds BCD byte",
+          "offset": 1684,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_3.record_4.minutes_character",
+          "label": "Course 3 record 4: Packed minutes and character byte",
+          "offset": 1685,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_3.record_5.hundredths",
+          "label": "Course 3 record 5: Hundredths BCD byte",
+          "offset": 1686,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_3.record_5.seconds",
+          "label": "Course 3 record 5: Seconds BCD byte",
+          "offset": 1687,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_3.record_5.minutes_character",
+          "label": "Course 3 record 5: Packed minutes and character byte",
+          "offset": 1688,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_3.record_6.hundredths",
+          "label": "Course 3 record 6: Hundredths BCD byte",
+          "offset": 1689,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_3.record_6.seconds",
+          "label": "Course 3 record 6: Seconds BCD byte",
+          "offset": 1690,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_3.record_6.minutes_character",
+          "label": "Course 3 record 6: Packed minutes and character byte",
+          "offset": 1691,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_4.record_1.hundredths",
+          "label": "Course 4 record 1: Hundredths BCD byte",
+          "offset": 1694,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_4.record_1.seconds",
+          "label": "Course 4 record 1: Seconds BCD byte",
+          "offset": 1695,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_4.record_1.minutes_character",
+          "label": "Course 4 record 1: Packed minutes and character byte",
+          "offset": 1696,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_4.record_2.hundredths",
+          "label": "Course 4 record 2: Hundredths BCD byte",
+          "offset": 1697,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_4.record_2.seconds",
+          "label": "Course 4 record 2: Seconds BCD byte",
+          "offset": 1698,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_4.record_2.minutes_character",
+          "label": "Course 4 record 2: Packed minutes and character byte",
+          "offset": 1699,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_4.record_3.hundredths",
+          "label": "Course 4 record 3: Hundredths BCD byte",
+          "offset": 1700,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_4.record_3.seconds",
+          "label": "Course 4 record 3: Seconds BCD byte",
+          "offset": 1701,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_4.record_3.minutes_character",
+          "label": "Course 4 record 3: Packed minutes and character byte",
+          "offset": 1702,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_4.record_4.hundredths",
+          "label": "Course 4 record 4: Hundredths BCD byte",
+          "offset": 1703,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_4.record_4.seconds",
+          "label": "Course 4 record 4: Seconds BCD byte",
+          "offset": 1704,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_4.record_4.minutes_character",
+          "label": "Course 4 record 4: Packed minutes and character byte",
+          "offset": 1705,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_4.record_5.hundredths",
+          "label": "Course 4 record 5: Hundredths BCD byte",
+          "offset": 1706,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_4.record_5.seconds",
+          "label": "Course 4 record 5: Seconds BCD byte",
+          "offset": 1707,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_4.record_5.minutes_character",
+          "label": "Course 4 record 5: Packed minutes and character byte",
+          "offset": 1708,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_4.record_6.hundredths",
+          "label": "Course 4 record 6: Hundredths BCD byte",
+          "offset": 1709,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_4.record_6.seconds",
+          "label": "Course 4 record 6: Seconds BCD byte",
+          "offset": 1710,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_4.record_6.minutes_character",
+          "label": "Course 4 record 6: Packed minutes and character byte",
+          "offset": 1711,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_5.record_1.hundredths",
+          "label": "Course 5 record 1: Hundredths BCD byte",
+          "offset": 1714,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_5.record_1.seconds",
+          "label": "Course 5 record 1: Seconds BCD byte",
+          "offset": 1715,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_5.record_1.minutes_character",
+          "label": "Course 5 record 1: Packed minutes and character byte",
+          "offset": 1716,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_5.record_2.hundredths",
+          "label": "Course 5 record 2: Hundredths BCD byte",
+          "offset": 1717,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_5.record_2.seconds",
+          "label": "Course 5 record 2: Seconds BCD byte",
+          "offset": 1718,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_5.record_2.minutes_character",
+          "label": "Course 5 record 2: Packed minutes and character byte",
+          "offset": 1719,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_5.record_3.hundredths",
+          "label": "Course 5 record 3: Hundredths BCD byte",
+          "offset": 1720,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_5.record_3.seconds",
+          "label": "Course 5 record 3: Seconds BCD byte",
+          "offset": 1721,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_5.record_3.minutes_character",
+          "label": "Course 5 record 3: Packed minutes and character byte",
+          "offset": 1722,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_5.record_4.hundredths",
+          "label": "Course 5 record 4: Hundredths BCD byte",
+          "offset": 1723,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_5.record_4.seconds",
+          "label": "Course 5 record 4: Seconds BCD byte",
+          "offset": 1724,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_5.record_4.minutes_character",
+          "label": "Course 5 record 4: Packed minutes and character byte",
+          "offset": 1725,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_5.record_5.hundredths",
+          "label": "Course 5 record 5: Hundredths BCD byte",
+          "offset": 1726,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_5.record_5.seconds",
+          "label": "Course 5 record 5: Seconds BCD byte",
+          "offset": 1727,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_5.record_5.minutes_character",
+          "label": "Course 5 record 5: Packed minutes and character byte",
+          "offset": 1728,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_5.record_6.hundredths",
+          "label": "Course 5 record 6: Hundredths BCD byte",
+          "offset": 1729,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_5.record_6.seconds",
+          "label": "Course 5 record 6: Seconds BCD byte",
+          "offset": 1730,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_5.record_6.minutes_character",
+          "label": "Course 5 record 6: Packed minutes and character byte",
+          "offset": 1731,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_6.record_1.hundredths",
+          "label": "Course 6 record 1: Hundredths BCD byte",
+          "offset": 1734,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_6.record_1.seconds",
+          "label": "Course 6 record 1: Seconds BCD byte",
+          "offset": 1735,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_6.record_1.minutes_character",
+          "label": "Course 6 record 1: Packed minutes and character byte",
+          "offset": 1736,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_6.record_2.hundredths",
+          "label": "Course 6 record 2: Hundredths BCD byte",
+          "offset": 1737,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_6.record_2.seconds",
+          "label": "Course 6 record 2: Seconds BCD byte",
+          "offset": 1738,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_6.record_2.minutes_character",
+          "label": "Course 6 record 2: Packed minutes and character byte",
+          "offset": 1739,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_6.record_3.hundredths",
+          "label": "Course 6 record 3: Hundredths BCD byte",
+          "offset": 1740,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_6.record_3.seconds",
+          "label": "Course 6 record 3: Seconds BCD byte",
+          "offset": 1741,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_6.record_3.minutes_character",
+          "label": "Course 6 record 3: Packed minutes and character byte",
+          "offset": 1742,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_6.record_4.hundredths",
+          "label": "Course 6 record 4: Hundredths BCD byte",
+          "offset": 1743,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_6.record_4.seconds",
+          "label": "Course 6 record 4: Seconds BCD byte",
+          "offset": 1744,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_6.record_4.minutes_character",
+          "label": "Course 6 record 4: Packed minutes and character byte",
+          "offset": 1745,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_6.record_5.hundredths",
+          "label": "Course 6 record 5: Hundredths BCD byte",
+          "offset": 1746,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_6.record_5.seconds",
+          "label": "Course 6 record 5: Seconds BCD byte",
+          "offset": 1747,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_6.record_5.minutes_character",
+          "label": "Course 6 record 5: Packed minutes and character byte",
+          "offset": 1748,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_6.record_6.hundredths",
+          "label": "Course 6 record 6: Hundredths BCD byte",
+          "offset": 1749,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_6.record_6.seconds",
+          "label": "Course 6 record 6: Seconds BCD byte",
+          "offset": 1750,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_6.record_6.minutes_character",
+          "label": "Course 6 record 6: Packed minutes and character byte",
+          "offset": 1751,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_7.record_1.hundredths",
+          "label": "Course 7 record 1: Hundredths BCD byte",
+          "offset": 1754,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_7.record_1.seconds",
+          "label": "Course 7 record 1: Seconds BCD byte",
+          "offset": 1755,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_7.record_1.minutes_character",
+          "label": "Course 7 record 1: Packed minutes and character byte",
+          "offset": 1756,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_7.record_2.hundredths",
+          "label": "Course 7 record 2: Hundredths BCD byte",
+          "offset": 1757,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_7.record_2.seconds",
+          "label": "Course 7 record 2: Seconds BCD byte",
+          "offset": 1758,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_7.record_2.minutes_character",
+          "label": "Course 7 record 2: Packed minutes and character byte",
+          "offset": 1759,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_7.record_3.hundredths",
+          "label": "Course 7 record 3: Hundredths BCD byte",
+          "offset": 1760,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_7.record_3.seconds",
+          "label": "Course 7 record 3: Seconds BCD byte",
+          "offset": 1761,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_7.record_3.minutes_character",
+          "label": "Course 7 record 3: Packed minutes and character byte",
+          "offset": 1762,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_7.record_4.hundredths",
+          "label": "Course 7 record 4: Hundredths BCD byte",
+          "offset": 1763,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_7.record_4.seconds",
+          "label": "Course 7 record 4: Seconds BCD byte",
+          "offset": 1764,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_7.record_4.minutes_character",
+          "label": "Course 7 record 4: Packed minutes and character byte",
+          "offset": 1765,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_7.record_5.hundredths",
+          "label": "Course 7 record 5: Hundredths BCD byte",
+          "offset": 1766,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_7.record_5.seconds",
+          "label": "Course 7 record 5: Seconds BCD byte",
+          "offset": 1767,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_7.record_5.minutes_character",
+          "label": "Course 7 record 5: Packed minutes and character byte",
+          "offset": 1768,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_7.record_6.hundredths",
+          "label": "Course 7 record 6: Hundredths BCD byte",
+          "offset": 1769,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_7.record_6.seconds",
+          "label": "Course 7 record 6: Seconds BCD byte",
+          "offset": 1770,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_7.record_6.minutes_character",
+          "label": "Course 7 record 6: Packed minutes and character byte",
+          "offset": 1771,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_8.record_1.hundredths",
+          "label": "Course 8 record 1: Hundredths BCD byte",
+          "offset": 1774,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_8.record_1.seconds",
+          "label": "Course 8 record 1: Seconds BCD byte",
+          "offset": 1775,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_8.record_1.minutes_character",
+          "label": "Course 8 record 1: Packed minutes and character byte",
+          "offset": 1776,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_8.record_2.hundredths",
+          "label": "Course 8 record 2: Hundredths BCD byte",
+          "offset": 1777,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_8.record_2.seconds",
+          "label": "Course 8 record 2: Seconds BCD byte",
+          "offset": 1778,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_8.record_2.minutes_character",
+          "label": "Course 8 record 2: Packed minutes and character byte",
+          "offset": 1779,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_8.record_3.hundredths",
+          "label": "Course 8 record 3: Hundredths BCD byte",
+          "offset": 1780,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_8.record_3.seconds",
+          "label": "Course 8 record 3: Seconds BCD byte",
+          "offset": 1781,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_8.record_3.minutes_character",
+          "label": "Course 8 record 3: Packed minutes and character byte",
+          "offset": 1782,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_8.record_4.hundredths",
+          "label": "Course 8 record 4: Hundredths BCD byte",
+          "offset": 1783,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_8.record_4.seconds",
+          "label": "Course 8 record 4: Seconds BCD byte",
+          "offset": 1784,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_8.record_4.minutes_character",
+          "label": "Course 8 record 4: Packed minutes and character byte",
+          "offset": 1785,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_8.record_5.hundredths",
+          "label": "Course 8 record 5: Hundredths BCD byte",
+          "offset": 1786,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_8.record_5.seconds",
+          "label": "Course 8 record 5: Seconds BCD byte",
+          "offset": 1787,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_8.record_5.minutes_character",
+          "label": "Course 8 record 5: Packed minutes and character byte",
+          "offset": 1788,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_8.record_6.hundredths",
+          "label": "Course 8 record 6: Hundredths BCD byte",
+          "offset": 1789,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_8.record_6.seconds",
+          "label": "Course 8 record 6: Seconds BCD byte",
+          "offset": 1790,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_8.record_6.minutes_character",
+          "label": "Course 8 record 6: Packed minutes and character byte",
+          "offset": 1791,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_9.record_1.hundredths",
+          "label": "Course 9 record 1: Hundredths BCD byte",
+          "offset": 1794,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_9.record_1.seconds",
+          "label": "Course 9 record 1: Seconds BCD byte",
+          "offset": 1795,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_9.record_1.minutes_character",
+          "label": "Course 9 record 1: Packed minutes and character byte",
+          "offset": 1796,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_9.record_2.hundredths",
+          "label": "Course 9 record 2: Hundredths BCD byte",
+          "offset": 1797,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_9.record_2.seconds",
+          "label": "Course 9 record 2: Seconds BCD byte",
+          "offset": 1798,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_9.record_2.minutes_character",
+          "label": "Course 9 record 2: Packed minutes and character byte",
+          "offset": 1799,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_9.record_3.hundredths",
+          "label": "Course 9 record 3: Hundredths BCD byte",
+          "offset": 1800,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_9.record_3.seconds",
+          "label": "Course 9 record 3: Seconds BCD byte",
+          "offset": 1801,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_9.record_3.minutes_character",
+          "label": "Course 9 record 3: Packed minutes and character byte",
+          "offset": 1802,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_9.record_4.hundredths",
+          "label": "Course 9 record 4: Hundredths BCD byte",
+          "offset": 1803,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_9.record_4.seconds",
+          "label": "Course 9 record 4: Seconds BCD byte",
+          "offset": 1804,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_9.record_4.minutes_character",
+          "label": "Course 9 record 4: Packed minutes and character byte",
+          "offset": 1805,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_9.record_5.hundredths",
+          "label": "Course 9 record 5: Hundredths BCD byte",
+          "offset": 1806,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_9.record_5.seconds",
+          "label": "Course 9 record 5: Seconds BCD byte",
+          "offset": 1807,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_9.record_5.minutes_character",
+          "label": "Course 9 record 5: Packed minutes and character byte",
+          "offset": 1808,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_9.record_6.hundredths",
+          "label": "Course 9 record 6: Hundredths BCD byte",
+          "offset": 1809,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_9.record_6.seconds",
+          "label": "Course 9 record 6: Seconds BCD byte",
+          "offset": 1810,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_9.record_6.minutes_character",
+          "label": "Course 9 record 6: Packed minutes and character byte",
+          "offset": 1811,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_10.record_1.hundredths",
+          "label": "Course 10 record 1: Hundredths BCD byte",
+          "offset": 1814,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_10.record_1.seconds",
+          "label": "Course 10 record 1: Seconds BCD byte",
+          "offset": 1815,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_10.record_1.minutes_character",
+          "label": "Course 10 record 1: Packed minutes and character byte",
+          "offset": 1816,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_10.record_2.hundredths",
+          "label": "Course 10 record 2: Hundredths BCD byte",
+          "offset": 1817,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_10.record_2.seconds",
+          "label": "Course 10 record 2: Seconds BCD byte",
+          "offset": 1818,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_10.record_2.minutes_character",
+          "label": "Course 10 record 2: Packed minutes and character byte",
+          "offset": 1819,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_10.record_3.hundredths",
+          "label": "Course 10 record 3: Hundredths BCD byte",
+          "offset": 1820,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_10.record_3.seconds",
+          "label": "Course 10 record 3: Seconds BCD byte",
+          "offset": 1821,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_10.record_3.minutes_character",
+          "label": "Course 10 record 3: Packed minutes and character byte",
+          "offset": 1822,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_10.record_4.hundredths",
+          "label": "Course 10 record 4: Hundredths BCD byte",
+          "offset": 1823,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_10.record_4.seconds",
+          "label": "Course 10 record 4: Seconds BCD byte",
+          "offset": 1824,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_10.record_4.minutes_character",
+          "label": "Course 10 record 4: Packed minutes and character byte",
+          "offset": 1825,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_10.record_5.hundredths",
+          "label": "Course 10 record 5: Hundredths BCD byte",
+          "offset": 1826,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_10.record_5.seconds",
+          "label": "Course 10 record 5: Seconds BCD byte",
+          "offset": 1827,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_10.record_5.minutes_character",
+          "label": "Course 10 record 5: Packed minutes and character byte",
+          "offset": 1828,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_10.record_6.hundredths",
+          "label": "Course 10 record 6: Hundredths BCD byte",
+          "offset": 1829,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_10.record_6.seconds",
+          "label": "Course 10 record 6: Seconds BCD byte",
+          "offset": 1830,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_10.record_6.minutes_character",
+          "label": "Course 10 record 6: Packed minutes and character byte",
+          "offset": 1831,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_11.record_1.hundredths",
+          "label": "Course 11 record 1: Hundredths BCD byte",
+          "offset": 1834,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_11.record_1.seconds",
+          "label": "Course 11 record 1: Seconds BCD byte",
+          "offset": 1835,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_11.record_1.minutes_character",
+          "label": "Course 11 record 1: Packed minutes and character byte",
+          "offset": 1836,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_11.record_2.hundredths",
+          "label": "Course 11 record 2: Hundredths BCD byte",
+          "offset": 1837,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_11.record_2.seconds",
+          "label": "Course 11 record 2: Seconds BCD byte",
+          "offset": 1838,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_11.record_2.minutes_character",
+          "label": "Course 11 record 2: Packed minutes and character byte",
+          "offset": 1839,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_11.record_3.hundredths",
+          "label": "Course 11 record 3: Hundredths BCD byte",
+          "offset": 1840,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_11.record_3.seconds",
+          "label": "Course 11 record 3: Seconds BCD byte",
+          "offset": 1841,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_11.record_3.minutes_character",
+          "label": "Course 11 record 3: Packed minutes and character byte",
+          "offset": 1842,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_11.record_4.hundredths",
+          "label": "Course 11 record 4: Hundredths BCD byte",
+          "offset": 1843,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_11.record_4.seconds",
+          "label": "Course 11 record 4: Seconds BCD byte",
+          "offset": 1844,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_11.record_4.minutes_character",
+          "label": "Course 11 record 4: Packed minutes and character byte",
+          "offset": 1845,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_11.record_5.hundredths",
+          "label": "Course 11 record 5: Hundredths BCD byte",
+          "offset": 1846,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_11.record_5.seconds",
+          "label": "Course 11 record 5: Seconds BCD byte",
+          "offset": 1847,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_11.record_5.minutes_character",
+          "label": "Course 11 record 5: Packed minutes and character byte",
+          "offset": 1848,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_11.record_6.hundredths",
+          "label": "Course 11 record 6: Hundredths BCD byte",
+          "offset": 1849,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_11.record_6.seconds",
+          "label": "Course 11 record 6: Seconds BCD byte",
+          "offset": 1850,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_11.record_6.minutes_character",
+          "label": "Course 11 record 6: Packed minutes and character byte",
+          "offset": 1851,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_12.record_1.hundredths",
+          "label": "Course 12 record 1: Hundredths BCD byte",
+          "offset": 1854,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_12.record_1.seconds",
+          "label": "Course 12 record 1: Seconds BCD byte",
+          "offset": 1855,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_12.record_1.minutes_character",
+          "label": "Course 12 record 1: Packed minutes and character byte",
+          "offset": 1856,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_12.record_2.hundredths",
+          "label": "Course 12 record 2: Hundredths BCD byte",
+          "offset": 1857,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_12.record_2.seconds",
+          "label": "Course 12 record 2: Seconds BCD byte",
+          "offset": 1858,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_12.record_2.minutes_character",
+          "label": "Course 12 record 2: Packed minutes and character byte",
+          "offset": 1859,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_12.record_3.hundredths",
+          "label": "Course 12 record 3: Hundredths BCD byte",
+          "offset": 1860,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_12.record_3.seconds",
+          "label": "Course 12 record 3: Seconds BCD byte",
+          "offset": 1861,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_12.record_3.minutes_character",
+          "label": "Course 12 record 3: Packed minutes and character byte",
+          "offset": 1862,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_12.record_4.hundredths",
+          "label": "Course 12 record 4: Hundredths BCD byte",
+          "offset": 1863,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_12.record_4.seconds",
+          "label": "Course 12 record 4: Seconds BCD byte",
+          "offset": 1864,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_12.record_4.minutes_character",
+          "label": "Course 12 record 4: Packed minutes and character byte",
+          "offset": 1865,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_12.record_5.hundredths",
+          "label": "Course 12 record 5: Hundredths BCD byte",
+          "offset": 1866,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_12.record_5.seconds",
+          "label": "Course 12 record 5: Seconds BCD byte",
+          "offset": 1867,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_12.record_5.minutes_character",
+          "label": "Course 12 record 5: Packed minutes and character byte",
+          "offset": 1868,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_12.record_6.hundredths",
+          "label": "Course 12 record 6: Hundredths BCD byte",
+          "offset": 1869,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_12.record_6.seconds",
+          "label": "Course 12 record 6: Seconds BCD byte",
+          "offset": 1870,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_12.record_6.minutes_character",
+          "label": "Course 12 record 6: Packed minutes and character byte",
+          "offset": 1871,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_13.record_1.hundredths",
+          "label": "Course 13 record 1: Hundredths BCD byte",
+          "offset": 1874,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_13.record_1.seconds",
+          "label": "Course 13 record 1: Seconds BCD byte",
+          "offset": 1875,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_13.record_1.minutes_character",
+          "label": "Course 13 record 1: Packed minutes and character byte",
+          "offset": 1876,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_13.record_2.hundredths",
+          "label": "Course 13 record 2: Hundredths BCD byte",
+          "offset": 1877,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_13.record_2.seconds",
+          "label": "Course 13 record 2: Seconds BCD byte",
+          "offset": 1878,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_13.record_2.minutes_character",
+          "label": "Course 13 record 2: Packed minutes and character byte",
+          "offset": 1879,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_13.record_3.hundredths",
+          "label": "Course 13 record 3: Hundredths BCD byte",
+          "offset": 1880,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_13.record_3.seconds",
+          "label": "Course 13 record 3: Seconds BCD byte",
+          "offset": 1881,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_13.record_3.minutes_character",
+          "label": "Course 13 record 3: Packed minutes and character byte",
+          "offset": 1882,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_13.record_4.hundredths",
+          "label": "Course 13 record 4: Hundredths BCD byte",
+          "offset": 1883,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_13.record_4.seconds",
+          "label": "Course 13 record 4: Seconds BCD byte",
+          "offset": 1884,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_13.record_4.minutes_character",
+          "label": "Course 13 record 4: Packed minutes and character byte",
+          "offset": 1885,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_13.record_5.hundredths",
+          "label": "Course 13 record 5: Hundredths BCD byte",
+          "offset": 1886,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_13.record_5.seconds",
+          "label": "Course 13 record 5: Seconds BCD byte",
+          "offset": 1887,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_13.record_5.minutes_character",
+          "label": "Course 13 record 5: Packed minutes and character byte",
+          "offset": 1888,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_13.record_6.hundredths",
+          "label": "Course 13 record 6: Hundredths BCD byte",
+          "offset": 1889,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_13.record_6.seconds",
+          "label": "Course 13 record 6: Seconds BCD byte",
+          "offset": 1890,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_13.record_6.minutes_character",
+          "label": "Course 13 record 6: Packed minutes and character byte",
+          "offset": 1891,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_14.record_1.hundredths",
+          "label": "Course 14 record 1: Hundredths BCD byte",
+          "offset": 1894,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_14.record_1.seconds",
+          "label": "Course 14 record 1: Seconds BCD byte",
+          "offset": 1895,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_14.record_1.minutes_character",
+          "label": "Course 14 record 1: Packed minutes and character byte",
+          "offset": 1896,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_14.record_2.hundredths",
+          "label": "Course 14 record 2: Hundredths BCD byte",
+          "offset": 1897,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_14.record_2.seconds",
+          "label": "Course 14 record 2: Seconds BCD byte",
+          "offset": 1898,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_14.record_2.minutes_character",
+          "label": "Course 14 record 2: Packed minutes and character byte",
+          "offset": 1899,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_14.record_3.hundredths",
+          "label": "Course 14 record 3: Hundredths BCD byte",
+          "offset": 1900,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_14.record_3.seconds",
+          "label": "Course 14 record 3: Seconds BCD byte",
+          "offset": 1901,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_14.record_3.minutes_character",
+          "label": "Course 14 record 3: Packed minutes and character byte",
+          "offset": 1902,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_14.record_4.hundredths",
+          "label": "Course 14 record 4: Hundredths BCD byte",
+          "offset": 1903,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_14.record_4.seconds",
+          "label": "Course 14 record 4: Seconds BCD byte",
+          "offset": 1904,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_14.record_4.minutes_character",
+          "label": "Course 14 record 4: Packed minutes and character byte",
+          "offset": 1905,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_14.record_5.hundredths",
+          "label": "Course 14 record 5: Hundredths BCD byte",
+          "offset": 1906,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_14.record_5.seconds",
+          "label": "Course 14 record 5: Seconds BCD byte",
+          "offset": 1907,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_14.record_5.minutes_character",
+          "label": "Course 14 record 5: Packed minutes and character byte",
+          "offset": 1908,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_14.record_6.hundredths",
+          "label": "Course 14 record 6: Hundredths BCD byte",
+          "offset": 1909,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_14.record_6.seconds",
+          "label": "Course 14 record 6: Seconds BCD byte",
+          "offset": 1910,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_14.record_6.minutes_character",
+          "label": "Course 14 record 6: Packed minutes and character byte",
+          "offset": 1911,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_15.record_1.hundredths",
+          "label": "Course 15 record 1: Hundredths BCD byte",
+          "offset": 1914,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_15.record_1.seconds",
+          "label": "Course 15 record 1: Seconds BCD byte",
+          "offset": 1915,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_15.record_1.minutes_character",
+          "label": "Course 15 record 1: Packed minutes and character byte",
+          "offset": 1916,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_15.record_2.hundredths",
+          "label": "Course 15 record 2: Hundredths BCD byte",
+          "offset": 1917,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_15.record_2.seconds",
+          "label": "Course 15 record 2: Seconds BCD byte",
+          "offset": 1918,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_15.record_2.minutes_character",
+          "label": "Course 15 record 2: Packed minutes and character byte",
+          "offset": 1919,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_15.record_3.hundredths",
+          "label": "Course 15 record 3: Hundredths BCD byte",
+          "offset": 1920,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_15.record_3.seconds",
+          "label": "Course 15 record 3: Seconds BCD byte",
+          "offset": 1921,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_15.record_3.minutes_character",
+          "label": "Course 15 record 3: Packed minutes and character byte",
+          "offset": 1922,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_15.record_4.hundredths",
+          "label": "Course 15 record 4: Hundredths BCD byte",
+          "offset": 1923,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_15.record_4.seconds",
+          "label": "Course 15 record 4: Seconds BCD byte",
+          "offset": 1924,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_15.record_4.minutes_character",
+          "label": "Course 15 record 4: Packed minutes and character byte",
+          "offset": 1925,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_15.record_5.hundredths",
+          "label": "Course 15 record 5: Hundredths BCD byte",
+          "offset": 1926,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_15.record_5.seconds",
+          "label": "Course 15 record 5: Seconds BCD byte",
+          "offset": 1927,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_15.record_5.minutes_character",
+          "label": "Course 15 record 5: Packed minutes and character byte",
+          "offset": 1928,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_15.record_6.hundredths",
+          "label": "Course 15 record 6: Hundredths BCD byte",
+          "offset": 1929,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_15.record_6.seconds",
+          "label": "Course 15 record 6: Seconds BCD byte",
+          "offset": 1930,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_15.record_6.minutes_character",
+          "label": "Course 15 record 6: Packed minutes and character byte",
+          "offset": 1931,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_16.record_1.hundredths",
+          "label": "Course 16 record 1: Hundredths BCD byte",
+          "offset": 1934,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_16.record_1.seconds",
+          "label": "Course 16 record 1: Seconds BCD byte",
+          "offset": 1935,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_16.record_1.minutes_character",
+          "label": "Course 16 record 1: Packed minutes and character byte",
+          "offset": 1936,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_16.record_2.hundredths",
+          "label": "Course 16 record 2: Hundredths BCD byte",
+          "offset": 1937,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_16.record_2.seconds",
+          "label": "Course 16 record 2: Seconds BCD byte",
+          "offset": 1938,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_16.record_2.minutes_character",
+          "label": "Course 16 record 2: Packed minutes and character byte",
+          "offset": 1939,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_16.record_3.hundredths",
+          "label": "Course 16 record 3: Hundredths BCD byte",
+          "offset": 1940,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_16.record_3.seconds",
+          "label": "Course 16 record 3: Seconds BCD byte",
+          "offset": 1941,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_16.record_3.minutes_character",
+          "label": "Course 16 record 3: Packed minutes and character byte",
+          "offset": 1942,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_16.record_4.hundredths",
+          "label": "Course 16 record 4: Hundredths BCD byte",
+          "offset": 1943,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_16.record_4.seconds",
+          "label": "Course 16 record 4: Seconds BCD byte",
+          "offset": 1944,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_16.record_4.minutes_character",
+          "label": "Course 16 record 4: Packed minutes and character byte",
+          "offset": 1945,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_16.record_5.hundredths",
+          "label": "Course 16 record 5: Hundredths BCD byte",
+          "offset": 1946,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_16.record_5.seconds",
+          "label": "Course 16 record 5: Seconds BCD byte",
+          "offset": 1947,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_16.record_5.minutes_character",
+          "label": "Course 16 record 5: Packed minutes and character byte",
+          "offset": 1948,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_16.record_6.hundredths",
+          "label": "Course 16 record 6: Hundredths BCD byte",
+          "offset": 1949,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_16.record_6.seconds",
+          "label": "Course 16 record 6: Seconds BCD byte",
+          "offset": 1950,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_16.record_6.minutes_character",
+          "label": "Course 16 record 6: Packed minutes and character byte",
+          "offset": 1951,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_17.record_1.hundredths",
+          "label": "Course 17 record 1: Hundredths BCD byte",
+          "offset": 1954,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_17.record_1.seconds",
+          "label": "Course 17 record 1: Seconds BCD byte",
+          "offset": 1955,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_17.record_1.minutes_character",
+          "label": "Course 17 record 1: Packed minutes and character byte",
+          "offset": 1956,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_17.record_2.hundredths",
+          "label": "Course 17 record 2: Hundredths BCD byte",
+          "offset": 1957,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_17.record_2.seconds",
+          "label": "Course 17 record 2: Seconds BCD byte",
+          "offset": 1958,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_17.record_2.minutes_character",
+          "label": "Course 17 record 2: Packed minutes and character byte",
+          "offset": 1959,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_17.record_3.hundredths",
+          "label": "Course 17 record 3: Hundredths BCD byte",
+          "offset": 1960,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_17.record_3.seconds",
+          "label": "Course 17 record 3: Seconds BCD byte",
+          "offset": 1961,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_17.record_3.minutes_character",
+          "label": "Course 17 record 3: Packed minutes and character byte",
+          "offset": 1962,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_17.record_4.hundredths",
+          "label": "Course 17 record 4: Hundredths BCD byte",
+          "offset": 1963,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_17.record_4.seconds",
+          "label": "Course 17 record 4: Seconds BCD byte",
+          "offset": 1964,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_17.record_4.minutes_character",
+          "label": "Course 17 record 4: Packed minutes and character byte",
+          "offset": 1965,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_17.record_5.hundredths",
+          "label": "Course 17 record 5: Hundredths BCD byte",
+          "offset": 1966,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_17.record_5.seconds",
+          "label": "Course 17 record 5: Seconds BCD byte",
+          "offset": 1967,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_17.record_5.minutes_character",
+          "label": "Course 17 record 5: Packed minutes and character byte",
+          "offset": 1968,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_17.record_6.hundredths",
+          "label": "Course 17 record 6: Hundredths BCD byte",
+          "offset": 1969,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_17.record_6.seconds",
+          "label": "Course 17 record 6: Seconds BCD byte",
+          "offset": 1970,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_17.record_6.minutes_character",
+          "label": "Course 17 record 6: Packed minutes and character byte",
+          "offset": 1971,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_18.record_1.hundredths",
+          "label": "Course 18 record 1: Hundredths BCD byte",
+          "offset": 1974,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_18.record_1.seconds",
+          "label": "Course 18 record 1: Seconds BCD byte",
+          "offset": 1975,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_18.record_1.minutes_character",
+          "label": "Course 18 record 1: Packed minutes and character byte",
+          "offset": 1976,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_18.record_2.hundredths",
+          "label": "Course 18 record 2: Hundredths BCD byte",
+          "offset": 1977,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_18.record_2.seconds",
+          "label": "Course 18 record 2: Seconds BCD byte",
+          "offset": 1978,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_18.record_2.minutes_character",
+          "label": "Course 18 record 2: Packed minutes and character byte",
+          "offset": 1979,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_18.record_3.hundredths",
+          "label": "Course 18 record 3: Hundredths BCD byte",
+          "offset": 1980,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_18.record_3.seconds",
+          "label": "Course 18 record 3: Seconds BCD byte",
+          "offset": 1981,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_18.record_3.minutes_character",
+          "label": "Course 18 record 3: Packed minutes and character byte",
+          "offset": 1982,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_18.record_4.hundredths",
+          "label": "Course 18 record 4: Hundredths BCD byte",
+          "offset": 1983,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_18.record_4.seconds",
+          "label": "Course 18 record 4: Seconds BCD byte",
+          "offset": 1984,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_18.record_4.minutes_character",
+          "label": "Course 18 record 4: Packed minutes and character byte",
+          "offset": 1985,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_18.record_5.hundredths",
+          "label": "Course 18 record 5: Hundredths BCD byte",
+          "offset": 1986,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_18.record_5.seconds",
+          "label": "Course 18 record 5: Seconds BCD byte",
+          "offset": 1987,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_18.record_5.minutes_character",
+          "label": "Course 18 record 5: Packed minutes and character byte",
+          "offset": 1988,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_18.record_6.hundredths",
+          "label": "Course 18 record 6: Hundredths BCD byte",
+          "offset": 1989,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_18.record_6.seconds",
+          "label": "Course 18 record 6: Seconds BCD byte",
+          "offset": 1990,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_18.record_6.minutes_character",
+          "label": "Course 18 record 6: Packed minutes and character byte",
+          "offset": 1991,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_19.record_1.hundredths",
+          "label": "Course 19 record 1: Hundredths BCD byte",
+          "offset": 1994,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_19.record_1.seconds",
+          "label": "Course 19 record 1: Seconds BCD byte",
+          "offset": 1995,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_19.record_1.minutes_character",
+          "label": "Course 19 record 1: Packed minutes and character byte",
+          "offset": 1996,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_19.record_2.hundredths",
+          "label": "Course 19 record 2: Hundredths BCD byte",
+          "offset": 1997,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_19.record_2.seconds",
+          "label": "Course 19 record 2: Seconds BCD byte",
+          "offset": 1998,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_19.record_2.minutes_character",
+          "label": "Course 19 record 2: Packed minutes and character byte",
+          "offset": 1999,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_19.record_3.hundredths",
+          "label": "Course 19 record 3: Hundredths BCD byte",
+          "offset": 2000,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_19.record_3.seconds",
+          "label": "Course 19 record 3: Seconds BCD byte",
+          "offset": 2001,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_19.record_3.minutes_character",
+          "label": "Course 19 record 3: Packed minutes and character byte",
+          "offset": 2002,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_19.record_4.hundredths",
+          "label": "Course 19 record 4: Hundredths BCD byte",
+          "offset": 2003,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_19.record_4.seconds",
+          "label": "Course 19 record 4: Seconds BCD byte",
+          "offset": 2004,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_19.record_4.minutes_character",
+          "label": "Course 19 record 4: Packed minutes and character byte",
+          "offset": 2005,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_19.record_5.hundredths",
+          "label": "Course 19 record 5: Hundredths BCD byte",
+          "offset": 2006,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_19.record_5.seconds",
+          "label": "Course 19 record 5: Seconds BCD byte",
+          "offset": 2007,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_19.record_5.minutes_character",
+          "label": "Course 19 record 5: Packed minutes and character byte",
+          "offset": 2008,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_19.record_6.hundredths",
+          "label": "Course 19 record 6: Hundredths BCD byte",
+          "offset": 2009,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_19.record_6.seconds",
+          "label": "Course 19 record 6: Seconds BCD byte",
+          "offset": 2010,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_19.record_6.minutes_character",
+          "label": "Course 19 record 6: Packed minutes and character byte",
+          "offset": 2011,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_20.record_1.hundredths",
+          "label": "Course 20 record 1: Hundredths BCD byte",
+          "offset": 2014,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_20.record_1.seconds",
+          "label": "Course 20 record 1: Seconds BCD byte",
+          "offset": 2015,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_20.record_1.minutes_character",
+          "label": "Course 20 record 1: Packed minutes and character byte",
+          "offset": 2016,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_20.record_2.hundredths",
+          "label": "Course 20 record 2: Hundredths BCD byte",
+          "offset": 2017,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_20.record_2.seconds",
+          "label": "Course 20 record 2: Seconds BCD byte",
+          "offset": 2018,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_20.record_2.minutes_character",
+          "label": "Course 20 record 2: Packed minutes and character byte",
+          "offset": 2019,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_20.record_3.hundredths",
+          "label": "Course 20 record 3: Hundredths BCD byte",
+          "offset": 2020,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_20.record_3.seconds",
+          "label": "Course 20 record 3: Seconds BCD byte",
+          "offset": 2021,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_20.record_3.minutes_character",
+          "label": "Course 20 record 3: Packed minutes and character byte",
+          "offset": 2022,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_20.record_4.hundredths",
+          "label": "Course 20 record 4: Hundredths BCD byte",
+          "offset": 2023,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_20.record_4.seconds",
+          "label": "Course 20 record 4: Seconds BCD byte",
+          "offset": 2024,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_20.record_4.minutes_character",
+          "label": "Course 20 record 4: Packed minutes and character byte",
+          "offset": 2025,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_20.record_5.hundredths",
+          "label": "Course 20 record 5: Hundredths BCD byte",
+          "offset": 2026,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_20.record_5.seconds",
+          "label": "Course 20 record 5: Seconds BCD byte",
+          "offset": 2027,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_20.record_5.minutes_character",
+          "label": "Course 20 record 5: Packed minutes and character byte",
+          "offset": 2028,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_20.record_6.hundredths",
+          "label": "Course 20 record 6: Hundredths BCD byte",
+          "offset": 2029,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_20.record_6.seconds",
+          "label": "Course 20 record 6: Seconds BCD byte",
+          "offset": 2030,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        },
+        {
+          "id": "trial_20.record_6.minutes_character",
+          "label": "Course 20 record 6: Packed minutes and character byte",
+          "offset": 2031,
+          "type": "u8",
+          "description": "Raw stored record byte; 0xA in the low minutes nibble denotes an unset record."
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "add16_le",
+          "unit": "u16_le",
+          "start": 2034,
+          "length": 4,
+          "offset": 2032
+        },
+        {
+          "algorithm": "add16_le",
+          "start": 1632,
+          "length": 20,
+          "offset": 1632,
+          "exclude": [
+            {
+              "offset": 1632,
+              "length": 2
+            }
+          ]
+        },
+        {
+          "algorithm": "add16_le",
+          "start": 1652,
+          "length": 20,
+          "offset": 1652,
+          "exclude": [
+            {
+              "offset": 1652,
+              "length": 2
+            }
+          ]
+        },
+        {
+          "algorithm": "add16_le",
+          "start": 1672,
+          "length": 20,
+          "offset": 1672,
+          "exclude": [
+            {
+              "offset": 1672,
+              "length": 2
+            }
+          ]
+        },
+        {
+          "algorithm": "add16_le",
+          "start": 1692,
+          "length": 20,
+          "offset": 1692,
+          "exclude": [
+            {
+              "offset": 1692,
+              "length": 2
+            }
+          ]
+        },
+        {
+          "algorithm": "add16_le",
+          "start": 1712,
+          "length": 20,
+          "offset": 1712,
+          "exclude": [
+            {
+              "offset": 1712,
+              "length": 2
+            }
+          ]
+        },
+        {
+          "algorithm": "add16_le",
+          "start": 1732,
+          "length": 20,
+          "offset": 1732,
+          "exclude": [
+            {
+              "offset": 1732,
+              "length": 2
+            }
+          ]
+        },
+        {
+          "algorithm": "add16_le",
+          "start": 1752,
+          "length": 20,
+          "offset": 1752,
+          "exclude": [
+            {
+              "offset": 1752,
+              "length": 2
+            }
+          ]
+        },
+        {
+          "algorithm": "add16_le",
+          "start": 1772,
+          "length": 20,
+          "offset": 1772,
+          "exclude": [
+            {
+              "offset": 1772,
+              "length": 2
+            }
+          ]
+        },
+        {
+          "algorithm": "add16_le",
+          "start": 1792,
+          "length": 20,
+          "offset": 1792,
+          "exclude": [
+            {
+              "offset": 1792,
+              "length": 2
+            }
+          ]
+        },
+        {
+          "algorithm": "add16_le",
+          "start": 1812,
+          "length": 20,
+          "offset": 1812,
+          "exclude": [
+            {
+              "offset": 1812,
+              "length": 2
+            }
+          ]
+        },
+        {
+          "algorithm": "add16_le",
+          "start": 1832,
+          "length": 20,
+          "offset": 1832,
+          "exclude": [
+            {
+              "offset": 1832,
+              "length": 2
+            }
+          ]
+        },
+        {
+          "algorithm": "add16_le",
+          "start": 1852,
+          "length": 20,
+          "offset": 1852,
+          "exclude": [
+            {
+              "offset": 1852,
+              "length": 2
+            }
+          ]
+        },
+        {
+          "algorithm": "add16_le",
+          "start": 1872,
+          "length": 20,
+          "offset": 1872,
+          "exclude": [
+            {
+              "offset": 1872,
+              "length": 2
+            }
+          ]
+        },
+        {
+          "algorithm": "add16_le",
+          "start": 1892,
+          "length": 20,
+          "offset": 1892,
+          "exclude": [
+            {
+              "offset": 1892,
+              "length": 2
+            }
+          ]
+        },
+        {
+          "algorithm": "add16_le",
+          "start": 1912,
+          "length": 20,
+          "offset": 1912,
+          "exclude": [
+            {
+              "offset": 1912,
+              "length": 2
+            }
+          ]
+        },
+        {
+          "algorithm": "add16_le",
+          "start": 1932,
+          "length": 20,
+          "offset": 1932,
+          "exclude": [
+            {
+              "offset": 1932,
+              "length": 2
+            }
+          ]
+        },
+        {
+          "algorithm": "add16_le",
+          "start": 1952,
+          "length": 20,
+          "offset": 1952,
+          "exclude": [
+            {
+              "offset": 1952,
+              "length": 2
+            }
+          ]
+        },
+        {
+          "algorithm": "add16_le",
+          "start": 1972,
+          "length": 20,
+          "offset": 1972,
+          "exclude": [
+            {
+              "offset": 1972,
+              "length": 2
+            }
+          ]
+        },
+        {
+          "algorithm": "add16_le",
+          "start": 1992,
+          "length": 20,
+          "offset": 1992,
+          "exclude": [
+            {
+              "offset": 1992,
+              "length": 2
+            }
+          ]
+        },
+        {
+          "algorithm": "add16_le",
+          "start": 2012,
+          "length": 20,
+          "offset": 2012,
+          "exclude": [
+            {
+              "offset": 2012,
+              "length": 2
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -548,19 +548,19 @@ export type SaveChangePreview = { changes: Array<SaveFieldChange>, changed: bool
 
 export type SaveEditResult = { preview: SaveChangePreview, bytes: Array<number> | null, document: SaveDocument, };
 
-export type SaveIdentifyCommand = { input: string, game?: string, rom_sha1?: string, };
+export type SaveIdentifyCommand = { schema?: string, input: string, game?: string, rom_sha1?: string, };
 
-export type SaveCreateCommand = { game?: string, template?: string, assignments?: Array<string>, output?: string, dry_run?: boolean, force?: boolean, };
+export type SaveCreateCommand = { schema?: string, game?: string, template?: string, assignments?: Array<string>, output?: string, dry_run?: boolean, force?: boolean, };
 
-export type SaveListGamesCommand = Record<symbol, never>;
+export type SaveListGamesCommand = { schema?: string, };
 
-export type SaveInspectCommand = { input: string, game?: string, rom_sha1?: string, };
+export type SaveInspectCommand = { schema?: string, input: string, game?: string, rom_sha1?: string, };
 
-export type SaveGetCommand = { input: string, field: string, game?: string, rom_sha1?: string, };
+export type SaveGetCommand = { schema?: string, input: string, field: string, game?: string, rom_sha1?: string, };
 
-export type SaveSetCommand = { input: string, assignments: Array<string>, output?: string, game?: string, rom_sha1?: string, dry_run?: boolean, force?: boolean, };
+export type SaveSetCommand = { schema?: string, input: string, assignments: Array<string>, output?: string, game?: string, rom_sha1?: string, dry_run?: boolean, force?: boolean, };
 
-export type SaveExportSchemaCommand = { input?: string, game?: string, rom_sha1?: string, };
+export type SaveExportSchemaCommand = { schema?: string, input?: string, game?: string, rom_sha1?: string, };
 
 export type SaveCommands = { "type": "list-games", "args": SaveListGamesCommand } | { "type": "create", "args": SaveCreateCommand } | { "type": "identify", "args": SaveIdentifyCommand } | { "type": "inspect", "args": SaveInspectCommand } | { "type": "get", "args": SaveGetCommand } | { "type": "set", "args": SaveSetCommand } | { "type": "export-schema", "args": SaveExportSchemaCommand };
 

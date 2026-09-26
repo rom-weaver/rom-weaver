@@ -1,0 +1,524 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "rom-weaver save schema pack v1",
+  "description": "Authoring shape. Runtime validation also checks bounds, overlap, IDs, value ranges, and total integrity work.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "maxLength": 1024
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "games": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/game"
+      },
+      "minItems": 1
+    }
+  },
+  "required": ["schema_version", "games"],
+  "$defs": {
+    "game": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 1024,
+          "minLength": 1
+        },
+        "platform": {
+          "type": "string",
+          "maxLength": 1024,
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "save_size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8388608
+        },
+        "fields": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        },
+        "signatures": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/span"
+          }
+        },
+        "checksums": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/checksum"
+          }
+        },
+        "mirrors": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/mirror"
+          }
+        },
+        "generation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/generation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["id", "name", "platform", "save_size", "fields"]
+    },
+    "field": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 1024,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$"
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 1024,
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8388608
+        },
+        "type": {
+          "enum": [
+            "u8",
+            "u16_le",
+            "u16_be",
+            "u32_le",
+            "u32_be",
+            "i8",
+            "i16_le",
+            "i16_be",
+            "i32_le",
+            "i32_be",
+            "bool",
+            "bit",
+            "ascii",
+            "u24_le",
+            "u24_be",
+            "bcd_le",
+            "bcd_be"
+          ]
+        },
+        "bit": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 7
+        },
+        "length": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 255
+        },
+        "min": {
+          "type": ["integer", "null"],
+          "minimum": -2147483648,
+          "maximum": 4294967295
+        },
+        "max": {
+          "type": ["integer", "null"],
+          "minimum": -2147483648,
+          "maximum": 4294967295
+        },
+        "editable": {
+          "type": ["boolean", "null"]
+        },
+        "inverted": {
+          "type": "boolean"
+        },
+        "copies": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8388608
+          }
+        }
+      },
+      "required": ["id", "label", "offset", "type"],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "bit"
+              }
+            }
+          },
+          "then": {
+            "required": ["bit"],
+            "properties": {
+              "bit": {
+                "type": "integer"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "bit": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": ["ascii", "bcd_le", "bcd_be"]
+              }
+            }
+          },
+          "then": {
+            "required": ["length"],
+            "properties": {
+              "length": {
+                "type": "integer"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "length": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": ["bit", "bool", "ascii"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "min": {
+                "type": "null"
+              },
+              "max": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": ["bcd_le", "bcd_be"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "length": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": ["bit", "bool"]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "inverted": {
+                "const": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    "span": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8388608
+        },
+        "bytes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8388608,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          }
+        }
+      },
+      "required": ["offset", "bytes"]
+    },
+    "checksum": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "enum": [
+            "sum8",
+            "sum16_le",
+            "crc16_ccitt_false_le",
+            "sum16_be",
+            "sum32_le",
+            "sum32_be",
+            "add8",
+            "add16_le",
+            "add16_be",
+            "add32_le",
+            "add32_be",
+            "xor8",
+            "xor16_le",
+            "xor16_be",
+            "xor32_le",
+            "xor32_be",
+            "sum8_mod255_complement"
+          ]
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8388608
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8388608
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8388608
+        },
+        "target": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "unit": {
+          "enum": ["u8", "u16_le", "u16_be", "u32_le", "u32_be"]
+        },
+        "exclude": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/exclusion"
+          }
+        },
+        "spans": {
+          "type": "array",
+          "maxItems": 4096,
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/checksum_span"
+          }
+        }
+      },
+      "required": ["algorithm", "offset"],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "algorithm": {
+                "enum": ["crc16_ccitt_false_le", "sum8_mod255_complement"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "target": {
+                "type": "null"
+              },
+              "unit": {
+                "const": "u8"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "algorithm": {
+                "enum": ["sum8", "add8", "xor8"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "target": {
+                "maximum": 255
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "algorithm": {
+                "enum": ["sum16_le", "sum16_be", "add16_le", "add16_be", "xor16_le", "xor16_be"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "target": {
+                "maximum": 65535
+              }
+            }
+          }
+        }
+      ],
+      "oneOf": [
+        {
+          "required": ["start", "length"],
+          "not": {
+            "required": ["spans"]
+          }
+        },
+        {
+          "required": ["spans"],
+          "not": {
+            "anyOf": [
+              {
+                "required": ["start"]
+              },
+              {
+                "required": ["length"]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "mirror": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8388608
+        },
+        "target": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8388608
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8388608
+        },
+        "validate": {
+          "type": ["boolean", "null"],
+          "default": true
+        }
+      },
+      "required": ["source", "target", "length"]
+    },
+    "generation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fill": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "patches": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/span"
+          }
+        }
+      },
+      "required": ["fill"]
+    },
+    "exclusion": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8388608
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8388608
+        }
+      },
+      "required": ["offset", "length"]
+    },
+    "checksum_span": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8388608
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8388608
+        }
+      },
+      "required": ["start", "length"]
+    }
+  }
+}
