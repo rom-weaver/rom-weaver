@@ -101,4 +101,35 @@ describe("RomInputPanels view detail", () => {
     expect(checks).not.toContain("Database required");
     expect(container.querySelector(".identify-drawer-condition")).toBeNull();
   });
+
+  it("keeps the size and crc32 on a closed Checks header", () => {
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{ detailedViewEnabled: false }}>
+        <RomInputPanels info={{ bytes: 24592, checksums: { crc32: "3e30b9b3" }, open: false }} />
+      </RomWeaverSettingsProvider>,
+    );
+    const head = container.querySelector(".cks-head");
+    expect(head?.querySelector(".rb-size")).not.toBeNull();
+    expect(head?.textContent).toContain("3E30B9B3");
+  });
+
+  it("leaves the size and crc32 to the open Checks body", () => {
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{ detailedViewEnabled: false }}>
+        <RomInputPanels info={{ bytes: 24592, checksums: { crc32: "3e30b9b3" }, open: true }} />
+      </RomWeaverSettingsProvider>,
+    );
+    const head = container.querySelector(".cks-head");
+    expect(head?.querySelector(".rb-size")).toBeNull();
+    expect(head?.textContent).not.toContain("3E30B9B3");
+  });
+
+  it("keeps the closed-header readouts out of the detailed view", () => {
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{ detailedViewEnabled: true }}>
+        <RomInputPanels info={{ bytes: 24592, checksums: { crc32: "3e30b9b3" }, open: false }} />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(container.querySelector(".rb-size")).toBeNull();
+  });
 });
