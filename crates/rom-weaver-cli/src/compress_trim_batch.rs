@@ -1,3 +1,4 @@
+use super::patch_apply::paths_refer_to_same_file;
 use super::*;
 
 struct TrimBatchConfig<'a> {
@@ -116,6 +117,19 @@ impl CliApp {
             Err(report) => return self.finish("compress", *report),
         };
         let mut plan = plan;
+        if let Err(error) = ensure_compress_preserves_inputs(&input, &output, &plan.resolved_format)
+        {
+            return self.finish(
+                "compress",
+                OperationReport::failed_with_error(
+                    OperationFamily::Container,
+                    Some(plan.resolved_format.clone()),
+                    "validate",
+                    error,
+                    probe_threads,
+                ),
+            );
+        }
         if !entry_names.is_empty()
             && (!plan.handler.descriptor().matches_name("zip") || entry_names.len() != input.len())
         {
@@ -1215,6 +1229,53 @@ impl CliApp {
         }
         Ok(())
     }
+}
+
+fn ensure_compress_preserves_inputs(inputs: &[PathBuf], output: &Path, format: &str) -> Result<()> {
+    if !output.exists() {
+        return Ok(());
+    }
+    let mut pending = inputs.to_vec();
+    if format == "chd" {
+        for input in inputs
+            .iter()
+            .filter(|input| detect_disc_sheet(input).is_some())
+        {
+            let mut sheets = vec![input.clone()];
+            if let Some(gdi) = sibling_gdi_path(input) {
+                pending.push(gdi.clone());
+                sheets.push(gdi);
+            }
+            for sheet in sheets {
+                let parent = sheet.parent().unwrap_or_else(|| Path::new("."));
+                pending.extend(
+                    enumerate_disc_sheet_refs(&sheet)?
+                        .referenced_files
+                        .into_iter()
+                        .map(|name| parent.join(name)),
+                );
+            }
+        }
+    }
+    while let Some(input) = pending.pop() {
+        if paths_refer_to_same_file(&input, output) {
+            return Err(RomWeaverError::Validation(format!(
+                "compression output `{}` refers to input `{}`; choose a separate output file",
+                output.display(),
+                input.display()
+            )));
+        }
+        if input.is_dir() {
+            for entry in fs::read_dir(&input)? {
+                let entry = entry?;
+                let kind = entry.file_type()?;
+                if kind.is_file() || kind.is_dir() {
+                    pending.push(entry.path());
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -208,6 +208,127 @@ fn compress_refuses_to_overwrite_without_force() {
 }
 
 #[test]
+fn compress_force_preserves_inputs_that_alias_the_output() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.bin");
+    let alias = temp.child("alias.zip");
+    let extra = temp.child("extra.bin");
+    let bytes = b"source ROM bytes must survive";
+    fs::write(input.path(), bytes).expect("input fixture");
+    fs::write(extra.path(), b"another ROM").expect("extra fixture");
+    fs::hard_link(input.path(), alias.path()).expect("hard link");
+
+    for output in [input.path(), alias.path()] {
+        let stdout = command_stdout(
+            &[
+                "compress",
+                "--input",
+                extra.path().to_str().expect("path"),
+                "--input",
+                input.path().to_str().expect("path"),
+                "--output",
+                output.to_str().expect("path"),
+                "--format",
+                "zip",
+                "--force",
+                "--json",
+            ],
+            1,
+        );
+        let report = parse_single_json_line(&stdout);
+        assert!(
+            report["label"]
+                .as_str()
+                .expect("label")
+                .contains("refers to input")
+        );
+        assert_eq!(fs::read(input.path()).expect("input survives"), bytes);
+        assert_eq!(fs::read(alias.path()).expect("alias survives"), bytes);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn compress_force_preserves_symlinked_inputs() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.bin");
+    let output = temp.child("alias.zip");
+    fs::write(input.path(), b"ROM bytes").expect("input fixture");
+    std::os::unix::fs::symlink(input.path(), output.path()).expect("symlink");
+    command_stdout(
+        &[
+            "compress",
+            "-i",
+            input.path().to_str().expect("path"),
+            "-o",
+            output.path().to_str().expect("path"),
+            "--force",
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(
+        fs::read(input.path()).expect("input survives"),
+        b"ROM bytes"
+    );
+}
+
+#[test]
+fn compress_force_preserves_directory_members() {
+    let temp = setup_temp_dir();
+    let input = temp.child("roms");
+    fs::create_dir(input.path()).expect("input directory");
+    let member = input.path().join("game.bin");
+    let output = temp.child("alias.zip");
+    fs::write(&member, b"ROM bytes").expect("member fixture");
+    fs::hard_link(&member, output.path()).expect("hard link");
+    command_stdout(
+        &[
+            "compress",
+            "-i",
+            input.path().to_str().expect("path"),
+            "-o",
+            output.path().to_str().expect("path"),
+            "--force",
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(fs::read(member).expect("member survives"), b"ROM bytes");
+}
+
+#[test]
+fn compress_force_preserves_disc_sheet_tracks() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.cue");
+    let track = temp.child("track.bin");
+    fs::write(
+        input.path(),
+        b"FILE \"track.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n",
+    )
+    .expect("cue fixture");
+    fs::write(track.path(), vec![0x55; 2352 * 16]).expect("track fixture");
+    command_stdout(
+        &[
+            "compress",
+            "-i",
+            input.path().to_str().expect("path"),
+            "-o",
+            track.path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--force",
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(
+        fs::read(track.path()).expect("track survives"),
+        vec![0x55; 2352 * 16]
+    );
+}
+
+#[test]
 fn compress_dry_run_reports_the_plan_and_writes_nothing() {
     let temp = setup_temp_dir();
     let input = temp.child("game.bin");

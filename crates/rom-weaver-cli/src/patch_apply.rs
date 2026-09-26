@@ -16,7 +16,7 @@ mod chain_loop;
 mod run;
 mod step_plan;
 
-fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
+pub(super) fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
     left == right
         || matches!(
             (fs::canonicalize(left), fs::canonicalize(right)),
