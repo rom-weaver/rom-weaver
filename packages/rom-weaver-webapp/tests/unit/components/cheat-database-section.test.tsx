@@ -467,6 +467,54 @@ describe("CheatDatabaseSection", () => {
 
     expect(view.getByLabelText(`Browse games for ${SNES}`)).toBeTruthy();
   });
+
+  it("warns when no game matches the ROM and offers the game search", () => {
+    const view = render(
+      <CheatDatabaseSection
+        {...props}
+        rom={{ key: "unknown", platform: SNES, title: "Unknown game", checksums: { sha1: "no-match" } }}
+      />,
+    );
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
+    expect(view.getByText(/No game in the .* cheat database matches this ROM/u)).toBeTruthy();
+    expect(view.getByLabelText(`Browse games for ${SNES}`)).toBeTruthy();
+  });
+
+  it("warns and offers the game search when the exact match has no ROM cheats", async () => {
+    const unsupported = records.filter(({ resolution }) => resolution.type === "unsupported");
+    const view = render(
+      <CheatDatabaseSection
+        {...props}
+        classifyDatabaseCheats={makeClassifier(unsupported)}
+        shard={makeShard(unsupported)}
+      />,
+    );
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
+    await view.findByText(/no cheats that can be baked into the ROM for Super Mario World/u);
+    expect(view.getByLabelText(`Browse games for ${SNES}`)).toBeTruthy();
+  });
+
+  it("warns when the title match has no ROM cheats", async () => {
+    const unsupported = records.filter(({ resolution }) => resolution.type === "unsupported");
+    const view = render(
+      <CheatDatabaseSection
+        {...props}
+        classifyDatabaseCheats={makeClassifier(unsupported)}
+        rom={{ key: "title-only", platform: SNES, title: "Super Mario World", checksums: { sha1: "no-match" } }}
+        shard={makeShard(unsupported)}
+      />,
+    );
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
+    await view.findByText(/no cheats that can be baked into the ROM for Super Mario World/u);
+    expect(view.getByText(/ROM revision is unverified/u)).toBeTruthy();
+  });
+
+  it("keeps the game search hidden when the exact match has ROM cheats", async () => {
+    const view = render(<CheatDatabaseSection {...props} />);
+    await openDialog(view);
+    expect(view.queryByLabelText(`Browse games for ${SNES}`)).toBeNull();
+    expect(view.container.querySelector("#rom-weaver-cheat-game-warning")).toBeNull();
+  });
 });
 
 describe("CheatDatabaseSection platform resolution", () => {
@@ -477,6 +525,38 @@ describe("CheatDatabaseSection platform resolution", () => {
     expect(view.queryByPlaceholderText("Search cheat databases by system…")).toBeNull();
     fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
     expect(view.queryByRole("button", { name: "Add code manually" })).toBeNull();
+  });
+
+  it("warns about an uncovered platform and lets the user choose a system by hand", async () => {
+    const view = render(
+      <CheatDatabaseSection {...props} rom={{ key: "n64", platform: "Nintendo - Nintendo 64", title: "Game" }} />,
+    );
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
+    expect(view.getByText(/No cheat database covers Nintendo - Nintendo 64/u)).toBeTruthy();
+    expect(view.getByText(/Choose a system above/u)).toBeTruthy();
+    fireEvent.click(view.getByRole("button", { name: /Nintendo - Super Nintendo Entertainment System/u }));
+    await view.findByLabelText(`Browse games for ${SNES}`);
+    expect(view.getByText(/No game in the .* cheat database matches this ROM/u)).toBeTruthy();
+
+    fireEvent.click(view.getByRole("button", { name: "Change system" }));
+    expect(await view.findByPlaceholderText("Search cheat databases by system…")).toBeTruthy();
+  });
+
+  it("keeps the way back to the system search when a hand-picked shard fails to load", async () => {
+    const client = { close: vi.fn(), loadShard: () => Promise.reject(new Error("offline")) };
+    const view = render(
+      <CheatDatabaseSection
+        {...props}
+        client={client}
+        rom={{ key: "n64", platform: "Nintendo - Nintendo 64", title: "Game" }}
+        shard={undefined}
+      />,
+    );
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
+    fireEvent.click(view.getByRole("button", { name: /Nintendo - Super Nintendo Entertainment System/u }));
+    await view.findAllByText(/The cheat database is unavailable/u);
+    fireEvent.click(view.getByRole("button", { name: "Change system" }));
+    expect(await view.findByPlaceholderText("Search cheat databases by system…")).toBeTruthy();
   });
 
   it("keeps manual entry for a system the decoder covers without a database", async () => {
