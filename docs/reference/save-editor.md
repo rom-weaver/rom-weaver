@@ -11,6 +11,7 @@ The Save Editor changes persistent game data. It does not change emulator save s
 - [Recognition](#recognition)
 - [Integrity rules](#integrity-rules)
 - [Save generation](#save-generation)
+- [Runtime schema packs](#runtime-schema-packs)
 - [Save containers](#save-containers)
 - [Physical save formats](#physical-save-formats)
 - [Unsupported data](#unsupported-data)
@@ -118,6 +119,34 @@ Template generation supports every editable game above. It validates an existing
 `save list-games` reports the game definitions and the IDs that support fresh generation. `save create` requires an output path unless it runs with `--dry-run`.
 
 Procedures: [Create saves in the browser](../how-to/create-game-saves-browser.md) and [Create saves with the CLI](../how-to/create-game-saves-cli.md).
+
+## Runtime schema packs
+
+A schema pack adds game layouts without rebuilding the application. The CLI accepts `--schema PATH` on every `save` command. The browser accepts a local JSON pack through **Load schema pack**.
+
+The repository database is `data/save-schemas/`. Its Super Mario World pack uses game ID `super-mario-world-schema` and exposes all 233 File 1 fields. It requires a valid checksum and an identical backup. Files 2 and 3 stay unchanged. The native handler retains its three-file and recovery support.
+
+The top-level object contains `schema_version` (`1`) and a nonempty `games` array. Optional `$schema` metadata identifies an authoring schema; the interpreter never fetches it. A game contains `id`, `name`, `platform`, `save_size`, and `fields`. Optional members are `description`, `signatures`, `checksums`, `mirrors`, and `generation`.
+
+| Member | Representation |
+| --- | --- |
+| Field | `id`, `label`, absolute byte `offset`, and `type`; optional `description`, `editable`, `min`, `max`, `bit`, and `length` |
+| Signature | `offset` and a `bytes` array |
+| Checksum | `algorithm`, `start`, `length`, `offset`, and optional `target` |
+| Mirror | `source`, `target`, and `length`, all in bytes |
+| Generation | A `fill` byte and a `patches` array of `offset`/`bytes` objects |
+
+Storage types are `u8`, `u16_le`, `u16_be`, `u32_le`, `u32_be`, `i8`, `i16_le`, `i16_be`, `i32_le`, `i32_be`, `bool`, `bit`, and `ascii`. Integers expose their full stored range unless `min` or `max` narrows it. `bit` requires a bit index from 0 through 7. `ascii` requires a byte length from 1 through 255. Names and labels are metadata; they do not establish game compatibility.
+
+Checksum algorithms are `sum8`, `sum16_le`, and `crc16_ccitt_false_le`. The sum algorithms store `target - sum(input bytes)` at the checksum offset, modulo the stored width. `target` defaults to zero. CRC-16 uses polynomial `0x1021` and initial value `0xffff`; it has no `target`. Sixteen-bit results use little-endian storage.
+
+Generation fills the image, applies patches, writes checksums, and copies mirrors. Generation is unavailable when its initializer is absent. A structurally valid initializer does not prove that a game can load it.
+
+The interpreter rejects unknown properties and versions, duplicate IDs, invalid ranges, and conflicting writes. Packs cannot replace built-in games. Limits are 2 MiB per pack, 64 games, 4,096 fields per game, and 8 MiB per raw save. Layouts without signatures or checksums require an explicit game choice. Packs cannot execute code or fetch network resources.
+
+Game IDs contain 1–128 lowercase ASCII letters, digits, underscores, or hyphens and start with a letter or digit. Field IDs contain dot-separated nonempty segments of ASCII letters, digits, underscores, or hyphens. Other text values have a 1,024-byte limit. Each signatures, checksums, mirrors, or patches array contains at most 4,096 entries. Total signature, checksum-input, and mirror-source lengths across a pack cannot exceed 64 MiB.
+
+`save export-schema` still exports the fields of an inspected save. Its output is not an importable layout pack: it omits byte storage and integrity rules.
 
 ## Save containers
 

@@ -6,6 +6,7 @@ Create a Super Mario World or Zelda save, edit its properties, and download a co
 ## Table of contents
 
 - [Create a fresh save](#create-a-fresh-save)
+- [Load a schema pack](#load-a-schema-pack)
 - [Start from an existing save](#start-from-an-existing-save)
 
 <!-- END doctoc -->
@@ -22,6 +23,17 @@ Create a Super Mario World or Zelda save, edit its properties, and download a co
 A new Zelda save has one file named `LINK`, three hearts, and two empty slots. Change **File 1 player name** to give the file a different name.
 
 A new Super Mario World save has one file at Yoshi's House and two empty slots.
+
+## Load a schema pack
+
+1. Open **Saves** and select **Load schema pack**.
+2. Choose a local JSON schema pack. The editor checks the pack before accepting it.
+3. In **New save**, select **Choose a game**, choose the pack's game, and select **Create save**.
+4. Edit the properties and select **Download edited copy**.
+
+For a pack without a fresh initializer, add an existing save after loading the pack. The pack stays active for the editor session. Reloading the page clears it.
+
+The [schema reference](../reference/save-editor.md#runtime-schema-packs) defines the pack format and limits.
 
 ## Start from an existing save
 

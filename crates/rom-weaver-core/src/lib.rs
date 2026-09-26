@@ -90,8 +90,8 @@ pub use save::{
     SaveFieldValue, SaveFormatCandidate, SaveGameCandidate, SaveGameDefinition, SaveGameHandler,
     SaveGameIdentity, SaveGameRegistry, SaveIntegrity, SaveIntegrityIssue, SaveIntegrityState,
     SaveRecognition, SaveRecognitionConfidence, SaveRecognitionOutcome, SaveRecognitionReason,
-    SaveSection, SaveValue, apply_save_edits, candidate_save_formats, detect_save, parse_save,
-    unwrap_save_container, validate_save_edits,
+    SaveSchemaPack, SaveSection, SaveValue, SchemaSaveHandler, apply_save_edits,
+    candidate_save_formats, detect_save, parse_save, unwrap_save_container, validate_save_edits,
 };
 pub use selection::{SelectionMatcher, normalize_archive_name};
 pub use suggest::{closest_name, did_you_mean_suffix};

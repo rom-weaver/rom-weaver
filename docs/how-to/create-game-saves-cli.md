@@ -6,6 +6,7 @@ Use `save create` to write a fresh Super Mario World or Zelda save or a copy of 
 ## Table of contents
 
 - [Create a fresh Super Mario World or Zelda save](#create-a-fresh-super-mario-world-or-zelda-save)
+- [Load a schema pack](#load-a-schema-pack)
 - [Use an existing save as a template](#use-an-existing-save-as-a-template)
 
 <!-- END doctoc -->
@@ -37,6 +38,42 @@ Create a fresh Super Mario World file with its checked initial overworld state:
 ```bash
 rom-weaver save create --game super-mario-world -o mario.srm
 ```
+
+## Load a schema pack
+
+Set the path to a local JSON pack. This example uses the repository's Super Mario World File 1 pack:
+
+```bash
+schema=data/save-schemas/super-mario-world.json
+```
+
+Load the pack and list its games:
+
+```bash
+rom-weaver save list-games --schema "$schema"
+```
+
+Select its game ID:
+
+```bash
+game=super-mario-world-schema
+```
+
+Generate a save at a new output path:
+
+```bash
+rom-weaver save create --schema "$schema" --game "$game" -o mario.srm
+```
+
+Use the same pack and game ID to inspect the result:
+
+```bash
+rom-weaver save inspect mario.srm --schema "$schema" --game "$game"
+```
+
+Pass `--schema` to each later command that uses this layout. Add `--template existing.srm` when the pack has no fresh initializer.
+
+The [schema reference](../reference/save-editor.md#runtime-schema-packs) defines the supported storage and integrity rules.
 
 ## Use an existing save as a template
 

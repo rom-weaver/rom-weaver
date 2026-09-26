@@ -1,4 +1,4 @@
-import { Download, Gamepad2, RotateCcw, Save, Search, Undo2 } from "lucide-react";
+import { Download, FileJson2, Gamepad2, RotateCcw, Save, Search, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   clearPendingTestSave,
@@ -232,6 +232,8 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
   const { currentGameId, entries } = useEmulatorSession();
   const testGame = entries.find((entry) => entry.id === currentGameId);
   const [source, setSource] = useState<File | null>(null);
+  const [schemaPack, setSchemaPack] = useState<File | null>(null);
+  const [schemaRevision, setSchemaRevision] = useState(0);
   const [document, setDocument] = useState<SaveDocument | null>(null);
   const [recognition, setRecognition] = useState<SaveRecognition | undefined>();
   const [saveSize, setSaveSize] = useState<number>();
@@ -256,6 +258,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const outputRef = useRef<PublicOutput | null>(null);
+  const schemaInputRef = useRef<HTMLInputElement | null>(null);
   const handledDropRef = useRef(0);
   const requestRef = useRef(0);
   const requestAbortRef = useRef<AbortController | null>(null);
@@ -318,13 +321,42 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
       .catch(() => setSaves([]));
   }, []);
 
-  const inspectSelected = async (file: File, game?: string, romSha1?: string, activeRequest = startRequest()) => {
+  const replaceSchemaPack = async (nextSchema: File | null) => {
+    const currentSource = source;
+    const currentRomSha1 = sourceRomSha1;
+    const activeRequest = startRequest();
+    setBusy(true);
+    setError("");
+    try {
+      if (nextSchema) {
+        const { listSaveGames } = await loadSaveApi();
+        await listSaveGames(activeRequest.signal, nextSchema);
+      }
+      if (activeRequest.request !== requestRef.current) return;
+      setSchemaPack(nextSchema);
+      setSchemaRevision((revision) => revision + 1);
+      if (currentSource) selectSource(currentSource, currentRomSha1, nextSchema);
+    } catch (cause) {
+      if (activeRequest.request === requestRef.current)
+        setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      if (activeRequest.request === requestRef.current) setBusy(false);
+    }
+  };
+
+  const inspectSelected = async (
+    file: File,
+    game?: string,
+    romSha1?: string,
+    activeRequest = startRequest(),
+    schema = schemaPack,
+  ) => {
     const { request, signal } = activeRequest;
     setBusy(true);
     setError("");
     try {
       const { inspectSave } = await loadSaveApi();
-      const result = await inspectSave({ fileName: file.name, game, romSha1, signal, source: file });
+      const result = await inspectSave({ fileName: file.name, game, romSha1, schema, signal, source: file });
       if (request !== requestRef.current) return;
       if (!result.document) throw new Error("Save inspection returned no document.");
       setRecognition(result.recognition);
@@ -345,32 +377,33 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     file: File,
     romSha1: string | undefined,
     activeRequest: ReturnType<typeof startRequest>,
+    schema = schemaPack,
   ) => {
     const { request, signal } = activeRequest;
     setBusy(true);
     setError("");
     try {
       const { identifySave } = await loadSaveApi();
-      const result = await identifySave({ fileName: file.name, romSha1, signal, source: file });
+      const result = await identifySave({ fileName: file.name, romSha1, schema, signal, source: file });
       if (request !== requestRef.current) return;
       setRecognition(result.recognition);
       setSaveSize(result.saveSize);
       setPotentialFormat(result.potentialFormat);
       setContainerName(result.containerName);
       const candidate = candidateFromRecognition(result.recognition);
-      if (candidate) await inspectSelected(file, candidate.identity.id, romSha1, activeRequest);
+      if (candidate) await inspectSelected(file, candidate.identity.id, romSha1, activeRequest, schema);
     } catch (cause) {
       if (request === requestRef.current) setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       if (request === requestRef.current) setBusy(false);
     }
   };
-  const selectSource = (file: File, romSha1?: string) => {
+  const selectSource = (file: File, romSha1?: string, schema = schemaPack) => {
     resetEditor();
     setSource(file);
     setSourceRomSha1(romSha1);
     const activeRequest = startRequest();
-    void identifySelected(file, romSha1, activeRequest);
+    void identifySelected(file, romSha1, activeRequest, schema);
   };
   selectSourceRef.current = selectSource;
   const generateSave = async (game: string) => {
@@ -379,11 +412,11 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     setBusy(true);
     try {
       const { createSave } = await loadSaveApi();
-      const file = await createSave({ game, signal: activeRequest.signal });
+      const file = await createSave({ game, schema: schemaPack, signal: activeRequest.signal });
       if (activeRequest.request !== requestRef.current) return;
       setSource(file);
       setGenerated(true);
-      await inspectSelected(file, game, undefined, activeRequest);
+      await inspectSelected(file, game, undefined, activeRequest, schemaPack);
     } catch (cause) {
       if (activeRequest.request === requestRef.current)
         setError(cause instanceof Error ? cause.message : String(cause));
@@ -451,6 +484,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
         game: document.identity.id,
         outputName: source.name,
         romSha1: sourceRomSha1,
+        schema: schemaPack,
         signal,
         source,
       });
@@ -475,6 +509,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
         game: document?.identity.id,
         outputName: editedSaveName(source.name),
         romSha1: sourceRomSha1,
+        schema: schemaPack,
         signal,
         source,
       });
@@ -828,6 +863,39 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     </div>
   );
 
+  const schemaPackRow = (
+    <div className="drop-tray-row save-schema-pack">
+      <span className="drop-tray-label" id="save-schema-pack-title">
+        <FileJson2 aria-hidden="true" /> Save schema pack
+      </span>
+      <div className="drop-tray-control">
+        {schemaPack ? <span className="drop-tray-note mono">{schemaPack.name}</span> : null}
+        <button className="btn ghost" disabled={busy} onClick={() => schemaInputRef.current?.click()} type="button">
+          {schemaPack ? "Replace schema pack" : "Load schema pack"}
+        </button>
+        <input
+          accept="application/json,.json"
+          aria-labelledby="save-schema-pack-title"
+          disabled={busy}
+          hidden
+          id="save-schema-pack-picker"
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            event.currentTarget.value = "";
+            if (file) void replaceSchemaPack(file);
+          }}
+          ref={schemaInputRef}
+          type="file"
+        />
+        {schemaPack ? (
+          <button className="btn ghost" disabled={busy} onClick={() => void replaceSchemaPack(null)} type="button">
+            Clear schema pack
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+
   return (
     <section className="panel save-editor" id="save-editor-container">
       <UnifiedDropZone
@@ -835,12 +903,22 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
         addLabel="Replace the save"
         afterDropZone={
           source ? (
-            fileCard
+            <>
+              {fileCard}
+              <div className="drop-tray">{schemaPackRow}</div>
+            </>
           ) : (
             <>
               <div className="drop-tray save-editor-sources">
                 {sramList}
-                <SaveGenerator disabled={busy} onError={setError} onGenerate={generateSave} />
+                <SaveGenerator
+                  disabled={busy}
+                  key={schemaRevision}
+                  onError={setError}
+                  onGenerate={generateSave}
+                  schema={schemaPack}
+                />
+                {schemaPackRow}
               </div>
               {error ? <Notice level="error">{error}</Notice> : null}
             </>

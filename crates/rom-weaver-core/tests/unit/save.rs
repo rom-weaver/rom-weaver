@@ -1057,3 +1057,84 @@ fn gen4_trainer_ids_cover_full_u16_range_and_preserve_backup() {
         );
     }
 }
+
+const SMW_SCHEMA_PACK: &[u8] =
+    include_bytes!("../../../../data/save-schemas/super-mario-world.json");
+
+#[test]
+fn database_schema_generation_and_all_field_edits_match_native_smw() {
+    let registry = SaveGameRegistry::default()
+        .with_schema_pack_json(SMW_SCHEMA_PACK)
+        .unwrap();
+    let schema = registry.generate("super-mario-world-schema").unwrap();
+    let mut native = registry.generate("super-mario-world").unwrap();
+    assert_eq!(schema.bytes, native.bytes);
+    native.bytes[0x700] = 0xa5;
+    let schema = SaveDetectionInput {
+        bytes: native.bytes.clone(),
+        selected_game: Some("super-mario-world-schema".into()),
+        rom_sha1: None,
+    };
+    let definitions = registry.definitions();
+    let game = |id: &str| {
+        definitions
+            .iter()
+            .find(|entry| entry.identity.id == id)
+            .unwrap()
+            .identity
+            .clone()
+    };
+    let native_game = game("super-mario-world");
+    let schema_game = game("super-mario-world-schema");
+    let document = registry.parse(&native, &native_game).unwrap();
+    let schema_document = registry.parse(&schema, &schema_game).unwrap();
+    assert_eq!(schema_document.fields.len(), 233);
+    for field in &document.fields {
+        assert_eq!(value(&schema_document, &field.id), field.value);
+    }
+    let edits = document
+        .fields
+        .iter()
+        .map(|field| SaveEdit {
+            field: field.id.clone(),
+            value: match field.value {
+                SaveValue::U32(_) => SaveValue::U32(field.constraints.max.unwrap() as u32),
+                SaveValue::Bool(_) => SaveValue::Bool(true),
+                _ => panic!("unexpected Super Mario World field type"),
+            },
+        })
+        .collect::<Vec<_>>();
+    let expected = registry
+        .apply(&native, &native_game, &edits, false)
+        .unwrap();
+    let actual = registry
+        .apply(&schema, &schema_game, &edits, false)
+        .unwrap();
+    assert_eq!(actual.bytes, expected.bytes);
+    let bytes = actual.bytes.unwrap();
+    assert_eq!(bytes[0x700], 0xa5);
+    assert_eq!(&bytes[143..429], &schema.bytes[143..429]);
+    assert_eq!(&bytes[572..858], &schema.bytes[572..858]);
+    assert!(
+        registry
+            .apply(&schema, &schema_game, &edits, true)
+            .unwrap()
+            .bytes
+            .is_none()
+    );
+}
+
+#[test]
+fn schema_packs_cannot_replace_builtin_or_previously_loaded_games() {
+    let registry = SaveGameRegistry::default()
+        .with_schema_pack_json(SMW_SCHEMA_PACK)
+        .unwrap();
+    assert!(registry.with_schema_pack_json(SMW_SCHEMA_PACK).is_err());
+    let mut pack: serde_json::Value = serde_json::from_slice(SMW_SCHEMA_PACK).unwrap();
+    pack["games"][0]["id"] = serde_json::json!("super-mario-world");
+    assert!(
+        SaveGameRegistry::default()
+            .with_schema_pack_json(&serde_json::to_vec(&pack).unwrap())
+            .is_err()
+    );
+}

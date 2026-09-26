@@ -1,7 +1,29 @@
 import { expect, test } from "vitest";
-import { assertRunJsonSucceeded, readGuestFile, withTempFixture } from "./test-helpers.mjs";
+import { assertRunJsonSucceeded, readGuestFile, withTempFixture, writeGuestFile } from "./test-helpers.mjs";
 
 const SIGNATURE = 0x08012025;
+const TEST_SCHEMA_PACK = {
+  games: [
+    {
+      checksums: [{ algorithm: "sum8", length: 63, offset: 63, start: 0, target: 255 }],
+      fields: [{ id: "player.coins", label: "Coins", offset: 4, type: "u16_le" }],
+      generation: {
+        fill: 0,
+        patches: [
+          { bytes: [82, 87], offset: 0 },
+          { bytes: [77], offset: 20 },
+        ],
+      },
+      id: "test-schema-game",
+      mirrors: [],
+      name: "Test schema game",
+      platform: "custom",
+      save_size: 64,
+      signatures: [{ bytes: [82, 87], offset: 0 }],
+    },
+  ],
+  schema_version: 1,
+};
 
 const writeU16 = (bytes, offset, value) => {
   bytes[offset] = value & 0xff;
@@ -95,6 +117,51 @@ const pokemonGen1Fixture = () => {
   bytes[0x3523] = ~sum & 0xff;
   return bytes;
 };
+
+test("the real WASM command path creates and edits a save from a local schema pack", async () => {
+  await withTempFixture(async ({ opfsHandle, worker }) => {
+    const schemaPath = "/work/test-schema.json";
+    await writeGuestFile(opfsHandle, schemaPath, new TextEncoder().encode(JSON.stringify(TEST_SCHEMA_PACK)));
+    const createdPath = "/work/schema-created.sav";
+    const create = await worker.runJson({
+      args: {
+        args: {
+          assignments: ["player.coins=65535"],
+          game: "test-schema-game",
+          output: createdPath,
+          schema: schemaPath,
+        },
+        type: "create",
+      },
+      type: "save",
+    });
+    assertRunJsonSucceeded(create, { command: "save-create" });
+    const created = await readGuestFile(opfsHandle, createdPath);
+    expect(created.byteLength).toBe(64);
+    expect(Array.from(created.slice(0, 6))).toEqual([82, 87, 0, 0, 255, 255]);
+    expect(created.reduce((sum, byte) => (sum + byte) & 0xff, 0)).toBe(255);
+
+    const editedPath = "/work/schema-edited.sav";
+    const edit = await worker.runJson({
+      args: {
+        args: {
+          assignments: ["player.coins=0"],
+          game: "test-schema-game",
+          input: createdPath,
+          output: editedPath,
+          schema: schemaPath,
+        },
+        type: "set",
+      },
+      type: "save",
+    });
+    assertRunJsonSucceeded(edit, { command: "save-set" });
+    const edited = await readGuestFile(opfsHandle, editedPath);
+    expect(Array.from(edited.slice(4, 6))).toEqual([0, 0]);
+    expect(edited[20]).toBe(77);
+    expect(edited.reduce((sum, byte) => (sum + byte) & 0xff, 0)).toBe(255);
+  });
+});
 
 test("the real WASM command path identifies and edits an Emerald save", async () => {
   const original = emeraldFixture();
