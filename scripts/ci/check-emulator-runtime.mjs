@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import { createFirstSampleAssets } from "../../packages/rom-weaver-webapp/scripts/first-sample-assets.mjs";
@@ -11,6 +12,7 @@ const { values } = parseArgs({
     cli: { type: "string" },
     archive: { type: "string" },
     scratch: { type: "string" },
+    "source-dir": { type: "string" },
   },
 });
 for (const name of ["cli", "archive", "scratch"]) {
@@ -51,7 +53,29 @@ const run = (args, expectedCode = 0) => {
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const digest = sha256(fs.readFileSync(archive));
 run(["emulator", "install", "--archive", archive, "--sha256", digest]);
-run(["emulator", "info"]);
+const installed = run(["emulator", "info"]);
+const catalog = JSON.parse(
+  fs.readFileSync(new URL("../emulator-runtime/sources.json", import.meta.url), "utf8"),
+);
+assert.deepEqual(
+  installed.details.cores.map((core) => core.id).sort(),
+  catalog.cores.map((core) => core.id).sort(),
+);
+const browserLock = JSON.parse(
+  fs.readFileSync(
+    new URL("../../packages/rom-weaver-webapp/vendor/emulatorjs.lock.json", import.meta.url),
+    "utf8",
+  ),
+);
+const browserCores = Object.keys(browserLock.files).flatMap((filename) => {
+  const match = /^cores\/(.+)-thread-wasm\.data$/.exec(filename);
+  return match ? [match[1]] : [];
+});
+assert.deepEqual(
+  catalog.cores.map((core) => core.id).sort(),
+  browserCores.sort(),
+  "native runtime covers the browser core catalog",
+);
 const assets = createFirstSampleAssets();
 fs.writeFileSync(path.join(scratch, "original.nes"), assets.originalRom);
 fs.writeFileSync(path.join(scratch, "hello-to-rom.ips"), assets.helloToRomPatch);
@@ -86,6 +110,50 @@ const extracted = capture("sample.zip", "extracted.png", ["--select", "hello-wor
 assert.equal(original, repeated, "repeated runs produce the same frame");
 assert.equal(original, extracted, "archive selection runs the same ROM");
 assert.notEqual(original, patched, "applying the patch changes the frame");
+if (values["source-dir"]) {
+  const source = path.resolve(values["source-dir"]);
+  for (const [core, filename] of [
+    ["gambatte", "mgba/cinema/gb/acid/dmg-acid2/test.gb"],
+    ["mgba", "mgba/cinema/gba/obj/2d-wrap/test.gba"],
+  ]) {
+    const rom = path.join(source, filename);
+    const first = capture(rom, `${core}.png`, ["--core", core]);
+    const again = capture(rom, `${core}-again.png`, ["--core", core]);
+    assert.equal(first, again, `${core} produces repeatable frames`);
+    assert.notEqual(first, original, `${core} renders its own content`);
+  }
+  const ds = new URL("../../tests/fixtures/trim/nds-downloadplay.input.nds", import.meta.url);
+  capture(fileURLToPath(ds), "melonds.png", ["--core", "melonds"]);
+  const psp = path.join(scratch, "complex.prx");
+  const fixtureRevision = "2c804f5cb3cd97b5ca3e11242060fee73e50bc47";
+  const fixtureUrl = `https://raw.githubusercontent.com/hrydgard/pspautotests/${fixtureRevision}/tests/gpu/complex/complex.prx`;
+  // The upstream test fixture MUST stay outside the distributed runtime and source archives.
+  const download = spawnSync(
+    "curl",
+    [
+      "--fail",
+      "--location",
+      "--silent",
+      "--show-error",
+      "--max-time",
+      "60",
+      "--max-filesize",
+      "1048576",
+      "--output",
+      psp,
+      fixtureUrl,
+    ],
+    { encoding: "utf8", timeout: 65_000 },
+  );
+  assert.ifError(download.error);
+  assert.equal(download.status, 0, download.stderr);
+  assert.equal(
+    sha256(fs.readFileSync(psp)),
+    "c7fe00619e634b23042828836390c5e8812579b0b1f290864b64e37919a84e71",
+  );
+  capture(psp, "ppsspp.png", ["--core", "ppsspp"]);
+  run(["test", psp, "--core", "ppsspp", "--frames", "1"]);
+}
 const preserved = fs.readFileSync(path.join(scratch, "original.png"));
 run(["test", "original.nes", "--screenshot", "original.png"], 1);
 assert.deepEqual(fs.readFileSync(path.join(scratch, "original.png")), preserved);

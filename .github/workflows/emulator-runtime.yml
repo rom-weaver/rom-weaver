@@ -32,7 +32,7 @@ jobs:
       - uses: ./.github/actions/setup-build-env
         with:
           tools: node rust
-          apt-packages: cmake ninja-build pkg-config clang libclang-dev
+          apt-packages: cmake ninja-build pkg-config clang libclang-dev nasm libgl-dev zlib1g-dev
           cache-save: "false"
 
       - name: Build emulator runtime
@@ -50,6 +50,7 @@ jobs:
           --cli target/debug/rom-weaver
           --archive target/emulator-artifacts/rom-weaver-emulator-linux-x64-gnu.tar.gz
           --scratch target/emulator-check
+          --source-dir target/emulator-build/src
 
       - name: Upload emulator runtime
         uses: actions/upload-artifact@v7
