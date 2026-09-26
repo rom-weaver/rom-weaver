@@ -12,7 +12,7 @@
         "maxBrotliBytes": 10900
       },
       {
-        "_comment": "Raised for the Extract workflow route and its browser archive selection UI.",
+        "_comment": "Raised for the Extract workflow route and its browser archive selection UI. Raised again for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, whose rendered pages ship as docs route chunks.",
         "name": "JavaScript",
         "directory": "assets",
         "extension": ".js",
@@ -21,21 +21,22 @@
           "assets/(?:browser-save-api|edit-gen3-saves|save-editor)-[^/]+\\.js$"
         ],
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 2258000,
-        "maxRawBytes": 2328000,
-        "expectedBrotliBytes": 581000,
-        "maxBrotliBytes": 590000
+        "expectedRawBytes": 2312000,
+        "maxRawBytes": 2382000,
+        "expectedBrotliBytes": 593000,
+        "maxBrotliBytes": 602000
       },
       {
+        "_comment": "Raised for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, which the search index includes.",
         "name": "Documentation search JavaScript",
         "directory": "assets",
         "extension": ".js",
         "includePatterns": ["assets/_virtual_rom-weaver-docs-search-[^/]+\\.js$"],
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 308000,
-        "maxRawBytes": 319000,
-        "expectedBrotliBytes": 82500,
-        "maxBrotliBytes": 85500
+        "expectedRawBytes": 334000,
+        "maxRawBytes": 345000,
+        "expectedBrotliBytes": 88500,
+        "maxBrotliBytes": 91500
       },
       {
         "name": "Save Editor JavaScript",
