@@ -1321,6 +1321,9 @@ fn validate_reserved_overlaps(
     for (i, m) in mirrors.iter().enumerate() {
         let target = (m.target, m.target + m.length);
         if fields.iter().any(|f| overlaps(target, f.span()))
+            || signatures
+                .iter()
+                .any(|s| overlaps(target, (s.offset, s.offset + s.bytes.len())))
             || checksum_outputs.iter().any(|span| overlaps(target, *span))
             || checksums.iter().any(|checksum| checksum.reads_span(target))
             || mirrors.iter().enumerate().any(|(j, other)| {
@@ -1559,6 +1562,30 @@ mod tests {
             assert!(
                 SaveSchemaPack::from_json(json.as_bytes()).is_err(),
                 "accepted {json}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_mirrors_that_can_overwrite_required_signatures() {
+        let mut pack = serde_json::json!({
+            "schema_version": 1,
+            "games": [{
+                "id": "mirror_sig", "name": "Mirror", "platform": "test",
+                "save_size": 2, "fields": [],
+                "signatures": [{"offset": 1, "bytes": [170]}],
+                "mirrors": [{"source": 0, "target": 1, "length": 1}],
+                "generation": {"fill": 0, "patches": [{"offset": 1, "bytes": [170]}]}
+            }]
+        });
+        for validate in [true, false] {
+            pack["games"][0]["mirrors"][0]["validate"] = validate.into();
+            let error = SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap())
+                .expect_err("mirror must not overwrite a required signature");
+            assert!(
+                error
+                    .to_string()
+                    .contains("mirror targets overlap protected")
             );
         }
     }
