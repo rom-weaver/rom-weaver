@@ -544,6 +544,7 @@ fn an_extraction_that_produced_nothing_is_reported() {
             &out_dir,
             labels(),
             options(no_filter(), AutoExtractMode::Recursive),
+            &[],
         )
         .expect_err("no files were produced");
     assert!(
@@ -574,6 +575,7 @@ fn resolving_a_candidate_applies_the_ignore_then_kind_filters() {
                 ArchiveEntryKindFilter::new(true, false),
                 AutoExtractMode::Recursive,
             ),
+            &[],
         )
         .expect("the rom is the only survivor");
     assert_eq!(selected.display_name, "game.nes");
