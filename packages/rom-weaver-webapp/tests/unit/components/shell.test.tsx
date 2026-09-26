@@ -104,12 +104,12 @@ describe("Masthead", () => {
     const { container, getByRole } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
     const nav = container.querySelector(".side-nav") as HTMLElement;
     expect(nav.getAttribute("aria-label")).toBe("Workflow");
-    // Nothing is filed under an unnamed overflow: the four headings are the
-    // whole map, and every workflow appears exactly once.
+    // Every navigation group MUST have a name, and every workflow appears once.
     expect(Array.from(nav.querySelectorAll(".nav-group-label")).map((h) => h.textContent)).toEqual([
       "Project",
       "Patches",
       "ROMs",
+      "Files",
       "This device",
     ]);
     expect(rowsOf(nav)).toEqual([
@@ -170,6 +170,7 @@ describe("Masthead", () => {
     expect(Array.from(sheet.querySelectorAll(".nav-group-label")).map((heading) => heading.textContent)).toEqual([
       "Patches",
       "ROMs",
+      "Files",
       "This device",
       "Project",
     ]);

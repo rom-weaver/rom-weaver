@@ -65,6 +65,7 @@ const applyHtml = read("apply-patches.html");
 const bundleHtml = read("bundle-patches.html");
 const notFoundHtml = read("404.html");
 const createHtml = read("create-patch.html");
+const extractHtml = read("extract.html");
 const identifyHtml = read("identify-rom.html");
 const testHtml = read("test-rom.html");
 const headers = read("_headers");
@@ -85,6 +86,7 @@ for (const route of [
   "apply-patches",
   "bundle-patches",
   "create-patch",
+  "extract",
   "identify-rom",
   "test-rom",
   "trim-rom",
@@ -268,6 +270,9 @@ assertIncludes(read("bundle/index.html"), WORKFLOW_SEO_ROUTES.bundle.description
 assertIncludes(createHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.creator.slug}"`, "create canonical");
 assertIncludes(createHtml, WORKFLOW_SEO_ROUTES.creator.description, "create description");
 assertIncludes(read("create/index.html"), WORKFLOW_SEO_ROUTES.creator.description, "static-host create description");
+assertIncludes(extractHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.extract.slug}"`, "extract canonical");
+assertIncludes(extractHtml, WORKFLOW_SEO_ROUTES.extract.description, "extract description");
+assertIncludes(read("extract/index.html"), WORKFLOW_SEO_ROUTES.extract.description, "static-host extract description");
 assertIncludes(
   identifyHtml,
   `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.identify.slug}"`,
@@ -464,6 +469,7 @@ for (const beta of ["trim-rom", "ppf-undo", "whats-new", "save-editor"]) {
 for (const [route, panel] of Object.entries({
   "apply-patches": "panel-patcher",
   "create-patch": "panel-creator",
+  extract: "panel-extract",
   "identify-rom": "panel-identify",
   "ppf-undo": "panel-ppf-undo",
   "save-editor": "panel-save-editor",
@@ -518,6 +524,7 @@ if (production) {
   assertIncludes(robots, "Sitemap: https://rom-weaver.com/sitemap.xml", "production robots.txt");
   assertIncludes(read("sitemap.xml"), "<loc>https://rom-weaver.com/</loc>", "home sitemap entry");
   assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/create-patch", "sitemap");
+  assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/extract", "extract sitemap entry");
   assertIncludes(read("sitemap.xml"), "https://rom-weaver.com/identify-rom", "sitemap");
   for (const route of DOC_ROUTES) {
     assertIncludes(read("sitemap.xml"), `https://rom-weaver.com/${route.slug}`, `${route.slug} sitemap entry`);

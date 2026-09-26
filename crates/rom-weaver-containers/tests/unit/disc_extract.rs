@@ -1081,6 +1081,7 @@ fn test_context(temp_root: &Path) -> OperationContext {
 
 fn create_request(input: &Path, output: &Path) -> ContainerCreateRequest {
     ContainerCreateRequest {
+        archive_names: None,
         inputs: vec![input.to_path_buf()],
         output: output.to_path_buf(),
         format: "chd".to_string(),
@@ -1417,6 +1418,7 @@ fn extract_cd_rejects_a_chd_whose_units_are_not_cd_frames() {
     handler
         .create(
             &ContainerCreateRequest {
+                archive_names: None,
                 inputs: vec![iso],
                 output: chd_path.clone(),
                 format: "chd-dvd".to_string(),

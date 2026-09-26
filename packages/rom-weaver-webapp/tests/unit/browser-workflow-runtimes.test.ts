@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   archiveCreate: vi.fn(),
   extract: vi.fn(),
+  extractAll: vi.fn(),
   ingest: vi.fn(),
   probe: vi.fn(),
   compressionCreate: vi.fn(),
@@ -59,6 +60,7 @@ vi.mock("../../src/lib/runtime/run-result-parsing.ts", () => ({
 }));
 vi.mock("../../src/lib/runtime/wasm-command-runtime.ts", () => ({
   invokeRomWeaverCompressionCreateWorker: state.compressionCreate,
+  invokeRomWeaverExtractAllWorker: state.extractAll,
   invokeRomWeaverExtractWorker: state.extract,
   invokeRomWeaverIngestWorker: state.ingest,
   runRomWeaverProbeWorker: state.probe,
@@ -212,6 +214,25 @@ describe("browser archive runtime", () => {
     );
   });
 
+  it("passes aligned relative entry names when a zip preserves paths", async () => {
+    const runtime = createBrowserArchiveRuntime(io as never);
+
+    await runtime.create?.({
+      entries: [
+        { filename: "folder/one.bin", filePath: "/work/source/one.bin" },
+        { filename: "deeper/two.bin", filePath: "/work/source/two.bin" },
+      ],
+      format: "zip",
+      options: { preservePaths: true },
+    } as never);
+
+    expect(state.compressionCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ entryNames: ["folder/one.bin", "deeper/two.bin"] }),
+      expect.any(Function),
+      undefined,
+    );
+  });
+
   it("stages archive entries and creates a zip with codec and size metadata", async () => {
     const runtime = createBrowserArchiveRuntime(io as never);
     const result = await runtime.create?.({
@@ -271,6 +292,36 @@ describe("browser archive runtime", () => {
     await expect(
       runtime.extract?.({ source: "missing.zip", entries: ["missing.bin"], options: { directExtract: true } } as never),
     ).rejects.toThrow("no output path");
+  });
+
+  it("extracts every nested leaf once and preserves its relative path", async () => {
+    const runtime = createBrowserArchiveRuntime(io as never);
+    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "bundle.zip", filePath: "/work/bundle.zip" });
+    state.extractAll.mockResolvedValueOnce([
+      { fileName: "one.bin", filePath: "/work/output-scope/folder/one.bin", size: 4 },
+      { fileName: "two.txt", filePath: "/work/output-scope/deeper/two.txt", size: 5 },
+    ]);
+
+    const result = await runtime.extract?.({
+      source: "bundle.zip",
+      entries: [],
+      extractAll: true,
+      options: { chdSplitBin: true },
+    } as never);
+
+    expect(state.extractAll).toHaveBeenCalledWith(
+      expect.objectContaining({
+        interactiveSelectionEnabled: false,
+        noIgnore: true,
+        splitBin: true,
+      }),
+      expect.any(Function),
+      undefined,
+    );
+    expect(result?.outputs).toEqual([
+      expect.objectContaining({ fileName: "one.bin", relativePath: "folder/one.bin" }),
+      expect.objectContaining({ fileName: "two.txt", relativePath: "deeper/two.txt" }),
+    ]);
   });
 
   it("descends patch and ROM payloads, preserving disc metadata and track naming", async () => {

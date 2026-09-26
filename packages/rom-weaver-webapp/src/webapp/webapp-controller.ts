@@ -38,6 +38,7 @@ const VALID_WORKFLOW_VIEWS: readonly WebappView[] = [
   "patcher",
   "creator",
   "docs",
+  "extract",
   "identify",
   "trim",
   "ppf-undo",
@@ -64,6 +65,7 @@ const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
   // writeWorkflowViewToPath resolves it back to readAppBaseUrl.
   home: "",
   docs: "docs",
+  extract: "extract",
   identify: "identify-rom",
   patcher: "apply-patches",
   "ppf-undo": "ppf-undo",
@@ -83,6 +85,8 @@ const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
   "bundle.html": "bundle",
   "create-patch": "creator",
   "create-patch.html": "creator",
+  extract: "extract",
+  "extract.html": "extract",
   "identify-rom": "identify",
   "identify-rom.html": "identify",
   "test-rom": "test",
@@ -542,6 +546,15 @@ const createWebappRootController = (options: ControllerOptions) => {
       persistSettings(nextSettings);
       applyCommittedSettings(nextSettings, {
         draftSettings: { ...state.draftSettings, onboardingEnabled: enabled },
+      });
+    },
+    setDetailedViewEnabled(enabled: boolean) {
+      const state = store.getState();
+      if (state.settings.detailedViewEnabled === enabled) return;
+      const nextSettings = { ...copySettings(state.settings), detailedViewEnabled: enabled };
+      persistSettings(nextSettings);
+      applyCommittedSettings(nextSettings, {
+        draftSettings: { ...state.draftSettings, detailedViewEnabled: enabled },
       });
     },
     setOfflineCopyEnabled(enabled: boolean) {

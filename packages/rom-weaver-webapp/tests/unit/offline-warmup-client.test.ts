@@ -764,6 +764,11 @@ describe("offline warm-up client", () => {
     pauseOfflineWarmup();
     try {
       cancel = scheduleOfflineWarmup({ delayMs: 0, idleDelayMs: 0, navigator: { serviceWorker } });
+      await vi.waitFor(() =>
+        expect(
+          sink.mock.calls.some(([record]) => record.message === "offline warm-up waiting for interactive work"),
+        ).toBe(true),
+      );
       await new Promise((resolve) => setTimeout(resolve, 20));
       cancel();
       cancel = undefined;

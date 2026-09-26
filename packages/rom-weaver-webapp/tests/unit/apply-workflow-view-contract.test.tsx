@@ -160,7 +160,7 @@ const renderView = ({
   pendingDrops,
   romLookupRequest,
   setPatchTarget,
-  settings = {},
+  settings = { detailedViewEnabled: true },
   startup,
   ui,
 }: {
@@ -195,8 +195,9 @@ const renderView = ({
     ui: Object.assign(storeOf(ui), ui) as unknown as PatcherUiController,
   };
   Object.assign(controllers.output, outputControllerOverrides);
+  const resolvedSettings = { detailedViewEnabled: true, ...settings };
   return render(
-    <RomWeaverSettingsProvider settings={settings}>
+    <RomWeaverSettingsProvider settings={resolvedSettings}>
       <ApplyWorkflowFormView
         bundleMetaById={bundleMetaById}
         cheats={({ renderStack }) =>
@@ -238,7 +239,7 @@ describe("apply workflow view - empty bench", () => {
     expect(chip.textContent).toContain("New here?");
     fireEvent.click(chip);
     expect(container.querySelector(".first-weave-demo")?.textContent).toContain("Start guided Apply");
-    expect(container.querySelector(".first-weave-demo")?.textContent).not.toContain("Create a sharable bundle");
+    expect(container.querySelector(".first-weave-demo")?.textContent).not.toContain("Start guided bundle");
     expect(document.querySelector(".sample-tutorial-dialog")).toBeNull();
     // The remaining workflow is progressively disclosed after staging begins.
     const numbers = Array.from(container.querySelectorAll(".step-num")).map((el) => el.textContent);
@@ -248,21 +249,27 @@ describe("apply workflow view - empty bench", () => {
 
   it.each([
     ["apply", "/apply-patches?guide=apply", "Start guided Apply"],
-    ["bundle", "/bundle-patches?guide=bundle", "Create a sharable bundle"],
+    ["bundle", "/bundle-patches?guide=bundle", "Start guided bundle"],
   ] as const)("offers the %s guide and the test bundle download", (mode, href, label) => {
     const { container } = renderView({ mode, ui: createEmptyPatcherUiState() });
     fireEvent.click(container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement);
     const actions = container.querySelectorAll(".sample-tutorial-start-action");
-    expect(actions).toHaveLength(3);
+    expect(actions).toHaveLength(mode === "bundle" ? 4 : 3);
     expect(actions[0].getAttribute("href")).toBe(href);
     expect(actions[0].textContent).toContain(label);
-    expect(container.querySelector(".sample-tutorial-start-guide")).toBeNull();
+    if (mode === "bundle") {
+      expect(container.querySelector(".sample-tutorial-start-guide")?.getAttribute("href")).toBe(
+        "/docs/create-bundles",
+      );
+      expect(container.querySelector(".sample-tutorial-start-guide")?.textContent).toContain("Read the Bundle guide");
+    } else {
+      expect(container.querySelector(".sample-tutorial-start-guide")).toBeNull();
+    }
     expect(container.querySelector(".sample-tutorial-start-download")?.getAttribute("href")).toContain(
       "first-weave.zip",
     );
     expect(container.querySelector(".sample-tutorial-start-dismiss")).toBeTruthy();
-    if (mode === "bundle") expect(container.querySelector(".hero-guide")).toBeTruthy();
-    else expect(container.querySelector(".hero-guide")).toBeNull();
+    expect(container.querySelector(".hero-guide")).toBeNull();
   });
 
   it("keeps file input hooks unique when Apply and Bundle stay mounted", () => {
@@ -1082,6 +1089,9 @@ describe("apply workflow view - staged bench", () => {
       "14 B",
       "IPS",
     ]);
+    expect(
+      Array.from(patchCard?.querySelectorAll(".patch-checks .cks-head .rb") || []).map((el) => el.textContent),
+    ).not.toContain("IPS");
     expect(patchCard?.querySelector(".card-meta .meta-fmt")).toBeNull();
     const patchPosition = patchCard?.querySelector("button.phandle") as HTMLButtonElement;
     expect(patchPosition.textContent).toContain("1");
@@ -1094,6 +1104,25 @@ describe("apply workflow view - staged bench", () => {
     expect(container.querySelector("#rom-weaver-row-patch-stack .step-meta .rb")?.textContent).toContain("1 file");
     // no needs-input directives once content is staged
     expect(container.querySelectorAll("button.needs-input").length).toBe(0);
+  });
+
+  it("hides ROM and patch Files drawers in simple view but keeps Checks", () => {
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+    const { container } = renderView({
+      patches: [patchItem("change.ips")],
+      settings: { detailedViewEnabled: false },
+      ui,
+    });
+
+    const romCard = container.querySelector("#rom-weaver-list-input-stack .card.file");
+    const patchCard = container.querySelector("#rom-weaver-list-patch-stack .card.patch");
+    expect(romCard?.querySelector(".extract-d")).toBeNull();
+    expect(patchCard?.querySelector(".extract-d")).toBeNull();
+    expect(romCard?.textContent).toContain("Checks");
+    expect(patchCard?.textContent).toContain("Checks");
+    expect(
+      Array.from(patchCard?.querySelectorAll(".patch-checks .cks-head .rb") || []).map((el) => el.textContent),
+    ).toContain("IPS");
   });
 
   it.each([false, undefined])("shows cheats when beta tools are %s", (betaToolsEnabled) => {
@@ -1633,6 +1662,8 @@ describe("apply workflow view - bundle controls", () => {
     const romOptionRule = BUNDLE_FIELDS_CSS.match(/\.rw-app \.bundle-rom-option\s*\{([^}]*)\}/)?.[1];
 
     expect(romOptionRule).toContain("align-self: end");
+    expect(BUNDLE_FIELDS_CSS).not.toContain("grid-template-columns: minmax(160px, 0.85fr)");
+    expect(BUNDLE_RESPONSIVE_CSS).not.toContain(".bundle-job-fields");
     expect(fullRowRule).toContain("width: 100%");
     expect(shareRule).toContain("min-height: 40px");
     expect(BUNDLE_RESPONSIVE_CSS).not.toContain(".bundle-job .bundle-share");
@@ -1799,15 +1830,29 @@ describe("apply workflow view - bundle controls", () => {
     expect(job?.querySelector("#rom-weaver-button-export-bundle")).toBeTruthy();
   });
 
-  it("leads bundle pages with an open export job and keeps Apply collapsed", () => {
-    const ui = { ...createEmptyPatcherUiState(), romInputs: [romRow("game.bin")] };
+  it("presents Bundle as 0x04 with Apply as its optional alternate job", () => {
+    const exported = bundleExport();
+    const setOutputCompression = vi.fn();
+    const rom = romRow("game.nes");
+    rom.info.checksumVariants = [
+      {
+        applyCompatibility: { removeHeader: true },
+        checksums: { crc32: "C6FB1252" },
+        id: "raw",
+        transforms: { removeHeader: { retainOnOutput: false } },
+      },
+    ];
+    const ui = { ...createEmptyPatcherUiState(), romInputs: [rom] };
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
         <ApplyWorkflowFormView
-          bundleExport={bundleExport()}
+          bundleExport={exported}
           bundleTools={bundleTools(() => undefined)}
           controllers={{
-            output: storeOf(outputState()) as unknown as PatcherOutputController,
+            output: {
+              ...storeOf(outputState()),
+              setOutputCompression,
+            } as unknown as PatcherOutputController,
             patchStack: storeOf({ items: [patchItem("change.ips")] }) as unknown as PatcherStackController,
             ui: storeOf(ui) as unknown as PatcherUiController,
           }}
@@ -1817,11 +1862,37 @@ describe("apply workflow view - bundle controls", () => {
     );
 
     const job = container.querySelector("#rom-weaver-bundle-job");
-    const applyStep = container.querySelector("#rom-weaver-row-output-file-name");
-    expect(job?.querySelector(".bundle-job")?.classList).toContain("is-open");
-    expect(job?.compareDocumentPosition(applyStep || container)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(applyStep?.classList).toContain("is-collapsed");
-    expect(container.querySelector("#rom-weaver-button-apply")).toBeNull();
+    const applyJob = container.querySelector("#rom-weaver-apply-job");
+    expect(job?.querySelector(".step-num")?.textContent).toBe("0x04");
+    expect(job?.querySelector(".step-title")?.textContent).toBe("Bundle");
+    expect(job?.querySelector("#rom-weaver-input-bundle-file-name")).toBeTruthy();
+    expect(job?.querySelector("#rom-weaver-bundle-export-format")).toBeTruthy();
+    expect(job?.querySelector("#rom-weaver-button-export-bundle")).toBeTruthy();
+    fireEvent.change(job?.querySelector("#rom-weaver-bundle-export-format") as HTMLSelectElement, {
+      target: { value: "7z" },
+    });
+    expect(exported.format).toBe("7z");
+    expect(setOutputCompression).toHaveBeenCalledWith("7z");
+    fireEvent.click(job?.querySelector(".outopts .cks-head") as HTMLButtonElement);
+    expect(job?.querySelector("#rom-weaver-bundle-export-bundle-rom")).toBeTruthy();
+    expect(job?.querySelector(".optsnote")?.textContent).toBe("Output header changes apply only to this session.");
+    expect(job?.querySelectorAll("#rom-weaver-select-bundle-output-header")).toHaveLength(1);
+    expect(job?.contains(applyJob)).toBe(true);
+    expect(applyJob?.querySelector(".cks-head")?.textContent).toContain("Apply");
+    expect(applyJob?.querySelector(".cks-head")?.getAttribute("aria-expanded")).toBe("false");
+    expect(container.textContent).not.toContain("0x05");
+    expect(applyJob?.querySelector(".bundle-job")?.classList).not.toContain("is-open");
+    fireEvent.click(applyJob?.querySelector(".cks-head") as HTMLButtonElement);
+    expect(container.querySelectorAll("#rom-weaver-select-output-header")).toHaveLength(1);
+    expect(container.querySelectorAll('[id="rom-weaver-select-bundle-output-header"]')).toHaveLength(1);
+  });
+
+  it("labels Bundle as 0x04 in the empty route outline", () => {
+    const { container } = renderView({ mode: "bundle", ui: createEmptyPatcherUiState() });
+    const bundleStep = Array.from(container.querySelectorAll(".ghost-next-step")).find(
+      (step) => step.querySelector(".ghost-next-num")?.textContent === "0x04",
+    );
+    expect(bundleStep?.querySelector(".ghost-next-title")?.textContent).toBe("Bundle");
   });
 
   it("opens the optional Apply section on bundle pages", () => {
@@ -1841,8 +1912,9 @@ describe("apply workflow view - bundle controls", () => {
       </RomWeaverSettingsProvider>,
     );
 
-    fireEvent.click(container.querySelector("#rom-weaver-row-output-file-name .step-collapse") as HTMLButtonElement);
-    expect(container.querySelector("#rom-weaver-row-output-file-name")?.classList).not.toContain("is-collapsed");
+    const applyJob = container.querySelector("#rom-weaver-apply-job");
+    fireEvent.click(applyJob?.querySelector(".cks-head") as HTMLButtonElement);
+    expect(applyJob?.querySelector(".cks-head")?.getAttribute("aria-expanded")).toBe("true");
     expect(container.querySelector("#rom-weaver-button-apply")).toBeTruthy();
   });
 

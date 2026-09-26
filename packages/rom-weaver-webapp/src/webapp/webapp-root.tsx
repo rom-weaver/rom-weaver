@@ -1,5 +1,6 @@
 import {
   BookOpen,
+  FileArchive,
   Gamepad2,
   GitCompare,
   House,
@@ -8,7 +9,6 @@ import {
   Save as SaveIcon,
   ScanSearch,
   Scissors,
-  Settings,
 } from "lucide-react";
 import {
   lazy,
@@ -67,6 +67,7 @@ import {
   CreatePatchRoute,
   DocsPageRoute,
   EmulatorTestRoute,
+  ExtractRouteForm,
   HomePageRoute,
   IdentifyRouteForm,
   preloadWorkflowRoute,
@@ -121,6 +122,14 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     railLabel: "Identify",
   },
   {
+    group: "files",
+    href: "extract",
+    icon: <FileArchive aria-hidden="true" />,
+    id: "extract",
+    label: "Extract files",
+    railLabel: "Extract",
+  },
+  {
     beta: true,
     group: "roms",
     href: "trim-rom",
@@ -170,6 +179,7 @@ const syncWorkflowSeoMetadata = (view: WebappView) => {
   let route = null;
   if (view === "creator") route = WORKFLOW_SEO_ROUTES.creator;
   else if (view === "bundle") route = WORKFLOW_SEO_ROUTES.bundle;
+  else if (view === "extract") route = WORKFLOW_SEO_ROUTES.extract;
   else if (view === "home") route = WORKFLOW_SEO_ROUTES.home;
   else if (view === "identify") route = WORKFLOW_SEO_ROUTES.identify;
   else if (view === "patcher") route = WORKFLOW_SEO_ROUTES.patcher;
@@ -241,33 +251,23 @@ const ResetButton = ({ onReset }: { onReset: () => void }) => {
   );
 };
 
-/** Settings entry for the workflow panel's `0x01` heading band. */
-const PanelSettingsButton = ({
-  onOpenSettings,
-  onPreloadSettings,
-  settingsOpen,
-}: {
-  onOpenSettings: () => void;
-  onPreloadSettings?: () => void;
-  settingsOpen?: boolean;
-}) => {
+/** File-detail switch for the workflow panel's `0x01` heading band. */
+const PanelViewToggle = ({ detailed, onChange }: { detailed: boolean; onChange: (enabled: boolean) => void }) => {
   const localizer = useUiLocalizer();
-  const label = localizer.message("ui.settings.title");
+  const label = localizer.message("ui.view.detailed");
+  // The switch keeps one accessible name; its checked state carries on/off.
   return (
-    <button
-      aria-label={label}
-      aria-expanded={settingsOpen}
-      aria-haspopup="dialog"
-      className="panel-settings-btn"
-      onClick={onOpenSettings}
-      onFocus={onPreloadSettings}
-      onPointerDown={onPreloadSettings}
-      onPointerEnter={onPreloadSettings}
-      type="button"
-    >
-      <Settings aria-hidden="true" />
+    <label className="panel-view-toggle">
+      <input
+        aria-checked={detailed}
+        aria-label={label}
+        checked={detailed}
+        onChange={(event) => onChange(event.currentTarget.checked)}
+        role="switch"
+        type="checkbox"
+      />
       <span>{label}</span>
-    </button>
+    </label>
   );
 };
 
@@ -647,10 +647,9 @@ function WebappRoot({
                 onPreloadSettings={preloadSettingsPanel}
               />
             ) : null}
-            <PanelSettingsButton
-              onOpenSettings={() => openSettingsTab()}
-              onPreloadSettings={preloadSettingsPanel}
-              settingsOpen={state.settingsDialogOpen}
+            <PanelViewToggle
+              detailed={state.settings.detailedViewEnabled === true}
+              onChange={actions.onDetailedViewEnabledChange}
             />
             <ResetButton onReset={actions.onReset} />
           </div>
@@ -818,6 +817,7 @@ function WebappRoot({
                     updateReady={pageUpdate.ready}
                   />,
                 )}
+                {workflowPanel("extract", <ExtractRouteForm pageDrop={pageDropFor("extract")} />)}
                 {workflowPanel(
                   "identify",
                   <IdentifyRouteForm

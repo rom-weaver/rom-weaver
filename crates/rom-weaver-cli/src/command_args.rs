@@ -348,6 +348,16 @@ pub struct ProbeCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub no_ignore: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "split-bin",
+            help = "List per-track BIN files for a CD-format CHD"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub split_bin: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -920,6 +930,10 @@ pub struct CompressCommand {
         )
     )]
     pub input: Vec<PathBuf>,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long = "entry-name", hide = true))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub entry_names: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(

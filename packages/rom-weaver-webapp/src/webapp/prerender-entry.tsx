@@ -34,6 +34,7 @@ const createPrerenderActions = (): WebappRootProps["actions"] => ({
   onCreatorPatchTypeChange: noop,
   onCreatorSettingsChange: noop,
   onDraftChange: noop,
+  onDetailedViewEnabledChange: noop,
   onLanguageChange: noop,
   onLogLevelChange: noop,
   onOfflineCopyEnabledChange: noop,

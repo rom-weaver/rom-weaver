@@ -513,6 +513,7 @@ const SourceInfoList = ({
   open,
   pending,
   progress,
+  summary,
   timing,
   trim,
 }: {
@@ -537,6 +538,7 @@ const SourceInfoList = ({
    * planned groups/rows (reserving the resolved height) instead of any value. */
   pending?: ChecksumPendingGroup[];
   progress?: SourceInfoProgress | null;
+  summary?: ReactNode;
   timing?: ReactNode;
   /** Trim-padding probe; surfaces a "Trim" group only when padding is detected. */
   trim?: TrimFixDetails | null;
@@ -551,6 +553,7 @@ const SourceInfoList = ({
         label={label ?? localizer.message("ui.checks.title")}
         onToggle={onToggle}
         open={open}
+        summary={summary}
       />
     );
   }
@@ -602,6 +605,7 @@ const SourceInfoList = ({
       lead={progress ? <FileProgress {...progress} /> : lead}
       onToggle={onToggle}
       open={open}
+      summary={summary}
       timing={timing}
     >
       {expectedMatch ? (
@@ -656,14 +660,18 @@ type DiscTrackPanelInfo = {
  * single-file checksum variants. Each track is one labeled checksum group. */
 const DiscTracksPanel = ({
   tracks,
+  lead,
   open,
   onToggle,
   timing,
+  summary,
 }: {
   tracks: DiscTrackPanelInfo[];
+  lead?: ReactNode;
   open?: boolean;
   onToggle?: (open: boolean) => void;
   timing?: ReactNode;
+  summary?: ReactNode;
 }) => {
   const localizer = useUiLocalizer();
   if (!tracks.length) return null;
@@ -673,7 +681,9 @@ const DiscTracksPanel = ({
       label={localizer.message("ui.checks.title")}
       onToggle={onToggle}
       open={open}
+      summary={summary}
       timing={timing}
+      lead={lead}
     >
       {tracks.map((track) => {
         const hasBytes = typeof track.bytes === "number" && Number.isFinite(track.bytes);

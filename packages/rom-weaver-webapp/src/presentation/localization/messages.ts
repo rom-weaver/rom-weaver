@@ -519,7 +519,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.tutorial.applyDownload": msg({ id: "ui.apply.tutorial.applyDownload", message: "Apply & download" }),
   "ui.apply.tutorial.browse": msg({ id: "ui.apply.tutorial.browse", message: "Browse" }),
   "ui.apply.tutorial.checks": msg({ id: "ui.apply.tutorial.checks", message: "Checks" }),
-  "ui.apply.tutorial.createBundle": msg({ id: "ui.apply.tutorial.createBundle", message: "Create a sharable bundle" }),
+  "ui.apply.tutorial.createBundle": msg({ id: "ui.apply.tutorial.createBundle", message: "Start guided bundle" }),
   "ui.apply.tutorial.downloadTestBundle": msg({
     id: "ui.apply.tutorial.downloadTestBundle",
     message: "Download a test bundle",
@@ -871,6 +871,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "settings.chdCreateCdCodecs": msg({ id: "settings.chdCreateCdCodecs", message: "CD Codecs" }),
   "settings.chdCreateDvdCodecs": msg({ id: "settings.chdCreateDvdCodecs", message: "DVD Codecs" }),
   "settings.compressionProfile": msg({ id: "settings.compressionProfile", message: "Level" }),
+  "settings.detailedViewEnabled": msg({
+    id: "settings.detailedViewEnabled",
+    message: "Show detailed file information",
+  }),
   "settings.fixChecksum": msg({ id: "settings.fixChecksum", message: "Fix ROM header" }),
   "settings.language": msg({ id: "settings.language", message: "Language" }),
   "settings.levelOverride": msg({ id: "settings.levelOverride", message: "Level override" }),
@@ -938,11 +942,19 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.bundleExport.download": msg({ id: "ui.bundleExport.download", message: "Download {format} Bundle" }),
   "ui.bundleExport.downloadRom": msg({ id: "ui.bundleExport.downloadRom", message: "Download {format} ROM Bundle" }),
   "ui.bundleExport.includeRom": msg({ id: "ui.bundleExport.includeRom", message: "Include ROM in bundle" }),
+  "ui.bundleExport.headerNotSaved": msg({
+    id: "ui.bundleExport.headerNotSaved",
+    message: "Output header changes apply only to this session.",
+  }),
   "ui.bundleExport.romDistributionWarning": msg({
     id: "ui.bundleExport.romDistributionWarning",
     message: "Only include a ROM if you have the right to distribute it. Sharing copyrighted ROMs may be illegal.",
   }),
   "ui.bundleExport.optional": msg({ id: "ui.bundleExport.optional", message: "optional" }),
+  "ui.bundleExport.outputFilename": msg({
+    id: "ui.bundleExport.outputFilename",
+    message: "Bundle output name (without extension)",
+  }),
   "ui.bundleExport.share": msg({ id: "ui.bundleExport.share", message: "Share bundle" }),
   "ui.bundleExport.shareTitle": msg({
     id: "ui.bundleExport.shareTitle",
@@ -1024,6 +1036,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.nav.docs": msg({ id: "ui.nav.docs", message: "Docs" }),
   "ui.nav.groupDevice": msg({ id: "ui.nav.groupDevice", message: "This device" }),
   "ui.nav.groupPatches": msg({ id: "ui.nav.groupPatches", message: "Patches" }),
+  "ui.nav.groupFiles": msg({ id: "ui.nav.groupFiles", message: "Files" }),
   "ui.nav.groupRoms": msg({ id: "ui.nav.groupRoms", message: "ROMs" }),
   "ui.nav.home": msg({ id: "ui.nav.home", message: "rom-weaver home" }),
   "ui.nav.homeShort": msg({ id: "ui.nav.homeShort", message: "Home" }),
@@ -1056,6 +1069,13 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
       "Compare original and modified ROMs, raw or in archives, to create BPS, IPS, UPS, xdelta, or other patches.",
   }),
   "ui.hero.createGuide": msg({ id: "ui.hero.createGuide", message: "Read the Create guide" }),
+  "ui.hero.extractDescription": msg({
+    id: "ui.hero.extractDescription",
+    message:
+      "Extract every file from a ZIP, 7z, CHD, or other supported archive or disc image. Archives inside it are extracted too. Download one file, or several as one ZIP.",
+  }),
+  "ui.hero.extractThesis": msg({ id: "ui.hero.extractThesis", message: "Open the archive." }),
+  "ui.hero.extractThesis2": msg({ id: "ui.hero.extractThesis2", message: "Keep only the files you need." }),
   "ui.hero.identifyDescription": msg({
     id: "ui.hero.identifyDescription",
     message: "Match your ROM’s checksum against the local database to find its exact dump name.",
@@ -1245,9 +1265,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.settings.save": msg({ id: "ui.settings.save", message: "Save" }),
   "ui.settings.sevenZipCodec": msg({ id: "ui.settings.sevenZipCodec", message: "7z" }),
   "ui.settings.title": msg({ id: "ui.settings.title", message: "Settings" }),
+  "ui.view.detailed": msg({ id: "ui.view.detailed", message: "Detailed" }),
   "ui.settings.zipCodec": msg({ id: "ui.settings.zipCodec", message: "ZIP" }),
   "ui.status.doneMsg": msg({ id: "ui.status.doneMsg", message: "rom-weaver finished in {t}" }),
   "ui.step.apply": msg({ id: "ui.step.apply", message: "Apply" }),
+  "ui.step.bundle": msg({ id: "ui.step.bundle", message: "Bundle" }),
   "ui.step.cheats": msg({ id: "ui.step.cheats", message: "Cheats as a Patch" }),
   "ui.step.identify": msg({ id: "ui.step.identify", message: "Identify" }),
   "ui.step.modified": msg({ id: "ui.step.modified", message: "Modified" }),

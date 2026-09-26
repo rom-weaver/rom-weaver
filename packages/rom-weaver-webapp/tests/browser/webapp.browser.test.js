@@ -271,7 +271,7 @@ test("enabled PPF undo and Identify are named in the nav on desktop and phone", 
     // Neither beta tool takes one of the dock's three workflow slots.
     expect(document.querySelector(`.dock-tab[data-mode="identify"]`)).toBeNull();
     expect(document.querySelector(`.dock-tab[data-mode="ppf-undo"]`)).toBeNull();
-    expect(getComputedStyle(document.querySelector(".panel-settings-btn")).display).not.toBe("none");
+    expect(getComputedStyle(document.querySelector(".panel-view-toggle")).display).not.toBe("none");
     // Mobile Status stays in the dock; other destinations keep their groups.
     if (width < 1000) await openMenuSheet();
     for (const name of ["Docs", "Settings", "Storage", "Logs", "Support"]) {
@@ -283,15 +283,15 @@ test("enabled PPF undo and Identify are named in the nav on desktop and phone", 
   await page.viewport(1280, 900);
 });
 
-test("WebappRoot reports the configured thread count before the workflow Settings control", async () => {
+test("WebappRoot reports the configured thread count before the workflow view toggle", async () => {
   mountWebappRoot({ settings: { ...getDefaultSettings(), threads: 1 } });
   await expect
     .poll(() => document.querySelector("#panel-patcher .panel-threads-btn")?.textContent || "")
     .toContain("1 thread");
   expect(document.querySelector(".masthead-threads")).toBeNull();
   const threadButton = document.querySelector("#panel-patcher .panel-threads-btn");
-  const settingsButton = document.querySelector("#panel-patcher .panel-settings-btn");
-  expect(threadButton.compareDocumentPosition(settingsButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const viewToggle = document.querySelector("#panel-patcher .panel-view-toggle");
+  expect(threadButton.compareDocumentPosition(viewToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 test("the wordmark keeps its version while persistent status sits beside navigation", async () => {
@@ -486,10 +486,14 @@ test.each([
   expect(document.querySelector(".sample-tutorial-start-pop")).toBeNull();
 
   chip.click();
-  await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(3);
+  await expect
+    .poll(() => document.querySelectorAll(".sample-tutorial-start-action").length)
+    .toBe(initialView === "bundle" ? 4 : 3);
   expect(document.querySelector(".sample-tutorial-start-primary")?.getAttribute("href")).toBe(guideHref);
   expect(document.querySelector(".sample-tutorial-start-secondary")).toBeNull();
-  expect(document.querySelector(".sample-tutorial-start-guide")).toBeNull();
+  expect(document.querySelector(".sample-tutorial-start-guide")?.getAttribute("href") ?? null).toBe(
+    initialView === "bundle" ? "/docs/create-bundles" : null,
+  );
   expect(document.querySelector(".sample-tutorial-start-download").hasAttribute("download")).toBe(true);
   expect(document.querySelector(".sample-tutorial-start-dismiss")).toBeTruthy();
   const pop = document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect();

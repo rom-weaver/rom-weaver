@@ -25,9 +25,10 @@ type WorkflowTab = {
   /** Short name for the nav, where the group heading already carries the noun. */
   railLabel?: string;
 };
-type NavGroup = "patches" | "project" | "roms";
+type NavGroup = "files" | "patches" | "project" | "roms";
 
 const NAV_GROUP_TITLES: Record<NavGroup, MessageId> = {
+  files: "ui.nav.groupFiles",
   patches: "ui.nav.groupPatches",
   project: "ui.tools.project",
   roms: "ui.nav.groupRoms",

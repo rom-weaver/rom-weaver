@@ -3284,6 +3284,7 @@ mod tests {
 
         let output = dir.join("archive.zip");
         let request = ContainerCreateRequest {
+            archive_names: None,
             inputs: archive_entries
                 .iter()
                 .map(|entry| entry.source.clone())

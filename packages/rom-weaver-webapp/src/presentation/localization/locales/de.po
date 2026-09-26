@@ -685,8 +685,18 @@ msgstr "Mehrere bearbeiten"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.step.bundle"
+msgstr "Bundle"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.bundleTutorial.bundlePatches"
 msgstr "Bundle + Patches (.zip)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.outputFilename"
+msgstr "Bundle-Ausgabename (ohne Erweiterung)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1056,7 +1066,7 @@ msgstr "{format}-ROM-Bundle erstellen"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.createBundle"
-msgstr "Teilbares Bundle erstellen"
+msgstr "Geführtes Bundle starten"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1122,6 +1132,11 @@ msgstr "Patch-Anleitung beschreiben"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.description"
 msgstr "Beschreibung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.view.detailed"
+msgstr "Detailliert"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1420,6 +1435,11 @@ msgstr "extrahieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.extractDescription"
+msgstr "Extrahiere alle Dateien aus einem ZIP-, 7z-, CHD- oder anderen unterstützten Archiv oder Disc-Image. Enthaltene Archive werden ebenfalls extrahiert. Lade eine Datei herunter oder mehrere als ein ZIP."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.extractTiming"
 msgstr "Zeit zum Extrahieren"
 
@@ -1461,6 +1481,11 @@ msgstr "Dateien"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.file.files"
+msgstr "Dateien"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.nav.groupFiles"
 msgstr "Dateien"
 
 #. js-lingui-explicit-id
@@ -1772,6 +1797,11 @@ msgstr "aktuelle behalten ({order})"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.header.keepInfo"
 msgstr "Header behalten: Die gepatchte Ausgabe enthält den ROM-Header."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.extractThesis2"
+msgstr "Nur die Dateien behalten, die du brauchst."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2270,6 +2300,11 @@ msgstr "Für immer Open Source"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.extractThesis"
+msgstr "Das Archiv öffnen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.related.hintGuide"
 msgstr "Öffnet die Anleitung"
 
@@ -2372,6 +2407,11 @@ msgstr "Ausgabeformat"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.header.title"
 msgstr "Ausgabe-Header"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.bundleExport.headerNotSaved"
+msgstr "Änderungen am Ausgabe-Header gelten nur für diese Sitzung."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3057,6 +3097,11 @@ msgstr "Details zu {label} anzeigen"
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.showChecksums"
 msgstr "Prüfsummen anzeigen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.detailedViewEnabled"
+msgstr "Detaillierte Dateiinformationen anzeigen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

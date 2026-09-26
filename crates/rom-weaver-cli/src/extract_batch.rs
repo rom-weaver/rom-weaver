@@ -185,6 +185,7 @@ mod tests {
         let outcome = RomWeaverApp::run(
             Commands::Compress(CompressCommand {
                 input: vec![input],
+                entry_names: Vec::new(),
                 format: Some("zip".to_string()),
                 output: archive.clone(),
                 codec: Vec::new(),

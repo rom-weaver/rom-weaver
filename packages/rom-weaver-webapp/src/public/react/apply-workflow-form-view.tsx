@@ -26,6 +26,7 @@ import { SampleTutorial, type SampleTutorialStep, useGuidedSampleStart } from ".
 import { skipSourceIdentification } from "../../lib/input/input-identification-policy.ts";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
+import { OutputCard, type OutputCardProps } from "./components/ds/output-card.tsx";
 import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.tsx";
 import { ARCHIVE_FILE_EXTENSIONS, PATCH_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
@@ -59,8 +60,10 @@ import {
   OutputHeaderField,
   PostApplyBehaviorFields,
   ApplyOutputAction,
+  ApplySecondaryJob,
   buildRomActualsById,
   getBundleActionLabel,
+  BundleOutputStep,
   BundleSecondaryJob,
 } from "./apply-output-fields.tsx";
 import { type RomRowDeps, groupRomInputs, renderRomInputRow, renderDiscGroup } from "./apply-rom-input-rows.tsx";
@@ -423,10 +426,6 @@ function ApplyWorkflowFormView({
   const localizer = useUiLocalizer();
   const bundlePage = mode === "bundle";
   const unifiedInputId = mode === "bundle" ? "rom-weaver-input-file-unified-bundle" : "rom-weaver-input-file-unified";
-  const [applySectionCollapsed, setApplySectionCollapsed] = useState(bundlePage);
-  useEffect(() => {
-    setApplySectionCollapsed(bundlePage);
-  }, [bundlePage]);
 
   const romInputs: RomInputRowState[] = uiState.romInputs;
   const patches = patchState.items;
@@ -565,11 +564,12 @@ function ApplyWorkflowFormView({
   const compressionTypeOptions = createCompressionTypeOptions(outputState.options, "none");
   const outputDisabled = outputState.disabled || bundleExport?.busy === true;
   const header = resolveOutputHeaderOptions(romInputs);
-  const outputHeaderField = (
+  const renderOutputHeaderField = (id?: string) => (
     <OutputHeaderField
       disabled={outputDisabled}
       headeredExtension={header.headeredExtension}
       headerlessExtension={header.headerlessExtension}
+      id={id}
       onChange={(value) => controllers.output.setOutputHeader?.(value)}
       retained={header.retained}
       value={outputState.outputHeader}
@@ -588,7 +588,7 @@ function ApplyWorkflowFormView({
     : bundleCreateLabel;
   const outputExtraFields = (
     <>
-      {outputHeaderField}
+      {renderOutputHeaderField()}
       <PostApplyBehaviorFields
         disabled={outputDisabled}
         downloadSetting={settings.postApplyDownloadBehavior}
@@ -678,18 +678,65 @@ function ApplyWorkflowFormView({
       uiState={uiState}
     />
   );
-  // Keep the sharing job available once the bench has content. Its position is
-  // route-specific: Bundle presents it before Apply, while Apply follows it.
+  // Keep the optional sharing job available after Apply once the bench has content.
+  const showBundleJob = bundleExport && bundleTools && (romInputs.length > 0 || patches.length > 0 || applyDone);
   const bundleSecondaryJob =
-    bundleExport && bundleTools && (romInputs.length > 0 || patches.length > 0 || applyDone) ? (
+    showBundleJob && !bundlePage ? (
       <BundleSecondaryJob
         bundleActionLabel={bundleActionLabel}
         bundleExport={bundleExport}
         bundleTools={bundleTools}
         disabled={outputState.disabled || !bundleExport.ready || !romInputs.length || !patches.length}
-        primary={bundlePage}
       />
     ) : null;
+
+  const applyOutputProps: OutputCardProps = {
+    action: renderOutputAction,
+    compress: buildOutputCompressionPanel({
+      disabled: outputDisabled,
+      extraChildren: outputExtraFields,
+      fields: outputState.compress?.fields,
+      format: compressHeaderFormat,
+      formatId: "rom-weaver-select-output-format-compress",
+      formatLabel: localizer.message("ui.apply.compressionType"),
+      formatOptions: compressionTypeOptions,
+      formatValue: outputState.compressionFormat,
+      note: outputState.compress?.note,
+      onFieldChange: (key, value, updates) => controllers.output.setOutputCompressOption?.(key, value, updates),
+      onFormatChange: (value) => controllers.output.setOutputCompression(value),
+      readouts: null,
+      timing: outputState.compressTiming || undefined,
+    }),
+    disabled: outputDisabled,
+    fileName: outputState.displayFileName,
+    fileNameId: "rom-weaver-input-output-file-name",
+    fileNamePlaceholder: localizer.message("ui.apply.outputFilename"),
+    format: outputState.compressionFormat,
+    formatId: "rom-weaver-select-output-format",
+    formatOptions: outputState.options,
+    nameSource: outputState.identifiedName
+      ? {
+          identifiedName: outputState.identifiedName.name,
+          on: outputState.identifiedName.on,
+          onChange: (on) => controllers.output.setUseIdentifiedName(on),
+        }
+      : null,
+    onFileNameChange: (value) => controllers.output.setDisplayFileName(value),
+    onFormatChange: (value) => controllers.output.setOutputCompression(value),
+  };
+  const outputNotice = (
+    <SectionNotice
+      id="rom-weaver-output-notice-message"
+      onDismiss={dismissSectionNotice("outputNotice")}
+      state={uiState.outputNotice}
+    />
+  );
+  const applySecondaryJob = bundlePage ? (
+    <ApplySecondaryJob>
+      <OutputCard {...applyOutputProps} />
+      {outputNotice}
+    </ApplySecondaryJob>
+  ) : null;
 
   if (startup.status === "error") {
     return (
@@ -742,7 +789,6 @@ function ApplyWorkflowFormView({
                 line1: "ui.hero.bundleThesis",
                 line2: "ui.hero.bundleThesis2",
                 description: "ui.hero.bundleDescription",
-                guide: { href: "/docs/create-bundles", label: "ui.hero.bundleGuide" },
               }
             : {
                 line1: "ui.hero.thesis",
@@ -763,10 +809,7 @@ function ApplyWorkflowFormView({
               title: localizer.message(bundlePage ? "ui.step.patches" : "ui.step.patchesCheats"),
             },
             ...(bundlePage
-              ? [
-                  { num: "0x04", title: localizer.message("ui.bundleExport.shareTitle") },
-                  { num: "0x05", title: localizer.message("ui.step.apply") },
-                ]
+              ? [{ num: "0x04", title: localizer.message("ui.step.bundle") }]
               : [{ num: "0x04", title: localizer.message("ui.step.apply") }]),
           ]}
         />
@@ -879,77 +922,48 @@ function ApplyWorkflowFormView({
               : renderPatchStep();
           })()}
 
-          {bundlePage ? bundleSecondaryJob : null}
+          {bundleExport && bundleTools && showBundleJob && bundlePage ? (
+            <BundleOutputStep
+              bundleActionLabel={bundleActionLabel}
+              bundleExport={bundleExport}
+              bundleTools={bundleTools}
+              disabled={outputDisabled || !bundleExport.ready || !romInputs.length || !patches.length}
+              fileName={outputState.displayFileName}
+              headerField={
+                header.visible ? renderOutputHeaderField("rom-weaver-select-bundle-output-header") : undefined
+              }
+              onFileNameChange={(value) => controllers.output.setDisplayFileName(value)}
+              onFormatChange={(value) => {
+                bundleExport.setFormat(value);
+                controllers.output.setOutputCompression(value);
+              }}
+              secondary={applySecondaryJob}
+            />
+          ) : null}
 
-          <WorkflowOutputStep
-            action={renderOutputAction}
-            compress={buildOutputCompressionPanel({
-              disabled: outputDisabled,
-              extraChildren: outputExtraFields,
-              fields: outputState.compress?.fields,
-              format: compressHeaderFormat,
-              formatId: "rom-weaver-select-output-format-compress",
-              formatLabel: localizer.message("ui.apply.compressionType"),
-              formatOptions: compressionTypeOptions,
-              formatValue: outputState.compressionFormat,
-              note: outputState.compress?.note,
-              onFieldChange: (key, value, updates) => controllers.output.setOutputCompressOption?.(key, value, updates),
-              onFormatChange: (value) => controllers.output.setOutputCompression(value),
-              readouts: null,
-              timing: outputState.compressTiming || undefined,
-            })}
-            {...(bundlePage
-              ? {
-                  collapse: {
-                    collapsed: applySectionCollapsed,
-                    label: localizer.message("ui.step.apply"),
-                    onToggle: () => setApplySectionCollapsed((collapsed) => !collapsed),
-                  },
-                }
-              : {})}
-            disabled={outputDisabled}
-            fault={applyFailed}
-            fileName={outputState.displayFileName}
-            fileNameId="rom-weaver-input-output-file-name"
-            fileNamePlaceholder={localizer.message("ui.apply.outputFilename")}
-            format={outputState.compressionFormat}
-            formatId="rom-weaver-select-output-format"
-            formatOptions={outputState.options}
-            id="rom-weaver-row-output-file-name"
-            info={
-              <InfoPopover title={localizer.message("ui.apply.outputOptions.title")}>
-                <strong>{localizer.message("ui.apply.outputOptions.output")}</strong>
-                <ul>
-                  <li>{localizer.message("ui.apply.outputOptions.filename")}</li>
-                  <li>{localizer.message("ui.apply.outputOptions.containers")}</li>
-                  <li>{localizer.message("ui.apply.outputOptions.compression")}</li>
-                </ul>
-              </InfoPopover>
-            }
-            meta={renderApplyTimingMeta(applyDone, localizer, outputState.applyTiming, outputState.compressTiming)}
-            nameSource={
-              outputState.identifiedName
-                ? {
-                    identifiedName: outputState.identifiedName.name,
-                    on: outputState.identifiedName.on,
-                    onChange: (on) => controllers.output.setUseIdentifiedName(on),
-                  }
-                : null
-            }
-            notice={
-              <SectionNotice
-                id="rom-weaver-output-notice-message"
-                onDismiss={dismissSectionNotice("outputNotice")}
-                state={uiState.outputNotice}
-              />
-            }
-            num={bundlePage ? "0x05" : "0x04"}
-            onFileNameChange={(value) => controllers.output.setDisplayFileName(value)}
-            onFormatChange={(value) => controllers.output.setOutputCompression(value)}
-            secondary={bundlePage ? undefined : bundleSecondaryJob}
-            title={localizer.message("ui.step.apply")}
-            woven={applyDone || running}
-          />
+          {bundlePage ? null : (
+            <WorkflowOutputStep
+              {...applyOutputProps}
+              fault={applyFailed}
+              id="rom-weaver-row-output-file-name"
+              info={
+                <InfoPopover title={localizer.message("ui.apply.outputOptions.title")}>
+                  <strong>{localizer.message("ui.apply.outputOptions.output")}</strong>
+                  <ul>
+                    <li>{localizer.message("ui.apply.outputOptions.filename")}</li>
+                    <li>{localizer.message("ui.apply.outputOptions.containers")}</li>
+                    <li>{localizer.message("ui.apply.outputOptions.compression")}</li>
+                  </ul>
+                </InfoPopover>
+              }
+              meta={renderApplyTimingMeta(applyDone, localizer, outputState.applyTiming, outputState.compressTiming)}
+              notice={outputNotice}
+              num="0x04"
+              secondary={bundleSecondaryJob}
+              title={localizer.message("ui.step.apply")}
+              woven={applyDone || running}
+            />
+          )}
           {applyDone && onSelectTab ? <RelatedStrip entryKey="patcher" onSelectTab={onSelectTab} /> : null}
         </>
       )}

@@ -23,6 +23,7 @@ type WorkflowRouteProps = {
     onSelectTab?: (id: string) => void;
     slug: string;
   };
+  extract: { pageDrop?: import("../public/react/public-types.ts").PageFileDrop | null };
   home: HomePageProps;
   identify: IdentifyFormProps;
   patcher: ApplyPatchFormProps;
@@ -110,6 +111,9 @@ const BundleWorkflowRoute = createWorkflowRoute("bundle", () =>
 const HomeRoute = createWorkflowRoute("home", () =>
   import("./components/home-page.tsx").then((module) => ({ default: module.HomePage })),
 );
+const ExtractRoute = createWorkflowRoute("extract", () =>
+  import("./components/extract-form.tsx").then((module) => ({ default: module.ExtractForm })),
+);
 const IdentifyRoute = createWorkflowRoute("identify", () =>
   import("./components/identify-form.tsx").then((module) => ({ default: module.IdentifyForm })),
 );
@@ -133,6 +137,7 @@ const WORKFLOW_ROUTES = {
   bundle: BundleWorkflowRoute,
   creator: CreatorRoute,
   docs: DocsRoute,
+  extract: ExtractRoute,
   home: HomeRoute,
   identify: IdentifyRoute,
   patcher: PatcherRoute,
@@ -148,6 +153,7 @@ const DocsPageRoute = DocsRoute.Component;
 const ApplyPatchRoute = PatcherRoute.Component;
 const BundleRoute = BundleWorkflowRoute.Component;
 const EmulatorTestRoute = TestRoute.Component;
+const ExtractRouteForm = ExtractRoute.Component;
 const HomePageRoute = HomeRoute.Component;
 const IdentifyRouteForm = IdentifyRoute.Component;
 const PpfUndoRouteForm = PpfUndoRoute.Component;
@@ -173,6 +179,7 @@ export {
   DocsNavigationRoute,
   DocsPageRoute,
   EmulatorTestRoute,
+  ExtractRouteForm,
   HomePageRoute,
   IdentifyRouteForm,
   preloadDocsRouteHtml,

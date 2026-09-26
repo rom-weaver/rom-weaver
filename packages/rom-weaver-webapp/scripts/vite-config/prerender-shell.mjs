@@ -172,6 +172,7 @@ export const prerenderWebappShell = (prerenderedShells) => ({
         prerenderedShells.set("bundle", await render("bundle"));
         prerenderedShells.set("creator", await render("creator"));
         prerenderedShells.set("identify", await render("identify"));
+        prerenderedShells.set("extract", await render("extract"));
         prerenderedShells.set("trim", await render("trim"));
         prerenderedShells.set("ppf-undo", await render("ppf-undo"));
         prerenderedShells.set("save-editor", await render("save-editor"));

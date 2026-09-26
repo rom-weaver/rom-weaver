@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
+import { useRomWeaverSettings } from "../../settings-context.tsx";
 import { ExtractDrawer, ExtractName, type ExtractPanelProps } from "./extraction-tree.tsx";
 import { FileProgress } from "./feedback.tsx";
 import { FileCard } from "./file-card.tsx";
@@ -30,6 +31,7 @@ type WorkflowRomInputStepProps = Omit<ComponentProps<typeof StepSection>, "child
 };
 
 const WorkflowRomInputStepRow = ({ item }: { item: WorkflowRomInputStepItem }) => {
+  const { detailedViewEnabled = false } = useRomWeaverSettings();
   if (item.progress) return <FileProgress {...item.progress} />;
   if (!item.card) return null;
   const { children, displayName, extract, identified, panels, ...cardProps } = item.card;
@@ -47,7 +49,7 @@ const WorkflowRomInputStepRow = ({ item }: { item: WorkflowRomInputStepItem }) =
         />
       }
     >
-      <ExtractDrawer {...extract} />
+      {detailedViewEnabled ? <ExtractDrawer {...extract} /> : null}
       {children}
       {panels ? <RomInputPanels {...panels} /> : null}
     </FileCard>

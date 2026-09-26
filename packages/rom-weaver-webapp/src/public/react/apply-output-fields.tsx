@@ -1,5 +1,5 @@
 import { Download, Share2, TriangleAlert } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   postApplyDownloadBehaviorOption,
   postApplyTestBehaviorOption,
@@ -14,6 +14,7 @@ import { FieldInfoToggle } from "./components/ds/compress-panel.tsx";
 import { Drawer, DrawerReadout } from "./components/ds/drawer.tsx";
 import { Notice } from "./components/ds/feedback.tsx";
 import { OutputField } from "./components/ds/output-card.tsx";
+import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { PatcherPrimaryAction } from "./components/patcher-output-controls.tsx";
 import { ProgressActionButton } from "./components/progress-action-button.tsx";
 import type { NoticeController, PatcherOutputController, PatcherUiController } from "./patcher-form.ts";
@@ -58,6 +59,7 @@ export const OutputHeaderField = ({
   disabled,
   headeredExtension,
   headerlessExtension,
+  id = "rom-weaver-select-output-header",
   onChange,
   retained,
   value,
@@ -66,6 +68,7 @@ export const OutputHeaderField = ({
   disabled: boolean;
   headeredExtension?: string;
   headerlessExtension?: string;
+  id?: string;
   onChange: (value: "auto" | "keep" | "strip") => void;
   retained: boolean;
   value?: "auto" | "keep" | "strip";
@@ -95,7 +98,7 @@ export const OutputHeaderField = ({
         aria-label={localizer.message("ui.apply.header.title")}
         className="select"
         disabled={disabled}
-        id="rom-weaver-select-output-header"
+        id={id}
         onChange={(event) => onChange(event.currentTarget.value as "auto" | "keep" | "strip")}
         value={value || "auto"}
       >
@@ -409,34 +412,86 @@ const BundleOutputFields = ({
   );
 };
 
-/**
- * Bundle export is a separate job from Apply. The Bundle route presents it
- * first, while the Apply route keeps it after the primary action.
- */
-export const BundleSecondaryJob = ({
+export const BundleOutputStep = ({
   bundleActionLabel,
   bundleExport,
   bundleTools,
   disabled,
-  primary = false,
+  fileName,
+  headerField,
+  onFileNameChange,
+  onFormatChange,
+  secondary,
 }: {
   bundleActionLabel: string;
   bundleExport: BundleExportState;
   bundleTools: BundleToolsState;
   disabled: boolean;
-  primary?: boolean;
+  fileName: string;
+  headerField?: ReactNode;
+  onFileNameChange: (value: string) => void;
+  onFormatChange: (value: string) => void;
+  secondary?: ReactNode;
 }) => {
   const localizer = useUiLocalizer();
-  const [open, setOpen] = useState(primary);
+  return (
+    <WorkflowOutputStep
+      action={
+        <>
+          {bundleExport.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
+          <BundleExportAction bundleActionLabel={bundleActionLabel} bundleExport={bundleExport} disabled={disabled} />
+        </>
+      }
+      compress={{
+        children: null,
+        extraChildren: (
+          <>
+            <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} />
+            {headerField}
+          </>
+        ),
+        optionsNote: headerField ? localizer.message("ui.bundleExport.headerNotSaved") : false,
+      }}
+      disabled={bundleExport.busy}
+      fault={!!bundleExport.error}
+      fileName={fileName}
+      fileNameId="rom-weaver-input-bundle-file-name"
+      fileNamePlaceholder={localizer.message("ui.bundleExport.outputFilename")}
+      format={bundleExport.format}
+      formatId="rom-weaver-bundle-export-format"
+      formatOptions={[
+        { label: ".zip", value: "zip" },
+        { label: ".7z", value: "7z" },
+      ]}
+      id="rom-weaver-bundle-job"
+      num="0x04"
+      onFileNameChange={onFileNameChange}
+      onFormatChange={onFormatChange}
+      secondary={secondary}
+      title={localizer.message("ui.step.bundle")}
+    />
+  );
+};
+
+const SecondaryOutputJob = ({
+  children,
+  hash,
+  id,
+  label,
+}: {
+  children: ReactNode;
+  hash?: string;
+  id: string;
+  label: string;
+}) => {
+  const localizer = useUiLocalizer();
+  const [open, setOpen] = useState(false);
   const headingRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    if (primary && !disabled) setOpen(true);
-  }, [disabled, primary]);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || !hash) return;
     let frameId: number | undefined;
-    const revealBundleStep = () => {
-      if (window.location.hash.toLowerCase() !== "#bundle") return;
+    const revealJob = () => {
+      if (window.location.hash.toLowerCase() !== hash) return;
       setOpen(true);
       frameId = window.requestAnimationFrame(() => {
         frameId = undefined;
@@ -444,30 +499,62 @@ export const BundleSecondaryJob = ({
         headingRef.current?.focus();
       });
     };
-    revealBundleStep();
-    window.addEventListener("hashchange", revealBundleStep);
+    revealJob();
+    window.addEventListener("hashchange", revealJob);
     return () => {
-      window.removeEventListener("hashchange", revealBundleStep);
+      window.removeEventListener("hashchange", revealJob);
       if (frameId !== undefined) window.cancelAnimationFrame(frameId);
     };
-  }, []);
+  }, [hash]);
   return (
-    <div id="rom-weaver-bundle-job">
+    <div id={id}>
       <Drawer
         bodyClassName="bundle-job-content"
         className="bundle-job"
         headingRef={headingRef}
-        label={localizer.message("ui.bundleExport.shareTitle")}
+        label={label}
         onToggle={setOpen}
         open={open}
-        readouts={
-          primary ? undefined : <DrawerReadout muted>{localizer.message("ui.bundleExport.optional")}</DrawerReadout>
-        }
+        readouts={<DrawerReadout muted>{localizer.message("ui.bundleExport.optional")}</DrawerReadout>}
       >
-        <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} />
-        {bundleExport.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
-        <BundleExportAction bundleActionLabel={bundleActionLabel} bundleExport={bundleExport} disabled={disabled} />
+        {children}
       </Drawer>
     </div>
+  );
+};
+
+/** Bundle export is the optional alternate job on the Apply route. */
+export const BundleSecondaryJob = ({
+  bundleActionLabel,
+  bundleExport,
+  bundleTools,
+  disabled,
+}: {
+  bundleActionLabel: string;
+  bundleExport: BundleExportState;
+  bundleTools: BundleToolsState;
+  disabled: boolean;
+}) => {
+  const localizer = useUiLocalizer();
+  return (
+    <SecondaryOutputJob
+      hash="#bundle"
+      id="rom-weaver-bundle-job"
+      label={localizer.message("ui.bundleExport.shareTitle")}
+    >
+      <BundleOutputFields bundleExport={bundleExport} bundleTools={bundleTools} />
+      {bundleExport.error ? <Notice level="error">{bundleExport.error}</Notice> : null}
+      <BundleExportAction bundleActionLabel={bundleActionLabel} bundleExport={bundleExport} disabled={disabled} />
+    </SecondaryOutputJob>
+  );
+};
+
+/** Apply is the optional alternate job on the Bundle route. */
+export const ApplySecondaryJob = ({ children }: { children: ReactNode }) => {
+  const localizer = useUiLocalizer();
+  return (
+    <SecondaryOutputJob id="rom-weaver-apply-job" label={localizer.message("ui.step.apply")}>
+      {children}
+    </SecondaryOutputJob>
   );
 };

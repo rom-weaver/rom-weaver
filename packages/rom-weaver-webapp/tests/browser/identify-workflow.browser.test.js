@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { page } from "vitest/browser";
+import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import "../../src/webapp/design-system/index.css";
 // deferred.css ships lazily in production (webapp.ts loads it at boot); the drawer
 // surfaces the identify results live in come from it.
@@ -70,7 +71,13 @@ const mountIdentifyForm = async () => {
   host.className = "rw-app";
   document.body.append(host);
   root = createRoot(host);
-  root.render(createElement(IdentifyForm, {}));
+  root.render(
+    createElement(
+      RomWeaverSettingsProvider,
+      { settings: { detailedViewEnabled: true } },
+      createElement(IdentifyForm, {}),
+    ),
+  );
   await waitFor(() => host.querySelector("#identify-input-picker"));
 };
 
