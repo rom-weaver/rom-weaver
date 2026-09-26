@@ -1,6 +1,6 @@
 # Native emulator runtime
 
-The native ROM smoke test uses a separate RetroArch and FCEUmm runtime built from pinned sources. The CLI binary does not embed these GPL components. Release assets carry both the runtime and its corresponding source package.
+The native ROM smoke test uses a separate RetroArch and libretro core runtime built from pinned sources. The CLI binary does not embed these components. Release assets carry both the runtime and its corresponding source package.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -18,15 +18,18 @@ The native ROM smoke test uses a separate RetroArch and FCEUmm runtime built fro
 The first runtime target is `linux-x64-gnu`: Linux x86-64 with GNU libc 2.39 or later. The runtime contains:
 
 - a headless RetroArch binary with networking and unused drivers disabled;
-- the FCEUmm libretro core for NES ROMs;
-- a schema-version 1 manifest with pinned revisions and SHA-256 values;
-- the RetroArch and FCEUmm license files.
+- libretro cores for the supported ROM systems;
+- packaged core assets, including PPSSPP assets;
+- a schema-version 2 manifest with pinned revisions and SHA-256 values;
+- the RetroArch, core, and dependency license files.
 
 The source lock is `scripts/emulator-runtime/sources.json`. It pins the upstream archive URL, revision, and SHA-256 for each component.
 
+Each component retains its upstream license. Snes9x and Genesis Plus GX restrict commercial redistribution; their source-lock entries record `redistribution: "noncommercial-only"`. The runtime and source archives include their license notices.
+
 ## Build the release artifacts
 
-Use separate empty build and output directories. The build needs `cc`, `c++`, `curl`, `gzip`, `make`, `node`, `sha256sum`, and `tar`.
+Use separate empty build and output directories. The build needs `cc`, `c++`, `cmake`, `curl`, `gzip`, `make`, `nasm`, `node`, `python3`, `sha256sum`, and `tar`. It also needs OpenGL and zlib development libraries (`libgl-dev` and `zlib1g-dev` on Ubuntu).
 
 ```sh
 root=$HOME/.cache/rom-weaver-emulator
@@ -70,13 +73,23 @@ smoke=scripts/emulator-runtime/smoke.sh
 $smoke --runtime-dir PATH_TO_RUNTIME --scratch-dir "$root/smoke"
 ```
 
-The smoke script uses isolated configuration, data, cache, save, and state directories. It requires a nonempty PNG with the PNG signature.
+The smoke script uses isolated configuration, data, cache, save, and state directories. It requires a nonempty PNG with the PNG signature. It checks the baseline FCEUmm path; it does not prove every packaged core or game.
+
+The build loads all core libraries. The CI integration check checks that the installed catalog matches the browser catalog. It runs NES, Game Boy, GBA, DS, and PSP inputs through the CLI. The PSP fixture downloads from a pinned upstream revision, passes a SHA-256 check, and remains outside distributed archives.
+
+The PPSSPP source recipe waits for asynchronous startup before it returns the first frame. Without this patch, a short frame budget can unload the core while its loader thread still writes to emulated memory.
 
 ## Runtime manifest contract
 
-`manifest.json` has `schemaVersion: 1` and `platform: "linux-x64-gnu"`. Its `retroarch` object records `path`, the 40-character source `revision`, and `sha256`. Its only initial `cores` entry uses `id: "fceumm"`, `platform: "nes"`, and the same path, revision, and hash fields.
+`manifest.json` has `schemaVersion: 2` and `platform: "linux-x64-gnu"`. Its `retroarch` object records `path`, the 40-character source `revision`, and `sha256`.
 
-The CLI rejects extra manifest fields, unsafe paths, symbolic links, missing executable permission, hash mismatches, other platforms, and other core sets.
+Each `cores` entry records `id`, `platform`, `path`, `revision`, `sha256`, `extensions`, `options`, and `firmware`. Extensions drive automatic core selection. Options become an isolated RetroArch core-options file. Firmware paths describe files the user must supply through `--system-dir`.
+
+The `systemFiles` array records the relative `path` and `sha256` of each packaged core asset. The CLI copies these assets into the isolated system directory before it adds user-supplied firmware. The PPSSPP assets use this mechanism.
+
+The CLI also accepts the original schema-version 1 NES manifest. It supplies the `.nes` extension for the legacy FCEUmm entry when it is absent.
+
+The CLI rejects extra manifest fields, unsafe or duplicate paths, symbolic links, missing executable permission, hash mismatches, unsupported platforms, invalid core metadata, and empty or oversized core sets.
 
 ## Release flow
 
