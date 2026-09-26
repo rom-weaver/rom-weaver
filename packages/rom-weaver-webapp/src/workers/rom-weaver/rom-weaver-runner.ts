@@ -113,16 +113,6 @@ let operationScheduler: OperationScheduler | null = null;
 // Bound graceful disposal so a worker blocked in a synchronous wait cannot block a reset.
 const RUNNER_DISPOSE_GRACE_MS = 2000;
 
-// WASM heaps only grow. These switches keep warmup cleanup outside the first operation.
-const PRE_EXTRACT_GAP = {
-  // Compile once on the page thread and reuse the module across runner and thread workers.
-  cacheCompiledWasmModule: true,
-  // Terminate an exhausted worker immediately to release its OPFS handles.
-  hardTerminateStaleOnOom: true,
-  // Keep the runner that warmed extraction state and release the other warm heaps.
-  recycleRunnerAfterWarmup: true,
-};
-
 // Page-thread cache entries are keyed by URL so a changed asset recompiles.
 let cachedBrowserWasmModule: { module: WebAssembly.Module; wasmUrl: string } | null = null;
 
@@ -153,7 +143,6 @@ const compileBrowserWasmModule = async (wasmUrl: string): Promise<WebAssembly.Mo
 
 // Compile and cache the module on first use. A failure leaves the worker-side wasmUrl fallback available.
 const getCachedBrowserWasmModule = async (wasmUrl?: string): Promise<WebAssembly.Module | undefined> => {
-  if (!PRE_EXTRACT_GAP.cacheCompiledWasmModule) return undefined;
   if (!wasmUrl) return undefined;
   if (cachedBrowserWasmModule?.wasmUrl === wasmUrl) {
     emitWasmCacheTrace("wasm module cache hit (skipping fetch+compile)", { wasmUrl });
@@ -375,7 +364,6 @@ const noteRomWeaverIoBatch = (jobSizes: number[]) => {
 
 // Keep the extraction runner and release the other idle warmup runners without resetting its worker or thread-pool state.
 const recycleWarmRomWeaverRunner = async (threads?: RuntimeValue) => {
-  if (!PRE_EXTRACT_GAP.recycleRunnerAfterWarmup) return;
   if (!isBrowserRuntime()) return;
   const pool = getRunnerPool();
   if (pool.busyCount !== 0 || pool.idleCount === 0) return;
@@ -392,7 +380,6 @@ let idleRecycleTimer: ReturnType<typeof setTimeout> | null = null;
 let idleRecycleInFlight = false;
 const scheduleIdleRecycle = (operationBytes: number) => {
   if (!isBrowserRuntime()) return;
-  if (!PRE_EXTRACT_GAP.recycleRunnerAfterWarmup) return;
   if (operationBytes < IDLE_RECYCLE_MIN_OP_BYTES) return;
   if (idleRecycleTimer) clearTimeout(idleRecycleTimer);
   idleRecycleTimer = setTimeout(() => {
@@ -572,14 +559,9 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
     } catch (error) {
       // A long-lived worker can exhaust its grown heap. Only that runner is replaced on the next acquire.
       if (isRunnerOutOfMemoryError(error)) {
-        if (PRE_EXTRACT_GAP.hardTerminateStaleOnOom) {
-          // Release the exhausted worker's OPFS handles immediately.
-          emitRunnerTraceLine(options, "runJson out-of-memory; terminating exhausted runner");
-          lease.terminate();
-        } else {
-          emitRunnerTraceLine(options, "runJson out-of-memory; flagging exhausted runner for recycle");
-          lease.markStale();
-        }
+        // Release the exhausted worker's OPFS handles immediately.
+        emitRunnerTraceLine(options, "runJson out-of-memory; terminating exhausted runner");
+        lease.terminate();
       }
       throw error;
     } finally {
