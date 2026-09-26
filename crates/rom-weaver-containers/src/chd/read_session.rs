@@ -149,7 +149,17 @@ impl ChdReadSession {
                     parent_source.display()
                 )
             })?;
-            let parent_reader = BufReader::new(parent_file);
+            let parent_file_len = parent_file
+                .metadata()
+                .map_err(|error| {
+                    format!(
+                        "failed to read parent chd `{}` size: {error}",
+                        parent_source.display()
+                    )
+                })?
+                .len();
+            let mut parent_reader = BufReader::new(parent_file);
+            Self::validate_v5_map_allocation(&mut parent_reader, parent_source, parent_file_len)?;
             let parent_chd = chd::Chd::open(parent_reader, None).map_err(|error| {
                 format!(
                     "failed to parse parent chd `{}`: {error}",
@@ -163,9 +173,146 @@ impl ChdReadSession {
 
         let file = File::open(source)
             .map_err(|error| format!("failed to open `{}`: {error}", source.display()))?;
-        let reader = BufReader::new(file);
+        let file_len = file
+            .metadata()
+            .map_err(|error| format!("failed to read `{}` size: {error}", source.display()))?
+            .len();
+        let mut reader = BufReader::new(file);
+        Self::validate_v5_map_allocation(&mut reader, source, file_len)?;
         chd::Chd::open(reader, parent)
             .map_err(|error| format!("failed to parse `{}`: {error}", source.display()))
+    }
+
+    pub(super) fn validate_v5_map_allocation<R: Read + Seek>(
+        reader: &mut R,
+        source: &Path,
+        file_len: u64,
+    ) -> std::result::Result<(), String> {
+        const V5_HEADER_BYTES: usize = 124;
+        const V5_COMPRESSED_MAP_HEADER_BYTES: u64 = 16;
+
+        if file_len < V5_HEADER_BYTES as u64 {
+            return Ok(());
+        }
+
+        let mut header = [0_u8; V5_HEADER_BYTES];
+        reader
+            .seek(SeekFrom::Start(0))
+            .and_then(|_| reader.read_exact(&mut header))
+            .map_err(|error| format!("failed to inspect `{}`: {error}", source.display()))?;
+        reader
+            .seek(SeekFrom::Start(0))
+            .map_err(|error| format!("failed to inspect `{}`: {error}", source.display()))?;
+
+        let read_u32 = |offset: usize| {
+            u32::from_be_bytes([
+                header[offset],
+                header[offset + 1],
+                header[offset + 2],
+                header[offset + 3],
+            ])
+        };
+        let read_u64 = |offset: usize| {
+            u64::from_be_bytes([
+                header[offset],
+                header[offset + 1],
+                header[offset + 2],
+                header[offset + 3],
+                header[offset + 4],
+                header[offset + 5],
+                header[offset + 6],
+                header[offset + 7],
+            ])
+        };
+
+        if header[..8] != CHD_SIGNATURE
+            || read_u32(8) != V5_HEADER_BYTES as u32
+            || read_u32(12) != 5
+        {
+            return Ok(());
+        }
+
+        let codec = read_u32(16);
+        let logical_bytes = read_u64(32);
+        let map_offset = read_u64(40);
+        let hunk_bytes = read_u32(56);
+        if hunk_bytes == 0 {
+            return Ok(());
+        }
+
+        let hunk_count = logical_bytes
+            .checked_add(u64::from(hunk_bytes) - 1)
+            .ok_or_else(|| format!("CHD `{}` hunk count overflows", source.display()))?
+            / u64::from(hunk_bytes);
+        let map_entry_bytes = if codec == 0 { 4 } else { 12 };
+        let expanded_map_bytes = hunk_count
+            .checked_mul(map_entry_bytes)
+            .ok_or_else(|| format!("CHD `{}` map size overflows", source.display()))?;
+        u32::try_from(hunk_count)
+            .map_err(|_| format!("CHD `{}` hunk count exceeds u32", source.display()))?;
+        usize::try_from(expanded_map_bytes).map_err(|_| {
+            format!(
+                "CHD `{}` expanded map exceeds addressable memory",
+                source.display()
+            )
+        })?;
+
+        if codec == 0 {
+            Self::validate_map_span(source, map_offset, expanded_map_bytes, file_len)?;
+            return Ok(());
+        }
+
+        Self::validate_map_span(source, map_offset, V5_COMPRESSED_MAP_HEADER_BYTES, file_len)?;
+        reader
+            .seek(SeekFrom::Start(map_offset))
+            .map_err(|error| format!("failed to inspect `{}` map: {error}", source.display()))?;
+        let mut map_bytes = [0_u8; 4];
+        reader
+            .read_exact(&mut map_bytes)
+            .map_err(|error| format!("failed to inspect `{}` map: {error}", source.display()))?;
+        let map_bytes = u64::from(u32::from_be_bytes(map_bytes));
+        let compressed_map_offset = map_offset
+            .checked_add(V5_COMPRESSED_MAP_HEADER_BYTES)
+            .ok_or_else(|| format!("CHD `{}` map span overflows", source.display()))?;
+        Self::validate_map_span(source, compressed_map_offset, map_bytes, file_len)?;
+
+        let encoded_bits = map_bytes
+            .checked_mul(8)
+            .ok_or_else(|| format!("CHD `{}` compressed map size overflows", source.display()))?;
+        // Every valid Huffman lookup consumes at least one bit, and RleLarge expands one decoded
+        // symbol to at most 274 entries; counting all payload bits keeps this bound conservative.
+        const MAX_RLE_LARGE_ENTRIES: u64 = 274;
+        let max_encodable_hunks = encoded_bits
+            .checked_mul(MAX_RLE_LARGE_ENTRIES)
+            .ok_or_else(|| format!("CHD `{}` map entry bound overflows", source.display()))?;
+        if hunk_count > max_encodable_hunks {
+            return Err(format!(
+                "CHD `{}` declares {hunk_count} hunks, but its compressed map can encode at most {max_encodable_hunks}",
+                source.display()
+            ));
+        }
+        reader
+            .seek(SeekFrom::Start(0))
+            .map_err(|error| format!("failed to inspect `{}`: {error}", source.display()))?;
+        Ok(())
+    }
+
+    fn validate_map_span(
+        source: &Path,
+        offset: u64,
+        length: u64,
+        file_len: u64,
+    ) -> std::result::Result<(), String> {
+        let end = offset
+            .checked_add(length)
+            .ok_or_else(|| format!("CHD `{}` map span overflows", source.display()))?;
+        if end > file_len {
+            return Err(format!(
+                "CHD `{}` map span ends at byte {end}, past the {file_len}-byte file",
+                source.display()
+            ));
+        }
+        Ok(())
     }
 
     pub(super) fn stream_with_progress<F>(
