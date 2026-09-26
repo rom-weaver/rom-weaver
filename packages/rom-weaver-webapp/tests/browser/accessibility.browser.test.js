@@ -1247,7 +1247,9 @@ describe("webapp responsive navigation", () => {
     for (const width of [1000, 1100, 1200, 1280, 1600]) {
       await setViewport({ height: 900, width });
       await renderMastheadOnly(ALL_TABS);
-      for (const label of host.querySelectorAll(".side-nav .nav-row-label")) {
+      // The test MUST measure painted rows. Beta rows stay in the DOM while
+      // their setting is off so hydration can reveal them without changing markup.
+      for (const label of host.querySelectorAll(".side-nav .nav-row:not([hidden]) .nav-row-label")) {
         // painted in full: never clipped to a glyph, never ellipsized. A locale
         // with longer words wraps the row instead of truncating the name.
         expect(label.getBoundingClientRect().width).toBeGreaterThan(20);

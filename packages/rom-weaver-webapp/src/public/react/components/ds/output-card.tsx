@@ -28,6 +28,7 @@ type OutputCompressPanel = {
   formatInfo?: ReactNode;
   formatId?: string;
   onFormatChange?: (value: string) => void;
+  optionsNote?: ReactNode | false;
 };
 type OutputCardProps = {
   fileName: string;
@@ -176,11 +177,9 @@ const OutputCard = ({
             </>
           }
         >
-          {/* None of these controls writes back - the public form reads settings
-              only. Phrased as "not saved" rather than "overrides your defaults"
-              because a few options (Apply's ROM header) have no saved default at
-              all. Said once at the top, since it holds for every option below. */}
-          <p className="optsnote">{localizer.message("ui.output.notSaved")}</p>
+          {compress?.optionsNote === false ? null : (
+            <p className="optsnote">{compress?.optionsNote ?? localizer.message("ui.output.notSaved")}</p>
+          )}
           <div className="optsgrid">
             {nameSource ? (
               <div className="optsgroup opts-name-source">

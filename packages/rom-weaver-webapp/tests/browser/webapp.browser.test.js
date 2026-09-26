@@ -486,10 +486,14 @@ test.each([
   expect(document.querySelector(".sample-tutorial-start-pop")).toBeNull();
 
   chip.click();
-  await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(3);
+  await expect
+    .poll(() => document.querySelectorAll(".sample-tutorial-start-action").length)
+    .toBe(initialView === "bundle" ? 4 : 3);
   expect(document.querySelector(".sample-tutorial-start-primary")?.getAttribute("href")).toBe(guideHref);
   expect(document.querySelector(".sample-tutorial-start-secondary")).toBeNull();
-  expect(document.querySelector(".sample-tutorial-start-guide")).toBeNull();
+  expect(document.querySelector(".sample-tutorial-start-guide")?.getAttribute("href") ?? null).toBe(
+    initialView === "bundle" ? "/docs/create-bundles" : null,
+  );
   expect(document.querySelector(".sample-tutorial-start-download").hasAttribute("download")).toBe(true);
   expect(document.querySelector(".sample-tutorial-start-dismiss")).toBeTruthy();
   const pop = document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect();

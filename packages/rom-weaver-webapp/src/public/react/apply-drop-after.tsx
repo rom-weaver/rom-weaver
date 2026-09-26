@@ -154,6 +154,9 @@ export const ApplyDropAfter = ({
   if (!workflowEmpty) return null;
   return (
     <SampleTutorialStart
+      documentation={
+        bundlePage ? { href: "/docs/create-bundles", label: localizer.message("ui.hero.bundleGuide") } : undefined
+      }
       downloadHref={downloadHref}
       downloadLabel={localizer.message("ui.apply.tutorial.downloadTestBundle")}
       downloadName={FIRST_WEAVE_ASSET}
