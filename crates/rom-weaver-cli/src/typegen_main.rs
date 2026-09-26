@@ -347,75 +347,53 @@ fn render_metadata() -> String {
 
 fn render_command_types() -> String {
     let config = ts_rs::Config::default();
-    let command_types = tagged_enum_type_literals::<Commands>(&config);
-    let patch_command_types = tagged_enum_type_literals::<PatchCommands>(&config);
-    let bundle_command_types = tagged_enum_type_literals::<BundleCommands>(&config);
+    let discriminants = [
+        render_command_discriminant::<Commands>(&config, "", "command"),
+        render_command_discriminant::<PatchCommands>(&config, "Patch", "patch command"),
+        render_command_discriminant::<BundleCommands>(&config, "Bundle", "bundle command"),
+        render_command_discriminant::<SaveCommands>(&config, "Save", "save command"),
+        render_command_discriminant::<ToolsCommands>(&config, "Tools", "tools command"),
+    ];
     format!(
-        "{COMMAND_TYPES_HEADER}{}\n\n{}\n\n{}\n\n{}\n",
-        render_ts_const(
-            "KNOWN_COMMAND_TYPES",
-            Value::Array(string_values(command_types))
-        ),
-        render_ts_const(
-            "KNOWN_PATCH_COMMAND_TYPES",
-            Value::Array(string_values(patch_command_types))
-        ),
-        render_ts_const(
-            "KNOWN_BUNDLE_COMMAND_TYPES",
-            Value::Array(string_values(bundle_command_types))
-        ),
-        r#"export type KnownRomWeaverCommandType = typeof KNOWN_COMMAND_TYPES[number];
-export type KnownRomWeaverPatchCommandType = typeof KNOWN_PATCH_COMMAND_TYPES[number];
-export type KnownRomWeaverBundleCommandType = typeof KNOWN_BUNDLE_COMMAND_TYPES[number];
-
-export function isKnownRomWeaverCommandType(value: unknown): value is KnownRomWeaverCommandType {
-  return typeof value === 'string' && (KNOWN_COMMAND_TYPES as readonly string[]).includes(value);
-}
-
-export function isKnownRomWeaverPatchCommandType(value: unknown): value is KnownRomWeaverPatchCommandType {
-  return typeof value === 'string' && (KNOWN_PATCH_COMMAND_TYPES as readonly string[]).includes(value);
-}
-
-export function isKnownRomWeaverBundleCommandType(value: unknown): value is KnownRomWeaverBundleCommandType {
-  return typeof value === 'string' && (KNOWN_BUNDLE_COMMAND_TYPES as readonly string[]).includes(value);
-}
-
-export function assertKnownRomWeaverCommandType(
-  value: unknown,
-  label = 'rom-weaver command',
-  field = '`type` field',
-): KnownRomWeaverCommandType {
-  const type = typeof value === 'string' ? value.trim() : '';
-  if (!type) throw new TypeError(`${label} requires a string ${field}`);
-  if (isKnownRomWeaverCommandType(type)) return type;
-  throw new TypeError(`${label} has unsupported ${field}: ${type} (known: ${formatKnownTypes(KNOWN_COMMAND_TYPES)})`);
-}
-
-export function assertKnownRomWeaverPatchCommandType(
-  value: unknown,
-  label = 'rom-weaver patch command',
-  field = '`type` field',
-): KnownRomWeaverPatchCommandType {
-  const type = typeof value === 'string' ? value.trim() : '';
-  if (!type) throw new TypeError(`${label} requires a string ${field}`);
-  if (isKnownRomWeaverPatchCommandType(type)) return type;
-  throw new TypeError(`${label} has unsupported ${field}: ${type} (known: ${formatKnownTypes(KNOWN_PATCH_COMMAND_TYPES)})`);
-}
-
-export function assertKnownRomWeaverBundleCommandType(
-  value: unknown,
-  label = 'rom-weaver bundle command',
-  field = '`type` field',
-): KnownRomWeaverBundleCommandType {
-  const type = typeof value === 'string' ? value.trim() : '';
-  if (!type) throw new TypeError(`${label} requires a string ${field}`);
-  if (isKnownRomWeaverBundleCommandType(type)) return type;
-  throw new TypeError(`${label} has unsupported ${field}: ${type} (known: ${formatKnownTypes(KNOWN_BUNDLE_COMMAND_TYPES)})`);
-}
-
-function formatKnownTypes(types: readonly string[]): string {
+        "{COMMAND_TYPES_HEADER}{}\n\n{}\n",
+        discriminants.join("\n\n"),
+        r#"function formatKnownTypes(types: readonly string[]): string {
   return types.map((type) => `"${type}"`).join(', ');
-}"#,
+}"#
+    )
+}
+
+fn render_command_discriminant<T: TS>(config: &ts_rs::Config, family: &str, label: &str) -> String {
+    let constant_family = if family.is_empty() {
+        String::new()
+    } else {
+        format!("{}_", family.to_ascii_uppercase())
+    };
+    let constant = format!("KNOWN_{constant_family}COMMAND_TYPES");
+    let type_name = format!("KnownRomWeaver{family}CommandType");
+    let is_function = format!("isKnownRomWeaver{family}CommandType");
+    let assert_function = format!("assertKnownRomWeaver{family}CommandType");
+    let values = Value::Array(string_values(tagged_enum_type_literals::<T>(config)));
+    format!(
+        r#"{}
+
+export type {type_name} = typeof {constant}[number];
+
+export function {is_function}(value: unknown): value is {type_name} {{
+  return typeof value === 'string' && ({constant} as readonly string[]).includes(value);
+}}
+
+export function {assert_function}(
+  value: unknown,
+  label = 'rom-weaver {label}',
+  field = '`type` field',
+): {type_name} {{
+  const type = typeof value === 'string' ? value.trim() : '';
+  if (!type) throw new TypeError(`${{label}} requires a string ${{field}}`);
+  if ({is_function}(type)) return type;
+  throw new TypeError(`${{label}} has unsupported ${{field}}: ${{type}} (known: ${{formatKnownTypes({constant})}})`);
+}}"#,
+        render_ts_const(&constant, values)
     )
 }
 

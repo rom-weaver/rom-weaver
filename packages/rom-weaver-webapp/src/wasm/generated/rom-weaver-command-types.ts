@@ -17,31 +17,10 @@ export const KNOWN_COMMAND_TYPES = [
   "plan-extract-batch"
 ] as const;
 
-export const KNOWN_PATCH_COMMAND_TYPES = [
-  "apply",
-  "validate",
-  "create"
-] as const;
-
-export const KNOWN_BUNDLE_COMMAND_TYPES = [
-  "create",
-  "parse"
-] as const;
-
 export type KnownRomWeaverCommandType = typeof KNOWN_COMMAND_TYPES[number];
-export type KnownRomWeaverPatchCommandType = typeof KNOWN_PATCH_COMMAND_TYPES[number];
-export type KnownRomWeaverBundleCommandType = typeof KNOWN_BUNDLE_COMMAND_TYPES[number];
 
 export function isKnownRomWeaverCommandType(value: unknown): value is KnownRomWeaverCommandType {
   return typeof value === 'string' && (KNOWN_COMMAND_TYPES as readonly string[]).includes(value);
-}
-
-export function isKnownRomWeaverPatchCommandType(value: unknown): value is KnownRomWeaverPatchCommandType {
-  return typeof value === 'string' && (KNOWN_PATCH_COMMAND_TYPES as readonly string[]).includes(value);
-}
-
-export function isKnownRomWeaverBundleCommandType(value: unknown): value is KnownRomWeaverBundleCommandType {
-  return typeof value === 'string' && (KNOWN_BUNDLE_COMMAND_TYPES as readonly string[]).includes(value);
 }
 
 export function assertKnownRomWeaverCommandType(
@@ -55,6 +34,18 @@ export function assertKnownRomWeaverCommandType(
   throw new TypeError(`${label} has unsupported ${field}: ${type} (known: ${formatKnownTypes(KNOWN_COMMAND_TYPES)})`);
 }
 
+export const KNOWN_PATCH_COMMAND_TYPES = [
+  "apply",
+  "validate",
+  "create"
+] as const;
+
+export type KnownRomWeaverPatchCommandType = typeof KNOWN_PATCH_COMMAND_TYPES[number];
+
+export function isKnownRomWeaverPatchCommandType(value: unknown): value is KnownRomWeaverPatchCommandType {
+  return typeof value === 'string' && (KNOWN_PATCH_COMMAND_TYPES as readonly string[]).includes(value);
+}
+
 export function assertKnownRomWeaverPatchCommandType(
   value: unknown,
   label = 'rom-weaver patch command',
@@ -66,6 +57,17 @@ export function assertKnownRomWeaverPatchCommandType(
   throw new TypeError(`${label} has unsupported ${field}: ${type} (known: ${formatKnownTypes(KNOWN_PATCH_COMMAND_TYPES)})`);
 }
 
+export const KNOWN_BUNDLE_COMMAND_TYPES = [
+  "create",
+  "parse"
+] as const;
+
+export type KnownRomWeaverBundleCommandType = typeof KNOWN_BUNDLE_COMMAND_TYPES[number];
+
+export function isKnownRomWeaverBundleCommandType(value: unknown): value is KnownRomWeaverBundleCommandType {
+  return typeof value === 'string' && (KNOWN_BUNDLE_COMMAND_TYPES as readonly string[]).includes(value);
+}
+
 export function assertKnownRomWeaverBundleCommandType(
   value: unknown,
   label = 'rom-weaver bundle command',
@@ -75,6 +77,54 @@ export function assertKnownRomWeaverBundleCommandType(
   if (!type) throw new TypeError(`${label} requires a string ${field}`);
   if (isKnownRomWeaverBundleCommandType(type)) return type;
   throw new TypeError(`${label} has unsupported ${field}: ${type} (known: ${formatKnownTypes(KNOWN_BUNDLE_COMMAND_TYPES)})`);
+}
+
+export const KNOWN_SAVE_COMMAND_TYPES = [
+  "list-games",
+  "create",
+  "identify",
+  "inspect",
+  "get",
+  "set",
+  "export-schema"
+] as const;
+
+export type KnownRomWeaverSaveCommandType = typeof KNOWN_SAVE_COMMAND_TYPES[number];
+
+export function isKnownRomWeaverSaveCommandType(value: unknown): value is KnownRomWeaverSaveCommandType {
+  return typeof value === 'string' && (KNOWN_SAVE_COMMAND_TYPES as readonly string[]).includes(value);
+}
+
+export function assertKnownRomWeaverSaveCommandType(
+  value: unknown,
+  label = 'rom-weaver save command',
+  field = '`type` field',
+): KnownRomWeaverSaveCommandType {
+  const type = typeof value === 'string' ? value.trim() : '';
+  if (!type) throw new TypeError(`${label} requires a string ${field}`);
+  if (isKnownRomWeaverSaveCommandType(type)) return type;
+  throw new TypeError(`${label} has unsupported ${field}: ${type} (known: ${formatKnownTypes(KNOWN_SAVE_COMMAND_TYPES)})`);
+}
+
+export const KNOWN_TOOLS_COMMAND_TYPES = [
+  "ppf-undo"
+] as const;
+
+export type KnownRomWeaverToolsCommandType = typeof KNOWN_TOOLS_COMMAND_TYPES[number];
+
+export function isKnownRomWeaverToolsCommandType(value: unknown): value is KnownRomWeaverToolsCommandType {
+  return typeof value === 'string' && (KNOWN_TOOLS_COMMAND_TYPES as readonly string[]).includes(value);
+}
+
+export function assertKnownRomWeaverToolsCommandType(
+  value: unknown,
+  label = 'rom-weaver tools command',
+  field = '`type` field',
+): KnownRomWeaverToolsCommandType {
+  const type = typeof value === 'string' ? value.trim() : '';
+  if (!type) throw new TypeError(`${label} requires a string ${field}`);
+  if (isKnownRomWeaverToolsCommandType(type)) return type;
+  throw new TypeError(`${label} has unsupported ${field}: ${type} (known: ${formatKnownTypes(KNOWN_TOOLS_COMMAND_TYPES)})`);
 }
 
 function formatKnownTypes(types: readonly string[]): string {
