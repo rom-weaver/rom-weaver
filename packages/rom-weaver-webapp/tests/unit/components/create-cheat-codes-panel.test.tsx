@@ -162,6 +162,14 @@ describe("CreateCheatCodesPanel", () => {
     expect(onKindChange).not.toHaveBeenCalled();
     expect(onValueChange).not.toHaveBeenCalled();
   });
+  it("warns about an uncovered platform and offers the system search", () => {
+    const { view } = renderPanel("", { rom: { key: "n64", platform: "Nintendo - Nintendo 64", title: "Game" } });
+    fireEvent.click(view.getByRole("button", { name: /Pick from the cheat database/u }));
+    expect(view.getByText(/No cheat database covers Nintendo - Nintendo 64/u)).toBeTruthy();
+    expect(view.getByPlaceholderText("Search cheat databases by system…")).toBeTruthy();
+    expect(view.getByText(/Choose a system above/u)).toBeTruthy();
+  });
+
   it("shows the detected line and one write row per code", async () => {
     const { view } = renderPanel("SXIOPO");
     await waitFor(() => expect(view.getByRole("status").textContent).toBe("NES · Game Genie · 1 write"));
