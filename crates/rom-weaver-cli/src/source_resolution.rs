@@ -71,6 +71,7 @@ enum AutoExtractMode {
 }
 
 impl CliApp {
+    #[cfg(not(target_arch = "wasm32"))]
     pub(super) fn resolve_emulator_source(
         &self,
         source: &Path,

@@ -14,7 +14,575 @@
       "platform": "nes",
       "revision": "236ccdfc911e84c60fea6b9d0699c2d440a8de14",
       "sha256": "dd002cde9b5271979e0394bb9e696bd37e149ced473ff1e3629cc7fed502381f",
-      "url": "https://github.com/libretro/libretro-fceumm/archive/236ccdfc911e84c60fea6b9d0699c2d440a8de14.tar.gz"
+      "url": "https://github.com/libretro/libretro-fceumm/archive/236ccdfc911e84c60fea6b9d0699c2d440a8de14.tar.gz",
+      "extensions": ["nes", "fds", "unf", "unif"],
+      "options": {},
+      "firmware": []
+    },
+    {
+      "id": "gambatte",
+      "platform": "gb",
+      "revision": "d9d6cd06382d1ced30de34d56d3609452323dab1",
+      "url": "https://github.com/libretro/gambatte-libretro/archive/d9d6cd06382d1ced30de34d56d3609452323dab1.tar.gz",
+      "archive": "gambatte-d9d6cd06382d1ced30de34d56d3609452323dab1.tar.gz",
+      "sha256": "bd39cd38662135d17e221a7fd34baf2908a40065ade16edf2e8d1168b21b921e",
+      "build": [
+        {
+          "cwd": ".",
+          "command": [
+            "make",
+            "-f",
+            "Makefile.libretro",
+            "-j{jobs}",
+            "platform=unix",
+            "CC=cc",
+            "CXX=c++",
+            "GIT_VERSION= d9d6cd06382d1ced30de34d56d3609452323dab1"
+          ]
+        }
+      ],
+      "output": "gambatte_libretro.so",
+      "licenses": ["COPYING"],
+      "extensions": ["gb", "gbc"],
+      "options": {},
+      "firmware": []
+    },
+    {
+      "id": "mgba",
+      "platform": "gba",
+      "revision": "7a12d6d4b9acb14c0ae62c9166b6a2f3d08007f6",
+      "url": "https://github.com/libretro/mgba/archive/7a12d6d4b9acb14c0ae62c9166b6a2f3d08007f6.tar.gz",
+      "archive": "mgba-7a12d6d4b9acb14c0ae62c9166b6a2f3d08007f6.tar.gz",
+      "sha256": "5cbf639e527fb586bf33e14d59037eab35f78f45154e0b79c784fff474c3bc37",
+      "build": [
+        {
+          "cwd": ".",
+          "command": [
+            "cmake",
+            "-S",
+            ".",
+            "-B",
+            "build",
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DBUILD_LIBRETRO=ON",
+            "-DBUILD_QT=OFF",
+            "-DBUILD_SDL=OFF",
+            "-DBUILD_SHARED=OFF",
+            "-DUSE_DISCORD_RPC=OFF"
+          ]
+        },
+        {
+          "cwd": ".",
+          "command": [
+            "cmake",
+            "--build",
+            "build",
+            "--target",
+            "mgba_libretro",
+            "--parallel",
+            "{jobs}"
+          ]
+        }
+      ],
+      "output": "build/mgba_libretro.so",
+      "licenses": ["LICENSE"],
+      "extensions": ["gba"],
+      "options": {},
+      "firmware": []
+    },
+    {
+      "id": "snes9x",
+      "platform": "snes",
+      "revision": "fae2fea08f74180759ef540ee94259213f503480",
+      "url": "https://github.com/libretro/snes9x/archive/fae2fea08f74180759ef540ee94259213f503480.tar.gz",
+      "archive": "snes9x-fae2fea08f74180759ef540ee94259213f503480.tar.gz",
+      "sha256": "0d4b0c4181d66668ec0040eb17f90a559f7b7fa6cbd9198593c3bdbe79acd029",
+      "build": [
+        {
+          "cwd": "libretro",
+          "command": [
+            "make",
+            "-j{jobs}",
+            "platform=unix",
+            "CC=cc",
+            "CXX=c++",
+            "GIT_VERSION= fae2fea08f74180759ef540ee94259213f503480"
+          ]
+        }
+      ],
+      "output": "libretro/snes9x_libretro.so",
+      "licenses": ["LICENSE", "filter/snes_ntsc-license.txt"],
+      "redistribution": "noncommercial-only",
+      "extensions": ["smc", "sfc", "swc", "fig", "bs", "st"],
+      "options": {},
+      "firmware": []
+    },
+    {
+      "id": "genesis_plus_gx",
+      "platform": "genesis",
+      "revision": "c2838c7dc4236fc2fe94e5dbd08b41486067918e",
+      "url": "https://github.com/libretro/Genesis-Plus-GX/archive/c2838c7dc4236fc2fe94e5dbd08b41486067918e.tar.gz",
+      "archive": "genesis_plus_gx-c2838c7dc4236fc2fe94e5dbd08b41486067918e.tar.gz",
+      "sha256": "7ba2eab9d6dae71bb42e8208573300ad3475a4263e860178c4d19c36d85fc92b",
+      "build": [
+        {
+          "cwd": ".",
+          "command": [
+            "make",
+            "-f",
+            "Makefile.libretro",
+            "-j{jobs}",
+            "platform=unix",
+            "CC=cc",
+            "CXX=c++",
+            "GIT_VERSION= c2838c7dc4236fc2fe94e5dbd08b41486067918e"
+          ]
+        }
+      ],
+      "output": "genesis_plus_gx_libretro.so",
+      "licenses": ["LICENSE.txt"],
+      "redistribution": "noncommercial-only",
+      "extensions": ["md", "gen", "smd", "cue", "iso", "chd", "m3u"],
+      "options": {},
+      "firmware": []
+    },
+    {
+      "id": "handy",
+      "platform": "lynx",
+      "revision": "bc55d462f0b2d6b073ea93dc552ebd73cec60fd1",
+      "url": "https://github.com/libretro/libretro-handy/archive/bc55d462f0b2d6b073ea93dc552ebd73cec60fd1.tar.gz",
+      "archive": "handy-bc55d462f0b2d6b073ea93dc552ebd73cec60fd1.tar.gz",
+      "sha256": "65ad333df22aab7f3c8156c21ffd0b8da1ef09c7a7f1775df964b89986aa7324",
+      "build": [
+        {
+          "cwd": ".",
+          "command": [
+            "make",
+            "-j{jobs}",
+            "platform=unix",
+            "CC=cc",
+            "CXX=c++",
+            "GIT_VERSION= bc55d462f0b2d6b073ea93dc552ebd73cec60fd1"
+          ]
+        }
+      ],
+      "output": "handy_libretro.so",
+      "licenses": ["lynx/license.txt"],
+      "extensions": ["lnx", "lyx"],
+      "options": {},
+      "firmware": []
+    },
+    {
+      "id": "prosystem",
+      "platform": "atari7800",
+      "revision": "8a88014287c7a01cd568067e5a557d0a2b2a051f",
+      "url": "https://github.com/libretro/prosystem-libretro/archive/8a88014287c7a01cd568067e5a557d0a2b2a051f.tar.gz",
+      "archive": "prosystem-8a88014287c7a01cd568067e5a557d0a2b2a051f.tar.gz",
+      "sha256": "23401c8b104ef24db111bbc4b13e37f224ffe16febfb89c704c70cdb269603bc",
+      "build": [
+        {
+          "cwd": ".",
+          "command": [
+            "make",
+            "-j{jobs}",
+            "platform=unix",
+            "CC=cc",
+            "CXX=c++",
+            "GIT_VERSION= 8a88014287c7a01cd568067e5a557d0a2b2a051f"
+          ]
+        }
+      ],
+      "output": "prosystem_libretro.so",
+      "licenses": ["License.txt", "bupboop/License.txt"],
+      "extensions": ["a78", "cdf"],
+      "options": {},
+      "firmware": []
+    },
+    {
+      "id": "smsplus",
+      "platform": "sms",
+      "revision": "3844b46caa926b6494987b97da63092818c4ddef",
+      "url": "https://github.com/libretro/smsplus-gx/archive/3844b46caa926b6494987b97da63092818c4ddef.tar.gz",
+      "archive": "smsplus-3844b46caa926b6494987b97da63092818c4ddef.tar.gz",
+      "sha256": "09ca73d206f11e476e714b5297f1efdf4ca52df093103872f9c1cf76b12aa2ed",
+      "build": [
+        {
+          "cwd": ".",
+          "command": [
+            "make",
+            "-f",
+            "Makefile.libretro",
+            "-j{jobs}",
+            "platform=unix",
+            "CC=cc",
+            "CXX=c++",
+            "GIT_VERSION= 3844b46caa926b6494987b97da63092818c4ddef"
+          ]
+        }
+      ],
+      "output": "smsplus_libretro.so",
+      "licenses": ["docs/license"],
+      "extensions": ["sms", "gg"],
+      "options": {},
+      "firmware": []
+    },
+    {
+      "id": "pcsx_rearmed",
+      "platform": "psx",
+      "revision": "ff81ed17a15241d2f3730cdd7585b38e172532ca",
+      "url": "https://github.com/libretro/pcsx_rearmed/archive/ff81ed17a15241d2f3730cdd7585b38e172532ca.tar.gz",
+      "archive": "pcsx_rearmed-ff81ed17a15241d2f3730cdd7585b38e172532ca.tar.gz",
+      "sha256": "23e0006435e66503e1b862daaf8a47cb6bee120f4ca82482c08ec129668a35c5",
+      "dependencies": [
+        {
+          "path": "frontend/libpicofe",
+          "revision": "a2697389e76744cfa0c56c13a172845c45ede719",
+          "url": "https://github.com/notaz/libpicofe/archive/a2697389e76744cfa0c56c13a172845c45ede719.tar.gz",
+          "archive": "libpicofe-a2697389e76744cfa0c56c13a172845c45ede719.tar.gz",
+          "sha256": "dbea47d36dfae389ffe15fb0450a0241ed81c896c5ca3cd7615cf43af1b17610"
+        }
+      ],
+      "build": [
+        {
+          "cwd": ".",
+          "command": [
+            "make",
+            "-f",
+            "Makefile.libretro",
+            "-j{jobs}",
+            "platform=unix",
+            "CC=cc",
+            "CXX=c++",
+            "GIT_VERSION= ff81ed17a15241d2f3730cdd7585b38e172532ca"
+          ]
+        }
+      ],
+      "output": "pcsx_rearmed_libretro.so",
+      "licenses": ["COPYING", "frontend/libpicofe/README"],
+      "extensions": ["cue", "img", "mdf", "pbp", "cbn", "m3u", "chd", "iso", "exe"],
+      "options": {},
+      "firmware": []
+    },
+    {
+      "id": "melonds",
+      "platform": "nds",
+      "revision": "66b5d2634cd0a79030562811e6e05f5532f800ba",
+      "url": "https://github.com/libretro/melonDS/archive/66b5d2634cd0a79030562811e6e05f5532f800ba.tar.gz",
+      "archive": "melonds-66b5d2634cd0a79030562811e6e05f5532f800ba.tar.gz",
+      "sha256": "8fa494f12a8fe7f20a4ab32ac89a1391f079d41a203d02822b8541e71637a22c",
+      "build": [
+        {
+          "cwd": ".",
+          "command": [
+            "make",
+            "-j{jobs}",
+            "platform=unix",
+            "HAVE_OPENGL=0",
+            "GIT_VERSION=66b5d2634cd0a79030562811e6e05f5532f800ba"
+          ]
+        }
+      ],
+      "output": "melonds_libretro.so",
+      "licenses": ["LICENSE"],
+      "options": {
+        "melonds_threaded_renderer": "enabled",
+        "melonds_jit_enable": "disabled"
+      },
+      "extensions": ["nds"],
+      "firmware": []
+    },
+    {
+      "id": "mupen64plus_next",
+      "platform": "n64",
+      "revision": "6752836de8b224febfd5708444755b77712ac939",
+      "url": "https://github.com/libretro/mupen64plus-libretro-nx/archive/6752836de8b224febfd5708444755b77712ac939.tar.gz",
+      "archive": "mupen64plus_next-6752836de8b224febfd5708444755b77712ac939.tar.gz",
+      "sha256": "78509e9787729aa0051915e646200ce21ab2d7e809318c9b1dfdaabcab2f067d",
+      "build": [
+        {
+          "cwd": ".",
+          "command": [
+            "make",
+            "-j{jobs}",
+            "platform=unix",
+            "HAVE_THR_AL=1",
+            "HAVE_PARALLEL_RSP=1",
+            "GIT_VERSION=6752836de8b224febfd5708444755b77712ac939"
+          ]
+        }
+      ],
+      "output": "mupen64plus_next_libretro.so",
+      "licenses": [
+        "LICENSE",
+        "GLideN64/LICENSE",
+        "mupen64plus-core/LICENSES",
+        "mupen64plus-rsp-cxd4/COPYING",
+        "mupen64plus-rsp-hle/LICENSES",
+        "mupen64plus-rsp-paraLLEl/LICENSE",
+        "mupen64plus-rsp-paraLLEl/LICENSE.LESSER",
+        "mupen64plus-rsp-paraLLEl/LICENSE.MIT"
+      ],
+      "options": {
+        "mupen64plus-rdp-plugin": "angrylion",
+        "mupen64plus-rsp-plugin": "parallel"
+      },
+      "extensions": ["n64", "v64", "z64"],
+      "firmware": []
+    },
+    {
+      "id": "ppsspp",
+      "platform": "psp",
+      "revision": "cae623f4e6c197f45662358ffc4605e3fb97298e",
+      "url": "https://github.com/hrydgard/ppsspp/archive/cae623f4e6c197f45662358ffc4605e3fb97298e.tar.gz",
+      "archive": "ppsspp-cae623f4e6c197f45662358ffc4605e3fb97298e.tar.gz",
+      "sha256": "abcf0053cb4e9324445f2d7639871f168fa285658c99d8d704757033aa6f1038",
+      "dependencies": [
+        {
+          "path": "libretro/libretro-common",
+          "revision": "76a3d54feb0ee0ce9d59b90aa24694f3782063d3",
+          "url": "https://github.com/libretro/libretro-common/archive/76a3d54feb0ee0ce9d59b90aa24694f3782063d3.tar.gz",
+          "archive": "libretro-common-76a3d54feb0ee0ce9d59b90aa24694f3782063d3.tar.gz",
+          "sha256": "da3c61d2d47df12536a7977443387c1c3d7a750fe8c916c943860788b590db7e"
+        },
+        {
+          "path": "ext/armips",
+          "revision": "62adab4ef30da765f5cf22a451eb08a59c54dc8b",
+          "url": "https://github.com/Kingcom/armips/archive/62adab4ef30da765f5cf22a451eb08a59c54dc8b.tar.gz",
+          "archive": "armips-62adab4ef30da765f5cf22a451eb08a59c54dc8b.tar.gz",
+          "sha256": "f7a65102febb4811a336a06e6d93c7e84cc86548182d54e1b1b4e2bffe562f56"
+        },
+        {
+          "path": "ext/glslang",
+          "revision": "50e0708ec3a5c16020c4f845c654b80b8edb80bd",
+          "url": "https://github.com/hrydgard/glslang/archive/50e0708ec3a5c16020c4f845c654b80b8edb80bd.tar.gz",
+          "archive": "glslang-50e0708ec3a5c16020c4f845c654b80b8edb80bd.tar.gz",
+          "sha256": "15941716c09bdb476e8eefcec24b8c8359e5e7bca3bfebe648b6a2206689c485"
+        },
+        {
+          "path": "ext/SPIRV-Cross",
+          "revision": "4212eef67ed0ca048cb726a6767185504e7695e5",
+          "url": "https://github.com/KhronosGroup/SPIRV-Cross/archive/4212eef67ed0ca048cb726a6767185504e7695e5.tar.gz",
+          "archive": "SPIRV-Cross-4212eef67ed0ca048cb726a6767185504e7695e5.tar.gz",
+          "sha256": "a7adf77b5680795302aee160309c6cb81b0da341d92bd7face01f9a156b65aeb"
+        },
+        {
+          "path": "ext/cpu_features",
+          "revision": "fd4ffc1632db7b4e763bd28ffa6fc9d761cf3587",
+          "url": "https://github.com/google/cpu_features/archive/fd4ffc1632db7b4e763bd28ffa6fc9d761cf3587.tar.gz",
+          "archive": "cpu_features-fd4ffc1632db7b4e763bd28ffa6fc9d761cf3587.tar.gz",
+          "sha256": "60b2e0e7adfbf40f0c69fb77ad197440a8435532285a83b19f99b4f886cca67a"
+        },
+        {
+          "path": "ext/rcheevos",
+          "revision": "2ac45d357bce2906bb0f1438f3eaf8ce6e78e3c4",
+          "url": "https://github.com/RetroAchievements/rcheevos/archive/2ac45d357bce2906bb0f1438f3eaf8ce6e78e3c4.tar.gz",
+          "archive": "rcheevos-2ac45d357bce2906bb0f1438f3eaf8ce6e78e3c4.tar.gz",
+          "sha256": "8c2fd46beb95f0301df0644f0140f1fc78af1752bd3000225beaf4ebce8e9b4a"
+        },
+        {
+          "path": "ext/libchdr",
+          "revision": "8bba7745d758627258b315997a860039244cedaf",
+          "url": "https://github.com/rtissera/libchdr/archive/8bba7745d758627258b315997a860039244cedaf.tar.gz",
+          "archive": "libchdr-8bba7745d758627258b315997a860039244cedaf.tar.gz",
+          "sha256": "169e3d2edf86d5501434301fa2505319ebd40aae83d4a5eedf05f6becbf13a3b"
+        },
+        {
+          "path": "ext/lua",
+          "revision": "7648485f14e8e5ee45e8e39b1eb4d3206dbd405a",
+          "url": "https://github.com/hrydgard/ppsspp-lua/archive/7648485f14e8e5ee45e8e39b1eb4d3206dbd405a.tar.gz",
+          "archive": "lua-7648485f14e8e5ee45e8e39b1eb4d3206dbd405a.tar.gz",
+          "sha256": "ee31027159979d7be564e19710e10339179992f6d663d38337e78340dd31987b"
+        },
+        {
+          "path": "ext/miniupnp",
+          "revision": "27d13ca9beeb5541f5fbf11959dced03dac39972",
+          "url": "https://github.com/miniupnp/miniupnp/archive/27d13ca9beeb5541f5fbf11959dced03dac39972.tar.gz",
+          "archive": "miniupnp-27d13ca9beeb5541f5fbf11959dced03dac39972.tar.gz",
+          "sha256": "a07a32b2db1f6c5f2823847d47ba6e326b08fbcfe78690801fda9c3aeddf25a3"
+        },
+        {
+          "path": "ext/zstd",
+          "revision": "f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+          "url": "https://github.com/facebook/zstd/archive/f8745da6ff1ad1e7bab384bd1f9d742439278e99.tar.gz",
+          "archive": "zstd-f8745da6ff1ad1e7bab384bd1f9d742439278e99.tar.gz",
+          "sha256": "4b0bd1f0cfb25e61b9103c35f27395530ff5b4c0d2513a00fd745849e85ea52c"
+        },
+        {
+          "path": "ext/aemu_postoffice",
+          "revision": "9e533637b9a13bb0194c75cf43b0bf6d25d8101a",
+          "url": "https://github.com/Kethen/aemu_postoffice/archive/9e533637b9a13bb0194c75cf43b0bf6d25d8101a.tar.gz",
+          "archive": "aemu_postoffice-9e533637b9a13bb0194c75cf43b0bf6d25d8101a.tar.gz",
+          "sha256": "38b8c2a446df60cf4e974ec2477e39e2006ceec676cc907d203e3d86e0046cb0"
+        },
+        {
+          "path": "ext/OpenXR-SDK",
+          "revision": "be392bf6949adeeabad5082aa79d12aacbda781f",
+          "url": "https://github.com/KhronosGroup/OpenXR-SDK/archive/be392bf6949adeeabad5082aa79d12aacbda781f.tar.gz",
+          "archive": "OpenXR-SDK-be392bf6949adeeabad5082aa79d12aacbda781f.tar.gz",
+          "sha256": "f91007ec5cd5380184678cb282353a6b97b6ba2278ef4911e217472186a31762"
+        },
+        {
+          "path": "ext/rapidjson",
+          "revision": "73063f5002612c6bf64fe24f851cd5cc0d83eef9",
+          "url": "https://github.com/Tencent/rapidjson/archive/73063f5002612c6bf64fe24f851cd5cc0d83eef9.tar.gz",
+          "archive": "rapidjson-73063f5002612c6bf64fe24f851cd5cc0d83eef9.tar.gz",
+          "sha256": "896eb817fb2bc62a0a84ca65fac3e3c385b410e6dbf70d69c411e25776663e39"
+        },
+        {
+          "path": "ffmpeg",
+          "revision": "b87f7c6d522d1edba77cfc4fac96ce48a236f806",
+          "url": "https://github.com/hrydgard/ppsspp-ffmpeg/archive/b87f7c6d522d1edba77cfc4fac96ce48a236f806.tar.gz",
+          "archive": "ffmpeg-b87f7c6d522d1edba77cfc4fac96ce48a236f806.tar.gz",
+          "sha256": "cb3a92c412b754886b469bd0d937e8edcdabc87f7a09614720223e6856e76bcc"
+        }
+      ],
+      "build": [
+        {
+          "cwd": "ffmpeg",
+          "command": [
+            "./configure",
+            "--prefix=./linux/x86_64",
+            "--disable-shared",
+            "--enable-static",
+            "--extra-cflags=-D__STDC_CONSTANT_MACROS -O3",
+            "--enable-zlib",
+            "--enable-pic",
+            "--disable-yasm",
+            "--disable-everything",
+            "--disable-avdevice",
+            "--disable-filters",
+            "--disable-programs",
+            "--disable-network",
+            "--disable-avfilter",
+            "--disable-postproc",
+            "--disable-encoders",
+            "--disable-doc",
+            "--disable-ffplay",
+            "--disable-ffprobe",
+            "--disable-ffserver",
+            "--disable-ffmpeg",
+            "--enable-decoder=h264",
+            "--enable-decoder=mpeg4",
+            "--enable-decoder=h263",
+            "--enable-decoder=h263p",
+            "--enable-decoder=mpeg2video",
+            "--enable-decoder=mjpeg",
+            "--enable-decoder=mjpegb",
+            "--enable-decoder=aac",
+            "--enable-decoder=aac_latm",
+            "--enable-decoder=atrac3",
+            "--enable-decoder=atrac3p",
+            "--enable-decoder=mp3",
+            "--enable-decoder=pcm_s16le",
+            "--enable-decoder=pcm_s8",
+            "--enable-encoder=ffv1",
+            "--enable-encoder=huffyuv",
+            "--enable-encoder=mpeg4",
+            "--enable-encoder=pcm_s16le",
+            "--enable-demuxer=h264",
+            "--enable-demuxer=h263",
+            "--enable-demuxer=m4v",
+            "--enable-demuxer=mpegps",
+            "--enable-demuxer=mpegvideo",
+            "--enable-demuxer=avi",
+            "--enable-demuxer=mp3",
+            "--enable-demuxer=aac",
+            "--enable-demuxer=pmp",
+            "--enable-demuxer=oma",
+            "--enable-demuxer=pcm_s16le",
+            "--enable-demuxer=pcm_s8",
+            "--enable-demuxer=wav",
+            "--enable-muxer=avi",
+            "--enable-parser=h264",
+            "--enable-parser=mpeg4video",
+            "--enable-parser=mpegvideo",
+            "--enable-parser=aac",
+            "--enable-parser=aac_latm",
+            "--enable-parser=mpegaudio",
+            "--enable-protocol=file",
+            "--arch=x86_64"
+          ]
+        },
+        {
+          "cwd": "ffmpeg",
+          "command": ["make", "-j{jobs}"]
+        },
+        {
+          "cwd": "ffmpeg",
+          "command": ["make", "install"]
+        },
+        {
+          "cwd": "libretro",
+          "command": [
+            "make",
+            "-j{jobs}",
+            "platform=unix",
+            "GIT_VERSION=cae623f4e6c197f45662358ffc4605e3fb97298e"
+          ]
+        }
+      ],
+      "output": "libretro/ppsspp_libretro.so",
+      "licenses": [
+        "LICENSE.TXT",
+        "ext/armips/LICENSE.txt",
+        "ext/glslang/LICENSE.txt",
+        "ext/SPIRV-Cross/LICENSE",
+        "ext/cpu_features/LICENSE",
+        "ext/rcheevos/LICENSE",
+        "ext/libchdr/LICENSE.txt",
+        "ext/lua/README.md",
+        "ext/miniupnp/LICENSE",
+        "ext/zstd/LICENSE",
+        "ext/aemu_postoffice/gpl-3.0.txt",
+        "ext/OpenXR-SDK/LICENSE",
+        "ext/rapidjson/license.txt",
+        "ffmpeg/LICENSE.md",
+        "ffmpeg/COPYING.LGPLv2.1"
+      ],
+      "options": {
+        "ppsspp_backend": "none",
+        "ppsspp_software_rendering": "enabled"
+      },
+      "extensions": ["cso", "elf", "iso", "pbp", "prx"],
+      "firmware": [],
+      "assets": [
+        {
+          "source": "assets",
+          "destination": "PPSSPP"
+        }
+      ],
+      "patches": [
+        {
+          "path": "libretro/libretro.cpp",
+          "find": "      BootState state = PSP_InitUpdate(&g_bootErrorString);",
+          "replace": "      // Headless frame budgets MUST exclude asynchronous boot polling.\n      BootState state;\n      do {\n         state = PSP_InitUpdate(&g_bootErrorString);\n         if (state == BootState::Booting)\n            sleep_ms(5, \"libretro-init-poll\");\n      } while (state == BootState::Booting);"
+        }
+      ]
+    },
+    {
+      "id": "yabause",
+      "platform": "saturn",
+      "revision": "8926b0c6c347f8c5c755911ddb0ac695420ffbf8",
+      "url": "https://github.com/libretro/yabause/archive/8926b0c6c347f8c5c755911ddb0ac695420ffbf8.tar.gz",
+      "archive": "yabause-8926b0c6c347f8c5c755911ddb0ac695420ffbf8.tar.gz",
+      "sha256": "a76c92903d9aa0c53548127202760bf28568f16f169c5f26b09a507d1c08ddab",
+      "build": [
+        {
+          "cwd": "yabause/src/libretro",
+          "command": [
+            "make",
+            "-j{jobs}",
+            "platform=unix",
+            "HAVE_GL=0",
+            "GIT_VERSION=8926b0c6c347f8c5c755911ddb0ac695420ffbf8"
+          ]
+        }
+      ],
+      "output": "yabause/src/libretro/yabause_libretro.so",
+      "licenses": ["yabause/COPYING"],
+      "options": {},
+      "extensions": ["cue", "iso", "chd"],
+      "firmware": []
     }
   ]
 }
