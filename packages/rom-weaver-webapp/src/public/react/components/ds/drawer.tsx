@@ -17,16 +17,18 @@ import { join } from "./cx.ts";
  */
 const DrawerReadout = ({
   children,
+  className,
   label,
   muted,
   time,
 }: {
   children: ReactNode;
+  className?: string;
   label?: ReactNode;
   muted?: boolean;
   time?: boolean;
 }) => (
-  <span className={join("rb mono", muted && "muted", time && "time")}>
+  <span className={join("rb mono", muted && "muted", time && "time", className)}>
     {label ? <span className="k">{label}</span> : null}
     {label ? <span className="t">{children}</span> : children}
   </span>

@@ -380,16 +380,22 @@
 }
 /* Only label+value chips need inline-flex. Bare note and timing chips stay plain
    boxes, so their values remain visible as ordinary text. */
-.rw-app .outopts > .cks-head .rb:has(.k) {
+.rw-app .cks > .cks-head .rb:has(.k) {
   display: inline-flex;
   gap: var(--sp-xs);
   align-items: baseline;
 }
-.rw-app .outopts > .cks-head .rb .k {
+.rw-app .cks > .cks-head .rb .k {
   flex: none;
   color: var(--ink-3);
 }
-.rw-app .outopts > .cks-head .rb .t {
+/* A phone header has room for crc32 and the identify status, not the size too. */
+@media (max-width: 419px) {
+  .rw-app .cks > .cks-head .rb-size {
+    display: none;
+  }
+}
+.rw-app .cks > .cks-head .rb .t {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

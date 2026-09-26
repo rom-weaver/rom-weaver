@@ -93,8 +93,14 @@ const RomInputPanels = ({
         {conditionNote}
       </>
     ) : undefined;
+  // A closed Checks drawer still names the file: size and crc32 stay on its header.
+  const closed = !isDisc && info.open === false;
+  const closedBytes = closed && typeof info.bytes === "number" ? localizer.formatBytes(info.bytes) : undefined;
+  const closedCrc32 = closed ? info.checksums?.crc32 : undefined;
   const summary = detailedViewEnabled ? undefined : (
     <>
+      {closedBytes ? <DrawerReadout className="rb-size">{closedBytes}</DrawerReadout> : null}
+      {closedCrc32 ? <DrawerReadout label="crc32">{closedCrc32.toUpperCase()}</DrawerReadout> : null}
       {systemTag ? <DrawerReadout>{systemTag}</DrawerReadout> : null}
       {identifyPending ? (
         <DrawerReadout muted>{localizer.message("ui.identifyDrawer.identifying")}</DrawerReadout>
