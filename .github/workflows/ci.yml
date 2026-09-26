@@ -1654,6 +1654,14 @@ jobs:
           cargo test -p rom-weaver-cli --locked --features typescript-types,wasm-app
           --example rom-weaver-typegen --example rom-weaver-app
 
+  emulator-runtime:
+    name: Emulator runtime
+    needs: changes
+    if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/emulator-runtime.yml
+
   # Keep node-only checks on the shorter Lighthouse job so the browser suite
   # can start immediately without adding another runner to the queue.
   webapp-static:
@@ -1965,6 +1973,7 @@ jobs:
         cli-linux-arm64,
         rust-macos,
         rust-windows,
+        emulator-runtime,
         webapp-static,
         webapp-browser,
         webapp-wasm-browser,
@@ -2029,6 +2038,7 @@ jobs:
           '${{ needs.changes.outputs.rust }}'
           'rust-host=${{ needs.rust-host.result }}'
           'cli-platforms=${{ needs.cli-platforms.result }}'
+          'emulator-runtime=${{ needs.emulator-runtime.result }}'
 
       - name: Verify full native jobs
         if: ${{ !cancelled() }}
