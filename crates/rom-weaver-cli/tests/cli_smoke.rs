@@ -61,6 +61,10 @@ mod extract_batch_plan;
 #[path = "cli_smoke/formats.rs"]
 mod formats;
 
+#[cfg(all(target_os = "linux", target_arch = "x86_64", target_env = "gnu"))]
+#[path = "cli_smoke/emulator.rs"]
+mod emulator;
+
 #[path = "cli_smoke/dry_run.rs"]
 mod dry_run;
 
