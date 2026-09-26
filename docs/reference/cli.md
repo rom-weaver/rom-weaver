@@ -9,6 +9,7 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
   - [Alternate names](#alternate-names)
 - [Binary pipelines](#binary-pipelines)
 - [Reaching inside archives](#reaching-inside-archives)
+- [Native ROM testing](#native-rom-testing)
 - [Identify](#identify)
   - [Identify flags](#identify-flags)
   - [Identify database directory](#identify-database-directory)
@@ -50,6 +51,9 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 | `formats` | List the formats this build supports, and what it can do with each. |
 | `compress` | Pack files into an archive, disc image, or ROM-specific compressed format. |
 | `trim` | Cut the padding off a ROM, or put it back. |
+| `test` | Start an NES ROM for a fixed frame count and hash the captured final frame. |
+| `emulator install` | Install the optional native NES test runtime. |
+| `emulator info` | Verify and describe the installed native test runtime. |
 | `cheat list` | List the cheat database's entries for a ROM, with each one's delivery. |
 | `patch apply` | Apply one or more patches to a ROM, in order. |
 | `patch create` | Build a patch from an original ROM and a changed one. |
@@ -165,6 +169,29 @@ Not every command takes all five. `extract` has no `--no-extract`, since unpacki
 --help` is authoritative.
 
 `extract` also unpacks archives found inside the input, up to eight levels deep; `--no-nested-extract` stops after the first layer. If any output file already exists, extraction stops before writing anything, unless `--force` is given. While extracting it can hash what it writes (`--checksum ALGO`, or `--checksum-rom ALGO` for the ROMs only) and report each file's format and platform (`--probe`).
+
+## Native ROM testing
+
+`rom-weaver test INPUT` runs a bounded emulator smoke test. Native testing initially supports iNES and NES 2.0 ROMs on Linux x86-64 with GNU libc 2.39 or later. It checks the ROM header after archive extraction. Other platforms and ROM systems are rejected.
+
+The command uses a matching optional runtime containing RetroArch and the FCEUmm core. The packaged runtime is built without networking. It isolates configuration, cache, data, saves, and input. A custom `--runtime-dir` can contain a different executable, and rom-weaver does not add an operating-system network sandbox. A successful result means that the ROM started and produced a PNG after the requested frame budget. It does not guarantee input handling, later gameplay, or game completion.
+
+| `test` option | Value |
+| --- | --- |
+| `INPUT` | A bare NES ROM or an archive containing one. |
+| `--frames N` | Requested frame budget. The default is 600; the range is 1–10,000,000. |
+| `--timeout SECONDS` | Wall-clock limit. The default is 30; the range is 1–3,600. |
+| `--screenshot FILE` | Publish the captured PNG without replacing an existing file. Omit it to capture and hash a temporary image. |
+| `--runtime-dir DIR` | Use and verify a runtime at this path instead of the versioned user data directory. |
+| `--select NAME` | Select an archive member by exact name, prefix, or glob. |
+
+The JSON result uses `details.status: "smoke-tested"`. It reports `requested_frames`, `timeout_seconds`, `platform`, `core`, `retroarch_revision`, `core_revision`, `elapsed_ms`, `screenshot`, and `screenshot_sha256`. `screenshot` is `null` when the image was captured only for validation. The result does not claim an observed frame count. Bounded RetroArch stdout and stderr are included for diagnostics.
+
+`rom-weaver emulator install` installs the runtime for the current CLI version. With no archive option, it downloads the runtime archive and `.sha256` file from the matching GitHub release. `--runtime-dir DIR` changes the destination. `--archive FILE --sha256 HEX` performs an offline install and requires both options. Installation verifies the archive digest, the strict manifest, and each runtime file before it publishes the directory.
+
+`rom-weaver emulator info` verifies the installed runtime again and reports its directory, platform, core, and pinned revisions. It accepts `--runtime-dir DIR`.
+
+The default runtime directory is the versioned `emulators/VERSION/linux-x64-gnu` directory beside the native identify database. See [Test a ROM from the CLI](../how-to/test-roms-cli.md) for the procedure and [Native emulator runtime](../development/emulator-runtime.md) for the build and release contract.
 
 ## Identify
 

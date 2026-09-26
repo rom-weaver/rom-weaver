@@ -59,6 +59,7 @@ const DOC_SOURCES = Object.freeze([
     slug: "docs/create-game-saves-cli",
   }),
   Object.freeze({ file: "how-to/install-cli.md", label: "Install the CLI", slug: "docs/install" }),
+  Object.freeze({ file: "how-to/test-roms-cli.md", label: "Test ROMs (CLI)", slug: "docs/test-roms-cli" }),
   Object.freeze({
     file: "how-to/verify-downloads.md",
     label: "Verify a download",
@@ -145,6 +146,11 @@ const DOC_SOURCES = Object.freeze([
     file: "development/save-editor.md",
     label: "Save Editor development",
     slug: "docs/game-save-development",
+  }),
+  Object.freeze({
+    file: "development/emulator-runtime.md",
+    label: "Native emulator runtime",
+    slug: "docs/emulator-runtime-development",
   }),
   Object.freeze({ file: "development/references.md", label: "References", slug: "docs/references" }),
   Object.freeze({ file: "legal/about.md", label: "About", slug: "docs/about" }),

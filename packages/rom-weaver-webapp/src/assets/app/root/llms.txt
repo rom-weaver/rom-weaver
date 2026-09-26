@@ -46,12 +46,14 @@
 
 - [Documentation index](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/README.md): Every page, grouped as tutorials, how-to guides, reference, and explanation.
 - [Install the CLI](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/how-to/install-cli.md): Package managers, verified install scripts, npm, Docker, and source builds.
+- [Test ROMs from the CLI](https://rom-weaver.com/docs/test-roms-cli): Install the native NES runtime, run a bounded smoke test, and capture a screenshot.
 - [CLI reference](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/reference/cli.md): Commands, global flags, JSON output, exit codes, permissions, and completions.
 - [Supported formats](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/reference/formats.md): Patch, container, codec, checksum, trim, and header support tables.
 - [Save Editor support](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/reference/save-editor.md): Supported games, fields, recognition rules, and integrity checks.
 - [Web app integration](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/webapp-integration.md): Preloaded URLs and same-origin OPFS integration.
 - [Self-hosting](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/hosting/self-hosting.md): Docker, static hosting, reverse proxies, subpaths, HTTPS, and browser isolation headers.
 - [Architecture](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/development/ARCHITECTURE.md): Crate graph, registries, browser workers, OPFS, and the Rust-TypeScript boundary.
+- [Native emulator runtime](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/development/emulator-runtime.md): Reproducible runtime builds, manifests, source distribution, and release gates.
 - [Edit Generation III saves](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/how-to/edit-gen3-saves.md): Supported English retail layouts, recognition outcomes, editable fields, and safe browser workflows.
 - [Save Editor development](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/development/save-editor.md): Handler architecture, integrity rules, and the eight-step contributor flow.
 - [Release guide](https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/.github/RELEASING.md): Release automation, publishing channels, and retry procedures.
