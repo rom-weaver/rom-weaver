@@ -46,7 +46,9 @@ Keep one clean original somewhere safe. rom-weaver writes a separate result, but
 
 You can add [supported archives](../reference/formats.md#container-and-compression-formats), including ZIP, 7z, RAR, and tar, without extracting them first. rom-weaver looks inside, including inside nested archives. Disc containers such as CHD and RVZ are unpacked to the form the patch expects.
 
-The page changes after the files are understood. **0x02 ROM** holds the game, **0x03 Patches** holds the patch stack, **0x04 Cheats** holds optional cheats, and **0x05 Apply** controls the new file.
+The page changes after the files are understood. **ROM** holds the game, **Patches & Cheats** holds the ordered steps, and **Apply** controls the new file.
+
+Use [cheats](use-browser-cheats.md) to add supported codes to that order. To change only the container, follow [Convert a ROM](convert-roms-browser.md).
 
 ## Apply a BPS patch
 
@@ -64,16 +66,16 @@ Each patch card shows its format and position. Open **Checks** to see the state 
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-patches-mobile-light.avif" width="1170" height="2440">
-    <source type="image/avif" srcset="/docs/screenshots/apply-patches-desktop-light.avif" width="2242" height="1031">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-patches-mobile-light.webp" width="1170" height="2440">
-    <img src="/docs/screenshots/apply-patches-desktop-light.webp" width="2242" height="1031" alt="Cropped Apply patch stack with two ordered practice patches in the light theme">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/apply-patches-mobile-light.avif" width="1170" height="1815">
+    <source type="image/avif" srcset="../screenshots/apply-patches-desktop-light.avif" width="1770" height="897">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/apply-patches-mobile-light.webp" width="1170" height="1815">
+    <img src="../screenshots/apply-patches-desktop-light.webp" alt="Cropped Apply patch stack with two ordered practice patches in the light theme" width="1770" height="897">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-patches-mobile-dark.avif" width="1170" height="2440">
-    <source type="image/avif" srcset="/docs/screenshots/apply-patches-desktop-dark.avif" width="2242" height="1031">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-patches-mobile-dark.webp" width="1170" height="2440">
-    <img src="/docs/screenshots/apply-patches-desktop-dark.webp" width="2242" height="1031" alt="Cropped Apply patch stack with two ordered practice patches in the dark theme">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/apply-patches-mobile-dark.avif" width="1170" height="1815">
+    <source type="image/avif" srcset="../screenshots/apply-patches-desktop-dark.avif" width="1770" height="897">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/apply-patches-mobile-dark.webp" width="1170" height="1815">
+    <img src="../screenshots/apply-patches-desktop-dark.webp" alt="Cropped Apply patch stack with two ordered practice patches in the dark theme" width="1770" height="897">
   </picture>
   <figcaption>Patches run from top to bottom. Each card shows the checks for that step.</figcaption>
 </figure>
@@ -94,7 +96,7 @@ After changing an input, the order, or a switch, read each patch's **Checks** su
 
 If **APPLY & DOWNLOAD** is disabled, wait for reading and checksumming to finish. Read the nearby notice and resolve any failed checks.
 
-In **0x05 Apply**:
+In **Apply**:
 
 1. Enter an output filename without an extension.
 2. Pick a plain file or a compressed output format. The format selector adds the extension.
@@ -104,16 +106,16 @@ In **0x05 Apply**:
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-output-mobile-light.avif" width="1170" height="654">
-    <source type="image/avif" srcset="/docs/screenshots/apply-output-desktop-light.avif" width="2242" height="560">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-output-mobile-light.webp" width="1170" height="654">
-    <img src="/docs/screenshots/apply-output-desktop-light.webp" width="2242" height="560" alt="Cropped Apply output card with filename, format, options, and APPLY &amp; DOWNLOAD button in the light theme">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/apply-output-mobile-light.avif" width="1170" height="819">
+    <source type="image/avif" srcset="../screenshots/apply-output-desktop-light.avif" width="1770" height="676">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/apply-output-mobile-light.webp" width="1170" height="819">
+    <img src="../screenshots/apply-output-desktop-light.webp" alt="Cropped Apply output card with filename, format, options, and APPLY &amp; DOWNLOAD button in the light theme" width="1770" height="676">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/apply-output-mobile-dark.avif" width="1170" height="654">
-    <source type="image/avif" srcset="/docs/screenshots/apply-output-desktop-dark.avif" width="2242" height="560">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/apply-output-mobile-dark.webp" width="1170" height="654">
-    <img src="/docs/screenshots/apply-output-desktop-dark.webp" width="2242" height="560" alt="Cropped Apply output card with filename, format, options, and APPLY &amp; DOWNLOAD button in the dark theme">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/apply-output-mobile-dark.avif" width="1170" height="819">
+    <source type="image/avif" srcset="../screenshots/apply-output-desktop-dark.avif" width="1770" height="676">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/apply-output-mobile-dark.webp" width="1170" height="819">
+    <img src="../screenshots/apply-output-desktop-dark.webp" alt="Cropped Apply output card with filename, format, options, and APPLY &amp; DOWNLOAD button in the dark theme" width="1770" height="676">
   </picture>
   <figcaption>Choose the output name and format before applying.</figcaption>
 </figure>

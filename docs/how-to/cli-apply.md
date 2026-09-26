@@ -12,6 +12,7 @@ Apply one patch or an ordered chain in the terminal, handle headers and byte ord
 - [Apply a patch made for a headerless ROM](#apply-a-patch-made-for-a-headerless-rom)
 - [Apply an N64 patch regardless of byte order](#apply-an-n64-patch-regardless-of-byte-order)
 - [Validate a patch chain](#validate-a-patch-chain)
+- [Undo a PPF patch](#undo-a-ppf-patch)
 - [Where next](#where-next)
 
 <!-- END doctoc -->
@@ -141,6 +142,18 @@ rom-weaver patch validate \
 Patches default to automatic checksum inference. Pass `--default-patch-basis base` for patches made from the original ROM, or `previous` for a dependent chain.
 
 Pass `--independent` to check each patch separately and report every verdict. Use `--expect-in ALGO=HEX` to check the ROM itself.
+
+## Undo a PPF patch
+
+Use the patched ROM and the exact PPF3 patch that changed it. The patch must include undo data.
+
+```sh
+rom-weaver tools ppf-undo -i patched.bin --patch change.ppf -o restored.bin
+```
+
+Compare the restored file with the original's known checksum before you use it. If the patch lacks undo data, restore your backup instead.
+
+The [tools reference](../reference/cli.md#tools) lists the inputs and limits.
 
 ## Where next
 

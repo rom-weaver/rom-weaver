@@ -41,16 +41,16 @@ Each card shows the selected file, size, detected system, and checksums. Open **
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/create-inputs-mobile-light.avif" width="1170" height="881">
-    <source type="image/avif" srcset="/docs/screenshots/create-inputs-desktop-light.avif" width="2242" height="837">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/create-inputs-mobile-light.webp" width="1170" height="881">
-    <img src="/docs/screenshots/create-inputs-desktop-light.webp" width="2242" height="837" alt="Cropped Create workflow showing the Original and Modified homebrew sample cards in the light theme">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/create-inputs-mobile-light.avif" width="1170" height="1313">
+    <source type="image/avif" srcset="../screenshots/create-inputs-desktop-light.avif" width="1770" height="1205">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/create-inputs-mobile-light.webp" width="1170" height="1313">
+    <img src="../screenshots/create-inputs-desktop-light.webp" alt="Cropped Create workflow showing the Original and Modified homebrew sample cards in the light theme" width="1770" height="1205">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/create-inputs-mobile-dark.avif" width="1170" height="881">
-    <source type="image/avif" srcset="/docs/screenshots/create-inputs-desktop-dark.avif" width="2242" height="837">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/create-inputs-mobile-dark.webp" width="1170" height="881">
-    <img src="/docs/screenshots/create-inputs-desktop-dark.webp" width="2242" height="837" alt="Cropped Create workflow showing the Original and Modified homebrew sample cards in the dark theme">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/create-inputs-mobile-dark.avif" width="1170" height="1313">
+    <source type="image/avif" srcset="../screenshots/create-inputs-desktop-dark.avif" width="1770" height="1205">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/create-inputs-mobile-dark.webp" width="1170" height="1313">
+    <img src="../screenshots/create-inputs-desktop-dark.webp" alt="Cropped Create workflow showing the Original and Modified homebrew sample cards in the dark theme" width="1770" height="1205">
   </picture>
   <figcaption>Original is the clean starting file. Modified is the result your patch must rebuild.</figcaption>
 </figure>
@@ -59,7 +59,7 @@ If rom-weaver asks you to choose a file from an archive, stop and make sure you 
 
 ## Choose a patch format
 
-In **0x04 Output**, give the download a useful filename and choose a format.
+In **0x04 Patch**, give the download a useful filename and choose a format.
 
 BPS is a strong default unless your community expects otherwise; [Choosing a patch format](../explanation/patch-formats.md) compares the choices and their trade-offs. If you do publish IPS, put the Original's checksum prominently in the release notes - the format cannot carry it.
 
@@ -75,16 +75,16 @@ The format list in Create only offers formats rom-weaver can make for the files 
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/create-output-mobile-light.avif" width="1170" height="666">
-    <source type="image/avif" srcset="/docs/screenshots/create-output-desktop-light.avif" width="2242" height="568">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/create-output-mobile-light.webp" width="1170" height="666">
-    <img src="/docs/screenshots/create-output-desktop-light.webp" width="2242" height="568" alt="Cropped Create output card with patch name, BPS format, options, and CREATE &amp; DOWNLOAD PATCH button in the light theme">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/create-output-mobile-light.avif" width="1170" height="666">
+    <source type="image/avif" srcset="../screenshots/create-output-desktop-light.avif" width="1770" height="568">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/create-output-mobile-light.webp" width="1170" height="666">
+    <img src="../screenshots/create-output-desktop-light.webp" alt="Cropped Create output card with patch name, BPS format, options, and CREATE &amp; DOWNLOAD PATCH button in the light theme" width="1770" height="568">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/create-output-mobile-dark.avif" width="1170" height="666">
-    <source type="image/avif" srcset="/docs/screenshots/create-output-desktop-dark.avif" width="2242" height="568">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/create-output-mobile-dark.webp" width="1170" height="666">
-    <img src="/docs/screenshots/create-output-desktop-dark.webp" width="2242" height="568" alt="Cropped Create output card with patch name, BPS format, options, and CREATE &amp; DOWNLOAD PATCH button in the dark theme">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/create-output-mobile-dark.avif" width="1170" height="666">
+    <source type="image/avif" srcset="../screenshots/create-output-desktop-dark.avif" width="1770" height="568">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/create-output-mobile-dark.webp" width="1170" height="666">
+    <img src="../screenshots/create-output-desktop-dark.webp" alt="Cropped Create output card with patch name, BPS format, options, and CREATE &amp; DOWNLOAD PATCH button in the dark theme" width="1770" height="568">
   </picture>
   <figcaption>The output controls set the patch name, format, and format-specific options.</figcaption>
 </figure>

@@ -63,7 +63,7 @@ Zelda dungeon fields cover all 14 dungeon entries. Progression includes the game
 | --- | --- |
 | Pokémon Generation I | Trainer name, rival name, and current PC box |
 | Pokémon Generation II | Trainer name, Trainer ID, and the formatted play-time summary; Crystal also shows its Secret ID |
-| Pokémon Generation III | Trainer IDs, play time, and the security key |
+| Pokémon Generation III | Trainer IDs, the formatted play-time summary, and the security key |
 | Pokémon Generation IV | Trainer IDs and the formatted play-time summary |
 
 ## Recognition
@@ -84,11 +84,15 @@ Generation IV uses the block layout and stored game version after both save-bloc
 
 Every write starts from a copy. The handler reparses the result before it returns the edited bytes.
 
+Generation III chooses the newest complete valid slot. Each slot has 14 sections with IDs, signatures, counters, and checksums. An empty backup slot permits editing with a warning and stays empty. A damaged backup slot blocks editing, even if the active slot passes. No complete valid slot means no editable save.
+
+Procedure: [Edit a game save in the browser](../how-to/edit-gen3-saves.md).
+
 ## Save generation
 
 Fresh generation is available for The Legend of Zelda: A Link to the Past. Its image contains one file named `LINK`, three hearts, no acquired equipment, a valid backup, and two empty file slots. Its bytes follow the original game's file initialization. The browser shows only editable properties for a fresh save; the full document retains its read-only metadata.
 
-Fresh Pokémon generation is unavailable because structure and checksum checks do not prove a playable game state. Earlier generated Pokémon files may pass those checks while missing game initialization data. Start with a save made by the matching game.
+Fresh Pokémon generation is unavailable because structure and checksum checks do not prove a playable game state. Earlier generated Pokémon files may pass those checks while missing game initialization data. Pokémon templates require a save made by the matching game.
 
 Template generation supports every editable game above. It validates an existing save, applies optional field assignments, and writes a separate file. Without assignments, the output is byte-identical to the template. Container wrappers are retained. A template cannot be the output path.
 

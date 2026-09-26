@@ -1,6 +1,8 @@
 # rom-weaver documentation
 
-rom-weaver applies and creates ROM patches without uploading your files. It runs in your browser with nothing to install, and as a command-line tool for scripts and large jobs.
+rom-weaver changes, checks, compresses, and tests game files you already have. Your files stay on your device.
+
+[What rom-weaver supports](reference/features.md) explains every feature in plain words, with links to exact support limits.
 
 These pages are organised by what you need right now: learning, doing, looking up, or understanding.
 
@@ -8,6 +10,7 @@ These pages are organised by what you need right now: learning, doing, looking u
 ## Table of contents
 
 - [New here?](#new-here)
+- [Choose a task](#choose-a-task)
 - [Tutorials](#tutorials)
 - [How-to guides](#how-to-guides)
   - [In the browser](#in-the-browser)
@@ -22,9 +25,31 @@ These pages are organised by what you need right now: learning, doing, looking u
 
 ## New here?
 
-Start in the browser. Nothing to install, your files stay on your device, and the guided tours let you practise on tiny homebrew ROMs before you touch a game you care about.
+Start in the browser. No account, installation, or commercial game is needed for the practice run.
 
-Take [your first patch](tutorials/first-patch.md), or open a tour directly: [apply two practice patches](https://rom-weaver.com/apply-patches?guide=apply), [build a patch from two ROMs](https://rom-weaver.com/create-patch?guide=create), or [package one as a release](https://rom-weaver.com/bundle-patches?guide=bundle).
+1. Follow [your first patch](tutorials/first-patch.md) with the supplied homebrew files.
+2. Check the result against the tutorial's checksum.
+3. Choose your own task below. Keep a clean backup of your files.
+
+Prefer the terminal? Start with [Install the CLI](how-to/install-cli.md), then [your first CLI apply](tutorials/cli-first-weave.md).
+
+Guided app samples: [Apply](https://rom-weaver.com/apply-patches?guide=apply), [Create](https://rom-weaver.com/create-patch?guide=create), and [Bundle](https://rom-weaver.com/bundle-patches?guide=bundle).
+
+## Choose a task
+
+| I want to… | Browser guide |
+| --- | --- |
+| Add a translation or other game change | [Apply a patch](how-to/apply-rom-patches.md) |
+| Share changes I made | [Create a patch](how-to/create-rom-patches.md) or [bundle a recipe](how-to/create-bundles.md) |
+| Find which game or revision a file contains | [Identify and compare checksums](how-to/identify-roms-browser.md) |
+| Take files out of an archive | [Extract files](how-to/extract-files-browser.md) |
+| Make a game's file smaller or change its container | [Convert or compress](how-to/convert-roms-browser.md), or [trim padding](how-to/trim-roms-browser.md) |
+| Use cheat codes | [Add cheats](how-to/use-browser-cheats.md) |
+| Play a game or back up progress | [Test a ROM](how-to/test-roms-in-browser.md) |
+| Change saved progress | [Edit a save](how-to/edit-gen3-saves.md) or [create a fresh save](how-to/create-game-saves-browser.md) |
+| Work without an internet connection | [Set up offline use](how-to/browser-settings.md#prepare-for-offline-use) |
+
+For terminal equivalents and availability limits, use the [feature map](reference/features.md).
 
 ## Tutorials
 
@@ -43,10 +68,16 @@ Procedures for specific tasks.
 - [Use cheats in the browser](how-to/use-browser-cheats.md)
 - [Create a ROM patch](how-to/create-rom-patches.md)
 - [Create and share a patch bundle](how-to/create-bundles.md)
+- [Identify a ROM and compare checksums](how-to/identify-roms-browser.md)
+- [Extract files from an archive or disc image](how-to/extract-files-browser.md)
+- [Extract, convert, or compress a ROM](how-to/convert-roms-browser.md)
+- [Trim a ROM](how-to/trim-roms-browser.md)
+- [Undo a PPF patch](how-to/undo-ppf-browser.md)
 - [Test a ROM in the browser](how-to/test-roms-in-browser.md)
 - [Fix a checksum error](how-to/fix-checksum-errors.md)
-- [Edit a Generation III save](how-to/edit-gen3-saves.md): inspect and safely edit an English retail Pokémon Ruby, Sapphire, Emerald, FireRed, or LeafGreen game save in the browser.
+- [Edit a game save](how-to/edit-gen3-saves.md)
 - [Create game saves in the browser](how-to/create-game-saves-browser.md)
+- [Settings, beta tools, and offline use](how-to/browser-settings.md)
 
 ### From the terminal
 
@@ -74,6 +105,7 @@ Procedures for specific tasks.
 Facts to look up. No advice, no steps.
 
 - [Supported formats](reference/formats.md): the full patch, container, codec, checksum, trim, and header support tables.
+- [What rom-weaver supports](reference/features.md): every feature in plain words, browser and CLI availability, and links to exact limits.
 - [Cheat database](reference/cheat-database.md): supported systems, delivery classes, matching, storage, and licensing.
 - [CLI reference](reference/cli.md): every command, global flag, patching flag, JSON output, exit code, and permission check.
 - [Save Editor support](reference/save-editor.md): supported games, editable fields, recognition rules, and integrity checks.

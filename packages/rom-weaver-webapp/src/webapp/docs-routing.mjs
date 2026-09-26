@@ -39,13 +39,43 @@ const DOC_SOURCES = Object.freeze([
   Object.freeze({ file: "how-to/create-bundles.md", label: "Create bundles (browser)", slug: "docs/create-bundles" }),
   Object.freeze({ file: "how-to/test-roms-in-browser.md", label: "Test ROMs (browser)", slug: "docs/test-roms" }),
   Object.freeze({
+    file: "how-to/identify-roms-browser.md",
+    label: "Identify ROMs (browser)",
+    slug: "docs/identify-roms-browser",
+  }),
+  Object.freeze({
+    file: "how-to/extract-files-browser.md",
+    label: "Extract files (browser)",
+    slug: "docs/extract-files-browser",
+  }),
+  Object.freeze({
+    file: "how-to/convert-roms-browser.md",
+    label: "Convert ROMs (browser)",
+    slug: "docs/convert-roms-browser",
+  }),
+  Object.freeze({
+    file: "how-to/trim-roms-browser.md",
+    label: "Trim ROMs (browser)",
+    slug: "docs/trim-roms-browser",
+  }),
+  Object.freeze({
+    file: "how-to/undo-ppf-browser.md",
+    label: "Undo PPF (browser)",
+    slug: "docs/undo-ppf-browser",
+  }),
+  Object.freeze({
+    file: "how-to/browser-settings.md",
+    label: "Settings and offline use",
+    slug: "docs/browser-settings",
+  }),
+  Object.freeze({
     file: "how-to/fix-checksum-errors.md",
     label: "Fix checksum errors",
     slug: "docs/fix-checksum-errors",
   }),
   Object.freeze({
     file: "how-to/edit-gen3-saves.md",
-    label: "Edit Generation III saves",
+    label: "Edit a game save (browser)",
     slug: "docs/edit-gen3-saves",
   }),
   Object.freeze({
@@ -86,6 +116,11 @@ const DOC_SOURCES = Object.freeze([
     slug: "docs/fix-permission-errors",
   }),
   Object.freeze({ file: "reference/cli.md", label: "CLI reference", slug: "docs/cli" }),
+  Object.freeze({
+    file: "reference/features.md",
+    label: "What rom-weaver supports",
+    slug: "docs/features",
+  }),
   Object.freeze({
     file: "reference/save-editor.md",
     label: "Save Editor support",

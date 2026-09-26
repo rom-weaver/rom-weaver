@@ -5,6 +5,10 @@ Find the guide that answers your question.
 <!-- START doctoc -->
 ## Table of contents
 
+- [Getting started](#getting-started)
+  - [What can rom-weaver do?](#what-can-rom-weaver-do)
+  - [Can I try it without a game file?](#can-i-try-it-without-a-game-file)
+  - [Where are Trim, PPF Undo, and the Save Editor?](#where-are-trim-ppf-undo-and-the-save-editor)
 - [Files and privacy](#files-and-privacy)
   - [Are my ROMs or patches uploaded?](#are-my-roms-or-patches-uploaded)
   - [Does rom-weaver include games?](#does-rom-weaver-include-games)
@@ -27,6 +31,13 @@ Find the guide that answers your question.
   - [Does a bundle contain the ROM?](#does-a-bundle-contain-the-rom)
   - [How do I make one?](#how-do-i-make-one)
   - [Can a link open my hosted bundle?](#can-a-link-open-my-hosted-bundle)
+- [Identify, prepare, and save](#identify-prepare-and-save)
+  - [Why is my ROM unknown?](#why-is-my-rom-unknown)
+  - [Can I compress or extract without a patch?](#can-i-compress-or-extract-without-a-patch)
+  - [Can I make a trimmed ROM larger again?](#can-i-make-a-trimmed-rom-larger-again)
+  - [Can I undo a patch?](#can-i-undo-a-patch)
+  - [Can I edit a save state?](#can-i-edit-a-save-state)
+  - [How do I back up my progress?](#how-do-i-back-up-my-progress)
 - [Devices, browsers, and offline](#devices-browsers-and-offline)
   - [Does it work on a phone or tablet?](#does-it-work-on-a-phone-or-tablet)
   - [Does it work offline?](#does-it-work-offline)
@@ -39,6 +50,20 @@ Find the guide that answers your question.
   - [Where can I report a bug?](#where-can-i-report-a-bug)
 
 <!-- END doctoc -->
+
+## Getting started
+
+### What can rom-weaver do?
+
+[Every feature in plain words](reference/features.md), or [choose a task](README.md#choose-a-task).
+
+### Can I try it without a game file?
+
+[Your first patch with supplied homebrew files](tutorials/first-patch.md).
+
+### Where are Trim, PPF Undo, and the Save Editor?
+
+[Enable beta tools](how-to/browser-settings.md#enable-beta-tools).
 
 ## Files and privacy
 
@@ -120,6 +145,32 @@ Work through [Fix a checksum error](how-to/fix-checksum-errors.md).
 
 [Open a hosted bundle in Apply](how-to/create-bundles.md#open-a-hosted-bundle-in-apply).
 
+## Identify, prepare, and save
+
+### Why is my ROM unknown?
+
+[Read an identification result](how-to/identify-roms-browser.md#identify-a-file).
+
+### Can I compress or extract without a patch?
+
+[Extract files in the browser](how-to/extract-files-browser.md), [convert a ROM in the browser](how-to/convert-roms-browser.md), or [use CLI archive commands](how-to/work-with-archives.md).
+
+### Can I make a trimmed ROM larger again?
+
+[Restoration limits](reference/formats.md#trim-support) and [the CLI procedure](how-to/cli-trim.md#put-the-padding-back).
+
+### Can I undo a patch?
+
+[Undo a PPF3 patch with undo data](how-to/undo-ppf-browser.md).
+
+### Can I edit a save state?
+
+[Game saves and unsupported save states](reference/save-editor.md#unsupported-data).
+
+### How do I back up my progress?
+
+[Export and restore emulator saves](how-to/test-roms-in-browser.md#export-and-restore-a-save).
+
 ## Devices, browsers, and offline
 
 ### Does it work on a phone or tablet?
@@ -128,7 +179,7 @@ Work through [Fix a checksum error](how-to/fix-checksum-errors.md).
 
 ### Does it work offline?
 
-[Offline requirements](explanation/local-first.md#offline).
+[Prepare for offline use](how-to/browser-settings.md#prepare-for-offline-use) and [offline limits](explanation/local-first.md#offline).
 
 ### Which browser should I use?
 
@@ -136,7 +187,7 @@ Work through [Fix a checksum error](how-to/fix-checksum-errors.md).
 
 ### Can I change the theme?
 
-[Change the theme](hosting/webapp-runtime-status.md#theme).
+[Change browser preferences](how-to/browser-settings.md#change-preferences).
 
 ## CLI and support
 
