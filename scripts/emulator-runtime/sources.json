@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "platform": "linux-x64-gnu",
+  "retroarch": {
+    "archive": "retroarch-69a4f0ea1e8aaf442ae4858f2e7f2b31a1776576.tar.gz",
+    "revision": "69a4f0ea1e8aaf442ae4858f2e7f2b31a1776576",
+    "sha256": "b4bfa46ea5ce09008494099b967816de8da7a146ede2f7d1a52d5842a6aae215",
+    "url": "https://github.com/libretro/RetroArch/archive/69a4f0ea1e8aaf442ae4858f2e7f2b31a1776576.tar.gz"
+  },
+  "cores": [
+    {
+      "archive": "fceumm-236ccdfc911e84c60fea6b9d0699c2d440a8de14.tar.gz",
+      "id": "fceumm",
+      "platform": "nes",
+      "revision": "236ccdfc911e84c60fea6b9d0699c2d440a8de14",
+      "sha256": "dd002cde9b5271979e0394bb9e696bd37e149ced473ff1e3629cc7fed502381f",
+      "url": "https://github.com/libretro/libretro-fceumm/archive/236ccdfc911e84c60fea6b9d0699c2d440a8de14.tar.gz"
+    }
+  ]
+}
