@@ -2,7 +2,7 @@
 
 Use Apply with only a ROM to extract it or change its output container. No patch is needed.
 
-For general archive extraction or directory packaging, use the [CLI archive guide](work-with-archives.md).
+To take every file out of an archive, use [Extract files](extract-files-browser.md). For directory packaging, use the [CLI archive guide](work-with-archives.md).
 
 <!-- START doctoc -->
 ## Table of contents

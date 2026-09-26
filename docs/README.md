@@ -42,7 +42,8 @@ Guided app samples: [Apply](https://rom-weaver.com/apply-patches?guide=apply), [
 | Add a translation or other game change | [Apply a patch](how-to/apply-rom-patches.md) |
 | Share changes I made | [Create a patch](how-to/create-rom-patches.md) or [bundle a recipe](how-to/create-bundles.md) |
 | Find which game or revision a file contains | [Identify and compare checksums](how-to/identify-roms-browser.md) |
-| Extract a game or make its file smaller | [Convert or compress](how-to/convert-roms-browser.md), or [trim padding](how-to/trim-roms-browser.md) |
+| Take files out of an archive | [Extract files](how-to/extract-files-browser.md) |
+| Make a game's file smaller or change its container | [Convert or compress](how-to/convert-roms-browser.md), or [trim padding](how-to/trim-roms-browser.md) |
 | Use cheat codes | [Add cheats](how-to/use-browser-cheats.md) |
 | Play a game or back up progress | [Test a ROM](how-to/test-roms-in-browser.md) |
 | Change saved progress | [Edit a save](how-to/edit-gen3-saves.md) or [create a fresh save](how-to/create-game-saves-browser.md) |
@@ -68,6 +69,7 @@ Procedures for specific tasks.
 - [Create a ROM patch](how-to/create-rom-patches.md)
 - [Create and share a patch bundle](how-to/create-bundles.md)
 - [Identify a ROM and compare checksums](how-to/identify-roms-browser.md)
+- [Extract files from an archive or disc image](how-to/extract-files-browser.md)
 - [Extract, convert, or compress a ROM](how-to/convert-roms-browser.md)
 - [Trim a ROM](how-to/trim-roms-browser.md)
 - [Undo a PPF patch](how-to/undo-ppf-browser.md)

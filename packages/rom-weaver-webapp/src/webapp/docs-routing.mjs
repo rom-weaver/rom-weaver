@@ -44,6 +44,11 @@ const DOC_SOURCES = Object.freeze([
     slug: "docs/identify-roms-browser",
   }),
   Object.freeze({
+    file: "how-to/extract-files-browser.md",
+    label: "Extract files (browser)",
+    slug: "docs/extract-files-browser",
+  }),
+  Object.freeze({
     file: "how-to/convert-roms-browser.md",
     label: "Convert ROMs (browser)",
     slug: "docs/convert-roms-browser",
