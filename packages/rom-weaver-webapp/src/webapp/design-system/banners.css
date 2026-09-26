@@ -438,7 +438,7 @@
   color: var(--ink);
   background: var(--plate);
   border: 1px solid color-mix(in oklab, var(--thread) 45%, var(--seam-strong));
-  border-radius: 99px;
+  border-radius: var(--r-s);
   box-shadow: var(--overlay-shadow);
   animation: pop 0.35s var(--ease);
 }

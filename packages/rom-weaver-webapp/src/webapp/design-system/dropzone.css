@@ -345,7 +345,7 @@
   letter-spacing: 0.04em;
   background: var(--plate);
   border: 1px solid var(--seam);
-  border-radius: 99px;
+  border-radius: var(--r-s);
 }
 @keyframes formats-ticker {
   from {
@@ -441,7 +441,7 @@
   color: var(--ink-2);
   background: var(--plate-2);
   border: 1px solid var(--seam-strong);
-  border-radius: 99px;
+  border-radius: var(--r-s);
 }
 .rw-app .drop:focus-within .main.btnish {
   color: var(--thread-text);
@@ -1127,7 +1127,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   overflow: hidden;
   background: color-mix(in oklab, var(--thread) 10%, var(--well));
   border: 1px solid color-mix(in oklab, var(--thread) 55%, var(--seam-strong));
-  border-radius: 999px;
+  border-radius: var(--r-s);
 }
 .rw-app .sample-tutorial-progress > span {
   display: block;
@@ -1157,7 +1157,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   color: var(--ink-2);
   background: var(--well);
   border: 1px solid var(--seam-strong);
-  border-radius: 3px;
+  border-radius: var(--r-s);
 }
 .rw-app .sample-tutorial-action-icon {
   display: grid;

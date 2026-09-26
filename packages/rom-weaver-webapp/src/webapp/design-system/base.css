@@ -23,16 +23,14 @@
   border-color: transparent;
   transition: none;
 }
-/* base scale - bumped up (text read a touch small) but still responsive so it
-   eases down on narrow phones instead of a flat size */
+/* Monospace runs about 15% wider than the old proportional face, so the scale
+   sits one step lower to keep line lengths; it still eases down on phones. */
 :root:has(.rw-app) {
   scrollbar-gutter: stable;
-  font-size: clamp(15px, 13px + 0.42vw, 17px);
+  font-size: clamp(14px, 12.5px + 0.36vw, 15.5px);
 }
 .rw-app {
-  --mono:
-    ui-monospace, "SF Mono", "SFMono-Regular", "Cascadia Code", "Roboto Mono", Menlo, Consolas, "Liberation Mono",
-    monospace;
+  --mono: var(--font);
   /* `viewport-fit=cover` exposes the PWA's device insets; browser tabs resolve
      these to zero. Vertical insets belong to the shell, while side insets are
      applied locally to the footer below. */
@@ -69,27 +67,17 @@
   min-height: 100dvh;
   margin: 0;
   font: 500 1rem / 1.5 var(--font);
-  font-stretch: 94%;
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   color: var(--ink);
-  background: radial-gradient(
-      1100px 320px at 50% -140px,
-      color-mix(in oklab, var(--thread) 5%, transparent),
-      transparent 70%
-    )
-    var(--chassis);
+  background: var(--chassis);
   transition:
     background 0.25s,
     color 0.25s;
 }
-/* Keep mono/checksum content on the UI face while long hashes use tighter
-   spacing. */
 .rw-app .mono {
   font-family: var(--font);
-  font-stretch: 86%;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
 }
 .rw-app .ck {
   font-family: var(--mono);
@@ -145,14 +133,13 @@
     animation: none;
   }
 }
-/* status in the meta line - sized/condensed to match the size + tag chips so it
+/* status in the meta line - sized to match the size + tag chips so it
    reads as part of that row, sitting to the right of the platform/format tag. */
 .rw-app .stage-status {
   display: inline-flex;
   gap: var(--sp-s);
   align-items: baseline;
   font-size: var(--badge-fs);
-  font-stretch: 86%;
   color: var(--ink-3);
   letter-spacing: 0.01em;
   white-space: nowrap;
@@ -210,7 +197,7 @@
 .rw-app :focus-visible {
   outline: 2px solid var(--thread-text);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: var(--r-s);
 }
 /* a dialog and its body are only focused programmatically (to park initial focus
    off the controls) - neither must ever draw a focus ring */

@@ -1,11 +1,11 @@
 /* Guides.
-   The app chrome is a loom: condensed type, hairline seams, warp strung across
+   The app chrome is a loom: monospace type, hairline seams, warp strung across
    waiting surfaces. Long-form reading extends that rather than replacing it.
    The warp is a piece's lengthwise structure, which is exactly what a document
    outline is - so the section list becomes a warp rail, and the section being
    read is marked by a weft pick crossing it. That rail is the only loud thing
-   on the page; the prose stays quiet and opens up (font-stretch 100% against
-   the app's 94%) to signal a reading mode rather than a working mode. */
+   on the page; the prose stays quiet to signal a reading mode rather than a
+   working mode. */
 
 html:has(.docs-workbench) {
   scroll-behavior: smooth;
@@ -54,7 +54,6 @@ html:has(.docs-workbench) {
   padding: var(--sp-m) 0 var(--sp-s) 1.15rem;
   font-size: 0.655rem;
   font-weight: 700;
-  font-stretch: 86%;
   color: var(--ink-3);
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -109,7 +108,6 @@ html:has(.docs-workbench) {
   margin: 0;
   font-size: 0.625rem;
   font-weight: 700;
-  font-stretch: 86%;
   color: var(--ink-4);
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -129,7 +127,6 @@ html:has(.docs-workbench) {
   padding: 7px 9px;
   font-size: 0.78rem;
   font-weight: 600;
-  font-stretch: 92%;
   line-height: 1.3;
   color: var(--ink-2);
   text-decoration: none;
@@ -181,7 +178,6 @@ html:has(.docs-workbench) {
   padding: 0.3rem 0 0.3rem 1.15rem;
   font-size: 0.755rem;
   font-weight: 600;
-  font-stretch: 90%;
   line-height: 1.35;
   color: var(--ink-3);
   text-decoration: none;
@@ -234,8 +230,6 @@ html:has(.docs-workbench) {
 }
 .rw-app .docs-article {
   padding: var(--article-pad);
-  /* long-form opens up; the surrounding app chrome stays condensed */
-  font-stretch: 100%;
 }
 /* The page turn. Switching guide swaps this element and nothing else, so its
    entrance is the whole transition - the chrome around it never blinks, which
@@ -266,14 +260,12 @@ html:has(.docs-workbench) {
   margin: 0 0 var(--sp-l);
   font-size: clamp(2rem, 1.4rem + 2.6vw, 2.9rem);
   font-weight: 780;
-  font-stretch: 92%;
 }
 .rw-app .docs-article h2 {
   position: relative;
   margin: clamp(26px, 4.5vw, 40px) 0 var(--sp-m);
   font-size: clamp(1.3rem, 1.08rem + 0.9vw, 1.6rem);
   font-weight: 720;
-  font-stretch: 96%;
   scroll-margin-top: 5.5rem;
 }
 /* The heading is its own permalink, GitHub style: plain ink at rest, accent
@@ -328,7 +320,6 @@ html:has(.docs-workbench) {
   margin: var(--sp-xl) 0 0;
   font-size: 0.78rem;
   font-weight: 750;
-  font-stretch: 90%;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   scroll-margin-top: 5.5rem;
@@ -426,7 +417,7 @@ html:has(.docs-workbench) {
   color: var(--weft);
   background: var(--well);
   border: 1px solid var(--seam-soft);
-  border-radius: 4px;
+  border-radius: var(--r-s);
 }
 .rw-app .docs-article :not(pre) > code {
   overflow-wrap: anywhere;
@@ -600,7 +591,6 @@ html:has(.docs-workbench) {
 .rw-app .docs-screenshot figcaption {
   margin-top: var(--sp-s);
   font-size: 0.72rem;
-  font-stretch: 92%;
   line-height: 1.5;
   color: var(--ink-3);
 }
@@ -831,7 +821,6 @@ html:has(.docs-workbench) {
   padding-inline: var(--sp-l);
   font-size: 0.7rem;
   font-weight: 700;
-  font-stretch: 88%;
   color: var(--ink-3);
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -853,7 +842,6 @@ html:has(.docs-workbench) {
 .rw-app .docs-step-copy small {
   font-size: 0.625rem;
   font-weight: 700;
-  font-stretch: 86%;
   color: var(--ink-3);
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -876,7 +864,6 @@ html:has(.docs-workbench) {
   margin: 0 auto var(--sp-l);
   font-size: 0.7rem;
   font-weight: 700;
-  font-stretch: 88%;
   color: var(--ink-3);
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -972,14 +959,13 @@ html:has(.docs-workbench) {
     font: inherit;
     font-size: 0.68rem;
     font-weight: 700;
-    font-stretch: 88%;
     color: var(--ink-2);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     cursor: pointer;
     background: var(--plate);
     border: 1px solid var(--seam-strong);
-    border-radius: 999px;
+    border-radius: var(--r-s);
     box-shadow: 0 8px 24px color-mix(in oklab, var(--ink) 18%, transparent);
   }
   .rw-app .docs-trail-menu svg {

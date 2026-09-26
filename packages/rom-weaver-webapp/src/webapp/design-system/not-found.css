@@ -34,7 +34,6 @@
 .rw-app .not-found-code {
   font-size: clamp(5.5rem, 18vw, 9rem);
   font-weight: 800;
-  font-stretch: 82%;
   line-height: 0.78;
   color: transparent;
   letter-spacing: -0.09em;

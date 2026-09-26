@@ -400,7 +400,6 @@
 }
 .rw-app .tracelog .caller {
   flex: none;
-  font-stretch: 90%;
   color: #b594d6;
 }
 :root[data-theme="light"] .tracelog .ts {

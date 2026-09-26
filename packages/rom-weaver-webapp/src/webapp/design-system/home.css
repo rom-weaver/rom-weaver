@@ -98,7 +98,7 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   background: var(--thread);
-  border-radius: 999px;
+  border-radius: var(--r-s);
 }
 .rw-app .home-loom-tag {
   position: absolute;
@@ -109,7 +109,7 @@
   color: var(--ink-3);
   background: var(--chassis);
   border: 1px solid var(--seam);
-  border-radius: 999px;
+  border-radius: var(--r-s);
 }
 .rw-app .home-loom-legend {
   display: grid;

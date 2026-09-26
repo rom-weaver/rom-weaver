@@ -84,7 +84,7 @@
   cursor: pointer;
   background: var(--well);
   border: 1px solid var(--seam-strong);
-  border-radius: 99px;
+  border-radius: var(--r-s);
   transition:
     background 0.18s var(--ease),
     border-color 0.18s;
@@ -105,8 +105,7 @@
   height: var(--sw-thumb);
   content: "";
   background: var(--ink-4);
-  border-radius: 50%;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+  border-radius: 1px;
   translate: 0 -50%;
   transition:
     translate 0.18s var(--ease),
@@ -597,7 +596,7 @@
   cursor: pointer;
   background: none;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--r-s);
   transition:
     color 0.15s,
     background 0.15s;
@@ -690,7 +689,7 @@
   cursor: pointer;
   background: none;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--r-s);
 }
 .rw-app .patch-checks-body .verification-row .ck-open:focus-visible {
   outline: 2px solid var(--thread-text);
@@ -727,13 +726,12 @@
   /* Offset padding so editable and read-only text share an origin. */
   margin-inline: -4px 0;
   font-family: var(--mono);
-  font-stretch: revert;
   color: var(--weft);
   text-transform: uppercase;
   letter-spacing: 0.03em;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 5px;
+  border-radius: var(--r-s);
   transition:
     border-color 0.08s,
     background-color 0.08s;
@@ -946,7 +944,6 @@
   padding-inline: 5px;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 0.68rem;
-  font-stretch: 100%;
   letter-spacing: -0.02em;
 }
 .rw-app .popt-input[readonly] {

@@ -316,7 +316,7 @@ describe("rendered appearance snapshots", () => {
       expect(getComputedStyle(surface).backgroundColor).not.toBe(before);
       expect(getComputedStyle(surface).transitionDuration).toBe("0s");
       expect(getComputedStyle(surface).backgroundColor).toBe(
-        document.documentElement.dataset.theme === "dark" ? "rgb(12, 15, 19)" : "rgb(236, 233, 225)",
+        document.documentElement.dataset.theme === "dark" ? "rgb(7, 9, 11)" : "rgb(236, 233, 225)",
       );
       const frames = animation.effect.getKeyframes();
       const origin = frames[0].clipPath.match(/at ([\d.]+)% ([\d.]+)%/);

@@ -19,7 +19,11 @@
   --loom-weft-2: color-mix(in srgb, var(--thread) 62%, var(--warp-b));
   --loom-weft-3: var(--thread-hi);
   --weft: var(--thread-text); /* hash readouts, dyed by the accent */
-  --font: system-ui, sans-serif;
+  /* The hex-editor look sets every surface in one monospace face; the stack
+     uses installed faces only, so the app makes no font requests. */
+  --font:
+    ui-monospace, "JetBrains Mono", "SF Mono", "SFMono-Regular", "Cascadia Mono", "Roboto Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
   --dropdown-fs: 0.72rem;
   --ctl: 40px;
   /* Fluid rhythm reaches its mobile floor near 560px and desktop cap near 860px. */
@@ -29,9 +33,9 @@
   --gutter: clamp(10px, 2.5vw, 28px); /* shared app-column inset */
   --step-pt: clamp(16px, 4vw - 8px, 22px); /* shared step-head inset */
   --step-pb: clamp(10px, 4.4vw - 14.6px, 24px); /* step-body bottom padding */
-  --r-s: 6px;
-  --r-m: 9px;
-  --r-l: 13px;
+  --r-s: 2px;
+  --r-m: 2px;
+  --r-l: 3px;
   /* Static hairlines and fluid spacing replace per-breakpoint overrides. */
   --sp-2xs: 2px; /* micro seams (2/3px) - static */
   --sp-xs: 4px; /* tight gaps (4/5px) - static */
@@ -47,13 +51,13 @@
 }
 
 :root[data-theme="dark"] {
-  --chassis: #0c0f13; /* console shell */
-  --plate: #161b21; /* mounted plate */
-  --plate-2: #1c222a; /* raised plate */
-  --well: #0f1318; /* inset controls */
-  --seam: #39414e;
-  --seam-soft: #2c333f;
-  --seam-strong: #4b5564;
+  --chassis: #07090b; /* console shell */
+  --plate: #0c1014; /* mounted plate */
+  --plate-2: #10161c; /* raised plate */
+  --well: #090c0f; /* inset controls */
+  --seam: #2f3945;
+  --seam-soft: #1d252e;
+  --seam-strong: #45515f;
   --ink: #edf0f5;
   --ink-2: #b3bbc8;
   --ink-3: #9aa3b1;

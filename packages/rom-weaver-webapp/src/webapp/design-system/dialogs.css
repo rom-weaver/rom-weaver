@@ -367,12 +367,11 @@
   justify-self: start;
   padding: 1px 7px;
   font-size: 0.66rem;
-  font-stretch: 86%;
   color: var(--ink-3);
   letter-spacing: 0.02em;
   background: var(--plate-2);
   border: 1px solid var(--seam-soft);
-  border-radius: 5px;
+  border-radius: var(--r-s);
 }
 /* Virtual entries are staged in memory, not on disk - the only row kind whose
    bytes are not actually in OPFS, so it is the only one that takes the thread. */
@@ -992,7 +991,7 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
   color: var(--ink-3);
   white-space: nowrap;
   border: 1px solid var(--seam-soft);
-  border-radius: 999px;
+  border-radius: var(--r-s);
 }
 .rw-app .sw-chip svg {
   width: 13px;
@@ -1257,7 +1256,7 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
   font-size: 0.74rem;
   background: var(--well);
   border: 1px solid var(--seam-soft);
-  border-radius: 4px;
+  border-radius: var(--r-s);
 }
 .rw-app .status-row a {
   color: var(--thread-text);

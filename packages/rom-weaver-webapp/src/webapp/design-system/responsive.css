@@ -7,13 +7,7 @@
   .rw-app .cks > .cks-head .rb {
     padding: 1px 6px;
   }
-  .rw-app .app {
-    font-stretch: 82%;
-  }
-  .rw-app .mono {
-    font-stretch: 74%;
-  }
-  /* Keep condensed progress labels legible. */
+  /* Keep small progress labels legible. */
   .rw-app .prog .lab {
     font-size: 0.85rem;
   }
@@ -28,8 +22,8 @@
   }
   /* Preserve full status outlines while making room for hashes. */
   .rw-app .card {
+    --card-pad: 7px;
     gap: var(--sp-xs);
-    padding: 7px;
     border-radius: var(--r-s) var(--r-s) var(--card-end-radius, var(--r-s)) var(--card-end-radius, var(--r-s));
   }
   .rw-app .card-name {

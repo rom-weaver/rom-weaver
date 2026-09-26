@@ -18,24 +18,22 @@
   transition:
     background 0.18s,
     border-color 0.18s,
-    color 0.18s,
-    transform 0.15s var(--ease),
-    box-shadow 0.18s;
+    color 0.18s;
 }
 @media (hover: hover) {
   .rw-app .btn:hover {
     border-color: var(--ink-4);
-    transform: translateY(-1px);
   }
 }
 .rw-app .btn:active {
-  transform: translateY(0) scale(0.99);
+  border-color: var(--ink-4);
 }
 .rw-app .btn svg {
   width: 15px;
   height: 15px;
 }
 .rw-app .btn.primary {
+  font-weight: 800;
   color: var(--thread-ink);
   background: var(--thread-fill);
   border-color: var(--thread-fill);
@@ -43,7 +41,6 @@
 @media (hover: hover) {
   .rw-app .btn.primary:hover {
     background: color-mix(in oklab, var(--thread-fill) 88%, #fff);
-    box-shadow: 0 4px 18px -6px color-mix(in oklab, var(--thread-fill) 60%, transparent);
   }
 }
 .rw-app .btn.primary:active {

@@ -60,7 +60,7 @@
   font-size: 0.62rem;
   color: var(--ink-3);
   border: 1px solid var(--seam);
-  border-radius: 4px;
+  border-radius: var(--r-s);
 }
 .rw-app .find-empty {
   padding: 12px 10px;

@@ -102,51 +102,43 @@
 .rw-app .step-head-action {
   display: none;
 }
-/* Match step headings to card-name scaling. */
-.rw-app .step-num {
-  position: relative;
-  padding: 2px 18px 2px 9px;
-  font-size: clamp(0.9rem, 1.1vw + 0.55rem, 1.06rem);
-  font-weight: 650;
-  color: var(--thread-text);
-  letter-spacing: 0.06em;
-  isolation: isolate;
-  transition: color 0.3s;
-}
-.rw-app .step-num::before {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
+/* Step headings read like a hex editor's section marker: a solid offset block,
+   the title in caps, then a dashed rule that runs to the step's meta. */
+.rw-app .step-head::after {
+  flex: 1 1 var(--sp-l);
+  align-self: center;
+  order: 1;
   content: "";
-  background: linear-gradient(90deg, var(--thread) 52%, transparent 96%);
-  border-radius: 3px 0 0 3px;
-  opacity: 0.2;
-  mask-image: var(--weave-mask);
-  mask-size: 9px 9px;
+  border-block-start: 1px dashed var(--seam);
+}
+.rw-app .step-head > .step-meta,
+.rw-app .step-head > .step-collapse,
+.rw-app .step-head > .step-head-action {
+  order: 2;
+}
+.rw-app .step-num {
+  padding: 1px 7px;
+  font-size: clamp(0.84rem, 1vw + 0.5rem, 0.98rem);
+  font-weight: 800;
+  color: var(--thread-ink);
+  letter-spacing: 0.04em;
+  background: var(--thread-fill);
+  border-radius: var(--r-s);
   transition:
-    opacity 0.3s,
+    color 0.3s,
     background-color 0.3s;
 }
-.rw-app .step.is-woven .step-num {
-  color: var(--thread-text);
-}
-.rw-app .step.is-woven .step-num::before {
-  opacity: 0.42;
-}
 .rw-app .step.is-fault .step-num {
-  color: var(--fault);
-}
-.rw-app .step.is-fault .step-num::before {
-  background: linear-gradient(90deg, var(--fault) 52%, transparent 96%);
-  opacity: 0.28;
+  color: #fff;
+  background: var(--fault);
 }
 .rw-app .step-title {
   margin: 0;
-  font-size: clamp(0.9rem, 1.1vw + 0.55rem, 1.06rem);
-  font-weight: 650;
+  font-size: clamp(0.84rem, 1vw + 0.5rem, 0.98rem);
+  font-weight: 800;
   color: var(--ink);
-  text-transform: none;
-  letter-spacing: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 .rw-app .step-meta {
   display: inline-flex;
@@ -154,7 +146,6 @@
   gap: var(--sp-2xs) var(--sp-s);
   align-items: baseline;
   justify-content: flex-end;
-  margin-inline-start: auto;
   font-size: 0.74rem;
   color: var(--ink-3);
 }
@@ -170,13 +161,12 @@
   align-items: center;
   padding: 2px 8px;
   font-size: var(--badge-fs);
-  font-stretch: 86%;
   color: var(--weft);
   letter-spacing: 0.01em;
   white-space: nowrap;
   background: var(--well);
   border: 1px solid var(--seam-soft);
-  border-radius: 6px;
+  border-radius: var(--r-s);
 }
 .rw-app .step-meta .rb.muted {
   color: var(--ink-3);
@@ -199,7 +189,7 @@
   cursor: pointer;
   background: none;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--r-s);
   transition:
     color 0.2s,
     border-color 0.2s;
@@ -364,7 +354,7 @@
   font-size: 0.72rem;
   font-weight: 600;
   border: 1px solid var(--seam);
-  border-radius: 999px;
+  border-radius: var(--r-s);
 }
 .rw-app .save-editor-pill::before {
   width: 6px;
@@ -611,7 +601,7 @@
   font-size: 0.72rem;
   color: var(--ink-3);
   border: 1px solid var(--seam-soft);
-  border-radius: 999px;
+  border-radius: var(--r-s);
 }
 .rw-app .save-editor-reset {
   justify-self: end;
@@ -745,7 +735,7 @@
   overflow-wrap: anywhere;
   background: var(--well);
   border: 1px solid var(--seam-soft);
-  border-radius: 999px;
+  border-radius: var(--r-s);
 }
 .rw-app .save-editor-chip .mono {
   color: var(--thread-text);
