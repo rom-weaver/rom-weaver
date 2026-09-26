@@ -158,6 +158,13 @@ test("Rust test-only changes select Rust alone", () => {
   );
 });
 
+test("embedded compiler assets select release stacks", () => {
+  const result = classify("crates/rom-weaver-checksum/src/platform-names.json");
+  assert.equal(result.rust, "true");
+  assert.equal(result.webapp, "true");
+  assert.equal(result.wasm_runtime, "true");
+});
+
 test("production Rust skips source Docker on pull requests and restores it on main", () => {
   const path = "crates/rom-weaver-containers/src/chd/decode/frames.rs";
   const pullRequest = classifyFor("pull_request", path);
@@ -331,10 +338,7 @@ test("dependency and CI changes select their broader checks", () => {
     repo_lint: "false",
     full: "false",
   });
-  for (const path of [
-    ".github/workflows/ci.yml",
-    "scripts/ci/mise-disable-tools.mjs",
-  ]) {
+  for (const path of [".github/workflows/ci.yml", "scripts/ci/mise-disable-tools.mjs"]) {
     assert.deepEqual(
       classify(path),
       {

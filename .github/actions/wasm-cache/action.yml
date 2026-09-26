@@ -104,14 +104,8 @@ runs:
               section == "env" && /^(WASI_|CC_|CXX_|AR_|RANLIB_|CFLAGS_|CXXFLAGS_|CARGO_INCREMENTAL)/ { print }
               (section == "[tasks.build-wasm]" || section == "[tasks.build-wasm-prod]") && /^(env\.|run =)/ { print }
             '
-            git ls-tree -r HEAD -- crates | while read -r mode type object path; do
-              case "$path" in
-                */tests/*|*/test/*|*/examples/*|*/benches/*|*/src/test*.rs|*/src/*/test*.rs)
-                  continue
-                  ;;
-              esac
-              printf '%s %s %s\t%s\n' "$mode" "$type" "$object" "$path"
-            done
+            git ls-tree -r HEAD -- crates |
+              node scripts/wasm/wasm-compiler-inputs.mjs
           }
         )
         if [ -z "$basis" ]; then
