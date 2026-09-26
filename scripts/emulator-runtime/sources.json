@@ -583,6 +583,270 @@
       "options": {},
       "extensions": ["cue", "iso", "chd"],
       "firmware": []
+    },
+    {
+      "id": "beetle_pce_fast",
+      "platform": "pce",
+      "revision": "1c693c630121366f0b819d785762f1ce5b3a68d0",
+      "url": "https://github.com/libretro/beetle-pce-fast-libretro/archive/1c693c630121366f0b819d785762f1ce5b3a68d0.tar.gz",
+      "archive": "beetle_pce_fast-1c693c630121366f0b819d785762f1ce5b3a68d0.tar.gz",
+      "sha256": "8b427af5f0dcb07067f69699eab5f37386fed757cf373216c62ea20e75fb1e02",
+      "build": [
+        {
+          "cwd": ".",
+          "command": [
+            "make",
+            "-j{jobs}",
+            "platform=unix",
+            "CC=cc",
+            "CXX=c++",
+            "GIT_VERSION= 1c693c630121366f0b819d785762f1ce5b3a68d0"
+          ]
+        }
+      ],
+      "output": "mednafen_pce_fast_libretro.so",
+      "licenses": ["COPYING"],
+      "extensions": ["pce", "cue", "chd", "m3u"],
+      "options": {},
+      "firmware": []
+    },
+    {
+      "id": "beetle_supergrafx",
+      "platform": "supergrafx",
+      "revision": "3c6fcd3deded54ebecd69408f108407ac03d11b5",
+      "url": "https://github.com/libretro/beetle-supergrafx-libretro/archive/3c6fcd3deded54ebecd69408f108407ac03d11b5.tar.gz",
+      "archive": "beetle_supergrafx-3c6fcd3deded54ebecd69408f108407ac03d11b5.tar.gz",
+      "sha256": "87c5355089ad3d60befd76c2227062e48d6db5a33ab46e4b3efd680cb55a9ee9",
+      "build": [
+        {
+          "cwd": ".",
+          "command": [
+            "make",
+            "-j{jobs}",
+            "platform=unix",
+            "CC=cc",
+            "CXX=c++",
+            "GIT_VERSION= 3c6fcd3deded54ebecd69408f108407ac03d11b5"
+          ]
+        }
+      ],
+      "output": "mednafen_supergrafx_libretro.so",
+      "licenses": ["COPYING"],
+      "extensions": ["sgx", "cue", "chd", "m3u"],
+      "options": {
+        "sgx_forcesgx": "enabled"
+      },
+      "firmware": []
+    },
+    {
+      "id": "beetle_vb",
+      "platform": "virtualboy",
+      "revision": "83ed42608601fb7b01d41e4f8fb2007a37b8c84e",
+      "url": "https://github.com/libretro/beetle-vb-libretro/archive/83ed42608601fb7b01d41e4f8fb2007a37b8c84e.tar.gz",
+      "archive": "beetle_vb-83ed42608601fb7b01d41e4f8fb2007a37b8c84e.tar.gz",
+      "sha256": "02630caca19b3e5ba4a1132c78cca7c2ac7238169f7014d8f345b86540ce4fc7",
+      "build": [
+        {
+          "cwd": ".",
+          "command": [
+            "make",
+            "-j{jobs}",
+            "platform=unix",
+            "CC=cc",
+            "CXX=c++",
+            "GIT_VERSION= 83ed42608601fb7b01d41e4f8fb2007a37b8c84e"
+          ]
+        }
+      ],
+      "output": "mednafen_vb_libretro.so",
+      "licenses": ["COPYING"],
+      "extensions": ["vb", "vboy"],
+      "options": {},
+      "firmware": []
+    },
+    {
+      "id": "beetle_ngp",
+      "platform": "ngp",
+      "revision": "a50d5ac288a81f2104ddf43195a4efdd15c72227",
+      "url": "https://github.com/libretro/beetle-ngp-libretro/archive/a50d5ac288a81f2104ddf43195a4efdd15c72227.tar.gz",
+      "archive": "beetle_ngp-a50d5ac288a81f2104ddf43195a4efdd15c72227.tar.gz",
+      "sha256": "ffeabf2a357548f3a55423d542c31bb1e08571d81d7104f8213df3bfa2eb9c9f",
+      "build": [
+        {
+          "cwd": ".",
+          "command": [
+            "make",
+            "-j{jobs}",
+            "platform=unix",
+            "CC=cc",
+            "CXX=c++",
+            "GIT_VERSION= a50d5ac288a81f2104ddf43195a4efdd15c72227"
+          ]
+        }
+      ],
+      "output": "mednafen_ngp_libretro.so",
+      "licenses": ["COPYING"],
+      "extensions": ["ngp", "ngc", "ngpc", "npc"],
+      "options": {},
+      "firmware": []
+    },
+    {
+      "id": "stella",
+      "platform": "atari2600",
+      "revision": "ba52c43b9eda950eb0c0eec69cda9b17dee8c39b",
+      "url": "https://github.com/libretro/stella/archive/ba52c43b9eda950eb0c0eec69cda9b17dee8c39b.tar.gz",
+      "archive": "stella-ba52c43b9eda950eb0c0eec69cda9b17dee8c39b.tar.gz",
+      "sha256": "1f3425b0ddab23dad3c46d08780cc01cb919c47cc04b3b1318e798e0c22c03c5",
+      "build": [
+        {
+          "cwd": "src/os/libretro",
+          "command": [
+            "make",
+            "-j{jobs}",
+            "platform=unix",
+            "CC=cc",
+            "CXX=c++",
+            "GIT_VERSION=ba52c43b9eda950eb0c0eec69cda9b17dee8c39b"
+          ]
+        }
+      ],
+      "output": "src/os/libretro/stella2023_libretro.so",
+      "licenses": ["License.txt"],
+      "options": {},
+      "extensions": ["a26"],
+      "firmware": []
+    },
+    {
+      "id": "beetle_wswan",
+      "platform": "wonderswan",
+      "revision": "4b01295838ea89e3f1355bbe4cb5cf98aa6108cd",
+      "url": "https://github.com/libretro/beetle-wswan-libretro/archive/4b01295838ea89e3f1355bbe4cb5cf98aa6108cd.tar.gz",
+      "archive": "beetle_wswan-4b01295838ea89e3f1355bbe4cb5cf98aa6108cd.tar.gz",
+      "sha256": "bce15c0e2505e15b7b55fa1d51b4a12219d07a67be62bbca5c26678d0d89c659",
+      "build": [
+        {
+          "cwd": ".",
+          "command": [
+            "make",
+            "-j{jobs}",
+            "platform=unix",
+            "CC=cc",
+            "CXX=c++",
+            "GIT_VERSION=4b01295838ea89e3f1355bbe4cb5cf98aa6108cd"
+          ]
+        }
+      ],
+      "output": "mednafen_wswan_libretro.so",
+      "licenses": ["COPYING"],
+      "options": {},
+      "extensions": ["ws", "wsc"],
+      "firmware": []
+    },
+    {
+      "id": "pokemini",
+      "platform": "pokemon-mini",
+      "revision": "132111b76343559860532a1ccc094f93f1ed5650",
+      "url": "https://github.com/libretro/PokeMini/archive/132111b76343559860532a1ccc094f93f1ed5650.tar.gz",
+      "archive": "pokemini-132111b76343559860532a1ccc094f93f1ed5650.tar.gz",
+      "sha256": "53d1266404a823d1cf11b66b0d837c34604fa1623576275e52ec796b663ca2cf",
+      "build": [
+        {
+          "cwd": ".",
+          "command": [
+            "make",
+            "-f",
+            "Makefile.libretro",
+            "-j{jobs}",
+            "platform=unix",
+            "CC=cc",
+            "CXX=c++",
+            "GIT_VERSION=132111b76343559860532a1ccc094f93f1ed5650"
+          ]
+        }
+      ],
+      "output": "pokemini_libretro.so",
+      "licenses": ["LICENSE"],
+      "options": {},
+      "extensions": ["min"],
+      "firmware": []
+    },
+    {
+      "id": "picodrive",
+      "platform": "sega32x",
+      "revision": "ab021146b70eef7ec0ac2afe06a94e9b4c16ef74",
+      "url": "https://github.com/libretro/picodrive/archive/ab021146b70eef7ec0ac2afe06a94e9b4c16ef74.tar.gz",
+      "archive": "picodrive-ab021146b70eef7ec0ac2afe06a94e9b4c16ef74.tar.gz",
+      "sha256": "68317ec58c501f2b57057db4c12bd5990ae2941e5f015334c85770e86d39523f",
+      "dependencies": [
+        {
+          "path": "cpu/cyclone",
+          "revision": "3ac7cf1bdeecb60e2414980e8dc72ff092f69769",
+          "url": "https://github.com/irixxxx/cyclone68000/archive/3ac7cf1bdeecb60e2414980e8dc72ff092f69769.tar.gz",
+          "archive": "cyclone-3ac7cf1bdeecb60e2414980e8dc72ff092f69769.tar.gz",
+          "sha256": "e570e121721441c1bf8015a8bce8614b73954e2344b983b3650e591952f74a6c"
+        },
+        {
+          "path": "pico/cd/libchdr",
+          "revision": "e62ac5995b1c7ef65ece35293914843b8ee57d49",
+          "url": "https://github.com/irixxxx/libchdr/archive/e62ac5995b1c7ef65ece35293914843b8ee57d49.tar.gz",
+          "archive": "libchdr-e62ac5995b1c7ef65ece35293914843b8ee57d49.tar.gz",
+          "sha256": "59b99005d3d6317a0d1e45e1c4abf0e551070dbf32c8fdc66ed5b4ae6d8ea702"
+        },
+        {
+          "path": "pico/sound/emu2413",
+          "revision": "a2dfc20ff507e4fd075cd325620bcea655e2c1f7",
+          "url": "https://github.com/digital-sound-antiques/emu2413/archive/a2dfc20ff507e4fd075cd325620bcea655e2c1f7.tar.gz",
+          "archive": "emu2413-a2dfc20ff507e4fd075cd325620bcea655e2c1f7.tar.gz",
+          "sha256": "bd816079cfbf13c56a260c095d6b8e260c2f877e5b13f50d4e570b96e8b92830"
+        },
+        {
+          "path": "platform/common/dr_libs",
+          "revision": "dd762b861ecadf5ddd5fb03e9ca1db6707b54fbb",
+          "url": "https://github.com/mackron/dr_libs/archive/dd762b861ecadf5ddd5fb03e9ca1db6707b54fbb.tar.gz",
+          "archive": "dr_libs-dd762b861ecadf5ddd5fb03e9ca1db6707b54fbb.tar.gz",
+          "sha256": "8f0be8a4aa27cd4ddaba41acbb845b1641964f2cc2f5a5f7b4b72f73368c1c12"
+        },
+        {
+          "path": "platform/libpicofe",
+          "revision": "9ed5822606dd7ff20a782a882e8fd611cb53ba88",
+          "url": "https://github.com/irixxxx/libpicofe/archive/9ed5822606dd7ff20a782a882e8fd611cb53ba88.tar.gz",
+          "archive": "libpicofe-9ed5822606dd7ff20a782a882e8fd611cb53ba88.tar.gz",
+          "sha256": "458519aaa70916528e593f1f052aa45f704670fba094b409478a8197e6f076a7"
+        }
+      ],
+      "build": [
+        {
+          "cwd": ".",
+          "command": [
+            "make",
+            "-f",
+            "Makefile.libretro",
+            "-j{jobs}",
+            "platform=unix",
+            "CC=cc",
+            "CXX=c++"
+          ]
+        }
+      ],
+      "output": "picodrive_libretro.so",
+      "licenses": [
+        "COPYING",
+        "cpu/cyclone/License-GPLv2.txt",
+        "cpu/cyclone/License.txt",
+        "pico/cd/libchdr/LICENSE.txt",
+        "pico/cd/libchdr/deps/lzma-24.05/LICENSE",
+        "pico/cd/libchdr/deps/zlib-1.3.1/LICENSE",
+        "pico/cd/libchdr/deps/zstd-1.5.6/COPYING",
+        "pico/cd/libchdr/deps/zstd-1.5.6/LICENSE",
+        "pico/sound/emu2413/LICENSE",
+        "platform/common/dr_libs/LICENSE",
+        "platform/common/tremor/COPYING",
+        "platform/libpicofe/arm/neon_scale_license.txt"
+      ],
+      "options": {},
+      "extensions": ["32x"],
+      "firmware": [],
+      "redistribution": "noncommercial-only"
     }
   ]
 }
