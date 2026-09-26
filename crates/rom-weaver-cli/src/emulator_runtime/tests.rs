@@ -50,7 +50,7 @@ fn offline_install_verifies_files_and_preserves_existing_runtime() {
     let result = install(&args, false).unwrap();
     assert_eq!(result["core"], "fceumm");
     let runtime = resolve(args.runtime_dir.as_deref()).unwrap();
-    assert_eq!(fs::read(&runtime.core).unwrap(), b"fixture core");
+    assert_eq!(fs::read(&runtime.cores[0].path).unwrap(), b"fixture core");
     assert_eq!(runtime.retroarch_revision, "a".repeat(40));
     fs::write(args.archive.as_ref().unwrap(), b"not an archive").unwrap();
     assert!(
@@ -59,7 +59,7 @@ fn offline_install_verifies_files_and_preserves_existing_runtime() {
             .unwrap()
             .contains("already installed")
     );
-    assert_eq!(fs::read(&runtime.core).unwrap(), b"fixture core");
+    assert_eq!(fs::read(&runtime.cores[0].path).unwrap(), b"fixture core");
 }
 
 #[test]
@@ -93,8 +93,8 @@ fn changed_executable_and_symlinked_core_are_rejected() {
             .contains("checksum mismatch")
     );
     fs::write(&runtime.retroarch, &fixture()[1].1).unwrap();
-    fs::remove_file(&runtime.core).unwrap();
-    std::os::unix::fs::symlink(&runtime.retroarch, &runtime.core).unwrap();
+    fs::remove_file(&runtime.cores[0].path).unwrap();
+    std::os::unix::fs::symlink(&runtime.retroarch, &runtime.cores[0].path).unwrap();
     assert!(
         resolve(args.runtime_dir.as_deref())
             .unwrap_err()
@@ -176,4 +176,59 @@ fn existing_unrecognized_directory_is_preserved() {
         fs::read(destination.join("keep")).unwrap(),
         b"existing data"
     );
+}
+
+#[test]
+fn multiple_cores_and_system_assets_are_verified() {
+    let temp = assert_fs::TempDir::new().unwrap();
+    let mut files = fixture();
+    let mut manifest: Value = serde_json::from_slice(&files[0].1).unwrap();
+    manifest["schemaVersion"] = json!(2);
+    manifest["cores"][0]["extensions"] = json!(["nes"]);
+    manifest["cores"].as_array_mut().unwrap().push(json!({
+        "id": "gambatte", "platform": "gb", "path": "cores/gambatte_libretro.so",
+        "revision": "c".repeat(40), "sha256": sha256_hex(b"gb core"),
+        "extensions": ["gb", "gbc"], "options": {"gambatte_gb_colorization": "disabled"},
+        "firmware": ["dmg_boot.bin"]
+    }));
+    manifest["systemFiles"] =
+        json!([{"path": "system/dmg_boot.bin", "sha256": sha256_hex(b"firmware")}]);
+    files[0].1 = serde_json::to_vec(&manifest).unwrap();
+    files.push(("cores/gambatte_libretro.so", b"gb core".to_vec()));
+    files.push(("system/dmg_boot.bin", b"firmware".to_vec()));
+    let args = options(temp.path(), &archive(&files));
+    install(&args, false).unwrap();
+    let runtime = resolve(args.runtime_dir.as_deref()).unwrap();
+    assert_eq!(runtime.cores.len(), 2);
+    assert_eq!(runtime.cores[1].extensions, ["gb", "gbc"]);
+    fs::write(runtime.root.join("system/dmg_boot.bin"), b"modified").unwrap();
+    assert!(
+        resolve(args.runtime_dir.as_deref())
+            .unwrap_err()
+            .to_string()
+            .contains("checksum mismatch")
+    );
+}
+
+#[test]
+fn unsafe_core_metadata_never_publishes_a_runtime() {
+    for (key, value) in [
+        ("id", json!("../fceumm")),
+        ("extensions", json!(["../nes"])),
+        ("firmware", json!(["../outside"])),
+        (
+            "options",
+            json!({"option": "value\"\nconfig_save_on_exit = true"}),
+        ),
+    ] {
+        let temp = assert_fs::TempDir::new().unwrap();
+        let mut files = fixture();
+        let mut manifest: Value = serde_json::from_slice(&files[0].1).unwrap();
+        manifest["schemaVersion"] = json!(2);
+        manifest["cores"][0][key] = value;
+        files[0].1 = serde_json::to_vec(&manifest).unwrap();
+        let args = options(temp.path(), &archive(&files));
+        assert!(install(&args, false).is_err(), "{key} must fail");
+        assert!(!args.runtime_dir.as_ref().unwrap().exists());
+    }
 }
