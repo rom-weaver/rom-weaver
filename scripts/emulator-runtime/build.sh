@@ -17,7 +17,7 @@ while [ "$#" -gt 0 ]; do
 done
 [ -n "$output_dir" ] && [ -n "$build_dir" ] || usage
 
-for command in cc c++ curl gzip make node sha256sum tar; do
+for command in cc c++ cmake curl gzip make nasm node python3 sha256sum tar; do
   command -v "$command" >/dev/null 2>&1 || {
     echo "required command is unavailable: $command" >&2
     exit 1
@@ -59,7 +59,7 @@ mkdir -p "$TMPDIR" "$build_dir/downloads" "$build_dir/src" \
 read_source() {
   node -e '
     const source = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
-    const item = process.argv[2] === "retroarch" ? source.retroarch : source.cores[0];
+    const item = process.argv[2] === "retroarch" ? source.retroarch : source.cores.find((core) => core.id === process.argv[2]);
     process.stdout.write(String(item[process.argv[3]]));
   ' "$script_dir/sources.json" "$1" "$2"
 }
@@ -149,29 +149,7 @@ install -m 0644 "$build_dir/src/retroarch/COPYING" \
 install -m 0644 "$build_dir/src/fceumm/Copying" \
   "$build_dir/runtime/licenses/FCEUmm-Copying"
 
-retroarch_revision=$(read_source retroarch revision)
-retroarch_sha=$(sha256sum "$build_dir/runtime/bin/retroarch" | cut -d ' ' -f 1)
-fceumm_sha=$(sha256sum "$build_dir/runtime/cores/fceumm_libretro.so" | cut -d ' ' -f 1)
-cat >"$build_dir/runtime/manifest.json" <<EOF
-{
-  "schemaVersion": 1,
-  "platform": "linux-x64-gnu",
-  "retroarch": {
-    "path": "bin/retroarch",
-    "revision": "$retroarch_revision",
-    "sha256": "$retroarch_sha"
-  },
-  "cores": [
-    {
-      "id": "fceumm",
-      "platform": "nes",
-      "path": "cores/fceumm_libretro.so",
-      "revision": "$fceumm_revision",
-      "sha256": "$fceumm_sha"
-    }
-  ]
-}
-EOF
+node "$script_dir/build-cores.mjs" "$build_dir"
 
 node "$script_dir/verify-runtime.mjs" "$build_dir/runtime"
 
@@ -182,7 +160,8 @@ runtime_digest=$(sha256sum "$runtime_archive" | cut -d ' ' -f 1)
 printf '%s  %s\n' "$runtime_digest" "$(basename "$runtime_archive")" \
   >"$runtime_archive.sha256"
 
-cp "$script_dir/build.sh" "$script_dir/smoke.sh" \
+cp "$script_dir/build.sh" "$script_dir/build-cores.mjs" \
+  "$script_dir/inspect-core.py" "$script_dir/smoke.sh" \
   "$script_dir/verify-runtime.mjs" "$script_dir/sources.json" \
   "$build_dir/source-package/"
 cp "$build_dir/runtime/licenses/RetroArch-COPYING" \
