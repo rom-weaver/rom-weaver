@@ -7,6 +7,7 @@ import { createLogger } from "../../lib/logging.ts";
 import { createPatchMetadataLabel } from "../../lib/output/output-name-composition.ts";
 import type { ParsedBundleChecks, ParsedBundlePatchInput } from "../../types/bundle.ts";
 import type { BinarySource, PatcherOutputController, PatcherStackController } from "./patcher-form.ts";
+import { waitForPatchStackReady } from "./wait-for-patch-stack-ready.ts";
 import { getReactBinarySourceFileName } from "./workflow-adapters.ts";
 
 const logger = createLogger("bundle-apply-session");
@@ -167,6 +168,7 @@ const useBundleApplySession = ({
   const [bundleMetaById, setBundleMetaById] = useState<ReadonlyMap<string, BundlePatchMeta>>(new Map());
   const [bundleDefaultsPending, setBundleDefaultsPending] = useState(false);
   const seedGenerationRef = useRef(0);
+  const seedAbortRef = useRef<AbortController | null>(null);
   // Apply-time input checks per patch id, filled from the identify record the
   // bundle's rom checks name. Kept out of `bundleMetaById` on purpose: the form
   // rebuilds run options from that metadata, and an export must not carry these.
@@ -176,6 +178,8 @@ const useBundleApplySession = ({
   useEffect(
     () => () => {
       seedGenerationRef.current += 1;
+      seedAbortRef.current?.abort();
+      seedAbortRef.current = null;
       activeSeedPatchNamesRef.current = null;
     },
     [],
@@ -189,6 +193,8 @@ const useBundleApplySession = ({
         clearGeneratedPatchNames(patches);
         if (activeSeedPatchNamesRef.current) {
           seedGenerationRef.current += 1;
+          seedAbortRef.current?.abort();
+          seedAbortRef.current = null;
           activeSeedPatchNamesRef.current = null;
           appliedKeyRef.current = null;
           setBundleDefaultsPending(false);
@@ -205,6 +211,8 @@ const useBundleApplySession = ({
         clearGeneratedPatchNames(patches);
         if (activeSeedPatchNamesRef.current) {
           seedGenerationRef.current += 1;
+          seedAbortRef.current?.abort();
+          seedAbortRef.current = null;
           activeSeedPatchNamesRef.current = null;
           appliedKeyRef.current = null;
           setBundleDefaultsPending(false);
@@ -223,6 +231,9 @@ const useBundleApplySession = ({
       appliedKeyRef.current = session.key;
       const generation = seedGenerationRef.current + 1;
       seedGenerationRef.current = generation;
+      seedAbortRef.current?.abort();
+      const seedAbort = new AbortController();
+      seedAbortRef.current = seedAbort;
       activeSeedPatchNamesRef.current = expected;
       setBundleDefaultsPending(true);
       logger.debug("bundle session matched patch list; seeding enablement + defaults", {
@@ -249,17 +260,11 @@ const useBundleApplySession = ({
           // Let the patch-list state commit so the option mutations snapshot the new list.
           await nextTask();
           if (!isCurrent()) return;
-          for (let attempt = 0; attempt < 100; attempt += 1) {
-            if (!isCurrent()) return;
-            const items = controllersRef.current.patchStack?.getState().items || [];
-            if (
-              items.length === session.entries.length &&
-              items.every((item) => !(item.progress || item.optionsDisabled))
-            ) {
-              break;
-            }
-            await new Promise<void>((resolve) => setTimeout(resolve, 20));
-          }
+          await waitForPatchStackReady(controllersRef.current.patchStack, {
+            count: session.entries.length,
+            signal: seedAbort.signal,
+          });
+          if (!isCurrent()) return;
           const memberLaneChecks = await resolveMemberLaneChecks(session);
           if (!isCurrent()) return;
           memberLaneChecksRef.current = new Map(
@@ -306,6 +311,7 @@ const useBundleApplySession = ({
           if (defaults.header) controllersRef.current.output?.setOutputHeader?.(defaults.header);
         } finally {
           if (isCurrent()) {
+            seedAbortRef.current = null;
             activeSeedPatchNamesRef.current = null;
             setBundleDefaultsPending(false);
             logger.debug("bundle session defaults applied", {
