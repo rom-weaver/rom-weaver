@@ -62,6 +62,18 @@ test("webapp changes reuse wasm and skip Rust", () => {
 });
 test("root Node scripts keep webapp coverage", () =>
   assert.equal(classify("scripts/warn-only.mjs").webapp, "true"));
+test("emulator runtime changes select Rust without the webapp", () => {
+  for (const path of [
+    "scripts/emulator-runtime/build.sh",
+    "scripts/ci/check-emulator-runtime.mjs",
+    "scripts/emulator-runtime/verify-runtime.mjs",
+    "scripts/emulator-runtime/sources.json",
+  ]) {
+    const result = classify(path);
+    assert.equal(result.rust, "true", path);
+    assert.equal(result.webapp, "false", path);
+  }
+});
 test("browser runtime changes select the direct WASM browser suite", () => {
   for (const path of [
     "packages/rom-weaver-webapp/src/wasm/browser-opfs-runner.ts",
@@ -333,6 +345,7 @@ test("dependency and CI changes select their broader checks", () => {
   });
   for (const path of [
     ".github/workflows/ci.yml",
+    ".github/workflows/emulator-runtime.yml",
     "scripts/ci/mise-disable-tools.mjs",
   ]) {
     assert.deepEqual(

@@ -17,6 +17,8 @@ mod cli;
 #[cfg(not(target_arch = "wasm32"))]
 mod cli_inputs;
 #[cfg(not(target_arch = "wasm32"))]
+mod emulator_runtime;
+#[cfg(not(target_arch = "wasm32"))]
 mod formats_command;
 #[cfg(not(target_arch = "wasm32"))]
 mod interactive;
@@ -26,6 +28,8 @@ pub(crate) mod manpages;
 mod native_output;
 #[cfg(not(target_arch = "wasm32"))]
 mod render;
+#[cfg(not(target_arch = "wasm32"))]
+mod rom_test;
 mod save_command;
 #[cfg(not(target_arch = "wasm32"))]
 mod stdout_output;

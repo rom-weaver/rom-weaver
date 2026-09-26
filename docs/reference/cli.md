@@ -9,6 +9,8 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
   - [Alternate names](#alternate-names)
 - [Binary pipelines](#binary-pipelines)
 - [Reaching inside archives](#reaching-inside-archives)
+- [Native ROM testing](#native-rom-testing)
+  - [Runtime cores](#runtime-cores)
 - [Identify](#identify)
   - [Identify flags](#identify-flags)
   - [Identify database directory](#identify-database-directory)
@@ -50,6 +52,9 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 | `formats` | List the formats this build supports, and what it can do with each. |
 | `compress` | Pack files into an archive, disc image, or ROM-specific compressed format. |
 | `trim` | Cut the padding off a ROM, or put it back. |
+| `test` | Start a ROM for a fixed frame count and hash the captured final frame. |
+| `emulator install` | Install the optional native ROM test runtime. |
+| `emulator info` | Verify and describe the installed native test runtime. |
 | `cheat list` | List the cheat database's entries for a ROM, with each one's delivery. |
 | `patch apply` | Apply one or more patches to a ROM, in order. |
 | `patch create` | Build a patch from an original ROM and a changed one. |
@@ -165,6 +170,67 @@ Not every command takes all five. `extract` has no `--no-extract`, since unpacki
 --help` is authoritative.
 
 `extract` also unpacks archives found inside the input, up to eight levels deep; `--no-nested-extract` stops after the first layer. If any output file already exists, extraction stops before writing anything, unless `--force` is given. While extracting it can hash what it writes (`--checksum ALGO`, or `--checksum-rom ALGO` for the ROMs only) and report each file's format and platform (`--probe`).
+
+## Native ROM testing
+
+`rom-weaver test INPUT` runs a bounded emulator smoke test on Linux x86-64 with GNU libc 2.39 or later. Native macOS and Windows runtimes are not available. The installed runtime defines the accepted systems and extensions. FCEUmm `.nes` inputs also receive an iNES or NES 2.0 header check.
+
+The command uses a matching optional runtime containing headless RetroArch and libretro cores. The RetroArch frontend is built without networking. It isolates configuration, cache, data, saves, states, system files, and input. A custom `--runtime-dir` can contain a different executable. rom-weaver does not add an operating-system network sandbox. A successful result means that the core started and produced a PNG after the requested frame budget. It does not guarantee controller input, later gameplay, or game completion.
+
+| `test` option | Value |
+| --- | --- |
+| `INPUT` | A ROM, CUE/GDI disc sheet, M3U playlist, or archive containing a supported input. |
+| `--frames N` | Requested frame budget. The default is 600; the range is 1–10,000,000. |
+| `--timeout SECONDS` | Emulator process wall-clock limit; input extraction and staging precede it. The default is 30; the range is 1–3,600. |
+| `--screenshot FILE` | Publish the captured PNG without replacing an existing file. Omit it to capture and hash a temporary image. |
+| `--runtime-dir DIR` | Use and verify a runtime at this path instead of the versioned user data directory. |
+| `--core ID` | Select an installed core. Without this option, exactly one core must accept the input extension. |
+| `--system-dir DIR` | Copy user-supplied firmware and core assets into the isolated system directory. |
+| `--select NAME` | Select an archive member by exact name, prefix, or glob. |
+
+Archives are extracted completely before input selection. CUE, GDI, and M3U inputs copy relative companion files recursively. Companion references must stay inside the source directory. Staging accepts at most 1,024 companion files and eight reference levels. Disc sheets and playlists have a 1 MiB text limit.
+
+The system directory accepts regular files and directories only. It rejects symbolic links, traversal, more than 4,096 entries, more than 512 MiB, and nesting deeper than 16 directories. The command fails when a selected core's required firmware paths remain missing.
+
+The JSON result uses `details.status: "smoke-tested"`. It reports `requested_frames`, `timeout_seconds`, `platform`, `core`, `retroarch_revision`, `core_revision`, `elapsed_ms`, `screenshot`, and `screenshot_sha256`. `screenshot` is `null` when the image was captured only for validation. The result does not claim an observed frame count. Bounded RetroArch stdout and stderr are included for diagnostics.
+
+`rom-weaver emulator install` installs the runtime for the current CLI version. With no archive option, it downloads the runtime archive and `.sha256` file from the matching GitHub release. `--runtime-dir DIR` changes the destination. `--archive FILE --sha256 HEX` performs an offline install and requires both options. Installation verifies the archive digest, the strict manifest, and each runtime file before it publishes the directory.
+
+`rom-weaver emulator info` verifies the installed runtime again. It reports the directory, platform, RetroArch revision, and each core's ID, platform, revision, extensions, and firmware paths. It accepts `--runtime-dir DIR`.
+
+The default runtime directory is the versioned `emulators/VERSION/linux-x64-gnu` directory beside the native identify database. See [Test a ROM from the CLI](../how-to/test-roms-cli.md) for the procedure and [Native emulator runtime](../development/emulator-runtime.md) for the build and release contract.
+
+### Runtime cores
+
+The multi-core runtime uses these core and platform IDs. `rom-weaver emulator info` is authoritative for the cores and extensions in an installed runtime.
+
+| Core ID | Platform ID | System |
+| --- | --- | --- |
+| `fceumm` | `nes` | Nintendo Entertainment System |
+| `gambatte` | `gb` | Game Boy and Game Boy Color |
+| `mgba` | `gba` | Game Boy Advance |
+| `snes9x` | `snes` | Super Nintendo Entertainment System |
+| `genesis_plus_gx` | `genesis` | Sega Genesis and Mega Drive |
+| `smsplus` | `sms` | Sega Master System and Game Gear |
+| `handy` | `lynx` | Atari Lynx |
+| `prosystem` | `atari7800` | Atari 7800 |
+| `melonds` | `nds` | Nintendo DS |
+| `mupen64plus_next` | `n64` | Nintendo 64 |
+| `pcsx_rearmed` | `psx` | PlayStation |
+| `ppsspp` | `psp` | PlayStation Portable |
+| `yabause` | `saturn` | Sega Saturn |
+| `stella` | `atari2600` | Atari 2600 |
+| `beetle_pce_fast` | `pce` | PC Engine and TurboGrafx-16 |
+| `beetle_supergrafx` | `supergrafx` | PC Engine SuperGrafx |
+| `beetle_vb` | `virtualboy` | Virtual Boy |
+| `beetle_ngp` | `ngp` | Neo Geo Pocket and Neo Geo Pocket Color |
+| `beetle_wswan` | `wonderswan` | WonderSwan and WonderSwan Color |
+| `pokemini` | `pokemon-mini` | Pokémon Mini |
+| `picodrive` | `sega32x` | Sega 32X |
+
+Sega CD inputs need the BIOS for their region: `bios_CD_E.bin`, `bios_CD_U.bin`, or `bios_CD_J.bin`. Famicom Disk System inputs need `disksys.rom`. These conditional files are user-supplied through `--system-dir`; cartridge inputs do not need them.
+
+PC Engine CD inputs use `syscard3.pce` with the packaged Beetle defaults. The SuperGrafx core forces SuperGrafx mode, including for homebrew ROMs without a known game checksum. PicoDrive advertises `.32x` for automatic selection; `.md`, `.gen`, and `.smd` continue to select Genesis Plus GX.
 
 ## Identify
 

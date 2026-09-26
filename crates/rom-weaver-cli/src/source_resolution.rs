@@ -67,9 +67,65 @@ pub(super) struct AutoExtractResolutionFlags {
 enum AutoExtractMode {
     Recursive,
     SingleStep,
+    SingleStepWithCompanions,
 }
 
 impl CliApp {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(super) fn resolve_emulator_source(
+        &self,
+        source: &Path,
+        select: &[String],
+        context: &OperationContext,
+        extensions: &std::collections::HashSet<String>,
+    ) -> Result<ResolvedChecksumSource> {
+        let mut resolved = ResolvedChecksumSource {
+            source: source.to_path_buf(),
+            extracted_archives: 0,
+            cleanup_paths: Vec::new(),
+        };
+        for _ in 0..=MAX_NESTED_EXTRACT_DEPTH {
+            let extension = resolved
+                .source
+                .extension()
+                .and_then(|value| value.to_str())
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            // Emulator-readable disc images MUST remain whole, including after archive extraction.
+            if extensions.contains(&extension) {
+                return Ok(resolved);
+            }
+            let next = self.resolve_source_with_auto_extract_with_mode(
+                &resolved.source,
+                select,
+                context,
+                AutoExtractResolutionLabels {
+                    command: "test",
+                    family: OperationFamily::Command,
+                    format: None,
+                    source_label: "ROM",
+                    temp_prefix: "test-extract",
+                },
+                AutoExtractResolutionOptions {
+                    no_extract: false,
+                    no_ignore: false,
+                    kind_filter: ArchiveEntryKindFilter::new(true, false),
+                    mode: AutoExtractMode::SingleStepWithCompanions,
+                    stop_on_single_payload_codec: true,
+                },
+            )?;
+            if next.source == resolved.source {
+                return Ok(resolved);
+            }
+            resolved.source = next.source;
+            resolved.extracted_archives += next.extracted_archives;
+            resolved.cleanup_paths.extend(next.cleanup_paths);
+        }
+        Err(RomWeaverError::Validation(format!(
+            "ROM extract exceeded max depth of {MAX_NESTED_EXTRACT_DEPTH}"
+        )))
+    }
+
     pub(super) fn resolve_exact_member_source(
         &self,
         source: &Path,
@@ -387,7 +443,10 @@ impl CliApp {
             // An unambiguous container resolves to an empty list, so we extract it whole as before.
             let resolved_selections;
             let select_for_extract: &[String] =
-                if select.is_empty() && self.interactive_selection_enabled {
+                if options.mode == AutoExtractMode::SingleStepWithCompanions {
+                    // Disc sheets and playlists MUST retain their referenced archive members.
+                    &[]
+                } else if select.is_empty() && self.interactive_selection_enabled {
                     resolved_selections = self.resolve_extract_payload_selections(
                         handler.as_ref(),
                         &current_source,
@@ -413,7 +472,11 @@ impl CliApp {
                 SelectionExtract {
                     out_dir: &out_dir,
                     selections: select_for_extract,
-                    kind_filter: options.kind_filter,
+                    kind_filter: if options.mode == AutoExtractMode::SingleStepWithCompanions {
+                        ArchiveEntryKindFilter::default()
+                    } else {
+                        options.kind_filter
+                    },
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -442,8 +505,13 @@ impl CliApp {
                 "auto-extract archive extraction completed"
             );
 
-            let selected_candidate =
-                self.resolve_auto_extract_candidate(&current_source, &out_dir, labels, options)?;
+            let selected_candidate = self.resolve_auto_extract_candidate(
+                &current_source,
+                &out_dir,
+                labels,
+                options,
+                select,
+            )?;
             trace!(
                 source = %current_source.display(),
                 selected = %selected_candidate.display_name,
@@ -451,7 +519,7 @@ impl CliApp {
                 "auto-extract selected single candidate"
             );
             current_source = selected_candidate.source;
-            if options.mode == AutoExtractMode::SingleStep {
+            if options.mode != AutoExtractMode::Recursive {
                 break;
             }
         }
@@ -476,8 +544,22 @@ impl CliApp {
         out_dir: &Path,
         labels: AutoExtractResolutionLabels<'_>,
         options: AutoExtractResolutionOptions,
+        select: &[String],
     ) -> Result<ChecksumExtractCandidate> {
         let all_candidates = self.collect_checksum_extract_candidates(out_dir)?;
+        if options.mode == AutoExtractMode::SingleStepWithCompanions && !select.is_empty() {
+            let mut matcher = SelectionMatcher::new(select);
+            let candidates = all_candidates
+                .into_iter()
+                .filter(|candidate| matcher.matches(&candidate.display_name))
+                .collect();
+            matcher.ensure_all_matched()?;
+            return self.select_auto_extract_candidate(
+                current_source,
+                candidates,
+                labels.source_label,
+            );
+        }
         trace!(
             source = %current_source.display(),
             candidate_count = all_candidates.len(),

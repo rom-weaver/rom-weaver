@@ -1,0 +1,64 @@
+name: Build emulator runtime
+
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: Commit to build. Defaults to the caller's commit.
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Linux x64 glibc
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CARGO_TERM_COLOR: always
+      TMPDIR: ${{ github.workspace }}/target/emulator-tmp
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+
+      - name: Prepare build directories
+        run: mkdir -p target/emulator-artifacts target/emulator-build target/emulator-tmp
+
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tools: node rust
+          apt-packages: cmake ninja-build pkg-config clang libclang-dev nasm libgl-dev zlib1g-dev
+          cache-save: "false"
+
+      - name: Build emulator runtime
+        run: >-
+          scripts/emulator-runtime/build.sh
+          --output-dir target/emulator-artifacts
+          --build-dir target/emulator-build
+
+      - name: Build integration CLI
+        run: cargo build --locked -p rom-weaver-cli --no-default-features
+
+      - name: Check emulator integration
+        run: >-
+          node scripts/ci/check-emulator-runtime.mjs
+          --cli target/debug/rom-weaver
+          --archive target/emulator-artifacts/rom-weaver-emulator-linux-x64-gnu.tar.gz
+          --scratch target/emulator-check
+          --source-dir target/emulator-build/src
+
+      - name: Upload emulator runtime
+        uses: actions/upload-artifact@v7
+        with:
+          name: emulator-runtime-linux-x64-gnu
+          path: |
+            target/emulator-artifacts/*.tar.gz
+            target/emulator-artifacts/*.sha256
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7

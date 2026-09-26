@@ -69,7 +69,7 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
 
   for (const path of paths.filter(Boolean)) {
     if (
-      /^\.github\/workflows\/(?:ci|coverage)\.yml$/.test(path) ||
+      /^\.github\/workflows\/(?:ci|coverage|emulator-runtime)\.yml$/.test(path) ||
       /^\.github\/actions\/(?:setup-build-env|wasm-cache)\//.test(path) ||
       path.startsWith(".cargo/") ||
       path === ".config/lefthook.yml" ||
@@ -79,7 +79,8 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
         !path.endsWith(".test.mjs") &&
         !REPO_LINT_CI_HELPERS.has(path) &&
         path !== "scripts/ci/cli-platform-matrix.mjs" &&
-        path !== "scripts/ci/docker-matrix.mjs")
+        path !== "scripts/ci/docker-matrix.mjs" &&
+        path !== "scripts/ci/check-emulator-runtime.mjs")
     )
       result.full = true;
 
@@ -93,6 +94,13 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
         // inputs below changed and the Docker path itself needs proving.
         if (eventName !== "pull_request") result.docker_cli = true;
       }
+    }
+
+    if (
+      path.startsWith("scripts/emulator-runtime/") ||
+      path === "scripts/ci/check-emulator-runtime.mjs"
+    ) {
+      result.rust = true;
     }
 
     if (
@@ -133,7 +141,7 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
       // CI helper tests run in repo-lint. Their implementation does not enter
       // the webapp bundle, and the classifier keeps selection plumbing above
       // fail-open.
-      /^scripts\/(?!ci\/).*\.mjs$/.test(path) ||
+      /^scripts\/(?!(?:ci|emulator-runtime)\/).*\.mjs$/.test(path) ||
       path.startsWith("scripts/wasm/") ||
       path === ".dockerignore" ||
       path === "docker-compose.yml" ||
@@ -255,8 +263,7 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
 
   // The prebuilt smoke requires a webapp bundle and an image change on ordinary
   // pull requests; other events also select it for webapp changes to publish nightly.
-  result.docker_prebuilt =
-    result.webapp && (eventName !== "pull_request" || result.docker_webapp);
+  result.docker_prebuilt = result.webapp && (eventName !== "pull_request" || result.docker_webapp);
   return result;
 }
 
