@@ -15,7 +15,7 @@ use rom_weaver_core::{
     OperationContext, OperationFamily, OperationReport, OperationStatus, PatchApplyRequest,
     PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
     ProgressEvent, Result, RomWeaverError, SharedBlockCacheReader, SharedThreadPool,
-    ThreadCapability,
+    ThreadCapability, bounded_items_for_threads,
 };
 use suffix_array::SuffixArray;
 use tracing::{debug, trace};
@@ -33,6 +33,7 @@ const COPY_BUFFER_SIZE: usize = 32 * 1024;
 /// Heap buffer for the serial streaming apply source-copy loop. Its size keeps
 /// WASM writes above the OPFS write-coalescing threshold.
 const APPLY_STREAM_BUFFER_SIZE: usize = 4 * 1024 * 1024;
+const BPS_PARALLEL_WRITE_CHUNK_SIZE: u64 = 4 * 1024 * 1024;
 const BPS_NO_OFFSET: u32 = u32::MAX;
 const BPS_MIN_COPY_LENGTH: usize = 4;
 const BPS_CREATE_INDEX_TAIL_BYTES: usize = 256;
@@ -167,14 +168,8 @@ impl PatchHandler for BpsPatchHandler {
                 thread_capability,
                 !has_target_copy,
                 |pool| {
-                    prepare_bps_writes_parallel(
-                        &patch,
-                        &request.input,
-                        patch.source_size,
-                        pool,
-                        context,
-                    )
-                    .map(Some)
+                    prepare_bps_writes_parallel(&patch, &request.input, patch.source_size, pool)
+                        .map(Some)
                 },
                 || {
                     let mut buffered_source = BufReader::new(source);
@@ -191,7 +186,7 @@ impl PatchHandler for BpsPatchHandler {
             if let Some(prepared) = prepared {
                 let mut progress =
                     BpsApplyProgress::new(context, self.descriptor.name, patch.target_size);
-                apply_prepared_bps_writes(&mut output, &prepared, &mut progress)?;
+                apply_parallel_bps_writes(&mut output, prepared, context, &mut progress)?;
             }
             if execution.used_parallelism && has_target_copy {
                 execution.apply_pool_fallback(
@@ -340,6 +335,13 @@ struct BpsWritePlan<'a> {
 struct PreparedBpsWrite {
     output_offset: u64,
     data: Vec<u8>,
+}
+
+struct PreparedBpsWrites<'a> {
+    plans: Vec<BpsWritePlan<'a>>,
+    source: Arc<SharedBlockCacheReader>,
+    source_len: u64,
+    pool: SharedThreadPool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1756,13 +1758,7 @@ fn collect_parallel_bps_write_plans(patch: &ParsedBpsPatch) -> Result<Vec<BpsWri
                         "SourceRead exceeded input size at output offset {output_offset}"
                     )));
                 }
-                plans.push(BpsWritePlan {
-                    output_offset,
-                    kind: BpsWritePlanKind::SourceRange {
-                        source_offset: output_offset,
-                        len: *length,
-                    },
-                });
+                push_source_write_plans(&mut plans, output_offset, output_offset, *length)?;
                 output_offset = end;
             }
             BpsAction::TargetRead { data } => {
@@ -1775,10 +1771,7 @@ fn collect_parallel_bps_write_plans(patch: &ParsedBpsPatch) -> Result<Vec<BpsWri
                 output_offset = output_offset.checked_add(data_len).ok_or_else(|| {
                     RomWeaverError::Validation("BPS target-read output overflowed".into())
                 })?;
-                plans.push(BpsWritePlan {
-                    output_offset: start,
-                    kind: BpsWritePlanKind::Literal(data.as_slice()),
-                });
+                push_literal_write_plans(&mut plans, start, data)?;
             }
             BpsAction::SourceCopy {
                 length,
@@ -1798,13 +1791,7 @@ fn collect_parallel_bps_write_plans(patch: &ParsedBpsPatch) -> Result<Vec<BpsWri
                         "SourceCopy exceeded input size at source offset {source_start}"
                     )));
                 }
-                plans.push(BpsWritePlan {
-                    output_offset,
-                    kind: BpsWritePlanKind::SourceRange {
-                        source_offset: source_start,
-                        len: *length,
-                    },
-                });
+                push_source_write_plans(&mut plans, output_offset, source_start, *length)?;
                 source_relative_offset = i128::from(source_end);
                 output_offset = output_offset.checked_add(*length).ok_or_else(|| {
                     RomWeaverError::Validation("BPS output offset overflowed".into())
@@ -1835,59 +1822,127 @@ fn collect_parallel_bps_write_plans(patch: &ParsedBpsPatch) -> Result<Vec<BpsWri
     Ok(plans)
 }
 
-fn prepare_bps_writes_parallel(
-    patch: &ParsedBpsPatch,
+fn push_source_write_plans<'a>(
+    plans: &mut Vec<BpsWritePlan<'a>>,
+    mut output_offset: u64,
+    mut source_offset: u64,
+    mut len: u64,
+) -> Result<()> {
+    while len > 0 {
+        let chunk_len = len.min(BPS_PARALLEL_WRITE_CHUNK_SIZE);
+        plans.push(BpsWritePlan {
+            output_offset,
+            kind: BpsWritePlanKind::SourceRange {
+                source_offset,
+                len: chunk_len,
+            },
+        });
+        output_offset = output_offset.checked_add(chunk_len).ok_or_else(|| {
+            RomWeaverError::Validation("BPS parallel output offset overflowed".into())
+        })?;
+        source_offset = source_offset.checked_add(chunk_len).ok_or_else(|| {
+            RomWeaverError::Validation("BPS parallel source offset overflowed".into())
+        })?;
+        len -= chunk_len;
+    }
+    Ok(())
+}
+
+fn push_literal_write_plans<'a>(
+    plans: &mut Vec<BpsWritePlan<'a>>,
+    mut output_offset: u64,
+    data: &'a [u8],
+) -> Result<()> {
+    for chunk in data.chunks(BPS_PARALLEL_WRITE_CHUNK_SIZE as usize) {
+        plans.push(BpsWritePlan {
+            output_offset,
+            kind: BpsWritePlanKind::Literal(chunk),
+        });
+        output_offset = output_offset
+            .checked_add(chunk.len() as u64)
+            .ok_or_else(|| {
+                RomWeaverError::Validation("BPS parallel output offset overflowed".into())
+            })?;
+    }
+    Ok(())
+}
+
+fn prepare_bps_writes_parallel<'a>(
+    patch: &'a ParsedBpsPatch,
     source_path: &Path,
     source_len: u64,
     pool: &SharedThreadPool,
-    context: &OperationContext,
-) -> Result<Vec<PreparedBpsWrite>> {
+) -> Result<PreparedBpsWrites<'a>> {
     let plans = collect_parallel_bps_write_plans(patch)?;
-    let shared_source = Arc::new(SharedBlockCacheReader::open(
+    let source = Arc::new(SharedBlockCacheReader::open(
         source_path,
         DEFAULT_BLOCK_CACHE_SIZE_BYTES,
         DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
     )?);
-    pool.install(|| {
-        plans
-            .par_iter()
-            .map(|plan| {
-                context.cancel().check()?;
-                let data = match &plan.kind {
-                    BpsWritePlanKind::Literal(data) => data.to_vec(),
-                    BpsWritePlanKind::SourceRange { source_offset, len } => {
-                        let range_len = usize::try_from(*len).map_err(|_| {
-                            RomWeaverError::Validation(
-                                "BPS source length exceeded addressable memory".into(),
-                            )
-                        })?;
-                        let mut bytes = vec![0u8; range_len];
-                        if *source_offset < source_len {
-                            let readable = usize::try_from((source_len - *source_offset).min(*len))
+    Ok(PreparedBpsWrites {
+        plans,
+        source,
+        source_len,
+        pool: pool.clone(),
+    })
+}
+
+fn apply_parallel_bps_writes(
+    output: &mut File,
+    prepared: PreparedBpsWrites<'_>,
+    context: &OperationContext,
+    progress: &mut BpsApplyProgress<'_>,
+) -> Result<()> {
+    let inflight = bounded_items_for_threads(prepared.pool.size());
+    let mut writer = BufWriter::with_capacity(COPY_BUFFER_SIZE, output);
+    let mut current_pos = 0u64;
+    for batch in prepared.plans.chunks(inflight) {
+        let writes = prepared.pool.install(|| {
+            batch
+                .par_iter()
+                .map(|plan| {
+                    context.cancel().check()?;
+                    let data = match &plan.kind {
+                        BpsWritePlanKind::Literal(data) => data.to_vec(),
+                        BpsWritePlanKind::SourceRange { source_offset, len } => {
+                            let range_len = usize::try_from(*len).map_err(|_| {
+                                RomWeaverError::Validation(
+                                    "BPS source length exceeded addressable memory".into(),
+                                )
+                            })?;
+                            let mut bytes = vec![0u8; range_len];
+                            if *source_offset < prepared.source_len {
+                                let readable = usize::try_from(
+                                    (prepared.source_len - *source_offset).min(*len),
+                                )
                                 .map_err(|_| {
                                     RomWeaverError::Validation(
                                         "BPS source readable length exceeded addressable memory"
                                             .into(),
                                     )
                                 })?;
-                            if readable > 0 {
-                                read_parallel_bps_source_range(
-                                    &shared_source,
-                                    *source_offset,
-                                    &mut bytes[..readable],
-                                )?;
+                                if readable > 0 {
+                                    read_parallel_bps_source_range(
+                                        &prepared.source,
+                                        *source_offset,
+                                        &mut bytes[..readable],
+                                    )?;
+                                }
                             }
+                            bytes
                         }
-                        bytes
-                    }
-                };
-                Ok(PreparedBpsWrite {
-                    output_offset: plan.output_offset,
-                    data,
+                    };
+                    Ok(PreparedBpsWrite {
+                        output_offset: plan.output_offset,
+                        data,
+                    })
                 })
-            })
-            .collect::<Result<Vec<_>>>()
-    })
+                .collect::<Result<Vec<_>>>()
+        })?;
+        apply_prepared_bps_writes(&mut writer, &writes, &mut current_pos, progress)?;
+    }
+    writer.flush()?;
+    Ok(())
 }
 
 fn read_parallel_bps_source_range(
@@ -1899,29 +1954,25 @@ fn read_parallel_bps_source_range(
 }
 
 fn apply_prepared_bps_writes(
-    output: &mut File,
+    writer: &mut (impl Write + Seek),
     writes: &[PreparedBpsWrite],
+    current_pos: &mut u64,
     progress: &mut BpsApplyProgress<'_>,
 ) -> Result<()> {
-    // Writes are in ascending, contiguous output_offset order (no gaps) so seeks are only
-    // needed when a write's offset diverges from the current file position (defensive).
-    let mut writer = BufWriter::with_capacity(COPY_BUFFER_SIZE, output);
-    let mut current_pos = 0u64;
     for write in writes {
         if write.data.is_empty() {
             continue;
         }
-        if write.output_offset != current_pos {
+        if write.output_offset != *current_pos {
             writer.seek(SeekFrom::Start(write.output_offset))?;
-            current_pos = write.output_offset;
+            *current_pos = write.output_offset;
         }
         writer.write_all(&write.data)?;
-        current_pos += write.data.len() as u64;
+        *current_pos += write.data.len() as u64;
         // The ordered write phase is sequential, so cumulative output position is a
         // monotonic progress signal; report mirrors the in-memory/sequential paths.
-        progress.report(current_pos);
+        progress.report(*current_pos);
     }
-    writer.flush()?;
     Ok(())
 }
 

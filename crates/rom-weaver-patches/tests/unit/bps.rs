@@ -1,4 +1,8 @@
-use std::{fs, sync::Arc};
+use std::{
+    fs,
+    io::{BufWriter, Write},
+    sync::Arc,
+};
 
 use rom_weaver_core::{
     CancellationToken, OperationContext, OperationStatus, PatchApplyRequest,
@@ -7,9 +11,9 @@ use rom_weaver_core::{
 };
 
 use super::{
-    BPS_CREATE_MEMORY_LIMIT_BYTES, BPS_MAGIC, BpsAction, BpsApplyProgress,
-    BpsCombinedSuffixMatcher, BpsCreateData, BpsCreateMode, BpsCreateProgress, BpsPatchHandler,
-    BpsSuffixIndexMode, ParsedBpsPatch, PreparedBpsWrite, adjust_relative_offset,
+    BPS_CREATE_MEMORY_LIMIT_BYTES, BPS_MAGIC, BPS_PARALLEL_WRITE_CHUNK_SIZE, BpsAction,
+    BpsApplyProgress, BpsCombinedSuffixMatcher, BpsCreateData, BpsCreateMode, BpsCreateProgress,
+    BpsPatchHandler, BpsSuffixIndexMode, ParsedBpsPatch, PreparedBpsWrite, adjust_relative_offset,
     apply_patch_actions, apply_patch_actions_in_memory, apply_prepared_bps_writes,
     bps_create_copy_match_is_worth, bps_create_estimated_low_memory_suffix_bytes,
     bps_create_estimated_suffix_memory_bytes, bps_create_match_is_worth,
@@ -148,6 +152,61 @@ fn parse_and_apply_round_trip_for_bps() {
     assert!(execution.used_parallelism);
     assert!(execution.effective_threads > 1);
     assert!(!execution.thread_fallback);
+    assert_eq!(fs::read(output_path).expect("output"), target);
+}
+
+#[test]
+fn parallel_apply_preserves_offsets_across_chunk_batches() {
+    const MIB: usize = 1024 * 1024;
+    let temp = TestDir::new();
+    let input_path = temp.child("large-input.bin");
+    let patch_path = temp.child("large-update.bps");
+    let output_path = temp.child("large-output.bin");
+    let source_read_len = 8 * MIB + 13;
+    let literal = vec![0xA5; 4 * MIB + 17];
+    let source_copy_start = MIB;
+    let source_copy_len = 8 * MIB + 29;
+    let source_len = source_copy_start + source_copy_len;
+    let source: Vec<u8> = (0..source_len).map(|index| index as u8).collect();
+    let mut target = Vec::with_capacity(source_read_len + literal.len() + source_copy_len);
+    target.extend_from_slice(&source[..source_read_len]);
+    target.extend_from_slice(&literal);
+    target.extend_from_slice(&source[source_copy_start..source_copy_start + source_copy_len]);
+    fs::write(&input_path, &source).expect("source fixture");
+    fs::write(
+        &patch_path,
+        build_bps_patch(
+            &source,
+            &target,
+            vec![
+                TestAction::SourceRead(source_read_len as u64),
+                TestAction::TargetRead(literal),
+                TestAction::SourceCopy {
+                    length: source_copy_len as u64,
+                    relative_offset: source_copy_start as i128,
+                },
+            ],
+        ),
+    )
+    .expect("patch fixture");
+
+    let report = BpsPatchHandler::new(&BPS)
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 2),
+        )
+        .expect("parallel apply");
+
+    assert!(
+        report
+            .thread_execution
+            .expect("thread execution")
+            .used_parallelism
+    );
     assert_eq!(fs::read(output_path).expect("output"), target);
 }
 
@@ -1439,8 +1498,10 @@ fn ordered_writes_skip_empty_records_and_seek_over_gaps() {
     let mut progress = BpsApplyProgress::new(&context, "BPS", 8);
     let mut output = open_output(&output_path);
 
+    let mut writer = BufWriter::new(&mut output);
+    let mut current_pos = 0;
     apply_prepared_bps_writes(
-        &mut output,
+        &mut writer,
         &[
             PreparedBpsWrite {
                 output_offset: 0,
@@ -1451,9 +1512,12 @@ fn ordered_writes_skip_empty_records_and_seek_over_gaps() {
                 data: b"WXYZ".to_vec(),
             },
         ],
+        &mut current_pos,
         &mut progress,
     )
     .expect("ordered writes");
+    writer.flush().expect("flush ordered writes");
+    drop(writer);
     drop(output);
 
     assert_eq!(fs::read(&output_path).expect("output"), b"\0\0\0\0WXYZ");
@@ -1588,6 +1652,36 @@ fn parallel_write_plans_reject_a_stream_that_misses_the_target_size() {
             .map(|plans| plans.len())
             .expect("an exact stream plans one write"),
         1
+    );
+}
+
+#[test]
+fn parallel_write_plans_bound_prepared_data_independent_of_target_size() {
+    let target_size = BPS_PARALLEL_WRITE_CHUNK_SIZE * 80;
+    let patch = parsed_patch(
+        target_size,
+        target_size,
+        vec![BpsAction::SourceRead {
+            length: target_size,
+        }],
+    );
+    let plans = collect_parallel_bps_write_plans(&patch).expect("large source-read plan");
+
+    assert_eq!(plans.len(), 80);
+    assert!(plans.iter().all(|plan| match &plan.kind {
+        super::BpsWritePlanKind::SourceRange { len, .. } => {
+            *len <= BPS_PARALLEL_WRITE_CHUNK_SIZE
+        }
+        super::BpsWritePlanKind::Literal(data) => {
+            data.len() as u64 <= BPS_PARALLEL_WRITE_CHUNK_SIZE
+        }
+    }));
+    let inflight = rom_weaver_core::bounded_items_for_threads(4);
+    assert_eq!(inflight, 8);
+    assert!(inflight < plans.len());
+    assert_eq!(
+        inflight as u64 * BPS_PARALLEL_WRITE_CHUNK_SIZE,
+        32 * 1024 * 1024
     );
 }
 
