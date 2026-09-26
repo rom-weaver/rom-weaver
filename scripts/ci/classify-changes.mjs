@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { DOC_SOURCES } from "../../packages/rom-weaver-webapp/src/webapp/docs-routing.mjs";
+import { isWasmCompilerInput } from "../wasm/wasm-compiler-inputs.mjs";
 import { isReleasePullRequest } from "./release-pr.mjs";
 
 // Published documentation MUST select the webapp build.
@@ -52,13 +53,6 @@ const EMPTY = {
   full: false,
 };
 
-// Test, bench, and example sources do not enter release binaries; this exclusion MUST match .github/actions/wasm-cache.
-// The wasm_runtime rules separately select Rust fixtures read by browser tests, as checked by wasm-runtime-coverage.test.mjs.
-const isReleaseInput = (path) =>
-  !/(?:\/tests\/|\/test\/|\/examples\/|\/benches\/|\/src\/test[^/]*\.rs$|\/src\/.*\/test[^/]*\.rs$)/.test(
-    path,
-  );
-
 // Only ordinary pull requests narrow checks; missing event names and release pull requests preserve the full selected matrix.
 // The event default MUST agree with scripts/ci/cli-platform-matrix.mjs.
 export function classifyChanges(paths, all = false, eventName = undefined, headRef = undefined) {
@@ -85,7 +79,7 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
 
     if (path.startsWith("crates/")) {
       result.rust = true;
-      if (isReleaseInput(path)) {
+      if (isWasmCompilerInput(path)) {
         result.webapp = true;
         result.wasm_runtime = true;
         // Pull requests already compile the release CLI directly. Rebuild its
@@ -255,8 +249,7 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
 
   // The prebuilt smoke requires a webapp bundle and an image change on ordinary
   // pull requests; other events also select it for webapp changes to publish nightly.
-  result.docker_prebuilt =
-    result.webapp && (eventName !== "pull_request" || result.docker_webapp);
+  result.docker_prebuilt = result.webapp && (eventName !== "pull_request" || result.docker_webapp);
   return result;
 }
 

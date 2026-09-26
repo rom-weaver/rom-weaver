@@ -90,6 +90,7 @@ import { cloneChecksumRomProbe, getInputAssetChecksums } from "./staged-source-c
 type NestedPatchSourceMetadata = { __nestedParentCompressions?: InputParentCompression[] };
 
 type ApplyWorkflowSnapshot = BaseWorkflowSnapshot & {
+  chainPlans: ReadonlyMap<string, PatchValidationPlan>;
   input: ApplyWorkflowInputState | null;
   patches: ApplyWorkflowPatchState[];
   output: {
@@ -112,6 +113,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   /** Latest verification plan per target chain, refreshed by each plan-mode validate pass. The
    * form reads it for chain verdict chips, order suggestions, and output enforceability. */
   readonly latestChainPlans = new Map<string, PatchValidationPlan>();
+  private publishedChainPlans: ReadonlyMap<string, PatchValidationPlan> = new Map();
   private readonly inputStages: StagedRomSourceController<TSource, InternalSourceState>;
   private nextCandidateSequence = 0;
   private nextInputSequence = 0;
@@ -690,6 +692,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       const patchCount = this.patches.length;
       await this.releasePatchSources();
       this.patches = [];
+      this.latestChainPlans.clear();
       this.recomputeOutputState();
       this.trace("patches.clear", { patchCount });
     });
@@ -1543,8 +1546,15 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   }
 
   protected computeSnapshot(): ApplyWorkflowSnapshot {
+    if (
+      this.publishedChainPlans.size !== this.latestChainPlans.size ||
+      [...this.latestChainPlans].some(([target, plan]) => this.publishedChainPlans.get(target) !== plan)
+    ) {
+      this.publishedChainPlans = new Map(this.latestChainPlans);
+    }
     return {
       busy: this.isBusy(),
+      chainPlans: this.publishedChainPlans,
       id: this.id,
       input: this.getInput(),
       output: {

@@ -57,6 +57,78 @@ describe("mergeBundleMetaForIds", () => {
 });
 
 describe("useBundleApplySession", () => {
+  it("waits for subscribed patch readiness before seeding defaults", async () => {
+    let items = [{ progress: {} }, { optionsDisabled: true }];
+    const listeners = new Set<() => void>();
+    const unsubscribe = vi.fn((listener: () => void) => listeners.delete(listener));
+    const setPatchOption = vi.fn().mockResolvedValue(undefined);
+    const controllersRef = {
+      current: {
+        output: { setDisplayFileName: vi.fn(), setOutputHeader: vi.fn() },
+        patchStack: {
+          getState: () => ({ items }),
+          setPatchOption,
+          subscribe: (listener: () => void) => {
+            listeners.add(listener);
+            return () => unsubscribe(listener);
+          },
+        },
+      },
+    } as never;
+    const { result, unmount } = renderHook(() =>
+      useBundleApplySession({
+        bundleSession: session(),
+        controllersRef,
+        getPatchIds: () => ["slot-1", "slot-2"],
+        seedPatchEnablement: vi.fn(),
+      }),
+    );
+
+    act(() => result.current.handleBundlePatchesChange([patch("first.ips"), patch("second.ips")]));
+    await waitFor(() => expect(listeners.size).toBe(1));
+    expect(setPatchOption).not.toHaveBeenCalled();
+
+    act(() => {
+      items = [{ progress: null }, { optionsDisabled: false }];
+      for (const listener of listeners) listener();
+    });
+    await waitFor(() => expect(result.current.bundleDefaultsPending).toBe(false));
+    expect(setPatchOption).toHaveBeenCalledTimes(2);
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    unmount();
+  });
+
+  it("aborts the readiness subscription on unmount", async () => {
+    const listeners = new Set<() => void>();
+    const unsubscribe = vi.fn((listener: () => void) => listeners.delete(listener));
+    const controllersRef = {
+      current: {
+        output: null,
+        patchStack: {
+          getState: () => ({ items: [] }),
+          subscribe: (listener: () => void) => {
+            listeners.add(listener);
+            return () => unsubscribe(listener);
+          },
+        },
+      },
+    } as never;
+    const { result, unmount } = renderHook(() =>
+      useBundleApplySession({
+        bundleSession: session(),
+        controllersRef,
+        getPatchIds: () => ["slot-1", "slot-2"],
+        seedPatchEnablement: vi.fn(),
+      }),
+    );
+
+    act(() => result.current.handleBundlePatchesChange([patch("first.ips"), patch("second.ips")]));
+    await waitFor(() => expect(listeners.size).toBe(1));
+    unmount();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    expect(listeners.size).toBe(0);
+  });
+
   it("seeds matching patches, options, output defaults, and metadata", async () => {
     const setPatchOption = vi.fn().mockResolvedValue(undefined);
     const setDisplayFileName = vi.fn();

@@ -18,7 +18,7 @@ import type {
   ProgressEvent,
   UncompressedOutputRetentionRequest,
 } from "../../types/workflow-runtime-types.ts";
-import type { PatchValidationPlan } from "../../wasm/index.ts";
+import { waitForPatchStackReady } from "./wait-for-patch-stack-ready.ts";
 import type { StagedInputInfo } from "./apply-session-types.ts";
 import { ApplyWorkflowFormView } from "./apply-workflow-form-view.tsx";
 import { CheatDatabaseSection } from "./components/cheat-database-section.tsx";
@@ -471,9 +471,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   // Ordered patch file names as state (the refs above don't re-render): drives
   // the bundle chain-intact check for output verification + its notice.
   const [currentPatchNames, setCurrentPatchNames] = useState<readonly string[]>([]);
-  // Per-target chain verification plans, snapshotted from the workflow after each deep
-  // validation pass: drives the output-verification line in the action column.
-  const [chainPlans, setChainPlans] = useState<ReadonlyMap<string, PatchValidationPlan>>(new Map());
+  const chainPlans = workflowSnapshot.chainPlans;
 
   const handleLocalPatchesChange = useCallback(
     (nextPatches: BinarySource[]) => {
@@ -482,7 +480,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       if (!nextPatches.length) {
         setLocalBundleSession(null);
         setBundleDismissed(true);
-        setChainPlans(new Map());
       }
       syncPatchTracking(nextPatches);
       currentPatchesRef.current = nextPatches;
@@ -514,16 +511,12 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     if (!bundleOutputChecksum || bundleChainStatus === null) return;
     const desired = bundleChainStatus === "full" ? bundleOutputChecksum : "";
     const targetIndex = (activeBundleSession?.entries.length ?? 0) - 1;
-    let cancelled = false;
+    const abort = new AbortController();
     void (async () => {
       // Wait for the stack to settle (same readiness rule as the session seeding)
       // so the option lands on staged items instead of racing their staging.
-      for (let attempt = 0; attempt < 100 && !cancelled; attempt += 1) {
-        const items = bundleControllersRef.current.patchStack?.getState().items || [];
-        if (items.length && items.every((item) => !(item.progress || item.optionsDisabled))) break;
-        await new Promise<void>((resolve) => setTimeout(resolve, 20));
-      }
-      if (cancelled) return;
+      await waitForPatchStackReady(bundleControllersRef.current.patchStack, { signal: abort.signal });
+      if (abort.signal.aborted) return;
       const stack = bundleControllersRef.current.patchStack;
       const items = stack?.getState().items || [];
       const carrierIndex = items.findIndex((item) => (item.validateOutputChecksum || "") === bundleOutputChecksum);
@@ -531,7 +524,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         if (carrierIndex === targetIndex) return;
         if (carrierIndex >= 0)
           await Promise.resolve(stack?.setPatchOption?.(carrierIndex, { validateOutputChecksum: "" }));
-        if (targetIndex >= 0 && targetIndex < items.length)
+        if (!abort.signal.aborted && targetIndex >= 0 && targetIndex < items.length)
           await Promise.resolve(stack?.setPatchOption?.(targetIndex, { validateOutputChecksum: bundleOutputChecksum }));
         return;
       }
@@ -539,7 +532,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         await Promise.resolve(stack?.setPatchOption?.(carrierIndex, { validateOutputChecksum: "" }));
     })();
     return () => {
-      cancelled = true;
+      abort.abort();
     };
   }, [activeBundleSession, bundleChainStatus, bundleOutputChecksum]);
 
@@ -1440,7 +1433,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             defaultPatchBasis: patchInputBasis,
             disabledIndexes,
           });
-          setChainPlans(new Map(workflow.latestChainPlans));
           return buildInfos();
         },
       );
@@ -1523,7 +1515,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
               defaultPatchBasis: patchInputBasisRef.current,
               disabledIndexes: getDisabledPatchIndexes(input.patches),
             });
-            setChainPlans(new Map(workflow.latestChainPlans));
           }
           const refreshedInput = workflow.getInput();
           const refreshedPatches = workflow.getPatches();

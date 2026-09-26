@@ -67,6 +67,7 @@ const createFakeApplyWorkflow = () => {
     getPatches: vi.fn(() => patches.slice()),
     getPatchSources: vi.fn(() => [] as unknown[]),
     getSnapshot: vi.fn(() => ({
+      chainPlans: new Map(),
       busy,
       id: "fake-apply-workflow",
       input,
