@@ -127,7 +127,7 @@ fn test_rejects_non_nes_content_before_spawn() {
         event["error"]["message"]
             .as_str()
             .unwrap()
-            .contains("only NES is supported")
+            .contains("not an iNES")
     );
     assert!(!marker.path().exists());
 }
@@ -205,4 +205,190 @@ fn test_dry_run_does_not_require_runtime_or_write() {
     assert_eq!(event["details"]["dry_run"], true);
     assert_eq!(event["details"]["status"], "planned");
     assert!(!output.path().exists());
+}
+
+fn add_core(runtime: &Path, id: &str, extensions: &[&str], firmware: &[&str]) {
+    let file = format!("cores/{id}_libretro.so");
+    fs::write(runtime.join(&file), b"another core").unwrap();
+    let path = runtime.join("manifest.json");
+    let mut manifest: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    manifest["schemaVersion"] = serde_json::json!(2);
+    manifest["cores"][0]["extensions"] = serde_json::json!(["nes"]);
+    manifest["cores"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "id": id, "platform": id, "path": file, "revision": "3".repeat(40),
+            "sha256": sha256(b"another core"), "extensions": extensions, "firmware": firmware,
+            "options": {"software_renderer": "enabled"}
+        }));
+    fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+}
+
+const CAPTURE: &str = r#"
+for arg in "$@"; do
+  case "$arg" in --max-frames-ss-path=*) shot=${arg#*=};; esac
+done
+printf '\211PNG\015\012\032\0120000IHDR00000000000000000000IEND' > "$shot"
+"#;
+
+#[test]
+fn multiple_cores_select_by_extension_or_explicit_id() {
+    let temp = TempDir::new().unwrap();
+    let runtime = runtime(&temp, CAPTURE);
+    add_core(&runtime, "gambatte", &["gb"], &[]);
+    let rom = temp.child("game.gb");
+    fs::write(rom.path(), b"a fake game boy ROM").unwrap();
+    assert_eq!(
+        run(&temp, &runtime, rom.path(), &[], 0)["details"]["core"],
+        "gambatte"
+    );
+    add_core(&runtime, "mgba", &["gb", "gba"], &[]);
+    let event = run(&temp, &runtime, rom.path(), &[], 1);
+    assert!(
+        event["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("pass --core")
+    );
+    assert_eq!(
+        run(&temp, &runtime, rom.path(), &["--core", "mgba"], 0)["details"]["core"],
+        "mgba"
+    );
+    let event = run(&temp, &runtime, rom.path(), &["--core", "missing"], 1);
+    assert!(
+        event["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("not installed")
+    );
+}
+
+#[test]
+fn firmware_is_required_and_isolated_from_user_files() {
+    let temp = TempDir::new().unwrap();
+    let runtime = runtime(
+        &temp,
+        &format!("test -f system/boot.bin\nprintf modified > system/boot.bin\n{CAPTURE}"),
+    );
+    add_core(&runtime, "handy", &["lnx"], &["boot.bin"]);
+    let rom = temp.child("game.lnx");
+    fs::write(rom.path(), b"a fake lynx ROM").unwrap();
+    let event = run(&temp, &runtime, rom.path(), &[], 1);
+    assert!(
+        event["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("requires firmware")
+    );
+    let system = temp.child("bios");
+    system.create_dir_all().unwrap();
+    fs::write(system.child("boot.bin").path(), b"original").unwrap();
+    run(
+        &temp,
+        &runtime,
+        rom.path(),
+        &["--system-dir", system.path().to_str().unwrap()],
+        0,
+    );
+    assert_eq!(
+        fs::read(system.child("boot.bin").path()).unwrap(),
+        b"original"
+    );
+}
+
+#[test]
+fn disc_sheets_keep_their_tracks_and_reject_escaping_references() {
+    let temp = TempDir::new().unwrap();
+    let runtime = runtime(
+        &temp,
+        &format!("test -f 'content/tracks/track 1.bin'\n{CAPTURE}"),
+    );
+    add_core(&runtime, "pcsx_rearmed", &["cue", "chd", "iso"], &[]);
+    let tracks = temp.child("tracks");
+    tracks.create_dir_all().unwrap();
+    fs::write(tracks.child("track 1.bin").path(), b"track data").unwrap();
+    let cue = temp.child("game.cue");
+    fs::write(
+        cue.path(),
+        "FILE \"tracks/track 1.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n",
+    )
+    .unwrap();
+    run(&temp, &runtime, cue.path(), &[], 0);
+    fs::write(
+        cue.path(),
+        "FILE \"../outside.bin\" BINARY\n  TRACK 01 MODE1/2352\n",
+    )
+    .unwrap();
+    let event = run(&temp, &runtime, cue.path(), &[], 1);
+    assert!(
+        event["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("unsafe disc reference")
+    );
+}
+
+#[test]
+fn archive_disc_selection_keeps_tracks_and_does_not_extract_the_disc() {
+    let temp = TempDir::new().unwrap();
+    let runtime = runtime(
+        &temp,
+        &format!("test -f content/game.cue\ntest -f content/track.bin\n{CAPTURE}"),
+    );
+    add_core(&runtime, "pcsx_rearmed", &["cue", "chd", "iso", "m3u"], &[]);
+    let archive = temp.child("disc.tar");
+    let mut builder = tar::Builder::new(File::create(archive.path()).unwrap());
+    for (name, contents) in [
+        (
+            "game.cue",
+            b"FILE \"track.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n".as_slice(),
+        ),
+        ("track.bin", b"disc track content".as_slice()),
+        ("playlist.m3u", b"# playlist\ngame.cue\n".as_slice()),
+    ] {
+        let mut header = tar::Header::new_gnu();
+        header.set_mode(0o644);
+        header.set_size(contents.len() as u64);
+        header.set_cksum();
+        builder.append_data(&mut header, name, contents).unwrap();
+    }
+    builder.finish().unwrap();
+    run(
+        &temp,
+        &runtime,
+        archive.path(),
+        &["--select", "game.cue"],
+        0,
+    );
+    run(
+        &temp,
+        &runtime,
+        archive.path(),
+        &["--select", "playlist.m3u"],
+        0,
+    );
+}
+
+#[test]
+fn system_directory_symlinks_are_rejected() {
+    let temp = TempDir::new().unwrap();
+    let runtime = runtime(&temp, CAPTURE);
+    let system = temp.child("bios");
+    system.create_dir_all().unwrap();
+    std::os::unix::fs::symlink(temp.path(), system.child("link").path()).unwrap();
+    let rom = nes(&temp);
+    let event = run(
+        &temp,
+        &runtime,
+        &rom,
+        &["--system-dir", system.path().to_str().unwrap()],
+        1,
+    );
+    assert!(
+        event["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("symlink")
+    );
 }

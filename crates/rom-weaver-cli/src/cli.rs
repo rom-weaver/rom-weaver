@@ -233,7 +233,7 @@ struct Cli {
 enum CliCommand {
     #[command(flatten)]
     App(Commands),
-    #[command(about = "Run a NES ROM headlessly with the optional native emulator runtime")]
+    #[command(about = "Run a ROM headlessly with the optional native emulator runtime")]
     Test(crate::rom_test::TestCommand),
     #[command(about = "Install or inspect the optional native emulator runtime")]
     Emulator(crate::emulator_runtime::EmulatorCommand),
