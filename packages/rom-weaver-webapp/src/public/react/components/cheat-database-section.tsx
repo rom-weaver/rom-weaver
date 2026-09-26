@@ -18,7 +18,8 @@ import {
   type ManualCheatResult,
 } from "../../../lib/cheats/index.ts";
 import { getCheatPatchStatus } from "../cheat-patch-export-model.ts";
-import { matchGame, useCheatDatabaseRecords } from "./use-cheat-database-records.ts";
+import { CheatGameSearch, countLabel, getCheatGameSearchStep } from "./cheat-game-search.tsx";
+import { useCheatDatabaseRecords } from "./use-cheat-database-records.ts";
 import { Drawer } from "./ds/drawer.tsx";
 import { DropdownSelect } from "./ds/dropdown-select.tsx";
 import { Notice } from "./ds/feedback.tsx";
@@ -47,11 +48,6 @@ const CHEAT_KIND_LABELS: Record<NonNullable<ClassifiedCheatRecord["detectedKind"
   "pro-action-replay": "Action Replay / GameShark",
   xploder: "Xploder",
 };
-
-const gameLabel = (game: NonNullable<ReturnType<typeof matchGame>>): string =>
-  [game.title, game.regions.join(" / "), game.revisions.join(" / ")].filter(Boolean).join(" · ");
-
-const countLabel = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 type CheatCardProps = {
   record: ClassifiedCheatRecord;
@@ -348,62 +344,6 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
   );
 };
 
-type CheatGamePickerProps = {
-  platform: string;
-  games: CheatSystemShard["games"];
-  value: string;
-  onChange: (gameId: string) => void;
-  /** The chosen game matched by title or by hand, not by checksum. */
-  unverified?: boolean;
-};
-
-/** Searchable game list for a ROM the cheat database did not match by checksum. */
-export const CheatGamePicker = ({ platform, games, value, onChange, unverified }: CheatGamePickerProps) => {
-  const [query, setQuery] = useState("");
-  const options = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase("en-US");
-    if (!needle) return games;
-    return games.filter((candidate) => gameLabel(candidate).toLocaleLowerCase("en-US").includes(needle));
-  }, [games, query]);
-  return (
-    <div className="cheat-game-picker">
-      <label>
-        <span>Search games in {platform}</span>
-        <input
-          className="input"
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search by game title…"
-          type="search"
-          value={query}
-        />
-      </label>
-      <DropdownSelect
-        aria-label={`Browse games for ${platform}`}
-        className="select"
-        onChange={(event) => onChange(event.target.value)}
-        value={value}
-      >
-        <option value="">Use automatic match</option>
-        {options.map((candidate) => (
-          <option key={candidate.id} value={candidate.id}>
-            {gameLabel(candidate)}
-          </option>
-        ))}
-      </DropdownSelect>
-      {options.length ? null : (
-        <p className="cheat-pick-empty" role="status">
-          No games match this search.
-        </p>
-      )}
-      {unverified ? (
-        <p className="cheat-pick-empty">
-          This ROM revision is unverified. These cheats may target different addresses.
-        </p>
-      ) : null}
-    </div>
-  );
-};
-
 type AddCheatsDialogProps = {
   open: boolean;
   onClose: () => void;
@@ -622,7 +562,6 @@ export const CheatDatabaseSection = ({
   const savingPatchRef = useRef(false);
   const [patchStatus, setPatchStatus] = useState("");
   const [patchError, setPatchError] = useState("");
-  const [databaseQuery, setDatabaseQuery] = useState("");
   // Cards on show. Selection is the subset whose switch is On, so a card can
   // stay in the stack while excluded from the run.
   const [addedIds, setAddedIds] = useState<Set<string>>(() => new Set());
@@ -643,23 +582,7 @@ export const CheatDatabaseSection = ({
     selectionCallback.current?.(entries);
   };
 
-  const {
-    activeIndex,
-    classificationError,
-    classifying,
-    entry,
-    game,
-    loadError,
-    loading,
-    manualGameId,
-    manualOnlySystem,
-    manualSystem,
-    match: databaseMatch,
-    records: classifiedRecords,
-    setManualGameId,
-    setManualEntrySlug,
-    shard,
-  } = useCheatDatabaseRecords({
+  const database = useCheatDatabaseRecords({
     ...(catalog ? { catalog } : {}),
     classifyDatabaseCheats,
     ...(suppliedClient ? { client: suppliedClient } : {}),
@@ -667,6 +590,18 @@ export const CheatDatabaseSection = ({
     rom,
     ...(suppliedShard ? { shard: suppliedShard } : {}),
   });
+  const {
+    activeIndex,
+    classificationError,
+    classifying,
+    game,
+    loadError,
+    loading,
+    manualSystem,
+    records: classifiedRecords,
+    setManualGameId,
+    setManualEntrySlug,
+  } = database;
   const identityKey = rom?.key;
   useEffect(() => {
     if (identityKey === "") return;
@@ -676,11 +611,9 @@ export const CheatDatabaseSection = ({
     setManualRecords([]);
     setManualGameId("");
     setManualEntrySlug("");
-    setDatabaseQuery("");
     selectionCallback.current?.([]);
   }, [identityKey, setManualEntrySlug, setManualGameId]);
 
-  const match = databaseMatch;
   const gameId = game?.id;
   useEffect(() => {
     if (previousGameId.current && previousGameId.current !== gameId) {
@@ -777,64 +710,8 @@ export const CheatDatabaseSection = ({
     })),
   ];
 
-  const databaseOptions = useMemo(() => {
-    if (!activeIndex) return [];
-    const query = databaseQuery.trim().toLocaleLowerCase("en-US");
-    const options = activeIndex.entries.filter((candidate) => {
-      if (!query) return true;
-      return `${candidate.platform} ${candidate.slug}`.toLocaleLowerCase("en-US").includes(query);
-    });
-    return options.slice(0, 8);
-  }, [activeIndex, databaseQuery]);
-
-  const databasePicker =
-    rom && activeIndex && !entry && !rom.platform && !manualOnlySystem ? (
-      <div className="cheat-database-picker">
-        <label className="cheat-search">
-          <Search aria-hidden="true" />
-          <span className="sr-only">Search cheat databases</span>
-          <input
-            className="input"
-            onChange={(event) => setDatabaseQuery(event.target.value)}
-            placeholder="Search cheat databases by system…"
-            type="search"
-            value={databaseQuery}
-          />
-        </label>
-        {databaseOptions.length ? (
-          <div className="cheat-database-options">
-            {databaseOptions.map((candidate) => (
-              <button
-                className="cheat-database-option"
-                key={candidate.slug}
-                onClick={() => setManualEntrySlug(candidate.slug)}
-                type="button"
-              >
-                <span>{candidate.platform}</span>
-                <span className="rb mono">
-                  {countLabel(candidate.games, "game")} · {countLabel(candidate.cheats, "cheat")}
-                </span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <p className="cheat-pick-empty" role="status">
-            No cheat database matches this search.
-          </p>
-        )}
-      </div>
-    ) : null;
-
-  const gamePicker =
-    rom && entry && shard && match.kind !== "exact" ? (
-      <CheatGamePicker
-        games={shard.games}
-        onChange={setManualGameId}
-        platform={entry.platform}
-        unverified={match.kind === "title" || match.kind === "manual"}
-        value={manualGameId}
-      />
-    ) : null;
+  const searchInput = { database, rom };
+  const searchStep = getCheatGameSearchStep(searchInput);
 
   const status = loading
     ? "Loading this system's cheat database…"
@@ -958,7 +835,7 @@ export const CheatDatabaseSection = ({
 
       <AddCheatsDialog
         addedIds={addedIds}
-        emptyPrompt={databasePicker ? "Choose a system above." : gamePicker ? "Choose a game above." : undefined}
+        emptyPrompt={searchStep ? `Choose a ${searchStep} above.` : undefined}
         extras={
           manualSystem ? (
             <ManualCodeForm
@@ -969,12 +846,7 @@ export const CheatDatabaseSection = ({
             />
           ) : null
         }
-        gamePicker={
-          <>
-            {databasePicker}
-            {gamePicker}
-          </>
-        }
+        gamePicker={<CheatGameSearch {...searchInput} />}
         onAdd={addRecord}
         onClose={() => setDialogOpen(false)}
         onRemove={dropRecord}

@@ -31,7 +31,7 @@ type CheatDatabaseRecordsInput = {
   classifyDatabaseCheats: DatabaseCheatClassifier;
 };
 
-type CheatDatabaseRecordsState = {
+export type CheatDatabaseRecordsState = {
   activeCatalog?: IdentifyCatalog;
   activeIndex?: CheatDatabaseIndex;
   classificationError: string;
@@ -158,6 +158,8 @@ const useCheatDatabaseRecords = ({
     }
     const client = suppliedClient ?? createCheatDatabaseClient();
     let active = true;
+    // The previous system's shard MUST NOT stay on show under the new system's label.
+    setLoadedShard(undefined);
     setLoading(true);
     setLoadError("");
     void client
@@ -232,4 +234,4 @@ const useCheatDatabaseRecords = ({
   };
 };
 
-export { matchGame, useCheatDatabaseRecords };
+export { useCheatDatabaseRecords };

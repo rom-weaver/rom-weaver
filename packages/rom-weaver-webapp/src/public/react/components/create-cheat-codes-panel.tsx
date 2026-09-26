@@ -17,7 +17,8 @@ import {
   splitCheatCodes,
   type CreateCheatCodeEntry,
 } from "../create-cheat-codes-model.ts";
-import { AddCheatsDialog, CheatGamePicker } from "./cheat-database-section.tsx";
+import { AddCheatsDialog } from "./cheat-database-section.tsx";
+import { CheatGameSearch, getCheatGameSearchStep } from "./cheat-game-search.tsx";
 import { FileCard } from "./ds/file-card.tsx";
 import { useCheatDatabaseRecords } from "./use-cheat-database-records.ts";
 import "./create-cheat-codes-panel.css";
@@ -97,23 +98,13 @@ const CreateCheatCodesPanel = ({
   reportClassifying.current = onClassifyingChange;
   reportSystem.current = onSystemChange;
 
-  const {
-    classificationError,
-    entry: databaseEntry,
-    game,
-    loadError,
-    manualGameId,
-    manualSystem,
-    match,
-    records,
-    setManualGameId,
-    shard,
-  } = useCheatDatabaseRecords({
+  const database = useCheatDatabaseRecords({
     classifyDatabaseCheats,
     ...(index ? { index } : {}),
     rom,
     ...(suppliedShard ? { shard: suppliedShard } : {}),
   });
+  const { classificationError, game, loadError, manualSystem, records } = database;
 
   useEffect(() => {
     reportSystem.current(manualSystem);
@@ -187,17 +178,7 @@ const CreateCheatCodesPanel = ({
       .map((entry) => entry.record.id),
   );
   const gameTitle = game?.title || rom?.title || "";
-
-  const gamePicker =
-    rom && databaseEntry && shard ? (
-      <CheatGamePicker
-        games={shard.games}
-        onChange={setManualGameId}
-        platform={databaseEntry.platform}
-        unverified={match.kind === "title" || match.kind === "manual"}
-        value={manualGameId}
-      />
-    ) : null;
+  const searchStep = getCheatGameSearchStep({ alwaysBrowseGames: true, database, rom });
 
   // Entries mirror the split codes one to one, so the position picks out the
   // card's own code even when the same code is typed twice.
@@ -289,7 +270,8 @@ const CreateCheatCodesPanel = ({
 
       <AddCheatsDialog
         addedIds={addedIds}
-        gamePicker={gamePicker}
+        emptyPrompt={searchStep ? `Choose a ${searchStep} above.` : undefined}
+        gamePicker={<CheatGameSearch alwaysBrowseGames database={database} rom={rom} />}
         onAdd={(record) => onValueChange(appendCodes(value, recordCodes(record, manualSystem), manualSystem))}
         onClose={() => setDialogOpen(false)}
         onRemove={(record) => {
