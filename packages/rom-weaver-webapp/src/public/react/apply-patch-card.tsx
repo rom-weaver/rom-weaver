@@ -310,6 +310,7 @@ const PatchCard = ({
             meta={meta}
             onMetaChange={onMetaChange}
             outputCheckHint={outputCheckHint}
+            patchType={detailedViewEnabled ? undefined : item.format?.trim().toUpperCase() || undefined}
             patchStack={patchStack}
             romActuals={romActuals}
             sharedInputChecks={sharedInputChecks}
