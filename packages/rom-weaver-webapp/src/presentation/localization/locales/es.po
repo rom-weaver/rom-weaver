@@ -355,6 +355,11 @@ msgstr "Acerca de rom-weaver, su licencia y su privacidad"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.accent"
+msgstr "Color de acento"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.accent"
 msgstr "Color de acento"
 
@@ -682,6 +687,11 @@ msgstr "Crear la pila de parches"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkEdit"
 msgstr "Edición en bloque"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.bundlePackage"
+msgstr "Paquete"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1062,11 +1072,6 @@ msgstr "Crear bundle {format}"
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.createRom"
 msgstr "Crear bundle {format} con ROM"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.createBundle"
-msgstr "Iniciar paquete guiado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2095,6 +2100,11 @@ msgstr "Nombre del título identificado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.identifiedOutputName"
+msgstr "Nombrar las salidas según el título identificado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.names"
 msgstr "Nombres"
 
@@ -2600,8 +2610,18 @@ msgstr "Plataformas posibles"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.postApplyDownloadBehavior"
+msgstr "Descarga después de aplicar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.postDownload"
 msgstr "Descarga después de aplicar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.postApplyTestBehavior"
+msgstr "Prueba después de aplicar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3160,6 +3180,11 @@ msgstr "Iniciar Aplicar guiado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.tutorial.createBundle"
+msgstr "Iniciar paquete guiado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.rom.title"
 msgstr "Empieza con la ROM"
 
@@ -3177,6 +3202,11 @@ msgstr "Almacenamiento"
 #: src/presentation/localization/messages.ts
 msgid "error.STORAGE_UNAVAILABLE"
 msgstr "El almacenamiento no está disponible."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.emulatorSaveStorageEnabled"
+msgstr "Guardar las partidas del emulador en este dispositivo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3602,6 +3632,11 @@ msgstr "Activar todos"
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.instructions"
 msgstr "Instrucciones del tutorial"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.defaultCompression"
+msgstr "Tipo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
