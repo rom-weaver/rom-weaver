@@ -1887,16 +1887,44 @@ fn prepare_bps_writes_parallel<'a>(
     })
 }
 
+/// Returns the end of the batch that starts at `start`. Batches are bounded by prepared bytes,
+/// not plan count, so patches made of many tiny actions keep one parallel pass per batch.
+fn bps_parallel_batch_end(plans: &[BpsWritePlan<'_>], start: usize, byte_limit: u64) -> usize {
+    let mut batch_bytes = 0u64;
+    let mut end = start;
+    while let Some(plan) = plans.get(end) {
+        let plan_bytes = match &plan.kind {
+            BpsWritePlanKind::SourceRange { len, .. } => *len,
+            BpsWritePlanKind::Literal(data) => data.len() as u64,
+        };
+        if end > start && batch_bytes.saturating_add(plan_bytes) > byte_limit {
+            break;
+        }
+        batch_bytes = batch_bytes.saturating_add(plan_bytes);
+        end += 1;
+    }
+    end
+}
+
 fn apply_parallel_bps_writes(
     output: &mut File,
     prepared: PreparedBpsWrites<'_>,
     context: &OperationContext,
     progress: &mut BpsApplyProgress<'_>,
 ) -> Result<()> {
-    let inflight = bounded_items_for_threads(prepared.pool.size());
+    let batch_byte_limit =
+        bounded_items_for_threads(prepared.pool.size()) as u64 * BPS_PARALLEL_WRITE_CHUNK_SIZE;
     let mut writer = BufWriter::with_capacity(COPY_BUFFER_SIZE, output);
     let mut current_pos = 0u64;
-    for batch in prepared.plans.chunks(inflight) {
+    let mut batch_start = 0;
+    while batch_start < prepared.plans.len() {
+        let batch_end = bps_parallel_batch_end(&prepared.plans, batch_start, batch_byte_limit);
+        let batch = &prepared.plans[batch_start..batch_end];
+        trace!(
+            batch_start,
+            batch_end, batch_byte_limit, "bps parallel apply batch"
+        );
+        batch_start = batch_end;
         let writes = prepared.pool.install(|| {
             batch
                 .par_iter()

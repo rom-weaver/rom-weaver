@@ -17,11 +17,11 @@ use super::{
     apply_patch_actions, apply_patch_actions_in_memory, apply_prepared_bps_writes,
     bps_create_copy_match_is_worth, bps_create_estimated_low_memory_suffix_bytes,
     bps_create_estimated_suffix_memory_bytes, bps_create_match_is_worth,
-    bps_create_suffix_index_mode, bps_create_usize_len, collect_parallel_bps_write_plans,
-    common_prefix_len_limited, copy_target_range, crc32_bytes, encode_action_header,
-    encode_signed_offset, initial_bps_sorted_target_len, next_bps_sorted_target_len,
-    parse_bps_bytes, parse_bps_bytes_with_checksum_validation, push_varint, read_bps_create_data,
-    repeated_byte_run_len, validate_output_file,
+    bps_create_suffix_index_mode, bps_create_usize_len, bps_parallel_batch_end,
+    collect_parallel_bps_write_plans, common_prefix_len_limited, copy_target_range, crc32_bytes,
+    encode_action_header, encode_signed_offset, initial_bps_sorted_target_len,
+    next_bps_sorted_target_len, parse_bps_bytes, parse_bps_bytes_with_checksum_validation,
+    push_varint, read_bps_create_data, repeated_byte_run_len, validate_output_file,
 };
 use crate::{
     BPS,
@@ -1682,6 +1682,41 @@ fn parallel_write_plans_bound_prepared_data_independent_of_target_size() {
     assert_eq!(
         inflight as u64 * BPS_PARALLEL_WRITE_CHUNK_SIZE,
         32 * 1024 * 1024
+    );
+}
+
+#[test]
+fn parallel_apply_batches_are_bounded_by_bytes_not_plan_count() {
+    let batch_byte_limit = 8 * BPS_PARALLEL_WRITE_CHUNK_SIZE;
+    let large_size = BPS_PARALLEL_WRITE_CHUNK_SIZE * 20;
+    let large = parsed_patch(
+        large_size,
+        large_size,
+        vec![BpsAction::SourceRead { length: large_size }],
+    );
+    let large_plans = collect_parallel_bps_write_plans(&large).expect("large plans");
+    assert_eq!(bps_parallel_batch_end(&large_plans, 0, batch_byte_limit), 8);
+    assert_eq!(
+        bps_parallel_batch_end(&large_plans, 16, batch_byte_limit),
+        20
+    );
+
+    let small_actions = (0..10_000)
+        .flat_map(|index| {
+            [
+                BpsAction::TargetRead {
+                    data: vec![index as u8],
+                },
+                BpsAction::SourceRead { length: 63 },
+            ]
+        })
+        .collect();
+    let small = parsed_patch(640_000, 640_000, small_actions);
+    let small_plans = collect_parallel_bps_write_plans(&small).expect("small plans");
+    assert_eq!(small_plans.len(), 20_000);
+    assert_eq!(
+        bps_parallel_batch_end(&small_plans, 0, batch_byte_limit),
+        small_plans.len()
     );
 }
 
