@@ -1581,6 +1581,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
 
   const { cheatRom, classifyDatabaseCheats, classifyManualCode, handleCheatSelection, saveCheatsAsPatch } =
     useApplyCheats({
+      mutationQueueRef,
       preparedWorkflowRef,
       resolvedAssetBaseUrl,
       resolvedUiController,

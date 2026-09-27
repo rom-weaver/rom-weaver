@@ -10,12 +10,14 @@ import {
 } from "react";
 import { cheatDelivery, type CheatManualSystem, type ClassifiedCheatRecord } from "../../lib/cheats/index.ts";
 import type { ApplyWorkflow, BrowserApplyResult } from "../../platform/browser/browser-api.ts";
+import type { SourceRef } from "../../types/source.ts";
 import { getCheatPatchCodes, getCheatPatchFileName, getCheatPatchFormat } from "./cheat-patch-export-model.ts";
 import { createCheatClassifiers } from "./cheat-classifier.ts";
 import type { useLocalApplyPatchFormSession } from "./patcher-form-session.ts";
 import { type createWorkflowHandle, loadBrowserApi } from "./workflow-loader.ts";
 
 type ApplyCheatsInput = {
+  mutationQueueRef: RefObject<Promise<void>>;
   preparedWorkflowRef: RefObject<ApplyWorkflow | null>;
   resolvedAssetBaseUrl: string | undefined;
   resolvedUiController: ReturnType<typeof useLocalApplyPatchFormSession>["localUiController"];
@@ -31,6 +33,7 @@ type ApplyCheatsInput = {
 
 /** Cheat card state for the apply form: the single staged ROM's identity, classifiers, and selection handling. */
 const useApplyCheats = ({
+  mutationQueueRef,
   preparedWorkflowRef,
   resolvedAssetBaseUrl,
   resolvedUiController,
@@ -81,14 +84,30 @@ const useApplyCheats = ({
         : null,
     [cheatChecksums, cheatFileName, cheatPlatform, cheatRomRow],
   );
+  const peekCheatSource = useCallback(
+    () => (preparedWorkflowRef.current || workflowHandle.peek())?.getBundleExportSources().rom?.source,
+    [preparedWorkflowRef, workflowHandle],
+  );
   const getCheatSource = useCallback(() => {
-    const source = (preparedWorkflowRef.current || workflowHandle.peek())?.getBundleExportSources().rom?.source;
+    const source = peekCheatSource();
     if (!source) throw new Error("Wait for ROM staging to finish before checking cheats");
     return source;
-  }, [preparedWorkflowRef, workflowHandle]);
+  }, [peekCheatSource]);
+  // The cheat card can match a game from the ROM file name before staging
+  // finishes, so classification MUST wait for queued workflow mutations.
+  const waitForCheatSource = useCallback(async (): Promise<SourceRef> => {
+    for (;;) {
+      const source = peekCheatSource();
+      if (source) return source;
+      const queued = mutationQueueRef.current;
+      await queued;
+      if (queued === mutationQueueRef.current && !peekCheatSource())
+        throw new Error("ROM staging did not finish, so cheats cannot be checked");
+    }
+  }, [mutationQueueRef, peekCheatSource]);
   const { classifyDatabaseCheats, classifyManualCode } = useMemo(
-    () => createCheatClassifiers(getCheatSource),
-    [getCheatSource],
+    () => createCheatClassifiers(waitForCheatSource),
+    [waitForCheatSource],
   );
   const saveCheatsAsPatch = useCallback(
     async (records: ClassifiedCheatRecord[], system: CheatManualSystem | undefined) => {
