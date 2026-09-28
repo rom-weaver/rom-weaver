@@ -22,6 +22,11 @@ done
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 [ -n "$repo_root" ] || repo_root=$(CDPATH='' cd -- "$script_dir/../.." && pwd)
 runtime_dir=$(CDPATH='' cd -- "$runtime_dir" && pwd)
+case $(uname -s) in
+  MINGW*|MSYS*) executable=retroarch.exe; core_extension=dll ;;
+  Darwin) executable=retroarch; core_extension=dylib ;;
+  *) executable=retroarch; core_extension=so ;;
+esac
 mkdir -p "$scratch_dir"
 scratch_dir=$(CDPATH='' cd -- "$scratch_dir" && pwd)
 
@@ -56,9 +61,9 @@ env -u DISPLAY -u WAYLAND_DISPLAY -u PULSE_SERVER -u XDG_RUNTIME_DIR \
   XDG_CONFIG_HOME="$scratch_dir/config" \
   XDG_DATA_HOME="$scratch_dir/data" \
   XDG_CACHE_HOME="$scratch_dir/cache" \
-  "$runtime_dir/bin/retroarch" \
+  "$runtime_dir/bin/$executable" \
   --config="$config" \
-  --libretro="$runtime_dir/cores/fceumm_libretro.so" \
+  --libretro="$runtime_dir/cores/fceumm_libretro.$core_extension" \
   --max-frames=120 \
   --max-frames-ss \
   --max-frames-ss-path="$screenshot" \

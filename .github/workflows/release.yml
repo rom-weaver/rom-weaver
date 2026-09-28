@@ -621,17 +621,17 @@ jobs:
       - name: Download emulator runtime
         uses: actions/download-artifact@v8
         with:
-          name: emulator-runtime-linux-x64-gnu
+          pattern: emulator-runtime-*
           path: target/emulator-release
+          merge-multiple: true
 
       - name: Upload emulator runtime release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "v${{ needs.release.outputs.version }}" \
-            target/emulator-release/rom-weaver-emulator-linux-x64-gnu.tar.gz \
-            target/emulator-release/rom-weaver-emulator-linux-x64-gnu.tar.gz.sha256 \
-            target/emulator-release/rom-weaver-emulator-sources.tar.gz \
+            target/emulator-release/*.tar.gz \
+            target/emulator-release/*.tar.gz.sha256 \
             --repo "$GITHUB_REPOSITORY" --clobber
 
       - name: Attest emulator runtime archives
