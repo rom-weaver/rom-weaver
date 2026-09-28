@@ -22,7 +22,7 @@ import {
   getBrowserVirtualFileSource,
   updateBrowserVirtualFileSource,
 } from "../../workers/protocol/browser-virtual-files.ts";
-import { parseCueFile } from "../../workers/protocol/cue-file-utils.ts";
+import { parseCueFile, replaceCueFileReferences } from "../../workers/protocol/cue-file-utils.ts";
 import {
   EXTRACT_CHECKSUM_ALGORITHMS,
   type ExtractedFileEntry,
@@ -102,19 +102,15 @@ const readStagedCueText = async (cuePath: string): Promise<string> => {
   return readTextFromBrowserVfs(cuePath);
 };
 
-const rewriteCueFileBinaryReference = async (cuePath: string, targetPath: string) => {
-  const virtualSource = getBrowserVirtualFileSource(cuePath);
-  if (virtualSource) {
-    const contents = await virtualSourceToText(virtualSource);
-    const updatedContents = replaceCuePatchFileName(contents, targetPath);
-    if (updatedContents !== contents) {
-      updateBrowserVirtualFileSource(cuePath, new Blob([updatedContents], { type: "application/x-cue" }));
-    }
+const rewriteStagedCue = async (cuePath: string, rewrite: (contents: string) => string) => {
+  const contents = await readStagedCueText(cuePath);
+  const updatedContents = rewrite(contents);
+  if (updatedContents === contents) return;
+  if (getBrowserVirtualFileSource(cuePath)) {
+    updateBrowserVirtualFileSource(cuePath, new Blob([updatedContents], { type: "application/x-cue" }));
     return;
   }
-  const contents = await readTextFromBrowserVfs(cuePath);
-  const updatedContents = replaceCuePatchFileName(contents, targetPath);
-  if (updatedContents !== contents) await writeTextToBrowserVfs(cuePath, updatedContents);
+  await writeTextToBrowserVfs(cuePath, updatedContents);
 };
 
 const resolveCueSidecarPath = (cuePath: string, referencedName: string): string => {
@@ -193,7 +189,9 @@ const createBrowserChdRuntime = (
         if (!stagedInputPaths.includes(normalizedCueFilePath)) stagedInputPaths.push(normalizedCueFilePath);
         chdInputPath = normalizedCueFilePath;
         if (workerInput.filePath !== normalizedCueFilePath) {
-          await rewriteCueFileBinaryReference(normalizedCueFilePath, workerInput.filePath);
+          await rewriteStagedCue(normalizedCueFilePath, (contents) =>
+            replaceCuePatchFileName(contents, workerInput.filePath),
+          );
         }
       } else if (/\.cue$/i.test(chdInputPath) && stagedImageSources.length === 1) {
         // The cue is the main input and its track staged separately. Staging can land the track on
@@ -201,7 +199,18 @@ const createBrowserChdRuntime = (
         // references, so point the cue at the staged file or the disc-layout read fails with
         // "No such file or directory (os error 44)".
         const stagedImagePath = stagedImageSources[0]?.filePath || "";
-        if (stagedImagePath) await rewriteCueFileBinaryReference(chdInputPath, stagedImagePath);
+        if (stagedImagePath)
+          await rewriteStagedCue(chdInputPath, (contents) => replaceCuePatchFileName(contents, stagedImagePath));
+      } else if (/\.cue$/i.test(chdInputPath) && stagedImageSources.length > 1) {
+        const stagedTracks = new Map(
+          stagedImageSources.map((entry, index) => [
+            getPathBaseName(imageFiles?.[index]?.fileName || entry.fileName).toLowerCase(),
+            entry.filePath,
+          ]),
+        );
+        await rewriteStagedCue(chdInputPath, (contents) =>
+          replaceCueFileReferences(contents, (name) => stagedTracks.get(getPathBaseName(name).toLowerCase())),
+        );
       }
 
       // When the CHD input is a cue, hydrate every sibling track file it references so worker

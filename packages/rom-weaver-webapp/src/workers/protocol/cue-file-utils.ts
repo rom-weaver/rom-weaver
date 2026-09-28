@@ -4,6 +4,7 @@ const CUE_TRACK_LINE_REGEX = /^TRACK\s+(\d+)\s+(\S+)$/i;
 const CUE_PREGAP_LINE_REGEX = /^PREGAP\b/i;
 const CUE_INDEX_00_LINE_REGEX = /^INDEX\s+00\b/i;
 const CUE_BINARY_FILE_ENTRY_REGEX = /^(\s*)FILE\s+"?.+?"?\s+BINARY\s*$/im;
+const CUE_FILE_REFERENCE_REGEX = /^([ \t]*FILE[ \t]+)"?(.+?)"?([ \t]+\S+[ \t]*)$/gim;
 const LINE_BREAK_REGEX = /\r?\n/;
 
 type ChdCueFileEntry = {
@@ -79,4 +80,10 @@ const replaceCuePatchFileName = (cueText: string, binFileName: string) => {
   return updatedCueText;
 };
 
-export { parseCueFile, replaceCuePatchFileName };
+const replaceCueFileReferences = (cueText: string, resolveFileName: (fileName: string) => string | undefined) =>
+  cueText.replace(CUE_FILE_REFERENCE_REGEX, (line, prefix: string, fileName: string, suffix: string) => {
+    const replacement = resolveFileName(fileName);
+    return replacement ? `${prefix}"${replacement.replace(/"/g, "")}"${suffix}` : line;
+  });
+
+export { parseCueFile, replaceCueFileReferences, replaceCuePatchFileName };

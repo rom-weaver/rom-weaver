@@ -137,6 +137,44 @@ describe("compress service", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it("matches CUE track references without folders or letter case", async () => {
+    const cue = file(
+      "disc.cue",
+      'FILE "tracks/TRACK1.BIN" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n' +
+        'FILE "tracks\\\\TRACK2.BIN" BINARY\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\n',
+    );
+    const track1 = file("track1.bin", new Uint8Array(2352));
+    const track2 = file("track2.bin", new Uint8Array(2352));
+    const { create, runtime } = makeRuntime();
+    expect(await getCompressFormats([cue, track2, track1])).toEqual(["zip", "7z", "chd"]);
+    await compressFiles([cue, track2, track1], options("chd"), runtime);
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: cue,
+        romSpecific: {
+          chd: expect.objectContaining({
+            imageFiles: [
+              { fileName: "track2.bin", source: track2 },
+              { fileName: "track1.bin", source: track1 },
+            ],
+          }),
+        },
+      }),
+    );
+  });
+
+  it("rejects ambiguous CUE track names while allowing the files in an archive", async () => {
+    const cue = file("disc.cue", 'FILE "track.bin" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n');
+    const lower = file("track.bin");
+    const upper = file("TRACK.BIN");
+    const { runtime } = makeRuntime();
+    expect(await getCompressFormats([cue, lower, upper])).toEqual(["zip", "7z"]);
+    await expect(compressFiles([cue, lower, upper], options("chd"), runtime)).rejects.toThrow("ambiguous track names");
+    await expect(compressFiles([cue, lower, upper], options("zip"), runtime)).resolves.toBeDefined();
+    const repeated = file("disc.cue", 'FILE "a/track.bin" BINARY\nFILE "b/TRACK.BIN" BINARY\n');
+    await expect(compressFiles([repeated, lower], options("chd"), runtime)).rejects.toThrow("ambiguous track names");
+  });
+
   it("cleans the built disc output if conversion to a public output fails", async () => {
     const { cleanup, createSource, runtime } = makeRuntime();
     createSource.mockRejectedValue(new Error("conversion failed"));

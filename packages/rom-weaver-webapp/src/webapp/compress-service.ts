@@ -9,7 +9,7 @@ import { parseCueFileReferences } from "../lib/input/archive.ts";
 import type { InputAsset } from "../lib/input/input-assets.ts";
 import { buildSessionOutputFiles, createSingleFileRomSpecificOutput } from "../lib/output/output-build-service.ts";
 import { createArchiveOutput } from "../lib/output/archive-output-service.ts";
-import { getFileNameWithoutExtension } from "../lib/input/path-utils.ts";
+import { getBaseFileName, getFileNameWithoutExtension } from "../lib/input/path-utils.ts";
 import { getChdAutoCreateMode } from "../lib/input/rom-specific-file-utils.ts";
 import { isLikelyDiscImageSize } from "../lib/compression/disc-image-policy.ts";
 import { ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS } from "../lib/compression/rom-specific-format-support.ts";
@@ -74,13 +74,17 @@ const validateInputs = async (files: File[]): Promise<ValidatedCompressInput> =>
   const references = parseCueFileReferences(await cue.text()).map((reference) => reference.fileName);
   let cueProblem: string | undefined;
   if (references.length === 0) cueProblem = `CUE file has no referenced tracks: ${cue.name}`;
-  const referenced = new Set(references);
-  if (!cueProblem && referenced.size !== references.length) cueProblem = `CUE file repeats a track path: ${cue.name}`;
+  const trackName = (name: string) => getBaseFileName(name).toLowerCase();
+  const referenced = new Set(references.map(trackName));
+  if (!cueProblem && referenced.size !== references.length)
+    cueProblem = `CUE file has ambiguous track names: ${cue.name}`;
   const suppliedTracks = files.filter((file) => file !== cue);
-  const suppliedNames = new Set(suppliedTracks.map((file) => file.name));
-  const missing = references.filter((name) => !suppliedNames.has(name));
+  const suppliedNames = new Set(suppliedTracks.map((file) => trackName(file.name)));
+  if (!cueProblem && suppliedNames.size !== suppliedTracks.length)
+    cueProblem = "CUE disc group has ambiguous track names";
+  const missing = references.filter((name) => !suppliedNames.has(trackName(name)));
   if (!cueProblem && missing.length > 0) cueProblem = `CUE file references missing track: ${missing[0]}`;
-  const extra = suppliedTracks.find((file) => !referenced.has(file.name));
+  const extra = suppliedTracks.find((file) => !referenced.has(trackName(file.name)));
   if (!cueProblem && extra) cueProblem = `CUE disc group contains an unreferenced file: ${extra.name}`;
   return {
     cue,
