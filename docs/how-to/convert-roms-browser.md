@@ -30,8 +30,8 @@ ZIP and 7z accept arbitrary file sets. CHD accepts compatible disc images and RO
 
 <figure class="docs-screenshot">
   <picture>
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/compress-mobile-dark.webp" width="370" height="634">
-    <img src="../screenshots/compress-desktop-light.webp" alt="Compress with input files, output filename, format, codec, level, and download button" width="1133" height="737">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/compress-mobile-dark.webp" width="370" height="639">
+    <img src="../screenshots/compress-desktop-light.webp" alt="Compress with input files, output filename, format, codec, level, and download button" width="1133" height="775">
   </picture>
   <figcaption>Choose a format and compression options, then download the finished file.</figcaption>
 </figure>
