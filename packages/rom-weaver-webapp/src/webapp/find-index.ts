@@ -110,7 +110,7 @@ const KIND_LIMIT: Record<FindKind, number> = { tool: 4, app: 4, setting: 4, guid
 // only command on its guide instead of sending it to a similar browser tool.
 const TOOL_FIND_DETAILS: Record<string, { hint: MessageId; keywords: string }> = {
   compress: {
-    hint: "ui.find.cliArchiveHint",
+    hint: "ui.hero.compressDescription",
     keywords: "compress pack archive disc image CHD RVZ Z3DS ZIP 7z",
   },
   creator: {
