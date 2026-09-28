@@ -2775,6 +2775,11 @@ msgstr "Read the Create guide"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.reading"
+msgstr "Reading"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.reading"
 msgstr "Reading"
 

@@ -30,6 +30,8 @@ type CompressSource = {
   metadata?: Record<string, unknown>;
 };
 
+/** One entry listed in an archive, by its path inside the archive. */
+type ListedCompressEntry = { path: string; size?: number };
 /** One file extracted from an opened archive. `output` owns the stored copy that `file` reads. */
 type OpenedCompressEntry = { file: File; output: PublicOutput; path: string };
 
@@ -158,10 +160,23 @@ const createAssets = async (input: ValidatedCompressInput): Promise<InputAsset[]
 
 const isOpenableCompressInput = (file: File): boolean => isArchiveFileName(file.name);
 
-const entryFileName = (output: PublicOutput, baseNameCounts: Map<string, number>): string => {
-  const path = output.relativePath || output.fileName;
-  if ((baseNameCounts.get(output.fileName) ?? 0) < 2) return output.fileName;
-  return path.split("/").filter(Boolean).join(" - ");
+const getEntryBaseName = (path: string): string => path.split("/").filter(Boolean).pop() || path;
+
+/** Lists an archive's entries without extracting any of them. Directory entries are left out. */
+const listCompressInput = async (
+  file: File,
+  runtime: WorkflowRuntime,
+  options: Pick<CompressionWorkflowOptions, "onProgress" | "signal"> = {},
+): Promise<ListedCompressEntry[]> => {
+  const probe = runtime.compression.probe;
+  if (!probe) throw new Error("Reading archives is not available in this browser.");
+  logger.trace("list.start", { fileName: file.name, size: file.size });
+  const result = await probe({ source: file, options });
+  const entries = result.entries
+    .filter((entry) => entry.filename && !entry.filename.endsWith("/") && entry.fileType !== "directory")
+    .map((entry) => ({ path: entry.filename, ...(typeof entry.size === "number" ? { size: entry.size } : {}) }));
+  logger.trace("list.done", { entryCount: entries.length, fileName: file.name });
+  return entries;
 };
 
 const disposeOpenedOutputs = async (outputs: PublicOutput[]) => {
@@ -172,42 +187,66 @@ const disposeOpenedOutputs = async (outputs: PublicOutput[]) => {
   );
 };
 
-// Extracted files stay in browser storage; each `File` is the disk-backed snapshot, so large disc
-// images are never copied into memory. Callers MUST dispose every returned output.
-const openCompressInput = async (
+// Only the named entries are extracted, one at a time, so an unpicked multi-GB image never touches
+// browser storage. Each `File` is the disk-backed snapshot of its stored copy, so it is never read into
+// memory either. Callers MUST dispose every returned output.
+const extractCompressEntries = async (
   file: File,
+  paths: string[],
   runtime: WorkflowRuntime,
   options: Pick<CompressionWorkflowOptions, "onProgress" | "signal"> = {},
 ): Promise<OpenedCompressEntry[]> => {
   const extract = runtime.compression.extract;
   if (!extract) throw new Error("Extraction is not available in this browser.");
-  logger.trace("open.start", { fileName: file.name, size: file.size });
-  const result = await extract({ source: file, entries: [], extractAll: true, options });
-  const entries: OpenedCompressEntry[] = [];
   // Entries keep their base name so CUE references still match. Entries that share a base name in
   // different folders take their folder path instead, or every compress run rejects them as duplicates.
   const baseNameCounts = new Map<string, number>();
-  for (const output of result.outputs)
-    baseNameCounts.set(output.fileName, (baseNameCounts.get(output.fileName) ?? 0) + 1);
+  for (const path of paths)
+    baseNameCounts.set(getEntryBaseName(path), (baseNameCounts.get(getEntryBaseName(path)) ?? 0) + 1);
+  const entries: OpenedCompressEntry[] = [];
+  const outputs: PublicOutput[] = [];
   try {
-    if (options.signal?.aborted) throw new DOMException("Opening cancelled", "AbortError");
-    for (const output of result.outputs) {
+    for (const [index, path] of paths.entries()) {
+      if (options.signal?.aborted) throw new DOMException("Opening cancelled", "AbortError");
+      logger.trace("extract.entry", { fileName: file.name, index, path });
+      const result = await extract({
+        entries: [path],
+        options: {
+          directExtract: true,
+          onProgress: (event) =>
+            options.onProgress?.({
+              ...event,
+              percent:
+                typeof event.percent === "number"
+                  ? ((index + event.percent / 100) / paths.length) * 100
+                  : event.percent,
+            }),
+          signal: options.signal,
+        },
+        source: file,
+      });
+      outputs.push(...result.outputs);
+      const [output] = result.outputs;
+      if (!output) throw new Error(`Extraction returned no file for ${path}`);
       const stored = await output.vfs.getFile?.(output.path);
-      if (!stored) throw new Error(`Extracted file is not available: ${output.relativePath || output.fileName}`);
+      if (!stored) throw new Error(`Extracted file is not available: ${path}`);
+      const baseName = getEntryBaseName(path);
+      const name = (baseNameCounts.get(baseName) ?? 0) > 1 ? path.split("/").filter(Boolean).join(" - ") : baseName;
       entries.push({
-        file: new File([stored], entryFileName(output, baseNameCounts), {
+        file: new File([stored], name, {
           lastModified: stored.lastModified,
           type: stored.type || "application/octet-stream",
         }),
         output,
-        path: output.relativePath || output.fileName,
+        path,
       });
     }
+    if (options.signal?.aborted) throw new DOMException("Opening cancelled", "AbortError");
   } catch (error) {
-    await disposeOpenedOutputs(result.outputs);
+    await disposeOpenedOutputs(outputs);
     throw error;
   }
-  logger.trace("open.done", { entryCount: entries.length, fileName: file.name });
+  logger.trace("extract.done", { entryCount: entries.length, fileName: file.name });
   return entries;
 };
 
@@ -263,12 +302,13 @@ const compressFiles = async (
   }
 };
 
-export type { CompressSource, OpenedCompressEntry };
+export type { CompressSource, ListedCompressEntry, OpenedCompressEntry };
 export {
   compressFiles,
   disposeOpenedOutputs,
   getCompressFormats,
   getCompressSource,
+  extractCompressEntries,
   isOpenableCompressInput,
-  openCompressInput,
+  listCompressInput,
 };

@@ -247,7 +247,9 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
                       <span className="fsize mono">{formatByteSize(archive.size)}</span>
                       <StageStatus
                         id={`compress-open-${archive.id}`}
-                        label={localizer.message("ui.compress.opening")}
+                        label={localizer.message(
+                          archive.phase === "reading" ? "ui.compress.reading" : "ui.compress.opening",
+                        )}
                         percent={archive.percent}
                       />
                     </>

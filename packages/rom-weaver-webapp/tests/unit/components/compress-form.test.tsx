@@ -4,11 +4,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CompressForm } from "../../../src/webapp/components/compress-form.tsx";
 import type { ApplyWorkflowOptions } from "../../../src/types/workflow-runtime-types.ts";
 
-const service = vi.hoisted(() => ({ compressFiles: vi.fn(), openCompressInput: vi.fn() }));
+const service = vi.hoisted(() => ({
+  compressFiles: vi.fn(),
+  extractCompressEntries: vi.fn(),
+  listCompressInput: vi.fn(),
+}));
 vi.mock("../../../src/webapp/compress-service.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../src/webapp/compress-service.ts")>()),
   compressFiles: service.compressFiles,
-  openCompressInput: service.openCompressInput,
+  extractCompressEntries: service.extractCompressEntries,
+  listCompressInput: service.listCompressInput,
 }));
 vi.mock("../../../src/platform/browser/workflow-runtime.ts", () => ({ browserRuntime: {} }));
 
@@ -130,38 +135,51 @@ describe("CompressForm", () => {
   });
 
   describe("opened archives", () => {
-    const opened = (path: string, contents: string) => ({
-      file: new File([contents], path.split("/").pop() || path),
-      output: { dispose: vi.fn(async () => undefined), size: contents.length },
-      path,
-    });
+    type Opened = { file: File; output: { dispose: ReturnType<typeof vi.fn>; size: number }; path: string };
+    // Lists the given entries and extracts only what the form asks for, recording every stored copy.
+    const archive = (contents: Record<string, string>) => {
+      const extracted: Opened[] = [];
+      service.listCompressInput.mockResolvedValue(Object.keys(contents).map((path) => ({ path, size: 1 })));
+      service.extractCompressEntries.mockImplementation(async (_file: File, paths: string[]) =>
+        paths.map((path) => {
+          const entry = {
+            file: new File([contents[path] ?? ""], path.split("/").pop() || path),
+            output: { dispose: vi.fn(async () => undefined), size: 1 },
+            path,
+          };
+          extracted.push(entry);
+          return entry;
+        }),
+      );
+      return extracted;
+    };
 
-    it("stages only the picked entries and disposes the rest and removed entries", async () => {
-      const entries = [opened("disc/game.iso", "iso"), opened("disc/readme.txt", "notes")];
-      service.openCompressInput.mockResolvedValue(entries);
+    it("extracts and stages only the picked entries and disposes removed entries", async () => {
+      const extracted = archive({ "disc/game.iso": "iso", "disc/readme.txt": "notes" });
       render(<CompressForm />);
       addFiles([new File(["zip"], "disc.zip")]);
 
       const [iso, readme] = (await screen.findAllByRole("checkbox")) as HTMLInputElement[];
       expect(iso?.checked && readme?.checked).toBe(true);
       expect(screen.getByRole("dialog").textContent).toContain("disc.zip");
-      expect(document.querySelector("#compress-container .pending-card")?.textContent).toContain("disc.zip");
+      expect(document.querySelector("#compress-container .pending-card")?.textContent).toContain("Reading");
+      expect(service.extractCompressEntries).not.toHaveBeenCalled();
       if (readme) fireEvent.click(readme);
       fireEvent.click(screen.getByRole("button", { name: "Add 1 file" }));
 
       await ready();
+      expect(service.extractCompressEntries.mock.calls[0]?.[1]).toEqual(["disc/game.iso"]);
       expect(screen.getByRole("button", { name: "Remove game.iso", exact: true })).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Remove readme.txt", exact: true })).toBeNull();
       expect(screen.queryByRole("button", { name: "Remove disc.zip", exact: true })).toBeNull();
-      await waitFor(() => expect(entries[1]?.output.dispose).toHaveBeenCalledOnce());
-      expect(entries[0]?.output.dispose).not.toHaveBeenCalled();
+      expect(extracted[0]?.output.dispose).not.toHaveBeenCalled();
 
       fireEvent.click(screen.getByRole("button", { name: "Remove game.iso", exact: true }));
-      await waitFor(() => expect(entries[0]?.output.dispose).toHaveBeenCalledOnce());
+      await waitFor(() => expect(extracted[0]?.output.dispose).toHaveBeenCalledOnce());
     });
 
     it("names the output after the archive instead of its first entry", async () => {
-      service.openCompressInput.mockResolvedValue([opened("readme.txt", "notes"), opened("game.sfc", "rom")]);
+      archive({ "readme.txt": "notes", "game.sfc": "rom" });
       render(<CompressForm />);
       addFiles([new File(["zip"], "Great Game.zip")]);
       fireEvent.click(await screen.findByRole("button", { name: "Add 2 files" }));
@@ -173,8 +191,7 @@ describe("CompressForm", () => {
     });
 
     it("asks about a single entry too and keeps plain files beside it", async () => {
-      const entries = [opened("game.sfc", "rom")];
-      service.openCompressInput.mockResolvedValue(entries);
+      archive({ "game.sfc": "rom" });
       render(<CompressForm />);
       addFiles([new File(["zip"], "game.zip"), new File(["patch"], "fix.bps")]);
 
@@ -184,12 +201,10 @@ describe("CompressForm", () => {
       await ready();
       expect(screen.getByRole("button", { name: "Remove game.sfc", exact: true })).toBeTruthy();
       expect(screen.getByRole("button", { name: "Remove fix.bps", exact: true })).toBeTruthy();
-      expect(entries[0]?.output.dispose).not.toHaveBeenCalled();
     });
 
-    it("adds the archive unchanged when Keep packed is on and disposes its extracted entries", async () => {
-      const entries = [opened("game.sfc", "rom"), opened("readme.txt", "notes")];
-      service.openCompressInput.mockResolvedValue(entries);
+    it("adds the archive unchanged when Keep packed is on without extracting anything", async () => {
+      archive({ "game.sfc": "rom", "readme.txt": "notes" });
       render(<CompressForm />);
       addFiles([new File(["zip"], "game.zip")]);
 
@@ -198,13 +213,23 @@ describe("CompressForm", () => {
       await ready();
       expect(screen.getByRole("button", { name: "Remove game.zip", exact: true })).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Remove game.sfc", exact: true })).toBeNull();
-      await waitFor(() => expect(entries.every((entry) => entry.output.dispose.mock.calls.length === 1)).toBe(true));
+      expect(service.extractCompressEntries).not.toHaveBeenCalled();
     });
 
-    it("adds an archive that cannot be opened unchanged and says why", async () => {
-      service.openCompressInput.mockRejectedValue(new Error("Unsupported archive"));
+    it.each([
+      ["listed", () => service.listCompressInput.mockRejectedValue(new Error("Unsupported archive"))],
+      [
+        "extracted",
+        () => {
+          archive({ "a.bin": "a" });
+          service.extractCompressEntries.mockRejectedValue(new Error("Unsupported archive"));
+        },
+      ],
+    ])("adds an archive that cannot be %s unchanged and says why", async (stage, fail) => {
+      fail();
       render(<CompressForm />);
       addFiles([new File(["broken"], "broken.zip")]);
+      if (stage === "extracted") fireEvent.click(await screen.findByRole("button", { name: "Add 1 file" }));
 
       await ready();
       expect(screen.getByRole("button", { name: "Remove broken.zip", exact: true })).toBeTruthy();
@@ -213,10 +238,9 @@ describe("CompressForm", () => {
       );
     });
 
-    it("cancels an archive that is still opening when its card is removed", async () => {
-      const late = [opened("a.bin", "a"), opened("b.bin", "b")];
+    it("cancels an archive that is still being read when its card is removed", async () => {
       let finish: (value: unknown) => void = () => undefined;
-      service.openCompressInput.mockImplementation(
+      service.listCompressInput.mockImplementation(
         () =>
           new Promise((resolve) => {
             finish = resolve;
@@ -225,28 +249,50 @@ describe("CompressForm", () => {
       render(<CompressForm />);
       addFiles([new File(["zip"], "slow.zip")]);
       fireEvent.click(await screen.findByRole("button", { name: "Remove slow.zip", exact: true }));
-      const signal = service.openCompressInput.mock.calls[0]?.[2]?.signal as AbortSignal;
+      const signal = service.listCompressInput.mock.calls[0]?.[2]?.signal as AbortSignal;
       expect(signal.aborted).toBe(true);
-      await act(async () => finish(late));
-      await waitFor(() => expect(late.every((entry) => entry.output.dispose.mock.calls.length === 1)).toBe(true));
+      await act(async () => finish([{ path: "a.bin" }, { path: "b.bin" }]));
       expect(screen.queryByRole("dialog")).toBeNull();
+      expect(service.extractCompressEntries).not.toHaveBeenCalled();
       expect(document.querySelector("#compress-container .pending-card")).toBeNull();
     });
 
-    it("disposes every extracted entry when the picker is cancelled or the form unmounts", async () => {
-      const cancelled = [opened("a.bin", "a"), opened("b.bin", "b")];
-      const abandoned = [opened("c.bin", "c"), opened("d.bin", "d")];
-      service.openCompressInput.mockResolvedValueOnce(cancelled).mockResolvedValueOnce(abandoned);
+    it("disposes entries that finish extracting after the form unmounts", async () => {
+      const contents = { "c.bin": "c", "d.bin": "d" };
+      archive(contents);
+      let finish: () => void = () => undefined;
+      const late: Opened[] = [];
+      service.extractCompressEntries.mockImplementation(
+        (_file: File, paths: string[]) =>
+          new Promise((resolve) => {
+            finish = () => {
+              for (const path of paths)
+                late.push({
+                  file: new File([contents[path as keyof typeof contents]], path),
+                  output: { dispose: vi.fn(async () => undefined), size: 1 },
+                  path,
+                });
+              resolve(late);
+            };
+          }),
+      );
       const { unmount } = render(<CompressForm />);
+      addFiles([new File(["zip"], "second.zip")]);
+      fireEvent.click(await screen.findByRole("button", { name: "Add 2 files" }));
+      await waitFor(() => expect(service.extractCompressEntries).toHaveBeenCalledOnce());
+      unmount();
+      await act(async () => finish());
+      await waitFor(() => expect(late.every((entry) => entry.output.dispose.mock.calls.length === 1)).toBe(true));
+    });
+
+    it("extracts nothing when the picker is cancelled", async () => {
+      archive({ "a.bin": "a", "b.bin": "b" });
+      render(<CompressForm />);
       addFiles([new File(["zip"], "first.zip")]);
       fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
-      await waitFor(() => expect(cancelled.every((entry) => entry.output.dispose.mock.calls.length === 1)).toBe(true));
+      await waitFor(() => expect(document.querySelector("#compress-container .pending-card")).toBeNull());
+      expect(service.extractCompressEntries).not.toHaveBeenCalled();
       expect(screen.queryByRole("alert")).toBeNull();
-
-      addFiles([new File(["zip"], "second.zip")]);
-      await screen.findByRole("button", { name: "Add 2 files" });
-      unmount();
-      await waitFor(() => expect(abandoned.every((entry) => entry.output.dispose.mock.calls.length === 1)).toBe(true));
     });
   });
 });
