@@ -8,8 +8,10 @@ import type {
   ClassifiedCheatRecord,
   DatabaseCheatClassifier,
   ManualCheatClassifier,
+  ManualCheatKindOverride,
 } from "../../../lib/cheats/index.ts";
 import {
+  CHEAT_KIND_OPTIONS,
   describeCheatCodes,
   formatCheatWrite,
   getCheatCodeWrites,
@@ -19,6 +21,7 @@ import {
 } from "../create-cheat-codes-model.ts";
 import { AddCheatsDialog, CheatGamePicker } from "./cheat-database-section.tsx";
 import { FileCard } from "./ds/file-card.tsx";
+import { DropdownSelect } from "./ds/dropdown-select.tsx";
 import { useCheatDatabaseRecords } from "./use-cheat-database-records.ts";
 import "./create-cheat-codes-panel.css";
 
@@ -34,7 +37,9 @@ type CreateCheatCodesPanelProps = {
   disabled?: boolean;
   /** The raw textarea contents, owned by the create form. */
   value: string;
+  kind: ManualCheatKindOverride;
   onValueChange: (value: string) => void;
+  onKindChange: (kind: ManualCheatKindOverride) => void;
   /** Reports every split code with whatever the classifier said about it. */
   onEntriesChange: (entries: CreateCheatCodeEntry[]) => void;
   /** Reports whether a classification pass is still in flight. */
@@ -50,11 +55,11 @@ type CreateCheatCodesPanelProps = {
  * and the description lookup miss it.
  */
 const recordCodes = (record: ClassifiedCheatRecord, system?: string): string[] =>
-  splitCheatCodes(record.record.rawCode || "", system);
+  splitCheatCodes(record.record.rawCode || "", system, record.record.codeKind);
 
 /** Codes the picker adds are appended to the textarea. */
-const appendCodes = (value: string, codes: readonly string[], system?: string): string => {
-  const existing = new Set(splitCheatCodes(value, system).map((code) => code.toUpperCase()));
+const appendCodes = (value: string, codes: readonly string[], system?: string, kind?: string): string => {
+  const existing = new Set(splitCheatCodes(value, system, kind).map((code) => code.toUpperCase()));
   const added: string[] = [];
   for (const code of codes) {
     const normalized = code.toUpperCase();
@@ -80,13 +85,16 @@ const CreateCheatCodesPanel = ({
   classifyDatabaseCheats,
   disabled,
   value,
+  kind,
   onValueChange,
+  onKindChange,
   onEntriesChange,
   onClassifyingChange,
   onSystemChange,
 }: CreateCheatCodesPanelProps) => {
   const [entries, setEntries] = useState<CreateCheatCodeEntry[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [kindConflict, setKindConflict] = useState("");
   // Only the newest classification pass may write state; a slower earlier pass
   // would otherwise restore the reading of a code the user already replaced.
   const classifySequence = useRef(0);
@@ -120,7 +128,7 @@ const CreateCheatCodesPanel = ({
   }, [manualSystem]);
 
   useEffect(() => {
-    const codes = splitCheatCodes(value, manualSystem);
+    const codes = splitCheatCodes(value, manualSystem, kind);
     const sequence = ++classifySequence.current;
     if (!codes.length) {
       setEntries([]);
@@ -152,7 +160,7 @@ const CreateCheatCodesPanel = ({
           const result = await classifyManualCode({
             code,
             description: description || code,
-            kind: "auto",
+            kind,
             system: manualSystem as CheatManualSystem,
           });
           return { code, description, id, record: result.record };
@@ -171,13 +179,13 @@ const CreateCheatCodesPanel = ({
       reportEntries.current(nextEntries);
       reportClassifying.current(false);
     });
-  }, [classifyManualCode, manualSystem, records, value]);
+  }, [classifyManualCode, kind, manualSystem, records, value]);
 
   const detected = describeCheatCodes(entries);
   // The picker keys "added" by record id, so map the codes in the textarea back
   // onto the database rows that carry them.
   // A row counts as added only once every code it carries is in the textarea.
-  const stagedCodes = new Set(splitCheatCodes(value, manualSystem).map((code) => code.toUpperCase()));
+  const stagedCodes = new Set(splitCheatCodes(value, manualSystem, kind).map((code) => code.toUpperCase()));
   const addedIds = new Set(
     records
       .filter((entry) => {
@@ -203,7 +211,7 @@ const CreateCheatCodesPanel = ({
   // card's own code even when the same code is typed twice.
   const removeCode = (position: number) => {
     onValueChange(
-      splitCheatCodes(value, manualSystem)
+      splitCheatCodes(value, manualSystem, kind)
         .filter((_code, index) => index !== position)
         .join("\n"),
     );
@@ -270,6 +278,26 @@ const CreateCheatCodesPanel = ({
         </span>
       </button>
 
+      <label className="create-cheat-codes-input" htmlFor="rom-weaver-create-cheat-kind">
+        <span>Code type</span>
+        <DropdownSelect
+          className="select"
+          disabled={disabled}
+          id="rom-weaver-create-cheat-kind"
+          onChange={(event) => {
+            setKindConflict("");
+            onKindChange(event.target.value as ManualCheatKindOverride);
+          }}
+          value={kind}
+        >
+          <option value="auto">Detect automatically</option>
+          {CHEAT_KIND_OPTIONS.map(({ value, label }) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </DropdownSelect>
+      </label>
       <label className="create-cheat-codes-input">
         <span>Type codes</span>
         <textarea
@@ -277,7 +305,10 @@ const CreateCheatCodesPanel = ({
           className="input mono"
           disabled={disabled}
           maxLength={8192}
-          onChange={(event) => onValueChange(event.target.value)}
+          onChange={(event) => {
+            setKindConflict("");
+            onValueChange(event.target.value);
+          }}
           placeholder="One per line or joined with +"
           rows={3}
           spellCheck={false}
@@ -286,16 +317,30 @@ const CreateCheatCodesPanel = ({
       </label>
       {classificationError ? <p role="alert">{classificationError}</p> : null}
       {loadError ? <p role="alert">{loadError}</p> : null}
+      {kindConflict ? <p role="alert">{kindConflict}</p> : null}
 
       <AddCheatsDialog
         addedIds={addedIds}
         gamePicker={gamePicker}
-        onAdd={(record) => onValueChange(appendCodes(value, recordCodes(record, manualSystem), manualSystem))}
+        onAdd={(record) => {
+          const recordKind = record.record.codeKind ?? record.detectedKind ?? undefined;
+          const autoEntriesMatch =
+            kind === "auto" &&
+            entries.length > 0 &&
+            entries.every((entry) => entry.record?.detectedKind === recordKind);
+          if (recordKind && value.trim() && kind !== recordKind && !autoEntriesMatch) {
+            setKindConflict("Create a separate patch for codes with a different code type.");
+            return;
+          }
+          setKindConflict("");
+          if (recordKind && kind !== recordKind) onKindChange(recordKind);
+          onValueChange(appendCodes(value, recordCodes(record, manualSystem), manualSystem, recordKind ?? kind));
+        }}
         onClose={() => setDialogOpen(false)}
         onRemove={(record) => {
           const dropped = new Set(recordCodes(record, manualSystem).map((code) => code.toUpperCase()));
           onValueChange(
-            splitCheatCodes(value, manualSystem)
+            splitCheatCodes(value, manualSystem, kind)
               .filter((code) => !dropped.has(code.toUpperCase()))
               .join("\n"),
           );

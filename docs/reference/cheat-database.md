@@ -20,17 +20,23 @@
 
 | Database system | Rust decoders |
 | --- | --- |
-| Nintendo Entertainment System | Game Genie, Pro Action Replay |
-| Super Nintendo Entertainment System | Game Genie, Pro Action Replay |
+| Nintendo Entertainment System | Game Genie, Pro Action Replay, Pro Action Rocky |
+| Super Nintendo Entertainment System | Game Genie, Pro Action Replay, Gold Finger |
 | Sega Genesis / Mega Drive | Game Genie, Pro Action Replay |
 | Sega 32X | Game Genie, Pro Action Replay |
 | Sega Master System | Game Genie, Pro Action Replay |
 | Sega Game Gear | Game Genie, Pro Action Replay |
 | Game Boy | Game Genie, GameShark |
 | Game Boy Color | Game Genie, GameShark |
-| Game Boy Advance | Xploder ROM-patch codes |
+| Game Boy Advance | Xploder, GameShark v1/v2, Action Replay v3 |
 
 rom-weaver does not offer database systems outside this table.
+
+The database stores these explicit code kinds: `game-genie`, `pro-action-replay`, `gold-finger`, `xploder`, `pro-action-rocky`, `game-shark-v1`, `game-shark-v1-raw`, `action-replay-v3`, and `action-replay-v3-raw`. Generic GBA GameShark and Action Replay file names remain `xploder` because the device name does not identify the encryption version.
+
+Gold Finger codes can write one to three consecutive SNES ROM bytes. `XX` marks an unused trailing byte. SRAM Gold Finger codes are unsupported. The address is a ROM offset without a 512-byte copier header.
+
+The GBA versioned kinds preserve the complete code block. The non-`raw` kinds decrypt their device format before classification. The `raw` kinds accept the corresponding decrypted form. Only writes that resolve to cartridge ROM can be baked. Runtime-memory writes, conditionals, and device operations without a ROM write remain unsupported.
 
 ## Delivery classes
 
@@ -80,7 +86,7 @@ The distribution includes the full license text and the source revision in the t
 
 Game titles and release checksums come from the same Libretro DAT files that build the platform's identify pack, so a cheat match and an identify match agree on the ROM.
 
-Before packaging, the build removes structured RetroArch entries, empty or placeholder codes, and entries whose every subcode has a known runtime-memory address. Mixed entries remain for the ROM-dependent decoder to classify; an entry remains unsupported if any subcode cannot bake.
+Before packaging, the build removes structured RetroArch entries, empty or placeholder codes, and entries whose every subcode has a known runtime-memory address. Gold Finger `XX` data slots are unused bytes, not parameters. Encrypted and versioned GBA blocks remain intact for the Rust decoder. Mixed entries remain for the ROM-dependent decoder to classify; an entry remains unsupported if any subcode cannot bake.
 
 ## CLI database directory
 
@@ -133,7 +139,7 @@ The file stores each cheat record without the values a reader derives. The CLI a
 | `gameId` | the game's `id` |
 | `sourceRevision` | the shard's `sourceRevision` |
 | `sourceFile` | always `libretro-database` |
-| `codeKind` | stored when the Libretro file name names a device (`Game Genie`, `Action Replay`, `GameShark`, `Code Breaker`, `Xploder`) |
+| `codeKind` | stored when the Libretro file name names an unambiguous device or version; generic GBA Action Replay and GameShark files retain Xploder compatibility |
 | `description` | stored when the source record has a `desc` field, else `Cheat <sourceIndex + 1>` |
 | `rawFields.desc`, `rawFields.code` | `description` and `rawCode` |
 | `rawFields.enable` | stored only when it is not `false` |
@@ -149,7 +155,7 @@ rom-weaver does not synthesize RetroArch memory handlers. It only decodes the na
 
 ## Bundles
 
-A bundle's optional top-level `cheats` array records a selection: each entry carries the record `id`, the `source` database and `revision`, the `description`, and a `code` snapshot.
+A bundle's optional top-level `cheats` array records a selection: each entry carries the record `id`, the `source` database and `revision`, the `description`, and a `code` snapshot with its optional `codeKind`.
 
 `bundle create --cheat` and `patch apply --emit-bundle` write the array. Applying the bundle resolves each entry by `id` against the database at `--cheat-database`, and falls back to its `code` snapshot when the database is absent. An unresolvable entry fails the apply unless it is marked `optional`.
 

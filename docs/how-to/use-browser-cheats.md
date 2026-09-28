@@ -17,13 +17,7 @@ Apply cheats do not need beta mode. Cheat-code creation on the Create page does.
 
 ## Add cheats to a ROM
 
-1. Add the original ROM to the **Apply** page.
-2. In **Patches & Cheats**, select **Add cheats to the patch order**.
-3. Choose the system and game if the dialog asks.
-4. Search the list and add the cheats you want.
-5. Close the dialog and check the selected cheats in the patch order.
-6. Move each cheat before or after the patches that it must use.
-7. Start **Apply** and save the output ROM.
+1. Add the original ROM to the **Apply** page. 2. In **Patches & Cheats**, select **Add cheats to the patch order**. 3. Choose the system and game if the dialog asks. 4. Search the list and add the cheats you want. 5. Close the dialog and check the selected cheats in the patch order. 6. Move each cheat before or after the patches that it must use. 7. Start **Apply** and save the output ROM.
 
 Check the game and revision yourself when the database only matches a title. A title match is not an exact ROM match.
 
@@ -49,31 +43,21 @@ Use each card's inclusion control to leave a step out without removing it. Patch
 
 ## Add a code manually
 
-1. Open **Add cheats to the patch order**, then **Add code manually**.
-2. Enter the code and an optional description.
-3. Keep automatic system and code-type detection, or select an override.
-4. Select **Check code**, then read the detected system, code type, and delivery result.
-5. Add the code when the result matches your game.
+1. Open **Add cheats to the patch order**, then **Add code manually**. 2. Enter the code and an optional description. 3. Keep automatic system and code-type detection, or select an override. 4. Select **Check code**, then read the detected system, code type, and delivery result. 5. Add the code when the result matches your game.
 
-Codes with unresolved `?` or `X` placeholders cannot be added. Codes that need live game memory cannot become ROM changes.
+Select Pro Action Rocky explicitly for an eight-digit NES code. For a GBA code, select the exact GameShark or Action Replay version. Select a `raw` version only for an already decrypted block. Keep all lines of a versioned GBA block together.
+
+Codes with unresolved `?` or `X` placeholders cannot be added. Gold Finger `XX` trailing data slots are valid unused bytes. Codes that need live game memory cannot become ROM changes.
 
 ## Save a ROM cheat as a patch
 
-1. Add a supported cheat to the patch order.
-2. Open that card's download menu and select **Save as patch**.
-3. Save the downloaded patch file.
+1. Add a supported cheat to the patch order. 2. Open that card's download menu and select **Save as patch**. 3. Save the downloaded patch file.
 
 The status names the output file. The [cheat reference](../reference/cheat-database.md#patch-export) lists the automatic export format limits.
 
 ## Create a patch from cheat codes
 
-1. [Enable beta tools](browser-settings.md#enable-beta-tools), then add the original ROM on **Create**.
-2. Select **Cheat codes** on the **Modified** step.
-3. Enter one code per line, or join codes with `+`.
-4. Check the detected system, code type, and write count.
-5. Check each code's write list and its `compare` badge.
-6. Select the patch format and file name on **Patch**.
-7. Select **Create & download patch**.
+1. [Enable beta tools](browser-settings.md#enable-beta-tools), then add the original ROM on **Create**. 2. Select **Cheat codes** on the **Modified** step. 3. Enter one code per line, or join codes with `+`. 4. Check the detected system, code type, and write count. 5. Check each code's write list and its `compare` badge. 6. Select the patch format and file name on **Patch**. 7. Select **Create & download patch**.
 
 **Pick from the cheat database** offers the same database as Apply. A code that cannot become ROM writes blocks creation and states its reason.
 

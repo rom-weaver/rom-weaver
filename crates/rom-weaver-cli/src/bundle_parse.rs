@@ -813,6 +813,7 @@ mod tests {
                 revision: Some("abc123".to_owned()),
                 description: Some("Infinite lives".to_owned()),
                 code: Some("AKE-LVS".to_owned()),
+                code_kind: None,
                 optional: true,
             }],
             output: Some(BundleOutput {

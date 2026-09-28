@@ -1,4 +1,4 @@
-import type { CheatManualSystem, ClassifiedCheatRecord } from "../../lib/cheats/index.ts";
+import type { CheatCodeKind, CheatManualSystem, ClassifiedCheatRecord } from "../../lib/cheats/index.ts";
 import { getFileNameWithoutExtension } from "../../lib/input/path-utils.ts";
 import { sanitizeCheatPatchNamePart, toCheatPatchNameSuffix } from "./cheat-patch-name.ts";
 
@@ -21,11 +21,19 @@ type CreateCheatCodeEntry = {
 
 type CheatCodeWrite = { offset: number; value: number; width: number; compare?: number | null };
 
-const KIND_LABELS: Record<string, string> = {
-  "game-genie": "Game Genie",
-  "pro-action-replay": "Action Replay",
-  xploder: "Xploder",
-};
+const CHEAT_KIND_OPTIONS: Array<{ value: CheatCodeKind; label: string }> = [
+  { value: "game-genie", label: "Game Genie" },
+  { value: "pro-action-replay", label: "Action Replay / GameShark" },
+  { value: "pro-action-rocky", label: "Pro Action Rocky" },
+  { value: "gold-finger", label: "Gold Finger" },
+  { value: "game-shark-v1", label: "GBA GameShark / AR v1/v2" },
+  { value: "game-shark-v1-raw", label: "GBA GameShark / AR v1/v2 (raw)" },
+  { value: "action-replay-v3", label: "GBA Action Replay v3" },
+  { value: "action-replay-v3-raw", label: "GBA Action Replay v3 (raw)" },
+  { value: "xploder", label: "Xploder" },
+];
+
+const KIND_LABELS = Object.fromEntries(CHEAT_KIND_OPTIONS.map(({ value, label }) => [value, label]));
 
 const SYSTEM_LABELS: Record<CheatManualSystem, string> = {
   nes: "NES",
@@ -99,6 +107,8 @@ const usesXploderSplit = (system?: string, kind?: string): boolean => {
   return normalizedKind === "auto" && (system === "gameboyadvance" || system === "playstation");
 };
 
+const GBA_BLOCK_KINDS = new Set(["game-shark-v1", "game-shark-v1-raw", "action-replay-v3", "action-replay-v3-raw"]);
+
 /**
  * Split a raw block of codes the way the Rust engine does: cheat lists arrive
  * joined with `+`, newlines, commas, semicolons or spaces, and each piece is one
@@ -106,6 +116,10 @@ const usesXploderSplit = (system?: string, kind?: string): boolean => {
  * `splitXploderCodes`. Intra-code separators (`-`, `:`) are left alone.
  */
 const splitCheatCodes = (text: string, system?: string, kind?: string): string[] => {
+  const block = String(text || "").trim();
+  if (system === "gameboyadvance" && GBA_BLOCK_KINDS.has(String(kind || "").toLowerCase())) {
+    return block ? [block] : [];
+  }
   const tokens = String(text || "")
     .split(CODE_SEPARATOR_REGEX)
     .map((code) => code.trim())
@@ -189,6 +203,7 @@ const getCheatCodesValidationMessage = (entries: readonly CreateCheatCodeEntry[]
 };
 
 export {
+  CHEAT_KIND_OPTIONS,
   describeCheatCodes,
   formatCheatWrite,
   getCheatCodeWrites,

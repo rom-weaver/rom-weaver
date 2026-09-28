@@ -86,6 +86,11 @@ pub struct BundleCheatEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub code: Option<String>,
+    /// Explicit decoder for the raw code snapshot. This is required for code
+    /// shapes that cannot identify their encryption scheme by themselves.
+    #[serde(default, rename = "codeKind", skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, rename = "codeKind"))]
+    pub code_kind: Option<CheatKind>,
     /// An optional cheat is skipped (and named in the report) when it cannot
     /// be resolved; omitted/false makes an unresolvable entry fail the apply.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]

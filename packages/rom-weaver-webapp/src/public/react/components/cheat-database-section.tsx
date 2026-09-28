@@ -18,6 +18,7 @@ import {
   type ManualCheatResult,
 } from "../../../lib/cheats/index.ts";
 import { getCheatPatchStatus } from "../cheat-patch-export-model.ts";
+import { CHEAT_KIND_OPTIONS } from "../create-cheat-codes-model.ts";
 import { matchGame, useCheatDatabaseRecords } from "./use-cheat-database-records.ts";
 import { Drawer } from "./ds/drawer.tsx";
 import { DropdownSelect } from "./ds/dropdown-select.tsx";
@@ -42,11 +43,10 @@ const deliveryCopy = (record: ClassifiedCheatRecord): { badge: string; short: st
     ? { badge: "ROM cheat", short: "ROM", text: "Baked into output" }
     : { badge: "Unsupported", short: "N/A", text: "Cannot be baked into the ROM" };
 
-const CHEAT_KIND_LABELS: Record<NonNullable<ClassifiedCheatRecord["detectedKind"]>, string> = {
-  "game-genie": "Game Genie",
-  "pro-action-replay": "Action Replay / GameShark",
-  xploder: "Xploder",
-};
+const CHEAT_KIND_LABELS = Object.fromEntries(CHEAT_KIND_OPTIONS.map(({ value, label }) => [value, label])) as Record<
+  NonNullable<ClassifiedCheatRecord["detectedKind"]>,
+  string
+>;
 
 const gameLabel = (game: NonNullable<ReturnType<typeof matchGame>>): string =>
   [game.title, game.regions.join(" / "), game.revisions.join(" / ")].filter(Boolean).join(" · ");
@@ -309,9 +309,11 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
                 value={kind}
               >
                 <option value="auto">Detect automatically</option>
-                <option value="game-genie">Game Genie</option>
-                <option value="pro-action-replay">Action Replay / GameShark</option>
-                <option value="xploder">Xploder</option>
+                {CHEAT_KIND_OPTIONS.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
               </DropdownSelect>
             </label>
           </div>

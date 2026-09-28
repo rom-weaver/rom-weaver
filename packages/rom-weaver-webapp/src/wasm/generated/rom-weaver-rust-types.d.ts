@@ -275,7 +275,7 @@ patches: Array<PatchDescriptor>, };
 
 export type CheatSystem = "nes" | "snes" | "genesis" | "gameboy" | "gameboy-color" | "gameboyadvance" | "playstation" | "mastersystem" | "gamegear" | "sega32x" | "sg1000";
 
-export type CheatKind = "game-genie" | "pro-action-replay" | "xploder";
+export type CheatKind = "game-genie" | "pro-action-replay" | "xploder" | "pro-action-rocky" | "gold-finger" | "game-shark-v1" | "game-shark-v1-raw" | "action-replay-v3" | "action-replay-v3-raw";
 
 export type CheatTarget = "cartridge-rom" | "runtime-memory" | "unknown";
 
@@ -695,6 +695,11 @@ revision?: string, description?: string,
  * database is absent.
  */
 code?: string,
+/**
+ * Explicit decoder for the raw code snapshot. This is required for code
+ * shapes that cannot identify their encryption scheme by themselves.
+ */
+codeKind?: CheatKind,
 /**
  * An optional cheat is skipped (and named in the report) when it cannot
  * be resolved; omitted/false makes an unresolvable entry fail the apply.

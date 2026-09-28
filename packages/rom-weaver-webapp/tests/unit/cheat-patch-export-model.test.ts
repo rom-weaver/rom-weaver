@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   getCheatPatchCodes,
+  getCheatPatchKind,
   getCheatPatchFileName,
   getCheatPatchFormat,
   getCheatPatchStatus,
@@ -49,6 +50,23 @@ describe("getRomCheats", () => {
 describe("getCheatPatchCodes", () => {
   it("returns only the ROM cheats' raw codes", () => {
     expect(getCheatPatchCodes(mixed)).toEqual(["C2B4-6D07", "DDEE-1234"]);
+  });
+});
+
+describe("getCheatPatchKind", () => {
+  it("keeps explicit decoders when exporting raw snapshots", () => {
+    for (const kind of ["pro-action-rocky", "action-replay-v3", "game-shark-v1"] as const) {
+      const entry = romCheat("explicit", "ROM patch", "15C93C0A");
+      entry.record.codeKind = kind;
+      expect(getCheatPatchKind([entry])).toBe(kind);
+    }
+  });
+
+  it("uses the detected kind and rejects incompatible selected decoders", () => {
+    expect(getCheatPatchKind(mixed)).toBe("game-genie");
+    const entry = romCheat("explicit", "ROM patch", "15C93C0A");
+    entry.record.codeKind = "pro-action-rocky";
+    expect(() => getCheatPatchKind([...mixed, entry])).toThrow("different code type");
   });
 });
 

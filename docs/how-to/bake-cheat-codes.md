@@ -1,6 +1,6 @@
 # Bake cheat codes into a ROM
 
-Write Game Genie, GameShark/Pro Action Replay, or raw Xploder codes permanently into a ROM with `rom-weaver patch apply --code`, so the effect is there without a cheat device or an emulator cheat list. To share the same change as a patch file instead, see [Share a cheat as a patch](#share-a-cheat-as-a-patch).
+Write supported cheat-device codes permanently into a ROM with `rom-weaver patch apply --code`, so the effect is there without a cheat device or an emulator cheat list. To share the same change as a patch file instead, see [Share a cheat as a patch](#share-a-cheat-as-a-patch).
 
 <!-- START doctoc -->
 ## Table of contents
@@ -56,7 +56,7 @@ rom-weaver patch apply \
   --no-compress --output game-coded.bin
 ```
 
-`--code-system` accepts `nes`, `snes`, `genesis`, `32x`, `sms`, `gamegear`, `sg1000`, `gameboy`, `gba`, and `psx`. `--code-kind` accepts `auto` (the default), `game-genie`, `gameshark`/`par`, and `xploder`.
+`--code-system` accepts `nes`, `snes`, `genesis`, `32x`, `sms`, `gamegear`, `sg1000`, `gameboy`, `gba`, and `psx`. `--code-kind` accepts `auto` (the default), `game-genie`, `gameshark`/`par`, `xploder`, `pro-action-rocky`, `gold-finger`, `game-shark-v1`, `game-shark-v1-raw`, `action-replay-v3`, and `action-replay-v3-raw`.
 
 A Master System Game Genie code works the same way:
 
@@ -73,6 +73,12 @@ Use `gba` with `--code-kind xploder` for raw Xploder Advance codes. The tool can
 ```text
 00000000 18000004 0000ABCD 00000000
 ```
+
+Select `pro-action-rocky` explicitly for NES or Famicom codes. Its eight hexadecimal digits are ambiguous with other NES formats.
+
+Use `game-shark-v1` for encrypted GameShark or Action Replay v1/v2 blocks. Use `action-replay-v3` for encrypted Action Replay or GameShark v3 blocks. Select the matching `-raw` kind only when the block is already decrypted. Keep every line of a block in one `--code` value. The decoder rejects a block unless its supported writes resolve to the cartridge ROM.
+
+SNES Gold Finger codes use `gold-finger`. Automatic detection recognizes their 14-character shape. `XX` marks an unused second or third data byte. The tool rejects SRAM codes.
 
 Use `psx` with `--code-kind xploder` for plain PlayStation constant writes. The input must be a PS-X EXE. The tool maps writes in the loaded executable to file offsets. Encrypted and conditional codes stay runtime-only.
 

@@ -1679,7 +1679,7 @@ output is written back in the order the input arrived in."
             long = "code-kind",
             default_value = "auto",
             help_heading = "Diagnostics/authoring",
-            help = "Which cheat scheme the --code values use: auto, game-genie, gameshark/par, or xploder"
+            help = "Cheat scheme: auto, game-genie, gameshark/par, xploder, pro-action-rocky, gold-finger, game-shark-v1[-raw], or action-replay-v3[-raw]"
         )
     )]
     #[serde(default = "default_code_kind")]
@@ -2303,7 +2303,7 @@ apply and verifies the input, as long as the file name survives."
         arg(
             long = "code-kind",
             default_value = "auto",
-            help = "Which cheat scheme the --code values use: auto, game-genie, gameshark/par, or xploder"
+            help = "Cheat scheme: auto, game-genie, gameshark/par, xploder, pro-action-rocky, gold-finger, game-shark-v1[-raw], or action-replay-v3[-raw]"
         )
     )]
     #[serde(default = "default_code_kind")]

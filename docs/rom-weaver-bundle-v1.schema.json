@@ -181,6 +181,11 @@
           "description": "Raw code snapshot, so the entry still applies when the local cheat database is absent.",
           "type": "string"
         },
+        "codeKind": {
+          "description": "Explicit decoder for the raw code snapshot.",
+          "type": "string",
+          "enum": ["game-genie", "pro-action-replay", "xploder", "pro-action-rocky", "gold-finger", "game-shark-v1", "game-shark-v1-raw", "action-replay-v3", "action-replay-v3-raw"]
+        },
         "optional": {
           "description": "When true an unresolvable cheat is skipped and named in the report; omitted/false makes it fail the apply.",
           "type": "boolean"

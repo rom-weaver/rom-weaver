@@ -1225,3 +1225,173 @@ fn cheat_create_solid_comment_records_codes() {
         "SOLID comment should record the codes"
     );
 }
+
+#[test]
+fn new_cheat_formats_bake_exact_bytes_and_export_patches() {
+    let mut rocky_rom = nes_rom();
+    rocky_rom[16 + 0x1123] = 0xDE;
+    let cases = [
+        (
+            "nes",
+            "pro-action-rocky",
+            "15C93C0A",
+            rocky_rom,
+            16 + 0x1123,
+            vec![0xBD],
+        ),
+        (
+            "snes",
+            "gold-finger",
+            "00000ABCDEF070",
+            vec![0u8; 0x8000],
+            0,
+            vec![0xAB, 0xCD, 0xEF],
+        ),
+        (
+            "gba",
+            "game-shark-v1",
+            "CDE69477 3E02C83D",
+            gba_rom(),
+            0x20,
+            vec![0x34, 0x12],
+        ),
+        (
+            "gba",
+            "action-replay-v3",
+            "57B5956C 0C9B860D\n463A0AF6 5A9BF7D9",
+            gba_rom(),
+            0x40,
+            vec![0xCD, 0xAB],
+        ),
+    ];
+    for (system, kind, code, original, offset, bytes) in cases {
+        let temp = setup_temp_dir();
+        let input = temp.child("input.bin");
+        let output = temp.child("output.bin");
+        let patch = temp.child("cheat.ips");
+        let roundtrip = temp.child("roundtrip.bin");
+        fs::write(input.path(), &original).unwrap();
+        command_stdout(
+            &[
+                "patch",
+                "apply",
+                "--input",
+                input.path().to_str().unwrap(),
+                "--code-system",
+                system,
+                "--code-kind",
+                kind,
+                "--code",
+                code,
+                "--output",
+                output.path().to_str().unwrap(),
+                "--no-compress",
+                "--jsonl",
+            ],
+            0,
+        );
+        let mut expected = original;
+        expected[offset..offset + bytes.len()].copy_from_slice(&bytes);
+        assert_eq!(fs::read(output.path()).unwrap(), expected, "{kind}");
+        command_stdout(
+            &[
+                "patch",
+                "create",
+                "--original",
+                input.path().to_str().unwrap(),
+                "--code-system",
+                system,
+                "--code-kind",
+                kind,
+                "--code",
+                code,
+                "--output",
+                patch.path().to_str().unwrap(),
+                "--jsonl",
+            ],
+            0,
+        );
+        command_stdout(
+            &[
+                "patch",
+                "apply",
+                "--input",
+                input.path().to_str().unwrap(),
+                "--patch",
+                patch.path().to_str().unwrap(),
+                "--patch-header",
+                "keep",
+                "--output-header",
+                "keep",
+                "--output",
+                roundtrip.path().to_str().unwrap(),
+                "--no-compress",
+                "--jsonl",
+            ],
+            0,
+        );
+        assert_eq!(fs::read(roundtrip.path()).unwrap(), expected, "{kind} IPS");
+    }
+}
+
+#[test]
+fn explicit_code_kind_survives_bundle_snapshot_replay() {
+    let temp = setup_temp_dir();
+    let mut rom = nes_rom();
+    rom[16 + 0x1123] = 0xDE;
+    let input = temp.child("game.nes");
+    fs::write(input.path(), &rom).unwrap();
+    let database = temp.child("no-database");
+    fs::create_dir_all(database.path()).unwrap();
+    let bundle = write_cheats_only_bundle(
+        &temp,
+        "rocky.json",
+        serde_json::json!([
+            {"id": "rocky", "code": "15C93C0A", "codeKind": "pro-action-rocky"}
+        ]),
+    );
+    let emitted = temp.child("emitted.json");
+    let first = temp.child("first.nes");
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().unwrap(),
+            "--bundle",
+            &bundle,
+            "--cheat-database",
+            database.path().to_str().unwrap(),
+            "--emit-bundle",
+            emitted.path().to_str().unwrap(),
+            "--output",
+            first.path().to_str().unwrap(),
+            "--no-compress",
+            "--jsonl",
+        ],
+        0,
+    );
+    let document: serde_json::Value =
+        serde_json::from_slice(&fs::read(emitted.path()).unwrap()).unwrap();
+    assert_eq!(document["cheats"][0]["codeKind"], "pro-action-rocky");
+    let replay = temp.child("replay.nes");
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().unwrap(),
+            "--bundle",
+            emitted.path().to_str().unwrap(),
+            "--cheat-database",
+            database.path().to_str().unwrap(),
+            "--output",
+            replay.path().to_str().unwrap(),
+            "--no-compress",
+            "--jsonl",
+        ],
+        0,
+    );
+    rom[16 + 0x1123] = 0xBD;
+    assert_eq!(fs::read(replay.path()).unwrap(), rom);
+}

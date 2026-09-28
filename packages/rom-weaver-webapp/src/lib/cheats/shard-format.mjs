@@ -40,7 +40,17 @@ export const CHEAT_SHARD_SCHEMA_VERSION = 2;
  */
 export const DATABASE_SOURCE_FILE = "libretro-database";
 
-const CODE_KINDS = new Set(["game-genie", "pro-action-replay", "xploder"]);
+const CODE_KINDS = new Set([
+  "game-genie",
+  "pro-action-replay",
+  "pro-action-rocky",
+  "gold-finger",
+  "game-shark-v1",
+  "game-shark-v1-raw",
+  "action-replay-v3",
+  "action-replay-v3-raw",
+  "xploder",
+]);
 
 /**
  * @typedef {Record<string, string>} RawFields

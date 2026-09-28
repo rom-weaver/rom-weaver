@@ -199,6 +199,12 @@ impl CliApp {
     ) -> Result<Vec<CheatWrite>> {
         let layout = RomLayout::detect(rom, system);
         let mut all = Vec::new();
+        if let Some(kind) = CheatKind::parse(kind_id).filter(|kind| kind.is_gba_action_replay()) {
+            for decoded in cheats::decode_gba_codes(&codes.join("\n"), system, kind)? {
+                all.extend(cheats::resolve_writes(rom, &layout, &decoded)?);
+            }
+            return Ok(all);
+        }
         // A single `--code` value may carry several `+`/comma/space-joined codes.
         for code in codes_for_kind(codes, system, kind_id) {
             let decoded = if kind_id.eq_ignore_ascii_case("auto") {
@@ -206,7 +212,7 @@ impl CliApp {
             } else {
                 let kind = CheatKind::parse(kind_id).ok_or_else(|| {
                     RomWeaverError::Validation(format!(
-                        "unknown --code-kind `{kind_id}`; expected auto, game-genie, gameshark, or xploder"
+                        "unknown --code-kind `{kind_id}`; expected auto, game-genie, gameshark, xploder, pro-action-rocky, gold-finger, game-shark-v1[-raw], or action-replay-v3[-raw]"
                     ))
                 })?;
                 cheats::decode(&code, system, kind)?
@@ -381,6 +387,13 @@ impl CliApp {
 
 /// Count individual codes after splitting `+`/comma/space-joined `--code` values.
 fn codes_for_kind(codes: &[String], system: CheatSystem, kind_id: &str) -> Vec<String> {
+    if CheatKind::parse(kind_id).is_some_and(CheatKind::is_gba_action_replay) {
+        return codes
+            .iter()
+            .filter(|code| !code.trim().is_empty())
+            .cloned()
+            .collect();
+    }
     let use_xploder = CheatKind::parse(kind_id) == Some(CheatKind::Xploder)
         || (kind_id.eq_ignore_ascii_case("auto")
             && matches!(

@@ -1,6 +1,6 @@
 import { getCreatePatchFormatsForSizes } from "../../lib/create/patch-format-limits.ts";
 import type { CreateSettings } from "../../platform/browser/browser-api.ts";
-import { cheatDelivery, type ClassifiedCheatRecord } from "../../lib/cheats/index.ts";
+import { cheatDelivery, type ClassifiedCheatRecord, type ManualCheatKindOverride } from "../../lib/cheats/index.ts";
 import { getFileNameWithoutExtension } from "../../lib/input/path-utils.ts";
 import { sanitizeCheatPatchNamePart, toCheatPatchNameSuffix } from "./cheat-patch-name.ts";
 
@@ -18,6 +18,12 @@ const getCheatPatchCodes = (records: readonly ClassifiedCheatRecord[]): string[]
   getRomCheats(records)
     .map((entry) => String(entry.record.rawCode || "").trim())
     .filter((code) => !!code);
+
+const getCheatPatchKind = (records: readonly ClassifiedCheatRecord[]): ManualCheatKindOverride => {
+  const kinds = new Set(getRomCheats(records).map((entry) => entry.record.codeKind ?? entry.detectedKind ?? "auto"));
+  if (kinds.size > 1) throw new Error("Create a separate patch for codes with a different code type.");
+  return kinds.values().next().value ?? "auto";
+};
 
 /** The patch format the create workflow accepts. */
 type CreatePatchFormat = NonNullable<CreateSettings["format"]>;
@@ -53,4 +59,11 @@ const getCheatPatchFileName = (romTitle: string, records: readonly ClassifiedChe
 const getCheatPatchStatus = (fileName: string, romCount: number): string =>
   `Created ${fileName} from ${romCount} ROM cheat${romCount === 1 ? "" : "s"}.`;
 
-export { getCheatPatchCodes, getCheatPatchFileName, getCheatPatchFormat, getCheatPatchStatus, getRomCheats };
+export {
+  getCheatPatchCodes,
+  getCheatPatchKind,
+  getCheatPatchFileName,
+  getCheatPatchFormat,
+  getCheatPatchStatus,
+  getRomCheats,
+};

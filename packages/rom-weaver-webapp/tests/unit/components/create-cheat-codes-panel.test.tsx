@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { fireEvent, render, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { CreateCheatCodesPanel } from "../../../src/public/react/components/create-cheat-codes-panel.tsx";
 import type {
   CheatDatabaseIndex,
@@ -107,21 +107,61 @@ const renderPanel = (value: string, overrides: Record<string, unknown> = {}) => 
   const onEntriesChange = vi.fn();
   const onClassifyingChange = vi.fn();
   const onSystemChange = vi.fn();
+  const onKindChange = vi.fn();
   const view = render(
     <CreateCheatCodesPanel
       {...props}
       onClassifyingChange={onClassifyingChange}
       onEntriesChange={onEntriesChange}
+      kind="auto"
+      onKindChange={onKindChange}
       onSystemChange={onSystemChange}
       onValueChange={onValueChange}
       value={value}
       {...overrides}
     />,
   );
-  return { onClassifyingChange, onEntriesChange, onSystemChange, onValueChange, view };
+  return { onClassifyingChange, onEntriesChange, onKindChange, onSystemChange, onValueChange, view };
 };
 
+afterEach(cleanup);
+
 describe("CreateCheatCodesPanel", () => {
+  it("offers every explicit code type and reports the selected kind", () => {
+    const { onKindChange, view } = renderPanel("");
+    const selector = view.getByLabelText("Code type");
+    expect(Array.from((selector as HTMLSelectElement).options).map(({ value }) => value)).toEqual([
+      "auto",
+      "game-genie",
+      "pro-action-replay",
+      "pro-action-rocky",
+      "gold-finger",
+      "game-shark-v1",
+      "game-shark-v1-raw",
+      "action-replay-v3",
+      "action-replay-v3-raw",
+      "xploder",
+    ]);
+    fireEvent.change(selector, { target: { value: "action-replay-v3" } });
+    expect(onKindChange).toHaveBeenCalledWith("action-replay-v3");
+  });
+
+  it("passes the selected code type to manual classification", async () => {
+    const classifier = vi.fn(classifyManualCode);
+    renderPanel("00000000", { classifyManualCode: classifier, kind: "pro-action-rocky" });
+    await waitFor(() => expect(classifier).toHaveBeenCalledWith(expect.objectContaining({ kind: "pro-action-rocky" })));
+  });
+
+  it("blocks a database code that would reinterpret staged codes", async () => {
+    const { onKindChange, onValueChange, view } = renderPanel("SXIOPO");
+    await waitFor(() => expect(view.getByRole("status").textContent).toContain("Game Genie"));
+    fireEvent.click(view.getByRole("button", { name: /Pick from the cheat database/u }));
+    await view.findByText("Walk through walls");
+    fireEvent.click(view.getByRole("button", { name: "Add Walk through walls" }));
+    expect(view.getByRole("alert").textContent).toBe("Create a separate patch for codes with a different code type.");
+    expect(onKindChange).not.toHaveBeenCalled();
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
   it("shows the detected line and one write row per code", async () => {
     const { view } = renderPanel("SXIOPO");
     await waitFor(() => expect(view.getByRole("status").textContent).toBe("NES · Game Genie · 1 write"));
