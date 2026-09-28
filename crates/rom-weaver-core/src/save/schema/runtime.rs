@@ -105,7 +105,11 @@ impl Runtime {
                 .chain(self.after_edit.iter().map(Store::work_bytes)),
         )
     }
-    pub fn expand_checks(&mut self, save_size: usize) -> Result<()> {
+    /// Expands the check and layout shorthands before validation.
+    pub fn expand(&mut self, save_size: usize) -> Result<()> {
+        if let Some(layout) = &mut self.layout {
+            layout.expand()?;
+        }
         let size = self.logical_size.unwrap_or(save_size);
         for checks in [
             &mut self.checks,

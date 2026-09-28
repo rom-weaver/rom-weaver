@@ -318,3 +318,63 @@ fn record_ordinals_and_omitted_presentation_members_follow_the_field() {
     assert_eq!((name.step, name.encoding.as_deref()), (None, None));
     assert_eq!(name.constraints.max_length, Some(1));
 }
+
+#[test]
+fn checksum_blocks_expand_into_checksums_mirrors_and_sections() {
+    let game = |blocks: serde_json::Value| {
+        json!({
+            "id":"blocks", "name":"Blocks", "platform":"test", "save_size":16,
+            "fields":[{"id":"value","label":"Value","offset":1,"type":"u8"}],
+            "layout":{"groups":[{"id":"body","logical_offset":0,"logical_length":16,
+                "copies":{"kind":"fixed","candidates":[{
+                    "spans":[{"logical_offset":0,"physical_offset":0,"length":16}],
+                    "checksum_blocks":{"algorithm":"add8","blocks":blocks}
+                }]}}]}
+        })
+    };
+    let handler = load(game(json!([
+        {"start":0,"length":4,"offset":4,"mirror":12},
+        {"start":6,"length":2,"offset":8}
+    ])));
+    let identity = handler.definitions().remove(0).identity;
+    let input = |bytes: Vec<u8>| SaveDetectionInput {
+        bytes,
+        selected_game: Some(identity.id.clone()),
+        rom_sha1: None,
+    };
+    let document = handler.parse(&input(vec![0; 16]), &identity).unwrap();
+    let sections = document
+        .sections
+        .iter()
+        .map(|section| (section.id, section.physical_offset, section.valid))
+        .collect::<Vec<_>>();
+    assert_eq!(sections, [(0, 0, true), (1, 6, true)]);
+    let output = handler
+        .apply(
+            &input(vec![0; 16]),
+            &identity,
+            &[SaveEdit {
+                field: "value".into(),
+                value: SaveValue::U32(5),
+            }],
+            false,
+        )
+        .unwrap()
+        .bytes
+        .unwrap();
+    assert_eq!((output[1], output[4], output[8], output[12]), (5, 5, 0, 5));
+    let mut mismatched = vec![0; 16];
+    mismatched[12] = 1;
+    assert!(handler.parse(&input(mismatched), &identity).is_err());
+
+    let too_many = (0..257)
+        .map(|_| json!({"start":0,"length":1,"offset":1}))
+        .collect::<Vec<_>>();
+    let pack = json!({"schema_version":1,"games":[game(json!(too_many))]});
+    assert!(
+        SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap())
+            .unwrap_err()
+            .to_string()
+            .contains("0 to 255")
+    );
+}

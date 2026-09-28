@@ -1113,9 +1113,35 @@
         "repairs": { "type": "array", "items": { "$ref": "#/$defs/repair" } },
         "predicates": { "type": "array", "items": { "$ref": "#/$defs/predicate" } },
         "sections": { "type": "array", "items": { "$ref": "#/$defs/fixed_section" } },
-        "counter": { "anyOf": [{ "$ref": "#/$defs/scalar" }, { "type": "null" }] }
+        "counter": { "anyOf": [{ "$ref": "#/$defs/scalar" }, { "type": "null" }] },
+        "checksum_blocks": { "$ref": "#/$defs/checksum_blocks" }
       },
       "required": ["spans"]
+    },
+    "checksum_blocks": {
+      "description": "Each block adds a checksum, an optional mirror predicate and repair, and a section with the next ID.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": { "$ref": "#/$defs/checksum/properties/algorithm" },
+        "signature": { "anyOf": [{ "$ref": "#/$defs/scalar" }, { "type": "null" }] },
+        "blocks": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "start": { "type": "integer", "minimum": 0, "maximum": 8388608 },
+              "length": { "type": "integer", "minimum": 1, "maximum": 8388608 },
+              "offset": { "type": "integer", "minimum": 0, "maximum": 8388608 },
+              "mirror": { "type": ["integer", "null"], "minimum": 0, "maximum": 8388608 }
+            },
+            "required": ["start", "length", "offset"]
+          }
+        }
+      },
+      "required": ["algorithm", "blocks"]
     },
     "repair": {
       "oneOf": [

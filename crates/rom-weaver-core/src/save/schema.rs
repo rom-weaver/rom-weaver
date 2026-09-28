@@ -774,7 +774,7 @@ fn shift_bit_field(
 impl GameSchema {
     fn build(mut raw: RawGame) -> Result<Self> {
         validate_game_id(&raw.id)?;
-        raw.runtime.expand_checks(raw.save_size)?;
+        raw.runtime.expand(raw.save_size)?;
         raw.runtime.validate(raw.save_size)?;
         let logical_size = raw.runtime.logical_size.unwrap_or(raw.save_size);
         bounded_text(&raw.name, "game name")?;

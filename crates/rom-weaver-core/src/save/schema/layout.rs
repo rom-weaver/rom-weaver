@@ -74,6 +74,27 @@ struct Candidate {
     #[serde(default)]
     sections: Vec<FixedSection>,
     counter: Option<Scalar>,
+    checksum_blocks: Option<ChecksumBlocks>,
+}
+
+/// Blocks that each own one checksum and an optional mirrored copy of it.
+/// Each block expands into a validated and repaired checksum, a mirror
+/// equality predicate and repair, and one reported section.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ChecksumBlocks {
+    algorithm: ChecksumAlgorithm,
+    signature: Option<Scalar>,
+    blocks: Vec<ChecksumBlock>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ChecksumBlock {
+    start: usize,
+    length: usize,
+    offset: usize,
+    mirror: Option<usize>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -174,6 +195,21 @@ pub(crate) struct ResolvedCopy {
 }
 
 impl Layout {
+    /// Replaces every `checksum_blocks` shorthand with the checksums,
+    /// predicates, repairs, and sections it stands for, in block order.
+    pub(crate) fn expand(&mut self) -> Result<()> {
+        for group in &mut self.groups {
+            let Copies::Fixed { candidates } = &mut group.copies else {
+                continue;
+            };
+            for candidate in candidates {
+                if let Some(blocks) = candidate.checksum_blocks.take() {
+                    candidate.expand_blocks(blocks)?;
+                }
+            }
+        }
+        Ok(())
+    }
     pub(crate) fn has_group(&self, id: &str) -> bool {
         self.groups.iter().any(|group| group.id == id)
     }
@@ -826,6 +862,52 @@ fn validate_spans(
     Ok(())
 }
 
+impl Candidate {
+    fn expand_blocks(&mut self, blocks: ChecksumBlocks) -> Result<()> {
+        let first_id = self.sections.len();
+        if first_id + blocks.blocks.len() > usize::from(u8::MAX) + 1 {
+            return Err(invalid("fixed section IDs must fit from 0 to 255"));
+        }
+        let width = blocks.algorithm.width();
+        for (index, block) in blocks.blocks.into_iter().enumerate() {
+            let checksum = RawChecksum {
+                algorithm: blocks.algorithm,
+                start: Some(block.start),
+                length: Some(block.length),
+                spans: Vec::new(),
+                offset: block.offset,
+                target: None,
+                unit: ChecksumUnit::default(),
+                exclude: Vec::new(),
+            };
+            self.checksums.push(checksum.clone());
+            self.repairs.push(Repair::Checksum {
+                checksum: checksum.clone(),
+            });
+            if let Some(mirror) = block.mirror {
+                self.predicates.push(Predicate::Equal {
+                    left: block.offset,
+                    right: mirror,
+                    length: width,
+                });
+                self.repairs.push(Repair::Mirror {
+                    source: block.offset,
+                    target: mirror,
+                    length: width,
+                });
+            }
+            self.sections.push(FixedSection {
+                id: (first_id + index) as u8,
+                physical_offset: block.start,
+                checksum,
+                signature: blocks.signature.clone(),
+                counter: None,
+            });
+        }
+        Ok(())
+    }
+}
+
 impl Repair {
     fn validate(&self, size: usize) -> Result<()> {
         match self {
@@ -1007,6 +1089,7 @@ mod tests {
                             repairs: vec![],
                             predicates: vec![],
                             sections: vec![],
+                            checksum_blocks: None,
                             counter: Some(Scalar {
                                 offset: 3,
                                 storage: Storage::U8,
@@ -1028,6 +1111,7 @@ mod tests {
                             repairs: vec![],
                             predicates: vec![],
                             sections: vec![],
+                            checksum_blocks: None,
                             counter: Some(Scalar {
                                 offset: 7,
                                 storage: Storage::U8,
