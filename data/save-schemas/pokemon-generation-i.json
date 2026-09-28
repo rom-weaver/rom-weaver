@@ -3,705 +3,19 @@
   "schema_version": 1,
   "games": [
     {
+      "profile": "default",
       "id": "pokemon-red-schema",
-      "name": "Pok\u00e9mon Red (English schema)",
-      "platform": "game-boy",
-      "description": "English 32 KiB SRAM layout. Packed-decimal, text, option, and variable inventory fields remain with the native handler.",
-      "save_size": 32768,
-      "fields": [
-        {
-          "id": "trainer.id",
-          "label": "Trainer ID",
-          "offset": 9733,
-          "type": "u16_be",
-          "description": "Public trainer identifier"
-        },
-        {
-          "id": "trainer.money",
-          "label": "Money",
-          "offset": 9715,
-          "type": "bcd_be",
-          "length": 3,
-          "description": "Money carried by the player"
-        },
-        {
-          "id": "trainer.coins",
-          "label": "Coins",
-          "offset": 10320,
-          "type": "bcd_be",
-          "length": 2,
-          "description": "Coins carried by the player"
-        },
-        {
-          "id": "trainer.name_glyph_01",
-          "label": "Trainer name glyph 1",
-          "offset": 9624,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.name_glyph_02",
-          "label": "Trainer name glyph 2",
-          "offset": 9625,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.name_glyph_03",
-          "label": "Trainer name glyph 3",
-          "offset": 9626,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.name_glyph_04",
-          "label": "Trainer name glyph 4",
-          "offset": 9627,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.name_glyph_05",
-          "label": "Trainer name glyph 5",
-          "offset": 9628,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.name_glyph_06",
-          "label": "Trainer name glyph 6",
-          "offset": 9629,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.name_glyph_07",
-          "label": "Trainer name glyph 7",
-          "offset": 9630,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.name_glyph_08",
-          "label": "Trainer name glyph 8",
-          "offset": 9631,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.name_glyph_09",
-          "label": "Trainer name glyph 9",
-          "offset": 9632,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.name_glyph_10",
-          "label": "Trainer name glyph 10",
-          "offset": 9633,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.name_glyph_11",
-          "label": "Trainer name glyph 11",
-          "offset": 9634,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_01",
-          "label": "Rival name glyph 1",
-          "offset": 9718,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_02",
-          "label": "Rival name glyph 2",
-          "offset": 9719,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_03",
-          "label": "Rival name glyph 3",
-          "offset": 9720,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_04",
-          "label": "Rival name glyph 4",
-          "offset": 9721,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_05",
-          "label": "Rival name glyph 5",
-          "offset": 9722,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_06",
-          "label": "Rival name glyph 6",
-          "offset": 9723,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_07",
-          "label": "Rival name glyph 7",
-          "offset": 9724,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_08",
-          "label": "Rival name glyph 8",
-          "offset": 9725,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_09",
-          "label": "Rival name glyph 9",
-          "offset": 9726,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_10",
-          "label": "Rival name glyph 10",
-          "offset": 9727,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_11",
-          "label": "Rival name glyph 11",
-          "offset": 9728,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "options.text_speed",
-          "label": "Text speed",
-          "offset": 9729,
-          "type": "u8",
-          "mask": 7,
-          "choices": [
-            {
-              "name": "fast",
-              "value": 1
-            },
-            {
-              "name": "medium",
-              "value": 3
-            },
-            {
-              "name": "slow",
-              "value": 5
-            }
-          ],
-          "description": "Text delay; changing it preserves the other option bits"
-        },
-        {
-          "id": "options.battle_scene",
-          "label": "Battle scene",
-          "offset": 9729,
-          "type": "bit",
-          "bit": 7,
-          "inverted": true,
-          "description": "Show battle animations"
-        },
-        {
-          "id": "options.battle_style",
-          "label": "Battle style",
-          "offset": 9729,
-          "type": "bit",
-          "bit": 6,
-          "inverted": true,
-          "description": "Prompt before switching Pok\u00e9mon"
-        },
-        {
-          "id": "trainer.play_time.hours",
-          "label": "Play time hours",
-          "offset": 11501,
-          "type": "u8",
-          "description": "Hours played"
-        },
-        {
-          "id": "trainer.play_time.minutes",
-          "label": "Play time minutes",
-          "offset": 11503,
-          "type": "u8",
-          "description": "Minutes played"
-        },
-        {
-          "id": "trainer.play_time.seconds",
-          "label": "Play time seconds",
-          "offset": 11504,
-          "type": "u8",
-          "description": "Seconds played"
-        },
-        {
-          "id": "trainer.play_time.frames",
-          "label": "Play time frames",
-          "offset": 11505,
-          "type": "u8",
-          "description": "Frames played"
-        },
-        {
-          "id": "progress.badge_1",
-          "label": "Gym badge 1",
-          "offset": 9730,
-          "type": "bit",
-          "bit": 0,
-          "description": "Gym badge flag"
-        },
-        {
-          "id": "progress.badge_2",
-          "label": "Gym badge 2",
-          "offset": 9730,
-          "type": "bit",
-          "bit": 1,
-          "description": "Gym badge flag"
-        },
-        {
-          "id": "progress.badge_3",
-          "label": "Gym badge 3",
-          "offset": 9730,
-          "type": "bit",
-          "bit": 2,
-          "description": "Gym badge flag"
-        },
-        {
-          "id": "progress.badge_4",
-          "label": "Gym badge 4",
-          "offset": 9730,
-          "type": "bit",
-          "bit": 3,
-          "description": "Gym badge flag"
-        },
-        {
-          "id": "progress.badge_5",
-          "label": "Gym badge 5",
-          "offset": 9730,
-          "type": "bit",
-          "bit": 4,
-          "description": "Gym badge flag"
-        },
-        {
-          "id": "progress.badge_6",
-          "label": "Gym badge 6",
-          "offset": 9730,
-          "type": "bit",
-          "bit": 5,
-          "description": "Gym badge flag"
-        },
-        {
-          "id": "progress.badge_7",
-          "label": "Gym badge 7",
-          "offset": 9730,
-          "type": "bit",
-          "bit": 6,
-          "description": "Gym badge flag"
-        },
-        {
-          "id": "progress.badge_8",
-          "label": "Gym badge 8",
-          "offset": 9730,
-          "type": "bit",
-          "bit": 7,
-          "description": "Gym badge flag"
-        }
-      ],
-      "checksums": [
-        {
-          "algorithm": "sum8",
-          "start": 9624,
-          "length": 3979,
-          "offset": 13603,
-          "target": 255
-        }
-      ],
-      "records": [
-        {
-          "record": "owned-1",
-          "id": "progress",
-          "offset": 9635,
-          "count": 151,
-          "stride_bits": 1,
-          "index_start": 1,
-          "index_width": 3
-        },
-        {
-          "record": "seen-2",
-          "id": "progress",
-          "offset": 9654,
-          "count": 151,
-          "stride_bits": 1,
-          "index_start": 1,
-          "index_width": 3
-        }
-      ]
+      "name": "Pokémon Red (English schema)"
     },
     {
+      "profile": "default",
       "id": "pokemon-blue-schema",
-      "name": "Pok\u00e9mon Blue (English schema)",
-      "platform": "game-boy",
-      "description": "English 32 KiB SRAM layout. Packed-decimal, text, option, and variable inventory fields remain with the native handler.",
-      "save_size": 32768,
-      "fields": [
-        {
-          "id": "trainer.id",
-          "label": "Trainer ID",
-          "offset": 9733,
-          "type": "u16_be",
-          "description": "Public trainer identifier"
-        },
-        {
-          "id": "trainer.money",
-          "label": "Money",
-          "offset": 9715,
-          "type": "bcd_be",
-          "length": 3,
-          "description": "Money carried by the player"
-        },
-        {
-          "id": "trainer.coins",
-          "label": "Coins",
-          "offset": 10320,
-          "type": "bcd_be",
-          "length": 2,
-          "description": "Coins carried by the player"
-        },
-        {
-          "id": "trainer.name_glyph_01",
-          "label": "Trainer name glyph 1",
-          "offset": 9624,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.name_glyph_02",
-          "label": "Trainer name glyph 2",
-          "offset": 9625,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.name_glyph_03",
-          "label": "Trainer name glyph 3",
-          "offset": 9626,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.name_glyph_04",
-          "label": "Trainer name glyph 4",
-          "offset": 9627,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.name_glyph_05",
-          "label": "Trainer name glyph 5",
-          "offset": 9628,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.name_glyph_06",
-          "label": "Trainer name glyph 6",
-          "offset": 9629,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.name_glyph_07",
-          "label": "Trainer name glyph 7",
-          "offset": 9630,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.name_glyph_08",
-          "label": "Trainer name glyph 8",
-          "offset": 9631,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.name_glyph_09",
-          "label": "Trainer name glyph 9",
-          "offset": 9632,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.name_glyph_10",
-          "label": "Trainer name glyph 10",
-          "offset": 9633,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.name_glyph_11",
-          "label": "Trainer name glyph 11",
-          "offset": 9634,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_01",
-          "label": "Rival name glyph 1",
-          "offset": 9718,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_02",
-          "label": "Rival name glyph 2",
-          "offset": 9719,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_03",
-          "label": "Rival name glyph 3",
-          "offset": 9720,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_04",
-          "label": "Rival name glyph 4",
-          "offset": 9721,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_05",
-          "label": "Rival name glyph 5",
-          "offset": 9722,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_06",
-          "label": "Rival name glyph 6",
-          "offset": 9723,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_07",
-          "label": "Rival name glyph 7",
-          "offset": 9724,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_08",
-          "label": "Rival name glyph 8",
-          "offset": 9725,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_09",
-          "label": "Rival name glyph 9",
-          "offset": 9726,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_10",
-          "label": "Rival name glyph 10",
-          "offset": 9727,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "trainer.rival_name_glyph_11",
-          "label": "Rival name glyph 11",
-          "offset": 9728,
-          "type": "u8",
-          "description": "Raw English Generation I character code; 0x50 terminates the name"
-        },
-        {
-          "id": "options.text_speed",
-          "label": "Text speed",
-          "offset": 9729,
-          "type": "u8",
-          "mask": 7,
-          "choices": [
-            {
-              "name": "fast",
-              "value": 1
-            },
-            {
-              "name": "medium",
-              "value": 3
-            },
-            {
-              "name": "slow",
-              "value": 5
-            }
-          ],
-          "description": "Text delay; changing it preserves the other option bits"
-        },
-        {
-          "id": "options.battle_scene",
-          "label": "Battle scene",
-          "offset": 9729,
-          "type": "bit",
-          "bit": 7,
-          "inverted": true,
-          "description": "Show battle animations"
-        },
-        {
-          "id": "options.battle_style",
-          "label": "Battle style",
-          "offset": 9729,
-          "type": "bit",
-          "bit": 6,
-          "inverted": true,
-          "description": "Prompt before switching Pok\u00e9mon"
-        },
-        {
-          "id": "trainer.play_time.hours",
-          "label": "Play time hours",
-          "offset": 11501,
-          "type": "u8",
-          "description": "Hours played"
-        },
-        {
-          "id": "trainer.play_time.minutes",
-          "label": "Play time minutes",
-          "offset": 11503,
-          "type": "u8",
-          "description": "Minutes played"
-        },
-        {
-          "id": "trainer.play_time.seconds",
-          "label": "Play time seconds",
-          "offset": 11504,
-          "type": "u8",
-          "description": "Seconds played"
-        },
-        {
-          "id": "trainer.play_time.frames",
-          "label": "Play time frames",
-          "offset": 11505,
-          "type": "u8",
-          "description": "Frames played"
-        },
-        {
-          "id": "progress.badge_1",
-          "label": "Gym badge 1",
-          "offset": 9730,
-          "type": "bit",
-          "bit": 0,
-          "description": "Gym badge flag"
-        },
-        {
-          "id": "progress.badge_2",
-          "label": "Gym badge 2",
-          "offset": 9730,
-          "type": "bit",
-          "bit": 1,
-          "description": "Gym badge flag"
-        },
-        {
-          "id": "progress.badge_3",
-          "label": "Gym badge 3",
-          "offset": 9730,
-          "type": "bit",
-          "bit": 2,
-          "description": "Gym badge flag"
-        },
-        {
-          "id": "progress.badge_4",
-          "label": "Gym badge 4",
-          "offset": 9730,
-          "type": "bit",
-          "bit": 3,
-          "description": "Gym badge flag"
-        },
-        {
-          "id": "progress.badge_5",
-          "label": "Gym badge 5",
-          "offset": 9730,
-          "type": "bit",
-          "bit": 4,
-          "description": "Gym badge flag"
-        },
-        {
-          "id": "progress.badge_6",
-          "label": "Gym badge 6",
-          "offset": 9730,
-          "type": "bit",
-          "bit": 5,
-          "description": "Gym badge flag"
-        },
-        {
-          "id": "progress.badge_7",
-          "label": "Gym badge 7",
-          "offset": 9730,
-          "type": "bit",
-          "bit": 6,
-          "description": "Gym badge flag"
-        },
-        {
-          "id": "progress.badge_8",
-          "label": "Gym badge 8",
-          "offset": 9730,
-          "type": "bit",
-          "bit": 7,
-          "description": "Gym badge flag"
-        }
-      ],
-      "checksums": [
-        {
-          "algorithm": "sum8",
-          "start": 9624,
-          "length": 3979,
-          "offset": 13603,
-          "target": 255
-        }
-      ],
-      "records": [
-        {
-          "record": "owned-1",
-          "id": "progress",
-          "offset": 9635,
-          "count": 151,
-          "stride_bits": 1,
-          "index_start": 1,
-          "index_width": 3
-        },
-        {
-          "record": "seen-2",
-          "id": "progress",
-          "offset": 9654,
-          "count": 151,
-          "stride_bits": 1,
-          "index_start": 1,
-          "index_width": 3
-        }
-      ]
+      "name": "Pokémon Blue (English schema)"
     },
     {
+      "profile": "default",
       "id": "pokemon-yellow-schema",
-      "name": "Pok\u00e9mon Yellow (English schema)",
-      "platform": "game-boy",
-      "description": "English 32 KiB SRAM layout. Packed-decimal, text, option, and variable inventory fields remain with the native handler.",
-      "save_size": 32768,
+      "name": "Pokémon Yellow (English schema)",
       "fields": [
         {
           "id": "trainer.id",
@@ -918,7 +232,7 @@
           "type": "bit",
           "bit": 6,
           "inverted": true,
-          "description": "Prompt before switching Pok\u00e9mon"
+          "description": "Prompt before switching Pokémon"
         },
         {
           "id": "trainer.play_time.hours",
@@ -1048,6 +362,347 @@
           "type": "bit",
           "bit": 5
         }
+      ]
+    }
+  ],
+  "records": {
+    "owned-1": [
+      {
+        "id": "pokedex_owned_{index}",
+        "label": "Pokédex owned #{index}",
+        "offset": 0,
+        "type": "bit",
+        "bit": 0,
+        "description": "Pokédex owned flag"
+      }
+    ],
+    "seen-2": [
+      {
+        "id": "pokedex_seen_{index}",
+        "label": "Pokédex seen #{index}",
+        "offset": 0,
+        "type": "bit",
+        "bit": 0,
+        "description": "Pokédex seen flag"
+      }
+    ]
+  },
+  "pack_revision": 1,
+  "profiles": {
+    "default": {
+      "platform": "game-boy",
+      "description": "English 32 KiB SRAM layout. Packed-decimal, text, option, and variable inventory fields remain with the native handler.",
+      "save_size": 32768,
+      "fields": [
+        {
+          "id": "trainer.id",
+          "label": "Trainer ID",
+          "offset": 9733,
+          "type": "u16_be",
+          "description": "Public trainer identifier"
+        },
+        {
+          "id": "trainer.money",
+          "label": "Money",
+          "offset": 9715,
+          "type": "bcd_be",
+          "length": 3,
+          "description": "Money carried by the player"
+        },
+        {
+          "id": "trainer.coins",
+          "label": "Coins",
+          "offset": 10320,
+          "type": "bcd_be",
+          "length": 2,
+          "description": "Coins carried by the player"
+        },
+        {
+          "id": "trainer.name_glyph_01",
+          "label": "Trainer name glyph 1",
+          "offset": 9624,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "trainer.name_glyph_02",
+          "label": "Trainer name glyph 2",
+          "offset": 9625,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "trainer.name_glyph_03",
+          "label": "Trainer name glyph 3",
+          "offset": 9626,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "trainer.name_glyph_04",
+          "label": "Trainer name glyph 4",
+          "offset": 9627,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "trainer.name_glyph_05",
+          "label": "Trainer name glyph 5",
+          "offset": 9628,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "trainer.name_glyph_06",
+          "label": "Trainer name glyph 6",
+          "offset": 9629,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "trainer.name_glyph_07",
+          "label": "Trainer name glyph 7",
+          "offset": 9630,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "trainer.name_glyph_08",
+          "label": "Trainer name glyph 8",
+          "offset": 9631,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "trainer.name_glyph_09",
+          "label": "Trainer name glyph 9",
+          "offset": 9632,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "trainer.name_glyph_10",
+          "label": "Trainer name glyph 10",
+          "offset": 9633,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "trainer.name_glyph_11",
+          "label": "Trainer name glyph 11",
+          "offset": 9634,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "trainer.rival_name_glyph_01",
+          "label": "Rival name glyph 1",
+          "offset": 9718,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "trainer.rival_name_glyph_02",
+          "label": "Rival name glyph 2",
+          "offset": 9719,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "trainer.rival_name_glyph_03",
+          "label": "Rival name glyph 3",
+          "offset": 9720,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "trainer.rival_name_glyph_04",
+          "label": "Rival name glyph 4",
+          "offset": 9721,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "trainer.rival_name_glyph_05",
+          "label": "Rival name glyph 5",
+          "offset": 9722,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "trainer.rival_name_glyph_06",
+          "label": "Rival name glyph 6",
+          "offset": 9723,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "trainer.rival_name_glyph_07",
+          "label": "Rival name glyph 7",
+          "offset": 9724,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "trainer.rival_name_glyph_08",
+          "label": "Rival name glyph 8",
+          "offset": 9725,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "trainer.rival_name_glyph_09",
+          "label": "Rival name glyph 9",
+          "offset": 9726,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "trainer.rival_name_glyph_10",
+          "label": "Rival name glyph 10",
+          "offset": 9727,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "trainer.rival_name_glyph_11",
+          "label": "Rival name glyph 11",
+          "offset": 9728,
+          "type": "u8",
+          "description": "Raw English Generation I character code; 0x50 terminates the name"
+        },
+        {
+          "id": "options.text_speed",
+          "label": "Text speed",
+          "offset": 9729,
+          "type": "u8",
+          "mask": 7,
+          "choices": [
+            {
+              "name": "fast",
+              "value": 1
+            },
+            {
+              "name": "medium",
+              "value": 3
+            },
+            {
+              "name": "slow",
+              "value": 5
+            }
+          ],
+          "description": "Text delay; changing it preserves the other option bits"
+        },
+        {
+          "id": "options.battle_scene",
+          "label": "Battle scene",
+          "offset": 9729,
+          "type": "bit",
+          "bit": 7,
+          "inverted": true,
+          "description": "Show battle animations"
+        },
+        {
+          "id": "options.battle_style",
+          "label": "Battle style",
+          "offset": 9729,
+          "type": "bit",
+          "bit": 6,
+          "inverted": true,
+          "description": "Prompt before switching Pokémon"
+        },
+        {
+          "id": "trainer.play_time.hours",
+          "label": "Play time hours",
+          "offset": 11501,
+          "type": "u8",
+          "description": "Hours played"
+        },
+        {
+          "id": "trainer.play_time.minutes",
+          "label": "Play time minutes",
+          "offset": 11503,
+          "type": "u8",
+          "description": "Minutes played"
+        },
+        {
+          "id": "trainer.play_time.seconds",
+          "label": "Play time seconds",
+          "offset": 11504,
+          "type": "u8",
+          "description": "Seconds played"
+        },
+        {
+          "id": "trainer.play_time.frames",
+          "label": "Play time frames",
+          "offset": 11505,
+          "type": "u8",
+          "description": "Frames played"
+        },
+        {
+          "id": "progress.badge_1",
+          "label": "Gym badge 1",
+          "offset": 9730,
+          "type": "bit",
+          "bit": 0,
+          "description": "Gym badge flag"
+        },
+        {
+          "id": "progress.badge_2",
+          "label": "Gym badge 2",
+          "offset": 9730,
+          "type": "bit",
+          "bit": 1,
+          "description": "Gym badge flag"
+        },
+        {
+          "id": "progress.badge_3",
+          "label": "Gym badge 3",
+          "offset": 9730,
+          "type": "bit",
+          "bit": 2,
+          "description": "Gym badge flag"
+        },
+        {
+          "id": "progress.badge_4",
+          "label": "Gym badge 4",
+          "offset": 9730,
+          "type": "bit",
+          "bit": 3,
+          "description": "Gym badge flag"
+        },
+        {
+          "id": "progress.badge_5",
+          "label": "Gym badge 5",
+          "offset": 9730,
+          "type": "bit",
+          "bit": 4,
+          "description": "Gym badge flag"
+        },
+        {
+          "id": "progress.badge_6",
+          "label": "Gym badge 6",
+          "offset": 9730,
+          "type": "bit",
+          "bit": 5,
+          "description": "Gym badge flag"
+        },
+        {
+          "id": "progress.badge_7",
+          "label": "Gym badge 7",
+          "offset": 9730,
+          "type": "bit",
+          "bit": 6,
+          "description": "Gym badge flag"
+        },
+        {
+          "id": "progress.badge_8",
+          "label": "Gym badge 8",
+          "offset": 9730,
+          "type": "bit",
+          "bit": 7,
+          "description": "Gym badge flag"
+        }
       ],
       "checksums": [
         {
@@ -1079,28 +734,5 @@
         }
       ]
     }
-  ],
-  "records": {
-    "owned-1": [
-      {
-        "id": "pokedex_owned_{index}",
-        "label": "Pok\u00e9dex owned #{index}",
-        "offset": 0,
-        "type": "bit",
-        "bit": 0,
-        "description": "Pok\u00e9dex owned flag"
-      }
-    ],
-    "seen-2": [
-      {
-        "id": "pokedex_seen_{index}",
-        "label": "Pok\u00e9dex seen #{index}",
-        "offset": 0,
-        "type": "bit",
-        "bit": 0,
-        "description": "Pok\u00e9dex seen flag"
-      }
-    ]
-  },
-  "pack_revision": 1
+  }
 }

@@ -1864,2027 +1864,20 @@
   },
   "games": [
     {
+      "profile": "default",
       "id": "pokemon-ruby",
-      "name": "Pokémon Ruby",
-      "platform": "gba",
-      "family": "pokemon-gen3-rs",
-      "handler_id": "pokemon-gen3",
-      "save_format": "gba_flash_128k",
-      "save_format_name": "Flash 128 KiB",
-      "save_size": 131072,
-      "logical_size": 55680,
-      "checksum_sizes": [
-        2192,
-        3968,
-        3968,
-        3968,
-        3136,
-        3968,
-        3968,
-        3968,
-        3968,
-        3968,
-        3968,
-        3968,
-        3968,
-        2000
-      ],
-      "fields": [
-        {
-          "id": "trainer.name",
-          "label": "Trainer name",
-          "description": "English trainer text",
-          "offset": 0,
-          "type": "ascii",
-          "length": 7,
-          "text_codec": "pokemon_gen3_english",
-          "presentation": {
-            "section_id": 0,
-            "offset": 0,
-            "step": null,
-            "encoding": "pokemon_gen3_english"
-          }
-        },
-        {
-          "id": "trainer.gender",
-          "label": "Gender",
-          "description": "Player gender",
-          "offset": 8,
-          "type": "u8",
-          "choices": [
-            {
-              "name": "male",
-              "value": 0
-            },
-            {
-              "name": "female",
-              "value": 1
-            }
-          ],
-          "presentation": {
-            "section_id": 0,
-            "offset": 8,
-            "constraints": {
-              "min": null,
-              "max": null,
-              "max_length": null,
-              "choices": [
-                "male",
-                "female"
-              ]
-            },
-            "step": null
-          }
-        },
-        {
-          "id": "trainer.id",
-          "label": "Trainer ID",
-          "description": "Public trainer identifier",
-          "offset": 10,
-          "type": "u16_le",
-          "min": 0,
-          "max": 65535,
-          "presentation": {
-            "section_id": 0,
-            "offset": 10,
-            "step": null
-          }
-        },
-        {
-          "id": "trainer.secret_id",
-          "label": "Secret ID",
-          "description": "Hidden trainer identifier",
-          "offset": 12,
-          "type": "u16_le",
-          "min": 0,
-          "max": 65535,
-          "presentation": {
-            "section_id": 0,
-            "offset": 12,
-            "step": null
-          }
-        },
-        {
-          "id": "trainer.money",
-          "label": "Money",
-          "description": "Money carried by the player",
-          "offset": 5264,
-          "type": "u32_le",
-          "min": 0,
-          "max": 999999,
-          "presentation": {
-            "section_id": 1,
-            "offset": 1168
-          }
-        },
-        {
-          "id": "trainer.coins",
-          "label": "Coins",
-          "description": "Game Corner coins",
-          "offset": 5268,
-          "type": "u16_le",
-          "min": 0,
-          "max": 9999,
-          "presentation": {
-            "section_id": 1,
-            "offset": 1172
-          }
-        },
-        {
-          "id": "trainer.play_time",
-          "label": "Play time",
-          "description": "Time played",
-          "offset": 14,
-          "type": "ascii",
-          "length": 1,
-          "editable": false,
-          "format": [
-            {
-              "value": {
-                "read": {
-                  "offset": 14,
-                  "type": "u16_le"
-                }
-              }
-            },
-            ":",
-            {
-              "value": {
-                "read": {
-                  "offset": 16,
-                  "type": "u8"
-                }
-              },
-              "width": 2
-            },
-            ":",
-            {
-              "value": {
-                "read": {
-                  "offset": 17,
-                  "type": "u8"
-                }
-              },
-              "width": 2
-            },
-            ":",
-            {
-              "value": {
-                "read": {
-                  "offset": 18,
-                  "type": "u8"
-                }
-              },
-              "width": 2
-            }
-          ],
-          "presentation": {
-            "section_id": 0,
-            "offset": 14,
-            "constraints": {
-              "min": null,
-              "max": null,
-              "max_length": null,
-              "choices": []
-            },
-            "step": null,
-            "encoding": null
-          }
-        },
-        {
-          "id": "trainer.play_time_hours",
-          "label": "Play time hours",
-          "description": "Hours played",
-          "offset": 14,
-          "type": "u16_le",
-          "min": 0,
-          "max": 65535,
-          "presentation": {
-            "section_id": 0,
-            "offset": 14
-          }
-        },
-        {
-          "id": "trainer.play_time_minutes",
-          "label": "Play time minutes",
-          "description": "Minutes in the current hour",
-          "offset": 16,
-          "type": "u8",
-          "min": 0,
-          "max": 59,
-          "presentation": {
-            "section_id": 0,
-            "offset": 16
-          }
-        },
-        {
-          "id": "trainer.play_time_seconds",
-          "label": "Play time seconds",
-          "description": "Seconds in the current minute",
-          "offset": 17,
-          "type": "u8",
-          "min": 0,
-          "max": 59,
-          "presentation": {
-            "section_id": 0,
-            "offset": 17
-          }
-        },
-        {
-          "id": "trainer.play_time_frames",
-          "label": "Play time frames",
-          "description": "Frames in the current second",
-          "offset": 18,
-          "type": "u8",
-          "min": 0,
-          "max": 59,
-          "presentation": {
-            "section_id": 0,
-            "offset": 18
-          }
-        },
-        {
-          "id": "options.button_mode",
-          "label": "Button mode",
-          "description": "A-button and shoulder-button behavior",
-          "offset": 19,
-          "type": "u8",
-          "choices": [
-            {
-              "name": "help",
-              "value": 0
-            },
-            {
-              "name": "lr",
-              "value": 1
-            },
-            {
-              "name": "l_equals_a",
-              "value": 2
-            }
-          ],
-          "presentation": {
-            "section_id": 0,
-            "offset": 19,
-            "constraints": {
-              "min": null,
-              "max": null,
-              "max_length": null,
-              "choices": [
-                "help",
-                "lr",
-                "l_equals_a"
-              ]
-            },
-            "step": null
-          }
-        },
-        {
-          "id": "options.text_speed",
-          "label": "Text speed",
-          "description": "Text speed: 0 slow, 1 medium, 2 fast",
-          "offset": 20,
-          "type": "u16_le",
-          "min": 0,
-          "max": 2,
-          "presentation": {
-            "section_id": 0,
-            "offset": 20
-          },
-          "mask": 7
-        },
-        {
-          "id": "options.window_frame",
-          "label": "Window frame",
-          "description": "Text window frame type",
-          "offset": 20,
-          "type": "u16_le",
-          "min": 0,
-          "max": 19,
-          "presentation": {
-            "section_id": 0,
-            "offset": 20
-          },
-          "mask": 248
-        },
-        {
-          "id": "options.sound",
-          "label": "Sound",
-          "description": "Sound output mode",
-          "offset": 20,
-          "type": "u16_le",
-          "choices": [
-            {
-              "name": "mono",
-              "value": 0
-            },
-            {
-              "name": "stereo",
-              "value": 1
-            }
-          ],
-          "presentation": {
-            "section_id": 0,
-            "offset": 20,
-            "constraints": {
-              "min": null,
-              "max": null,
-              "max_length": null,
-              "choices": [
-                "mono",
-                "stereo"
-              ]
-            },
-            "step": null
-          },
-          "mask": 256
-        },
-        {
-          "id": "options.battle_style",
-          "label": "Battle style",
-          "description": "Whether the game offers a switch after a foe faints",
-          "offset": 20,
-          "type": "u16_le",
-          "choices": [
-            {
-              "name": "shift",
-              "value": 0
-            },
-            {
-              "name": "set",
-              "value": 1
-            }
-          ],
-          "presentation": {
-            "section_id": 0,
-            "offset": 20,
-            "constraints": {
-              "min": null,
-              "max": null,
-              "max_length": null,
-              "choices": [
-                "shift",
-                "set"
-              ]
-            },
-            "step": null
-          },
-          "mask": 512
-        },
-        {
-          "id": "options.battle_scene",
-          "label": "Battle scene",
-          "description": "Battle animation mode",
-          "offset": 20,
-          "type": "u16_le",
-          "choices": [
-            {
-              "name": "on",
-              "value": 0
-            },
-            {
-              "name": "off",
-              "value": 1
-            }
-          ],
-          "presentation": {
-            "section_id": 0,
-            "offset": 20,
-            "constraints": {
-              "min": null,
-              "max": null,
-              "max_length": null,
-              "choices": [
-                "on",
-                "off"
-              ]
-            },
-            "step": null
-          },
-          "mask": 1024
-        },
-        {
-          "id": "options.region_map_zoom",
-          "label": "Region map zoom",
-          "description": "Region map zoom state",
-          "offset": 21,
-          "type": "bit",
-          "bit": 3,
-          "presentation": {
-            "section_id": 0,
-            "offset": 20,
-            "kind": "boolean",
-            "step": null
-          }
-        }
-      ],
-      "checks": [
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 8,
-                  "type": "u8"
-                }
-              },
-              1
-            ]
-          },
-          "code": "save_gender",
-          "message": "the save has an invalid player gender value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 5264,
-                  "type": "u32_le"
-                }
-              },
-              999999
-            ]
-          },
-          "code": "save_money",
-          "message": "the save has a money value above the game limit"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 16,
-                  "type": "u8",
-                  "relative": true
-                }
-              },
-              59
-            ]
-          },
-          "code": "save_play_time",
-          "message": "the save has an invalid play-time minute or second value",
-          "repeat": {
-            "count": 2,
-            "stride": 1
-          }
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 19,
-                  "type": "u8"
-                }
-              },
-              2
-            ]
-          },
-          "code": "save_options",
-          "message": "the save has an invalid Generation III option value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 20,
-                  "type": "u16_le",
-                  "mask": 7
-                }
-              },
-              2
-            ]
-          },
-          "code": "save_options",
-          "message": "the save has an invalid Generation III option value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 20,
-                  "type": "u16_le",
-                  "mask": 248
-                }
-              },
-              19
-            ]
-          },
-          "code": "save_options",
-          "message": "the save has an invalid Generation III option value"
-        },
-        {
-          "assert": {
-            "any": [
-              {
-                "eq": [
-                  {
-                    "read": {
-                      "offset": 5272,
-                      "type": "u16_le",
-                      "relative": true
-                    }
-                  },
-                  0
-                ]
-              },
-              {
-                "all": [
-                  {
-                    "le": [
-                      1,
-                      {
-                        "read": {
-                          "offset": 5274,
-                          "type": "u16_le",
-                          "relative": true
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "le": [
-                      {
-                        "read": {
-                          "offset": 5274,
-                          "type": "u16_le",
-                          "relative": true
-                        }
-                      },
-                      999
-                    ]
-                  }
-                ]
-              }
-            ]
-          },
-          "code": "save_inventory_quantity",
-          "message": "an occupied inventory slot has an invalid quantity",
-          "repeat": {
-            "count": 50,
-            "stride": 4
-          }
-        },
-        {
-          "assert": {
-            "any": [
-              {
-                "eq": [
-                  {
-                    "read": {
-                      "offset": 5472,
-                      "type": "u16_le",
-                      "relative": true
-                    }
-                  },
-                  0
-                ]
-              },
-              {
-                "all": [
-                  {
-                    "le": [
-                      1,
-                      {
-                        "read": {
-                          "offset": 5474,
-                          "type": "u16_le",
-                          "relative": true
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "le": [
-                      {
-                        "read": {
-                          "offset": 5474,
-                          "type": "u16_le",
-                          "relative": true
-                        }
-                      },
-                      99
-                    ]
-                  }
-                ]
-              }
-            ]
-          },
-          "code": "save_inventory_quantity",
-          "message": "an occupied inventory slot has an invalid quantity",
-          "repeat": {
-            "count": 20,
-            "stride": 4
-          }
-        },
-        {
-          "assert": {
-            "any": [
-              {
-                "eq": [
-                  {
-                    "read": {
-                      "offset": 5552,
-                      "type": "u16_le",
-                      "relative": true
-                    }
-                  },
-                  0
-                ]
-              },
-              {
-                "all": [
-                  {
-                    "le": [
-                      1,
-                      {
-                        "read": {
-                          "offset": 5554,
-                          "type": "u16_le",
-                          "relative": true
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "le": [
-                      {
-                        "read": {
-                          "offset": 5554,
-                          "type": "u16_le",
-                          "relative": true
-                        }
-                      },
-                      1
-                    ]
-                  }
-                ]
-              }
-            ]
-          },
-          "code": "save_inventory_quantity",
-          "message": "an occupied inventory slot has an invalid quantity",
-          "repeat": {
-            "count": 20,
-            "stride": 4
-          }
-        },
-        {
-          "assert": {
-            "any": [
-              {
-                "eq": [
-                  {
-                    "read": {
-                      "offset": 5632,
-                      "type": "u16_le",
-                      "relative": true
-                    }
-                  },
-                  0
-                ]
-              },
-              {
-                "all": [
-                  {
-                    "le": [
-                      1,
-                      {
-                        "read": {
-                          "offset": 5634,
-                          "type": "u16_le",
-                          "relative": true
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "le": [
-                      {
-                        "read": {
-                          "offset": 5634,
-                          "type": "u16_le",
-                          "relative": true
-                        }
-                      },
-                      99
-                    ]
-                  }
-                ]
-              }
-            ]
-          },
-          "code": "save_inventory_quantity",
-          "message": "an occupied inventory slot has an invalid quantity",
-          "repeat": {
-            "count": 80,
-            "stride": 4
-          }
-        },
-        {
-          "assert": {
-            "any": [
-              {
-                "eq": [
-                  {
-                    "read": {
-                      "offset": 5952,
-                      "type": "u16_le",
-                      "relative": true
-                    }
-                  },
-                  0
-                ]
-              },
-              {
-                "all": [
-                  {
-                    "le": [
-                      1,
-                      {
-                        "read": {
-                          "offset": 5954,
-                          "type": "u16_le",
-                          "relative": true
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "le": [
-                      {
-                        "read": {
-                          "offset": 5954,
-                          "type": "u16_le",
-                          "relative": true
-                        }
-                      },
-                      999
-                    ]
-                  }
-                ]
-              }
-            ]
-          },
-          "code": "save_inventory_quantity",
-          "message": "an occupied inventory slot has an invalid quantity",
-          "repeat": {
-            "count": 46,
-            "stride": 4
-          }
-        }
-      ],
-      "include_implicit_changes": true,
-      "recognition": {
-        "reasons": [
-          "checksum_valid",
-          "signature_valid",
-          "counter_uniform"
-        ],
-        "confidence": "high",
-        "incomplete_confidence": "medium",
-        "empty_top_level_reasons": true
-      },
-      "recovery": {
-        "no_valid": {
-          "code": "save_checksum",
-          "message": "the save has an invalid section checksum"
-        },
-        "incomplete": {
-          "state": "valid_with_warnings",
-          "issue": {
-            "code": "redundant_slot_empty",
-            "message": "The redundant save slot is empty"
-          },
-          "warning": "The redundant save slot is empty; the editor preserves it"
-        },
-        "damaged": {
-          "state": "partially_recoverable",
-          "disable_editing": true,
-          "issue": {
-            "code": "redundant_slot_invalid",
-            "message": "One redundant save slot failed integrity checks"
-          },
-          "warning": "One redundant save slot is invalid; normal editing is disabled",
-          "edit_error": {
-            "code": "save_integrity_partial",
-            "message": "normal edits need two valid Pokémon save slots"
-          }
-        }
-      },
-      "layout": {
-        "groups": [
-          {
-            "id": "save",
-            "logical_offset": 0,
-            "logical_length": 55680,
-            "copies": {
-              "kind": "tagged",
-              "candidates": [
-                {
-                  "offset": 0,
-                  "section_count": 14
-                },
-                {
-                  "offset": 57344,
-                  "section_count": 14
-                }
-              ],
-              "sections": [
-                {
-                  "id": 0,
-                  "logical_offset": 0,
-                  "length": 4096,
-                  "checksum_length": 2192
-                },
-                {
-                  "id": 1,
-                  "logical_offset": 4096,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 2,
-                  "logical_offset": 8064,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 3,
-                  "logical_offset": 12032,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 4,
-                  "logical_offset": 16000,
-                  "length": 3968,
-                  "checksum_length": 3136
-                },
-                {
-                  "id": 5,
-                  "logical_offset": 19968,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 6,
-                  "logical_offset": 23936,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 7,
-                  "logical_offset": 27904,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 8,
-                  "logical_offset": 31872,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 9,
-                  "logical_offset": 35840,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 10,
-                  "logical_offset": 39808,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 11,
-                  "logical_offset": 43776,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 12,
-                  "logical_offset": 47744,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 13,
-                  "logical_offset": 51712,
-                  "length": 3968,
-                  "checksum_length": 2000
-                }
-              ],
-              "section_size": 4096,
-              "id_offset": 4084,
-              "checksum_offset": 4086,
-              "signature_offset": 4088,
-              "counter_offset": 4092,
-              "signature": 134291493
-            },
-            "selection": "newest_counter_max_to_zero_error_on_tie",
-            "write": "selected",
-            "empty": [
-              255
-            ],
-            "empty_if_no_signature": true
-          }
-        ]
-      },
-      "records": [
-        {
-          "record": "rs_pc",
-          "offset": 0,
-          "id": "inventory",
-          "count": 50,
-          "stride": 4,
-          "index_start": 1
-        },
-        {
-          "record": "rs_items",
-          "offset": 0,
-          "id": "inventory",
-          "count": 20,
-          "stride": 4,
-          "index_start": 1
-        },
-        {
-          "record": "rs_key_items",
-          "offset": 0,
-          "id": "inventory",
-          "count": 20,
-          "stride": 4,
-          "index_start": 1
-        },
-        {
-          "record": "rs_balls",
-          "offset": 0,
-          "id": "inventory",
-          "count": 16,
-          "stride": 4,
-          "index_start": 1
-        },
-        {
-          "record": "rs_tm_hm",
-          "offset": 0,
-          "id": "inventory",
-          "count": 64,
-          "stride": 4,
-          "index_start": 1
-        },
-        {
-          "record": "rs_berries",
-          "offset": 0,
-          "id": "inventory",
-          "count": 46,
-          "stride": 4,
-          "index_start": 1
-        },
-        {
-          "record": "rs_dex_owned",
-          "offset": 0,
-          "id": "pokedex",
-          "count": 386,
-          "stride_bits": 1,
-          "index_start": 1,
-          "index_width": 3
-        },
-        {
-          "record": "rs_dex_seen",
-          "offset": 0,
-          "id": "pokedex",
-          "count": 386,
-          "stride_bits": 1,
-          "index_start": 1,
-          "index_width": 3
-        },
-        {
-          "record": "rs_tail",
-          "offset": 0,
-          "id": ""
-        }
-      ]
+      "name": "Pokémon Ruby"
     },
     {
+      "profile": "default",
       "id": "pokemon-sapphire",
-      "name": "Pokémon Sapphire",
-      "platform": "gba",
-      "family": "pokemon-gen3-rs",
-      "handler_id": "pokemon-gen3",
-      "save_format": "gba_flash_128k",
-      "save_format_name": "Flash 128 KiB",
-      "save_size": 131072,
-      "logical_size": 55680,
-      "checksum_sizes": [
-        2192,
-        3968,
-        3968,
-        3968,
-        3136,
-        3968,
-        3968,
-        3968,
-        3968,
-        3968,
-        3968,
-        3968,
-        3968,
-        2000
-      ],
-      "fields": [
-        {
-          "id": "trainer.name",
-          "label": "Trainer name",
-          "description": "English trainer text",
-          "offset": 0,
-          "type": "ascii",
-          "length": 7,
-          "text_codec": "pokemon_gen3_english",
-          "presentation": {
-            "section_id": 0,
-            "offset": 0,
-            "step": null,
-            "encoding": "pokemon_gen3_english"
-          }
-        },
-        {
-          "id": "trainer.gender",
-          "label": "Gender",
-          "description": "Player gender",
-          "offset": 8,
-          "type": "u8",
-          "choices": [
-            {
-              "name": "male",
-              "value": 0
-            },
-            {
-              "name": "female",
-              "value": 1
-            }
-          ],
-          "presentation": {
-            "section_id": 0,
-            "offset": 8,
-            "constraints": {
-              "min": null,
-              "max": null,
-              "max_length": null,
-              "choices": [
-                "male",
-                "female"
-              ]
-            },
-            "step": null
-          }
-        },
-        {
-          "id": "trainer.id",
-          "label": "Trainer ID",
-          "description": "Public trainer identifier",
-          "offset": 10,
-          "type": "u16_le",
-          "min": 0,
-          "max": 65535,
-          "presentation": {
-            "section_id": 0,
-            "offset": 10,
-            "step": null
-          }
-        },
-        {
-          "id": "trainer.secret_id",
-          "label": "Secret ID",
-          "description": "Hidden trainer identifier",
-          "offset": 12,
-          "type": "u16_le",
-          "min": 0,
-          "max": 65535,
-          "presentation": {
-            "section_id": 0,
-            "offset": 12,
-            "step": null
-          }
-        },
-        {
-          "id": "trainer.money",
-          "label": "Money",
-          "description": "Money carried by the player",
-          "offset": 5264,
-          "type": "u32_le",
-          "min": 0,
-          "max": 999999,
-          "presentation": {
-            "section_id": 1,
-            "offset": 1168
-          }
-        },
-        {
-          "id": "trainer.coins",
-          "label": "Coins",
-          "description": "Game Corner coins",
-          "offset": 5268,
-          "type": "u16_le",
-          "min": 0,
-          "max": 9999,
-          "presentation": {
-            "section_id": 1,
-            "offset": 1172
-          }
-        },
-        {
-          "id": "trainer.play_time",
-          "label": "Play time",
-          "description": "Time played",
-          "offset": 14,
-          "type": "ascii",
-          "length": 1,
-          "editable": false,
-          "format": [
-            {
-              "value": {
-                "read": {
-                  "offset": 14,
-                  "type": "u16_le"
-                }
-              }
-            },
-            ":",
-            {
-              "value": {
-                "read": {
-                  "offset": 16,
-                  "type": "u8"
-                }
-              },
-              "width": 2
-            },
-            ":",
-            {
-              "value": {
-                "read": {
-                  "offset": 17,
-                  "type": "u8"
-                }
-              },
-              "width": 2
-            },
-            ":",
-            {
-              "value": {
-                "read": {
-                  "offset": 18,
-                  "type": "u8"
-                }
-              },
-              "width": 2
-            }
-          ],
-          "presentation": {
-            "section_id": 0,
-            "offset": 14,
-            "constraints": {
-              "min": null,
-              "max": null,
-              "max_length": null,
-              "choices": []
-            },
-            "step": null,
-            "encoding": null
-          }
-        },
-        {
-          "id": "trainer.play_time_hours",
-          "label": "Play time hours",
-          "description": "Hours played",
-          "offset": 14,
-          "type": "u16_le",
-          "min": 0,
-          "max": 65535,
-          "presentation": {
-            "section_id": 0,
-            "offset": 14
-          }
-        },
-        {
-          "id": "trainer.play_time_minutes",
-          "label": "Play time minutes",
-          "description": "Minutes in the current hour",
-          "offset": 16,
-          "type": "u8",
-          "min": 0,
-          "max": 59,
-          "presentation": {
-            "section_id": 0,
-            "offset": 16
-          }
-        },
-        {
-          "id": "trainer.play_time_seconds",
-          "label": "Play time seconds",
-          "description": "Seconds in the current minute",
-          "offset": 17,
-          "type": "u8",
-          "min": 0,
-          "max": 59,
-          "presentation": {
-            "section_id": 0,
-            "offset": 17
-          }
-        },
-        {
-          "id": "trainer.play_time_frames",
-          "label": "Play time frames",
-          "description": "Frames in the current second",
-          "offset": 18,
-          "type": "u8",
-          "min": 0,
-          "max": 59,
-          "presentation": {
-            "section_id": 0,
-            "offset": 18
-          }
-        },
-        {
-          "id": "options.button_mode",
-          "label": "Button mode",
-          "description": "A-button and shoulder-button behavior",
-          "offset": 19,
-          "type": "u8",
-          "choices": [
-            {
-              "name": "help",
-              "value": 0
-            },
-            {
-              "name": "lr",
-              "value": 1
-            },
-            {
-              "name": "l_equals_a",
-              "value": 2
-            }
-          ],
-          "presentation": {
-            "section_id": 0,
-            "offset": 19,
-            "constraints": {
-              "min": null,
-              "max": null,
-              "max_length": null,
-              "choices": [
-                "help",
-                "lr",
-                "l_equals_a"
-              ]
-            },
-            "step": null
-          }
-        },
-        {
-          "id": "options.text_speed",
-          "label": "Text speed",
-          "description": "Text speed: 0 slow, 1 medium, 2 fast",
-          "offset": 20,
-          "type": "u16_le",
-          "min": 0,
-          "max": 2,
-          "presentation": {
-            "section_id": 0,
-            "offset": 20
-          },
-          "mask": 7
-        },
-        {
-          "id": "options.window_frame",
-          "label": "Window frame",
-          "description": "Text window frame type",
-          "offset": 20,
-          "type": "u16_le",
-          "min": 0,
-          "max": 19,
-          "presentation": {
-            "section_id": 0,
-            "offset": 20
-          },
-          "mask": 248
-        },
-        {
-          "id": "options.sound",
-          "label": "Sound",
-          "description": "Sound output mode",
-          "offset": 20,
-          "type": "u16_le",
-          "choices": [
-            {
-              "name": "mono",
-              "value": 0
-            },
-            {
-              "name": "stereo",
-              "value": 1
-            }
-          ],
-          "presentation": {
-            "section_id": 0,
-            "offset": 20,
-            "constraints": {
-              "min": null,
-              "max": null,
-              "max_length": null,
-              "choices": [
-                "mono",
-                "stereo"
-              ]
-            },
-            "step": null
-          },
-          "mask": 256
-        },
-        {
-          "id": "options.battle_style",
-          "label": "Battle style",
-          "description": "Whether the game offers a switch after a foe faints",
-          "offset": 20,
-          "type": "u16_le",
-          "choices": [
-            {
-              "name": "shift",
-              "value": 0
-            },
-            {
-              "name": "set",
-              "value": 1
-            }
-          ],
-          "presentation": {
-            "section_id": 0,
-            "offset": 20,
-            "constraints": {
-              "min": null,
-              "max": null,
-              "max_length": null,
-              "choices": [
-                "shift",
-                "set"
-              ]
-            },
-            "step": null
-          },
-          "mask": 512
-        },
-        {
-          "id": "options.battle_scene",
-          "label": "Battle scene",
-          "description": "Battle animation mode",
-          "offset": 20,
-          "type": "u16_le",
-          "choices": [
-            {
-              "name": "on",
-              "value": 0
-            },
-            {
-              "name": "off",
-              "value": 1
-            }
-          ],
-          "presentation": {
-            "section_id": 0,
-            "offset": 20,
-            "constraints": {
-              "min": null,
-              "max": null,
-              "max_length": null,
-              "choices": [
-                "on",
-                "off"
-              ]
-            },
-            "step": null
-          },
-          "mask": 1024
-        },
-        {
-          "id": "options.region_map_zoom",
-          "label": "Region map zoom",
-          "description": "Region map zoom state",
-          "offset": 21,
-          "type": "bit",
-          "bit": 3,
-          "presentation": {
-            "section_id": 0,
-            "offset": 20,
-            "kind": "boolean",
-            "step": null
-          }
-        }
-      ],
-      "checks": [
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 8,
-                  "type": "u8"
-                }
-              },
-              1
-            ]
-          },
-          "code": "save_gender",
-          "message": "the save has an invalid player gender value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 5264,
-                  "type": "u32_le"
-                }
-              },
-              999999
-            ]
-          },
-          "code": "save_money",
-          "message": "the save has a money value above the game limit"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 16,
-                  "type": "u8",
-                  "relative": true
-                }
-              },
-              59
-            ]
-          },
-          "code": "save_play_time",
-          "message": "the save has an invalid play-time minute or second value",
-          "repeat": {
-            "count": 2,
-            "stride": 1
-          }
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 19,
-                  "type": "u8"
-                }
-              },
-              2
-            ]
-          },
-          "code": "save_options",
-          "message": "the save has an invalid Generation III option value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 20,
-                  "type": "u16_le",
-                  "mask": 7
-                }
-              },
-              2
-            ]
-          },
-          "code": "save_options",
-          "message": "the save has an invalid Generation III option value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 20,
-                  "type": "u16_le",
-                  "mask": 248
-                }
-              },
-              19
-            ]
-          },
-          "code": "save_options",
-          "message": "the save has an invalid Generation III option value"
-        },
-        {
-          "assert": {
-            "any": [
-              {
-                "eq": [
-                  {
-                    "read": {
-                      "offset": 5272,
-                      "type": "u16_le",
-                      "relative": true
-                    }
-                  },
-                  0
-                ]
-              },
-              {
-                "all": [
-                  {
-                    "le": [
-                      1,
-                      {
-                        "read": {
-                          "offset": 5274,
-                          "type": "u16_le",
-                          "relative": true
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "le": [
-                      {
-                        "read": {
-                          "offset": 5274,
-                          "type": "u16_le",
-                          "relative": true
-                        }
-                      },
-                      999
-                    ]
-                  }
-                ]
-              }
-            ]
-          },
-          "code": "save_inventory_quantity",
-          "message": "an occupied inventory slot has an invalid quantity",
-          "repeat": {
-            "count": 50,
-            "stride": 4
-          }
-        },
-        {
-          "assert": {
-            "any": [
-              {
-                "eq": [
-                  {
-                    "read": {
-                      "offset": 5472,
-                      "type": "u16_le",
-                      "relative": true
-                    }
-                  },
-                  0
-                ]
-              },
-              {
-                "all": [
-                  {
-                    "le": [
-                      1,
-                      {
-                        "read": {
-                          "offset": 5474,
-                          "type": "u16_le",
-                          "relative": true
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "le": [
-                      {
-                        "read": {
-                          "offset": 5474,
-                          "type": "u16_le",
-                          "relative": true
-                        }
-                      },
-                      99
-                    ]
-                  }
-                ]
-              }
-            ]
-          },
-          "code": "save_inventory_quantity",
-          "message": "an occupied inventory slot has an invalid quantity",
-          "repeat": {
-            "count": 20,
-            "stride": 4
-          }
-        },
-        {
-          "assert": {
-            "any": [
-              {
-                "eq": [
-                  {
-                    "read": {
-                      "offset": 5552,
-                      "type": "u16_le",
-                      "relative": true
-                    }
-                  },
-                  0
-                ]
-              },
-              {
-                "all": [
-                  {
-                    "le": [
-                      1,
-                      {
-                        "read": {
-                          "offset": 5554,
-                          "type": "u16_le",
-                          "relative": true
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "le": [
-                      {
-                        "read": {
-                          "offset": 5554,
-                          "type": "u16_le",
-                          "relative": true
-                        }
-                      },
-                      1
-                    ]
-                  }
-                ]
-              }
-            ]
-          },
-          "code": "save_inventory_quantity",
-          "message": "an occupied inventory slot has an invalid quantity",
-          "repeat": {
-            "count": 20,
-            "stride": 4
-          }
-        },
-        {
-          "assert": {
-            "any": [
-              {
-                "eq": [
-                  {
-                    "read": {
-                      "offset": 5632,
-                      "type": "u16_le",
-                      "relative": true
-                    }
-                  },
-                  0
-                ]
-              },
-              {
-                "all": [
-                  {
-                    "le": [
-                      1,
-                      {
-                        "read": {
-                          "offset": 5634,
-                          "type": "u16_le",
-                          "relative": true
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "le": [
-                      {
-                        "read": {
-                          "offset": 5634,
-                          "type": "u16_le",
-                          "relative": true
-                        }
-                      },
-                      99
-                    ]
-                  }
-                ]
-              }
-            ]
-          },
-          "code": "save_inventory_quantity",
-          "message": "an occupied inventory slot has an invalid quantity",
-          "repeat": {
-            "count": 80,
-            "stride": 4
-          }
-        },
-        {
-          "assert": {
-            "any": [
-              {
-                "eq": [
-                  {
-                    "read": {
-                      "offset": 5952,
-                      "type": "u16_le",
-                      "relative": true
-                    }
-                  },
-                  0
-                ]
-              },
-              {
-                "all": [
-                  {
-                    "le": [
-                      1,
-                      {
-                        "read": {
-                          "offset": 5954,
-                          "type": "u16_le",
-                          "relative": true
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "le": [
-                      {
-                        "read": {
-                          "offset": 5954,
-                          "type": "u16_le",
-                          "relative": true
-                        }
-                      },
-                      999
-                    ]
-                  }
-                ]
-              }
-            ]
-          },
-          "code": "save_inventory_quantity",
-          "message": "an occupied inventory slot has an invalid quantity",
-          "repeat": {
-            "count": 46,
-            "stride": 4
-          }
-        }
-      ],
-      "include_implicit_changes": true,
-      "recognition": {
-        "reasons": [
-          "checksum_valid",
-          "signature_valid",
-          "counter_uniform"
-        ],
-        "confidence": "high",
-        "incomplete_confidence": "medium",
-        "empty_top_level_reasons": true
-      },
-      "recovery": {
-        "no_valid": {
-          "code": "save_checksum",
-          "message": "the save has an invalid section checksum"
-        },
-        "incomplete": {
-          "state": "valid_with_warnings",
-          "issue": {
-            "code": "redundant_slot_empty",
-            "message": "The redundant save slot is empty"
-          },
-          "warning": "The redundant save slot is empty; the editor preserves it"
-        },
-        "damaged": {
-          "state": "partially_recoverable",
-          "disable_editing": true,
-          "issue": {
-            "code": "redundant_slot_invalid",
-            "message": "One redundant save slot failed integrity checks"
-          },
-          "warning": "One redundant save slot is invalid; normal editing is disabled",
-          "edit_error": {
-            "code": "save_integrity_partial",
-            "message": "normal edits need two valid Pokémon save slots"
-          }
-        }
-      },
-      "layout": {
-        "groups": [
-          {
-            "id": "save",
-            "logical_offset": 0,
-            "logical_length": 55680,
-            "copies": {
-              "kind": "tagged",
-              "candidates": [
-                {
-                  "offset": 0,
-                  "section_count": 14
-                },
-                {
-                  "offset": 57344,
-                  "section_count": 14
-                }
-              ],
-              "sections": [
-                {
-                  "id": 0,
-                  "logical_offset": 0,
-                  "length": 4096,
-                  "checksum_length": 2192
-                },
-                {
-                  "id": 1,
-                  "logical_offset": 4096,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 2,
-                  "logical_offset": 8064,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 3,
-                  "logical_offset": 12032,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 4,
-                  "logical_offset": 16000,
-                  "length": 3968,
-                  "checksum_length": 3136
-                },
-                {
-                  "id": 5,
-                  "logical_offset": 19968,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 6,
-                  "logical_offset": 23936,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 7,
-                  "logical_offset": 27904,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 8,
-                  "logical_offset": 31872,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 9,
-                  "logical_offset": 35840,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 10,
-                  "logical_offset": 39808,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 11,
-                  "logical_offset": 43776,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 12,
-                  "logical_offset": 47744,
-                  "length": 3968,
-                  "checksum_length": 3968
-                },
-                {
-                  "id": 13,
-                  "logical_offset": 51712,
-                  "length": 3968,
-                  "checksum_length": 2000
-                }
-              ],
-              "section_size": 4096,
-              "id_offset": 4084,
-              "checksum_offset": 4086,
-              "signature_offset": 4088,
-              "counter_offset": 4092,
-              "signature": 134291493
-            },
-            "selection": "newest_counter_max_to_zero_error_on_tie",
-            "write": "selected",
-            "empty": [
-              255
-            ],
-            "empty_if_no_signature": true
-          }
-        ]
-      },
-      "records": [
-        {
-          "record": "rs_pc",
-          "offset": 0,
-          "id": "inventory",
-          "count": 50,
-          "stride": 4,
-          "index_start": 1
-        },
-        {
-          "record": "rs_items",
-          "offset": 0,
-          "id": "inventory",
-          "count": 20,
-          "stride": 4,
-          "index_start": 1
-        },
-        {
-          "record": "rs_key_items",
-          "offset": 0,
-          "id": "inventory",
-          "count": 20,
-          "stride": 4,
-          "index_start": 1
-        },
-        {
-          "record": "rs_balls",
-          "offset": 0,
-          "id": "inventory",
-          "count": 16,
-          "stride": 4,
-          "index_start": 1
-        },
-        {
-          "record": "rs_tm_hm",
-          "offset": 0,
-          "id": "inventory",
-          "count": 64,
-          "stride": 4,
-          "index_start": 1
-        },
-        {
-          "record": "rs_berries",
-          "offset": 0,
-          "id": "inventory",
-          "count": 46,
-          "stride": 4,
-          "index_start": 1
-        },
-        {
-          "record": "rs_dex_owned",
-          "offset": 0,
-          "id": "pokedex",
-          "count": 386,
-          "stride_bits": 1,
-          "index_start": 1,
-          "index_width": 3
-        },
-        {
-          "record": "rs_dex_seen",
-          "offset": 0,
-          "id": "pokedex",
-          "count": 386,
-          "stride_bits": 1,
-          "index_start": 1,
-          "index_width": 3
-        },
-        {
-          "record": "rs_tail",
-          "offset": 0,
-          "id": ""
-        }
-      ]
+      "name": "Pokémon Sapphire"
     },
     {
+      "profile": "default",
       "id": "pokemon-emerald",
       "name": "Pokémon Emerald",
-      "platform": "gba",
       "family": "pokemon-gen3-emerald",
-      "handler_id": "pokemon-gen3",
-      "save_format": "gba_flash_128k",
-      "save_format_name": "Flash 128 KiB",
-      "save_size": 131072,
-      "logical_size": 55680,
       "checksum_sizes": [
         3884,
         3968,
@@ -3923,16 +1916,6 @@
           "description": "Player gender",
           "offset": 8,
           "type": "u8",
-          "choices": [
-            {
-              "name": "male",
-              "value": 0
-            },
-            {
-              "name": "female",
-              "value": 1
-            }
-          ],
           "presentation": {
             "section_id": 0,
             "offset": 8,
@@ -3946,7 +1929,8 @@
               ]
             },
             "step": null
-          }
+          },
+          "choices_ref": "gender"
         },
         {
           "id": "trainer.id",
@@ -4133,20 +2117,6 @@
           "description": "A-button and shoulder-button behavior",
           "offset": 19,
           "type": "u8",
-          "choices": [
-            {
-              "name": "help",
-              "value": 0
-            },
-            {
-              "name": "lr",
-              "value": 1
-            },
-            {
-              "name": "l_equals_a",
-              "value": 2
-            }
-          ],
           "presentation": {
             "section_id": 0,
             "offset": 19,
@@ -4161,7 +2131,8 @@
               ]
             },
             "step": null
-          }
+          },
+          "choices_ref": "button-mode"
         },
         {
           "id": "options.text_speed",
@@ -4197,16 +2168,6 @@
           "description": "Sound output mode",
           "offset": 20,
           "type": "u16_le",
-          "choices": [
-            {
-              "name": "mono",
-              "value": 0
-            },
-            {
-              "name": "stereo",
-              "value": 1
-            }
-          ],
           "presentation": {
             "section_id": 0,
             "offset": 20,
@@ -4221,7 +2182,8 @@
             },
             "step": null
           },
-          "mask": 256
+          "mask": 256,
+          "choices_ref": "sound"
         },
         {
           "id": "options.battle_style",
@@ -4229,16 +2191,6 @@
           "description": "Whether the game offers a switch after a foe faints",
           "offset": 20,
           "type": "u16_le",
-          "choices": [
-            {
-              "name": "shift",
-              "value": 0
-            },
-            {
-              "name": "set",
-              "value": 1
-            }
-          ],
           "presentation": {
             "section_id": 0,
             "offset": 20,
@@ -4253,7 +2205,8 @@
             },
             "step": null
           },
-          "mask": 512
+          "mask": 512,
+          "choices_ref": "battle-style"
         },
         {
           "id": "options.battle_scene",
@@ -4261,16 +2214,6 @@
           "description": "Battle animation mode",
           "offset": 20,
           "type": "u16_le",
-          "choices": [
-            {
-              "name": "on",
-              "value": 0
-            },
-            {
-              "name": "off",
-              "value": 1
-            }
-          ],
           "presentation": {
             "section_id": 0,
             "offset": 20,
@@ -4285,7 +2228,8 @@
             },
             "step": null
           },
-          "mask": 1024
+          "mask": 1024,
+          "choices_ref": "battle-scene"
         },
         {
           "id": "options.region_map_zoom",
@@ -4902,44 +2846,6 @@
           "message": "the save has battle points above the game limit"
         }
       ],
-      "include_implicit_changes": true,
-      "recognition": {
-        "reasons": [
-          "checksum_valid",
-          "signature_valid",
-          "counter_uniform"
-        ],
-        "confidence": "high",
-        "incomplete_confidence": "medium",
-        "empty_top_level_reasons": true
-      },
-      "recovery": {
-        "no_valid": {
-          "code": "save_checksum",
-          "message": "the save has an invalid section checksum"
-        },
-        "incomplete": {
-          "state": "valid_with_warnings",
-          "issue": {
-            "code": "redundant_slot_empty",
-            "message": "The redundant save slot is empty"
-          },
-          "warning": "The redundant save slot is empty; the editor preserves it"
-        },
-        "damaged": {
-          "state": "partially_recoverable",
-          "disable_editing": true,
-          "issue": {
-            "code": "redundant_slot_invalid",
-            "message": "One redundant save slot failed integrity checks"
-          },
-          "warning": "One redundant save slot is invalid; normal editing is disabled",
-          "edit_error": {
-            "code": "save_integrity_partial",
-            "message": "normal edits need two valid Pokémon save slots"
-          }
-        }
-      },
       "layout": {
         "groups": [
           {
@@ -5135,15 +3041,10 @@
       ]
     },
     {
+      "profile": "default",
       "id": "pokemon-firered",
       "name": "Pokémon FireRed",
-      "platform": "gba",
       "family": "pokemon-gen3-frlg",
-      "handler_id": "pokemon-gen3",
-      "save_format": "gba_flash_128k",
-      "save_format_name": "Flash 128 KiB",
-      "save_size": 131072,
-      "logical_size": 55680,
       "checksum_sizes": [
         3876,
         3968,
@@ -5182,16 +3083,6 @@
           "description": "Player gender",
           "offset": 8,
           "type": "u8",
-          "choices": [
-            {
-              "name": "male",
-              "value": 0
-            },
-            {
-              "name": "female",
-              "value": 1
-            }
-          ],
           "presentation": {
             "section_id": 0,
             "offset": 8,
@@ -5205,7 +3096,8 @@
               ]
             },
             "step": null
-          }
+          },
+          "choices_ref": "gender"
         },
         {
           "id": "trainer.id",
@@ -5392,20 +3284,6 @@
           "description": "A-button and shoulder-button behavior",
           "offset": 19,
           "type": "u8",
-          "choices": [
-            {
-              "name": "help",
-              "value": 0
-            },
-            {
-              "name": "lr",
-              "value": 1
-            },
-            {
-              "name": "l_equals_a",
-              "value": 2
-            }
-          ],
           "presentation": {
             "section_id": 0,
             "offset": 19,
@@ -5420,7 +3298,8 @@
               ]
             },
             "step": null
-          }
+          },
+          "choices_ref": "button-mode"
         },
         {
           "id": "options.text_speed",
@@ -5456,16 +3335,6 @@
           "description": "Sound output mode",
           "offset": 20,
           "type": "u16_le",
-          "choices": [
-            {
-              "name": "mono",
-              "value": 0
-            },
-            {
-              "name": "stereo",
-              "value": 1
-            }
-          ],
           "presentation": {
             "section_id": 0,
             "offset": 20,
@@ -5480,7 +3349,8 @@
             },
             "step": null
           },
-          "mask": 256
+          "mask": 256,
+          "choices_ref": "sound"
         },
         {
           "id": "options.battle_style",
@@ -5488,16 +3358,6 @@
           "description": "Whether the game offers a switch after a foe faints",
           "offset": 20,
           "type": "u16_le",
-          "choices": [
-            {
-              "name": "shift",
-              "value": 0
-            },
-            {
-              "name": "set",
-              "value": 1
-            }
-          ],
           "presentation": {
             "section_id": 0,
             "offset": 20,
@@ -5512,7 +3372,8 @@
             },
             "step": null
           },
-          "mask": 512
+          "mask": 512,
+          "choices_ref": "battle-style"
         },
         {
           "id": "options.battle_scene",
@@ -5520,16 +3381,6 @@
           "description": "Battle animation mode",
           "offset": 20,
           "type": "u16_le",
-          "choices": [
-            {
-              "name": "on",
-              "value": 0
-            },
-            {
-              "name": "off",
-              "value": 1
-            }
-          ],
           "presentation": {
             "section_id": 0,
             "offset": 20,
@@ -5544,7 +3395,8 @@
             },
             "step": null
           },
-          "mask": 1024
+          "mask": 1024,
+          "choices_ref": "battle-scene"
         },
         {
           "id": "options.region_map_zoom",
@@ -6040,44 +3892,6 @@
           }
         }
       ],
-      "include_implicit_changes": true,
-      "recognition": {
-        "reasons": [
-          "checksum_valid",
-          "signature_valid",
-          "counter_uniform"
-        ],
-        "confidence": "high",
-        "incomplete_confidence": "medium",
-        "empty_top_level_reasons": true
-      },
-      "recovery": {
-        "no_valid": {
-          "code": "save_checksum",
-          "message": "the save has an invalid section checksum"
-        },
-        "incomplete": {
-          "state": "valid_with_warnings",
-          "issue": {
-            "code": "redundant_slot_empty",
-            "message": "The redundant save slot is empty"
-          },
-          "warning": "The redundant save slot is empty; the editor preserves it"
-        },
-        "damaged": {
-          "state": "partially_recoverable",
-          "disable_editing": true,
-          "issue": {
-            "code": "redundant_slot_invalid",
-            "message": "One redundant save slot failed integrity checks"
-          },
-          "warning": "One redundant save slot is invalid; normal editing is disabled",
-          "edit_error": {
-            "code": "save_integrity_partial",
-            "message": "normal edits need two valid Pokémon save slots"
-          }
-        }
-      },
       "layout": {
         "groups": [
           {
@@ -6273,15 +4087,10 @@
       ]
     },
     {
+      "profile": "default",
       "id": "pokemon-leafgreen",
       "name": "Pokémon LeafGreen",
-      "platform": "gba",
       "family": "pokemon-gen3-frlg",
-      "handler_id": "pokemon-gen3",
-      "save_format": "gba_flash_128k",
-      "save_format_name": "Flash 128 KiB",
-      "save_size": 131072,
-      "logical_size": 55680,
       "checksum_sizes": [
         3876,
         3968,
@@ -6320,16 +4129,6 @@
           "description": "Player gender",
           "offset": 8,
           "type": "u8",
-          "choices": [
-            {
-              "name": "male",
-              "value": 0
-            },
-            {
-              "name": "female",
-              "value": 1
-            }
-          ],
           "presentation": {
             "section_id": 0,
             "offset": 8,
@@ -6343,7 +4142,8 @@
               ]
             },
             "step": null
-          }
+          },
+          "choices_ref": "gender"
         },
         {
           "id": "trainer.id",
@@ -6530,20 +4330,6 @@
           "description": "A-button and shoulder-button behavior",
           "offset": 19,
           "type": "u8",
-          "choices": [
-            {
-              "name": "help",
-              "value": 0
-            },
-            {
-              "name": "lr",
-              "value": 1
-            },
-            {
-              "name": "l_equals_a",
-              "value": 2
-            }
-          ],
           "presentation": {
             "section_id": 0,
             "offset": 19,
@@ -6558,7 +4344,8 @@
               ]
             },
             "step": null
-          }
+          },
+          "choices_ref": "button-mode"
         },
         {
           "id": "options.text_speed",
@@ -6594,16 +4381,6 @@
           "description": "Sound output mode",
           "offset": 20,
           "type": "u16_le",
-          "choices": [
-            {
-              "name": "mono",
-              "value": 0
-            },
-            {
-              "name": "stereo",
-              "value": 1
-            }
-          ],
           "presentation": {
             "section_id": 0,
             "offset": 20,
@@ -6618,7 +4395,8 @@
             },
             "step": null
           },
-          "mask": 256
+          "mask": 256,
+          "choices_ref": "sound"
         },
         {
           "id": "options.battle_style",
@@ -6626,16 +4404,6 @@
           "description": "Whether the game offers a switch after a foe faints",
           "offset": 20,
           "type": "u16_le",
-          "choices": [
-            {
-              "name": "shift",
-              "value": 0
-            },
-            {
-              "name": "set",
-              "value": 1
-            }
-          ],
           "presentation": {
             "section_id": 0,
             "offset": 20,
@@ -6650,7 +4418,8 @@
             },
             "step": null
           },
-          "mask": 512
+          "mask": 512,
+          "choices_ref": "battle-style"
         },
         {
           "id": "options.battle_scene",
@@ -6658,16 +4427,6 @@
           "description": "Battle animation mode",
           "offset": 20,
           "type": "u16_le",
-          "choices": [
-            {
-              "name": "on",
-              "value": 0
-            },
-            {
-              "name": "off",
-              "value": 1
-            }
-          ],
           "presentation": {
             "section_id": 0,
             "offset": 20,
@@ -6682,7 +4441,8 @@
             },
             "step": null
           },
-          "mask": 1024
+          "mask": 1024,
+          "choices_ref": "battle-scene"
         },
         {
           "id": "options.region_map_zoom",
@@ -7178,44 +4938,6 @@
           }
         }
       ],
-      "include_implicit_changes": true,
-      "recognition": {
-        "reasons": [
-          "checksum_valid",
-          "signature_valid",
-          "counter_uniform"
-        ],
-        "confidence": "high",
-        "incomplete_confidence": "medium",
-        "empty_top_level_reasons": true
-      },
-      "recovery": {
-        "no_valid": {
-          "code": "save_checksum",
-          "message": "the save has an invalid section checksum"
-        },
-        "incomplete": {
-          "state": "valid_with_warnings",
-          "issue": {
-            "code": "redundant_slot_empty",
-            "message": "The redundant save slot is empty"
-          },
-          "warning": "The redundant save slot is empty; the editor preserves it"
-        },
-        "damaged": {
-          "state": "partially_recoverable",
-          "disable_editing": true,
-          "issue": {
-            "code": "redundant_slot_invalid",
-            "message": "One redundant save slot failed integrity checks"
-          },
-          "warning": "One redundant save slot is invalid; normal editing is disabled",
-          "edit_error": {
-            "code": "save_integrity_partial",
-            "message": "normal edits need two valid Pokémon save slots"
-          }
-        }
-      },
       "layout": {
         "groups": [
           {
@@ -7410,5 +5132,1067 @@
         }
       ]
     }
-  ]
+  ],
+  "profiles": {
+    "default": {
+      "platform": "gba",
+      "family": "pokemon-gen3-rs",
+      "handler_id": "pokemon-gen3",
+      "save_format": "gba_flash_128k",
+      "save_format_name": "Flash 128 KiB",
+      "save_size": 131072,
+      "logical_size": 55680,
+      "checksum_sizes": [
+        2192,
+        3968,
+        3968,
+        3968,
+        3136,
+        3968,
+        3968,
+        3968,
+        3968,
+        3968,
+        3968,
+        3968,
+        3968,
+        2000
+      ],
+      "fields": [
+        {
+          "id": "trainer.name",
+          "label": "Trainer name",
+          "description": "English trainer text",
+          "offset": 0,
+          "type": "ascii",
+          "length": 7,
+          "text_codec": "pokemon_gen3_english",
+          "presentation": {
+            "section_id": 0,
+            "offset": 0,
+            "step": null,
+            "encoding": "pokemon_gen3_english"
+          }
+        },
+        {
+          "id": "trainer.gender",
+          "label": "Gender",
+          "description": "Player gender",
+          "offset": 8,
+          "type": "u8",
+          "choices": [
+            {
+              "name": "male",
+              "value": 0
+            },
+            {
+              "name": "female",
+              "value": 1
+            }
+          ],
+          "presentation": {
+            "section_id": 0,
+            "offset": 8,
+            "constraints": {
+              "min": null,
+              "max": null,
+              "max_length": null,
+              "choices": [
+                "male",
+                "female"
+              ]
+            },
+            "step": null
+          }
+        },
+        {
+          "id": "trainer.id",
+          "label": "Trainer ID",
+          "description": "Public trainer identifier",
+          "offset": 10,
+          "type": "u16_le",
+          "min": 0,
+          "max": 65535,
+          "presentation": {
+            "section_id": 0,
+            "offset": 10,
+            "step": null
+          }
+        },
+        {
+          "id": "trainer.secret_id",
+          "label": "Secret ID",
+          "description": "Hidden trainer identifier",
+          "offset": 12,
+          "type": "u16_le",
+          "min": 0,
+          "max": 65535,
+          "presentation": {
+            "section_id": 0,
+            "offset": 12,
+            "step": null
+          }
+        },
+        {
+          "id": "trainer.money",
+          "label": "Money",
+          "description": "Money carried by the player",
+          "offset": 5264,
+          "type": "u32_le",
+          "min": 0,
+          "max": 999999,
+          "presentation": {
+            "section_id": 1,
+            "offset": 1168
+          }
+        },
+        {
+          "id": "trainer.coins",
+          "label": "Coins",
+          "description": "Game Corner coins",
+          "offset": 5268,
+          "type": "u16_le",
+          "min": 0,
+          "max": 9999,
+          "presentation": {
+            "section_id": 1,
+            "offset": 1172
+          }
+        },
+        {
+          "id": "trainer.play_time",
+          "label": "Play time",
+          "description": "Time played",
+          "offset": 14,
+          "type": "ascii",
+          "length": 1,
+          "editable": false,
+          "format": [
+            {
+              "value": {
+                "read": {
+                  "offset": 14,
+                  "type": "u16_le"
+                }
+              }
+            },
+            ":",
+            {
+              "value": {
+                "read": {
+                  "offset": 16,
+                  "type": "u8"
+                }
+              },
+              "width": 2
+            },
+            ":",
+            {
+              "value": {
+                "read": {
+                  "offset": 17,
+                  "type": "u8"
+                }
+              },
+              "width": 2
+            },
+            ":",
+            {
+              "value": {
+                "read": {
+                  "offset": 18,
+                  "type": "u8"
+                }
+              },
+              "width": 2
+            }
+          ],
+          "presentation": {
+            "section_id": 0,
+            "offset": 14,
+            "constraints": {
+              "min": null,
+              "max": null,
+              "max_length": null,
+              "choices": []
+            },
+            "step": null,
+            "encoding": null
+          }
+        },
+        {
+          "id": "trainer.play_time_hours",
+          "label": "Play time hours",
+          "description": "Hours played",
+          "offset": 14,
+          "type": "u16_le",
+          "min": 0,
+          "max": 65535,
+          "presentation": {
+            "section_id": 0,
+            "offset": 14
+          }
+        },
+        {
+          "id": "trainer.play_time_minutes",
+          "label": "Play time minutes",
+          "description": "Minutes in the current hour",
+          "offset": 16,
+          "type": "u8",
+          "min": 0,
+          "max": 59,
+          "presentation": {
+            "section_id": 0,
+            "offset": 16
+          }
+        },
+        {
+          "id": "trainer.play_time_seconds",
+          "label": "Play time seconds",
+          "description": "Seconds in the current minute",
+          "offset": 17,
+          "type": "u8",
+          "min": 0,
+          "max": 59,
+          "presentation": {
+            "section_id": 0,
+            "offset": 17
+          }
+        },
+        {
+          "id": "trainer.play_time_frames",
+          "label": "Play time frames",
+          "description": "Frames in the current second",
+          "offset": 18,
+          "type": "u8",
+          "min": 0,
+          "max": 59,
+          "presentation": {
+            "section_id": 0,
+            "offset": 18
+          }
+        },
+        {
+          "id": "options.button_mode",
+          "label": "Button mode",
+          "description": "A-button and shoulder-button behavior",
+          "offset": 19,
+          "type": "u8",
+          "choices": [
+            {
+              "name": "help",
+              "value": 0
+            },
+            {
+              "name": "lr",
+              "value": 1
+            },
+            {
+              "name": "l_equals_a",
+              "value": 2
+            }
+          ],
+          "presentation": {
+            "section_id": 0,
+            "offset": 19,
+            "constraints": {
+              "min": null,
+              "max": null,
+              "max_length": null,
+              "choices": [
+                "help",
+                "lr",
+                "l_equals_a"
+              ]
+            },
+            "step": null
+          }
+        },
+        {
+          "id": "options.text_speed",
+          "label": "Text speed",
+          "description": "Text speed: 0 slow, 1 medium, 2 fast",
+          "offset": 20,
+          "type": "u16_le",
+          "min": 0,
+          "max": 2,
+          "presentation": {
+            "section_id": 0,
+            "offset": 20
+          },
+          "mask": 7
+        },
+        {
+          "id": "options.window_frame",
+          "label": "Window frame",
+          "description": "Text window frame type",
+          "offset": 20,
+          "type": "u16_le",
+          "min": 0,
+          "max": 19,
+          "presentation": {
+            "section_id": 0,
+            "offset": 20
+          },
+          "mask": 248
+        },
+        {
+          "id": "options.sound",
+          "label": "Sound",
+          "description": "Sound output mode",
+          "offset": 20,
+          "type": "u16_le",
+          "choices": [
+            {
+              "name": "mono",
+              "value": 0
+            },
+            {
+              "name": "stereo",
+              "value": 1
+            }
+          ],
+          "presentation": {
+            "section_id": 0,
+            "offset": 20,
+            "constraints": {
+              "min": null,
+              "max": null,
+              "max_length": null,
+              "choices": [
+                "mono",
+                "stereo"
+              ]
+            },
+            "step": null
+          },
+          "mask": 256
+        },
+        {
+          "id": "options.battle_style",
+          "label": "Battle style",
+          "description": "Whether the game offers a switch after a foe faints",
+          "offset": 20,
+          "type": "u16_le",
+          "choices": [
+            {
+              "name": "shift",
+              "value": 0
+            },
+            {
+              "name": "set",
+              "value": 1
+            }
+          ],
+          "presentation": {
+            "section_id": 0,
+            "offset": 20,
+            "constraints": {
+              "min": null,
+              "max": null,
+              "max_length": null,
+              "choices": [
+                "shift",
+                "set"
+              ]
+            },
+            "step": null
+          },
+          "mask": 512
+        },
+        {
+          "id": "options.battle_scene",
+          "label": "Battle scene",
+          "description": "Battle animation mode",
+          "offset": 20,
+          "type": "u16_le",
+          "choices": [
+            {
+              "name": "on",
+              "value": 0
+            },
+            {
+              "name": "off",
+              "value": 1
+            }
+          ],
+          "presentation": {
+            "section_id": 0,
+            "offset": 20,
+            "constraints": {
+              "min": null,
+              "max": null,
+              "max_length": null,
+              "choices": [
+                "on",
+                "off"
+              ]
+            },
+            "step": null
+          },
+          "mask": 1024
+        },
+        {
+          "id": "options.region_map_zoom",
+          "label": "Region map zoom",
+          "description": "Region map zoom state",
+          "offset": 21,
+          "type": "bit",
+          "bit": 3,
+          "presentation": {
+            "section_id": 0,
+            "offset": 20,
+            "kind": "boolean",
+            "step": null
+          }
+        }
+      ],
+      "checks": [
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 8,
+                  "type": "u8"
+                }
+              },
+              1
+            ]
+          },
+          "code": "save_gender",
+          "message": "the save has an invalid player gender value"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 5264,
+                  "type": "u32_le"
+                }
+              },
+              999999
+            ]
+          },
+          "code": "save_money",
+          "message": "the save has a money value above the game limit"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 16,
+                  "type": "u8",
+                  "relative": true
+                }
+              },
+              59
+            ]
+          },
+          "code": "save_play_time",
+          "message": "the save has an invalid play-time minute or second value",
+          "repeat": {
+            "count": 2,
+            "stride": 1
+          }
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 19,
+                  "type": "u8"
+                }
+              },
+              2
+            ]
+          },
+          "code": "save_options",
+          "message": "the save has an invalid Generation III option value"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 20,
+                  "type": "u16_le",
+                  "mask": 7
+                }
+              },
+              2
+            ]
+          },
+          "code": "save_options",
+          "message": "the save has an invalid Generation III option value"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 20,
+                  "type": "u16_le",
+                  "mask": 248
+                }
+              },
+              19
+            ]
+          },
+          "code": "save_options",
+          "message": "the save has an invalid Generation III option value"
+        },
+        {
+          "assert": {
+            "any": [
+              {
+                "eq": [
+                  {
+                    "read": {
+                      "offset": 5272,
+                      "type": "u16_le",
+                      "relative": true
+                    }
+                  },
+                  0
+                ]
+              },
+              {
+                "all": [
+                  {
+                    "le": [
+                      1,
+                      {
+                        "read": {
+                          "offset": 5274,
+                          "type": "u16_le",
+                          "relative": true
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "le": [
+                      {
+                        "read": {
+                          "offset": 5274,
+                          "type": "u16_le",
+                          "relative": true
+                        }
+                      },
+                      999
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "code": "save_inventory_quantity",
+          "message": "an occupied inventory slot has an invalid quantity",
+          "repeat": {
+            "count": 50,
+            "stride": 4
+          }
+        },
+        {
+          "assert": {
+            "any": [
+              {
+                "eq": [
+                  {
+                    "read": {
+                      "offset": 5472,
+                      "type": "u16_le",
+                      "relative": true
+                    }
+                  },
+                  0
+                ]
+              },
+              {
+                "all": [
+                  {
+                    "le": [
+                      1,
+                      {
+                        "read": {
+                          "offset": 5474,
+                          "type": "u16_le",
+                          "relative": true
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "le": [
+                      {
+                        "read": {
+                          "offset": 5474,
+                          "type": "u16_le",
+                          "relative": true
+                        }
+                      },
+                      99
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "code": "save_inventory_quantity",
+          "message": "an occupied inventory slot has an invalid quantity",
+          "repeat": {
+            "count": 20,
+            "stride": 4
+          }
+        },
+        {
+          "assert": {
+            "any": [
+              {
+                "eq": [
+                  {
+                    "read": {
+                      "offset": 5552,
+                      "type": "u16_le",
+                      "relative": true
+                    }
+                  },
+                  0
+                ]
+              },
+              {
+                "all": [
+                  {
+                    "le": [
+                      1,
+                      {
+                        "read": {
+                          "offset": 5554,
+                          "type": "u16_le",
+                          "relative": true
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "le": [
+                      {
+                        "read": {
+                          "offset": 5554,
+                          "type": "u16_le",
+                          "relative": true
+                        }
+                      },
+                      1
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "code": "save_inventory_quantity",
+          "message": "an occupied inventory slot has an invalid quantity",
+          "repeat": {
+            "count": 20,
+            "stride": 4
+          }
+        },
+        {
+          "assert": {
+            "any": [
+              {
+                "eq": [
+                  {
+                    "read": {
+                      "offset": 5632,
+                      "type": "u16_le",
+                      "relative": true
+                    }
+                  },
+                  0
+                ]
+              },
+              {
+                "all": [
+                  {
+                    "le": [
+                      1,
+                      {
+                        "read": {
+                          "offset": 5634,
+                          "type": "u16_le",
+                          "relative": true
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "le": [
+                      {
+                        "read": {
+                          "offset": 5634,
+                          "type": "u16_le",
+                          "relative": true
+                        }
+                      },
+                      99
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "code": "save_inventory_quantity",
+          "message": "an occupied inventory slot has an invalid quantity",
+          "repeat": {
+            "count": 80,
+            "stride": 4
+          }
+        },
+        {
+          "assert": {
+            "any": [
+              {
+                "eq": [
+                  {
+                    "read": {
+                      "offset": 5952,
+                      "type": "u16_le",
+                      "relative": true
+                    }
+                  },
+                  0
+                ]
+              },
+              {
+                "all": [
+                  {
+                    "le": [
+                      1,
+                      {
+                        "read": {
+                          "offset": 5954,
+                          "type": "u16_le",
+                          "relative": true
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "le": [
+                      {
+                        "read": {
+                          "offset": 5954,
+                          "type": "u16_le",
+                          "relative": true
+                        }
+                      },
+                      999
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "code": "save_inventory_quantity",
+          "message": "an occupied inventory slot has an invalid quantity",
+          "repeat": {
+            "count": 46,
+            "stride": 4
+          }
+        }
+      ],
+      "include_implicit_changes": true,
+      "recognition": {
+        "reasons": [
+          "checksum_valid",
+          "signature_valid",
+          "counter_uniform"
+        ],
+        "confidence": "high",
+        "incomplete_confidence": "medium",
+        "empty_top_level_reasons": true
+      },
+      "recovery": {
+        "no_valid": {
+          "code": "save_checksum",
+          "message": "the save has an invalid section checksum"
+        },
+        "incomplete": {
+          "state": "valid_with_warnings",
+          "issue": {
+            "code": "redundant_slot_empty",
+            "message": "The redundant save slot is empty"
+          },
+          "warning": "The redundant save slot is empty; the editor preserves it"
+        },
+        "damaged": {
+          "state": "partially_recoverable",
+          "disable_editing": true,
+          "issue": {
+            "code": "redundant_slot_invalid",
+            "message": "One redundant save slot failed integrity checks"
+          },
+          "warning": "One redundant save slot is invalid; normal editing is disabled",
+          "edit_error": {
+            "code": "save_integrity_partial",
+            "message": "normal edits need two valid Pokémon save slots"
+          }
+        }
+      },
+      "layout": {
+        "groups": [
+          {
+            "id": "save",
+            "logical_offset": 0,
+            "logical_length": 55680,
+            "copies": {
+              "kind": "tagged",
+              "candidates": [
+                {
+                  "offset": 0,
+                  "section_count": 14
+                },
+                {
+                  "offset": 57344,
+                  "section_count": 14
+                }
+              ],
+              "sections": [
+                {
+                  "id": 0,
+                  "logical_offset": 0,
+                  "length": 4096,
+                  "checksum_length": 2192
+                },
+                {
+                  "id": 1,
+                  "logical_offset": 4096,
+                  "length": 3968,
+                  "checksum_length": 3968
+                },
+                {
+                  "id": 2,
+                  "logical_offset": 8064,
+                  "length": 3968,
+                  "checksum_length": 3968
+                },
+                {
+                  "id": 3,
+                  "logical_offset": 12032,
+                  "length": 3968,
+                  "checksum_length": 3968
+                },
+                {
+                  "id": 4,
+                  "logical_offset": 16000,
+                  "length": 3968,
+                  "checksum_length": 3136
+                },
+                {
+                  "id": 5,
+                  "logical_offset": 19968,
+                  "length": 3968,
+                  "checksum_length": 3968
+                },
+                {
+                  "id": 6,
+                  "logical_offset": 23936,
+                  "length": 3968,
+                  "checksum_length": 3968
+                },
+                {
+                  "id": 7,
+                  "logical_offset": 27904,
+                  "length": 3968,
+                  "checksum_length": 3968
+                },
+                {
+                  "id": 8,
+                  "logical_offset": 31872,
+                  "length": 3968,
+                  "checksum_length": 3968
+                },
+                {
+                  "id": 9,
+                  "logical_offset": 35840,
+                  "length": 3968,
+                  "checksum_length": 3968
+                },
+                {
+                  "id": 10,
+                  "logical_offset": 39808,
+                  "length": 3968,
+                  "checksum_length": 3968
+                },
+                {
+                  "id": 11,
+                  "logical_offset": 43776,
+                  "length": 3968,
+                  "checksum_length": 3968
+                },
+                {
+                  "id": 12,
+                  "logical_offset": 47744,
+                  "length": 3968,
+                  "checksum_length": 3968
+                },
+                {
+                  "id": 13,
+                  "logical_offset": 51712,
+                  "length": 3968,
+                  "checksum_length": 2000
+                }
+              ],
+              "section_size": 4096,
+              "id_offset": 4084,
+              "checksum_offset": 4086,
+              "signature_offset": 4088,
+              "counter_offset": 4092,
+              "signature": 134291493
+            },
+            "selection": "newest_counter_max_to_zero_error_on_tie",
+            "write": "selected",
+            "empty": [
+              255
+            ],
+            "empty_if_no_signature": true
+          }
+        ]
+      },
+      "records": [
+        {
+          "record": "rs_pc",
+          "offset": 0,
+          "id": "inventory",
+          "count": 50,
+          "stride": 4,
+          "index_start": 1
+        },
+        {
+          "record": "rs_items",
+          "offset": 0,
+          "id": "inventory",
+          "count": 20,
+          "stride": 4,
+          "index_start": 1
+        },
+        {
+          "record": "rs_key_items",
+          "offset": 0,
+          "id": "inventory",
+          "count": 20,
+          "stride": 4,
+          "index_start": 1
+        },
+        {
+          "record": "rs_balls",
+          "offset": 0,
+          "id": "inventory",
+          "count": 16,
+          "stride": 4,
+          "index_start": 1
+        },
+        {
+          "record": "rs_tm_hm",
+          "offset": 0,
+          "id": "inventory",
+          "count": 64,
+          "stride": 4,
+          "index_start": 1
+        },
+        {
+          "record": "rs_berries",
+          "offset": 0,
+          "id": "inventory",
+          "count": 46,
+          "stride": 4,
+          "index_start": 1
+        },
+        {
+          "record": "rs_dex_owned",
+          "offset": 0,
+          "id": "pokedex",
+          "count": 386,
+          "stride_bits": 1,
+          "index_start": 1,
+          "index_width": 3
+        },
+        {
+          "record": "rs_dex_seen",
+          "offset": 0,
+          "id": "pokedex",
+          "count": 386,
+          "stride_bits": 1,
+          "index_start": 1,
+          "index_width": 3
+        },
+        {
+          "record": "rs_tail",
+          "offset": 0,
+          "id": ""
+        }
+      ]
+    }
+  },
+  "choices": {
+    "gender": [
+      {
+        "name": "male",
+        "value": 0
+      },
+      {
+        "name": "female",
+        "value": 1
+      }
+    ],
+    "button-mode": [
+      {
+        "name": "help",
+        "value": 0
+      },
+      {
+        "name": "lr",
+        "value": 1
+      },
+      {
+        "name": "l_equals_a",
+        "value": 2
+      }
+    ],
+    "sound": [
+      {
+        "name": "mono",
+        "value": 0
+      },
+      {
+        "name": "stereo",
+        "value": 1
+      }
+    ],
+    "battle-style": [
+      {
+        "name": "shift",
+        "value": 0
+      },
+      {
+        "name": "set",
+        "value": 1
+      }
+    ],
+    "battle-scene": [
+      {
+        "name": "on",
+        "value": 0
+      },
+      {
+        "name": "off",
+        "value": 1
+      }
+    ]
+  }
 }

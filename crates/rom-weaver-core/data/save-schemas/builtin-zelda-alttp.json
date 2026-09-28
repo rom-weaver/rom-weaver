@@ -285,48 +285,11 @@
           },
           "step": null
         },
-        "choices": [
-          {
-            "name": "none",
-            "value": 0
-          },
-          {
-            "name": "mushroom",
-            "value": 1
-          },
-          {
-            "name": "empty",
-            "value": 2
-          },
-          {
-            "name": "red_potion",
-            "value": 3
-          },
-          {
-            "name": "green_potion",
-            "value": 4
-          },
-          {
-            "name": "blue_potion",
-            "value": 5
-          },
-          {
-            "name": "fairy",
-            "value": 6
-          },
-          {
-            "name": "bee",
-            "value": 7
-          },
-          {
-            "name": "good_bee",
-            "value": 8
-          }
-        ],
         "unknown_choice": {
           "value": "unknown",
           "warning": "The stored value is outside the original game range"
-        }
+        },
+        "choices_ref": "bottle-1"
       },
       {
         "offset": 861,
@@ -357,48 +320,11 @@
           },
           "step": null
         },
-        "choices": [
-          {
-            "name": "none",
-            "value": 0
-          },
-          {
-            "name": "mushroom",
-            "value": 1
-          },
-          {
-            "name": "empty",
-            "value": 2
-          },
-          {
-            "name": "red_potion",
-            "value": 3
-          },
-          {
-            "name": "green_potion",
-            "value": 4
-          },
-          {
-            "name": "blue_potion",
-            "value": 5
-          },
-          {
-            "name": "fairy",
-            "value": 6
-          },
-          {
-            "name": "bee",
-            "value": 7
-          },
-          {
-            "name": "good_bee",
-            "value": 8
-          }
-        ],
         "unknown_choice": {
           "value": "unknown",
           "warning": "The stored value is outside the original game range"
-        }
+        },
+        "choices_ref": "bottle-1"
       },
       {
         "offset": 862,
@@ -429,48 +355,11 @@
           },
           "step": null
         },
-        "choices": [
-          {
-            "name": "none",
-            "value": 0
-          },
-          {
-            "name": "mushroom",
-            "value": 1
-          },
-          {
-            "name": "empty",
-            "value": 2
-          },
-          {
-            "name": "red_potion",
-            "value": 3
-          },
-          {
-            "name": "green_potion",
-            "value": 4
-          },
-          {
-            "name": "blue_potion",
-            "value": 5
-          },
-          {
-            "name": "fairy",
-            "value": 6
-          },
-          {
-            "name": "bee",
-            "value": 7
-          },
-          {
-            "name": "good_bee",
-            "value": 8
-          }
-        ],
         "unknown_choice": {
           "value": "unknown",
           "warning": "The stored value is outside the original game range"
-        }
+        },
+        "choices_ref": "bottle-1"
       },
       {
         "offset": 863,
@@ -501,48 +390,11 @@
           },
           "step": null
         },
-        "choices": [
-          {
-            "name": "none",
-            "value": 0
-          },
-          {
-            "name": "mushroom",
-            "value": 1
-          },
-          {
-            "name": "empty",
-            "value": 2
-          },
-          {
-            "name": "red_potion",
-            "value": 3
-          },
-          {
-            "name": "green_potion",
-            "value": 4
-          },
-          {
-            "name": "blue_potion",
-            "value": 5
-          },
-          {
-            "name": "fairy",
-            "value": 6
-          },
-          {
-            "name": "bee",
-            "value": 7
-          },
-          {
-            "name": "good_bee",
-            "value": 8
-          }
-        ],
         "unknown_choice": {
           "value": "unknown",
           "warning": "The stored value is outside the original game range"
-        }
+        },
+        "choices_ref": "bottle-1"
       },
       {
         "id": "resources.rupees",
@@ -7568,5 +7420,45 @@
         }
       }
     }
+  },
+  "choices": {
+    "bottle-1": [
+      {
+        "name": "none",
+        "value": 0
+      },
+      {
+        "name": "mushroom",
+        "value": 1
+      },
+      {
+        "name": "empty",
+        "value": 2
+      },
+      {
+        "name": "red_potion",
+        "value": 3
+      },
+      {
+        "name": "green_potion",
+        "value": 4
+      },
+      {
+        "name": "blue_potion",
+        "value": 5
+      },
+      {
+        "name": "fairy",
+        "value": 6
+      },
+      {
+        "name": "bee",
+        "value": 7
+      },
+      {
+        "name": "good_bee",
+        "value": 8
+      }
+    ]
   }
 }

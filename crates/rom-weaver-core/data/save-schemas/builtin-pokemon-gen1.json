@@ -350,20 +350,6 @@
         "type": "u8",
         "description": "Text delay setting",
         "mask": 7,
-        "choices": [
-          {
-            "name": "fast",
-            "value": 1
-          },
-          {
-            "name": "medium",
-            "value": 3
-          },
-          {
-            "name": "slow",
-            "value": 5
-          }
-        ],
         "editable_when": {
           "any": [
             {
@@ -466,7 +452,8 @@
             ]
           },
           "step": null
-        }
+        },
+        "choices_ref": "text-speed"
       },
       {
         "id": "options.battle_scene",
@@ -637,3720 +624,40 @@
         }
       }
     ],
-    "gen1-bag": [
-      {
-        "id": "inventory.bag.1.item_id",
-        "label": "Bag slot 1 Item ID",
-        "offset": 9674,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            0,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
+    "gen1-bag": {
+      "fields": [],
+      "records": [
+        {
+          "record": "gen1-bag-slot",
           "offset": 9674,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
+          "id": "",
+          "count": 20,
+          "stride": 2,
+          "index_start": 1,
+          "count_from": {
+            "offset": 9673,
+            "type": "u8"
           }
         }
-      },
-      {
-        "id": "inventory.bag.1.quantity",
-        "label": "Bag slot 1 Quantity",
-        "offset": 9675,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            0,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9675
-        }
-      },
-      {
-        "id": "inventory.bag.2.item_id",
-        "label": "Bag slot 2 Item ID",
-        "offset": 9676,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            1,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9676,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.bag.2.quantity",
-        "label": "Bag slot 2 Quantity",
-        "offset": 9677,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            1,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9677
-        }
-      },
-      {
-        "id": "inventory.bag.3.item_id",
-        "label": "Bag slot 3 Item ID",
-        "offset": 9678,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            2,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9678,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.bag.3.quantity",
-        "label": "Bag slot 3 Quantity",
-        "offset": 9679,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            2,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9679
-        }
-      },
-      {
-        "id": "inventory.bag.4.item_id",
-        "label": "Bag slot 4 Item ID",
-        "offset": 9680,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            3,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9680,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.bag.4.quantity",
-        "label": "Bag slot 4 Quantity",
-        "offset": 9681,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            3,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9681
-        }
-      },
-      {
-        "id": "inventory.bag.5.item_id",
-        "label": "Bag slot 5 Item ID",
-        "offset": 9682,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            4,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9682,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.bag.5.quantity",
-        "label": "Bag slot 5 Quantity",
-        "offset": 9683,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            4,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9683
-        }
-      },
-      {
-        "id": "inventory.bag.6.item_id",
-        "label": "Bag slot 6 Item ID",
-        "offset": 9684,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            5,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9684,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.bag.6.quantity",
-        "label": "Bag slot 6 Quantity",
-        "offset": 9685,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            5,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9685
-        }
-      },
-      {
-        "id": "inventory.bag.7.item_id",
-        "label": "Bag slot 7 Item ID",
-        "offset": 9686,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            6,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9686,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.bag.7.quantity",
-        "label": "Bag slot 7 Quantity",
-        "offset": 9687,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            6,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9687
-        }
-      },
-      {
-        "id": "inventory.bag.8.item_id",
-        "label": "Bag slot 8 Item ID",
-        "offset": 9688,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            7,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9688,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.bag.8.quantity",
-        "label": "Bag slot 8 Quantity",
-        "offset": 9689,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            7,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9689
-        }
-      },
-      {
-        "id": "inventory.bag.9.item_id",
-        "label": "Bag slot 9 Item ID",
-        "offset": 9690,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            8,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9690,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.bag.9.quantity",
-        "label": "Bag slot 9 Quantity",
-        "offset": 9691,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            8,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9691
-        }
-      },
-      {
-        "id": "inventory.bag.10.item_id",
-        "label": "Bag slot 10 Item ID",
-        "offset": 9692,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            9,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9692,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.bag.10.quantity",
-        "label": "Bag slot 10 Quantity",
-        "offset": 9693,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            9,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9693
-        }
-      },
-      {
-        "id": "inventory.bag.11.item_id",
-        "label": "Bag slot 11 Item ID",
-        "offset": 9694,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            10,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9694,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.bag.11.quantity",
-        "label": "Bag slot 11 Quantity",
-        "offset": 9695,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            10,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9695
-        }
-      },
-      {
-        "id": "inventory.bag.12.item_id",
-        "label": "Bag slot 12 Item ID",
-        "offset": 9696,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            11,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9696,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.bag.12.quantity",
-        "label": "Bag slot 12 Quantity",
-        "offset": 9697,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            11,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9697
-        }
-      },
-      {
-        "id": "inventory.bag.13.item_id",
-        "label": "Bag slot 13 Item ID",
-        "offset": 9698,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            12,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9698,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.bag.13.quantity",
-        "label": "Bag slot 13 Quantity",
-        "offset": 9699,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            12,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9699
-        }
-      },
-      {
-        "id": "inventory.bag.14.item_id",
-        "label": "Bag slot 14 Item ID",
-        "offset": 9700,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            13,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9700,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.bag.14.quantity",
-        "label": "Bag slot 14 Quantity",
-        "offset": 9701,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            13,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9701
-        }
-      },
-      {
-        "id": "inventory.bag.15.item_id",
-        "label": "Bag slot 15 Item ID",
-        "offset": 9702,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            14,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9702,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.bag.15.quantity",
-        "label": "Bag slot 15 Quantity",
-        "offset": 9703,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            14,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9703
-        }
-      },
-      {
-        "id": "inventory.bag.16.item_id",
-        "label": "Bag slot 16 Item ID",
-        "offset": 9704,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            15,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9704,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.bag.16.quantity",
-        "label": "Bag slot 16 Quantity",
-        "offset": 9705,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            15,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9705
-        }
-      },
-      {
-        "id": "inventory.bag.17.item_id",
-        "label": "Bag slot 17 Item ID",
-        "offset": 9706,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            16,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9706,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.bag.17.quantity",
-        "label": "Bag slot 17 Quantity",
-        "offset": 9707,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            16,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9707
-        }
-      },
-      {
-        "id": "inventory.bag.18.item_id",
-        "label": "Bag slot 18 Item ID",
-        "offset": 9708,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            17,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9708,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.bag.18.quantity",
-        "label": "Bag slot 18 Quantity",
-        "offset": 9709,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            17,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9709
-        }
-      },
-      {
-        "id": "inventory.bag.19.item_id",
-        "label": "Bag slot 19 Item ID",
-        "offset": 9710,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            18,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9710,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.bag.19.quantity",
-        "label": "Bag slot 19 Quantity",
-        "offset": 9711,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            18,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9711
-        }
-      },
-      {
-        "id": "inventory.bag.20.item_id",
-        "label": "Bag slot 20 Item ID",
-        "offset": 9712,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            19,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9712,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.bag.20.quantity",
-        "label": "Bag slot 20 Quantity",
-        "offset": 9713,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            19,
-            {
-              "read": {
-                "offset": 9673,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 9713
-        }
-      }
-    ],
-    "gen1-pc": [
-      {
-        "id": "inventory.pc.1.item_id",
-        "label": "PC slot 1 Item ID",
-        "offset": 10215,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            0,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
+      ]
+    },
+    "gen1-pc": {
+      "fields": [],
+      "records": [
+        {
+          "record": "gen1-pc-slot",
           "offset": 10215,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
+          "id": "",
+          "count": 50,
+          "stride": 2,
+          "index_start": 1,
+          "count_from": {
+            "offset": 10214,
+            "type": "u8"
           }
         }
-      },
-      {
-        "id": "inventory.pc.1.quantity",
-        "label": "PC slot 1 Quantity",
-        "offset": 10216,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            0,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10216
-        }
-      },
-      {
-        "id": "inventory.pc.2.item_id",
-        "label": "PC slot 2 Item ID",
-        "offset": 10217,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            1,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10217,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.2.quantity",
-        "label": "PC slot 2 Quantity",
-        "offset": 10218,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            1,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10218
-        }
-      },
-      {
-        "id": "inventory.pc.3.item_id",
-        "label": "PC slot 3 Item ID",
-        "offset": 10219,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            2,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10219,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.3.quantity",
-        "label": "PC slot 3 Quantity",
-        "offset": 10220,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            2,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10220
-        }
-      },
-      {
-        "id": "inventory.pc.4.item_id",
-        "label": "PC slot 4 Item ID",
-        "offset": 10221,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            3,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10221,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.4.quantity",
-        "label": "PC slot 4 Quantity",
-        "offset": 10222,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            3,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10222
-        }
-      },
-      {
-        "id": "inventory.pc.5.item_id",
-        "label": "PC slot 5 Item ID",
-        "offset": 10223,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            4,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10223,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.5.quantity",
-        "label": "PC slot 5 Quantity",
-        "offset": 10224,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            4,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10224
-        }
-      },
-      {
-        "id": "inventory.pc.6.item_id",
-        "label": "PC slot 6 Item ID",
-        "offset": 10225,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            5,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10225,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.6.quantity",
-        "label": "PC slot 6 Quantity",
-        "offset": 10226,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            5,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10226
-        }
-      },
-      {
-        "id": "inventory.pc.7.item_id",
-        "label": "PC slot 7 Item ID",
-        "offset": 10227,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            6,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10227,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.7.quantity",
-        "label": "PC slot 7 Quantity",
-        "offset": 10228,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            6,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10228
-        }
-      },
-      {
-        "id": "inventory.pc.8.item_id",
-        "label": "PC slot 8 Item ID",
-        "offset": 10229,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            7,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10229,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.8.quantity",
-        "label": "PC slot 8 Quantity",
-        "offset": 10230,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            7,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10230
-        }
-      },
-      {
-        "id": "inventory.pc.9.item_id",
-        "label": "PC slot 9 Item ID",
-        "offset": 10231,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            8,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10231,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.9.quantity",
-        "label": "PC slot 9 Quantity",
-        "offset": 10232,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            8,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10232
-        }
-      },
-      {
-        "id": "inventory.pc.10.item_id",
-        "label": "PC slot 10 Item ID",
-        "offset": 10233,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            9,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10233,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.10.quantity",
-        "label": "PC slot 10 Quantity",
-        "offset": 10234,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            9,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10234
-        }
-      },
-      {
-        "id": "inventory.pc.11.item_id",
-        "label": "PC slot 11 Item ID",
-        "offset": 10235,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            10,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10235,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.11.quantity",
-        "label": "PC slot 11 Quantity",
-        "offset": 10236,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            10,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10236
-        }
-      },
-      {
-        "id": "inventory.pc.12.item_id",
-        "label": "PC slot 12 Item ID",
-        "offset": 10237,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            11,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10237,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.12.quantity",
-        "label": "PC slot 12 Quantity",
-        "offset": 10238,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            11,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10238
-        }
-      },
-      {
-        "id": "inventory.pc.13.item_id",
-        "label": "PC slot 13 Item ID",
-        "offset": 10239,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            12,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10239,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.13.quantity",
-        "label": "PC slot 13 Quantity",
-        "offset": 10240,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            12,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10240
-        }
-      },
-      {
-        "id": "inventory.pc.14.item_id",
-        "label": "PC slot 14 Item ID",
-        "offset": 10241,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            13,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10241,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.14.quantity",
-        "label": "PC slot 14 Quantity",
-        "offset": 10242,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            13,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10242
-        }
-      },
-      {
-        "id": "inventory.pc.15.item_id",
-        "label": "PC slot 15 Item ID",
-        "offset": 10243,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            14,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10243,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.15.quantity",
-        "label": "PC slot 15 Quantity",
-        "offset": 10244,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            14,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10244
-        }
-      },
-      {
-        "id": "inventory.pc.16.item_id",
-        "label": "PC slot 16 Item ID",
-        "offset": 10245,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            15,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10245,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.16.quantity",
-        "label": "PC slot 16 Quantity",
-        "offset": 10246,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            15,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10246
-        }
-      },
-      {
-        "id": "inventory.pc.17.item_id",
-        "label": "PC slot 17 Item ID",
-        "offset": 10247,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            16,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10247,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.17.quantity",
-        "label": "PC slot 17 Quantity",
-        "offset": 10248,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            16,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10248
-        }
-      },
-      {
-        "id": "inventory.pc.18.item_id",
-        "label": "PC slot 18 Item ID",
-        "offset": 10249,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            17,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10249,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.18.quantity",
-        "label": "PC slot 18 Quantity",
-        "offset": 10250,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            17,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10250
-        }
-      },
-      {
-        "id": "inventory.pc.19.item_id",
-        "label": "PC slot 19 Item ID",
-        "offset": 10251,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            18,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10251,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.19.quantity",
-        "label": "PC slot 19 Quantity",
-        "offset": 10252,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            18,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10252
-        }
-      },
-      {
-        "id": "inventory.pc.20.item_id",
-        "label": "PC slot 20 Item ID",
-        "offset": 10253,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            19,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10253,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.20.quantity",
-        "label": "PC slot 20 Quantity",
-        "offset": 10254,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            19,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10254
-        }
-      },
-      {
-        "id": "inventory.pc.21.item_id",
-        "label": "PC slot 21 Item ID",
-        "offset": 10255,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            20,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10255,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.21.quantity",
-        "label": "PC slot 21 Quantity",
-        "offset": 10256,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            20,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10256
-        }
-      },
-      {
-        "id": "inventory.pc.22.item_id",
-        "label": "PC slot 22 Item ID",
-        "offset": 10257,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            21,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10257,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.22.quantity",
-        "label": "PC slot 22 Quantity",
-        "offset": 10258,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            21,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10258
-        }
-      },
-      {
-        "id": "inventory.pc.23.item_id",
-        "label": "PC slot 23 Item ID",
-        "offset": 10259,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            22,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10259,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.23.quantity",
-        "label": "PC slot 23 Quantity",
-        "offset": 10260,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            22,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10260
-        }
-      },
-      {
-        "id": "inventory.pc.24.item_id",
-        "label": "PC slot 24 Item ID",
-        "offset": 10261,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            23,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10261,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.24.quantity",
-        "label": "PC slot 24 Quantity",
-        "offset": 10262,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            23,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10262
-        }
-      },
-      {
-        "id": "inventory.pc.25.item_id",
-        "label": "PC slot 25 Item ID",
-        "offset": 10263,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            24,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10263,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.25.quantity",
-        "label": "PC slot 25 Quantity",
-        "offset": 10264,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            24,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10264
-        }
-      },
-      {
-        "id": "inventory.pc.26.item_id",
-        "label": "PC slot 26 Item ID",
-        "offset": 10265,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            25,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10265,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.26.quantity",
-        "label": "PC slot 26 Quantity",
-        "offset": 10266,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            25,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10266
-        }
-      },
-      {
-        "id": "inventory.pc.27.item_id",
-        "label": "PC slot 27 Item ID",
-        "offset": 10267,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            26,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10267,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.27.quantity",
-        "label": "PC slot 27 Quantity",
-        "offset": 10268,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            26,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10268
-        }
-      },
-      {
-        "id": "inventory.pc.28.item_id",
-        "label": "PC slot 28 Item ID",
-        "offset": 10269,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            27,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10269,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.28.quantity",
-        "label": "PC slot 28 Quantity",
-        "offset": 10270,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            27,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10270
-        }
-      },
-      {
-        "id": "inventory.pc.29.item_id",
-        "label": "PC slot 29 Item ID",
-        "offset": 10271,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            28,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10271,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.29.quantity",
-        "label": "PC slot 29 Quantity",
-        "offset": 10272,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            28,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10272
-        }
-      },
-      {
-        "id": "inventory.pc.30.item_id",
-        "label": "PC slot 30 Item ID",
-        "offset": 10273,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            29,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10273,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.30.quantity",
-        "label": "PC slot 30 Quantity",
-        "offset": 10274,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            29,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10274
-        }
-      },
-      {
-        "id": "inventory.pc.31.item_id",
-        "label": "PC slot 31 Item ID",
-        "offset": 10275,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            30,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10275,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.31.quantity",
-        "label": "PC slot 31 Quantity",
-        "offset": 10276,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            30,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10276
-        }
-      },
-      {
-        "id": "inventory.pc.32.item_id",
-        "label": "PC slot 32 Item ID",
-        "offset": 10277,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            31,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10277,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.32.quantity",
-        "label": "PC slot 32 Quantity",
-        "offset": 10278,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            31,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10278
-        }
-      },
-      {
-        "id": "inventory.pc.33.item_id",
-        "label": "PC slot 33 Item ID",
-        "offset": 10279,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            32,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10279,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.33.quantity",
-        "label": "PC slot 33 Quantity",
-        "offset": 10280,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            32,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10280
-        }
-      },
-      {
-        "id": "inventory.pc.34.item_id",
-        "label": "PC slot 34 Item ID",
-        "offset": 10281,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            33,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10281,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.34.quantity",
-        "label": "PC slot 34 Quantity",
-        "offset": 10282,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            33,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10282
-        }
-      },
-      {
-        "id": "inventory.pc.35.item_id",
-        "label": "PC slot 35 Item ID",
-        "offset": 10283,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            34,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10283,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.35.quantity",
-        "label": "PC slot 35 Quantity",
-        "offset": 10284,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            34,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10284
-        }
-      },
-      {
-        "id": "inventory.pc.36.item_id",
-        "label": "PC slot 36 Item ID",
-        "offset": 10285,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            35,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10285,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.36.quantity",
-        "label": "PC slot 36 Quantity",
-        "offset": 10286,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            35,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10286
-        }
-      },
-      {
-        "id": "inventory.pc.37.item_id",
-        "label": "PC slot 37 Item ID",
-        "offset": 10287,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            36,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10287,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.37.quantity",
-        "label": "PC slot 37 Quantity",
-        "offset": 10288,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            36,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10288
-        }
-      },
-      {
-        "id": "inventory.pc.38.item_id",
-        "label": "PC slot 38 Item ID",
-        "offset": 10289,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            37,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10289,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.38.quantity",
-        "label": "PC slot 38 Quantity",
-        "offset": 10290,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            37,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10290
-        }
-      },
-      {
-        "id": "inventory.pc.39.item_id",
-        "label": "PC slot 39 Item ID",
-        "offset": 10291,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            38,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10291,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.39.quantity",
-        "label": "PC slot 39 Quantity",
-        "offset": 10292,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            38,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10292
-        }
-      },
-      {
-        "id": "inventory.pc.40.item_id",
-        "label": "PC slot 40 Item ID",
-        "offset": 10293,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            39,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10293,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.40.quantity",
-        "label": "PC slot 40 Quantity",
-        "offset": 10294,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            39,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10294
-        }
-      },
-      {
-        "id": "inventory.pc.41.item_id",
-        "label": "PC slot 41 Item ID",
-        "offset": 10295,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            40,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10295,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.41.quantity",
-        "label": "PC slot 41 Quantity",
-        "offset": 10296,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            40,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10296
-        }
-      },
-      {
-        "id": "inventory.pc.42.item_id",
-        "label": "PC slot 42 Item ID",
-        "offset": 10297,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            41,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10297,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.42.quantity",
-        "label": "PC slot 42 Quantity",
-        "offset": 10298,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            41,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10298
-        }
-      },
-      {
-        "id": "inventory.pc.43.item_id",
-        "label": "PC slot 43 Item ID",
-        "offset": 10299,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            42,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10299,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.43.quantity",
-        "label": "PC slot 43 Quantity",
-        "offset": 10300,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            42,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10300
-        }
-      },
-      {
-        "id": "inventory.pc.44.item_id",
-        "label": "PC slot 44 Item ID",
-        "offset": 10301,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            43,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10301,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.44.quantity",
-        "label": "PC slot 44 Quantity",
-        "offset": 10302,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            43,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10302
-        }
-      },
-      {
-        "id": "inventory.pc.45.item_id",
-        "label": "PC slot 45 Item ID",
-        "offset": 10303,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            44,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10303,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.45.quantity",
-        "label": "PC slot 45 Quantity",
-        "offset": 10304,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            44,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10304
-        }
-      },
-      {
-        "id": "inventory.pc.46.item_id",
-        "label": "PC slot 46 Item ID",
-        "offset": 10305,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            45,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10305,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.46.quantity",
-        "label": "PC slot 46 Quantity",
-        "offset": 10306,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            45,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10306
-        }
-      },
-      {
-        "id": "inventory.pc.47.item_id",
-        "label": "PC slot 47 Item ID",
-        "offset": 10307,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            46,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10307,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.47.quantity",
-        "label": "PC slot 47 Quantity",
-        "offset": 10308,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            46,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10308
-        }
-      },
-      {
-        "id": "inventory.pc.48.item_id",
-        "label": "PC slot 48 Item ID",
-        "offset": 10309,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            47,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10309,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.48.quantity",
-        "label": "PC slot 48 Quantity",
-        "offset": 10310,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            47,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10310
-        }
-      },
-      {
-        "id": "inventory.pc.49.item_id",
-        "label": "PC slot 49 Item ID",
-        "offset": 10311,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            48,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10311,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.49.quantity",
-        "label": "PC slot 49 Quantity",
-        "offset": 10312,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            48,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10312
-        }
-      },
-      {
-        "id": "inventory.pc.50.item_id",
-        "label": "PC slot 50 Item ID",
-        "offset": 10313,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "present_when": {
-          "lt": [
-            49,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10313,
-          "constraints": {
-            "min": 1,
-            "max": 255,
-            "max_length": null,
-            "choices": []
-          }
-        }
-      },
-      {
-        "id": "inventory.pc.50.quantity",
-        "label": "PC slot 50 Quantity",
-        "offset": 10314,
-        "type": "u8",
-        "description": "Inventory item slot value",
-        "min": 1,
-        "max": 99,
-        "present_when": {
-          "lt": [
-            49,
-            {
-              "read": {
-                "offset": 10214,
-                "type": "u8"
-              }
-            }
-          ]
-        },
-        "presentation": {
-          "section_id": 0,
-          "offset": 10314
-        }
-      }
-    ],
+      ]
+    },
     "red-blue-footer": [
       {
         "id": "storage.current_box",
@@ -4642,20 +949,6 @@
         "type": "u8",
         "description": "Text delay setting",
         "mask": 7,
-        "choices": [
-          {
-            "name": "fast",
-            "value": 1
-          },
-          {
-            "name": "medium",
-            "value": 3
-          },
-          {
-            "name": "slow",
-            "value": 5
-          }
-        ],
         "editable_when": {
           "any": [
             {
@@ -4758,7 +1051,8 @@
             ]
           },
           "step": null
-        }
+        },
+        "choices_ref": "text-speed"
       },
       {
         "id": "options.battle_scene",
@@ -4909,12 +1203,631 @@
           }
         }
       }
+    ],
+    "gen1-bag-slot": [
+      {
+        "id": "inventory.bag.{index}.item_id",
+        "label": "Bag slot {index} Item ID",
+        "offset": 0,
+        "type": "u8",
+        "description": "Inventory item slot value",
+        "min": 1,
+        "presentation": {
+          "section_id": 0,
+          "offset": 9674,
+          "constraints": {
+            "min": 1,
+            "max": 255,
+            "max_length": null,
+            "choices": []
+          },
+          "relative_offset": true
+        }
+      },
+      {
+        "id": "inventory.bag.{index}.quantity",
+        "label": "Bag slot {index} Quantity",
+        "offset": 1,
+        "type": "u8",
+        "description": "Inventory item slot value",
+        "min": 1,
+        "max": 99,
+        "presentation": {
+          "section_id": 0,
+          "offset": 9675,
+          "relative_offset": true
+        }
+      }
+    ],
+    "gen1-pc-slot": [
+      {
+        "id": "inventory.pc.{index}.item_id",
+        "label": "PC slot {index} Item ID",
+        "offset": 0,
+        "type": "u8",
+        "description": "Inventory item slot value",
+        "min": 1,
+        "presentation": {
+          "section_id": 0,
+          "offset": 10215,
+          "constraints": {
+            "min": 1,
+            "max": 255,
+            "max_length": null,
+            "choices": []
+          },
+          "relative_offset": true
+        }
+      },
+      {
+        "id": "inventory.pc.{index}.quantity",
+        "label": "PC slot {index} Quantity",
+        "offset": 1,
+        "type": "u8",
+        "description": "Inventory item slot value",
+        "min": 1,
+        "max": 99,
+        "presentation": {
+          "section_id": 0,
+          "offset": 10216,
+          "relative_offset": true
+        }
+      }
     ]
   },
   "games": [
     {
+      "profile": "default",
       "id": "pokemon-red",
-      "name": "Pokémon Red",
+      "name": "Pokémon Red"
+    },
+    {
+      "profile": "default",
+      "id": "pokemon-blue",
+      "name": "Pokémon Blue",
+      "description": "Pokémon Blue, English 32 KiB SRAM."
+    },
+    {
+      "profile": "default",
+      "id": "pokemon-yellow",
+      "name": "Pokémon Yellow",
+      "description": "Pokémon Yellow, English 32 KiB SRAM.",
+      "records": [
+        {
+          "record": "yellow-header",
+          "offset": 0,
+          "id": ""
+        },
+        {
+          "record": "gen1-badges",
+          "offset": 0,
+          "id": "",
+          "count": 1
+        },
+        {
+          "record": "gen1-owned",
+          "offset": 9635,
+          "id": "",
+          "count": 151,
+          "stride_bits": 1,
+          "index_start": 1,
+          "index_width": 3
+        },
+        {
+          "record": "gen1-seen",
+          "offset": 9654,
+          "id": "",
+          "count": 151,
+          "stride_bits": 1,
+          "index_start": 1,
+          "index_width": 3
+        },
+        {
+          "record": "gen1-bag",
+          "offset": 0,
+          "id": ""
+        },
+        {
+          "record": "gen1-pc",
+          "offset": 0,
+          "id": ""
+        },
+        {
+          "record": "yellow-footer",
+          "offset": 0,
+          "id": ""
+        }
+      ],
+      "recognition": {
+        "checks": [
+          {
+            "assert": {
+              "le": [
+                {
+                  "read": {
+                    "offset": 9673,
+                    "type": "u8"
+                  }
+                },
+                20
+              ]
+            },
+            "code": "save_layout",
+            "message": "the save does not contain valid English inventory layout markers"
+          },
+          {
+            "assert": {
+              "eq": [
+                {
+                  "at": {
+                    "offset": {
+                      "add": [
+                        9674,
+                        {
+                          "mul": [
+                            {
+                              "read": {
+                                "offset": 9673,
+                                "type": "u8"
+                              }
+                            },
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    "type": "u8"
+                  }
+                },
+                255
+              ]
+            },
+            "code": "save_layout",
+            "message": "the save does not contain valid English inventory layout markers"
+          },
+          {
+            "assert": {
+              "le": [
+                {
+                  "read": {
+                    "offset": 10214,
+                    "type": "u8"
+                  }
+                },
+                50
+              ]
+            },
+            "code": "save_layout",
+            "message": "the save does not contain valid English inventory layout markers"
+          },
+          {
+            "assert": {
+              "eq": [
+                {
+                  "at": {
+                    "offset": {
+                      "add": [
+                        10215,
+                        {
+                          "mul": [
+                            {
+                              "read": {
+                                "offset": 10214,
+                                "type": "u8"
+                              }
+                            },
+                            2
+                          ]
+                        }
+                      ]
+                    },
+                    "type": "u8"
+                  }
+                },
+                255
+              ]
+            },
+            "code": "save_layout",
+            "message": "the save does not contain valid English inventory layout markers"
+          },
+          {
+            "assert": {
+              "lt": [
+                {
+                  "read": {
+                    "offset": 10316,
+                    "type": "u8",
+                    "mask": 127
+                  }
+                },
+                12
+              ]
+            },
+            "code": "save_layout",
+            "message": "the save does not contain valid English inventory layout markers"
+          },
+          {
+            "assert": {
+              "le": [
+                {
+                  "bit_and": [
+                    {
+                      "read": {
+                        "offset": 9715,
+                        "type": "u8"
+                      }
+                    },
+                    15
+                  ]
+                },
+                9
+              ]
+            },
+            "code": "save_bcd",
+            "message": "the save contains an invalid packed decimal value"
+          },
+          {
+            "assert": {
+              "le": [
+                {
+                  "bit_and": [
+                    {
+                      "read": {
+                        "offset": 9715,
+                        "type": "u8"
+                      }
+                    },
+                    240
+                  ]
+                },
+                144
+              ]
+            },
+            "code": "save_bcd",
+            "message": "the save contains an invalid packed decimal value"
+          },
+          {
+            "assert": {
+              "le": [
+                {
+                  "bit_and": [
+                    {
+                      "read": {
+                        "offset": 9716,
+                        "type": "u8"
+                      }
+                    },
+                    15
+                  ]
+                },
+                9
+              ]
+            },
+            "code": "save_bcd",
+            "message": "the save contains an invalid packed decimal value"
+          },
+          {
+            "assert": {
+              "le": [
+                {
+                  "bit_and": [
+                    {
+                      "read": {
+                        "offset": 9716,
+                        "type": "u8"
+                      }
+                    },
+                    240
+                  ]
+                },
+                144
+              ]
+            },
+            "code": "save_bcd",
+            "message": "the save contains an invalid packed decimal value"
+          },
+          {
+            "assert": {
+              "le": [
+                {
+                  "bit_and": [
+                    {
+                      "read": {
+                        "offset": 9717,
+                        "type": "u8"
+                      }
+                    },
+                    15
+                  ]
+                },
+                9
+              ]
+            },
+            "code": "save_bcd",
+            "message": "the save contains an invalid packed decimal value"
+          },
+          {
+            "assert": {
+              "le": [
+                {
+                  "bit_and": [
+                    {
+                      "read": {
+                        "offset": 9717,
+                        "type": "u8"
+                      }
+                    },
+                    240
+                  ]
+                },
+                144
+              ]
+            },
+            "code": "save_bcd",
+            "message": "the save contains an invalid packed decimal value"
+          },
+          {
+            "assert": {
+              "le": [
+                {
+                  "bit_and": [
+                    {
+                      "read": {
+                        "offset": 10320,
+                        "type": "u8"
+                      }
+                    },
+                    15
+                  ]
+                },
+                9
+              ]
+            },
+            "code": "save_bcd",
+            "message": "the save contains an invalid packed decimal value"
+          },
+          {
+            "assert": {
+              "le": [
+                {
+                  "bit_and": [
+                    {
+                      "read": {
+                        "offset": 10320,
+                        "type": "u8"
+                      }
+                    },
+                    240
+                  ]
+                },
+                144
+              ]
+            },
+            "code": "save_bcd",
+            "message": "the save contains an invalid packed decimal value"
+          },
+          {
+            "assert": {
+              "le": [
+                {
+                  "bit_and": [
+                    {
+                      "read": {
+                        "offset": 10321,
+                        "type": "u8"
+                      }
+                    },
+                    15
+                  ]
+                },
+                9
+              ]
+            },
+            "code": "save_bcd",
+            "message": "the save contains an invalid packed decimal value"
+          },
+          {
+            "assert": {
+              "le": [
+                {
+                  "bit_and": [
+                    {
+                      "read": {
+                        "offset": 10321,
+                        "type": "u8"
+                      }
+                    },
+                    240
+                  ]
+                },
+                144
+              ]
+            },
+            "code": "save_bcd",
+            "message": "the save contains an invalid packed decimal value"
+          },
+          {
+            "assert": {
+              "le": [
+                {
+                  "read": {
+                    "offset": 11503,
+                    "type": "u8",
+                    "relative": true
+                  }
+                },
+                59
+              ]
+            },
+            "code": "save_play_time",
+            "message": "play time must use values below 60 and stop at 255:00:00",
+            "repeat": {
+              "count": 3,
+              "stride": 1
+            }
+          },
+          {
+            "assert": {
+              "any": [
+                {
+                  "not": {
+                    "eq": [
+                      {
+                        "read": {
+                          "offset": 11501,
+                          "type": "u8"
+                        }
+                      },
+                      255
+                    ]
+                  }
+                },
+                {
+                  "all": [
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 11503,
+                            "type": "u8"
+                          }
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 11504,
+                            "type": "u8"
+                          }
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 11505,
+                            "type": "u8"
+                          }
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "code": "save_play_time",
+            "message": "play time must use values below 60 and stop at 255:00:00"
+          },
+          {
+            "assert": {
+              "any": [
+                {
+                  "eq": [
+                    {
+                      "read": {
+                        "offset": 10691,
+                        "type": "u8"
+                      }
+                    },
+                    84
+                  ]
+                },
+                {
+                  "all": [
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 10691,
+                            "type": "u8"
+                          }
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "lt": [
+                        0,
+                        {
+                          "read": {
+                            "offset": 10012,
+                            "type": "u8"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "code": "save_game_mismatch",
+            "message": "game discriminator mismatch"
+          }
+        ],
+        "reasons": [
+          "checksum_valid"
+        ],
+        "confidence": "high",
+        "selected_reason": false,
+        "empty_top_level_reasons": true
+      },
+      "document_checks": [
+        {
+          "assert": {
+            "any": [
+              {
+                "eq": [
+                  {
+                    "read": {
+                      "offset": 10691,
+                      "type": "u8"
+                    }
+                  },
+                  84
+                ]
+              },
+              {
+                "all": [
+                  {
+                    "eq": [
+                      {
+                        "read": {
+                          "offset": 10691,
+                          "type": "u8"
+                        }
+                      },
+                      0
+                    ]
+                  },
+                  {
+                    "lt": [
+                      0,
+                      {
+                        "read": {
+                          "offset": 10012,
+                          "type": "u8"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "code": "save_game_mismatch",
+          "message": "the save does not contain the Pokémon Yellow starter marker"
+        }
+      ]
+    }
+  ],
+  "profiles": {
+    "default": {
       "platform": "game-boy",
       "description": "Pokémon Red, English 32 KiB SRAM.",
       "save_size": 32768,
@@ -5905,1990 +2818,22 @@
         "active_group": false,
         "zero_counter": true
       }
-    },
-    {
-      "id": "pokemon-blue",
-      "name": "Pokémon Blue",
-      "platform": "game-boy",
-      "description": "Pokémon Blue, English 32 KiB SRAM.",
-      "save_size": 32768,
-      "fields": [],
-      "records": [
-        {
-          "record": "red-blue-header",
-          "offset": 0,
-          "id": ""
-        },
-        {
-          "record": "gen1-badges",
-          "offset": 0,
-          "id": "",
-          "count": 1
-        },
-        {
-          "record": "gen1-owned",
-          "offset": 9635,
-          "id": "",
-          "count": 151,
-          "stride_bits": 1,
-          "index_start": 1,
-          "index_width": 3
-        },
-        {
-          "record": "gen1-seen",
-          "offset": 9654,
-          "id": "",
-          "count": 151,
-          "stride_bits": 1,
-          "index_start": 1,
-          "index_width": 3
-        },
-        {
-          "record": "gen1-bag",
-          "offset": 0,
-          "id": ""
-        },
-        {
-          "record": "gen1-pc",
-          "offset": 0,
-          "id": ""
-        },
-        {
-          "record": "red-blue-footer",
-          "offset": 0,
-          "id": ""
-        }
-      ],
-      "family": "pokemon-gen1",
-      "handler_id": "pokemon-gen1",
-      "save_format": "game_boy_sram_32k",
-      "save_format_name": "Battery SRAM 32 KiB",
-      "recognition": {
-        "checks": [
-          {
-            "assert": {
-              "le": [
-                {
-                  "read": {
-                    "offset": 9673,
-                    "type": "u8"
-                  }
-                },
-                20
-              ]
-            },
-            "code": "save_layout",
-            "message": "the save does not contain valid English inventory layout markers"
-          },
-          {
-            "assert": {
-              "eq": [
-                {
-                  "at": {
-                    "offset": {
-                      "add": [
-                        9674,
-                        {
-                          "mul": [
-                            {
-                              "read": {
-                                "offset": 9673,
-                                "type": "u8"
-                              }
-                            },
-                            2
-                          ]
-                        }
-                      ]
-                    },
-                    "type": "u8"
-                  }
-                },
-                255
-              ]
-            },
-            "code": "save_layout",
-            "message": "the save does not contain valid English inventory layout markers"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "read": {
-                    "offset": 10214,
-                    "type": "u8"
-                  }
-                },
-                50
-              ]
-            },
-            "code": "save_layout",
-            "message": "the save does not contain valid English inventory layout markers"
-          },
-          {
-            "assert": {
-              "eq": [
-                {
-                  "at": {
-                    "offset": {
-                      "add": [
-                        10215,
-                        {
-                          "mul": [
-                            {
-                              "read": {
-                                "offset": 10214,
-                                "type": "u8"
-                              }
-                            },
-                            2
-                          ]
-                        }
-                      ]
-                    },
-                    "type": "u8"
-                  }
-                },
-                255
-              ]
-            },
-            "code": "save_layout",
-            "message": "the save does not contain valid English inventory layout markers"
-          },
-          {
-            "assert": {
-              "lt": [
-                {
-                  "read": {
-                    "offset": 10316,
-                    "type": "u8",
-                    "mask": 127
-                  }
-                },
-                12
-              ]
-            },
-            "code": "save_layout",
-            "message": "the save does not contain valid English inventory layout markers"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "bit_and": [
-                    {
-                      "read": {
-                        "offset": 9715,
-                        "type": "u8"
-                      }
-                    },
-                    15
-                  ]
-                },
-                9
-              ]
-            },
-            "code": "save_bcd",
-            "message": "the save contains an invalid packed decimal value"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "bit_and": [
-                    {
-                      "read": {
-                        "offset": 9715,
-                        "type": "u8"
-                      }
-                    },
-                    240
-                  ]
-                },
-                144
-              ]
-            },
-            "code": "save_bcd",
-            "message": "the save contains an invalid packed decimal value"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "bit_and": [
-                    {
-                      "read": {
-                        "offset": 9716,
-                        "type": "u8"
-                      }
-                    },
-                    15
-                  ]
-                },
-                9
-              ]
-            },
-            "code": "save_bcd",
-            "message": "the save contains an invalid packed decimal value"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "bit_and": [
-                    {
-                      "read": {
-                        "offset": 9716,
-                        "type": "u8"
-                      }
-                    },
-                    240
-                  ]
-                },
-                144
-              ]
-            },
-            "code": "save_bcd",
-            "message": "the save contains an invalid packed decimal value"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "bit_and": [
-                    {
-                      "read": {
-                        "offset": 9717,
-                        "type": "u8"
-                      }
-                    },
-                    15
-                  ]
-                },
-                9
-              ]
-            },
-            "code": "save_bcd",
-            "message": "the save contains an invalid packed decimal value"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "bit_and": [
-                    {
-                      "read": {
-                        "offset": 9717,
-                        "type": "u8"
-                      }
-                    },
-                    240
-                  ]
-                },
-                144
-              ]
-            },
-            "code": "save_bcd",
-            "message": "the save contains an invalid packed decimal value"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "bit_and": [
-                    {
-                      "read": {
-                        "offset": 10320,
-                        "type": "u8"
-                      }
-                    },
-                    15
-                  ]
-                },
-                9
-              ]
-            },
-            "code": "save_bcd",
-            "message": "the save contains an invalid packed decimal value"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "bit_and": [
-                    {
-                      "read": {
-                        "offset": 10320,
-                        "type": "u8"
-                      }
-                    },
-                    240
-                  ]
-                },
-                144
-              ]
-            },
-            "code": "save_bcd",
-            "message": "the save contains an invalid packed decimal value"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "bit_and": [
-                    {
-                      "read": {
-                        "offset": 10321,
-                        "type": "u8"
-                      }
-                    },
-                    15
-                  ]
-                },
-                9
-              ]
-            },
-            "code": "save_bcd",
-            "message": "the save contains an invalid packed decimal value"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "bit_and": [
-                    {
-                      "read": {
-                        "offset": 10321,
-                        "type": "u8"
-                      }
-                    },
-                    240
-                  ]
-                },
-                144
-              ]
-            },
-            "code": "save_bcd",
-            "message": "the save contains an invalid packed decimal value"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "read": {
-                    "offset": 11503,
-                    "type": "u8",
-                    "relative": true
-                  }
-                },
-                59
-              ]
-            },
-            "code": "save_play_time",
-            "message": "play time must use values below 60 and stop at 255:00:00",
-            "repeat": {
-              "count": 3,
-              "stride": 1
-            }
-          },
-          {
-            "assert": {
-              "any": [
-                {
-                  "not": {
-                    "eq": [
-                      {
-                        "read": {
-                          "offset": 11501,
-                          "type": "u8"
-                        }
-                      },
-                      255
-                    ]
-                  }
-                },
-                {
-                  "all": [
-                    {
-                      "eq": [
-                        {
-                          "read": {
-                            "offset": 11503,
-                            "type": "u8"
-                          }
-                        },
-                        0
-                      ]
-                    },
-                    {
-                      "eq": [
-                        {
-                          "read": {
-                            "offset": 11504,
-                            "type": "u8"
-                          }
-                        },
-                        0
-                      ]
-                    },
-                    {
-                      "eq": [
-                        {
-                          "read": {
-                            "offset": 11505,
-                            "type": "u8"
-                          }
-                        },
-                        0
-                      ]
-                    }
-                  ]
-                }
-              ]
-            },
-            "code": "save_play_time",
-            "message": "play time must use values below 60 and stop at 255:00:00"
-          },
-          {
-            "assert": {
-              "not": {
-                "any": [
-                  {
-                    "eq": [
-                      {
-                        "read": {
-                          "offset": 10691,
-                          "type": "u8"
-                        }
-                      },
-                      84
-                    ]
-                  },
-                  {
-                    "all": [
-                      {
-                        "eq": [
-                          {
-                            "read": {
-                              "offset": 10691,
-                              "type": "u8"
-                            }
-                          },
-                          0
-                        ]
-                      },
-                      {
-                        "lt": [
-                          0,
-                          {
-                            "read": {
-                              "offset": 10012,
-                              "type": "u8"
-                            }
-                          }
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              }
-            },
-            "code": "save_game_mismatch",
-            "message": "game discriminator mismatch"
-          }
-        ],
-        "reasons": [
-          "checksum_valid"
-        ],
-        "confidence": "high",
-        "selected_reason": false,
-        "empty_top_level_reasons": true
-      },
-      "checks": [
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 9673,
-                  "type": "u8"
-                }
-              },
-              20
-            ]
-          },
-          "code": "save_layout",
-          "message": "the save does not contain valid English inventory layout markers"
-        },
-        {
-          "assert": {
-            "eq": [
-              {
-                "at": {
-                  "offset": {
-                    "add": [
-                      9674,
-                      {
-                        "mul": [
-                          {
-                            "read": {
-                              "offset": 9673,
-                              "type": "u8"
-                            }
-                          },
-                          2
-                        ]
-                      }
-                    ]
-                  },
-                  "type": "u8"
-                }
-              },
-              255
-            ]
-          },
-          "code": "save_layout",
-          "message": "the save does not contain valid English inventory layout markers"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 10214,
-                  "type": "u8"
-                }
-              },
-              50
-            ]
-          },
-          "code": "save_layout",
-          "message": "the save does not contain valid English inventory layout markers"
-        },
-        {
-          "assert": {
-            "eq": [
-              {
-                "at": {
-                  "offset": {
-                    "add": [
-                      10215,
-                      {
-                        "mul": [
-                          {
-                            "read": {
-                              "offset": 10214,
-                              "type": "u8"
-                            }
-                          },
-                          2
-                        ]
-                      }
-                    ]
-                  },
-                  "type": "u8"
-                }
-              },
-              255
-            ]
-          },
-          "code": "save_layout",
-          "message": "the save does not contain valid English inventory layout markers"
-        },
-        {
-          "assert": {
-            "lt": [
-              {
-                "read": {
-                  "offset": 10316,
-                  "type": "u8",
-                  "mask": 127
-                }
-              },
-              12
-            ]
-          },
-          "code": "save_layout",
-          "message": "the save does not contain valid English inventory layout markers"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "bit_and": [
-                  {
-                    "read": {
-                      "offset": 9715,
-                      "type": "u8"
-                    }
-                  },
-                  15
-                ]
-              },
-              9
-            ]
-          },
-          "code": "save_bcd",
-          "message": "the save contains an invalid packed decimal value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "bit_and": [
-                  {
-                    "read": {
-                      "offset": 9715,
-                      "type": "u8"
-                    }
-                  },
-                  240
-                ]
-              },
-              144
-            ]
-          },
-          "code": "save_bcd",
-          "message": "the save contains an invalid packed decimal value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "bit_and": [
-                  {
-                    "read": {
-                      "offset": 9716,
-                      "type": "u8"
-                    }
-                  },
-                  15
-                ]
-              },
-              9
-            ]
-          },
-          "code": "save_bcd",
-          "message": "the save contains an invalid packed decimal value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "bit_and": [
-                  {
-                    "read": {
-                      "offset": 9716,
-                      "type": "u8"
-                    }
-                  },
-                  240
-                ]
-              },
-              144
-            ]
-          },
-          "code": "save_bcd",
-          "message": "the save contains an invalid packed decimal value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "bit_and": [
-                  {
-                    "read": {
-                      "offset": 9717,
-                      "type": "u8"
-                    }
-                  },
-                  15
-                ]
-              },
-              9
-            ]
-          },
-          "code": "save_bcd",
-          "message": "the save contains an invalid packed decimal value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "bit_and": [
-                  {
-                    "read": {
-                      "offset": 9717,
-                      "type": "u8"
-                    }
-                  },
-                  240
-                ]
-              },
-              144
-            ]
-          },
-          "code": "save_bcd",
-          "message": "the save contains an invalid packed decimal value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "bit_and": [
-                  {
-                    "read": {
-                      "offset": 10320,
-                      "type": "u8"
-                    }
-                  },
-                  15
-                ]
-              },
-              9
-            ]
-          },
-          "code": "save_bcd",
-          "message": "the save contains an invalid packed decimal value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "bit_and": [
-                  {
-                    "read": {
-                      "offset": 10320,
-                      "type": "u8"
-                    }
-                  },
-                  240
-                ]
-              },
-              144
-            ]
-          },
-          "code": "save_bcd",
-          "message": "the save contains an invalid packed decimal value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "bit_and": [
-                  {
-                    "read": {
-                      "offset": 10321,
-                      "type": "u8"
-                    }
-                  },
-                  15
-                ]
-              },
-              9
-            ]
-          },
-          "code": "save_bcd",
-          "message": "the save contains an invalid packed decimal value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "bit_and": [
-                  {
-                    "read": {
-                      "offset": 10321,
-                      "type": "u8"
-                    }
-                  },
-                  240
-                ]
-              },
-              144
-            ]
-          },
-          "code": "save_bcd",
-          "message": "the save contains an invalid packed decimal value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 11503,
-                  "type": "u8",
-                  "relative": true
-                }
-              },
-              59
-            ]
-          },
-          "code": "save_play_time",
-          "message": "play time must use values below 60 and stop at 255:00:00",
-          "repeat": {
-            "count": 3,
-            "stride": 1
-          }
-        },
-        {
-          "assert": {
-            "any": [
-              {
-                "not": {
-                  "eq": [
-                    {
-                      "read": {
-                        "offset": 11501,
-                        "type": "u8"
-                      }
-                    },
-                    255
-                  ]
-                }
-              },
-              {
-                "all": [
-                  {
-                    "eq": [
-                      {
-                        "read": {
-                          "offset": 11503,
-                          "type": "u8"
-                        }
-                      },
-                      0
-                    ]
-                  },
-                  {
-                    "eq": [
-                      {
-                        "read": {
-                          "offset": 11504,
-                          "type": "u8"
-                        }
-                      },
-                      0
-                    ]
-                  },
-                  {
-                    "eq": [
-                      {
-                        "read": {
-                          "offset": 11505,
-                          "type": "u8"
-                        }
-                      },
-                      0
-                    ]
-                  }
-                ]
-              }
-            ]
-          },
-          "code": "save_play_time",
-          "message": "play time must use values below 60 and stop at 255:00:00"
-        }
-      ],
-      "document_checks": [
-        {
-          "assert": {
-            "not": {
-              "any": [
-                {
-                  "eq": [
-                    {
-                      "read": {
-                        "offset": 10691,
-                        "type": "u8"
-                      }
-                    },
-                    84
-                  ]
-                },
-                {
-                  "all": [
-                    {
-                      "eq": [
-                        {
-                          "read": {
-                            "offset": 10691,
-                            "type": "u8"
-                          }
-                        },
-                        0
-                      ]
-                    },
-                    {
-                      "lt": [
-                        0,
-                        {
-                          "read": {
-                            "offset": 10012,
-                            "type": "u8"
-                          }
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          },
-          "code": "save_game_mismatch",
-          "message": "the save contains the Pokémon Yellow starter marker"
-        }
-      ],
-      "logical_size": 32768,
-      "layout": {
-        "groups": [
-          {
-            "id": "save",
-            "logical_offset": 9624,
-            "logical_length": 3980,
-            "copies": {
-              "kind": "fixed",
-              "candidates": [
-                {
-                  "spans": [
-                    {
-                      "logical_offset": 9624,
-                      "physical_offset": 9624,
-                      "length": 3980
-                    }
-                  ],
-                  "checksums": [
-                    {
-                      "algorithm": "sum8",
-                      "start": 9624,
-                      "length": 3979,
-                      "offset": 13603,
-                      "target": 255
-                    }
-                  ],
-                  "repairs": [],
-                  "predicates": [],
-                  "sections": [
-                    {
-                      "id": 0,
-                      "physical_offset": 9624,
-                      "checksum": {
-                        "algorithm": "sum8",
-                        "start": 9624,
-                        "length": 3979,
-                        "offset": 13603,
-                        "target": 255
-                      }
-                    }
-                  ]
-                }
-              ]
-            },
-            "selection": "first_valid",
-            "write": "selected",
-            "empty": [],
-            "empty_if_no_signature": false
-          }
-        ]
-      },
-      "recovery": {
-        "no_valid": {
-          "code": "save_checksum",
-          "message": "the save checksum is invalid"
-        },
-        "active_group": false,
-        "zero_counter": true
-      }
-    },
-    {
-      "id": "pokemon-yellow",
-      "name": "Pokémon Yellow",
-      "platform": "game-boy",
-      "description": "Pokémon Yellow, English 32 KiB SRAM.",
-      "save_size": 32768,
-      "fields": [],
-      "records": [
-        {
-          "record": "yellow-header",
-          "offset": 0,
-          "id": ""
-        },
-        {
-          "record": "gen1-badges",
-          "offset": 0,
-          "id": "",
-          "count": 1
-        },
-        {
-          "record": "gen1-owned",
-          "offset": 9635,
-          "id": "",
-          "count": 151,
-          "stride_bits": 1,
-          "index_start": 1,
-          "index_width": 3
-        },
-        {
-          "record": "gen1-seen",
-          "offset": 9654,
-          "id": "",
-          "count": 151,
-          "stride_bits": 1,
-          "index_start": 1,
-          "index_width": 3
-        },
-        {
-          "record": "gen1-bag",
-          "offset": 0,
-          "id": ""
-        },
-        {
-          "record": "gen1-pc",
-          "offset": 0,
-          "id": ""
-        },
-        {
-          "record": "yellow-footer",
-          "offset": 0,
-          "id": ""
-        }
-      ],
-      "family": "pokemon-gen1",
-      "handler_id": "pokemon-gen1",
-      "save_format": "game_boy_sram_32k",
-      "save_format_name": "Battery SRAM 32 KiB",
-      "recognition": {
-        "checks": [
-          {
-            "assert": {
-              "le": [
-                {
-                  "read": {
-                    "offset": 9673,
-                    "type": "u8"
-                  }
-                },
-                20
-              ]
-            },
-            "code": "save_layout",
-            "message": "the save does not contain valid English inventory layout markers"
-          },
-          {
-            "assert": {
-              "eq": [
-                {
-                  "at": {
-                    "offset": {
-                      "add": [
-                        9674,
-                        {
-                          "mul": [
-                            {
-                              "read": {
-                                "offset": 9673,
-                                "type": "u8"
-                              }
-                            },
-                            2
-                          ]
-                        }
-                      ]
-                    },
-                    "type": "u8"
-                  }
-                },
-                255
-              ]
-            },
-            "code": "save_layout",
-            "message": "the save does not contain valid English inventory layout markers"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "read": {
-                    "offset": 10214,
-                    "type": "u8"
-                  }
-                },
-                50
-              ]
-            },
-            "code": "save_layout",
-            "message": "the save does not contain valid English inventory layout markers"
-          },
-          {
-            "assert": {
-              "eq": [
-                {
-                  "at": {
-                    "offset": {
-                      "add": [
-                        10215,
-                        {
-                          "mul": [
-                            {
-                              "read": {
-                                "offset": 10214,
-                                "type": "u8"
-                              }
-                            },
-                            2
-                          ]
-                        }
-                      ]
-                    },
-                    "type": "u8"
-                  }
-                },
-                255
-              ]
-            },
-            "code": "save_layout",
-            "message": "the save does not contain valid English inventory layout markers"
-          },
-          {
-            "assert": {
-              "lt": [
-                {
-                  "read": {
-                    "offset": 10316,
-                    "type": "u8",
-                    "mask": 127
-                  }
-                },
-                12
-              ]
-            },
-            "code": "save_layout",
-            "message": "the save does not contain valid English inventory layout markers"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "bit_and": [
-                    {
-                      "read": {
-                        "offset": 9715,
-                        "type": "u8"
-                      }
-                    },
-                    15
-                  ]
-                },
-                9
-              ]
-            },
-            "code": "save_bcd",
-            "message": "the save contains an invalid packed decimal value"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "bit_and": [
-                    {
-                      "read": {
-                        "offset": 9715,
-                        "type": "u8"
-                      }
-                    },
-                    240
-                  ]
-                },
-                144
-              ]
-            },
-            "code": "save_bcd",
-            "message": "the save contains an invalid packed decimal value"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "bit_and": [
-                    {
-                      "read": {
-                        "offset": 9716,
-                        "type": "u8"
-                      }
-                    },
-                    15
-                  ]
-                },
-                9
-              ]
-            },
-            "code": "save_bcd",
-            "message": "the save contains an invalid packed decimal value"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "bit_and": [
-                    {
-                      "read": {
-                        "offset": 9716,
-                        "type": "u8"
-                      }
-                    },
-                    240
-                  ]
-                },
-                144
-              ]
-            },
-            "code": "save_bcd",
-            "message": "the save contains an invalid packed decimal value"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "bit_and": [
-                    {
-                      "read": {
-                        "offset": 9717,
-                        "type": "u8"
-                      }
-                    },
-                    15
-                  ]
-                },
-                9
-              ]
-            },
-            "code": "save_bcd",
-            "message": "the save contains an invalid packed decimal value"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "bit_and": [
-                    {
-                      "read": {
-                        "offset": 9717,
-                        "type": "u8"
-                      }
-                    },
-                    240
-                  ]
-                },
-                144
-              ]
-            },
-            "code": "save_bcd",
-            "message": "the save contains an invalid packed decimal value"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "bit_and": [
-                    {
-                      "read": {
-                        "offset": 10320,
-                        "type": "u8"
-                      }
-                    },
-                    15
-                  ]
-                },
-                9
-              ]
-            },
-            "code": "save_bcd",
-            "message": "the save contains an invalid packed decimal value"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "bit_and": [
-                    {
-                      "read": {
-                        "offset": 10320,
-                        "type": "u8"
-                      }
-                    },
-                    240
-                  ]
-                },
-                144
-              ]
-            },
-            "code": "save_bcd",
-            "message": "the save contains an invalid packed decimal value"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "bit_and": [
-                    {
-                      "read": {
-                        "offset": 10321,
-                        "type": "u8"
-                      }
-                    },
-                    15
-                  ]
-                },
-                9
-              ]
-            },
-            "code": "save_bcd",
-            "message": "the save contains an invalid packed decimal value"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "bit_and": [
-                    {
-                      "read": {
-                        "offset": 10321,
-                        "type": "u8"
-                      }
-                    },
-                    240
-                  ]
-                },
-                144
-              ]
-            },
-            "code": "save_bcd",
-            "message": "the save contains an invalid packed decimal value"
-          },
-          {
-            "assert": {
-              "le": [
-                {
-                  "read": {
-                    "offset": 11503,
-                    "type": "u8",
-                    "relative": true
-                  }
-                },
-                59
-              ]
-            },
-            "code": "save_play_time",
-            "message": "play time must use values below 60 and stop at 255:00:00",
-            "repeat": {
-              "count": 3,
-              "stride": 1
-            }
-          },
-          {
-            "assert": {
-              "any": [
-                {
-                  "not": {
-                    "eq": [
-                      {
-                        "read": {
-                          "offset": 11501,
-                          "type": "u8"
-                        }
-                      },
-                      255
-                    ]
-                  }
-                },
-                {
-                  "all": [
-                    {
-                      "eq": [
-                        {
-                          "read": {
-                            "offset": 11503,
-                            "type": "u8"
-                          }
-                        },
-                        0
-                      ]
-                    },
-                    {
-                      "eq": [
-                        {
-                          "read": {
-                            "offset": 11504,
-                            "type": "u8"
-                          }
-                        },
-                        0
-                      ]
-                    },
-                    {
-                      "eq": [
-                        {
-                          "read": {
-                            "offset": 11505,
-                            "type": "u8"
-                          }
-                        },
-                        0
-                      ]
-                    }
-                  ]
-                }
-              ]
-            },
-            "code": "save_play_time",
-            "message": "play time must use values below 60 and stop at 255:00:00"
-          },
-          {
-            "assert": {
-              "any": [
-                {
-                  "eq": [
-                    {
-                      "read": {
-                        "offset": 10691,
-                        "type": "u8"
-                      }
-                    },
-                    84
-                  ]
-                },
-                {
-                  "all": [
-                    {
-                      "eq": [
-                        {
-                          "read": {
-                            "offset": 10691,
-                            "type": "u8"
-                          }
-                        },
-                        0
-                      ]
-                    },
-                    {
-                      "lt": [
-                        0,
-                        {
-                          "read": {
-                            "offset": 10012,
-                            "type": "u8"
-                          }
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ]
-            },
-            "code": "save_game_mismatch",
-            "message": "game discriminator mismatch"
-          }
-        ],
-        "reasons": [
-          "checksum_valid"
-        ],
-        "confidence": "high",
-        "selected_reason": false,
-        "empty_top_level_reasons": true
-      },
-      "checks": [
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 9673,
-                  "type": "u8"
-                }
-              },
-              20
-            ]
-          },
-          "code": "save_layout",
-          "message": "the save does not contain valid English inventory layout markers"
-        },
-        {
-          "assert": {
-            "eq": [
-              {
-                "at": {
-                  "offset": {
-                    "add": [
-                      9674,
-                      {
-                        "mul": [
-                          {
-                            "read": {
-                              "offset": 9673,
-                              "type": "u8"
-                            }
-                          },
-                          2
-                        ]
-                      }
-                    ]
-                  },
-                  "type": "u8"
-                }
-              },
-              255
-            ]
-          },
-          "code": "save_layout",
-          "message": "the save does not contain valid English inventory layout markers"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 10214,
-                  "type": "u8"
-                }
-              },
-              50
-            ]
-          },
-          "code": "save_layout",
-          "message": "the save does not contain valid English inventory layout markers"
-        },
-        {
-          "assert": {
-            "eq": [
-              {
-                "at": {
-                  "offset": {
-                    "add": [
-                      10215,
-                      {
-                        "mul": [
-                          {
-                            "read": {
-                              "offset": 10214,
-                              "type": "u8"
-                            }
-                          },
-                          2
-                        ]
-                      }
-                    ]
-                  },
-                  "type": "u8"
-                }
-              },
-              255
-            ]
-          },
-          "code": "save_layout",
-          "message": "the save does not contain valid English inventory layout markers"
-        },
-        {
-          "assert": {
-            "lt": [
-              {
-                "read": {
-                  "offset": 10316,
-                  "type": "u8",
-                  "mask": 127
-                }
-              },
-              12
-            ]
-          },
-          "code": "save_layout",
-          "message": "the save does not contain valid English inventory layout markers"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "bit_and": [
-                  {
-                    "read": {
-                      "offset": 9715,
-                      "type": "u8"
-                    }
-                  },
-                  15
-                ]
-              },
-              9
-            ]
-          },
-          "code": "save_bcd",
-          "message": "the save contains an invalid packed decimal value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "bit_and": [
-                  {
-                    "read": {
-                      "offset": 9715,
-                      "type": "u8"
-                    }
-                  },
-                  240
-                ]
-              },
-              144
-            ]
-          },
-          "code": "save_bcd",
-          "message": "the save contains an invalid packed decimal value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "bit_and": [
-                  {
-                    "read": {
-                      "offset": 9716,
-                      "type": "u8"
-                    }
-                  },
-                  15
-                ]
-              },
-              9
-            ]
-          },
-          "code": "save_bcd",
-          "message": "the save contains an invalid packed decimal value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "bit_and": [
-                  {
-                    "read": {
-                      "offset": 9716,
-                      "type": "u8"
-                    }
-                  },
-                  240
-                ]
-              },
-              144
-            ]
-          },
-          "code": "save_bcd",
-          "message": "the save contains an invalid packed decimal value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "bit_and": [
-                  {
-                    "read": {
-                      "offset": 9717,
-                      "type": "u8"
-                    }
-                  },
-                  15
-                ]
-              },
-              9
-            ]
-          },
-          "code": "save_bcd",
-          "message": "the save contains an invalid packed decimal value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "bit_and": [
-                  {
-                    "read": {
-                      "offset": 9717,
-                      "type": "u8"
-                    }
-                  },
-                  240
-                ]
-              },
-              144
-            ]
-          },
-          "code": "save_bcd",
-          "message": "the save contains an invalid packed decimal value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "bit_and": [
-                  {
-                    "read": {
-                      "offset": 10320,
-                      "type": "u8"
-                    }
-                  },
-                  15
-                ]
-              },
-              9
-            ]
-          },
-          "code": "save_bcd",
-          "message": "the save contains an invalid packed decimal value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "bit_and": [
-                  {
-                    "read": {
-                      "offset": 10320,
-                      "type": "u8"
-                    }
-                  },
-                  240
-                ]
-              },
-              144
-            ]
-          },
-          "code": "save_bcd",
-          "message": "the save contains an invalid packed decimal value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "bit_and": [
-                  {
-                    "read": {
-                      "offset": 10321,
-                      "type": "u8"
-                    }
-                  },
-                  15
-                ]
-              },
-              9
-            ]
-          },
-          "code": "save_bcd",
-          "message": "the save contains an invalid packed decimal value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "bit_and": [
-                  {
-                    "read": {
-                      "offset": 10321,
-                      "type": "u8"
-                    }
-                  },
-                  240
-                ]
-              },
-              144
-            ]
-          },
-          "code": "save_bcd",
-          "message": "the save contains an invalid packed decimal value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 11503,
-                  "type": "u8",
-                  "relative": true
-                }
-              },
-              59
-            ]
-          },
-          "code": "save_play_time",
-          "message": "play time must use values below 60 and stop at 255:00:00",
-          "repeat": {
-            "count": 3,
-            "stride": 1
-          }
-        },
-        {
-          "assert": {
-            "any": [
-              {
-                "not": {
-                  "eq": [
-                    {
-                      "read": {
-                        "offset": 11501,
-                        "type": "u8"
-                      }
-                    },
-                    255
-                  ]
-                }
-              },
-              {
-                "all": [
-                  {
-                    "eq": [
-                      {
-                        "read": {
-                          "offset": 11503,
-                          "type": "u8"
-                        }
-                      },
-                      0
-                    ]
-                  },
-                  {
-                    "eq": [
-                      {
-                        "read": {
-                          "offset": 11504,
-                          "type": "u8"
-                        }
-                      },
-                      0
-                    ]
-                  },
-                  {
-                    "eq": [
-                      {
-                        "read": {
-                          "offset": 11505,
-                          "type": "u8"
-                        }
-                      },
-                      0
-                    ]
-                  }
-                ]
-              }
-            ]
-          },
-          "code": "save_play_time",
-          "message": "play time must use values below 60 and stop at 255:00:00"
-        }
-      ],
-      "document_checks": [
-        {
-          "assert": {
-            "any": [
-              {
-                "eq": [
-                  {
-                    "read": {
-                      "offset": 10691,
-                      "type": "u8"
-                    }
-                  },
-                  84
-                ]
-              },
-              {
-                "all": [
-                  {
-                    "eq": [
-                      {
-                        "read": {
-                          "offset": 10691,
-                          "type": "u8"
-                        }
-                      },
-                      0
-                    ]
-                  },
-                  {
-                    "lt": [
-                      0,
-                      {
-                        "read": {
-                          "offset": 10012,
-                          "type": "u8"
-                        }
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          },
-          "code": "save_game_mismatch",
-          "message": "the save does not contain the Pokémon Yellow starter marker"
-        }
-      ],
-      "logical_size": 32768,
-      "layout": {
-        "groups": [
-          {
-            "id": "save",
-            "logical_offset": 9624,
-            "logical_length": 3980,
-            "copies": {
-              "kind": "fixed",
-              "candidates": [
-                {
-                  "spans": [
-                    {
-                      "logical_offset": 9624,
-                      "physical_offset": 9624,
-                      "length": 3980
-                    }
-                  ],
-                  "checksums": [
-                    {
-                      "algorithm": "sum8",
-                      "start": 9624,
-                      "length": 3979,
-                      "offset": 13603,
-                      "target": 255
-                    }
-                  ],
-                  "repairs": [],
-                  "predicates": [],
-                  "sections": [
-                    {
-                      "id": 0,
-                      "physical_offset": 9624,
-                      "checksum": {
-                        "algorithm": "sum8",
-                        "start": 9624,
-                        "length": 3979,
-                        "offset": 13603,
-                        "target": 255
-                      }
-                    }
-                  ]
-                }
-              ]
-            },
-            "selection": "first_valid",
-            "write": "selected",
-            "empty": [],
-            "empty_if_no_signature": false
-          }
-        ]
-      },
-      "recovery": {
-        "no_valid": {
-          "code": "save_checksum",
-          "message": "the save checksum is invalid"
-        },
-        "active_group": false,
-        "zero_counter": true
-      }
     }
-  ]
+  },
+  "choices": {
+    "text-speed": [
+      {
+        "name": "fast",
+        "value": 1
+      },
+      {
+        "name": "medium",
+        "value": 3
+      },
+      {
+        "name": "slow",
+        "value": 5
+      }
+    ]
+  }
 }

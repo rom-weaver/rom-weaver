@@ -14,7 +14,10 @@
           "label": "Play time (seconds)",
           "offset": 92,
           "type": "u32_le",
-          "copies": [76, 28],
+          "copies": [
+            76,
+            28
+          ],
           "description": "Total play time in seconds; updates both save previews"
         },
         {
@@ -22,7 +25,10 @@
           "label": "Level",
           "offset": 114,
           "type": "u8",
-          "copies": [84, 36],
+          "copies": [
+            84,
+            36
+          ],
           "description": "Current level; updates both save previews"
         },
         {
@@ -36,7 +42,10 @@
           "label": "Rings",
           "offset": 120,
           "type": "u32_le",
-          "copies": [80, 32],
+          "copies": [
+            80,
+            32
+          ],
           "description": "Current rings; updates both save previews"
         },
         {
@@ -117,7 +126,23 @@
       "signatures": [
         {
           "offset": 0,
-          "bytes": [67, 79, 68, 65, 83, 65, 86, 69, 95, 48, 48, 48, 48, 48, 98]
+          "bytes": [
+            67,
+            79,
+            68,
+            65,
+            83,
+            65,
+            86,
+            69,
+            95,
+            48,
+            48,
+            48,
+            48,
+            48,
+            98
+          ]
         }
       ],
       "checksums": [

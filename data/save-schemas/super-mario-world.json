@@ -1546,42 +1546,59 @@
       ],
       "generation": {
         "fill": 0,
+        "values": {
+          "slot_1.levels.level_28.flags": {
+            "u32": 3
+          },
+          "slot_1.levels.level_30.flags": {
+            "u32": 1
+          },
+          "slot_1.levels.level_4d.flags": {
+            "u32": 1
+          },
+          "slot_1.levels.level_52.flags": {
+            "u32": 1
+          },
+          "slot_1.levels.level_53.flags": {
+            "u32": 1
+          },
+          "slot_1.levels.level_57.flags": {
+            "u32": 4
+          },
+          "slot_1.levels.level_5b.flags": {
+            "u32": 8
+          },
+          "slot_1.levels.level_5c.flags": {
+            "u32": 2
+          }
+        },
         "patches": [
           {
-            "offset": 40,
-            "bytes": [3]
-          },
-          {
-            "offset": 77,
-            "bytes": [1]
-          },
-          {
-            "offset": 82,
-            "bytes": [1]
-          },
-          {
-            "offset": 83,
-            "bytes": [1]
-          },
-          {
-            "offset": 91,
-            "bytes": [8]
-          },
-          {
-            "offset": 92,
-            "bytes": [2]
-          },
-          {
-            "offset": 87,
-            "bytes": [4]
-          },
-          {
-            "offset": 48,
-            "bytes": [1]
-          },
-          {
             "offset": 111,
-            "bytes": [1, 1, 2, 0, 2, 0, 104, 0, 120, 0, 104, 0, 120, 0, 6, 0, 7, 0, 6, 0, 7, 0]
+            "bytes": [
+              1,
+              1,
+              2,
+              0,
+              2,
+              0,
+              104,
+              0,
+              120,
+              0,
+              104,
+              0,
+              120,
+              0,
+              6,
+              0,
+              7,
+              0,
+              6,
+              0,
+              7,
+              0
+            ]
           }
         ]
       }

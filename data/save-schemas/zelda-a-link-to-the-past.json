@@ -710,7 +710,9 @@
           "id": "slot_1.resources.rupees",
           "label": "Rupees",
           "offset": 866,
-          "copies": [864],
+          "copies": [
+            864
+          ],
           "type": "u16_le",
           "description": "Updates both rupee values stored by the game."
         },
@@ -902,27 +904,56 @@
         "patches": [
           {
             "offset": 524,
-            "bytes": [0, 240, 0, 240]
+            "bytes": [
+              0,
+              240,
+              0,
+              240
+            ]
           },
           {
             "offset": 876,
-            "bytes": [24, 24]
+            "bytes": [
+              24,
+              24
+            ]
           },
           {
             "offset": 889,
-            "bytes": [248]
+            "bytes": [
+              248
+            ]
           },
           {
             "offset": 985,
-            "bytes": [11, 0, 8, 0, 13, 0, 10, 0, 169, 0, 169, 0]
+            "bytes": [
+              11,
+              0,
+              8,
+              0,
+              13,
+              0,
+              10,
+              0,
+              169,
+              0,
+              169,
+              0
+            ]
           },
           {
             "offset": 997,
-            "bytes": [170, 85]
+            "bytes": [
+              170,
+              85
+            ]
           },
           {
             "offset": 1029,
-            "bytes": [255, 255]
+            "bytes": [
+              255,
+              255
+            ]
           }
         ]
       }
@@ -1635,7 +1666,9 @@
           "id": "slot_2.resources.rupees",
           "label": "Rupees",
           "offset": 2146,
-          "copies": [2144],
+          "copies": [
+            2144
+          ],
           "type": "u16_le",
           "description": "Updates both rupee values stored by the game."
         },
@@ -2531,7 +2564,9 @@
           "id": "slot_3.resources.rupees",
           "label": "Rupees",
           "offset": 3426,
-          "copies": [3424],
+          "copies": [
+            3424
+          ],
           "type": "u16_le",
           "description": "Updates both rupee values stored by the game."
         },
