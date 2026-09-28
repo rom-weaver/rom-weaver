@@ -20,6 +20,9 @@ For common disc tasks, use [Convert RVZ to ISO](convert-rvz-to-iso-browser.md) o
 1. Open [Compress](https://rom-weaver.com/compress).
 2. Add the files that you want to package or compress.
 3. For a CUE disc, add the CUE file and every referenced track file.
+4. When you add an archive or a compressed disc image, Compress extracts it. If it holds more than one file, select the files to add, then select **Add files**.
+
+To keep an archive packed inside a new ZIP or 7z, [package its folder with the CLI](work-with-archives.md#create-a-zip-or-7z).
 
 ZIP and 7z accept arbitrary file sets. CHD accepts compatible disc images and ROMs. RVZ accepts GameCube and Wii ISO images. Z3DS accepts Nintendo 3DS images.
 
@@ -39,8 +42,6 @@ ZIP and 7z accept arbitrary file sets. CHD accepts compatible disc images and RO
 </figure>
 
 The format picker offers outputs that match the selected inputs. Renaming a filename extension does not convert its contents.
-
-For conversion, extract the ROM or disc image first. Add the extracted files to Compress.
 
 Compress does not apply patches. Use [Apply](apply-rom-patches.md) when you need to change ROM contents.
 
