@@ -176,7 +176,7 @@ Not every command takes all five. `extract` has no `--no-extract`, since unpacki
 
 ## Native ROM testing
 
-`rom-weaver test INPUT` runs a bounded emulator smoke test on Linux x86-64 with GNU libc 2.39 or later. Native macOS and Windows runtimes are not available. The installed runtime defines the accepted systems and extensions. FCEUmm `.nes` inputs also receive an iNES or NES 2.0 header check.
+`rom-weaver test INPUT` runs a bounded emulator smoke test on Linux x86-64 with GNU libc 2.39 or later, macOS Intel/Apple Silicon, and Windows x64. The installed runtime defines the accepted systems and extensions. FCEUmm `.nes` inputs also receive an iNES or NES 2.0 header check.
 
 The command uses a matching optional runtime containing headless RetroArch and libretro cores. The RetroArch frontend is built without networking. It isolates configuration, cache, data, saves, states, system files, and input. A custom `--runtime-dir` can contain a different executable. rom-weaver does not add an operating-system network sandbox. A successful result means that the core started and produced a PNG after the requested frame budget. It does not guarantee controller input, later gameplay, or game completion.
 
@@ -201,7 +201,7 @@ The JSON result uses `details.status: "smoke-tested"`. It reports `requested_fra
 
 `rom-weaver emulator info` verifies the installed runtime again. It reports the directory, platform, RetroArch revision, and each core's ID, platform, revision, extensions, and firmware paths. It accepts `--runtime-dir DIR`.
 
-The default runtime directory is the versioned `emulators/VERSION/linux-x64-gnu` directory beside the native identify database. See [Test a ROM from the CLI](../how-to/test-roms-cli.md) for the procedure and [Native emulator runtime](../development/emulator-runtime.md) for the build and release contract.
+The default runtime directory is `emulators/VERSION/PLATFORM` beside the native identify database. The platform is `linux-x64-gnu`, `darwin-x64`, `darwin-arm64`, or `win32-x64`. It follows the CLI architecture, including when the CLI runs under operating-system emulation. See [Test a ROM from the CLI](../how-to/test-roms-cli.md) for the procedure and [Native emulator runtime](../development/emulator-runtime.md) for the build and release contract.
 
 ### Runtime cores
 
