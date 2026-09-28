@@ -352,6 +352,10 @@
     display: none;
   }
 }
+/* Compress */
+.rw-app .compress-files {
+  margin-block-start: var(--sp-m);
+}
 /* Save Editor */
 .rw-app .save-editor-file {
   margin-block-start: var(--sp-m);

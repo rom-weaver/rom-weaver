@@ -193,23 +193,29 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
     <section className="panel compress-tool" id="compress-container">
       <UnifiedDropZone
         addLabel={localizer.message("ui.drop.addFiles")}
-        afterDropZone={stagedFiles.map(({ file, id }) => (
-          <FileCard
-            key={id}
-            meta={<span className="fsize mono">{formatByteSize(file.size)}</span>}
-            name={file.name}
-            onRemove={
-              disabled
-                ? undefined
-                : () => {
-                    clearOutput();
-                    setError("");
-                    setStagedFiles((previous) => previous.filter((entry) => entry.id !== id));
+        afterDropZone={
+          stagedFiles.length ? (
+            <div className="cards compress-files">
+              {stagedFiles.map(({ file, id }) => (
+                <FileCard
+                  key={id}
+                  meta={<span className="fsize mono">{formatByteSize(file.size)}</span>}
+                  name={<span className="nm mono">{file.name}</span>}
+                  onRemove={
+                    disabled
+                      ? undefined
+                      : () => {
+                          clearOutput();
+                          setError("");
+                          setStagedFiles((previous) => previous.filter((entry) => entry.id !== id));
+                        }
                   }
-            }
-            removeLabel={localizer.message("ui.compress.removeFile", { name: file.name })}
-          />
-        ))}
+                  removeLabel={localizer.message("ui.compress.removeFile", { name: file.name })}
+                />
+              ))}
+            </div>
+          ) : null
+        }
         big={!files.length}
         disabled={disabled}
         heroLabel={localizer.message("ui.compress.drop")}
