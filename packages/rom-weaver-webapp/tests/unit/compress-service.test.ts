@@ -296,6 +296,40 @@ describe("compress service", () => {
       expect(entries.every((entry) => vi.mocked(entry.output.dispose).mock.calls.length === 0)).toBe(true);
     });
 
+    it("points a picked cue's folder references at the staged track names and keeps other bytes", async () => {
+      const cueBytes = new Uint8Array([
+        ...new TextEncoder().encode('TITLE "Caf'),
+        0xe9,
+        ...new TextEncoder().encode('"\r\nFILE "tracks\\track 01.bin" BINARY\r\nFILE "../other.bin" BINARY\r\n'),
+      ]);
+      const { runtime } = extractRuntime({
+        "Disc/game.cue": new File([cueBytes], "game.cue"),
+        "Disc/tracks/track 01.bin": file("t", "bin"),
+      });
+      const entries = await extractCompressEntries(
+        file("disc.zip"),
+        ["Disc/game.cue", "Disc/tracks/track 01.bin"],
+        runtime,
+      );
+
+      const cue = entries[0]?.file;
+      if (!cue) throw new Error("The cue entry is missing");
+      const rewritten = new Uint8Array(await cue.arrayBuffer());
+      expect(entries.map((entry) => entry.file.name)).toEqual(["game.cue", "track 01.bin"]);
+      expect(rewritten[10]).toBe(0xe9);
+      expect(new TextDecoder("latin1").decode(rewritten.slice(12))).toBe(
+        '\r\nFILE "track 01.bin" BINARY\r\nFILE "../other.bin" BINARY\r\n',
+      );
+    });
+
+    it("leaves a cue whose references already match unchanged", async () => {
+      const cue = file("game.cue", 'FILE "game.bin" BINARY\n');
+      const { runtime } = extractRuntime({ "game.cue": cue, "game.bin": file("b", "bin") });
+      const entries = await extractCompressEntries(file("disc.zip"), ["game.cue", "game.bin"], runtime);
+
+      expect(await entries[0]?.file.text()).toBe('FILE "game.bin" BINARY\n');
+    });
+
     it("selects names with wildcard characters literally", async () => {
       const { extract, runtime } = extractRuntime({});
       extract.mockImplementationOnce(async () => {

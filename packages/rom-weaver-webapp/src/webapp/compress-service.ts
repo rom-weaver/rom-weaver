@@ -14,6 +14,7 @@ import { getChdAutoCreateMode } from "../lib/input/rom-specific-file-utils.ts";
 import { isLikelyDiscImageSize } from "../lib/compression/disc-image-policy.ts";
 import { ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS } from "../lib/compression/rom-specific-format-support.ts";
 import { createLogger } from "../lib/logging.ts";
+import { replaceCueFileReferences } from "../workers/protocol/cue-file-utils.ts";
 import { isArchiveFileName } from "../public/react/file-classification.ts";
 import type { WorkflowRuntime } from "../types/workflow-runtime-adapter.ts";
 import type {
@@ -177,6 +178,49 @@ const disposeOpenedOutputs = async (outputs: PublicOutput[]) => {
 // Each `File` is the disk-backed snapshot of its stored copy, so it is never read into memory. Entries
 // keep their base name so CUE references still match; entries that share a base name in different
 // folders take their folder path instead, or every compress run rejects them as duplicates.
+const MAX_CUE_REWRITE_BYTES = 1024 * 1024;
+
+const resolveCueReference = (cuePath: string, reference: string): string => {
+  const folder = cuePath.split("/").slice(0, -1);
+  const parts: string[] = [];
+  for (const part of [...folder, ...reference.replace(/\\/g, "/").split("/")]) {
+    if (!part || part === ".") continue;
+    if (part === "..") parts.pop();
+    else parts.push(part);
+  }
+  return parts.join("/");
+};
+
+// CUE text is decoded one byte per character so every byte the rewrite does not touch round-trips
+// exactly, whatever code page the sheet was written in. Replacement names outside Latin-1 are UTF-8.
+const decodeBytes = (bytes: Uint8Array): string => Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
+const encodeBytes = (text: string): Uint8Array<ArrayBuffer> => {
+  const bytes: number[] = [];
+  for (const character of text) {
+    const code = character.codePointAt(0) ?? 0;
+    if (code < 256) bytes.push(code);
+    else bytes.push(...new TextEncoder().encode(character));
+  }
+  return new Uint8Array(bytes);
+};
+
+// Staged entries sit side by side under new names, so a CUE that reached its tracks through folders
+// MUST point at the staged names, or a ZIP or 7z made from them holds a sheet with missing tracks.
+const rewriteCueReferences = async (cue: File, cuePath: string, nameByPath: Map<string, string>): Promise<File> => {
+  if (cue.size > MAX_CUE_REWRITE_BYTES) return cue;
+  const text = decodeBytes(new Uint8Array(await cue.arrayBuffer()));
+  let changed = false;
+  const rewritten = replaceCueFileReferences(text, (reference) => {
+    const name = nameByPath.get(resolveCueReference(cuePath, reference).toLowerCase());
+    if (!name || name === reference) return undefined;
+    changed = true;
+    return name;
+  });
+  if (!changed) return cue;
+  logger.trace("cue.references-rewritten", { cuePath });
+  return new File([encodeBytes(rewritten)], cue.name, { lastModified: cue.lastModified, type: cue.type });
+};
+
 const toOpenedEntries = async (
   picked: Array<{ output: PublicOutput; path: string }>,
 ): Promise<OpenedCompressEntry[]> => {
@@ -185,17 +229,21 @@ const toOpenedEntries = async (
     const baseName = getEntryBaseName(path);
     baseNameCounts.set(baseName, (baseNameCounts.get(baseName) ?? 0) + 1);
   }
+  const nameOf = (path: string) => {
+    const baseName = getEntryBaseName(path);
+    return (baseNameCounts.get(baseName) ?? 0) > 1 ? path.split("/").filter(Boolean).join(" - ") : baseName;
+  };
+  const nameByPath = new Map(picked.map(({ path }) => [normalizeEntryPath(path).toLowerCase(), nameOf(path)]));
   const entries: OpenedCompressEntry[] = [];
   for (const { output, path } of picked) {
     const stored = await output.vfs.getFile?.(output.path);
     if (!stored) throw new Error(`Extracted file is not available: ${path}`);
-    const baseName = getEntryBaseName(path);
-    const name = (baseNameCounts.get(baseName) ?? 0) > 1 ? path.split("/").filter(Boolean).join(" - ") : baseName;
+    const file = new File([stored], nameOf(path), {
+      lastModified: stored.lastModified,
+      type: stored.type || "application/octet-stream",
+    });
     entries.push({
-      file: new File([stored], name, {
-        lastModified: stored.lastModified,
-        type: stored.type || "application/octet-stream",
-      }),
+      file: /\.cue$/i.test(path) ? await rewriteCueReferences(file, normalizeEntryPath(path), nameByPath) : file,
       output,
       path,
     });
