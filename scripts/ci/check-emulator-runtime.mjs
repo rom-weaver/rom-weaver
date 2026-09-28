@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { parseArgs } from "node:util";
 import { createFirstSampleAssets } from "../../packages/rom-weaver-webapp/scripts/first-sample-assets.mjs";
+import { platformConfig } from "../emulator-runtime/platform.mjs";
 
 const { values } = parseArgs({
   options: {
@@ -21,6 +22,9 @@ for (const name of ["cli", "archive", "scratch"]) {
 const cli = path.resolve(values.cli);
 const archive = path.resolve(values.archive);
 const scratch = path.resolve(values.scratch);
+const hostPlatform = `${process.platform}-${process.arch}${process.platform === "linux" ? "-gnu" : ""}`;
+platformConfig(hostPlatform);
+assert.equal(path.basename(archive), `rom-weaver-emulator-${hostPlatform}.tar.gz`);
 assert.ok(!fs.existsSync(scratch), `scratch directory already exists: ${scratch}`);
 fs.mkdirSync(scratch, { recursive: true });
 const environment = {
@@ -54,9 +58,11 @@ const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const digest = sha256(fs.readFileSync(archive));
 run(["emulator", "install", "--archive", archive, "--sha256", digest]);
 const installed = run(["emulator", "info"]);
+assert.equal(installed.details.platform, hostPlatform);
 const catalog = JSON.parse(
   fs.readFileSync(new URL("../emulator-runtime/sources.json", import.meta.url), "utf8"),
 );
+assert.ok(catalog.platforms.includes(hostPlatform));
 assert.deepEqual(
   installed.details.cores.map((core) => core.id).sort(),
   catalog.cores.map((core) => core.id).sort(),

@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { platformConfig } from "./platform.mjs";
 
 const runtimeDirectory = path.resolve(process.argv[2] ?? "");
 assert.ok(process.argv[2], "usage: verify-runtime.mjs RUNTIME_DIRECTORY");
@@ -59,12 +60,15 @@ exactKeys(
     : ["schemaVersion", "platform", "retroarch", "cores"],
   "manifest",
 );
-assert.equal(manifest.platform, "linux-x64-gnu");
+const platform = platformConfig(manifest.platform);
 exactKeys(manifest.retroarch, ["path", "revision", "sha256"], "retroarch");
-assert.equal(manifest.retroarch.path, "bin/retroarch");
+assert.equal(manifest.retroarch.path, platform.retroarchPath);
 assert.match(manifest.retroarch.revision, /^[0-9a-f]{40}$/);
 assert.match(manifest.retroarch.sha256, /^[0-9a-f]{64}$/);
-assert.equal(digest(resolveFile(manifest.retroarch.path, true)), manifest.retroarch.sha256);
+assert.equal(
+  digest(resolveFile(manifest.retroarch.path, manifest.platform !== "win32-x64")),
+  manifest.retroarch.sha256,
+);
 assert.ok(manifest.cores.length > 0 && manifest.cores.length <= 256);
 const ids = new Set();
 for (const core of manifest.cores) {
@@ -79,7 +83,7 @@ for (const core of manifest.cores) {
   assert.ok(!ids.has(core.id), `duplicate core: ${core.id}`);
   ids.add(core.id);
   assert.match(core.platform, /^[a-z0-9_-]{1,64}$/);
-  assert.equal(core.path, `cores/${core.id}_libretro.so`);
+  assert.equal(core.path, `cores/${core.id}_libretro${platform.coreExtension}`);
   assert.match(core.revision, /^[0-9a-f]{40}$/);
   assert.match(core.sha256, /^[0-9a-f]{64}$/);
   assert.equal(digest(resolveFile(core.path)), core.sha256);

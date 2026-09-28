@@ -4,18 +4,22 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
+import { coreRecipe, platformConfig } from "./platform.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const buildDirectory = path.resolve(process.argv[2]);
 const runtimeDirectory = path.join(buildDirectory, "runtime");
 const sourcePackage = path.join(buildDirectory, "source-package");
 const sources = JSON.parse(fs.readFileSync(path.join(scriptDirectory, "sources.json"), "utf8"));
+const platformName = process.env.EMULATOR_RUNTIME_PLATFORM;
+assert.ok(platformName, "EMULATOR_RUNTIME_PLATFORM is required");
+const platform = platformConfig(platformName);
 const jobs = process.env.JOBS ?? "2";
 assert.match(jobs, /^[1-9][0-9]*$/);
 const environment = {
   ...process.env,
-  CC: "cc",
-  CXX: "c++",
+  CC: process.env.CC ?? "cc",
+  CXX: process.env.CXX ?? "c++",
   TMPDIR: path.join(buildDirectory, "tmp"),
 };
 const run = (command, cwd = buildDirectory, capture = false) =>
@@ -50,7 +54,7 @@ const unpack = (source, destination) => {
   assert.equal(digest(archive), source.sha256, `source checksum mismatch: ${source.archive}`);
   copyFile(archive, path.join(sourcePackage, "archives", source.archive));
   fs.mkdirSync(destination, { recursive: true });
-  run(["tar", "-xzf", archive, "-C", destination, "--strip-components=1"]);
+  run(["tar", "--force-local", "-xzf", archive, "-C", destination, "--strip-components=1"]);
 };
 
 for (const core of sources.cores.filter((core) => core.id !== "fceumm")) {
@@ -68,16 +72,29 @@ for (const core of sources.cores.filter((core) => core.id !== "fceumm")) {
     );
     fs.writeFileSync(filename, contents.replace(patch.find, patch.replace));
   }
-  for (const step of core.build) {
+  const recipe = coreRecipe(core, platformName);
+  for (const patch of recipe.patches) {
+    const filename = inside(sourceDirectory, patch.path);
+    const contents = fs.readFileSync(filename, "utf8");
+    assert.ok(contents.includes(patch.find), `platform patch no longer applies: ${core.id}`);
+    fs.writeFileSync(filename, contents.replace(patch.find, patch.replace));
+  }
+  for (const step of recipe.build) {
     const cwd = step.cwd === "." ? sourceDirectory : inside(sourceDirectory, step.cwd);
     run(
-      step.command.map((argument) => argument.replaceAll("{jobs}", jobs)),
+      step.command.map((argument) =>
+        argument
+          .replaceAll("{jobs}", jobs)
+          .replaceAll("{cc}", environment.CC)
+          .replaceAll("{cxx}", environment.CXX)
+          .replaceAll("{make}", process.env.MAKE ?? "make"),
+      ),
       cwd,
     );
   }
   copyFile(
-    inside(sourceDirectory, core.output),
-    path.join(runtimeDirectory, "cores", `${core.id}_libretro.so`),
+    inside(sourceDirectory, recipe.output),
+    path.join(runtimeDirectory, "cores", `${core.id}_libretro${platform.coreExtension}`),
   );
   for (const license of core.licenses) {
     copyFile(
@@ -108,7 +125,11 @@ const fileList = (directory) => {
     .sort();
 };
 const cores = sources.cores.map((core) => {
-  const filename = path.join(runtimeDirectory, "cores", `${core.id}_libretro.so`);
+  const filename = path.join(
+    runtimeDirectory,
+    "cores",
+    `${core.id}_libretro${platform.coreExtension}`,
+  );
   const info = JSON.parse(
     run(["python3", path.join(scriptDirectory, "inspect-core.py"), filename], buildDirectory, true),
   );
@@ -119,7 +140,7 @@ const cores = sources.cores.map((core) => {
   return {
     id: core.id,
     platform: core.platform,
-    path: `cores/${core.id}_libretro.so`,
+    path: `cores/${core.id}_libretro${platform.coreExtension}`,
     revision: core.revision,
     sha256: digest(filename),
     extensions: core.extensions,
@@ -136,11 +157,11 @@ fs.writeFileSync(
   `${JSON.stringify(
     {
       schemaVersion: 2,
-      platform: sources.platform,
+      platform: platformName,
       retroarch: {
-        path: "bin/retroarch",
+        path: platform.retroarchPath,
         revision: sources.retroarch.revision,
-        sha256: digest(path.join(runtimeDirectory, "bin", "retroarch")),
+        sha256: digest(path.join(runtimeDirectory, platform.retroarchPath)),
       },
       cores,
       systemFiles,
