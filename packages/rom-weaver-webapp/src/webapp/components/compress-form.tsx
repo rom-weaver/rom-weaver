@@ -45,7 +45,7 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
   const [output, setOutput] = useState<PublicOutput | null>(null);
   const [busy, setBusy] = useState(false);
   const [downloadBusy, setDownloadBusy] = useState(false);
-  const [percent, setPercent] = useState<number | null>(null);
+  const [progress, setProgress] = useState<{ label: string; percent: number | null } | null>(null);
   const [error, setError] = useState("");
   const outputRef = useRef<PublicOutput | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -137,7 +137,7 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
     abortRef.current = abort;
     clearOutput();
     setBusy(true);
-    setPercent(null);
+    setProgress(null);
     setError("");
     try {
       const { browserRuntime } = await import("../../platform/browser/workflow-runtime.ts");
@@ -150,8 +150,11 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
           signal: abort.signal,
           onLog: options.logging?.sink,
           onProgress: (event) => {
-            if (runId === runIdRef.current && !abort.signal.aborted && typeof event.percent === "number")
-              setPercent(event.percent);
+            if (runId !== runIdRef.current || abort.signal.aborted) return;
+            setProgress((previous) => ({
+              label: event.label || previous?.label || "",
+              percent: typeof event.percent === "number" ? event.percent : (previous?.percent ?? null),
+            }));
           },
         },
         browserRuntime,
@@ -169,7 +172,7 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
       if (runId === runIdRef.current) {
         abortRef.current = null;
         setBusy(false);
-        setPercent(null);
+        setProgress(null);
       }
     }
   };
@@ -240,9 +243,9 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
               progress={
                 busy
                   ? {
-                      label: localizer.message("ui.compress.running"),
-                      percent,
-                      value: percent === null ? "" : `${Math.round(percent)}%`,
+                      label: progress?.label || localizer.message("ui.compress.running"),
+                      percent: progress?.percent ?? null,
+                      value: typeof progress?.percent === "number" ? `${Math.round(progress.percent)}%` : "",
                       onCancel: () => abortRef.current?.abort(),
                     }
                   : undefined

@@ -83,6 +83,7 @@ describe("CompressForm", () => {
     await ready();
     fireEvent.click(screen.getByRole("button", { name: "Compress", exact: true }));
     expect(await screen.findByText("40%")).toBeTruthy();
+    expect(screen.getByText("runtime details")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
     expect(signal?.aborted).toBe(true);
     await act(async () => finish(late));
