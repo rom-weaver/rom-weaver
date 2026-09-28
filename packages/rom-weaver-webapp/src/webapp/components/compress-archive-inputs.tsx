@@ -19,7 +19,8 @@ const logger = createLogger("compress-archive-inputs");
 /**
  * Opens dropped archives and compressed disc images for Compress, the way Apply opens its inputs:
  * extract every entry, ask which ones to add, then stage the chosen files. The picker always opens,
- * even for one entry, because its Keep packed switch is the only way to add the archive unchanged.
+ * even for one entry, because its Keep packed switch adds a readable archive unchanged. An archive
+ * that cannot be opened is added unchanged with an error.
  * The hook owns each staged entry's stored copy until `release` or unmount disposes it.
  */
 const useCompressArchiveInputs = ({ nextId, onAdd, onError }: CompressArchiveInputsOptions) => {
@@ -98,7 +99,11 @@ const useCompressArchiveInputs = ({ nextId, onAdd, onError }: CompressArchiveInp
       } catch (cause) {
         if (abort.signal.aborted || !mountedRef.current) return;
         if (getErrorCode(cause) === "WORKFLOW_SELECTION_SKIPPED") return;
-        onError(cause instanceof Error ? cause.message : String(cause));
+        // A file that cannot be opened still packs as-is, so it is added unchanged rather than dropped.
+        const reason = cause instanceof Error ? cause.message : String(cause);
+        logger.debug("open.failed; adding unchanged", { fileName: file.name, reason });
+        onAdd([{ file, id: nextId(), sourceName: file.name }]);
+        onError(`${file.name} could not be opened, so it was added unchanged. ${reason}`);
       } finally {
         abortsRef.current.delete(pendingId);
         openedRef.current.delete(pendingId);

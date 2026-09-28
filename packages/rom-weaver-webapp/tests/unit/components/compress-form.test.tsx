@@ -194,11 +194,23 @@ describe("CompressForm", () => {
       addFiles([new File(["zip"], "game.zip")]);
 
       fireEvent.click(await screen.findByRole("switch", { name: "Keep packed" }));
-      fireEvent.click(screen.getByRole("button", { name: "Add game.zip" }));
+      fireEvent.click(screen.getByRole("button", { name: "Add archive" }));
       await ready();
       expect(screen.getByRole("button", { name: "Remove game.zip", exact: true })).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Remove game.sfc", exact: true })).toBeNull();
       await waitFor(() => expect(entries.every((entry) => entry.output.dispose.mock.calls.length === 1)).toBe(true));
+    });
+
+    it("adds an archive that cannot be opened unchanged and says why", async () => {
+      service.openCompressInput.mockRejectedValue(new Error("Unsupported archive"));
+      render(<CompressForm />);
+      addFiles([new File(["broken"], "broken.zip")]);
+
+      await ready();
+      expect(screen.getByRole("button", { name: "Remove broken.zip", exact: true })).toBeTruthy();
+      expect(screen.getByRole("alert").textContent).toContain(
+        "broken.zip could not be opened, so it was added unchanged. Unsupported archive",
+      );
     });
 
     it("cancels an archive that is still opening when its card is removed", async () => {
