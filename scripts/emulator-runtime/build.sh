@@ -8,6 +8,8 @@ usage() {
 
 output_dir=
 build_dir=
+configure_host=
+retroarch_ldflags=${LDFLAGS:-}
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --output-dir) [ "$#" -ge 2 ] || usage; output_dir=$2; shift 2 ;;
@@ -17,17 +19,39 @@ while [ "$#" -gt 0 ]; do
 done
 [ -n "$output_dir" ] && [ -n "$build_dir" ] || usage
 
-for command in cc c++ cmake curl gzip make nasm node python3 sha256sum tar; do
+case $(uname -s):$(uname -m) in
+  Linux:x86_64)
+    platform=linux-x64-gnu; cc=cc; cxx=c++; make_command='make'
+    tar_command=tar; sha256_command=sha256sum; executable=retroarch
+    core_extension=so
+    ;;
+  Darwin:x86_64)
+    platform=darwin-x64; cc=clang; cxx=clang++; make_command=gmake
+    tar_command=gtar; sha256_command=gsha256sum; executable=retroarch
+    core_extension=dylib
+    ;;
+  Darwin:arm64)
+    platform=darwin-arm64; cc=clang; cxx=clang++; make_command=gmake
+    tar_command=gtar; sha256_command=gsha256sum; executable=retroarch
+    core_extension=dylib
+    ;;
+  MINGW*:x86_64|MSYS_NT*:x86_64)
+    platform=win32-x64; cc=gcc; cxx=g++; make_command='make'
+    tar_command=tar; sha256_command=sha256sum; executable=retroarch.exe
+    core_extension=dll
+    configure_host=x86_64-w64-mingw32
+    retroarch_ldflags="$retroarch_ldflags -lole32 -lcomdlg32 -lgdi32"
+    ;;
+  *) echo "unsupported emulator runtime host: $(uname -s):$(uname -m)" >&2; exit 1 ;;
+esac
+
+for command in "$cc" "$cxx" cmake curl gzip "$make_command" nasm node python3 \
+  "$sha256_command" "$tar_command"; do
   command -v "$command" >/dev/null 2>&1 || {
     echo "required command is unavailable: $command" >&2
     exit 1
   }
 done
-
-case $(uname -s):$(uname -m) in
-  Linux:x86_64) ;;
-  *) echo "this source lock supports only Linux x86_64" >&2; exit 1 ;;
-esac
 
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 mkdir -p "$output_dir" "$build_dir"
@@ -114,12 +138,20 @@ fs.writeFileSync(file, source.replace(probe, `GIT_VERSION := ${process.argv[3]}`
 NODE
 
 cd "$build_dir/src/retroarch"
-CC=cc CXX=c++ ./configure \
+# Cocoa selects NSApplicationMain even with null video. These probes have no
+# configure switches; their environment values keep the command-line entry point.
+HAVE_COCOA=no HAVE_COCOA_METAL=no CC="$cc" CXX="$cxx" \
+  LDFLAGS="$retroarch_ldflags" sh ./configure \
+  ${configure_host:+"--host=$configure_host"} \
   --disable-bluetooth --enable-rgui --disable-materialui \
   --disable-xmb --disable-ozone \
   --disable-video_filter --disable-dsp_filter --disable-overlay \
   --disable-sdl --disable-sdl2 --disable-x11 --disable-wayland \
   --disable-kms --disable-egl --disable-opengl --disable-vulkan \
+  --disable-metal --disable-d3d8 --disable-d3d9 --disable-d3d10 \
+  --disable-d3d11 --disable-d3d12 --disable-d3dx --disable-dinput \
+  --disable-dsound --disable-wasapi --disable-winmm --disable-xaudio \
+  --disable-coreaudio --disable-coreaudio3 \
   --disable-alsa --disable-tinyalsa --disable-oss --disable-rsound \
   --disable-roar --disable-jack --disable-pipewire --disable-pulse \
   --disable-libusb --disable-dbus --disable-systemd --disable-udev \
@@ -135,40 +167,45 @@ CC=cc CXX=c++ ./configure \
   --disable-test_drivers --disable-imageviewer --disable-bsv_movie \
   --disable-runahead --disable-rewind --disable-cheats --disable-patch \
   --enable-builtinzlib
-make -j"${JOBS:-2}"
+"$make_command" -j"${JOBS:-2}"
 
 cd "$build_dir/src/fceumm"
-make -f Makefile.libretro -j"${JOBS:-2}" CC=cc
+"$make_command" -f Makefile.libretro -j"${JOBS:-2}" \
+  "platform=$(case "$platform" in linux-*) echo unix;; darwin-*) echo osx;; win32-*) echo win;; esac)" \
+  "CC=$cc" "CXX=$cxx"
 
-install -m 0755 "$build_dir/src/retroarch/retroarch" \
-  "$build_dir/runtime/bin/retroarch"
-install -m 0755 "$build_dir/src/fceumm/fceumm_libretro.so" \
-  "$build_dir/runtime/cores/fceumm_libretro.so"
+install -m 0755 "$build_dir/src/retroarch/$executable" \
+  "$build_dir/runtime/bin/$executable"
+install -m 0755 "$build_dir/src/fceumm/fceumm_libretro.$core_extension" \
+  "$build_dir/runtime/cores/fceumm_libretro.$core_extension"
 install -m 0644 "$build_dir/src/retroarch/COPYING" \
   "$build_dir/runtime/licenses/RetroArch-COPYING"
 install -m 0644 "$build_dir/src/fceumm/Copying" \
   "$build_dir/runtime/licenses/FCEUmm-Copying"
 
-node "$script_dir/build-cores.mjs" "$build_dir"
+EMULATOR_RUNTIME_PLATFORM="$platform" CC="$cc" CXX="$cxx" \
+  MAKE="$make_command" node "$script_dir/build-cores.mjs" "$build_dir"
 
 node "$script_dir/verify-runtime.mjs" "$build_dir/runtime"
+node "$script_dir/verify-dependencies.mjs" "$build_dir/runtime"
 
-runtime_archive="$output_dir/rom-weaver-emulator-linux-x64-gnu.tar.gz"
-tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
+runtime_archive="$output_dir/rom-weaver-emulator-$platform.tar.gz"
+"$tar_command" --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
   -C "$build_dir/runtime" -cf - . | gzip -n >"$runtime_archive"
-runtime_digest=$(sha256sum "$runtime_archive" | cut -d ' ' -f 1)
+runtime_digest=$("$sha256_command" "$runtime_archive" | cut -d ' ' -f 1)
 printf '%s  %s\n' "$runtime_digest" "$(basename "$runtime_archive")" \
   >"$runtime_archive.sha256"
 
 cp "$script_dir/build.sh" "$script_dir/build-cores.mjs" \
   "$script_dir/inspect-core.py" "$script_dir/smoke.sh" \
   "$script_dir/verify-runtime.mjs" "$script_dir/sources.json" \
+  "$script_dir/verify-dependencies.mjs" "$script_dir/platform.mjs" \
   "$build_dir/source-package/"
 cp "$build_dir/runtime/licenses/RetroArch-COPYING" \
   "$build_dir/runtime/licenses/FCEUmm-Copying" \
   "$build_dir/source-package/licenses/"
-source_archive="$output_dir/rom-weaver-emulator-sources.tar.gz"
-tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
+source_archive="$output_dir/rom-weaver-emulator-sources-$platform.tar.gz"
+"$tar_command" --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner \
   -C "$build_dir/source-package" -cf - . | gzip -n >"$source_archive"
 
 echo "runtime archive: $runtime_archive"
