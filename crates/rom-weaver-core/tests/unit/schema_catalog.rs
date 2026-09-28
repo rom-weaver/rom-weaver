@@ -1,6 +1,6 @@
 use std::{collections::HashSet, fs, path::Path};
 
-use super::{SaveDetectionInput, SaveEdit, SaveGameRegistry, SaveValue};
+use super::super::{SaveDetectionInput, SaveEdit, SaveGameRegistry, SaveValue};
 
 #[test]
 fn every_catalog_pack_loads_and_builtins_match_the_default_registry() {
@@ -23,9 +23,20 @@ fn every_catalog_pack_loads_and_builtins_match_the_default_registry() {
             continue;
         }
         let bytes = fs::read(&path).unwrap();
-        let pack: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         let schema = super::SaveSchemaPack::from_json(&bytes)
             .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+        let generation_ids = schema
+            .games
+            .iter()
+            .filter(|game| game.generation.is_some())
+            .map(|game| game.id.clone())
+            .collect::<Vec<_>>();
+        for game in &schema.games {
+            let id = &game.id;
+            assert!(ids.insert(id.clone()), "duplicate catalog game: {id}");
+            assert!(!game.fields.is_empty(), "empty catalog game: {id}");
+            count += 1;
+        }
         if path
             .file_name()
             .unwrap()
@@ -43,29 +54,10 @@ fn every_catalog_pack_loads_and_builtins_match_the_default_registry() {
                 .with_schema_pack_json(&bytes)
                 .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
         }
-        for game in pack["games"].as_array().unwrap() {
-            let id = game["id"].as_str().unwrap();
-            assert!(ids.insert(id.to_owned()), "duplicate catalog game: {id}");
-            assert!(
-                !game["fields"].as_array().unwrap().is_empty()
-                    || game["records"]
-                        .as_array()
-                        .is_some_and(|records| records.iter().any(|record| {
-                            pack["records"][record["record"].as_str().unwrap()]
-                                .as_array()
-                                .is_some_and(|fields| !fields.is_empty())
-                        })),
-                "empty catalog game: {id}"
-            );
-            if game
-                .get("generation")
-                .is_some_and(|generation| !generation.is_null())
-            {
-                registry
-                    .generate(id)
-                    .unwrap_or_else(|error| panic!("{id}: {error}"));
-            }
-            count += 1;
+        for id in generation_ids {
+            registry
+                .generate(&id)
+                .unwrap_or_else(|error| panic!("{id}: {error}"));
         }
     }
     assert!(count > 1);

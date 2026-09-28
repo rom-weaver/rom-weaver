@@ -289,6 +289,11 @@ impl FieldBehavior {
 
 impl FieldSchema {
     pub(super) fn present(&self, bytes: &[u8]) -> Result<bool> {
+        for guard in &self.array_guards {
+            if !guard.visible(bytes)? {
+                return Ok(false);
+            }
+        }
         self.behavior
             .present_when
             .as_ref()

@@ -1,11 +1,18 @@
 #[cfg(test)]
 mod advanced_parity;
+mod authoring;
 #[cfg(test)]
 mod early_parity;
 mod field;
+mod generation;
+#[cfg(test)]
+#[path = "../../tests/unit/schema_catalog.rs"]
+mod schema_catalog_tests;
+use generation::{Generation, RawGeneration};
 mod layout;
 #[cfg(test)]
 mod parity;
+mod records;
 mod rules;
 #[cfg(test)]
 mod rules_tests;
@@ -52,7 +59,8 @@ impl SaveSchemaPack {
         if bytes.len() > MAX_PACK_BYTES {
             return Err(invalid("the save schema pack exceeds 2 MiB"));
         }
-        let raw: RawPack = serde_json::from_slice(bytes)
+        let value = authoring::from_json(bytes)?;
+        let raw: RawPack = serde_json::from_value(authoring::normalize(value)?)
             .map_err(|error| invalid_owned(format!("invalid save schema JSON: {error}")))?;
         if let Some(schema) = &raw.schema {
             bounded_text_allow_empty(schema, "$schema")?;
@@ -66,7 +74,7 @@ impl SaveSchemaPack {
         for (name, codec) in &raw.text_codecs {
             codec.validate(name)?;
         }
-        validate_record_templates(&raw.records)?;
+        records::validate_templates(&raw.records)?;
         if raw.games.is_empty() || raw.games.len() > MAX_GAMES {
             return Err(invalid("a save schema pack must contain 1 to 64 games"));
         }
@@ -82,7 +90,7 @@ impl SaveSchemaPack {
             if !ids.insert(game.id.clone()) {
                 return Err(invalid("save schema game IDs must be unique"));
             }
-            expand_records(&mut game, &raw.records)?;
+            records::expand(&mut game, &raw.records)?;
             let mut game = GameSchema::build(game)?;
             for field in &mut game.fields {
                 field.bind_codec(&codecs)?;
@@ -94,6 +102,9 @@ impl SaveSchemaPack {
                 return Err(invalid("schema integrity work exceeds 64 MiB"));
             }
             games.push(game);
+        }
+        for game in &games {
+            game.validate_generation()?;
         }
         debug!(games = games.len(), "loaded save schema pack");
         Ok(Self { games })
@@ -127,23 +138,7 @@ impl SaveGameHandler for SchemaSaveHandler {
 
     fn generate(&self, game: &SaveGameIdentity) -> Result<Vec<u8>> {
         self.game.check_identity(game)?;
-        let generation = self.game.generation.as_ref().ok_or_else(|| {
-            validation(
-                "save_generation_unsupported",
-                "this schema has no save initializer",
-            )
-        })?;
-        let mut bytes = vec![generation.fill; self.game.save_size];
-        for patch in &generation.patches {
-            bytes[patch.offset..patch.offset + patch.bytes.len()].copy_from_slice(&patch.bytes);
-        }
-        if self.game.runtime.layout.is_none() {
-            self.game.repair_integrity(&mut bytes);
-        }
-        let input = self.game.input(bytes.clone());
-        self.game.parse_document(&input, game)?;
-        debug!(game = %self.game.id, "generated schema save");
-        Ok(bytes)
+        self.game.generate_save()
     }
 
     fn recognize(&self, input: &SaveDetectionInput) -> SaveRecognition {
@@ -237,7 +232,7 @@ struct RawPack {
     schema_version: u32,
     pack_revision: Option<u32>,
     #[serde(default)]
-    records: BTreeMap<String, Vec<RawField>>,
+    records: BTreeMap<String, records::Record>,
     #[serde(default)]
     text_codecs: BTreeMap<String, text::TextCodec>,
     games: Vec<RawGame>,
@@ -254,7 +249,7 @@ struct RawGame {
     save_size: usize,
     fields: Vec<RawField>,
     #[serde(default)]
-    records: Vec<RawRecordInstance>,
+    records: Vec<records::Instance>,
     #[serde(default)]
     signatures: Vec<RawSignature>,
     #[serde(default)]
@@ -290,6 +285,8 @@ struct RawField {
     mask: Option<u32>,
     #[serde(flatten)]
     behavior: field::FieldBehavior,
+    #[serde(skip)]
+    array_guards: Vec<records::ArrayGuard>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -297,26 +294,6 @@ struct RawField {
 struct RawChoice {
     name: String,
     value: i64,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawRecordInstance {
-    record: String,
-    offset: usize,
-    id: String,
-    #[serde(default = "one")]
-    count: usize,
-    stride: Option<usize>,
-    stride_bits: Option<usize>,
-    #[serde(default)]
-    index_start: usize,
-    #[serde(default)]
-    index_width: u8,
-}
-
-fn one() -> usize {
-    1
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -422,21 +399,6 @@ struct RawMirror {
     validate: Option<bool>,
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawGeneration {
-    fill: u8,
-    #[serde(default)]
-    patches: Vec<RawPatch>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawPatch {
-    offset: usize,
-    bytes: Vec<u8>,
-}
-
 #[derive(Clone, Debug)]
 struct GameSchema {
     id: String,
@@ -469,6 +431,7 @@ struct FieldSchema {
     mask: Option<u32>,
     behavior: field::FieldBehavior,
     codec: Option<Arc<text::TextCodec>>,
+    array_guards: Vec<records::ArrayGuard>,
 }
 
 #[derive(Clone, Debug)]
@@ -499,278 +462,6 @@ struct Mirror {
     length: usize,
     validate: bool,
 }
-#[derive(Clone, Debug)]
-struct Generation {
-    fill: u8,
-    patches: Vec<SpanBytes>,
-}
-
-fn validate_record_templates(records: &BTreeMap<String, Vec<RawField>>) -> Result<()> {
-    if records.len() > MAX_COMPONENTS {
-        return Err(invalid("record templates exceed 4096 entries"));
-    }
-    let mut field_count = 0usize;
-    for (name, fields) in records {
-        validate_field_id(name)?;
-        if fields.is_empty() {
-            return Err(invalid("record templates must contain at least one field"));
-        }
-        field_count = field_count
-            .checked_add(fields.len())
-            .filter(|count| *count <= MAX_FIELDS)
-            .ok_or_else(|| invalid("record template fields exceed 4096 entries"))?;
-        for field in fields {
-            let mut rendered = field.clone();
-            rendered.id = render_index(&rendered.id, "0", "1");
-            rendered.label = render_index(&rendered.label, "0", "1");
-            rendered.description = render_index(&rendered.description, "0", "1");
-            FieldSchema::build(rendered, MAX_SAVE_SIZE)?;
-        }
-    }
-    Ok(())
-}
-
-fn expand_records(game: &mut RawGame, records: &BTreeMap<String, Vec<RawField>>) -> Result<()> {
-    if game.records.len() > MAX_COMPONENTS {
-        return Err(invalid("record instances exceed 4096 entries"));
-    }
-    let mut expanded_count = game.fields.len();
-    let mut metadata_bytes = game.fields.iter().try_fold(0usize, |total, field| {
-        expanded_field_bytes(field, "", "", "").and_then(|bytes| {
-            total
-                .checked_add(bytes)
-                .filter(|total| *total <= MAX_EXPANDED_METADATA_BYTES)
-                .ok_or_else(|| invalid("expanded record metadata exceeds 2 MiB"))
-        })
-    })?;
-    let mut storage_count = game.fields.iter().try_fold(0usize, |count, field| {
-        count
-            .checked_add(field.copies.len() + 1)
-            .filter(|count| *count <= MAX_FIELDS)
-            .ok_or_else(|| invalid("fields and their copies exceed 4096 storage locations"))
-    })?;
-    for instance in &game.records {
-        let template = records
-            .get(&instance.record)
-            .ok_or_else(|| invalid("record instance references an unknown template"))?;
-        if instance.count == 0 || instance.count > MAX_RECORD_COUNT {
-            return Err(invalid("record instance count must be from 1 to 4096"));
-        }
-        if instance.index_width > 10 {
-            return Err(invalid("record instance index_width must be at most 10"));
-        }
-        if instance.index_start > u32::MAX as usize {
-            return Err(invalid("record instance index_start must fit u32"));
-        }
-        if !instance.id.is_empty() {
-            validate_field_id(&instance.id)?;
-        }
-        if instance.stride.is_some() && instance.stride_bits.is_some() {
-            return Err(invalid(
-                "record instance stride and stride_bits are mutually exclusive",
-            ));
-        }
-        if instance.count > 1
-            && instance.stride.is_none_or(|stride| stride == 0)
-            && instance.stride_bits.is_none_or(|stride| stride == 0)
-        {
-            return Err(invalid(
-                "repeated record instances require a positive stride or stride_bits",
-            ));
-        }
-        if instance.stride == Some(0) || instance.stride_bits == Some(0) {
-            return Err(invalid("record instance strides must be positive"));
-        }
-        if instance.stride.is_some_and(|stride| stride > MAX_SAVE_SIZE)
-            || instance
-                .stride_bits
-                .is_some_and(|stride| stride > MAX_SAVE_SIZE * 8)
-        {
-            return Err(invalid(
-                "record instance stride exceeds the save-size limit",
-            ));
-        }
-        if instance.stride_bits.is_some()
-            && template
-                .iter()
-                .any(|field| !matches!(field.storage, Storage::Bit))
-        {
-            return Err(invalid(
-                "stride_bits requires a record containing only bit fields",
-            ));
-        }
-        let additions = template
-            .len()
-            .checked_mul(instance.count)
-            .ok_or_else(|| invalid("expanded record fields exceed 4096 entries"))?;
-        expanded_count = expanded_count
-            .checked_add(additions)
-            .filter(|count| *count <= MAX_FIELDS)
-            .ok_or_else(|| invalid("expanded record fields exceed 4096 entries"))?;
-        let template_storage = template.iter().try_fold(0usize, |count, field| {
-            count
-                .checked_add(field.copies.len() + 1)
-                .ok_or_else(|| invalid("expanded record storage exceeds 4096 locations"))
-        })?;
-        storage_count = template_storage
-            .checked_mul(instance.count)
-            .and_then(|count| storage_count.checked_add(count))
-            .filter(|count| *count <= MAX_FIELDS)
-            .ok_or_else(|| invalid("expanded record storage exceeds 4096 locations"))?;
-        for repetition in 0..instance.count {
-            let index = instance
-                .index_start
-                .checked_add(repetition)
-                .filter(|index| *index <= u32::MAX as usize)
-                .ok_or_else(|| invalid("record index overflows"))?;
-            let index = if instance.index_width == 0 {
-                index.to_string()
-            } else {
-                format!("{index:0width$}", width = usize::from(instance.index_width))
-            };
-            let ordinal = (repetition + 1).to_string();
-            for field in template {
-                metadata_bytes = metadata_bytes
-                    .checked_add(expanded_field_bytes(field, &instance.id, &index, &ordinal)?)
-                    .filter(|total| *total <= MAX_EXPANDED_METADATA_BYTES)
-                    .ok_or_else(|| invalid("expanded record metadata exceeds 2 MiB"))?;
-            }
-        }
-    }
-    let mut expanded = Vec::with_capacity(expanded_count);
-    expanded.append(&mut game.fields);
-    for instance in &game.records {
-        let template = &records[&instance.record];
-        for repetition in 0..instance.count {
-            let index = instance
-                .index_start
-                .checked_add(repetition)
-                .filter(|index| *index <= u32::MAX as usize)
-                .ok_or_else(|| invalid("record index overflows"))?;
-            let index = if instance.index_width == 0 {
-                index.to_string()
-            } else {
-                format!("{index:0width$}", width = usize::from(instance.index_width))
-            };
-            let ordinal = (repetition + 1).to_string();
-            for source in template {
-                let mut field = source.clone();
-                field.id = if instance.id.is_empty() {
-                    render_index(&field.id, &index, &ordinal)
-                } else {
-                    format!(
-                        "{}.{}",
-                        instance.id,
-                        render_index(&field.id, &index, &ordinal)
-                    )
-                };
-                let repetition_bits = repetition
-                    .checked_mul(
-                        instance
-                            .stride_bits
-                            .unwrap_or_else(|| instance.stride.unwrap_or(0) * 8),
-                    )
-                    .ok_or_else(|| invalid("record displacement overflows"))?;
-                field.behavior.shift(
-                    instance.offset,
-                    repetition_bits,
-                    instance.stride_bits.is_some(),
-                )?;
-                field.label = render_index(&field.label, &index, &ordinal);
-                field.description = render_index(&field.description, &index, &ordinal);
-                if let Some(group) = &mut field.behavior.group {
-                    *group = render_index(group, &index, &ordinal);
-                }
-                if let Some(stride_bits) = instance.stride_bits {
-                    shift_bit_field(&mut field, instance.offset, repetition, stride_bits)?;
-                } else {
-                    let stride = instance.stride.unwrap_or(0);
-                    let base = repetition
-                        .checked_mul(stride)
-                        .and_then(|value| instance.offset.checked_add(value))
-                        .ok_or_else(|| invalid("record field offset overflows"))?;
-                    field.offset = base
-                        .checked_add(field.offset)
-                        .ok_or_else(|| invalid("record field offset overflows"))?;
-                    for copy in &mut field.copies {
-                        *copy = base
-                            .checked_add(*copy)
-                            .ok_or_else(|| invalid("record field copy offset overflows"))?;
-                    }
-                }
-                expanded.push(field);
-            }
-        }
-    }
-    game.fields = expanded;
-    Ok(())
-}
-
-/// Substitutes `{index}` (the instance index) and `{ordinal}` (the one-based
-/// repetition number) so zero-based IDs can keep one-based labels.
-fn render_index(value: &str, index: &str, ordinal: &str) -> String {
-    value
-        .replace("{index}", index)
-        .replace("{ordinal}", ordinal)
-}
-
-fn expanded_field_bytes(
-    field: &RawField,
-    prefix: &str,
-    index: &str,
-    ordinal: &str,
-) -> Result<usize> {
-    let rendered_len = |value: &str| render_index(value, index, ordinal).len();
-    let mut bytes = EXPANDED_FIELD_COST
-        .checked_add(field.behavior.metadata_bytes()?)
-        .and_then(|bytes| bytes.checked_add(rendered_len(&field.id)))
-        .and_then(|bytes| bytes.checked_add(rendered_len(&field.label)))
-        .and_then(|bytes| bytes.checked_add(rendered_len(&field.description)))
-        .and_then(|bytes| bytes.checked_add(prefix.len() + usize::from(!prefix.is_empty())))
-        .and_then(|bytes| bytes.checked_add(field.copies.len() * EXPANDED_COPY_COST))
-        .ok_or_else(|| invalid("expanded record metadata exceeds 2 MiB"))?;
-    for choice in &field.choices {
-        bytes = bytes
-            .checked_add(EXPANDED_CHOICE_COST)
-            .and_then(|bytes| bytes.checked_add(choice.name.len()))
-            .ok_or_else(|| invalid("expanded record metadata exceeds 2 MiB"))?;
-    }
-    Ok(bytes)
-}
-
-fn shift_bit_field(
-    field: &mut RawField,
-    instance_offset: usize,
-    repetition: usize,
-    stride_bits: usize,
-) -> Result<()> {
-    let repetition_bits = repetition
-        .checked_mul(stride_bits)
-        .ok_or_else(|| invalid("record bit offset overflows"))?;
-    let shift = |offset: usize, bit: u8| -> Result<(usize, u8)> {
-        let bits = instance_offset
-            .checked_mul(8)
-            .and_then(|value| {
-                offset
-                    .checked_mul(8)
-                    .and_then(|offset| value.checked_add(offset))
-            })
-            .and_then(|value| value.checked_add(usize::from(bit)))
-            .and_then(|value| value.checked_add(repetition_bits))
-            .ok_or_else(|| invalid("record bit offset overflows"))?;
-        Ok((bits / 8, (bits % 8) as u8))
-    };
-    let bit = field.bit.expect("bit storage requires a bit");
-    (field.offset, field.bit) = {
-        let (offset, bit) = shift(field.offset, bit)?;
-        (offset, Some(bit))
-    };
-    for copy in &mut field.copies {
-        *copy = shift(*copy, bit)?.0;
-    }
-    Ok(())
-}
-
 impl GameSchema {
     fn build(mut raw: RawGame) -> Result<Self> {
         validate_game_id(&raw.id)?;
@@ -794,10 +485,6 @@ impl GameSchema {
         if raw.signatures.len() > MAX_COMPONENTS
             || raw.checksums.len() > MAX_COMPONENTS
             || raw.mirrors.len() > MAX_COMPONENTS
-            || raw
-                .generation
-                .as_ref()
-                .is_some_and(|generation| generation.patches.len() > MAX_COMPONENTS)
         {
             return Err(invalid("a schema component array exceeds 4096 entries"));
         }
@@ -884,6 +571,11 @@ impl GameSchema {
                 .chain(self.checksums.iter().map(|checksum| Ok(checksum.length)))
                 .chain(self.mirrors.iter().map(|mirror| Ok(mirror.length)))
                 .chain(self.fields.iter().map(|field| field.behavior.work_bytes()))
+                .chain(
+                    self.fields.iter().flat_map(|field| {
+                        field.array_guards.iter().map(|guard| guard.count.width())
+                    }),
+                )
                 .chain(std::iter::once(self.runtime.work_bytes()))
                 .chain(
                     self.runtime
@@ -1131,6 +823,9 @@ impl FieldSchema {
             intrinsic_max = i64::from(shifted);
         }
         raw.behavior.validate(save_size)?;
+        for guard in &raw.array_guards {
+            guard.count.validate(save_size)?;
+        }
         if raw.behavior.format.is_some() && raw.editable.unwrap_or(true) {
             return Err(invalid("formatted fields must be read-only"));
         }
@@ -1194,6 +889,7 @@ impl FieldSchema {
             mask: raw.mask,
             behavior: raw.behavior,
             codec: None,
+            array_guards: raw.array_guards,
         })
     }
     fn span(&self) -> (usize, usize) {
@@ -1927,26 +1623,6 @@ impl Mirror {
         })
     }
 }
-impl Generation {
-    fn build(raw: RawGeneration, size: usize) -> Result<Self> {
-        let patches = raw
-            .patches
-            .into_iter()
-            .map(|p| {
-                check_nonempty_span(p.offset, p.bytes.len(), size, "generation patch")?;
-                Ok(SpanBytes {
-                    offset: p.offset,
-                    bytes: p.bytes,
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
-        Ok(Self {
-            fill: raw.fill,
-            patches,
-        })
-    }
-}
-
 fn validate_field_overlaps(fields: &[FieldSchema]) -> Result<()> {
     let mut sorted = fields.iter().collect::<Vec<_>>();
     sorted.sort_unstable_by_key(|field| field.offset);

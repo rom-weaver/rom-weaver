@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "profiles": {
+    "compact": {
+      "platform": "test",
+      "save_size": 16,
+      "fields": [
+        {
+          "id": "mode",
+          "label": "Mode",
+          "offset": 1,
+          "type": "u8",
+          "choices_ref": "modes"
+        }
+      ],
+      "checksums": [
+        {
+          "algorithm": "sum8",
+          "start": 0,
+          "length": 15,
+          "offset": 15,
+          "target": 255
+        }
+      ],
+      "generation": {
+        "fill": 255,
+        "values": {
+          "mode": { "enum": "slow" },
+          "bag.count": { "u32": 1 },
+          "bag.items.1.value": { "u32": 7 }
+        }
+      }
+    }
+  },
+  "choices": {
+    "modes": [
+      { "name": "fast", "value": 1 },
+      { "name": "slow", "value": 5 }
+    ]
+  },
+  "records": {
+    "item": [
+      {
+        "id": "value",
+        "label": "Item {ordinal}",
+        "offset": 0,
+        "type": "u8"
+      }
+    ],
+    "bag": {
+      "fields": [
+        {
+          "id": "count",
+          "label": "Item count",
+          "offset": 0,
+          "type": "u8"
+        }
+      ],
+      "records": [
+        {
+          "record": "item",
+          "id": "items.{index}",
+          "offset": 1,
+          "count": 2,
+          "stride": 2,
+          "index_start": 1,
+          "count_from": {
+            "offset": 0,
+            "type": "u8",
+            "relative": true
+          }
+        }
+      ]
+    }
+  },
+  "games": [
+    {
+      "id": "compact-authoring",
+      "name": "Compact authoring fixture",
+      "profile": "compact",
+      "records": [{ "record": "bag", "id": "bag", "offset": 4 }]
+    }
+  ]
+}

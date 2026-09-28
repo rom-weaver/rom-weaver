@@ -95,6 +95,89 @@ fn write_custom_schema(temp: &TempDir) -> PathBuf {
 }
 
 #[test]
+fn compact_schema_authoring_creates_and_edits_visible_array_items() {
+    let temp = setup_temp_dir();
+    let schema = temp.child("compact-schema.json");
+    fs::write(
+        schema.path(),
+        include_str!("../../../rom-weaver-core/tests/fixtures/compact-authoring.json"),
+    )
+    .unwrap();
+    let created = temp.child("compact-created.sav");
+    run_single_json_event(
+        &[
+            "save",
+            "create",
+            "--game",
+            "compact-authoring",
+            "--schema",
+            schema.to_str().unwrap(),
+            "--output",
+            created.to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    let initial = fs::read(created.path()).unwrap();
+    assert_eq!(initial[1], 5);
+    assert_eq!(&initial[4..8], &[1, 7, 255, 255]);
+    assert_eq!(initial[14], 255);
+    assert_eq!(
+        initial
+            .iter()
+            .fold(0u8, |sum, byte| sum.wrapping_add(*byte)),
+        255
+    );
+
+    let edited = temp.child("compact-edited.sav");
+    run_single_json_event(
+        &[
+            "save",
+            "set",
+            created.to_str().unwrap(),
+            "mode=fast",
+            "bag.items.1.value=9",
+            "--game",
+            "compact-authoring",
+            "--schema",
+            schema.to_str().unwrap(),
+            "--output",
+            edited.to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    let output = fs::read(edited.path()).unwrap();
+    assert_eq!(output[1], 1);
+    assert_eq!(&output[4..8], &[1, 9, 255, 255]);
+    assert_eq!(output[14], 255);
+    assert_eq!(
+        output.iter().fold(0u8, |sum, byte| sum.wrapping_add(*byte)),
+        255
+    );
+
+    let rejected = temp.child("compact-rejected.sav");
+    run_single_json_event(
+        &[
+            "save",
+            "set",
+            edited.to_str().unwrap(),
+            "bag.items.2.value=3",
+            "--game",
+            "compact-authoring",
+            "--schema",
+            schema.to_str().unwrap(),
+            "--output",
+            rejected.to_str().unwrap(),
+            "--json",
+        ],
+        1,
+    );
+    assert!(!rejected.path().exists());
+    assert_eq!(fs::read(edited.path()).unwrap(), output);
+}
+
+#[test]
 fn save_schema_records_and_named_choices_share_the_cli_write_path() {
     let temp = setup_temp_dir();
     let mut pack = custom_schema_game("test-schema-game", 4);

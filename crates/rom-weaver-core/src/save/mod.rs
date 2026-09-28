@@ -678,7 +678,3 @@ mod schema_catalog_handheld_tests;
 #[cfg(test)]
 #[path = "../../tests/unit/schema_catalog_console.rs"]
 mod schema_catalog_console_tests;
-
-#[cfg(test)]
-#[path = "../../tests/unit/schema_catalog.rs"]
-mod schema_catalog_tests;

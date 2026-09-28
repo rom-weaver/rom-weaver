@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import compactSchemaJson from "../../../../crates/rom-weaver-core/tests/fixtures/compact-authoring.json?raw";
 import { assertRunJsonSucceeded, readGuestFile, withTempFixture, writeGuestFile } from "./test-helpers.mjs";
 
 const SIGNATURE = 0x08012025;
@@ -180,6 +181,71 @@ test("the real WASM command path creates and edits a save from a local schema pa
     expect(edited[6]).toBe(165);
     expect(edited[9]).toBe(1);
     expect(edited.reduce((sum, byte) => (sum + byte) & 0xff, 0)).toBe(255);
+  });
+});
+
+test("the WASM path supports compact schema authoring and counted arrays", async () => {
+  await withTempFixture(async ({ opfsHandle, worker }) => {
+    const schemaPath = "/work/compact-schema.json";
+    await writeGuestFile(opfsHandle, schemaPath, new TextEncoder().encode(compactSchemaJson));
+    const createdPath = "/work/compact-created.sav";
+    const create = await worker.runJson({
+      args: {
+        args: {
+          assignments: [],
+          game: "compact-authoring",
+          output: createdPath,
+          schema: schemaPath,
+        },
+        type: "create",
+      },
+      type: "save",
+    });
+    assertRunJsonSucceeded(create, { command: "save-create" });
+    const initial = await readGuestFile(opfsHandle, createdPath);
+    expect(initial[1]).toBe(5);
+    expect(Array.from(initial.slice(4, 8))).toEqual([1, 7, 255, 255]);
+    expect(initial[14]).toBe(255);
+    expect(initial.reduce((sum, byte) => (sum + byte) & 0xff, 0)).toBe(255);
+
+    const editedPath = "/work/compact-edited.sav";
+    const edit = await worker.runJson({
+      args: {
+        args: {
+          assignments: ["mode=fast", "bag.items.1.value=9"],
+          game: "compact-authoring",
+          input: createdPath,
+          output: editedPath,
+          schema: schemaPath,
+        },
+        type: "set",
+      },
+      type: "save",
+    });
+    assertRunJsonSucceeded(edit, { command: "save-set" });
+    const edited = await readGuestFile(opfsHandle, editedPath);
+    expect(edited[1]).toBe(1);
+    expect(Array.from(edited.slice(4, 8))).toEqual([1, 9, 255, 255]);
+    expect(edited[14]).toBe(255);
+    expect(edited.reduce((sum, byte) => (sum + byte) & 0xff, 0)).toBe(255);
+
+    const rejectedPath = "/work/compact-rejected.sav";
+    const rejected = await worker.runJson({
+      args: {
+        args: {
+          assignments: ["bag.items.2.value=3"],
+          game: "compact-authoring",
+          input: editedPath,
+          output: rejectedPath,
+          schema: schemaPath,
+        },
+        type: "set",
+      },
+      type: "save",
+    });
+    expect(rejected.code).not.toBe(0);
+    expect(await Array.fromAsync(opfsHandle.keys())).not.toContain("compact-rejected.sav");
+    expect(await readGuestFile(opfsHandle, editedPath)).toEqual(edited);
   });
 });
 

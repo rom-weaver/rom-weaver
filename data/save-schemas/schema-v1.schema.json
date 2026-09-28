@@ -17,6 +17,22 @@
       "minimum": 1,
       "maximum": 4294967295
     },
+    "profiles": {
+      "type": "object",
+      "maxProperties": 4096,
+      "propertyNames": { "$ref": "#/$defs/field_id" },
+      "additionalProperties": { "$ref": "#/$defs/profile" }
+    },
+    "choices": {
+      "type": "object",
+      "maxProperties": 4096,
+      "propertyNames": { "$ref": "#/$defs/field_id" },
+      "additionalProperties": {
+        "type": "array",
+        "maxItems": 4096,
+        "items": { "$ref": "#/$defs/choice" }
+      }
+    },
     "records": {
       "type": "object",
       "maxProperties": 4096,
@@ -25,14 +41,7 @@
         "maxLength": 1024,
         "pattern": "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$"
       },
-      "additionalProperties": {
-        "type": "array",
-        "minItems": 1,
-        "maxItems": 4096,
-        "items": {
-          "$ref": "#/$defs/field"
-        }
-      }
+      "additionalProperties": { "$ref": "#/$defs/record" }
     },
     "text_codecs": {
       "type": "object",
@@ -50,10 +59,48 @@
   },
   "required": ["schema_version", "games"],
   "$defs": {
+    "field_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$"
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "platform": { "$ref": "#/$defs/game/properties/platform" },
+        "description": { "$ref": "#/$defs/game/properties/description" },
+        "save_size": { "$ref": "#/$defs/game/properties/save_size" },
+        "fields": { "$ref": "#/$defs/game/properties/fields" },
+        "records": { "$ref": "#/$defs/game/properties/records" },
+        "signatures": { "$ref": "#/$defs/game/properties/signatures" },
+        "checksums": { "$ref": "#/$defs/game/properties/checksums" },
+        "mirrors": { "$ref": "#/$defs/game/properties/mirrors" },
+        "generation": { "$ref": "#/$defs/game/properties/generation" },
+        "family": { "$ref": "#/$defs/game/properties/family" },
+        "handler_id": { "$ref": "#/$defs/game/properties/handler_id" },
+        "save_format": { "$ref": "#/$defs/game/properties/save_format" },
+        "save_format_name": { "$ref": "#/$defs/game/properties/save_format_name" },
+        "known_rom_sha1": { "$ref": "#/$defs/game/properties/known_rom_sha1" },
+        "checksum_sizes": { "$ref": "#/$defs/game/properties/checksum_sizes" },
+        "logical_size": { "$ref": "#/$defs/game/properties/logical_size" },
+        "layout": { "$ref": "#/$defs/game/properties/layout" },
+        "recognition": { "$ref": "#/$defs/game/properties/recognition" },
+        "checks": { "$ref": "#/$defs/game/properties/checks" },
+        "document_checks": { "$ref": "#/$defs/game/properties/document_checks" },
+        "edit_checks": { "$ref": "#/$defs/game/properties/edit_checks" },
+        "after_edit": { "$ref": "#/$defs/game/properties/after_edit" },
+        "recovery": { "$ref": "#/$defs/game/properties/recovery" },
+        "include_implicit_changes": { "$ref": "#/$defs/game/properties/include_implicit_changes" },
+        "all_copy_sections": { "$ref": "#/$defs/game/properties/all_copy_sections" }
+      }
+    },
     "game": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "profile": { "$ref": "#/$defs/field_id" },
         "id": {
           "type": "string",
           "minLength": 1,
@@ -145,7 +192,29 @@
         "include_implicit_changes": { "type": "boolean" },
         "all_copy_sections": { "type": "boolean" }
       },
-      "required": ["id", "name", "platform", "save_size", "fields"]
+      "required": ["id", "name"],
+      "anyOf": [{ "required": ["profile"] }, { "required": ["platform", "save_size", "fields"] }]
+    },
+    "record": {
+      "oneOf": [
+        { "type": "array", "minItems": 1, "maxItems": 4096, "items": { "$ref": "#/$defs/field" } },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "fields": { "type": "array", "maxItems": 4096, "items": { "$ref": "#/$defs/field" } },
+            "records": {
+              "type": "array",
+              "maxItems": 4096,
+              "items": { "$ref": "#/$defs/record_instance" }
+            }
+          },
+          "anyOf": [
+            { "required": ["fields"], "properties": { "fields": { "minItems": 1 } } },
+            { "required": ["records"], "properties": { "records": { "minItems": 1 } } }
+          ]
+        }
+      ]
     },
     "record_instance": {
       "type": "object",
@@ -166,7 +235,7 @@
           "type": "string",
           "minLength": 0,
           "maxLength": 1024,
-          "pattern": "^(?:[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*)?$"
+          "pattern": "^(?:(?:[A-Za-z0-9_-]|\\{index\\}|\\{index_upper\\}|\\{ordinal\\})+(?:\\.(?:[A-Za-z0-9_-]|\\{index\\}|\\{index_upper\\}|\\{ordinal\\})+)*)?$"
         },
         "count": {
           "type": "integer",
@@ -195,9 +264,12 @@
           "minimum": 0,
           "maximum": 10,
           "default": 0
-        }
+        },
+        "index_radix": { "enum": [10, 16], "default": 10 },
+        "count_from": { "anyOf": [{ "$ref": "#/$defs/scalar" }, { "type": "null" }] },
+        "group": { "type": ["string", "null"], "maxLength": 1024 }
       },
-      "required": ["record", "offset", "id"],
+      "required": ["record"],
       "allOf": [
         {
           "not": {
@@ -248,7 +320,7 @@
           "type": "string",
           "maxLength": 1024,
           "minLength": 1,
-          "pattern": "^(?:[A-Za-z0-9_-]|\\{index\\}|\\{ordinal\\})+(?:\\.(?:[A-Za-z0-9_-]|\\{index\\}|\\{ordinal\\})+)*$"
+          "pattern": "^(?:[A-Za-z0-9_-]|\\{index\\}|\\{index_upper\\}|\\{ordinal\\})+(?:\\.(?:[A-Za-z0-9_-]|\\{index\\}|\\{index_upper\\}|\\{ordinal\\})+)*$"
         },
         "label": {
           "type": "string",
@@ -327,6 +399,7 @@
             "$ref": "#/$defs/choice"
           }
         },
+        "choices_ref": { "$ref": "#/$defs/field_id" },
         "mask": {
           "type": "integer",
           "minimum": 1,
@@ -350,6 +423,7 @@
       },
       "required": ["id", "label", "offset", "type"],
       "allOf": [
+        { "not": { "required": ["choices", "choices_ref"] } },
         {
           "if": {
             "properties": {
@@ -476,7 +550,7 @@
           },
           "else": {
             "not": {
-              "required": ["choices"]
+              "anyOf": [{ "required": ["choices"] }, { "required": ["choices_ref"] }]
             }
           }
         },
@@ -718,9 +792,79 @@
           "items": {
             "$ref": "#/$defs/span"
           }
+        },
+        "values": {
+          "type": "object",
+          "maxProperties": 4096,
+          "propertyNames": { "$ref": "#/$defs/field_id" },
+          "additionalProperties": { "$ref": "#/$defs/save_value" }
         }
       },
       "required": ["fill"]
+    },
+    "save_value": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "text": { "type": "string" } },
+          "required": ["text"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "u32": { "type": "integer", "minimum": 0, "maximum": 4294967295 } },
+          "required": ["u32"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "i32": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 }
+          },
+          "required": ["i32"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "bool": { "type": "boolean" } },
+          "required": ["bool"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "enum": { "type": "string" } },
+          "required": ["enum"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "list": { "type": "array", "items": { "$ref": "#/$defs/save_value" } } },
+          "required": ["list"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "table": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": { "$ref": "#/$defs/save_value" }
+              }
+            }
+          },
+          "required": ["table"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "object": { "type": "object", "additionalProperties": { "$ref": "#/$defs/save_value" } }
+          },
+          "required": ["object"]
+        }
+      ]
     },
     "exclusion": {
       "type": "object",
