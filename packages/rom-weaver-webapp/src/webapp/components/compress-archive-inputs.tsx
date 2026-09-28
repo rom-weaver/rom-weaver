@@ -6,7 +6,7 @@ import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 import { disposeOpenedOutputs, type OpenedCompressEntry, openCompressInput } from "../compress-service.ts";
 
 type PendingArchive = { id: number; name: string; percent: number | null; size: number };
-type StagedArchiveEntry = { file: File; id: number };
+type StagedArchiveEntry = { file: File; id: number; sourceName: string };
 type CompressArchiveInputsOptions = {
   nextId: () => number;
   onAdd: (entries: StagedArchiveEntry[]) => void;
@@ -80,7 +80,7 @@ const useCompressArchiveInputs = ({ nextId, onAdd, onError }: CompressArchiveInp
         const staged = chosen.map((entry) => {
           const id = nextId();
           ownedRef.current.set(id, entry.output);
-          return { file: entry.file, id };
+          return { file: entry.file, id, sourceName: file.name };
         });
         const stagedOutputs = new Set(chosen.map((entry) => entry.output));
         entries = entries.filter((entry) => !stagedOutputs.has(entry.output));

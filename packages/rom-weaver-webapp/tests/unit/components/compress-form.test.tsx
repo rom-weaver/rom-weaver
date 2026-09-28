@@ -160,6 +160,18 @@ describe("CompressForm", () => {
       await waitFor(() => expect(entries[0]?.output.dispose).toHaveBeenCalledOnce());
     });
 
+    it("names the output after the archive instead of its first entry", async () => {
+      service.openCompressInput.mockResolvedValue([opened("readme.txt", "notes"), opened("game.sfc", "rom")]);
+      render(<CompressForm />);
+      addFiles([new File(["zip"], "Great Game.zip")]);
+      fireEvent.click(await screen.findByRole("button", { name: "Add 2 files" }));
+
+      await ready();
+      expect((screen.getByRole("textbox", { name: "Output filename (no extension)" }) as HTMLInputElement).value).toBe(
+        "Great Game",
+      );
+    });
+
     it("adds a single entry without asking and keeps plain files beside it", async () => {
       const entries = [opened("game.sfc", "rom")];
       service.openCompressInput.mockResolvedValue(entries);

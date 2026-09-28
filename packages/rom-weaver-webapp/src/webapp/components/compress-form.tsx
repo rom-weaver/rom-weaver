@@ -43,7 +43,7 @@ const disposeOutput = (output: PublicOutput | null) => {
 const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
   const localizer = useUiLocalizer();
   const settings = useRomWeaverSettings();
-  const [stagedFiles, setStagedFiles] = useState<Array<{ file: File; id: number }>>([]);
+  const [stagedFiles, setStagedFiles] = useState<Array<{ file: File; id: number; sourceName?: string }>>([]);
   const files = useMemo(() => stagedFiles.map((entry) => entry.file), [stagedFiles]);
   const nextFileId = useRef(0);
   const [inputInfo, setInputInfo] = useState<InputInfo | null>(null);
@@ -60,7 +60,7 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
   const runIdRef = useRef(0);
   const handledDropRef = useRef(0);
   const nextId = useCallback(() => ++nextFileId.current, []);
-  const addStaged = useCallback((entries: Array<{ file: File; id: number }>) => {
+  const addStaged = useCallback((entries: Array<{ file: File; id: number; sourceName?: string }>) => {
     if (entries.length) setStagedFiles((previous) => [...previous, ...entries]);
   }, []);
   const {
@@ -81,7 +81,8 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
   const source = inputInfo?.files === files ? inputInfo.source : null;
   const formatOptions = createOutputOptions(formats, source);
   const panel = buildCompressPanel(format, activeSettings, source);
-  const generatedName = getFileNameWithoutExtension(files[0]?.name || "archive");
+  // Entries from an opened archive are named after the archive rather than whichever entry came first.
+  const generatedName = getFileNameWithoutExtension(stagedFiles[0]?.sourceName || files[0]?.name || "archive");
   const name = outputName || generatedName;
   const totalSize = files.reduce((sum, file) => sum + file.size, 0);
 

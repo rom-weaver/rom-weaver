@@ -158,6 +158,12 @@ const createAssets = async (input: ValidatedCompressInput): Promise<InputAsset[]
 
 const isOpenableCompressInput = (file: File): boolean => isArchiveFileName(file.name);
 
+const entryFileName = (output: PublicOutput, baseNameCounts: Map<string, number>): string => {
+  const path = output.relativePath || output.fileName;
+  if ((baseNameCounts.get(output.fileName) ?? 0) < 2) return output.fileName;
+  return path.split("/").filter(Boolean).join(" - ");
+};
+
 const disposeOpenedOutputs = async (outputs: PublicOutput[]) => {
   await Promise.all(
     outputs.map((output) =>
@@ -178,13 +184,18 @@ const openCompressInput = async (
   logger.trace("open.start", { fileName: file.name, size: file.size });
   const result = await extract({ source: file, entries: [], extractAll: true, options });
   const entries: OpenedCompressEntry[] = [];
+  // Entries keep their base name so CUE references still match. Entries that share a base name in
+  // different folders take their folder path instead, or every compress run rejects them as duplicates.
+  const baseNameCounts = new Map<string, number>();
+  for (const output of result.outputs)
+    baseNameCounts.set(output.fileName, (baseNameCounts.get(output.fileName) ?? 0) + 1);
   try {
     if (options.signal?.aborted) throw new DOMException("Opening cancelled", "AbortError");
     for (const output of result.outputs) {
       const stored = await output.vfs.getFile?.(output.path);
       if (!stored) throw new Error(`Extracted file is not available: ${output.relativePath || output.fileName}`);
       entries.push({
-        file: new File([stored], output.fileName, {
+        file: new File([stored], entryFileName(output, baseNameCounts), {
           lastModified: stored.lastModified,
           type: stored.type || "application/octet-stream",
         }),

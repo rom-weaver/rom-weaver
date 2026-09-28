@@ -236,6 +236,23 @@ describe("compress service", () => {
       expect(outputs.every((output) => vi.mocked(output.dispose).mock.calls.length === 0)).toBe(true);
     });
 
+    it("names entries that share a base name after their folders so they compress together", async () => {
+      const outputs = [
+        extracted("Disc 1/readme.txt", file("a", "one")),
+        extracted("Disc 2/readme.txt", file("b", "two")),
+        extracted("Disc 1/game.cue", file("c", "cue")),
+      ];
+      const { runtime } = extractRuntime(outputs);
+      const entries = await openCompressInput(file("set.zip"), runtime);
+
+      expect(entries.map((entry) => entry.file.name)).toEqual([
+        "Disc 1 - readme.txt",
+        "Disc 2 - readme.txt",
+        "game.cue",
+      ]);
+      await expect(getCompressFormats(entries.slice(0, 2).map((entry) => entry.file))).resolves.toEqual(["zip", "7z"]);
+    });
+
     it("disposes every extracted file when one cannot be read", async () => {
       const outputs = [extracted("a.bin", file("a", "a")), extracted("b.bin", null)];
       const { runtime } = extractRuntime(outputs);
