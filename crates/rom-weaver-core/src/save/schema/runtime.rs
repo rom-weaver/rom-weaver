@@ -105,7 +105,8 @@ impl Runtime {
                 .chain(self.after_edit.iter().map(Store::work_bytes)),
         )
     }
-    pub fn expand_checks(&mut self) -> Result<()> {
+    pub fn expand_checks(&mut self, save_size: usize) -> Result<()> {
+        let size = self.logical_size.unwrap_or(save_size);
         for checks in [
             &mut self.checks,
             &mut self.document_checks,
@@ -114,7 +115,7 @@ impl Runtime {
         .into_iter()
         .chain(self.recognition.iter_mut().map(|config| &mut config.checks))
         {
-            rules::expand_checks(checks)?;
+            rules::expand_checks(checks, size)?;
         }
         Ok(())
     }

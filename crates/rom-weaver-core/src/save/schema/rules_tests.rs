@@ -172,14 +172,17 @@ fn logical_integrity_ranges_are_checked_before_recognition() {
 
 #[test]
 fn repeated_checks_move_relative_reads_and_keep_absolute_reads() {
-    let game = |repeat: serde_json::Value| {
+    // Byte 0 holds the limit; each 2-byte slot holds a value and an active flag.
+    let check = |repeat: serde_json::Value| {
         json!({
-            "id":"slots", "name":"Slots", "platform":"test", "save_size":8, "fields":[],
-            "checks":[{
-                "assert":{"le":[{"read":{"offset":1,"type":"u8","relative":true}},{"read":{"offset":0,"type":"u8"}}]},
-                "code":"slot_range", "message":"a slot exceeds the limit", "repeat":repeat
-            }]
+            "when":{"ne":[{"read":{"offset":2,"type":"u8","relative":true}},0]},
+            "assert":{"le":[{"read":{"offset":1,"type":"u8","relative":true}},{"read":{"offset":0,"type":"u8"}}]},
+            "code":"slot_range", "message":"a slot exceeds the limit", "repeat":repeat
         })
+    };
+    let game = |repeat: serde_json::Value| {
+        json!({"id":"slots", "name":"Slots", "platform":"test", "save_size":8, "fields":[],
+            "checks":[check(repeat)]})
     };
     let handler = load(game(json!({"count":3,"stride":2})));
     let game_id = handler.definitions().remove(0).identity;
@@ -193,8 +196,8 @@ fn repeated_checks_move_relative_reads_and_keep_absolute_reads() {
             &game_id,
         )
     };
-    assert!(parse(vec![5, 5, 0, 5, 0, 5, 0, 9]).is_ok());
-    let RomWeaverError::ValidationCode(error) = parse(vec![5, 5, 0, 5, 0, 6, 0, 0]).unwrap_err()
+    assert!(parse(vec![5, 5, 1, 5, 1, 6, 0, 9]).is_ok());
+    let RomWeaverError::ValidationCode(error) = parse(vec![5, 5, 0, 5, 0, 6, 1, 0]).unwrap_err()
     else {
         panic!("the third repetition must fail with a validation code");
     };
@@ -210,6 +213,63 @@ fn repeated_checks_move_relative_reads_and_keep_absolute_reads() {
     }
     let pack = json!({"schema_version":1,"games":[game(json!({"count":5,"stride":2}))]});
     assert!(SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap()).is_err());
+
+    let every_list = load(json!({
+        "id":"lists", "name":"Lists", "platform":"test", "save_size":8, "fields":[],
+        "document_checks":[check(json!({"count":2,"stride":2}))],
+        "edit_checks":[check(json!({"count":3,"stride":2}))],
+        "recognition":{"checks":[check(json!({"count":2,"stride":1}))],
+            "reasons":["selected_game"],"confidence":"high"}
+    }));
+    let runtime = &every_list.game.runtime;
+    let recognition = &runtime.recognition.as_ref().unwrap().checks;
+    for (checks, count) in [
+        (&runtime.document_checks, 2),
+        (&runtime.edit_checks, 3),
+        (recognition, 2),
+    ] {
+        assert_eq!(checks.len(), count);
+        assert!(checks.iter().all(|check| check.repeat.is_none()));
+    }
+}
+
+#[test]
+fn repeated_checks_meet_their_limits_before_expansion() {
+    let terms = (0..1400).map(|_| json!({"eq":[1,1]})).collect::<Vec<_>>();
+    let wide = json!({"schema_version":1,"games":[{"id":"wide","name":"Wide","platform":"test",
+        "save_size":8,"fields":[],"checks":[{"assert":{"all":terms},"code":"wide",
+        "message":"wide","repeat":{"count":4096,"stride":1}}]}]});
+    assert!(
+        SaveSchemaPack::from_json(&serde_json::to_vec(&wide).unwrap())
+            .unwrap_err()
+            .to_string()
+            .contains("depth or work limit")
+    );
+    let heavy = json!({"schema_version":1,"games":[{"id":"heavy","name":"Heavy","platform":"test",
+        "save_size":8388608,"fields":[],"checks":[{"assert":{"uniform":{"offset":0,
+        "length":8388608,"values":[0]}},"code":"heavy","message":"heavy",
+        "repeat":{"count":9,"stride":1}}]}]});
+    assert!(
+        SaveSchemaPack::from_json(&serde_json::to_vec(&heavy).unwrap())
+            .unwrap_err()
+            .to_string()
+            .contains("64 MiB")
+    );
+}
+
+#[test]
+fn presentation_kind_and_constraints_reject_null() {
+    for member in ["kind", "constraints"] {
+        let mut presentation = json!({"section_id":0,"offset":0});
+        presentation[member] = serde_json::Value::Null;
+        let pack = json!({"schema_version":1,"games":[{"id":"nulls","name":"Nulls",
+            "platform":"test","save_size":8,"fields":[{"id":"value","label":"Value",
+            "offset":0,"type":"u8","presentation":presentation}]}]});
+        assert!(
+            SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap()).is_err(),
+            "{member}: null must be rejected"
+        );
+    }
 }
 
 #[test]

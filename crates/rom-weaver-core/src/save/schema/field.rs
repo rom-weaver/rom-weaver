@@ -63,9 +63,17 @@ pub(super) struct Presentation {
     pub relative_offset: bool,
     pub section_id: u8,
     pub offset: u16,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "non_null",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub kind: Option<SaveFieldKind>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "non_null",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub constraints: Option<SaveConstraint>,
     #[serde(
         default,
@@ -81,6 +89,15 @@ pub(super) struct Presentation {
     pub encoding: Option<Option<String>>,
     #[serde(default)]
     pub warnings: Vec<String>,
+}
+
+/// Rejects `null` for a member that may only be omitted.
+fn non_null<'de, D, T>(deserializer: D) -> std::result::Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
 }
 
 /// Keeps a present `null` distinct from an omitted member.

@@ -530,8 +530,10 @@ pub(super) struct CheckRepeat {
     pub stride: usize,
 }
 
-/// Replaces every repeated check with its copies, in repetition order.
-pub(super) fn expand_checks(checks: &mut Vec<Check>) -> Result<()> {
+/// Replaces every repeated check with its copies, in repetition order. Each
+/// template MUST pass its node and work limits before it is cloned, so a small
+/// pack cannot expand into unbounded memory.
+pub(super) fn expand_checks(checks: &mut Vec<Check>, size: usize) -> Result<()> {
     if checks.iter().all(|check| check.repeat.is_none()) {
         return Ok(());
     }
@@ -556,6 +558,12 @@ pub(super) fn expand_checks(checks: &mut Vec<Check>) -> Result<()> {
                 "check repeat stride must be positive and within the save-size limit",
             ));
         }
+        check.validate(size)?;
+        check
+            .work_bytes()?
+            .checked_mul(repeat.count)
+            .filter(|work| *work <= super::MAX_INTEGRITY_BYTES)
+            .ok_or_else(|| invalid("schema work exceeds 64 MiB"))?;
         for repetition in 0..repeat.count {
             let bits = repetition
                 .checked_mul(repeat.stride)
