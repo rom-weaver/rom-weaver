@@ -61,15 +61,15 @@
         "maxBrotliBytes": 40100
       },
       {
-        "_comment": "Raised for the additional decoder paths in lzma-rust2 0.21.0.",
+        "_comment": "The WASM module MUST include the 70 compiled save profiles. After sharing field constructors, the measured build uses 9,002,546 raw bytes and 2,249,483 Brotli bytes.",
         "name": "WASM",
         "directory": "assets",
         "extension": ".wasm",
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 7770000,
-        "maxRawBytes": 8040000,
-        "expectedBrotliBytes": 2050000,
-        "maxBrotliBytes": 2120000
+        "expectedRawBytes": 9010000,
+        "maxRawBytes": 9300000,
+        "expectedBrotliBytes": 2250000,
+        "maxBrotliBytes": 2320000
       }
     ]
   },
