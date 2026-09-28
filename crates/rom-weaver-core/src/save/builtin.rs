@@ -107,7 +107,7 @@ macro_rules! builtin_handler {
                 static HANDLERS: OnceLock<Vec<SchemaSaveHandler>> = OnceLock::new();
                 load(
                     &HANDLERS,
-                    include_bytes!(concat!("../../data/save-schemas/", $file, ".json")),
+                    include_bytes!(concat!(env!("OUT_DIR"), "/save-schemas/", $file, ".json")),
                 )
             }
         }
