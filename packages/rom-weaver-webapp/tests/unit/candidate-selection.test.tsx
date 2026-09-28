@@ -164,7 +164,7 @@ describe("CandidateSelectionDialog", () => {
     fireEvent.click(keep);
     expect(entry.disabled).toBe(true);
     expect(screen.queryByRole("button", { name: "Add 1 file" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Add game.zip" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add archive" }));
     expect(onKeepSource).toHaveBeenCalledOnce();
     fireEvent.click(keep);
     fireEvent.click(screen.getByRole("button", { name: "Add 1 file" }));
@@ -230,5 +230,35 @@ describe("useCandidateSelection", () => {
       message: "Selection skipped",
     });
     expect(onCancelSelection).toHaveBeenCalledWith(first);
+  });
+
+  it("opens each queued keep-source request with the switch off", async () => {
+    const request = (sourceName: string): CandidateSelectionPrompt => ({
+      candidates: [
+        { defaultSelected: true, fileName: "game.sfc", id: "0", kind: "rom", selectable: true, type: "file" },
+      ],
+      keepSourceLabel: "Keep packed",
+      multiSelect: true,
+      role: "input",
+      sourceName,
+      warnings: [],
+    });
+    const { result } = renderHook(() => useCandidateSelection());
+    const view = render(result.current.candidateSelectionDialog);
+    let first: Promise<unknown> = Promise.resolve();
+    let second: Promise<unknown> = Promise.resolve();
+    act(() => {
+      first = result.current.selectFile(request("a.zip"));
+      second = result.current.selectFile(request("b.zip"));
+    });
+    view.rerender(result.current.candidateSelectionDialog);
+    fireEvent.click(screen.getByRole("switch", { name: "Keep packed" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add archive" }));
+    await expect(first).resolves.toEqual({ id: "", ids: [], keepSource: true });
+
+    view.rerender(result.current.candidateSelectionDialog);
+    expect((screen.getByRole("switch", { name: "Keep packed" }) as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Add 1 file" }));
+    await expect(second).resolves.toEqual({ id: "0", ids: ["0"] });
   });
 });

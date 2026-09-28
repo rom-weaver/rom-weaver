@@ -78,7 +78,7 @@ function CandidateSelectionDialog({
   });
   const keepSource =
     request.keepSourceLabel && onKeepSource
-      ? { label: request.keepSourceLabel, onSubmit: onKeepSource, submitLabel: `Add ${request.sourceName}` }
+      ? { label: request.keepSourceLabel, onSubmit: onKeepSource, submitLabel: "Add archive" }
       : undefined;
   // The keep-source switch lives in the checklist footer, so it forces the checklist for one entry too.
   const multiSelect = !!request.multiSelect && (selectableCount > 1 || !!keepSource);
