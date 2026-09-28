@@ -13,6 +13,8 @@ const countSelectable = (request: CandidateSelectionPrompt): number =>
   request.candidates.filter((candidate) => candidate.selectable).length;
 
 type CandidateSelectionState = {
+  /** Distinguishes queued requests so each one opens with fresh picker state. */
+  seq?: number;
   request: CandidateSelectionPrompt;
   resolve: (choice: CandidateSelectionChoice) => void;
   reject: (error: Error) => void;
@@ -32,11 +34,13 @@ const createSelectionSkippedError = (): CandidateSelectionError => {
 function CandidateSelectionDialog({
   state,
   onCancel,
+  onKeepSource,
   onSelect,
   onSelectMany,
 }: {
   state: CandidateSelectionState | null;
   onCancel: () => void;
+  onKeepSource?: () => void;
   onSelect: (id: string) => void;
   onSelectMany: (ids: string[]) => void;
 }) {
@@ -72,7 +76,12 @@ function CandidateSelectionDialog({
       subheading: archiveLabel || undefined,
     };
   });
-  const multiSelect = !!request.multiSelect && selectableCount > 1;
+  const keepSource =
+    request.keepSourceLabel && onKeepSource
+      ? { label: request.keepSourceLabel, onSubmit: onKeepSource, submitLabel: `Add ${request.sourceName}` }
+      : undefined;
+  // The keep-source switch lives in the checklist footer, so it forces the checklist for one entry too.
+  const multiSelect = !!request.multiSelect && (selectableCount > 1 || !!keepSource);
   // A ROM prompt answers "which ROM do I patch?" rather than "which patch do I
   // add?", so its heading and hint name the ROM rather than the patch stack.
   const isRomRole = request.role === "input";
@@ -96,6 +105,7 @@ function CandidateSelectionDialog({
       {multiSelect ? (
         <SelectionCheckList
           items={items}
+          keepSource={keepSource}
           onCancel={onCancel}
           onSubmit={onSelectMany}
           submitLabel={(count) => {
@@ -119,6 +129,7 @@ const useCandidateSelection = ({ onCancelSelection }: UseCandidateSelectionOptio
   // replacing without settling orphaned the open dialog's promise and hung the
   // mutation awaiting it.
   const pendingQueueRef = useRef<CandidateSelectionState[]>([]);
+  const selectionSeqRef = useRef(0);
   const showSelection = useCallback((next: CandidateSelectionState | null) => {
     selectionStateRef.current = next;
     setSelectionState(next);
@@ -130,7 +141,8 @@ const useCandidateSelection = ({ onCancelSelection }: UseCandidateSelectionOptio
   const selectFile = useCallback(
     (request: CandidateSelectionPrompt) =>
       new Promise<CandidateSelectionChoice>((resolve, reject) => {
-        const nextState: CandidateSelectionState = { reject, request, resolve };
+        selectionSeqRef.current += 1;
+        const nextState: CandidateSelectionState = { reject, request, resolve, seq: selectionSeqRef.current };
         if (selectionStateRef.current) {
           pendingQueueRef.current.push(nextState);
           logger.trace("queued candidate selection behind an open dialog", {
@@ -192,11 +204,22 @@ const useCandidateSelection = ({ onCancelSelection }: UseCandidateSelectionOptio
     },
     [advanceSelection],
   );
+  const keepSource = useCallback(() => {
+    const current = selectionStateRef.current;
+    advanceSelection();
+    logger.trace("candidate selection dialog resolved with the source kept", {
+      role: current?.request.role,
+      sourceName: current?.request.sourceName,
+    });
+    current?.resolve({ id: "", ids: [], keepSource: true });
+  }, [advanceSelection]);
   return {
     cancelSelection,
     candidateSelectionDialog: (
       <CandidateSelectionDialog
+        key={selectionState?.seq}
         onCancel={cancelSelection}
+        onKeepSource={keepSource}
         onSelect={chooseCandidate}
         onSelectMany={chooseCandidates}
         state={selectionState}

@@ -131,6 +131,46 @@ describe("CandidateSelectionDialog", () => {
     expect(onSelectMany).toHaveBeenCalledWith(["0", "1"]);
   });
 
+  it("offers an off-by-default keep-source switch that replaces the picked entries", () => {
+    const onKeepSource = vi.fn();
+    const onSelectMany = vi.fn();
+    render(
+      <CandidateSelectionDialog
+        onCancel={vi.fn()}
+        onKeepSource={onKeepSource}
+        onSelect={vi.fn()}
+        onSelectMany={onSelectMany}
+        state={{
+          request: {
+            candidates: [
+              { defaultSelected: true, fileName: "game.sfc", id: "0", kind: "rom", selectable: true, type: "file" },
+            ],
+            keepSourceLabel: "Keep packed",
+            multiSelect: true,
+            role: "input",
+            sourceName: "game.zip",
+            warnings: [],
+          },
+          resolve: vi.fn(),
+          reject: vi.fn(),
+        }}
+      />,
+    );
+
+    const keep = screen.getByRole("switch", { name: "Keep packed" }) as HTMLInputElement;
+    const entry = screen.getByRole("checkbox") as HTMLInputElement;
+    expect(keep.checked).toBe(false);
+    expect(entry.disabled).toBe(false);
+    fireEvent.click(keep);
+    expect(entry.disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Add 1 file" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Add game.zip" }));
+    expect(onKeepSource).toHaveBeenCalledOnce();
+    fireEvent.click(keep);
+    fireEvent.click(screen.getByRole("button", { name: "Add 1 file" }));
+    expect(onSelectMany).toHaveBeenCalledWith(["0"]);
+  });
+
   it("shows a no-selectable state and forwards modal cancellation", () => {
     const onCancel = vi.fn();
     render(

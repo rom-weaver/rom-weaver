@@ -26,8 +26,9 @@ type RomWeaverReactSettings = ApplySettings &
 type ApplyWorkflowSettings = ApplySettings;
 type CreateWorkflowSettings = CreateSettings;
 type CandidateSelectionPrompt = CandidateSelectionRequest;
-/** `id` is the primary pick; `ids` carries the full ordered set for a multi-select prompt. */
-type CandidateSelectionChoice = { id: string; ids?: string[] };
+/** `id` is the primary pick; `ids` carries the full ordered set for a multi-select prompt. `keepSource`
+ * means the host asked for the source itself, so `id` and `ids` are empty. */
+type CandidateSelectionChoice = { id: string; ids?: string[]; keepSource?: boolean };
 type ApplyPatchFormSettings = ApplySettings;
 
 type ApplyPatchFormProps = Omit<BaseApplyPatchFormProps, "onApplyComplete"> & {

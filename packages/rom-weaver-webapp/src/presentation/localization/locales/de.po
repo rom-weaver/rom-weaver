@@ -1855,6 +1855,11 @@ msgstr "Nur die Dateien behalten, die du brauchst."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.keepPacked"
+msgstr "Gepackt lassen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis"
 msgstr "Eine ROM trimmen."
 

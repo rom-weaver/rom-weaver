@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createLogger } from "../../lib/logging.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
 import { useCandidateSelection } from "../../public/react/candidate-selection.tsx";
+import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 import { disposeOpenedOutputs, type OpenedCompressEntry, openCompressInput } from "../compress-service.ts";
 
@@ -17,10 +18,12 @@ const logger = createLogger("compress-archive-inputs");
 
 /**
  * Opens dropped archives and compressed disc images for Compress, the way Apply opens its inputs:
- * extract every entry, ask which ones to add when there is more than one, then stage the chosen
- * files. The hook owns each staged entry's stored copy until `release` or unmount disposes it.
+ * extract every entry, ask which ones to add, then stage the chosen files. The picker always opens,
+ * even for one entry, because its Keep packed switch is the only way to add the archive unchanged.
+ * The hook owns each staged entry's stored copy until `release` or unmount disposes it.
  */
 const useCompressArchiveInputs = ({ nextId, onAdd, onError }: CompressArchiveInputsOptions) => {
+  const localizer = useUiLocalizer();
   const { candidateSelectionDialog, selectFile } = useCandidateSelection();
   const [pending, setPending] = useState<PendingArchive[]>([]);
   const abortsRef = useRef(new Map<number, AbortController>());
@@ -29,8 +32,7 @@ const useCompressArchiveInputs = ({ nextId, onAdd, onError }: CompressArchiveInp
   const mountedRef = useRef(true);
 
   const chooseEntries = useCallback(
-    async (sourceName: string, entries: OpenedCompressEntry[]): Promise<OpenedCompressEntry[]> => {
-      if (entries.length < 2) return entries;
+    async (sourceName: string, entries: OpenedCompressEntry[]): Promise<OpenedCompressEntry[] | "keep"> => {
       const choice = await selectFile({
         candidates: entries.map((entry, index) => ({
           defaultSelected: true,
@@ -41,15 +43,17 @@ const useCompressArchiveInputs = ({ nextId, onAdd, onError }: CompressArchiveInp
           size: entry.output.size,
           type: "file",
         })),
+        keepSourceLabel: localizer.message("ui.compress.keepPacked"),
         multiSelect: true,
         role: "input",
         sourceName,
         warnings: [],
       });
+      if (choice.keepSource) return "keep";
       const ids = new Set(choice.ids ?? [choice.id]);
       return entries.filter((_entry, index) => ids.has(String(index)));
     },
-    [selectFile],
+    [localizer, selectFile],
   );
 
   const open = useCallback(
@@ -77,6 +81,11 @@ const useCompressArchiveInputs = ({ nextId, onAdd, onError }: CompressArchiveInp
         if (!entries.length) throw new Error(`No files were found in ${file.name}`);
         const chosen = await chooseEntries(file.name, entries);
         if (abort.signal.aborted || !mountedRef.current) return;
+        if (chosen === "keep") {
+          logger.trace("open.kept", { fileName: file.name });
+          onAdd([{ file, id: nextId(), sourceName: file.name }]);
+          return;
+        }
         const staged = chosen.map((entry) => {
           const id = nextId();
           ownedRef.current.set(id, entry.output);

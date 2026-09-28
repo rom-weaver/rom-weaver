@@ -172,16 +172,33 @@ describe("CompressForm", () => {
       );
     });
 
-    it("adds a single entry without asking and keeps plain files beside it", async () => {
+    it("asks about a single entry too and keeps plain files beside it", async () => {
       const entries = [opened("game.sfc", "rom")];
       service.openCompressInput.mockResolvedValue(entries);
       render(<CompressForm />);
       addFiles([new File(["zip"], "game.zip"), new File(["patch"], "fix.bps")]);
 
+      const keep = (await screen.findByRole("switch", { name: "Keep packed" })) as HTMLInputElement;
+      expect(keep.checked).toBe(false);
+      fireEvent.click(screen.getByRole("button", { name: "Add 1 file" }));
       await ready();
-      expect(screen.queryByRole("dialog")).toBeNull();
       expect(screen.getByRole("button", { name: "Remove game.sfc", exact: true })).toBeTruthy();
       expect(screen.getByRole("button", { name: "Remove fix.bps", exact: true })).toBeTruthy();
+      expect(entries[0]?.output.dispose).not.toHaveBeenCalled();
+    });
+
+    it("adds the archive unchanged when Keep packed is on and disposes its extracted entries", async () => {
+      const entries = [opened("game.sfc", "rom"), opened("readme.txt", "notes")];
+      service.openCompressInput.mockResolvedValue(entries);
+      render(<CompressForm />);
+      addFiles([new File(["zip"], "game.zip")]);
+
+      fireEvent.click(await screen.findByRole("switch", { name: "Keep packed" }));
+      fireEvent.click(screen.getByRole("button", { name: "Add game.zip" }));
+      await ready();
+      expect(screen.getByRole("button", { name: "Remove game.zip", exact: true })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Remove game.sfc", exact: true })).toBeNull();
+      await waitFor(() => expect(entries.every((entry) => entry.output.dispose.mock.calls.length === 1)).toBe(true));
     });
 
     it("cancels an archive that is still opening when its card is removed", async () => {

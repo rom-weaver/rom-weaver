@@ -24,6 +24,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message:
       "Your files stay in this browser. Archives and compressed disc images open so you can choose the files inside.",
   }),
+  "ui.compress.keepPacked": msg({ id: "ui.compress.keepPacked", message: "Keep packed" }),
   "ui.compress.opening": msg({ id: "ui.compress.opening", message: "Extracting" }),
   "ui.compress.removeFile": msg({ id: "ui.compress.removeFile", message: "Remove {name}" }),
   "ui.compress.running": msg({ id: "ui.compress.running", message: "Compressing files…" }),
