@@ -1682,6 +1682,8 @@ impl GameDefinition {
     }
 }
 impl FieldDefinition {
+    // Catalog fields MUST share this initialization code to bound WASM size.
+    #[inline(never)]
     pub fn new(id: String, label: String, offset: usize, storage: Storage) -> Self {
         Self {
             id,

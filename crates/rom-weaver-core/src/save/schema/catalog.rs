@@ -60,6 +60,8 @@ struct FieldScope {
 }
 
 impl FieldScope {
+    // Repeated fields MUST share this construction code to bound WASM size.
+    #[inline(never)]
     fn field(&self, id: String, label: String, offset: usize, storage: Storage) -> FieldDefinition {
         FieldDefinition {
             array_guards: self.guards.clone(),
