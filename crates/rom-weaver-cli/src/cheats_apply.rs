@@ -200,8 +200,12 @@ impl CliApp {
         let layout = RomLayout::detect(rom, system);
         let mut all = Vec::new();
         if let Some(kind) = CheatKind::parse(kind_id).filter(|kind| kind.is_gba_action_replay()) {
-            for decoded in cheats::decode_gba_codes(&codes.join("\n"), system, kind)? {
-                all.extend(cheats::resolve_writes(rom, &layout, &decoded)?);
+            // Each `--code` value is one block that starts from the default
+            // seeds; a reseed in one block MUST NOT change the next block.
+            for code in codes_for_kind(codes, system, kind_id) {
+                for decoded in cheats::decode_gba_codes(&code, system, kind)? {
+                    all.extend(cheats::resolve_writes(rom, &layout, &decoded)?);
+                }
             }
             return Ok(all);
         }
@@ -437,6 +441,31 @@ fn is_playstation_executable(path: &Path) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gba_code_values_decrypt_with_their_own_seeds() {
+        let rom = vec![0u8; 0x200];
+        let codes = [
+            "70BDB80D 69F37FCB\n25A8F94C B1A4BCF4".to_owned(),
+            "CDE69477 3E02C83D".to_owned(),
+        ];
+
+        let writes = CliApp::resolve_cheat_writes(
+            &rom,
+            CheatSystem::GameBoyAdvance,
+            &codes,
+            "game-shark-v1",
+        )
+        .unwrap();
+
+        assert_eq!(
+            writes
+                .iter()
+                .map(|write| (write.offset, write.value))
+                .collect::<Vec<_>>(),
+            vec![(0x44, 0xBEEF), (0x20, 0x1234)]
+        );
+    }
 
     fn validation_message(err: &RomWeaverError) -> String {
         match err {
