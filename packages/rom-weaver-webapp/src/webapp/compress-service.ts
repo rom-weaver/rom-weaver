@@ -203,6 +203,10 @@ const toOpenedEntries = async (
   return entries;
 };
 
+// The runtime's entry selection reads `*`, `?`, and `[...]` as wildcards and has no escape, so a name
+// like `game[1].iso` would also extract `game1.iso`. A one-character class matches each literally.
+const toExactSelectPattern = (path: string): string => path.replace(/[[*?]/g, (character) => `[${character}]`);
+
 const abortIfCancelled = (signal?: AbortSignal) => {
   if (signal?.aborted) throw new DOMException("Opening cancelled", "AbortError");
 };
@@ -267,7 +271,7 @@ const extractCompressEntries = async (
   if (!extract) throw new Error("Extraction is not available in this browser.");
   logger.trace("extract.start", { fileName: file.name, paths });
   const result = await extract({
-    entries: paths,
+    entries: paths.map(toExactSelectPattern),
     options: { extractSelected: true, onProgress: options.onProgress, signal: options.signal },
     source: file,
   });

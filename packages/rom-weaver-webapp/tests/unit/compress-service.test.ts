@@ -296,6 +296,18 @@ describe("compress service", () => {
       expect(entries.every((entry) => vi.mocked(entry.output.dispose).mock.calls.length === 0)).toBe(true);
     });
 
+    it("selects names with wildcard characters literally", async () => {
+      const { extract, runtime } = extractRuntime({});
+      extract.mockImplementationOnce(async () => {
+        const output = extracted("game[1] (v1.0?).iso", file("g", "iso"));
+        return { entries: [], output, outputs: [output] };
+      });
+      const entries = await extractCompressEntries(file("set.zip"), ["game[1] (v1.0?).iso"], runtime);
+
+      expect(extract.mock.calls[0]?.[0].entries).toEqual(["game[[]1] (v1.0[?]).iso"]);
+      expect(entries.map((entry) => entry.file.name)).toEqual(["game[1] (v1.0?).iso"]);
+    });
+
     it("names entries that share a base name after their folders so they compress together", async () => {
       const { runtime } = extractRuntime({
         "Disc 1/readme.txt": file("a", "one"),
