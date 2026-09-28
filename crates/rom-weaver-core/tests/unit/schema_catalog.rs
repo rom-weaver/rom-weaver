@@ -1,75 +1,32 @@
-use std::{collections::HashSet, fs, path::Path};
+use std::collections::HashSet;
 
 use super::super::{SaveDetectionInput, SaveEdit, SaveGameRegistry, SaveValue};
 
 #[test]
 fn every_catalog_pack_loads_and_builtins_match_the_default_registry() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let directories = [
-        root.join("../../data/save-schemas"),
-        root.join("data/save-schemas"),
-    ];
-    let mut registry = SaveGameRegistry::default();
+    let registry = SaveGameRegistry::default();
     let mut ids = HashSet::new();
-    let mut count = 0;
-    for entry in directories
-        .into_iter()
-        .flat_map(|directory| fs::read_dir(directory).unwrap())
-    {
-        let path = entry.unwrap().path();
-        if path.extension().is_none_or(|extension| extension != "json")
-            || path.file_name().unwrap() == "schema-v1.schema.json"
-        {
-            continue;
-        }
-        let bytes = fs::read(&path).unwrap();
-        let schema = super::SaveSchemaPack::from_json(&bytes)
-            .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
-        let generation_ids = schema
-            .games
-            .iter()
-            .filter(|game| game.generation.is_some())
-            .map(|game| game.id.clone())
-            .collect::<Vec<_>>();
-        for game in &schema.games {
-            let id = &game.id;
-            assert!(ids.insert(id.clone()), "duplicate catalog game: {id}");
-            assert!(!game.fields.is_empty(), "empty catalog game: {id}");
-            count += 1;
-        }
-        if path
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .starts_with("builtin-")
-        {
-            for handler in schema.into_handlers() {
-                for definition in super::SaveGameHandler::definitions(&handler) {
-                    assert!(registry.definitions().contains(&definition));
-                }
-            }
-        } else {
-            registry = registry
-                .with_schema_pack_json(&bytes)
-                .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
-        }
-        for id in generation_ids {
-            registry
-                .generate(&id)
+    let handlers = super::catalog::all();
+    assert_eq!(handlers.len(), 70);
+    for handler in handlers {
+        let definition = super::SaveGameHandler::definitions(&handler)
+            .into_iter()
+            .next()
+            .unwrap();
+        let id = &definition.identity.id;
+        assert!(ids.insert(id.clone()), "duplicate catalog game: {id}");
+        assert!(!handler.game.fields.is_empty(), "empty catalog game: {id}");
+        assert!(registry.definitions().contains(&definition));
+        if super::SaveGameHandler::supports_generation(&handler, &definition.identity) {
+            super::SaveGameHandler::generate(&handler, &definition.identity)
                 .unwrap_or_else(|error| panic!("{id}: {error}"));
         }
     }
-    assert!(count > 1);
 }
 
 #[test]
 fn extra_zelda_slots_preserve_other_files_and_match_native_rupee_edits() {
-    let registry = SaveGameRegistry::default()
-        .with_schema_pack_json(include_bytes!(
-            "../../../../data/save-schemas/zelda-a-link-to-the-past.json"
-        ))
-        .unwrap();
+    let registry = SaveGameRegistry::default();
     let mut original = registry.generate("zelda-a-link-to-the-past").unwrap();
     for offset in [0x500, 0xa00, 0x1400, 0x1900] {
         original.bytes.copy_within(0..0x500, offset);
@@ -111,11 +68,7 @@ fn extra_zelda_slots_preserve_other_files_and_match_native_rupee_edits() {
 
 #[test]
 fn extra_mario_world_slots_preserve_other_files_and_match_native_edits() {
-    let registry = SaveGameRegistry::default()
-        .with_schema_pack_json(include_bytes!(
-            "../../../../data/save-schemas/super-mario-world.json"
-        ))
-        .unwrap();
+    let registry = SaveGameRegistry::default();
     let mut original = registry.generate("super-mario-world").unwrap();
     for offset in [143, 286, 572, 715] {
         original.bytes.copy_within(0..143, offset);

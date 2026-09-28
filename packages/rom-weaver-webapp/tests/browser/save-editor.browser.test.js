@@ -155,14 +155,9 @@ test("loads a recognized local save with generic grouped fields", async () => {
   await expect.element(page.getByLabelText("Badge 1", { exact: true })).toHaveTextContent("1");
 });
 
-test("loads and clears a local save schema pack", async () => {
-  await expect.element(page.getByRole("button", { name: "Load schema pack" })).toBeVisible();
-  const schema = new File(["{}"], "custom-saves.json", { type: "application/json" });
-  await page.getByLabelText("Save schema pack").upload(schema);
-  await expect.element(page.getByText("custom-saves.json")).toBeInTheDocument();
-  expect(mocks.listSaveGames).toHaveBeenCalledWith(expect.any(AbortSignal), schema);
-  await page.getByRole("button", { name: "Clear schema pack" }).click();
-  await expect.element(page.getByText("custom-saves.json")).not.toBeInTheDocument();
+test("uses the compiled catalog without a schema-pack control", async () => {
+  await expect.element(page.getByRole("button", { name: "Load schema pack" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("button", { name: "Choose a game" })).toBeVisible();
 });
 
 test("finds properties while retaining pending changes", async () => {

@@ -3,13 +3,6 @@ use super::{
     SaveGameRegistry, SaveValue, ZeldaAlttpHandler,
 };
 
-const POKEMON_GEN1_PACK: &[u8] =
-    include_bytes!("../../../../data/save-schemas/pokemon-generation-i.json");
-const ZELDA_ALTTP_PACK: &[u8] =
-    include_bytes!("../../../../data/save-schemas/zelda-a-link-to-the-past.json");
-const POKEMON_GEN2_PACK: &[u8] =
-    include_bytes!("../../../../data/save-schemas/pokemon-generation-ii.json");
-
 fn input(bytes: Vec<u8>, game: &str) -> SaveDetectionInput {
     SaveDetectionInput {
         bytes,
@@ -39,9 +32,7 @@ fn value_for_gen1_field(id: &str) -> SaveValue {
 
 #[test]
 fn pokemon_gen1_schema_template_and_representable_edits_match_native() {
-    let registry = SaveGameRegistry::default()
-        .with_schema_pack_json(POKEMON_GEN1_PACK)
-        .unwrap();
+    let registry = SaveGameRegistry::default();
     for (native_id, schema_id) in [
         ("pokemon-red", "pokemon-red-schema"),
         ("pokemon-blue", "pokemon-blue-schema"),
@@ -112,9 +103,7 @@ fn value_for_zelda_field(id: &str) -> SaveValue {
 
 #[test]
 fn zelda_alttp_schema_generation_and_representable_edits_match_native() {
-    let registry = SaveGameRegistry::default()
-        .with_schema_pack_json(ZELDA_ALTTP_PACK)
-        .unwrap();
+    let registry = SaveGameRegistry::default();
     let native_game = ZeldaAlttpHandler.definitions()[0].identity.clone();
     let schema_id = "zelda-a-link-to-the-past-file-1-schema";
     let schema_game = registry
@@ -153,9 +142,7 @@ fn zelda_alttp_schema_generation_and_representable_edits_match_native() {
 
 #[test]
 fn pokemon_gen2_schema_template_and_semantic_fixed_edits_match_native() {
-    let registry = SaveGameRegistry::default()
-        .with_schema_pack_json(POKEMON_GEN2_PACK)
-        .unwrap();
+    let registry = SaveGameRegistry::default();
     for native_game in PokemonGen2Handler.definitions() {
         let native_game = native_game.identity;
         let schema_id = format!("{}-schema", native_game.id);

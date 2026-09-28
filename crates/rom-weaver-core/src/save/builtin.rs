@@ -2,21 +2,10 @@ use std::sync::OnceLock;
 
 use super::{
     SaveDetectionInput, SaveDocument, SaveEdit, SaveEditResult, SaveGameDefinition,
-    SaveGameHandler, SaveGameIdentity, SaveRecognition, SaveRecognitionOutcome, SaveSchemaPack,
-    SchemaSaveHandler,
+    SaveGameHandler, SaveGameIdentity, SaveRecognition, SaveRecognitionOutcome,
+    schema::{SchemaSaveHandler, catalog},
 };
 use crate::{Result, RomWeaverError};
-
-fn load(
-    slot: &'static OnceLock<Vec<SchemaSaveHandler>>,
-    bytes: &'static [u8],
-) -> &'static [SchemaSaveHandler] {
-    slot.get_or_init(|| {
-        SaveSchemaPack::from_json(bytes)
-            .expect("built-in save schema packs must pass repository validation")
-            .into_handlers()
-    })
-}
 
 fn definitions(handlers: &[SchemaSaveHandler]) -> Vec<SaveGameDefinition> {
     handlers
@@ -87,7 +76,7 @@ fn recognize(handlers: &[SchemaSaveHandler], input: &SaveDetectionInput) -> Save
 fn generate_first(handlers: &[SchemaSaveHandler]) -> Result<Vec<u8>> {
     let handler = handlers
         .first()
-        .ok_or_else(|| RomWeaverError::Validation("the built-in schema pack is empty".into()))?;
+        .ok_or_else(|| RomWeaverError::Validation("the built-in schema catalog is empty".into()))?;
     let identity = handler
         .definitions()
         .into_iter()
@@ -98,17 +87,14 @@ fn generate_first(handlers: &[SchemaSaveHandler]) -> Result<Vec<u8>> {
 }
 
 macro_rules! builtin_handler {
-    ($name:ident, $file:literal) => {
+    ($name:ident, $catalog:ident) => {
         #[derive(Clone, Copy, Debug, Default)]
         pub struct $name;
 
         impl $name {
             fn handlers() -> &'static [SchemaSaveHandler] {
                 static HANDLERS: OnceLock<Vec<SchemaSaveHandler>> = OnceLock::new();
-                load(
-                    &HANDLERS,
-                    include_bytes!(concat!(env!("OUT_DIR"), "/save-schemas/", $file, ".json")),
-                )
+                HANDLERS.get_or_init(catalog::$catalog::schemas)
             }
         }
 
@@ -151,13 +137,13 @@ macro_rules! builtin_handler {
     };
 }
 
-builtin_handler!(PokemonGen1Handler, "builtin-pokemon-gen1");
-builtin_handler!(PokemonGen2Handler, "builtin-pokemon-gen2");
-builtin_handler!(PokemonGen3Handler, "builtin-pokemon-gen3");
-builtin_handler!(PokemonGen4Handler, "builtin-pokemon-gen4");
-builtin_handler!(PokemonGen5Handler, "builtin-pokemon-gen5");
-builtin_handler!(SuperMarioWorldHandler, "builtin-super-mario-world");
-builtin_handler!(ZeldaAlttpHandler, "builtin-zelda-alttp");
+builtin_handler!(PokemonGen1Handler, builtin_pokemon_gen1);
+builtin_handler!(PokemonGen2Handler, builtin_pokemon_gen2);
+builtin_handler!(PokemonGen3Handler, builtin_pokemon_gen3);
+builtin_handler!(PokemonGen4Handler, builtin_pokemon_gen4);
+builtin_handler!(PokemonGen5Handler, builtin_pokemon_gen5);
+builtin_handler!(SuperMarioWorldHandler, builtin_super_mario_world);
+builtin_handler!(ZeldaAlttpHandler, builtin_zelda_alttp);
 
 impl SuperMarioWorldHandler {
     pub fn generate() -> Result<Vec<u8>> {

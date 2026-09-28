@@ -1,12 +1,10 @@
 use std::collections::HashSet;
 
-use serde::Deserialize;
-
 use super::super::SaveSection;
 #[cfg(test)]
 use super::Storage;
-use super::rules::{Predicate, Scalar};
-use super::{Checksum, ChecksumAlgorithm, ChecksumSpan, ChecksumUnit, RawChecksum};
+use super::rules::{Condition, Scalar};
+use super::{Checksum, ChecksumAlgorithm, ChecksumDefinition, ChecksumSpan, ChecksumUnit};
 use crate::{Result, RomWeaverError, ValidationCodeError};
 
 const MAX_LOGICAL_SIZE: usize = 8 * 1024 * 1024;
@@ -15,33 +13,25 @@ const MAX_COPIES: usize = 128;
 const MAX_SPANS: usize = 4096;
 const MAX_INTEGRITY_BYTES: usize = 64 * 1024 * 1024;
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct Layout {
-    #[serde(default)]
-    groups: Vec<Group>,
+#[derive(Clone, Debug)]
+pub struct Layout {
+    pub groups: Vec<Group>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Group {
-    id: String,
-    logical_offset: usize,
-    logical_length: usize,
-    copies: Copies,
-    #[serde(default)]
-    selection: Selection,
-    #[serde(default)]
-    write: WritePolicy,
-    #[serde(default)]
-    empty: Vec<u8>,
-    #[serde(default)]
-    empty_if_no_signature: bool,
+#[derive(Clone, Debug)]
+pub struct Group {
+    pub id: String,
+    pub logical_offset: usize,
+    pub logical_length: usize,
+    pub copies: Copies,
+    pub selection: Selection,
+    pub write: WritePolicy,
+    pub empty: Vec<u8>,
+    pub empty_if_no_signature: bool,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-enum Copies {
+#[derive(Clone, Debug)]
+pub enum Copies {
     Fixed {
         candidates: Vec<Candidate>,
     },
@@ -59,49 +49,40 @@ enum Copies {
     },
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Candidate {
-    spans: Vec<Span>,
-    #[serde(default)]
-    signatures: Vec<Signature>,
-    #[serde(default)]
-    checksums: Vec<RawChecksum>,
-    #[serde(default)]
-    repairs: Vec<Repair>,
-    #[serde(default)]
-    predicates: Vec<Predicate>,
-    #[serde(default)]
-    sections: Vec<FixedSection>,
-    counter: Option<Scalar>,
-    checksum_blocks: Option<ChecksumBlocks>,
+#[derive(Clone, Debug, Default)]
+pub struct Candidate {
+    pub spans: Vec<Span>,
+    pub signatures: Vec<Signature>,
+    pub checksums: Vec<ChecksumDefinition>,
+    pub repairs: Vec<Repair>,
+    pub predicates: Vec<Condition>,
+    pub sections: Vec<FixedSection>,
+    pub counter: Option<Scalar>,
+    pub checksum_blocks: Option<ChecksumBlocks>,
 }
 
 /// Blocks that each own one checksum and an optional mirrored copy of it.
 /// Each block expands into a validated and repaired checksum, a mirror
 /// equality predicate and repair, and one reported section.
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ChecksumBlocks {
-    algorithm: ChecksumAlgorithm,
-    signature: Option<Scalar>,
-    blocks: Vec<ChecksumBlock>,
+#[derive(Clone, Debug)]
+pub struct ChecksumBlocks {
+    pub algorithm: ChecksumAlgorithm,
+    pub signature: Option<Scalar>,
+    pub blocks: Vec<ChecksumBlock>,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ChecksumBlock {
-    start: usize,
-    length: usize,
-    offset: usize,
-    mirror: Option<usize>,
+#[derive(Clone, Copy, Debug)]
+pub struct ChecksumBlock {
+    pub start: usize,
+    pub length: usize,
+    pub offset: usize,
+    pub mirror: Option<usize>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-enum Repair {
+#[derive(Clone, Debug)]
+pub enum Repair {
     Checksum {
-        checksum: RawChecksum,
+        checksum: ChecksumDefinition,
     },
     Mirror {
         source: usize,
@@ -110,50 +91,44 @@ enum Repair {
     },
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct FixedSection {
-    id: u8,
-    physical_offset: usize,
-    checksum: RawChecksum,
-    signature: Option<Scalar>,
-    counter: Option<Scalar>,
+#[derive(Clone, Debug)]
+pub struct FixedSection {
+    pub id: u8,
+    pub physical_offset: usize,
+    pub checksum: ChecksumDefinition,
+    pub signature: Option<Scalar>,
+    pub counter: Option<Scalar>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct TaggedCandidate {
-    offset: usize,
-    section_count: usize,
+#[derive(Clone, Debug)]
+pub struct TaggedCandidate {
+    pub offset: usize,
+    pub section_count: usize,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct TaggedSection {
-    id: u8,
-    logical_offset: usize,
-    length: usize,
-    checksum_length: usize,
+#[derive(Clone, Debug)]
+pub struct TaggedSection {
+    pub id: u8,
+    pub logical_offset: usize,
+    pub length: usize,
+    pub checksum_length: usize,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Span {
-    logical_offset: usize,
-    physical_offset: usize,
-    length: usize,
+#[derive(Clone, Copy, Debug)]
+pub struct Span {
+    pub logical_offset: usize,
+    pub physical_offset: usize,
+    pub length: usize,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Signature {
-    offset: usize,
-    bytes: Vec<u8>,
+#[derive(Clone, Debug)]
+pub struct Signature {
+    pub offset: usize,
+    pub bytes: Vec<u8>,
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum Selection {
+#[derive(Clone, Copy, Debug, Default)]
+pub enum Selection {
     #[default]
     FirstValid,
     NewestCounter,
@@ -162,9 +137,8 @@ enum Selection {
     NewestCounterMaxToZeroErrorOnTie,
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum WritePolicy {
+#[derive(Clone, Copy, Debug, Default)]
+pub enum WritePolicy {
     #[default]
     Selected,
     PatchAllValid,
@@ -464,20 +438,10 @@ impl Group {
                                 .checked_add(length)
                                 .ok_or_else(|| invalid("layout integrity work overflows"))
                         })?;
-                    let predicates =
-                        candidate
-                            .predicates
-                            .iter()
-                            .try_fold(0usize, |total, predicate| {
-                                total
-                                    .checked_add(predicate.work_bytes()?)
-                                    .ok_or_else(|| invalid("layout integrity work overflows"))
-                            })?;
                     total
                         .checked_add(checksums)
                         .and_then(|value| value.checked_add(mirrors))
                         .and_then(|value| value.checked_add(mappings))
-                        .and_then(|value| value.checked_add(predicates))
                         .ok_or_else(|| invalid("layout integrity work overflows"))
                 })
             }
@@ -527,9 +491,6 @@ impl Group {
                     }
                     for repair in &candidate.repairs {
                         repair.validate(save_size)?;
-                    }
-                    for predicate in &candidate.predicates {
-                        predicate.validate(save_size)?;
                     }
                     if candidate.sections.len() > MAX_SPANS {
                         return Err(invalid("fixed sections exceed 4096 entries"));
@@ -876,7 +837,7 @@ impl Candidate {
         }
         let width = blocks.algorithm.width();
         for (index, block) in blocks.blocks.into_iter().enumerate() {
-            let checksum = RawChecksum {
+            let checksum = ChecksumDefinition {
                 algorithm: blocks.algorithm,
                 start: Some(block.start),
                 length: Some(block.length),
@@ -891,11 +852,22 @@ impl Candidate {
                 checksum: checksum.clone(),
             });
             if let Some(mirror) = block.mirror {
-                self.predicates.push(Predicate::Equal {
-                    left: block.offset,
-                    right: mirror,
-                    length: width,
-                });
+                let left = block.offset;
+                self.predicates.push(Condition::new(move |bytes| {
+                    let left_end = left
+                        .checked_add(width)
+                        .ok_or_else(|| invalid("equality check range overflows"))?;
+                    let right_end = mirror
+                        .checked_add(width)
+                        .ok_or_else(|| invalid("equality check range overflows"))?;
+                    let left = bytes
+                        .get(left..left_end)
+                        .ok_or_else(|| invalid("equality check is outside its image"))?;
+                    let right = bytes
+                        .get(mirror..right_end)
+                        .ok_or_else(|| invalid("equality check is outside its image"))?;
+                    Ok(left == right)
+                }));
                 self.repairs.push(Repair::Mirror {
                     source: block.offset,
                     target: mirror,
@@ -1053,8 +1025,8 @@ fn tagged_checksum(
     offset: usize,
     algorithm: Option<ChecksumAlgorithm>,
     unit: Option<ChecksumUnit>,
-) -> RawChecksum {
-    RawChecksum {
+) -> ChecksumDefinition {
+    ChecksumDefinition {
         algorithm: algorithm.unwrap_or(ChecksumAlgorithm::Sum32LeFold16),
         start: None,
         length: None,
@@ -1100,7 +1072,6 @@ mod tests {
                                 offset: 3,
                                 storage: Storage::U8,
                                 mask: None,
-                                relative: false,
                             }),
                         },
                         Candidate {
@@ -1122,7 +1093,6 @@ mod tests {
                                 offset: 7,
                                 storage: Storage::U8,
                                 mask: None,
-                                relative: false,
                             }),
                         },
                     ],
@@ -1195,13 +1165,11 @@ mod tests {
         };
         candidates[0].counter = Some(Scalar {
             offset: 1,
-            relative: false,
             storage: Storage::U32Le,
             mask: None,
         });
         candidates[1].counter = Some(Scalar {
             offset: 6,
-            relative: false,
             storage: Storage::U32Le,
             mask: None,
         });

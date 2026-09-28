@@ -1,29 +1,30 @@
 #[cfg(test)]
 mod advanced_parity;
-mod authoring;
+pub(super) mod catalog;
+mod definition;
 #[cfg(test)]
 mod early_parity;
-mod field;
-mod generation;
+pub mod field;
+pub mod generation;
 #[cfg(test)]
 #[path = "../../tests/unit/schema_catalog.rs"]
 mod schema_catalog_tests;
-use generation::{Generation, RawGeneration};
-mod layout;
+#[cfg(test)]
+mod tests;
+use generation::{Generation, GenerationDefinition};
+pub mod layout;
 #[cfg(test)]
 mod parity;
-mod records;
-mod rules;
+pub mod rules;
 #[cfg(test)]
 mod rules_tests;
-mod runtime;
-mod text;
+pub mod runtime;
+pub mod text;
 
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
-use tracing::{debug, trace};
+use tracing::trace;
 
 use super::{
     SaveConstraint, SaveDetectionInput, SaveDocument, SaveEdit, SaveEditResult, SaveField,
@@ -34,97 +35,38 @@ use super::{
 };
 use crate::{Result, RomWeaverError, ValidationCodeError};
 
-const MAX_PACK_BYTES: usize = 2 * 1024 * 1024;
-const MAX_GAMES: usize = 64;
 const MAX_FIELDS: usize = 4096;
 const MAX_COMPONENTS: usize = 4096;
+const MAX_INTEGRITY_BYTES: usize = 64 * 1024 * 1024;
 const MAX_SAVE_SIZE: usize = 8 * 1024 * 1024;
 const MAX_SECTIONS: usize = 128;
 const MAX_TEXT: usize = 1024;
 const MAX_GAME_ID: usize = 128;
-const MAX_INTEGRITY_BYTES: usize = 64 * 1024 * 1024;
-const MAX_RECORD_COUNT: usize = 4096;
-const MAX_EXPANDED_METADATA_BYTES: usize = 2 * 1024 * 1024;
-const EXPANDED_FIELD_COST: usize = 256;
-const EXPANDED_CHOICE_COST: usize = 32;
-const EXPANDED_COPY_COST: usize = 8;
-
-#[derive(Clone, Debug)]
-pub struct SaveSchemaPack {
-    games: Vec<GameSchema>,
-}
-
-impl SaveSchemaPack {
-    pub fn from_json(bytes: &[u8]) -> Result<Self> {
-        if bytes.len() > MAX_PACK_BYTES {
-            return Err(invalid("the save schema pack exceeds 2 MiB"));
-        }
-        let value = authoring::from_json(bytes)?;
-        let raw: RawPack = serde_json::from_value(authoring::normalize(value)?)
-            .map_err(|error| invalid_owned(format!("invalid save schema JSON: {error}")))?;
-        if let Some(schema) = &raw.schema {
-            bounded_text_allow_empty(schema, "$schema")?;
-        }
-        if raw.schema_version != 1 {
-            return Err(invalid("the save schema version is unsupported"));
-        }
-        if raw.pack_revision.is_some_and(|revision| revision == 0) {
-            return Err(invalid("pack_revision must be positive"));
-        }
-        for (name, codec) in &raw.text_codecs {
-            codec.validate(name)?;
-        }
-        records::validate_templates(&raw.records)?;
-        if raw.games.is_empty() || raw.games.len() > MAX_GAMES {
-            return Err(invalid("a save schema pack must contain 1 to 64 games"));
-        }
-        let codecs = raw
-            .text_codecs
-            .into_iter()
-            .map(|(name, codec)| (name, Arc::new(codec)))
-            .collect();
-        let mut ids = HashSet::new();
-        let mut games = Vec::with_capacity(raw.games.len());
-        let mut integrity_bytes = 0usize;
-        for mut game in raw.games {
-            if !ids.insert(game.id.clone()) {
-                return Err(invalid("save schema game IDs must be unique"));
-            }
-            records::expand(&mut game, &raw.records)?;
-            let mut game = GameSchema::build(game)?;
-            for field in &mut game.fields {
-                field.bind_codec(&codecs)?;
-            }
-            integrity_bytes = integrity_bytes
-                .checked_add(game.integrity_bytes()?)
-                .ok_or_else(|| invalid("schema integrity work exceeds 64 MiB"))?;
-            if integrity_bytes > MAX_INTEGRITY_BYTES {
-                return Err(invalid("schema integrity work exceeds 64 MiB"));
-            }
-            games.push(game);
-        }
-        for game in &games {
-            game.validate_generation()?;
-        }
-        debug!(games = games.len(), "loaded save schema pack");
-        Ok(Self { games })
-    }
-
-    pub fn game_ids(&self) -> impl Iterator<Item = &str> {
-        self.games.iter().map(|game| game.id.as_str())
-    }
-
-    pub fn into_handlers(self) -> Vec<SchemaSaveHandler> {
-        self.games
-            .into_iter()
-            .map(|game| SchemaSaveHandler { game })
-            .collect()
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct SchemaSaveHandler {
-    game: GameSchema,
+    game: Arc<GameSchema>,
+}
+
+impl SchemaSaveHandler {
+    pub fn new(
+        definition: GameDefinition,
+        codecs: BTreeMap<String, text::TextCodec>,
+    ) -> Result<Self> {
+        let mut shared = BTreeMap::new();
+        for (name, codec) in codecs {
+            codec.validate(&name)?;
+            shared.insert(name, Arc::new(codec));
+        }
+        let mut game = GameSchema::build(definition)?;
+        for field in &mut game.fields {
+            field.bind_codec(&shared)?;
+        }
+        game.validate_generation()?;
+        Ok(Self {
+            game: Arc::new(game),
+        })
+    }
 }
 
 impl SaveGameHandler for SchemaSaveHandler {
@@ -142,6 +84,17 @@ impl SaveGameHandler for SchemaSaveHandler {
     }
 
     fn recognize(&self, input: &SaveDetectionInput) -> SaveRecognition {
+        if self.game.runtime.require_selection
+            && input.selected_game.as_deref() != Some(&self.game.id)
+        {
+            return SaveRecognition {
+                outcome: SaveRecognitionOutcome::Unsupported {
+                    reasons: vec![SaveRecognitionReason::UnsupportedLayout],
+                },
+                candidates: Vec::new(),
+                reasons: vec![SaveRecognitionReason::UnsupportedLayout],
+            };
+        }
         if self.game.runtime.recognition.is_some() {
             return self.game.recognize_configured(input);
         }
@@ -224,81 +177,49 @@ impl SaveGameHandler for SchemaSaveHandler {
     }
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawPack {
-    #[serde(default, rename = "$schema")]
-    schema: Option<String>,
-    schema_version: u32,
-    pack_revision: Option<u32>,
-    #[serde(default)]
-    records: BTreeMap<String, records::Record>,
-    #[serde(default)]
-    text_codecs: BTreeMap<String, text::TextCodec>,
-    games: Vec<RawGame>,
+#[derive(Clone, Debug)]
+pub struct GameDefinition {
+    pub id: String,
+    pub name: String,
+    pub platform: String,
+    pub description: String,
+    pub save_size: usize,
+    pub fields: Vec<FieldDefinition>,
+    pub signatures: Vec<SignatureDefinition>,
+    pub checksums: Vec<ChecksumDefinition>,
+    pub mirrors: Vec<MirrorDefinition>,
+    pub generation: Option<GenerationDefinition>,
+    pub runtime: runtime::Runtime,
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawGame {
-    id: String,
-    name: String,
-    platform: String,
-    #[serde(default)]
-    description: String,
-    save_size: usize,
-    fields: Vec<RawField>,
-    #[serde(default)]
-    records: Vec<records::Instance>,
-    #[serde(default)]
-    signatures: Vec<RawSignature>,
-    #[serde(default)]
-    checksums: Vec<RawChecksum>,
-    #[serde(default)]
-    mirrors: Vec<RawMirror>,
-    generation: Option<RawGeneration>,
-    #[serde(flatten)]
-    runtime: runtime::Runtime,
+#[derive(Clone, Debug)]
+pub struct FieldDefinition {
+    pub id: String,
+    pub label: String,
+    pub description: String,
+    pub offset: usize,
+    pub storage: Storage,
+    pub bit: Option<u8>,
+    pub length: Option<u8>,
+    pub min: Option<i64>,
+    pub max: Option<i64>,
+    pub editable: Option<bool>,
+    pub inverted: bool,
+    pub copies: Vec<usize>,
+    pub choices: Vec<FieldChoice>,
+    pub mask: Option<u32>,
+    pub behavior: field::FieldBehavior,
+    pub array_guards: Vec<field::ArrayGuard>,
 }
 
-#[derive(Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawField {
-    id: String,
-    label: String,
-    #[serde(default)]
-    description: String,
-    offset: usize,
-    #[serde(rename = "type")]
-    storage: Storage,
-    bit: Option<u8>,
-    length: Option<u8>,
-    min: Option<i64>,
-    max: Option<i64>,
-    editable: Option<bool>,
-    #[serde(default)]
-    inverted: bool,
-    #[serde(default)]
-    copies: Vec<usize>,
-    #[serde(default)]
-    choices: Vec<RawChoice>,
-    mask: Option<u32>,
-    #[serde(flatten)]
-    behavior: field::FieldBehavior,
-    #[serde(skip)]
-    array_guards: Vec<records::ArrayGuard>,
+#[derive(Clone, Debug)]
+pub struct FieldChoice {
+    pub name: String,
+    pub value: i64,
 }
 
-#[derive(Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawChoice {
-    name: String,
-    value: i64,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum Storage {
+#[derive(Clone, Copy, Debug)]
+pub enum Storage {
     U8,
     U16Le,
     U16Be,
@@ -318,32 +239,26 @@ enum Storage {
     BcdBe,
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawSignature {
-    offset: usize,
-    bytes: Vec<u8>,
+#[derive(Clone, Debug)]
+pub struct SignatureDefinition {
+    pub offset: usize,
+    pub bytes: Vec<u8>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawChecksum {
-    algorithm: ChecksumAlgorithm,
-    start: Option<usize>,
-    length: Option<usize>,
-    #[serde(default)]
-    spans: Vec<ChecksumSpan>,
-    offset: usize,
-    target: Option<u32>,
-    #[serde(default)]
-    unit: ChecksumUnit,
-    #[serde(default)]
-    exclude: Vec<ChecksumExclusion>,
+#[derive(Clone, Debug)]
+pub struct ChecksumDefinition {
+    pub algorithm: ChecksumAlgorithm,
+    pub start: Option<usize>,
+    pub length: Option<usize>,
+    pub spans: Vec<ChecksumSpan>,
+    pub offset: usize,
+    pub target: Option<u32>,
+    pub unit: ChecksumUnit,
+    pub exclude: Vec<ChecksumExclusion>,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum ChecksumAlgorithm {
+#[derive(Clone, Copy, Debug)]
+pub enum ChecksumAlgorithm {
     Sum8,
     Sum16Le,
     Sum16Be,
@@ -364,9 +279,8 @@ enum ChecksumAlgorithm {
     Crc16CcittFalseLe,
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum ChecksumUnit {
+#[derive(Clone, Copy, Debug, Default)]
+pub enum ChecksumUnit {
     #[default]
     U8,
     U16Le,
@@ -375,28 +289,24 @@ enum ChecksumUnit {
     U32Be,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ChecksumExclusion {
-    offset: usize,
-    length: usize,
+#[derive(Clone, Debug)]
+pub struct ChecksumExclusion {
+    pub offset: usize,
+    pub length: usize,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ChecksumSpan {
-    start: usize,
-    length: usize,
+#[derive(Clone, Debug)]
+pub struct ChecksumSpan {
+    pub start: usize,
+    pub length: usize,
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RawMirror {
-    source: usize,
-    target: usize,
-    length: usize,
-    #[serde(default)]
-    validate: Option<bool>,
+#[derive(Clone, Debug)]
+pub struct MirrorDefinition {
+    pub source: usize,
+    pub target: usize,
+    pub length: usize,
+    pub validate: Option<bool>,
 }
 
 #[derive(Clone, Debug)]
@@ -431,7 +341,7 @@ struct FieldSchema {
     mask: Option<u32>,
     behavior: field::FieldBehavior,
     codec: Option<Arc<text::TextCodec>>,
-    array_guards: Vec<records::ArrayGuard>,
+    array_guards: Vec<field::ArrayGuard>,
 }
 
 #[derive(Clone, Debug)]
@@ -463,7 +373,7 @@ struct Mirror {
     validate: bool,
 }
 impl GameSchema {
-    fn build(mut raw: RawGame) -> Result<Self> {
+    fn build(mut raw: GameDefinition) -> Result<Self> {
         validate_game_id(&raw.id)?;
         raw.runtime.expand(raw.save_size)?;
         raw.runtime.validate(raw.save_size)?;
@@ -561,29 +471,6 @@ impl GameSchema {
             generation,
             runtime: raw.runtime,
         })
-    }
-
-    fn integrity_bytes(&self) -> Result<usize> {
-        rules::sum_work(
-            self.signatures
-                .iter()
-                .map(|signature| Ok(signature.bytes.len()))
-                .chain(self.checksums.iter().map(|checksum| Ok(checksum.length)))
-                .chain(self.mirrors.iter().map(|mirror| Ok(mirror.length)))
-                .chain(self.fields.iter().map(|field| field.behavior.work_bytes()))
-                .chain(
-                    self.fields.iter().flat_map(|field| {
-                        field.array_guards.iter().map(|guard| guard.count.width())
-                    }),
-                )
-                .chain(std::iter::once(self.runtime.work_bytes()))
-                .chain(
-                    self.runtime
-                        .layout
-                        .iter()
-                        .map(|layout| layout.integrity_bytes(self.save_size)),
-                ),
-        )
     }
 
     fn identity(&self) -> SaveGameIdentity {
@@ -771,7 +658,7 @@ impl GameSchema {
 }
 
 impl FieldSchema {
-    fn build(raw: RawField, save_size: usize) -> Result<Self> {
+    fn build(raw: FieldDefinition, save_size: usize) -> Result<Self> {
         validate_field_id(&raw.id)?;
         bounded_text(&raw.label, "field label")?;
         bounded_text_allow_empty(&raw.description, "field description")?;
@@ -1382,7 +1269,7 @@ impl ChecksumAlgorithm {
 }
 
 impl Checksum {
-    fn build(raw: RawChecksum, size: usize) -> Result<Self> {
+    fn build(raw: ChecksumDefinition, size: usize) -> Result<Self> {
         let spans = match (raw.start, raw.length, raw.spans.is_empty()) {
             (Some(start), Some(length), true) => vec![ChecksumSpan { start, length }],
             (None, None, false) => raw.spans,
@@ -1606,7 +1493,7 @@ impl Checksum {
     }
 }
 impl Mirror {
-    fn build(raw: RawMirror, size: usize) -> Result<Self> {
+    fn build(raw: MirrorDefinition, size: usize) -> Result<Self> {
         check_nonempty_span(raw.source, raw.length, size, "mirror source")?;
         check_nonempty_span(raw.target, raw.length, size, "mirror target")?;
         if overlaps(
@@ -1777,707 +1664,42 @@ fn validation(code: &'static str, message: &'static str) -> RomWeaverError {
     RomWeaverError::ValidationCode(ValidationCodeError::new(code).with_message(message))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn handler(fields: &str, extra: &str) -> SchemaSaveHandler {
-        let json = format!(
-            r#"{{"schema_version":1,"games":[{{"id":"demo","name":"Demo","platform":"test","save_size":16,"fields":[{fields}],{extra}}}]}}"#
-        );
-        SaveSchemaPack::from_json(json.as_bytes())
-            .unwrap()
-            .into_handlers()
-            .remove(0)
-    }
-
-    fn identity(handler: &SchemaSaveHandler) -> SaveGameIdentity {
-        handler.definitions().remove(0).identity
-    }
-
-    #[test]
-    fn reads_and_writes_numeric_bit_bool_and_ascii_storage() {
-        let handler = handler(
-            r#"{"id":"le","label":"LE","offset":0,"type":"u16_le"},{"id":"be","label":"BE","offset":2,"type":"i16_be"},{"id":"flag","label":"Flag","offset":4,"type":"bit","bit":3},{"id":"enabled","label":"Enabled","offset":5,"type":"bool"},{"id":"name","label":"Name","offset":6,"type":"ascii","length":4}"#,
-            r#""signatures":[{"offset":15,"bytes":[170]}],"checksums":[],"mirrors":[]"#,
-        );
-        let game = identity(&handler);
-        let input = SaveDetectionInput {
-            bytes: vec![
-                0x34, 0x12, 0xff, 0xfe, 0xa5, 2, b'A', 0, 0xcc, 0xdd, 0, 0, 0, 0, 0, 0xaa,
-            ],
-            selected_game: Some("demo".into()),
-            rom_sha1: None,
-        };
-        let document = handler.parse(&input, &game).unwrap();
-        assert_eq!(document.fields[0].value, SaveValue::U32(0x1234));
-        assert_eq!(document.fields[1].value, SaveValue::I32(-2));
-        assert_eq!(document.fields[2].value, SaveValue::Bool(false));
-        assert_eq!(document.fields[3].value, SaveValue::Bool(true));
-        assert_eq!(document.fields[4].value, SaveValue::Text("A".into()));
-        let result = handler
-            .apply(
-                &input,
-                &game,
-                &[
-                    SaveEdit {
-                        field: "le".into(),
-                        value: SaveValue::U32(0xabcd),
-                    },
-                    SaveEdit {
-                        field: "be".into(),
-                        value: SaveValue::I32(-3),
-                    },
-                    SaveEdit {
-                        field: "flag".into(),
-                        value: SaveValue::Bool(true),
-                    },
-                    SaveEdit {
-                        field: "enabled".into(),
-                        value: SaveValue::Bool(false),
-                    },
-                    SaveEdit {
-                        field: "name".into(),
-                        value: SaveValue::Text("XY".into()),
-                    },
-                ],
-                false,
-            )
-            .unwrap();
-        let bytes = result.bytes.unwrap();
-        assert_eq!(
-            &bytes[..10],
-            &[0xcd, 0xab, 0xff, 0xfd, 0xad, 0, b'X', b'Y', 0, 0]
-        );
-        assert_eq!(bytes[15], 0xaa);
-    }
-
-    #[test]
-    fn generation_repairs_checksum_then_mirror() {
-        let handler = handler(
-            r#"{"id":"value","label":"Value","offset":1,"type":"u8"}"#,
-            r#""signatures":[{"offset":0,"bytes":[82]}],"checksums":[{"algorithm":"sum8","start":0,"length":3,"offset":3,"target":255}],"mirrors":[{"source":0,"target":8,"length":4}],"generation":{"fill":0,"patches":[{"offset":0,"bytes":[82,2]}]}"#,
-        );
-        let bytes = SaveGameHandler::generate(&handler, &identity(&handler)).unwrap();
-        assert_eq!(bytes[3], 171);
-        assert_eq!(&bytes[..4], &bytes[8..12]);
-    }
-
-    #[test]
-    fn dry_run_returns_document_without_bytes_or_input_mutation() {
-        let handler = handler(
-            r#"{"id":"value","label":"Value","offset":1,"type":"u8"}"#,
-            r#""signatures":[{"offset":0,"bytes":[82]}],"checksums":[],"mirrors":[]"#,
-        );
-        let input = SaveDetectionInput {
-            bytes: [82, 1].into_iter().chain([0; 14]).collect(),
-            selected_game: Some("demo".into()),
-            rom_sha1: None,
-        };
-        let original = input.bytes.clone();
-        let result = handler
-            .apply(
-                &input,
-                &identity(&handler),
-                &[SaveEdit {
-                    field: "value".into(),
-                    value: SaveValue::U32(9),
-                }],
-                true,
-            )
-            .unwrap();
-        assert!(result.bytes.is_none());
-        assert_eq!(result.document.fields[0].value, SaveValue::U32(9));
-        assert_eq!(input.bytes, original);
-    }
-
-    #[test]
-    fn schemas_without_evidence_need_explicit_selection() {
-        let handler = handler(
-            r#"{"id":"value","label":"Value","offset":0,"type":"u8"}"#,
-            r#""signatures":[],"checksums":[],"mirrors":[]"#,
-        );
-        let mut input = SaveDetectionInput {
-            bytes: vec![0; 16],
-            selected_game: None,
-            rom_sha1: None,
-        };
-        assert!(matches!(
-            handler.recognize(&input).outcome,
-            SaveRecognitionOutcome::Unsupported { .. }
-        ));
-        input.selected_game = Some("demo".into());
-        assert!(matches!(
-            handler.recognize(&input).outcome,
-            SaveRecognitionOutcome::Recognized { .. }
-        ));
-    }
-
-    #[test]
-    fn rejects_unknown_version_attributes_duplicates_bounds_and_overlaps() {
-        for json in [
-            r#"{"schema_version":2,"games":[]}"#,
-            r#"{"schema_version":1,"extra":0,"games":[]}"#,
-            r#"{"schema_version":1,"games":[{"id":"x","name":"X","platform":"x","save_size":1,"fields":[{"id":"a","label":"A","offset":0,"type":"u8"},{"id":"a","label":"B","offset":0,"type":"u8"}],"signatures":[],"checksums":[],"mirrors":[]}]}"#,
-            r#"{"schema_version":1,"games":[{"id":"x","name":"X","platform":"x","save_size":1,"fields":[{"id":"a","label":"A","offset":1,"type":"u8"}],"signatures":[],"checksums":[],"mirrors":[]}]}"#,
-            r#"{"schema_version":1,"games":[{"id":"x","name":"X","platform":"x","save_size":2,"fields":[{"id":"a","label":"A","offset":0,"type":"u16_le"},{"id":"b","label":"B","offset":1,"type":"u8"}],"signatures":[],"checksums":[],"mirrors":[]}]}"#,
-        ] {
-            assert!(
-                SaveSchemaPack::from_json(json.as_bytes()).is_err(),
-                "accepted {json}"
-            );
+impl GameDefinition {
+    pub fn new(id: String, name: String, platform: String, save_size: usize) -> Self {
+        Self {
+            id,
+            name,
+            platform,
+            save_size,
+            description: String::new(),
+            fields: Vec::new(),
+            signatures: Vec::new(),
+            checksums: Vec::new(),
+            mirrors: Vec::new(),
+            generation: None,
+            runtime: runtime::Runtime::default(),
         }
     }
-
-    #[test]
-    fn rejects_mirrors_that_can_overwrite_required_signatures() {
-        let mut pack = serde_json::json!({
-            "schema_version": 1,
-            "games": [{
-                "id": "mirror_sig", "name": "Mirror", "platform": "test",
-                "save_size": 2, "fields": [],
-                "signatures": [{"offset": 1, "bytes": [170]}],
-                "mirrors": [{"source": 0, "target": 1, "length": 1}],
-                "generation": {"fill": 0, "patches": [{"offset": 1, "bytes": [170]}]}
-            }]
-        });
-        for validate in [true, false] {
-            pack["games"][0]["mirrors"][0]["validate"] = validate.into();
-            let error = SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap())
-                .expect_err("mirror must not overwrite a required signature");
-            assert!(
-                error
-                    .to_string()
-                    .contains("mirror targets overlap protected")
-            );
+}
+impl FieldDefinition {
+    pub fn new(id: String, label: String, offset: usize, storage: Storage) -> Self {
+        Self {
+            id,
+            label,
+            offset,
+            storage,
+            description: String::new(),
+            bit: None,
+            length: None,
+            min: None,
+            max: None,
+            editable: None,
+            inverted: false,
+            copies: Vec::new(),
+            choices: Vec::new(),
+            mask: None,
+            behavior: field::FieldBehavior::default(),
+            array_guards: Vec::new(),
         }
-    }
-
-    #[test]
-    fn corrupted_integrity_refuses_edits() {
-        let handler = handler(
-            r#"{"id":"value","label":"Value","offset":1,"type":"u8"}"#,
-            r#""signatures":[{"offset":0,"bytes":[82]}],"checksums":[{"algorithm":"sum8","start":0,"length":2,"offset":2}],"mirrors":[]"#,
-        );
-        let input = SaveDetectionInput {
-            bytes: vec![82, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            selected_game: Some("demo".into()),
-            rom_sha1: None,
-        };
-        assert!(
-            handler
-                .apply(
-                    &input,
-                    &identity(&handler),
-                    &[SaveEdit {
-                        field: "value".into(),
-                        value: SaveValue::U32(2)
-                    }],
-                    false
-                )
-                .is_err()
-        );
-    }
-
-    #[test]
-    fn rejects_unsafe_game_and_field_ids() {
-        for id in ["../save", "a/b", ".hidden", "Upper", "a\\n", ""] {
-            let json = format!(
-                r#"{{"schema_version":1,"games":[{{"id":"{id}","name":"X","platform":"x","save_size":1,"fields":[],"signatures":[],"checksums":[],"mirrors":[]}}]}}"#
-            );
-            assert!(SaveSchemaPack::from_json(json.as_bytes()).is_err());
-        }
-        for id in ["a..b", ".a", "a.", "a/b", "a=b", "a b", "é"] {
-            let json = format!(
-                r#"{{"schema_version":1,"games":[{{"id":"safe","name":"X","platform":"x","save_size":1,"fields":[{{"id":"{id}","label":"X","offset":0,"type":"u8"}}],"signatures":[],"checksums":[],"mirrors":[]}}]}}"#
-            );
-            assert!(SaveSchemaPack::from_json(json.as_bytes()).is_err());
-        }
-    }
-
-    #[test]
-    fn rejects_pack_wide_integrity_work_over_64_mib() {
-        let size = MAX_SAVE_SIZE;
-        let checksums = (0..9)
-            .map(|index| {
-                format!(
-                    r#"{{"algorithm":"sum8","start":0,"length":{},"offset":{}}}"#,
-                    size - 9,
-                    size - 9 + index
-                )
-            })
-            .collect::<Vec<_>>()
-            .join(",");
-        let json = format!(
-            r#"{{"schema_version":1,"games":[{{"id":"safe","name":"X","platform":"x","save_size":{size},"fields":[],"signatures":[],"checksums":[{checksums}],"mirrors":[]}}]}}"#
-        );
-        assert!(SaveSchemaPack::from_json(json.as_bytes()).is_err());
-    }
-
-    #[test]
-    fn preview_includes_integrity_mutations_in_other_sections() {
-        let size = 65_540;
-        let json = format!(
-            r#"{{"schema_version":1,"games":[{{"id":"wide","name":"Wide","platform":"x","save_size":{size},"fields":[{{"id":"value","label":"Value","offset":1,"type":"u8"}}],"signatures":[{{"offset":0,"bytes":[82]}}],"checksums":[{{"algorithm":"sum8","start":0,"length":2,"offset":65536}}],"mirrors":[{{"source":1,"target":65537,"length":1}}],"generation":{{"fill":0,"patches":[{{"offset":0,"bytes":[82]}}]}}}}]}}"#
-        );
-        let handler = SaveSchemaPack::from_json(json.as_bytes())
-            .unwrap()
-            .into_handlers()
-            .remove(0);
-        let game = identity(&handler);
-        let bytes = SaveGameHandler::generate(&handler, &game).unwrap();
-        let input = SaveDetectionInput {
-            bytes,
-            selected_game: Some("wide".into()),
-            rom_sha1: None,
-        };
-        let result = handler
-            .apply(
-                &input,
-                &game,
-                &[SaveEdit {
-                    field: "value".into(),
-                    value: SaveValue::U32(7),
-                }],
-                true,
-            )
-            .unwrap();
-        assert_eq!(result.preview.touched_sections, vec![0, 1]);
-        assert!(result.bytes.is_none());
-    }
-
-    #[test]
-    fn invalid_documents_expose_read_only_fields() {
-        let handler = handler(
-            r#"{"id":"value","label":"Value","offset":1,"type":"u8"}"#,
-            r#""signatures":[{"offset":0,"bytes":[82]}],"checksums":[],"mirrors":[]"#,
-        );
-        let input = SaveDetectionInput {
-            bytes: vec![0; 16],
-            selected_game: Some("demo".into()),
-            rom_sha1: None,
-        };
-        let document = handler.parse(&input, &identity(&handler)).unwrap();
-        assert_eq!(document.integrity.state, SaveIntegrityState::Invalid);
-        assert!(!document.fields[0].editable);
-    }
-
-    #[test]
-    fn checksum_algorithms_match_independent_byte_vectors() {
-        for (algorithm, unit, target, expected) in [
-            ("add8", "u8", 0, vec![10]),
-            ("sum8", "u8", 255, vec![245]),
-            ("xor8", "u8", 0, vec![4]),
-            ("add16_le", "u16_le", 0, vec![4, 6]),
-            ("add16_be", "u16_be", 0, vec![4, 6]),
-            ("sum16_le", "u16_le", 65535, vec![251, 249]),
-            ("sum16_be", "u16_be", 65535, vec![251, 249]),
-            ("xor16_le", "u16_le", 0, vec![2, 6]),
-            ("xor16_be", "u16_be", 0, vec![2, 6]),
-            ("add32_le", "u32_be", 0, vec![4, 3, 2, 1]),
-            ("add32_be", "u32_le", 0, vec![4, 3, 2, 1]),
-            ("sum32_le", "u32_be", u32::MAX, vec![251, 252, 253, 254]),
-            ("sum32_be", "u32_le", u32::MAX, vec![251, 252, 253, 254]),
-            ("xor32_le", "u32_be", 0, vec![4, 3, 2, 1]),
-            ("xor32_be", "u32_le", 0, vec![4, 3, 2, 1]),
-        ] {
-            let raw = serde_json::from_value(serde_json::json!({
-                "algorithm": algorithm, "unit": unit, "target": target,
-                "start": 0, "length": 4, "offset": 8
-            }))
-            .unwrap();
-            let checksum = Checksum::build(raw, 12).unwrap();
-            let mut bytes = vec![1, 2, 3, 4, 77, 88, 99, 111, 0, 0, 0, 0];
-            checksum.repair(&mut bytes);
-            assert_eq!(
-                &bytes[8..8 + expected.len()],
-                expected,
-                "{algorithm}/{unit}"
-            );
-            assert!(checksum.valid(&bytes));
-            bytes[0] = 2;
-            assert!(!checksum.valid(&bytes));
-        }
-        let raw = serde_json::from_value(serde_json::json!({
-            "algorithm":"add32_le", "unit":"u32_le", "start":0,"length":8,"offset":8
-        }))
-        .unwrap();
-        let checksum = Checksum::build(raw, 12).unwrap();
-        let mut bytes = vec![255, 255, 255, 255, 1, 0, 0, 0, 9, 9, 9, 9];
-        checksum.repair(&mut bytes);
-        assert_eq!(&bytes[8..], &[0; 4]);
-    }
-
-    #[test]
-    fn exclusions_zero_storage_and_mod255_checksum_matches_vectors() {
-        let raw = serde_json::from_value(serde_json::json!({
-            "algorithm":"sum8_mod255_complement", "start":0,"length":4,
-            "offset":1,"exclude":[{"offset":1,"length":1}]
-        }))
-        .unwrap();
-        let checksum = Checksum::build(raw, 4).unwrap();
-        let mut bytes = vec![255, 77, 2, 3];
-        checksum.repair(&mut bytes);
-        assert_eq!(bytes, [255, 250, 2, 3]);
-        assert!(!checksum.reads_span((1, 2)));
-        assert!(checksum.reads_span((1, 3)));
-        assert!(checksum.valid(&bytes));
-    }
-
-    #[test]
-    fn copies_preserve_other_backup_data_and_repair_disjoint_checksums() {
-        let handler = handler(
-            r#"{"id":"value","label":"Value","offset":1,"type":"u8","copies":[9]}"#,
-            r#""checksums":[{"algorithm":"add8","start":0,"length":3,"offset":3},{"algorithm":"add8","spans":[{"start":8,"length":2},{"start":12,"length":2}],"offset":15}],"generation":{"fill":0,"patches":[{"offset":1,"bytes":[2]},{"offset":8,"bytes":[11,3]},{"offset":12,"bytes":[13]}]}"#,
-        );
-        let game = identity(&handler);
-        let input = SaveDetectionInput {
-            bytes: handler.generate(&game).unwrap(),
-            selected_game: Some(game.id.clone()),
-            rom_sha1: None,
-        };
-        let result = handler
-            .apply(
-                &input,
-                &game,
-                &[SaveEdit {
-                    field: "value".into(),
-                    value: SaveValue::U32(7),
-                }],
-                false,
-            )
-            .unwrap();
-        let bytes = result.bytes.unwrap();
-        assert_eq!((bytes[1], bytes[3], bytes[9], bytes[15]), (7, 7, 7, 31));
-        assert_eq!((bytes[8], bytes[12], input.bytes[9]), (11, 13, 3));
-    }
-
-    #[test]
-    fn bcd_u24_and_inverted_bits_cover_boundaries() {
-        for (storage, encoded) in [
-            ("bcd_be", vec![0x12, 0x34, 0x56]),
-            ("bcd_le", vec![0x56, 0x34, 0x12]),
-        ] {
-            let raw = serde_json::from_value(serde_json::json!({"id":"money","label":"Money","offset":0,"type":storage,"length":3})).unwrap();
-            let field = FieldSchema::build(raw, 3).unwrap();
-            let mut bytes = vec![0; 3];
-            field.write(&mut bytes, &SaveValue::U32(123456)).unwrap();
-            assert_eq!(bytes, encoded);
-            assert_eq!(field.read(&bytes).unwrap(), SaveValue::U32(123456));
-            field.write(&mut bytes, &SaveValue::U32(999999)).unwrap();
-            assert_eq!(bytes, [0x99; 3]);
-            bytes[1] = 0xfa;
-            assert!(field.read(&bytes).is_err());
-        }
-        for storage in ["u24_le", "u24_be"] {
-            let raw = serde_json::from_value(
-                serde_json::json!({"id":"value","label":"Value","offset":0,"type":storage}),
-            )
-            .unwrap();
-            let field = FieldSchema::build(raw, 3).unwrap();
-            let mut bytes = vec![0; 3];
-            field.write(&mut bytes, &SaveValue::U32(0xffffff)).unwrap();
-            assert_eq!(bytes, [255; 3]);
-            assert_eq!(field.read(&bytes).unwrap(), SaveValue::U32(0xffffff));
-        }
-        let raw=serde_json::from_value(serde_json::json!({"id":"flag","label":"Flag","offset":0,"type":"bit","bit":2,"inverted":true})).unwrap();
-        let field = FieldSchema::build(raw, 1).unwrap();
-        let mut bytes = vec![255];
-        field.write(&mut bytes, &SaveValue::Bool(true)).unwrap();
-        assert_eq!(bytes, [251]);
-        assert_eq!(field.read(&bytes).unwrap(), SaveValue::Bool(true));
-    }
-
-    #[test]
-    fn rejects_invalid_checksum_spans_exclusions_and_copy_collisions() {
-        for checksum in [
-            serde_json::json!({"algorithm":"add16_le","unit":"u16_le","start":0,"length":3,"offset":8}),
-            serde_json::json!({"algorithm":"add8","start":0,"length":3,"spans":[{"start":4,"length":2}],"offset":8}),
-            serde_json::json!({"algorithm":"add8","spans":[{"start":0,"length":3},{"start":2,"length":3}],"offset":8}),
-            serde_json::json!({"algorithm":"add8","start":2,"length":3,"offset":8,"exclude":[{"offset":1,"length":1}]}),
-            serde_json::json!({"algorithm":"add8","start":0,"length":3,"offset":8,"target":256}),
-        ] {
-            assert!(Checksum::build(serde_json::from_value(checksum).unwrap(), 16).is_err());
-        }
-        let mut pack = serde_json::json!({"schema_version":1,"games":[{"id":"copy","name":"Copy","platform":"test","save_size":16,"fields":[{"id":"value","label":"Value","offset":1,"type":"u8","copies":[1]}]}]});
-        assert!(SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap()).is_err());
-        pack["games"][0]["fields"][0]["copies"] = serde_json::json!([8]);
-        pack["games"][0]["checksums"] =
-            serde_json::json!([{"algorithm":"add8","start":0,"length":3,"offset":8}]);
-        assert!(SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap()).is_err());
-    }
-
-    #[test]
-    fn schema_authoring_expands_records_and_bit_strides() {
-        let pack = serde_json::json!({
-            "schema_version": 1,
-            "pack_revision": 2,
-            "records": {
-                "slot": [{
-                    "id": "value_{index}", "label": "Value {index}",
-                    "description": "Slot {index}", "offset": 1, "type": "u8",
-                    "copies": [5]
-                }],
-                "flags": [{
-                    "id": "seen_{index}", "label": "Seen {index}",
-                    "offset": 0, "type": "bit", "bit": 7
-                }]
-            },
-            "games": [{
-                "id": "records", "name": "Records", "platform": "test",
-                "save_size": 32, "fields": [],
-                "records": [
-                    {"record":"slot", "offset":2, "id":"save", "count":2,
-                     "stride":8, "index_start":1, "index_width":3},
-                    {"record":"flags", "offset":20, "id":"dex", "count":3,
-                     "stride_bits":1, "index_start":7}
-                ]
-            }]
-        });
-        let handler = SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap())
-            .unwrap()
-            .into_handlers()
-            .remove(0);
-        let input = SaveDetectionInput {
-            bytes: vec![0; 32],
-            selected_game: Some("records".into()),
-            rom_sha1: None,
-        };
-        let document = handler.parse(&input, &identity(&handler)).unwrap();
-        assert_eq!(
-            document
-                .fields
-                .iter()
-                .map(|field| field.id.as_str())
-                .collect::<Vec<_>>(),
-            [
-                "save.value_001",
-                "save.value_002",
-                "dex.seen_7",
-                "dex.seen_8",
-                "dex.seen_9"
-            ]
-        );
-        assert_eq!(
-            (document.fields[0].offset, document.fields[1].offset),
-            (3, 11)
-        );
-        assert_eq!(
-            (document.fields[2].offset, document.fields[3].offset),
-            (20, 21)
-        );
-        let result = handler
-            .apply(
-                &input,
-                &identity(&handler),
-                &[SaveEdit {
-                    field: "save.value_002".into(),
-                    value: SaveValue::U32(9),
-                }],
-                false,
-            )
-            .unwrap();
-        let bytes = result.bytes.unwrap();
-        assert_eq!((bytes[11], bytes[15]), (9, 9));
-    }
-
-    #[test]
-    fn schema_authoring_rejects_invalid_record_contracts() {
-        let base = serde_json::json!({
-            "schema_version": 1,
-            "records": {"row":[{"id":"x_{index}","label":"X","offset":0,"type":"u8"}]},
-            "games":[{"id":"x","name":"X","platform":"x","save_size":2,"fields":[]}]
-        });
-        let mut cases = Vec::new();
-        let mut value = base.clone();
-        value["pack_revision"] = 0.into();
-        cases.push(value);
-        let mut value = base.clone();
-        value["records"]["row"][0]["unknown"] = true.into();
-        cases.push(value);
-        let mut value = base.clone();
-        value["games"][0]["records"] =
-            serde_json::json!([{"record":"missing","offset":0,"id":"r"}]);
-        cases.push(value);
-        let mut value = base.clone();
-        value["games"][0]["records"] =
-            serde_json::json!([{"record":"row","offset":0,"id":"r","count":2}]);
-        cases.push(value);
-        let mut value = base.clone();
-        value["games"][0]["records"] =
-            serde_json::json!([{"record":"row","offset":0,"id":"r","count":4097,"stride":1}]);
-        cases.push(value);
-        let mut value = base.clone();
-        value["games"][0]["records"] =
-            serde_json::json!([{"record":"row","offset":usize::MAX,"id":"r","count":2,"stride":1}]);
-        cases.push(value);
-        let mut value = base.clone();
-        value["games"][0]["records"] = serde_json::json!([{
-            "record":"row", "offset":0, "id":"r",
-            "index_start":u64::from(u32::MAX) + 1
-        }]);
-        cases.push(value);
-        let mut value = base.clone();
-        value["games"][0]["records"] = serde_json::json!([{
-            "record":"row", "offset":0, "id":"r", "count":2,
-            "stride":1, "index_start":u32::MAX
-        }]);
-        cases.push(value);
-        let mut value = base.clone();
-        value["games"][0]["records"] = serde_json::json!([{
-            "record":"row", "offset":0, "id":"r", "stride":MAX_SAVE_SIZE + 1
-        }]);
-        cases.push(value);
-        let mut value = base.clone();
-        value["games"][0]["records"] = serde_json::json!([{
-            "record":"row", "offset":0, "id":"r", "stride_bits":MAX_SAVE_SIZE * 8 + 1
-        }]);
-        cases.push(value);
-        let mut value = base.clone();
-        value["records"]["row"][0]["copies"] =
-            serde_json::Value::Array((0..4096).map(Into::into).collect());
-        value["games"][0]["save_size"] = 4096.into();
-        value["games"][0]["records"] = serde_json::json!([{"record":"row","offset":0,"id":"r"}]);
-        cases.push(value);
-        let mut value = base.clone();
-        value["records"]["row"][0]["choices"] = serde_json::Value::Array(
-            (0..100)
-                .map(|index| {
-                    serde_json::json!({
-                        "name": format!("choice-{index}-{}", "x".repeat(950)),
-                        "value": index
-                    })
-                })
-                .collect(),
-        );
-        value["games"][0]["save_size"] = 30.into();
-        value["games"][0]["records"] = serde_json::json!([
-            {"record":"row","offset":0,"id":"r","count":30,"stride":1}
-        ]);
-        cases.push(value);
-        for value in cases {
-            assert!(
-                SaveSchemaPack::from_json(&serde_json::to_vec(&value).unwrap()).is_err(),
-                "accepted {value}"
-            );
-        }
-        let mut unknown_version = base;
-        unknown_version["schema_version"] = 2.into();
-        assert!(SaveSchemaPack::from_json(&serde_json::to_vec(&unknown_version).unwrap()).is_err());
-
-        let boundary = serde_json::json!({
-            "schema_version":1,
-            "records":{"row":[{"id":"x_{index}","label":"X","offset":0,"type":"u8"}]},
-            "games":[{
-                "id":"x","name":"X","platform":"x","save_size":1,"fields":[],
-                "records":[{"record":"row","offset":0,"id":"r","index_start":u32::MAX}]
-            }]
-        });
-        assert!(SaveSchemaPack::from_json(&serde_json::to_vec(&boundary).unwrap()).is_ok());
-    }
-
-    #[test]
-    fn schema_authoring_choices_and_masks_preserve_unrelated_bits() {
-        let pack = serde_json::json!({
-            "schema_version":1,
-            "games":[{
-                "id":"mask", "name":"Mask", "platform":"test", "save_size":2,
-                "fields":[
-                    {"id":"mode","label":"Mode","offset":0,"type":"u16_le","mask":240,
-                     "choices":[{"name":"one","value":1},{"name":"two","value":2}]},
-                    {"id":"low","label":"Low","offset":0,"type":"u16_le","mask":15},
-                    {"id":"high","label":"High","offset":0,"type":"u16_le","mask":65280}
-                ]
-            }]
-        });
-        let handler = SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap())
-            .unwrap()
-            .into_handlers()
-            .remove(0);
-        let game = identity(&handler);
-        let input = SaveDetectionInput {
-            bytes: vec![0xb5, 0xaa],
-            selected_game: Some("mask".into()),
-            rom_sha1: None,
-        };
-        let document = handler.parse(&input, &game).unwrap();
-        assert_eq!(document.fields[0].value, SaveValue::Enum("raw:11".into()));
-        assert_eq!(
-            document.fields[0].constraints.choices,
-            ["one", "two", "raw:11"]
-        );
-        let result = handler
-            .apply(
-                &input,
-                &game,
-                &[SaveEdit {
-                    field: "mode".into(),
-                    value: SaveValue::Enum("two".into()),
-                }],
-                false,
-            )
-            .unwrap();
-        assert_eq!(result.bytes.unwrap(), [0x25, 0xaa]);
-        assert_eq!(
-            result.document.fields[0].value,
-            SaveValue::Enum("two".into())
-        );
-
-        let raw_result = handler
-            .apply(
-                &input,
-                &game,
-                &[SaveEdit {
-                    field: "mode".into(),
-                    value: SaveValue::Enum("raw:11".into()),
-                }],
-                false,
-            )
-            .unwrap();
-        assert!(!raw_result.preview.changed);
-    }
-
-    #[test]
-    fn schema_authoring_rejects_invalid_masks_choices_and_real_overlap() {
-        for fields in [
-            serde_json::json!([{"id":"x","label":"X","offset":0,"type":"u8","mask":0}]),
-            serde_json::json!([{"id":"x","label":"X","offset":0,"type":"u8","mask":5}]),
-            serde_json::json!([{"id":"x","label":"X","offset":0,"type":"i8","mask":1}]),
-            serde_json::json!([{"id":"x","label":"X","offset":0,"type":"bool","choices":[{"name":"x","value":1}]}]),
-            serde_json::json!([{"id":"x","label":"X","offset":0,"type":"u8","choices":[{"name":"raw:1","value":1}]}]),
-            serde_json::json!([
-                {"id":"x","label":"X","offset":0,"type":"u8","mask":15},
-                {"id":"y","label":"Y","offset":0,"type":"u8","mask":3}
-            ]),
-        ] {
-            let pack = serde_json::json!({"schema_version":1,"games":[{
-                "id":"x","name":"X","platform":"x","save_size":1,"fields":fields
-            }]});
-            assert!(
-                SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap()).is_err(),
-                "accepted {pack}"
-            );
-        }
-    }
-
-    #[test]
-    fn overlapping_read_only_views_still_protect_editable_storage() {
-        let mut fields = serde_json::json!([
-            {"id":"view","label":"View","offset":0,"type":"u16_le","editable":false},
-            {"id":"copy","label":"Copy","offset":1,"type":"u8","editable":false}
-        ]);
-        let load =
-            |fields: &serde_json::Value| {
-                SaveSchemaPack::from_json(&serde_json::to_vec(&serde_json::json!({
-                "schema_version":1,"games":[{
-                    "id":"views","name":"Views","platform":"test","save_size":2,"fields":fields
-                }]
-            })).unwrap())
-            };
-        assert!(load(&fields).is_ok());
-        fields[1]["editable"] = serde_json::json!(true);
-        assert!(load(&fields).is_err());
-        fields.as_array_mut().unwrap().reverse();
-        assert!(load(&fields).is_err());
     }
 }

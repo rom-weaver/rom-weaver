@@ -1,67 +1,23 @@
 use std::collections::{BTreeMap, HashSet};
 
-use serde::Deserialize;
-
 use crate::{Result, RomWeaverError, ValidationCodeError};
 
 const MAX_CODEC_COMPONENTS: usize = 1024;
 
-#[cfg(test)]
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct TextCodecCatalog {
-    pub codecs: BTreeMap<String, TextCodec>,
-}
-
-#[cfg(test)]
-impl TextCodecCatalog {
-    pub fn from_json(bytes: &[u8]) -> Result<Self> {
-        let catalog: Self = serde_json::from_slice(bytes).map_err(|error| {
-            RomWeaverError::ValidationCode(
-                ValidationCodeError::new("save_text_codec")
-                    .with_message(format!("invalid text codec catalog: {error}")),
-            )
-        })?;
-        if catalog.codecs.len() > MAX_CODEC_COMPONENTS {
-            return Err(validation(
-                "save_text_codec",
-                "a text codec catalog cannot exceed 1024 codecs",
-            ));
-        }
-        for (name, codec) in &catalog.codecs {
-            codec.validate(name)?;
-        }
-        Ok(catalog)
-    }
-
-    pub fn get(&self, name: &str) -> Result<&TextCodec> {
-        self.codecs
-            .get(name)
-            .ok_or_else(|| validation("save_text_codec", "the requested text codec is unknown"))
-    }
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug)]
 pub struct TextCodec {
     pub unit: TextUnit,
     pub max_chars: usize,
-    #[serde(default)]
     pub max_units: Option<usize>,
-    #[serde(default)]
     pub terminators: Vec<u32>,
-    #[serde(default)]
     pub skip: Vec<u32>,
     pub fill: u32,
-    #[serde(default)]
     pub write_terminator: Option<u32>,
-    #[serde(default)]
     pub lane: Option<BitLane>,
     pub mapping: TextMapping,
     pub decode_invalid: DecodeInvalid,
     pub missing_terminator: MissingTerminator,
     pub errors: TextErrors,
-    #[serde(default)]
     pub encode_transforms: Vec<ConditionalReplacement>,
 }
 
@@ -273,8 +229,7 @@ impl TextCodec {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug)]
 pub enum TextUnit {
     U8,
     U16Le,
@@ -369,8 +324,7 @@ impl TextUnit {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug)]
 pub struct BitLane {
     pub logical_to_storage: Vec<u8>,
 }
@@ -425,19 +379,14 @@ impl BitLane {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[derive(Clone, Debug)]
 pub enum TextMapping {
     Table {
-        #[serde(default)]
         ranges: Vec<GlyphRange>,
-        #[serde(default)]
         glyphs: BTreeMap<char, u32>,
-        #[serde(default)]
         aliases: BTreeMap<char, char>,
     },
     Unicode {
-        #[serde(default)]
         decode_replacements: BTreeMap<String, u32>,
     },
 }
@@ -551,8 +500,7 @@ impl TextMapping {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug)]
 pub struct GlyphRange {
     pub first: char,
     pub last: char,
@@ -600,24 +548,21 @@ impl GlyphRange {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[derive(Clone, Debug)]
 pub enum DecodeInvalid {
     Error,
     Replacement { character: char },
     Literal { template: String },
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[derive(Clone, Debug)]
 pub enum MissingTerminator {
     Accept,
     Error,
     Literal { value: String },
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug)]
 pub struct TextErrors {
     pub decode_invalid: TextError,
     pub encode_invalid: TextError,
@@ -625,8 +570,7 @@ pub struct TextErrors {
     pub too_long: TextError,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug)]
 pub struct TextError {
     pub code: String,
     pub message: String,
@@ -663,8 +607,7 @@ impl TextErrors {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug)]
 pub struct ConditionalReplacement {
     pub when_all: Vec<CodepointSet>,
     pub replacements: BTreeMap<String, u32>,
@@ -705,8 +648,7 @@ impl ConditionalReplacement {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(untagged)]
+#[derive(Clone, Debug)]
 pub enum CodepointSet {
     Range { min: u32, max: u32 },
     Values { values: Vec<u32> },
@@ -754,16 +696,163 @@ fn validation(code: &'static str, message: &'static str) -> RomWeaverError {
 
 #[cfg(test)]
 mod tests {
-    use super::TextCodecCatalog;
-    use crate::save::SaveSchemaPack;
+    use std::{collections::BTreeMap, sync::Arc};
 
-    const CATALOG: &[u8] = include_bytes!("../../../tests/fixtures/save-codecs.json");
+    use super::*;
+    use crate::save::schema::catalog::{builtin_pokemon_gen1, builtin_pokemon_gen2};
+
+    fn errors() -> TextErrors {
+        TextErrors {
+            decode_invalid: TextError {
+                code: "save_text_codec".into(),
+                message: "invalid text".into(),
+            },
+            encode_invalid: TextError {
+                code: "save_text_codec".into(),
+                message: "unsupported text".into(),
+            },
+            missing_terminator: TextError {
+                code: "save_text_codec".into(),
+                message: "missing terminator".into(),
+            },
+            too_long: TextError {
+                code: "save_name_length".into(),
+                message: "name is too long".into(),
+            },
+        }
+    }
+
+    fn builtin_codec(
+        handlers: Vec<crate::save::schema::SchemaSaveHandler>,
+        name: &str,
+    ) -> Arc<TextCodec> {
+        handlers
+            .into_iter()
+            .flat_map(|handler| handler.game.fields.clone())
+            .filter_map(|field| field.codec)
+            .find(|codec| {
+                codec.validate(name).is_ok()
+                    && match name {
+                        "pokemon_gen1_english" => {
+                            matches!(codec.decode_invalid, DecodeInvalid::Literal { .. })
+                        }
+                        "pokemon_gen2_english" => {
+                            matches!(codec.missing_terminator, MissingTerminator::Literal { .. })
+                        }
+                        _ => false,
+                    }
+            })
+            .expect("built-in text codec")
+    }
+
+    fn gen3_codec() -> TextCodec {
+        TextCodec {
+            unit: TextUnit::U8,
+            max_chars: 7,
+            max_units: Some(7),
+            terminators: vec![255],
+            skip: vec![],
+            fill: 0,
+            write_terminator: Some(255),
+            lane: None,
+            mapping: TextMapping::Table {
+                ranges: vec![
+                    GlyphRange {
+                        first: '0',
+                        last: '9',
+                        first_code: 161,
+                    },
+                    GlyphRange {
+                        first: 'A',
+                        last: 'Z',
+                        first_code: 187,
+                    },
+                    GlyphRange {
+                        first: 'a',
+                        last: 'z',
+                        first_code: 213,
+                    },
+                ],
+                glyphs: BTreeMap::from([('’', 180)]),
+                aliases: BTreeMap::from([('\'', '’')]),
+            },
+            decode_invalid: DecodeInvalid::Error,
+            missing_terminator: MissingTerminator::Accept,
+            errors: errors(),
+            encode_transforms: vec![],
+        }
+    }
+
+    fn gen5_codec() -> TextCodec {
+        TextCodec {
+            unit: TextUnit::U16Le,
+            max_chars: 7,
+            max_units: Some(7),
+            terminators: vec![0, 65535],
+            skip: vec![],
+            fill: 0,
+            write_terminator: Some(65535),
+            lane: None,
+            mapping: TextMapping::Unicode {
+                decode_replacements: BTreeMap::from([("9325".into(), 9794), ("9326".into(), 9792)]),
+            },
+            decode_invalid: DecodeInvalid::Error,
+            missing_terminator: MissingTerminator::Accept,
+            errors: errors(),
+            encode_transforms: vec![ConditionalReplacement {
+                when_all: vec![
+                    CodepointSet::Range { min: 0, max: 4095 },
+                    CodepointSet::Range {
+                        min: 57344,
+                        max: 61439,
+                    },
+                    CodepointSet::Values {
+                        values: vec![9792, 9794],
+                    },
+                ],
+                replacements: BTreeMap::from([("9794".into(), 9325), ("9792".into(), 9326)]),
+            }],
+        }
+    }
+
+    fn zelda_codec() -> TextCodec {
+        TextCodec {
+            unit: TextUnit::U16Le,
+            max_chars: 6,
+            max_units: Some(6),
+            terminators: vec![],
+            skip: vec![89],
+            fill: 89,
+            write_terminator: None,
+            lane: Some(BitLane {
+                logical_to_storage: vec![0, 1, 2, 3, 5, 6, 7, 8],
+            }),
+            mapping: TextMapping::Table {
+                ranges: vec![
+                    GlyphRange {
+                        first: 'A',
+                        last: 'Z',
+                        first_code: 0,
+                    },
+                    GlyphRange {
+                        first: 'a',
+                        last: 'z',
+                        first_code: 26,
+                    },
+                ],
+                glyphs: BTreeMap::from([(' ', 95)]),
+                aliases: BTreeMap::new(),
+            },
+            decode_invalid: DecodeInvalid::Replacement { character: '�' },
+            missing_terminator: MissingTerminator::Accept,
+            errors: errors(),
+            encode_transforms: vec![],
+        }
+    }
 
     #[test]
     fn built_in_codecs_match_native_name_rules() {
-        let catalog = TextCodecCatalog::from_json(CATALOG).unwrap();
-
-        let gen1 = catalog.get("pokemon_gen1_english").unwrap();
+        let gen1 = builtin_codec(builtin_pokemon_gen1::schemas(), "pokemon_gen1_english");
         let mut gen1_bytes = [0xa5; 11];
         gen1.encode("A{9", &mut gen1_bytes).unwrap();
         assert_eq!(&gen1_bytes[..4], &[0x80, 0xe1, 0xff, 0x50]);
@@ -774,13 +863,13 @@ mod tests {
         );
         assert_eq!(gen1.decode(&[0x80; 11]).unwrap(), "AAAAAAAAAAA");
 
-        let gen2 = catalog.get("pokemon_gen2_english").unwrap();
+        let gen2 = builtin_codec(builtin_pokemon_gen2::schemas(), "pokemon_gen2_english");
         assert_eq!(
             gen2.decode(&[0x80; 11]).unwrap(),
             "Trainer name has no terminator"
         );
 
-        let gen3 = catalog.get("pokemon_gen3_english").unwrap();
+        let gen3 = gen3_codec();
         let mut gen3_bytes = [0; 7];
         gen3.encode("A'", &mut gen3_bytes).unwrap();
         assert_eq!(&gen3_bytes[..3], &[0xbb, 0xb4, 0xff]);
@@ -789,8 +878,8 @@ mod tests {
 
     #[test]
     fn utf16_context_transform_and_unit_limit_match_gen5() {
-        let catalog = TextCodecCatalog::from_json(CATALOG).unwrap();
-        let codec = catalog.get("pokemon_gen5_utf16le").unwrap();
+        let codec = gen5_codec();
+        codec.validate("pokemon_gen5_utf16le").unwrap();
         let mut bytes = [0; 16];
         codec.encode("A♀é", &mut bytes).unwrap();
         assert_eq!(u16::from_le_bytes([bytes[2], bytes[3]]), 0x246e);
@@ -802,45 +891,29 @@ mod tests {
     }
 
     #[test]
-    fn unicode_replacement_keys_load_in_a_save_schema_pack() {
-        let catalog: serde_json::Value = serde_json::from_slice(CATALOG).unwrap();
-        let codec = catalog["codecs"]["pokemon_gen5_utf16le"].clone();
-        let pack = serde_json::json!({
-            "schema_version": 1,
-            "text_codecs": { "pokemon_gen5_utf16le": codec },
-            "games": [{
-                "id": "demo",
-                "name": "Demo",
-                "platform": "test",
-                "save_size": 16,
-                "fields": [{
-                    "id": "name",
-                    "label": "Name",
-                    "offset": 0,
-                    "type": "ascii",
-                    "length": 8,
-                    "text_codec": "pokemon_gen5_utf16le"
-                }]
-            }]
-        });
-
-        SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap()).unwrap();
+    fn unicode_replacement_keys_are_validated() {
+        let mut codec = gen5_codec();
+        codec.validate("pokemon_gen5_utf16le").unwrap();
+        let TextMapping::Unicode {
+            decode_replacements,
+        } = &mut codec.mapping
+        else {
+            unreachable!();
+        };
+        decode_replacements.insert("invalid".into(), 9794);
+        assert!(codec.validate("pokemon_gen5_utf16le").is_err());
     }
 
     #[test]
     fn pokemon_gen1_and_gen2_builtin_codecs_bind() {
-        for bytes in [
-            include_bytes!("../../../data/save-schemas/builtin-pokemon-gen1.json").as_slice(),
-            include_bytes!("../../../data/save-schemas/builtin-pokemon-gen2.json").as_slice(),
-        ] {
-            SaveSchemaPack::from_json(bytes).unwrap();
-        }
+        assert!(!builtin_pokemon_gen1::schemas().is_empty());
+        assert!(!builtin_pokemon_gen2::schemas().is_empty());
     }
 
     #[test]
     fn zelda_lane_preserves_unrelated_bits() {
-        let catalog = TextCodecCatalog::from_json(CATALOG).unwrap();
-        let codec = catalog.get("zelda_alttp_english_name").unwrap();
+        let codec = zelda_codec();
+        codec.validate("zelda_alttp_english_name").unwrap();
         let mut bytes = [0x10; 12];
         codec.encode("Az", &mut bytes).unwrap();
         assert_eq!(codec.decode(&bytes).unwrap(), "Az");

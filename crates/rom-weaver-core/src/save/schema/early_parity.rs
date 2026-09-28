@@ -1,4 +1,4 @@
-use super::SaveSchemaPack;
+use super::{SchemaSaveHandler, catalog};
 use crate::save::{
     SaveDetectionInput, SaveEdit, SaveGameHandler, SaveValue,
     pokemon_gen1::PokemonGen1Handler as NativeGen1, pokemon_gen2::PokemonGen2Handler as NativeGen2,
@@ -12,8 +12,7 @@ fn input(bytes: Vec<u8>, id: &str) -> SaveDetectionInput {
     }
 }
 
-fn check_documents(pack: &[u8], native: &dyn SaveGameHandler) {
-    let handlers = SaveSchemaPack::from_json(pack).unwrap().into_handlers();
+fn check_documents(handlers: Vec<SchemaSaveHandler>, native: &dyn SaveGameHandler) {
     for definition in native.definitions() {
         let schema = handlers
             .iter()
@@ -120,28 +119,18 @@ fn check_documents(pack: &[u8], native: &dyn SaveGameHandler) {
 
 #[test]
 fn pokemon_generation_1_schema_matches_native_documents() {
-    check_documents(
-        include_bytes!("../../../data/save-schemas/builtin-pokemon-gen1.json"),
-        &NativeGen1,
-    );
+    check_documents(catalog::builtin_pokemon_gen1::schemas(), &NativeGen1);
 }
 
 #[test]
 fn pokemon_generation_2_schema_matches_native_documents() {
-    check_documents(
-        include_bytes!("../../../data/save-schemas/builtin-pokemon-gen2.json"),
-        &NativeGen2,
-    );
+    check_documents(catalog::builtin_pokemon_gen2::schemas(), &NativeGen2);
 }
 
 #[test]
 fn pokemon_generation_2_schema_matches_native_partial_recovery() {
     let native = NativeGen2;
-    let handlers = SaveSchemaPack::from_json(include_bytes!(
-        "../../../data/save-schemas/builtin-pokemon-gen2.json"
-    ))
-    .unwrap()
-    .into_handlers();
+    let handlers = catalog::builtin_pokemon_gen2::schemas();
     for definition in native.definitions() {
         let schema = handlers
             .iter()
@@ -179,14 +168,14 @@ fn pokemon_generation_2_schema_matches_native_partial_recovery() {
 #[test]
 fn pokemon_schemas_match_native_occupied_inventory_fields() {
     type InventoryCase = (
-        &'static [u8],
+        fn() -> Vec<SchemaSaveHandler>,
         &'static dyn SaveGameHandler,
         &'static str,
         fn(&mut [u8]),
     );
     let cases: [InventoryCase; 2] = [
         (
-            include_bytes!("../../../data/save-schemas/builtin-pokemon-gen1.json"),
+            catalog::builtin_pokemon_gen1::schemas,
             &NativeGen1,
             "pokemon-red",
             |bytes| {
@@ -198,7 +187,7 @@ fn pokemon_schemas_match_native_occupied_inventory_fields() {
             },
         ),
         (
-            include_bytes!("../../../data/save-schemas/builtin-pokemon-gen2.json"),
+            catalog::builtin_pokemon_gen2::schemas,
             &NativeGen2,
             "pokemon-gold",
             |bytes| {
@@ -223,7 +212,7 @@ fn pokemon_schemas_match_native_occupied_inventory_fields() {
             },
         ),
     ];
-    for (pack, native, id, prepare) in cases {
+    for (schemas, native, id, prepare) in cases {
         let definition = native
             .definitions()
             .into_iter()
@@ -232,9 +221,7 @@ fn pokemon_schemas_match_native_occupied_inventory_fields() {
         let mut bytes = native.generate(&definition.identity).unwrap();
         prepare(&mut bytes);
         let source = input(bytes, id);
-        let schema = SaveSchemaPack::from_json(pack)
-            .unwrap()
-            .into_handlers()
+        let schema = schemas()
             .into_iter()
             .find(|handler| handler.definitions()[0].identity.id == id)
             .unwrap();

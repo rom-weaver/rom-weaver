@@ -2,33 +2,20 @@ use super::super::{super_mario_world, zelda_alttp};
 use super::*;
 
 fn snes() -> Vec<(Box<dyn SaveGameHandler>, SchemaSaveHandler, usize, usize)> {
-    [
+    vec![
         (
             Box::new(super_mario_world::SuperMarioWorldHandler) as Box<dyn SaveGameHandler>,
-            include_bytes!("../../../data/save-schemas/builtin-super-mario-world.json").as_slice(),
+            catalog::builtin_super_mario_world::schemas().remove(0),
             143,
             429,
         ),
         (
             Box::new(zelda_alttp::ZeldaAlttpHandler) as Box<dyn SaveGameHandler>,
-            include_bytes!("../../../data/save-schemas/builtin-zelda-alttp.json").as_slice(),
+            catalog::builtin_zelda_alttp::schemas().remove(0),
             0x500,
             0xf00,
         ),
     ]
-    .into_iter()
-    .map(|(native, json, length, backup)| {
-        (
-            native,
-            SaveSchemaPack::from_json(json)
-                .unwrap()
-                .into_handlers()
-                .remove(0),
-            length,
-            backup,
-        )
-    })
-    .collect()
 }
 
 fn alternate(field: &SaveField) -> Option<SaveValue> {

@@ -11,7 +11,7 @@ mod pokemon_gen3;
 mod pokemon_gen4;
 #[cfg(test)]
 mod pokemon_gen5;
-mod schema;
+pub mod schema;
 #[cfg(test)]
 mod super_mario_world;
 #[cfg(test)]
@@ -34,7 +34,7 @@ pub use container::{SaveContainer, SaveContainerKind, unwrap_save_container};
 pub use formats::{
     SaveFormatCandidate, SaveFormatDefinition, all_save_formats, candidate_save_formats,
 };
-pub use schema::{SaveSchemaPack, SchemaSaveHandler};
+pub use schema::SchemaSaveHandler;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
@@ -317,15 +317,10 @@ pub struct SaveGameRegistry {
 impl Default for SaveGameRegistry {
     fn default() -> Self {
         Self {
-            handlers: vec![
-                Box::new(PokemonGen2Handler),
-                Box::new(PokemonGen3Handler),
-                Box::new(PokemonGen4Handler),
-                Box::new(ZeldaAlttpHandler),
-                Box::new(PokemonGen1Handler),
-                Box::new(PokemonGen5Handler),
-                Box::new(SuperMarioWorldHandler),
-            ],
+            handlers: schema::catalog::all()
+                .into_iter()
+                .map(|handler| Box::new(handler) as Box<dyn SaveGameHandler>)
+                .collect(),
         }
     }
 }
@@ -338,28 +333,6 @@ impl SaveGameRegistry {
     pub fn with_handler(mut self, handler: impl SaveGameHandler + 'static) -> Self {
         self.handlers.push(Box::new(handler));
         self
-    }
-
-    /// Loads a data-only schema pack without replacing registered game handlers.
-    pub fn with_schema_pack_json(mut self, bytes: &[u8]) -> Result<Self> {
-        let pack = SaveSchemaPack::from_json(bytes)?;
-        let mut ids = self
-            .definitions()
-            .into_iter()
-            .map(|definition| definition.identity.id)
-            .collect::<std::collections::HashSet<_>>();
-        for handler in pack.into_handlers() {
-            for definition in handler.definitions() {
-                if !ids.insert(definition.identity.id) {
-                    return Err(validation(
-                        "save_schema_duplicate_game",
-                        "the schema pack repeats a registered game ID; use a distinct ID",
-                    ));
-                }
-            }
-            self.handlers.push(Box::new(handler));
-        }
-        Ok(self)
     }
 
     pub fn definitions(&self) -> Vec<SaveGameDefinition> {

@@ -1,4 +1,4 @@
-use super::SaveSchemaPack;
+use super::{SchemaSaveHandler, catalog};
 use crate::save::{
     SaveDetectionInput, SaveEdit, SaveGameHandler, SaveValue,
     pokemon_gen3::PokemonGen3Handler,
@@ -14,8 +14,11 @@ fn input(bytes: Vec<u8>, id: &str) -> SaveDetectionInput {
     }
 }
 
-fn check_pack(bytes: &[u8], native: &dyn SaveGameHandler, fixtures: impl Fn(&str) -> Vec<u8>) {
-    let handlers = SaveSchemaPack::from_json(bytes).unwrap().into_handlers();
+fn check_pack(
+    handlers: Vec<SchemaSaveHandler>,
+    native: &dyn SaveGameHandler,
+    fixtures: impl Fn(&str) -> Vec<u8>,
+) {
     for definition in native.definitions() {
         let schema = handlers
             .iter()
@@ -93,43 +96,35 @@ fn check_pack(bytes: &[u8], native: &dyn SaveGameHandler, fixtures: impl Fn(&str
 #[test]
 fn pokemon_generation_3_schema_matches_native_documents_and_edits() {
     let native = PokemonGen3Handler;
-    check_pack(
-        include_bytes!("../../../data/save-schemas/builtin-pokemon-gen3.json"),
-        &native,
-        |id| {
-            let identity = native
-                .definitions()
-                .into_iter()
-                .find(|definition| definition.identity.id == id)
-                .unwrap()
-                .identity;
-            native.generate(&identity).unwrap()
-        },
-    );
+    check_pack(catalog::builtin_pokemon_gen3::schemas(), &native, |id| {
+        let identity = native
+            .definitions()
+            .into_iter()
+            .find(|definition| definition.identity.id == id)
+            .unwrap()
+            .identity;
+        native.generate(&identity).unwrap()
+    });
 }
 
 #[test]
 fn pokemon_generation_4_schema_matches_native_documents_and_edits() {
     let native = PokemonGen4Handler;
-    check_pack(
-        include_bytes!("../../../data/save-schemas/builtin-pokemon-gen4.json"),
-        &native,
-        |id| {
-            let identity = native
-                .definitions()
-                .into_iter()
-                .find(|definition| definition.identity.id == id)
-                .unwrap()
-                .identity;
-            native.generate(&identity).unwrap()
-        },
-    );
+    check_pack(catalog::builtin_pokemon_gen4::schemas(), &native, |id| {
+        let identity = native
+            .definitions()
+            .into_iter()
+            .find(|definition| definition.identity.id == id)
+            .unwrap()
+            .identity;
+        native.generate(&identity).unwrap()
+    });
 }
 
 #[test]
 fn pokemon_generation_5_schema_matches_native_documents_and_edits() {
     check_pack(
-        include_bytes!("../../../data/save-schemas/builtin-pokemon-gen5.json"),
+        catalog::builtin_pokemon_gen5::schemas(),
         &PokemonGen5Handler,
         fixture_for_id,
     );

@@ -1,10 +1,5 @@
 use super::{SaveDetectionInput, SaveEdit, SaveGameRegistry, SaveValue};
 
-const FINAL_FANTASY_PACK: &[u8] =
-    include_bytes!("../../../../data/save-schemas/final-fantasy-nes.json");
-const WARIO_LAND_PACK: &[u8] =
-    include_bytes!("../../../../data/save-schemas/wario-land-super-mario-land-3.json");
-
 fn input(bytes: Vec<u8>, game: &str) -> SaveDetectionInput {
     SaveDetectionInput {
         bytes,
@@ -23,9 +18,7 @@ fn identity(registry: &SaveGameRegistry, id: &str) -> crate::save::SaveGameIdent
 
 #[test]
 fn wario_land_repairs_each_slot_checksum_after_edits() {
-    let registry = SaveGameRegistry::default()
-        .with_schema_pack_json(WARIO_LAND_PACK)
-        .unwrap();
+    let registry = SaveGameRegistry::default();
     let id = "wario-land-super-mario-land-3";
     let game = identity(&registry, id);
     let mut bytes = vec![0xff; 8192];
@@ -58,9 +51,7 @@ fn wario_land_repairs_each_slot_checksum_after_edits() {
 
 #[test]
 fn final_fantasy_repairs_checksum_with_excluded_output() {
-    let registry = SaveGameRegistry::default()
-        .with_schema_pack_json(FINAL_FANTASY_PACK)
-        .unwrap();
+    let registry = SaveGameRegistry::default();
     let id = "final-fantasy-nes";
     let game = identity(&registry, id);
     let mut bytes = vec![0u8; 8192];

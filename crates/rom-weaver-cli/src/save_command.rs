@@ -8,7 +8,6 @@ use rom_weaver_core::{
 
 const SAVE_DETAILS_KEY: &str = "save_editor";
 const MAX_SAVE_INPUT_SIZE: u64 = 128 * 1024 * 1024;
-const MAX_SAVE_SCHEMA_SIZE: u64 = 2 * 1024 * 1024;
 
 impl CliApp {
     pub(super) fn run_save(&self, command: SaveCommands) -> AppRunOutcome {
@@ -23,12 +22,9 @@ impl CliApp {
         }
     }
 
-    fn run_save_list_games(&self, args: SaveListGamesCommand) -> AppRunOutcome {
+    fn run_save_list_games(&self, _args: SaveListGamesCommand) -> AppRunOutcome {
         let command = "save-list-games";
-        let registry = match self.load_save_registry(command, args.schema.as_deref()) {
-            Ok(registry) => registry,
-            Err(report) => return self.finish(command, *report),
-        };
+        let registry = SaveGameRegistry::default();
         let games = registry.definitions();
         let generation_games = registry
             .generation_definitions()
@@ -56,10 +52,7 @@ impl CliApp {
 
     fn run_save_create(&self, args: SaveCreateCommand) -> AppRunOutcome {
         let command = "save-create";
-        let registry = match self.load_save_registry(command, args.schema.as_deref()) {
-            Ok(registry) => registry,
-            Err(report) => return self.finish(command, *report),
-        };
+        let registry = SaveGameRegistry::default();
         if !args.dry_run && args.output.is_none() {
             return self.finish(
                 command,
@@ -95,7 +88,6 @@ impl CliApp {
                 output: args.output,
                 game: args.game,
                 rom_sha1: None,
-                schema: args.schema,
                 dry_run: args.dry_run,
                 force: args.force,
             },
@@ -106,10 +98,7 @@ impl CliApp {
 
     fn run_save_identify(&self, args: SaveIdentifyCommand) -> AppRunOutcome {
         let command = "save-identify";
-        let registry = match self.load_save_registry(command, args.schema.as_deref()) {
-            Ok(registry) => registry,
-            Err(report) => return self.finish(command, *report),
-        };
+        let registry = SaveGameRegistry::default();
         let input = match self.load_save_input(command, &args.input, args.game, args.rom_sha1) {
             Ok(input) => input,
             Err(report) => return self.finish(command, *report),
@@ -184,10 +173,7 @@ impl CliApp {
 
     fn run_save_inspect(&self, args: SaveInspectCommand) -> AppRunOutcome {
         let command = "save-inspect";
-        let registry = match self.load_save_registry(command, args.schema.as_deref()) {
-            Ok(registry) => registry,
-            Err(report) => return self.finish(command, *report),
-        };
+        let registry = SaveGameRegistry::default();
         let input = match self.load_save_input(command, &args.input, args.game, args.rom_sha1) {
             Ok(input) => input,
             Err(report) => return self.finish(command, *report),
@@ -247,10 +233,7 @@ impl CliApp {
 
     fn run_save_get(&self, args: SaveGetCommand) -> AppRunOutcome {
         let command = "save-get";
-        let registry = match self.load_save_registry(command, args.schema.as_deref()) {
-            Ok(registry) => registry,
-            Err(report) => return self.finish(command, *report),
-        };
+        let registry = SaveGameRegistry::default();
         let input = match self.load_save_input(command, &args.input, args.game, args.rom_sha1) {
             Ok(input) => input,
             Err(report) => return self.finish(command, *report),
@@ -289,10 +272,7 @@ impl CliApp {
 
     pub(super) fn run_save_set(&self, args: SaveSetCommand) -> AppRunOutcome {
         let command = "save-set";
-        let registry = match self.load_save_registry(command, args.schema.as_deref()) {
-            Ok(registry) => registry,
-            Err(report) => return self.finish(command, *report),
-        };
+        let registry = SaveGameRegistry::default();
         let input = match self.load_save_input(
             command,
             &args.input,
@@ -401,10 +381,7 @@ impl CliApp {
 
     fn run_save_export_schema(&self, args: SaveExportSchemaCommand) -> AppRunOutcome {
         let command = "save-export-schema";
-        let registry = match self.load_save_registry(command, args.schema.as_deref()) {
-            Ok(registry) => registry,
-            Err(report) => return self.finish(command, *report),
-        };
+        let registry = SaveGameRegistry::default();
         let Some(path) = args.input else {
             return self.finish(
                 command,
@@ -507,50 +484,6 @@ impl CliApp {
             selected_game,
             rom_sha1,
         })
-    }
-
-    fn load_save_registry(
-        &self,
-        command: &str,
-        schema: Option<&Path>,
-    ) -> std::result::Result<SaveGameRegistry, Box<OperationReport>> {
-        let Some(path) = schema else {
-            return Ok(SaveGameRegistry::default());
-        };
-        if let Some(report) =
-            self.require_readable_path(command, OperationFamily::Save, None, path, None)
-        {
-            return Err(Box::new(report));
-        }
-        let mut file = fs::File::open(path).map_err(|error| {
-            Box::new(save_error_report(
-                "schema",
-                RomWeaverError::io_path(rom_weaver_core::IoOp::Open, path, error),
-            ))
-        })?;
-        let mut bytes = Vec::new();
-        std::io::Read::by_ref(&mut file)
-            .take(MAX_SAVE_SCHEMA_SIZE + 1)
-            .read_to_end(&mut bytes)
-            .map_err(|error| {
-                Box::new(save_error_report(
-                    "schema",
-                    RomWeaverError::io_path(rom_weaver_core::IoOp::Open, path, error),
-                ))
-            })?;
-        if bytes.len() as u64 > MAX_SAVE_SCHEMA_SIZE {
-            return Err(Box::new(save_error_report(
-                "schema",
-                RomWeaverError::ValidationCode(
-                    ValidationCodeError::new("save_schema_size_limit")
-                        .with_message("the save schema pack is larger than 2 MiB")
-                        .with_field("schema_size", bytes.len()),
-                ),
-            )));
-        }
-        SaveGameRegistry::default()
-            .with_schema_pack_json(&bytes)
-            .map_err(|error| Box::new(save_error_report("schema", error)))
     }
 }
 

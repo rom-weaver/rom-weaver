@@ -135,6 +135,54 @@ fn registry_lists_every_game_with_format_metadata() {
             "pokemon-black-2",
             "pokemon-white-2",
             "super-mario-world",
+            "donkey-kong-country-2-diddy-s-kong-quest-slot-1",
+            "donkey-kong-country-2-diddy-s-kong-quest-slot-2",
+            "donkey-kong-country-2-diddy-s-kong-quest-slot-3",
+            "donkey-kong-country-3-dixie-kong-s-double-trouble-slot-1",
+            "donkey-kong-country-3-dixie-kong-s-double-trouble-slot-2",
+            "donkey-kong-country-3-dixie-kong-s-double-trouble-slot-3",
+            "donkey-kong-country-slot-1-player-1",
+            "donkey-kong-country-slot-1-player-2",
+            "donkey-kong-country-slot-2-player-1",
+            "donkey-kong-country-slot-2-player-2",
+            "donkey-kong-country-slot-3-player-1",
+            "donkey-kong-country-slot-3-player-2",
+            "final-fantasy-nes",
+            "mario-party-2-canonical-eeprom",
+            "mario-party-canonical-eeprom",
+            "pokemon-red-schema",
+            "pokemon-blue-schema",
+            "pokemon-yellow-schema",
+            "pokemon-gold-schema",
+            "pokemon-silver-schema",
+            "pokemon-crystal-schema",
+            "secret-of-mana-slot-1",
+            "secret-of-mana-slot-2",
+            "secret-of-mana-slot-3",
+            "secret-of-mana-slot-4",
+            "solatorobo-red-the-hunter-desmume",
+            "super-mario-64-canonical-eeprom-mario-a",
+            "super-mario-64-canonical-eeprom-mario-b",
+            "super-mario-64-canonical-eeprom-mario-c",
+            "super-mario-64-canonical-eeprom-mario-d",
+            "super-mario-kart-schema",
+            "super-mario-rpg-slot-1",
+            "super-mario-rpg-slot-2",
+            "super-mario-rpg-slot-3",
+            "super-mario-rpg-slot-4",
+            "super-mario-world-schema",
+            "super-mario-world-file-2-schema",
+            "super-mario-world-file-3-schema",
+            "super-metroid-samus-a",
+            "super-metroid-samus-b",
+            "super-metroid-samus-c",
+            "super-metroid-samus-a-supermetroid",
+            "super-metroid-samus-b-supermetroid",
+            "super-metroid-samus-c-supermetroid",
+            "wario-land-super-mario-land-3",
+            "zelda-a-link-to-the-past-file-1-schema",
+            "zelda-a-link-to-the-past-file-2-schema",
+            "zelda-a-link-to-the-past-file-3-schema",
         ]
     );
     assert!(definitions[3..8].iter().all(|definition| {
@@ -171,7 +219,15 @@ fn registry_requires_a_game_made_template_for_pokemon_creation() {
         .into_iter()
         .map(|definition| definition.identity.id)
         .collect::<Vec<_>>();
-    assert_eq!(fresh_ids, ["zelda-a-link-to-the-past", "super-mario-world"]);
+    assert_eq!(
+        fresh_ids,
+        [
+            "zelda-a-link-to-the-past",
+            "super-mario-world",
+            "super-mario-world-schema",
+            "zelda-a-link-to-the-past-file-1-schema"
+        ]
+    );
     assert_eq!(
         error_code(registry.generate("pokemon-emerald").unwrap_err()),
         "save_generation_unsupported"
@@ -1067,14 +1123,9 @@ fn gen4_trainer_ids_cover_full_u16_range_and_preserve_backup() {
     }
 }
 
-const SMW_SCHEMA_PACK: &[u8] =
-    include_bytes!("../../../../data/save-schemas/super-mario-world.json");
-
 #[test]
 fn database_schema_generation_and_all_field_edits_match_native_smw() {
-    let registry = SaveGameRegistry::default()
-        .with_schema_pack_json(SMW_SCHEMA_PACK)
-        .unwrap();
+    let registry = SaveGameRegistry::default();
     let schema = registry.generate("super-mario-world-schema").unwrap();
     let mut native = registry.generate("super-mario-world").unwrap();
     assert_eq!(schema.bytes, native.bytes);
@@ -1134,16 +1185,16 @@ fn database_schema_generation_and_all_field_edits_match_native_smw() {
 }
 
 #[test]
-fn schema_packs_cannot_replace_builtin_or_previously_loaded_games() {
-    let registry = SaveGameRegistry::default()
-        .with_schema_pack_json(SMW_SCHEMA_PACK)
-        .unwrap();
-    assert!(registry.with_schema_pack_json(SMW_SCHEMA_PACK).is_err());
-    let mut pack: serde_json::Value = serde_json::from_slice(SMW_SCHEMA_PACK).unwrap();
-    pack["games"][0]["id"] = serde_json::json!("super-mario-world");
-    assert!(
-        SaveGameRegistry::default()
-            .with_schema_pack_json(&serde_json::to_vec(&pack).unwrap())
-            .is_err()
-    );
+fn compiled_and_custom_handlers_have_unique_registry_ids() {
+    let definitions = SaveGameRegistry::default().definitions();
+    let mut ids = std::collections::HashSet::new();
+    for definition in definitions {
+        assert!(
+            ids.insert(definition.identity.id.clone()),
+            "duplicate save handler ID: {}",
+            definition.identity.id
+        );
+    }
+    assert!(ids.contains("super-mario-world"));
+    assert!(ids.contains("super-mario-world-schema"));
 }

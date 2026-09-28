@@ -20,7 +20,6 @@ type RuntimeSaveCommandInput = {
   inputPath?: string;
   logLevel?: LogLevel | string;
   romSha1?: string;
-  schemaPath?: string;
   signal?: AbortSignal;
 };
 
@@ -41,13 +40,12 @@ const runSaveCommand = async (
     ...(input.inputPath ? { [type === "create" ? "template" : "input"]: input.inputPath } : {}),
     ...(input.game ? { game: input.game } : {}),
     ...(input.romSha1 ? { rom_sha1: input.romSha1 } : {}),
-    ...(input.schemaPath ? { schema: input.schemaPath } : {}),
     ...(outputPath ? { output: outputPath } : {}),
   } as never);
   const result = await runRomWeaverJson(
     command,
     toRomWeaverOptions({
-      knownInputPaths: [input.inputPath, input.schemaPath].filter((path): path is string => Boolean(path)),
+      knownInputPaths: [input.inputPath].filter((path): path is string => Boolean(path)),
       logLevel: input.logLevel,
       signal: input.signal,
       invalidateMountCacheBeforeRun: true,

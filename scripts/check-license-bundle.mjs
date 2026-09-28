@@ -32,6 +32,10 @@ runMain(() => {
         return [filename, notice];
       }),
     );
+    for (const [filename, notice] of Object.entries(notices)) {
+      if (!notice.includes("RyudoSynbios/game-tools-collection"))
+        throw new Error(`${filename} is missing save catalog attribution`);
+    }
     const noticesPage = readFileSync(join(output, "notices.md"), "utf8");
     if (!noticesPage.startsWith("# Notices\n"))
       throw new Error("generated webapp notices page is missing");

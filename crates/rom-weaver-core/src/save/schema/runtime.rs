@@ -1,71 +1,53 @@
-use serde::Deserialize;
-
 use super::{
     layout::{Layout, Resolved},
     rules::{Check, Store},
     *,
 };
 
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct Runtime {
+#[derive(Clone, Debug, Default)]
+pub struct Runtime {
+    pub require_selection: bool,
     pub family: Option<String>,
     pub handler_id: Option<String>,
     pub save_format: Option<String>,
     pub save_format_name: Option<String>,
-    #[serde(default)]
     pub known_rom_sha1: Vec<String>,
-    #[serde(default)]
     pub checksum_sizes: Vec<u16>,
     pub logical_size: Option<usize>,
     pub layout: Option<Layout>,
     pub recognition: Option<Recognition>,
-    #[serde(default)]
     pub checks: Vec<Check>,
-    #[serde(default)]
     pub document_checks: Vec<Check>,
-    #[serde(default)]
     pub edit_checks: Vec<Check>,
-    #[serde(default)]
     pub after_edit: Vec<Store>,
     pub recovery: Option<Recovery>,
-    #[serde(default)]
     pub include_implicit_changes: bool,
-    #[serde(default)]
     pub all_copy_sections: bool,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct Recognition {
-    #[serde(default)]
+#[derive(Clone, Debug)]
+pub struct Recognition {
     pub checks: Vec<Check>,
     pub reasons: Vec<SaveRecognitionReason>,
     pub confidence: SaveRecognitionConfidence,
     pub incomplete_confidence: Option<SaveRecognitionConfidence>,
-    #[serde(default)]
     pub selected_reason: bool,
-    #[serde(default)]
     pub empty_top_level_reasons: bool,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct Recovery {
+#[derive(Clone, Debug)]
+pub struct Recovery {
     pub no_valid: Failure,
     pub incomplete: Option<RecoveryOutcome>,
     pub damaged: Option<RecoveryOutcome>,
     pub unrecoverable: Option<RecoveryOutcome>,
     pub differing: Option<RecoveryOutcome>,
-    #[serde(default)]
     pub active_group: bool,
-    #[serde(default)]
     pub zero_counter: bool,
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct Failure {
+#[derive(Clone, Debug)]
+pub struct Failure {
     pub code: String,
     pub message: String,
 }
@@ -78,48 +60,23 @@ impl Failure {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct RecoveryOutcome {
+#[derive(Clone, Debug)]
+pub struct RecoveryOutcome {
     pub state: SaveIntegrityState,
-    #[serde(default)]
     pub disable_editing: bool,
     pub issue: Option<Failure>,
     pub warning: Option<String>,
     pub field_warning: Option<String>,
     pub edit_error: Option<Failure>,
     pub parse_error: Option<Failure>,
-    #[serde(default)]
     pub section_id: bool,
 }
 
 impl Runtime {
-    pub fn work_bytes(&self) -> Result<usize> {
-        rules::sum_work(
-            self.checks
-                .iter()
-                .chain(&self.document_checks)
-                .chain(&self.edit_checks)
-                .chain(self.recognition.iter().flat_map(|config| &config.checks))
-                .map(Check::work_bytes)
-                .chain(self.after_edit.iter().map(Store::work_bytes)),
-        )
-    }
-    /// Expands the check and layout shorthands before validation.
-    pub fn expand(&mut self, save_size: usize) -> Result<()> {
+    /// Expands typed layout conveniences before validation.
+    pub fn expand(&mut self, _save_size: usize) -> Result<()> {
         if let Some(layout) = &mut self.layout {
             layout.expand()?;
-        }
-        let size = self.logical_size.unwrap_or(save_size);
-        for checks in [
-            &mut self.checks,
-            &mut self.document_checks,
-            &mut self.edit_checks,
-        ]
-        .into_iter()
-        .chain(self.recognition.iter_mut().map(|config| &mut config.checks))
-        {
-            rules::expand_checks(checks, size)?;
         }
         Ok(())
     }

@@ -53,423 +53,78 @@ fn write_fixture(temp: &TempDir) -> PathBuf {
     path.path().to_path_buf()
 }
 
-fn custom_schema_game(id: &str, field_offset: u64) -> Value {
-    serde_json::json!({
-        "schema_version": 1,
-        "games": [{
-            "id": id,
-            "name": "Test schema game",
-            "platform": "custom",
-            "save_size": 64,
-            "fields": [{
-                "id": "player.coins",
-                "label": "Coins",
-                "offset": field_offset,
-                "type": "u16_le"
-            }],
-            "signatures": [{"offset": 0, "bytes": [82, 87]}],
-            "checksums": [{
-                "algorithm": "sum8",
-                "start": 0,
-                "length": 63,
-                "offset": 63,
-                "target": 255
-            }],
-            "mirrors": [],
-            "generation": {
-                "fill": 0,
-                "patches": [{"offset": 0, "bytes": [82, 87]}]
-            }
-        }]
-    })
-}
-
-fn write_custom_schema(temp: &TempDir) -> PathBuf {
-    let path = temp.child("schema.json");
-    fs::write(
-        path.path(),
-        serde_json::to_vec(&custom_schema_game("test-schema-game", 4)).unwrap(),
-    )
-    .unwrap();
-    path.path().to_path_buf()
-}
-
 #[test]
-fn compact_schema_authoring_creates_and_edits_visible_array_items() {
-    let temp = setup_temp_dir();
-    let schema = temp.child("compact-schema.json");
-    fs::write(
-        schema.path(),
-        include_str!("../../../rom-weaver-core/tests/fixtures/compact-authoring.json"),
-    )
-    .unwrap();
-    let created = temp.child("compact-created.sav");
-    run_single_json_event(
-        &[
-            "save",
-            "create",
-            "--game",
-            "compact-authoring",
-            "--schema",
-            schema.to_str().unwrap(),
-            "--output",
-            created.to_str().unwrap(),
-            "--json",
-        ],
-        0,
-    );
-    let initial = fs::read(created.path()).unwrap();
-    assert_eq!(initial[1], 5);
-    assert_eq!(&initial[4..8], &[1, 7, 255, 255]);
-    assert_eq!(initial[14], 255);
-    assert_eq!(
-        initial
-            .iter()
-            .fold(0u8, |sum, byte| sum.wrapping_add(*byte)),
-        255
-    );
-
-    let edited = temp.child("compact-edited.sav");
-    run_single_json_event(
-        &[
-            "save",
-            "set",
-            created.to_str().unwrap(),
-            "mode=fast",
-            "bag.items.1.value=9",
-            "--game",
-            "compact-authoring",
-            "--schema",
-            schema.to_str().unwrap(),
-            "--output",
-            edited.to_str().unwrap(),
-            "--json",
-        ],
-        0,
-    );
-    let output = fs::read(edited.path()).unwrap();
-    assert_eq!(output[1], 1);
-    assert_eq!(&output[4..8], &[1, 9, 255, 255]);
-    assert_eq!(output[14], 255);
-    assert_eq!(
-        output.iter().fold(0u8, |sum, byte| sum.wrapping_add(*byte)),
-        255
-    );
-
-    let rejected = temp.child("compact-rejected.sav");
-    run_single_json_event(
-        &[
-            "save",
-            "set",
-            edited.to_str().unwrap(),
-            "bag.items.2.value=3",
-            "--game",
-            "compact-authoring",
-            "--schema",
-            schema.to_str().unwrap(),
-            "--output",
-            rejected.to_str().unwrap(),
-            "--json",
-        ],
-        1,
-    );
-    assert!(!rejected.path().exists());
-    assert_eq!(fs::read(edited.path()).unwrap(), output);
-}
-
-#[test]
-fn save_schema_records_and_named_choices_share_the_cli_write_path() {
-    let temp = setup_temp_dir();
-    let mut pack = custom_schema_game("test-schema-game", 4);
-    pack["pack_revision"] = serde_json::json!(1);
-    pack["records"] = serde_json::json!({
-        "flag": [{"id": "seen_{index}", "label": "Seen {index}",
-            "offset": 0, "type": "bit", "bit": 0}]
-    });
-    pack["games"][0]["records"] = serde_json::json!([{
-        "record": "flag", "id": "progress", "offset": 8,
-        "count": 9, "stride_bits": 1, "index_start": 1, "index_width": 3
-    }]);
-    pack["games"][0]["fields"]
-        .as_array_mut()
-        .unwrap()
-        .push(serde_json::json!({
-            "id": "options.speed", "label": "Speed", "offset": 6,
-            "type": "u8", "mask": 7,
-            "choices": [{"name": "fast", "value": 1}, {"name": "slow", "value": 5}]
-        }));
-    pack["games"][0]["generation"]["patches"]
-        .as_array_mut()
-        .unwrap()
-        .push(serde_json::json!({"offset": 6, "bytes": [161]}));
-    let schema = temp.child("records.json");
-    fs::write(schema.path(), serde_json::to_vec(&pack).unwrap()).unwrap();
-    let save = temp.child("created.sav");
-    run_single_json_event(
-        &[
-            "save",
-            "create",
-            "--game",
-            "test-schema-game",
-            "--schema",
-            schema.path().to_str().unwrap(),
-            "--output",
-            save.path().to_str().unwrap(),
-            "options.speed=slow",
-            "progress.seen_009=true",
-            "--json",
-        ],
-        0,
-    );
-    let bytes = fs::read(save.path()).unwrap();
-    assert_eq!(bytes[6], 165);
-    assert_eq!(&bytes[8..10], &[0, 1]);
-    assert_eq!(
-        bytes.iter().fold(0u8, |sum, byte| sum.wrapping_add(*byte)),
-        255
-    );
-    let result = run_single_json_event(
-        &[
-            "save",
-            "get",
-            save.path().to_str().unwrap(),
-            "options.speed",
-            "--schema",
-            schema.path().to_str().unwrap(),
-            "--json",
-        ],
-        0,
-    );
-    assert_eq!(
-        result["details"]["save_editor"]["field"]["value"]["enum"],
-        "slow"
-    );
-    let output = temp.child("rejected.sav");
-    run_single_json_event(
-        &[
-            "save",
-            "set",
-            save.path().to_str().unwrap(),
-            "options.speed=turbo",
-            "--schema",
-            schema.path().to_str().unwrap(),
-            "--output",
-            output.path().to_str().unwrap(),
-            "--json",
-        ],
-        1,
-    );
-    assert!(!output.path().exists());
-    assert_eq!(fs::read(save.path()).unwrap(), bytes);
-}
-
-#[test]
-fn save_schema_pack_supports_all_read_and_edit_commands() {
-    let temp = setup_temp_dir();
-    let schema = write_custom_schema(&temp);
-    let schema_path = schema.to_str().unwrap();
-    let listed = run_single_json_event(
-        &["save", "list-games", "--schema", schema_path, "--json"],
-        0,
-    );
+fn save_catalog_lists_compiled_games_and_generation_support() {
+    let report = run_single_json_event(&["save", "list-games", "--json"], 0);
+    let catalog = &report["details"]["save_editor"];
+    let game_ids = catalog["games"]
+        .as_array()
+        .expect("save games")
+        .iter()
+        .filter_map(|game| game["identity"]["id"].as_str())
+        .collect::<Vec<_>>();
+    assert!(game_ids.contains(&"pokemon-red-schema"));
+    assert!(game_ids.contains(&"zelda-a-link-to-the-past-file-1-schema"));
+    assert!(game_ids.contains(&"zelda-a-link-to-the-past"));
     assert!(
-        listed["details"]["save_editor"]["games"]
+        catalog["generation_games"]
             .as_array()
-            .unwrap()
+            .expect("generation games")
             .iter()
-            .any(|game| game["identity"]["id"] == "test-schema-game")
+            .any(|game| game == "zelda-a-link-to-the-past")
     );
+}
 
-    let save = temp.child("custom.sav");
-    run_single_json_event(
-        &[
+#[test]
+fn save_commands_reject_the_removed_schema_option_before_writing() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.sav");
+    let output = temp.child("output.sav");
+    fs::write(input.path(), pokemon_gen1_fixture()).unwrap();
+    let input_path = input.to_str().unwrap();
+    let output_path = output.to_str().unwrap();
+
+    for args in [
+        vec!["save", "list-games", "--schema", "pack.json"],
+        vec![
             "save",
             "create",
             "--game",
-            "test-schema-game",
+            "zelda-a-link-to-the-past",
             "--schema",
-            schema_path,
+            "pack.json",
             "--output",
-            save.path().to_str().unwrap(),
-            "--json",
+            output_path,
         ],
-        0,
-    );
-    assert_eq!(fs::read(save.path()).unwrap().len(), 64);
-
-    let identify = run_single_json_event(
-        &[
-            "save",
-            "identify",
-            save.path().to_str().unwrap(),
-            "--schema",
-            schema_path,
-            "--json",
-        ],
-        0,
-    );
-    assert_eq!(
-        identify["details"]["save_editor"]["document"]["identity"]["id"],
-        "test-schema-game"
-    );
-    let inspect = run_single_json_event(
-        &[
-            "save",
-            "inspect",
-            save.path().to_str().unwrap(),
-            "--schema",
-            schema_path,
-            "--json",
-        ],
-        0,
-    );
-    assert_eq!(
-        inspect["details"]["save_editor"]["document"]["fields"][0]["id"],
-        "player.coins"
-    );
-
-    let edited = temp.child("edited.sav");
-    run_single_json_event(
-        &[
-            "save",
-            "set",
-            save.path().to_str().unwrap(),
-            "player.coins=513",
-            "--schema",
-            schema_path,
-            "--output",
-            edited.path().to_str().unwrap(),
-            "--json",
-        ],
-        0,
-    );
-    let get = run_single_json_event(
-        &[
+        vec!["save", "identify", input_path, "--schema", "pack.json"],
+        vec!["save", "inspect", input_path, "--schema", "pack.json"],
+        vec![
             "save",
             "get",
-            edited.path().to_str().unwrap(),
-            "player.coins",
+            input_path,
+            "trainer.name",
             "--schema",
-            schema_path,
-            "--json",
+            "pack.json",
         ],
-        0,
-    );
-    assert_eq!(get["details"]["save_editor"]["field"]["value"]["u32"], 513);
-    let exported = run_single_json_event(
-        &[
-            "save",
-            "export-schema",
-            edited.path().to_str().unwrap(),
-            "--schema",
-            schema_path,
-            "--json",
-        ],
-        0,
-    );
-    assert_eq!(
-        exported["details"]["save_editor"]["schema"]["game"]["id"],
-        "test-schema-game"
-    );
-}
-
-#[test]
-fn save_schema_pack_supports_templates_and_dry_runs_without_output() {
-    let temp = setup_temp_dir();
-    let schema = write_custom_schema(&temp);
-    let template = temp.child("template.sav");
-    run_single_json_event(
-        &[
-            "save",
-            "create",
-            "--game",
-            "test-schema-game",
-            "--schema",
-            schema.to_str().unwrap(),
-            "--output",
-            template.path().to_str().unwrap(),
-            "--json",
-        ],
-        0,
-    );
-    let output = temp.child("copy.sav");
-    run_single_json_event(
-        &[
-            "save",
-            "create",
-            "--template",
-            template.path().to_str().unwrap(),
-            "--game",
-            "test-schema-game",
-            "--schema",
-            schema.to_str().unwrap(),
-            "player.coins=7",
-            "--output",
-            output.path().to_str().unwrap(),
-            "--json",
-        ],
-        0,
-    );
-    assert!(output.path().exists());
-
-    let dry_output = temp.child("dry.sav");
-    run_single_json_event(
-        &[
+        vec![
             "save",
             "set",
-            output.path().to_str().unwrap(),
-            "player.coins=8",
+            input_path,
+            "trainer.money=1",
             "--schema",
-            schema.to_str().unwrap(),
-            "--dry-run",
+            "pack.json",
             "--output",
-            dry_output.path().to_str().unwrap(),
-            "--json",
+            output_path,
         ],
-        0,
-    );
-    assert!(!dry_output.path().exists());
-}
-
-#[test]
-fn invalid_save_schema_packs_fail_before_touching_save_files() {
-    let temp = setup_temp_dir();
-    let save = temp.child("input.sav");
-    fs::write(save.path(), vec![0xA5; 64]).unwrap();
-    let original = fs::read(save.path()).unwrap();
-
-    let malformed = temp.child("malformed.json");
-    malformed.write_str("{").unwrap();
-    let duplicate = temp.child("duplicate.json");
-    fs::write(
-        duplicate.path(),
-        serde_json::to_vec(&custom_schema_game("pokemon-emerald", 4)).unwrap(),
-    )
-    .unwrap();
-    let out_of_bounds = temp.child("out-of-bounds.json");
-    fs::write(
-        out_of_bounds.path(),
-        serde_json::to_vec(&custom_schema_game("bad-layout", 64)).unwrap(),
-    )
-    .unwrap();
-
-    for schema in [malformed, duplicate, out_of_bounds] {
-        run_single_json_event(
-            &[
-                "save",
-                "set",
-                save.path().to_str().unwrap(),
-                "player.coins=1",
-                "--schema",
-                schema.path().to_str().unwrap(),
-                "--output",
-                save.path().to_str().unwrap(),
-                "--force",
-                "--json",
-            ],
-            1,
+        vec!["save", "export-schema", input_path, "--schema", "pack.json"],
+    ] {
+        let mut command = Command::cargo_bin("rom-weaver").expect("binary");
+        let result = command.args(args).assert().code(2);
+        assert!(
+            String::from_utf8_lossy(&result.get_output().stderr)
+                .contains("unexpected argument '--schema'")
         );
-        assert_eq!(fs::read(save.path()).unwrap(), original);
+        assert!(!output.path().exists());
     }
 }
 
