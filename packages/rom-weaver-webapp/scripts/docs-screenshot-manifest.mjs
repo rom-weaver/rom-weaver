@@ -87,6 +87,8 @@ const DOCS_SCREENSHOT_NAMES = [
   "first-sample-hello-world.webp",
   "first-sample-rom-world.webp",
   "first-sample-rom-weaver.webp",
+  "compress-desktop-light.webp",
+  "compress-mobile-dark.webp",
 ];
 
 export {

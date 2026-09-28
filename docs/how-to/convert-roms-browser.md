@@ -1,44 +1,52 @@
-# Extract or compress a ROM in the browser
+# Extract or compress files in the browser
 
-Use Apply with only a ROM to extract it or change its output container. No patch is needed.
+Use Compress to package files in a ZIP or 7z archive. You can also create CHD, RVZ, or Z3DS images from compatible disc images and ROMs.
 
 To take every file out of an archive, use [Extract files](extract-files-browser.md). For directory packaging, use the [CLI archive guide](work-with-archives.md).
 
 <!-- START doctoc -->
 ## Table of contents
 
-- [Load the ROM](#load-the-rom)
-- [Choose a plain or compressed output](#choose-a-plain-or-compressed-output)
+- [Add files](#add-files)
+- [Choose an output](#choose-an-output)
 - [Check the result](#check-the-result)
 
 <!-- END doctoc -->
 
-## Load the ROM
+## Add files
 
-1. Open a fresh [Apply page](https://rom-weaver.com/apply-patches).
-2. Add the ROM or its archive to **Inputs**.
-3. If a selection dialog opens, choose the ROM you need.
-4. Wait for reading and checksumming to finish.
-5. Remove any automatically discovered sidecar patches when you want only extraction or compression.
+1. Open [Compress](https://rom-weaver.com/compress).
+2. Add the files that you want to package or compress.
+3. For a CUE disc, add the CUE file and every referenced track file.
 
-For a disc, keep the sheet and its track files together. Add the complete set, or an archive containing that set.
+ZIP and 7z accept arbitrary file sets. CHD accepts compatible disc images and ROMs. RVZ accepts GameCube and Wii ISO images. Z3DS accepts Nintendo 3DS images.
 
-## Choose a plain or compressed output
+## Choose an output
 
-1. Open **Apply** and enter an output name.
-2. Choose the plain ROM format to extract, or choose a supported compressed format.
-3. Open **Options** if you need to change compression settings.
-4. Select **APPLY & DOWNLOAD** and save the result.
+1. Choose ZIP, 7z, CHD, RVZ, or Z3DS.
+2. Enter the output filename without its extension.
+3. Open **Options** to change the codec or compression level.
+4. Select **Compress**, then select **Download** when the output is ready.
 
-The format picker offers outputs for the selected input. Renaming a filename extension does not convert its contents.
+<figure class="docs-screenshot">
+  <picture>
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/compress-mobile-dark.webp" width="370" height="634">
+    <img src="../screenshots/compress-desktop-light.webp" alt="Compress with input files, output filename, format, codec, level, and download button" width="1133" height="737">
+  </picture>
+  <figcaption>Choose a format and compression options, then download the finished file.</figcaption>
+</figure>
 
-The [Apply output screenshot](apply-rom-patches.md#choose-the-output-and-apply) shows these same controls.
+The format picker offers outputs that match the selected inputs. Renaming a filename extension does not convert its contents.
+
+For conversion, extract the ROM or disc image first. Add the extracted files to Compress.
+
+Compress does not apply patches. Use [Apply](apply-rom-patches.md) when you need to change ROM contents.
 
 Only formats marked **Create** in the [container table](../reference/formats.md#container-and-compression-formats) can be output containers. A supported input is not necessarily a supported output.
 
 ## Check the result
 
-Open the result with [Identify](identify-roms-browser.md) and compare the ROM's checksums with the original. Compare extracted ROM bytes, not the outer archive.
+Open a disc-image result with [Identify](identify-roms-browser.md) and compare the extracted ROM bytes with the original.
 
 Test the result in the emulator or hardware you use before replacing your stored copy. Keep the source when changing disc layouts or using trimming.
 
