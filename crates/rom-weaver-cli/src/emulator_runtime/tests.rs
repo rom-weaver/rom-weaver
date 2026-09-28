@@ -1,24 +1,27 @@
 use super::*;
 use flate2::{Compression, write::GzEncoder};
 
-fn fixture() -> Vec<(&'static str, Vec<u8>)> {
+fn fixture() -> Vec<(String, Vec<u8>)> {
     let runner = b"#!/bin/sh\nexit 0\n".to_vec();
     let core = b"fixture core".to_vec();
     let manifest = json!({
         "schemaVersion": 1, "platform": PLATFORM,
-        "retroarch": { "path": "bin/retroarch", "revision": "a".repeat(40),
+        "retroarch": { "path": retroarch_path(), "revision": "a".repeat(40),
             "sha256": sha256_hex(&runner) },
-        "cores": [{ "id": "fceumm", "platform": "nes", "path": "cores/fceumm_libretro.so",
+        "cores": [{ "id": "fceumm", "platform": "nes", "path": format!("cores/fceumm_libretro.{}", core_extension()),
             "revision": "b".repeat(40), "sha256": sha256_hex(&core) }],
     });
     vec![
-        ("manifest.json", serde_json::to_vec(&manifest).unwrap()),
-        ("bin/retroarch", runner),
-        ("cores/fceumm_libretro.so", core),
+        (
+            "manifest.json".into(),
+            serde_json::to_vec(&manifest).unwrap(),
+        ),
+        (retroarch_path().into(), runner),
+        (format!("cores/fceumm_libretro.{}", core_extension()), core),
     ]
 }
 
-fn archive(entries: &[(&str, Vec<u8>)]) -> Vec<u8> {
+fn archive(entries: &[(String, Vec<u8>)]) -> Vec<u8> {
     let encoder = GzEncoder::new(Vec::new(), Compression::default());
     let mut builder = tar::Builder::new(encoder);
     for (path, bytes) in entries {
@@ -27,7 +30,29 @@ fn archive(entries: &[(&str, Vec<u8>)]) -> Vec<u8> {
         header.set_mode(0o644);
         header.set_cksum();
         builder
-            .append_data(&mut header, path, bytes.as_slice())
+            .append_data(&mut header, path.as_str(), bytes.as_slice())
+            .unwrap();
+    }
+    builder.into_inner().unwrap().finish().unwrap()
+}
+
+fn dot_prefixed_archive(entries: &[(String, Vec<u8>)]) -> Vec<u8> {
+    let encoder = GzEncoder::new(Vec::new(), Compression::default());
+    let mut builder = tar::Builder::new(encoder);
+    let mut root = tar::Header::new_gnu();
+    root.set_entry_type(tar::EntryType::Directory);
+    root.set_size(0);
+    root.set_mode(0o755);
+    root.set_path("./").unwrap();
+    root.set_cksum();
+    builder.append(&root, std::io::empty()).unwrap();
+    for (path, bytes) in entries {
+        let mut header = tar::Header::new_gnu();
+        header.set_size(bytes.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder
+            .append_data(&mut header, format!("./{path}"), bytes.as_slice())
             .unwrap();
     }
     builder.into_inner().unwrap().finish().unwrap()
@@ -63,6 +88,14 @@ fn offline_install_verifies_files_and_preserves_existing_runtime() {
 }
 
 #[test]
+fn install_accepts_gnu_tar_dot_prefixed_entries() {
+    let temp = assert_fs::TempDir::new().unwrap();
+    let args = options(temp.path(), &dot_prefixed_archive(&fixture()));
+    install(&args, false).unwrap();
+    resolve(args.runtime_dir.as_deref()).unwrap();
+}
+
+#[test]
 fn bad_archive_hash_and_dry_run_leave_no_destination() {
     let temp = assert_fs::TempDir::new().unwrap();
     let mut args = options(temp.path(), &archive(&fixture()));
@@ -79,6 +112,7 @@ fn bad_archive_hash_and_dry_run_leave_no_destination() {
     assert!(!args.runtime_dir.as_ref().unwrap().exists());
 }
 
+#[cfg(unix)]
 #[test]
 fn changed_executable_and_symlinked_core_are_rejected() {
     let temp = assert_fs::TempDir::new().unwrap();
@@ -120,7 +154,7 @@ fn bad_manifest_does_not_publish_staging_files() {
 fn duplicate_archive_entries_are_rejected() {
     let temp = assert_fs::TempDir::new().unwrap();
     let mut files = fixture();
-    files.push(("bin/retroarch", b"overwrite".to_vec()));
+    files.push((retroarch_path().into(), b"overwrite".to_vec()));
     let args = options(temp.path(), &archive(&files));
     assert!(
         install(&args, false)
@@ -186,7 +220,7 @@ fn multiple_cores_and_system_assets_are_verified() {
     manifest["schemaVersion"] = json!(2);
     manifest["cores"][0]["extensions"] = json!(["nes"]);
     manifest["cores"].as_array_mut().unwrap().push(json!({
-        "id": "gambatte", "platform": "gb", "path": "cores/gambatte_libretro.so",
+        "id": "gambatte", "platform": "gb", "path": format!("cores/gambatte_libretro.{}", core_extension()),
         "revision": "c".repeat(40), "sha256": sha256_hex(b"gb core"),
         "extensions": ["gb", "gbc"], "options": {"gambatte_gb_colorization": "disabled"},
         "firmware": ["dmg_boot.bin"]
@@ -194,8 +228,11 @@ fn multiple_cores_and_system_assets_are_verified() {
     manifest["systemFiles"] =
         json!([{"path": "system/dmg_boot.bin", "sha256": sha256_hex(b"firmware")}]);
     files[0].1 = serde_json::to_vec(&manifest).unwrap();
-    files.push(("cores/gambatte_libretro.so", b"gb core".to_vec()));
-    files.push(("system/dmg_boot.bin", b"firmware".to_vec()));
+    files.push((
+        format!("cores/gambatte_libretro.{}", core_extension()),
+        b"gb core".to_vec(),
+    ));
+    files.push(("system/dmg_boot.bin".into(), b"firmware".to_vec()));
     let args = options(temp.path(), &archive(&files));
     install(&args, false).unwrap();
     let runtime = resolve(args.runtime_dir.as_deref()).unwrap();
@@ -207,6 +244,34 @@ fn multiple_cores_and_system_assets_are_verified() {
             .unwrap_err()
             .to_string()
             .contains("checksum mismatch")
+    );
+}
+
+#[test]
+fn windows_ambiguous_paths_are_rejected_on_every_host() {
+    for path in [
+        "system/CON",
+        "system/game:stream",
+        "system/trailing. ",
+        "system\\outside",
+    ] {
+        assert!(!safe_runtime_path(path), "{path} must be unsafe");
+    }
+    assert!(safe_runtime_path("system/firmware.bin"));
+}
+
+#[test]
+fn archive_rejects_case_insensitive_path_collisions() {
+    let temp = assert_fs::TempDir::new().unwrap();
+    let mut files = fixture();
+    files.push(("SYSTEM/Firmware.bin".into(), b"first".to_vec()));
+    files.push(("system/firmware.bin".into(), b"second".to_vec()));
+    let args = options(temp.path(), &archive(&files));
+    assert!(
+        install(&args, false)
+            .unwrap_err()
+            .to_string()
+            .contains("duplicate")
     );
 }
 
