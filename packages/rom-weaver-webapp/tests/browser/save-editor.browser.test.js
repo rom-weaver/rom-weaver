@@ -240,7 +240,7 @@ test("shows unsupported and ambiguous recognition states", async () => {
     recognition: { candidates: [], outcome: { unsupported: { reasons: [] } }, reasons: [] },
   });
   await page.getByLabelText("Drop a game save to edit it").upload(new File(["bad"], "bad.sav"));
-  await expect.element(page.getByText(/does not have an editor/)).toBeInTheDocument();
+  await expect.element(page.getByText(/game could not be identified/)).toBeInTheDocument();
 
   mocks.identifySave.mockResolvedValueOnce({
     recognition: {
@@ -256,6 +256,24 @@ test("shows unsupported and ambiguous recognition states", async () => {
   await expect.element(page.getByText("Choose the game format")).toBeInTheDocument();
   await page.getByRole("button", { name: /Ruby/ }).click();
   await expect.element(page.getByLabelText("Name", { exact: true })).toHaveValue("ASH");
+});
+
+test("opens a compiled profile selected by stable game ID", async () => {
+  mocks.listSaveGames.mockResolvedValueOnce({
+    games: [
+      {
+        identity: { family: "gen3", id: "pokemon-ruby", name: "Ruby" },
+        supported_save_sizes: [4],
+      },
+    ],
+    generationGames: [],
+  });
+  await uploadSave();
+  await page.getByRole("button", { name: "Choose game profile" }).click();
+  await page.getByRole("combobox", { name: "Game profile" }).selectOptions("pokemon-ruby");
+  await page.getByRole("button", { name: "Open profile" }).click();
+  await expect.poll(() => mocks.inspectSave.mock.calls.length).toBe(2);
+  expect(mocks.inspectSave).toHaveBeenLastCalledWith(expect.objectContaining({ game: "pokemon-ruby" }));
 });
 
 test("stays within the mobile page width", async () => {

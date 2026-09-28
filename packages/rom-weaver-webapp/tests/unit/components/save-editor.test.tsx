@@ -135,8 +135,8 @@ beforeEach(() => {
   useEmulatorSession.mockReturnValue({ currentGameId: null, entries: [] });
   listSaveGames.mockResolvedValue({
     games: [
-      { identity: { id: "zelda-a-link-to-the-past", name: "Zelda" } },
-      { identity: { id: "pokemon-ruby", name: "Ruby" } },
+      { identity: { id: "zelda-a-link-to-the-past", name: "Zelda" }, supported_save_sizes: [4] },
+      { identity: { id: "pokemon-ruby", name: "Ruby" }, supported_save_sizes: [4, 131072] },
     ],
     generationGames: ["zelda-a-link-to-the-past"],
   });
@@ -419,9 +419,55 @@ describe("SaveEditor", () => {
     fireEvent.change(document.querySelector("input[type=file]"), {
       target: { files: [new File(["save"], "bad.dsv")] },
     });
-    await waitFor(() => expect(screen.getByText(/does not have an editor/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/game could not be identified/)).toBeTruthy());
     expect(screen.getByText(/Container: DeSmuME save \(\.dsv\)/)).toBeTruthy();
     expect(screen.getByText(/Potential format: Flash 64 KiB/)).toBeTruthy();
+  });
+
+  it("filters profiles by the normalized wrapped-save size", async () => {
+    identifySave.mockResolvedValueOnce({
+      containerName: "Wrapped save",
+      recognition: { candidates: [], outcome: { unsupported: {} } },
+      saveSize: 4,
+    });
+    render(<SaveEditor onSessionChange={vi.fn()} />);
+    const input = document.querySelector("input[type=file]");
+    if (!(input instanceof HTMLInputElement)) throw new Error("save input missing");
+    fireEvent.change(input, { target: { files: [new File(["wrapper bytes"], "wrapped.sav")] } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Choose game profile" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Choose game profile" }));
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Game profile" })).toBeTruthy());
+    expect(screen.getByRole("option", { name: "Zelda" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Ruby" })).toBeTruthy();
+  });
+
+  it("opens an explicitly selected compiled profile", async () => {
+    render(<SaveEditor onSessionChange={vi.fn()} />);
+    await chooseFile();
+    fireEvent.click(screen.getByRole("button", { name: "Choose game profile" }));
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Game profile" })).toBeTruthy());
+    fireEvent.change(screen.getByRole("combobox", { name: "Game profile" }), {
+      target: { value: "zelda-a-link-to-the-past" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Open profile" }));
+    await waitFor(() =>
+      expect(inspectSave).toHaveBeenLastCalledWith(expect.objectContaining({ game: "zelda-a-link-to-the-past" })),
+    );
+  });
+
+  it("removes stale fields before a profile switch that fails", async () => {
+    render(<SaveEditor onSessionChange={vi.fn()} />);
+    await chooseFile();
+    expect(screen.getByLabelText("Name")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Choose game profile" }));
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Game profile" })).toBeTruthy());
+    fireEvent.change(screen.getByRole("combobox", { name: "Game profile" }), {
+      target: { value: "zelda-a-link-to-the-past" },
+    });
+    inspectSave.mockRejectedValueOnce(new Error("Profile does not match this save"));
+    fireEvent.click(screen.getByRole("button", { name: "Open profile" }));
+    await waitFor(() => expect(screen.getByText("Profile does not match this save")).toBeTruthy());
+    expect(screen.queryByLabelText("Name")).toBeNull();
   });
 
   it("does not label emulator save states as SRAM", async () => {

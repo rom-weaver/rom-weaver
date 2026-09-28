@@ -10,6 +10,7 @@ import {
 } from "../../storage/browser/emulator-saves.ts";
 import { readRuntimeOutputBlob } from "../../storage/vfs/runtime-output.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
+import type { SaveGameDefinition } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
 import {
   saveValueFromText,
   saveValueToText,
@@ -255,6 +256,8 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
   const [undoAvailable, setUndoAvailable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [profiles, setProfiles] = useState<SaveGameDefinition[] | null>(null);
+  const [selectedProfile, setSelectedProfile] = useState("");
   const outputRef = useRef<PublicOutput | null>(null);
   const handledDropRef = useRef(0);
   const requestRef = useRef(0);
@@ -300,6 +303,8 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     setPendingReplacement(false);
     setUndoAvailable(false);
     setError("");
+    setProfiles(null);
+    setSelectedProfile("");
   }, [clearOutput]);
   useEffect(() => {
     onSessionChange(Boolean(source || document || output || Object.keys(values).length));
@@ -340,6 +345,50 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     } finally {
       if (request === requestRef.current) setBusy(false);
     }
+  };
+  const clearInspection = () => {
+    requestAbortRef.current?.abort();
+    requestAbortRef.current = null;
+    requestRef.current += 1;
+    clearOutput();
+    setDocument(null);
+    setRecognition(undefined);
+    setRawOffset(0);
+    setValues({});
+    setOriginalValues({});
+    setErrors({});
+    setPreview(null);
+    setSelectedSlot("");
+    setFieldQuery("");
+    setGenerated(false);
+    setPendingReplacement(false);
+    setError("");
+  };
+  const loadProfiles = async () => {
+    if (!source) return;
+    const activeRequest = startRequest();
+    setBusy(true);
+    setError("");
+    try {
+      const { listSaveGames } = await loadSaveApi();
+      const result = await listSaveGames(activeRequest.signal);
+      if (activeRequest.request !== requestRef.current) return;
+      const normalizedSize = saveSize ?? source.size;
+      const matching = (result.games ?? []).filter((game) => game.supported_save_sizes.includes(normalizedSize));
+      setProfiles(matching);
+      setSelectedProfile(matching.find((game) => game.identity.id === document?.identity.id)?.identity.id ?? "");
+    } catch (cause) {
+      if (activeRequest.request === requestRef.current)
+        setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      if (activeRequest.request === requestRef.current) setBusy(false);
+    }
+  };
+  const openProfile = () => {
+    if (!(source && selectedProfile)) return;
+    clearInspection();
+    const activeRequest = startRequest();
+    void inspectSelected(source, selectedProfile, sourceRomSha1, activeRequest);
   };
   const identifySelected = async (
     file: File,
@@ -790,12 +839,46 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
         ) : null}
         {kind === "unsupported" ? (
           <Notice level="warn">
-            ROMWeaver does not have an editor for this game. {containerName ? "Raw save size" : "Save size"}:{" "}
+            The game could not be identified. {containerName ? "Raw save size" : "Save size"}:{" "}
             {formatByteSize(saveSize)}
             {containerName ? ` · Container: ${containerName}` : ""}
-            {potentialFormat ? ` · Potential format: ${potentialFormat}` : ""}. The original file remains unchanged.
+            {potentialFormat ? ` · Potential format: ${potentialFormat}` : ""}. Choose a game profile to open the save.
           </Notice>
         ) : null}
+        <div className="drop-tray-row">
+          <span className="drop-tray-label">Game profile</span>
+          <div className="drop-tray-control">
+            {profiles?.length ? (
+              <>
+                <select
+                  aria-label="Game profile"
+                  className="select"
+                  disabled={busy}
+                  onChange={(event) => setSelectedProfile(event.currentTarget.value)}
+                  value={selectedProfile}
+                >
+                  <option value="">Choose a profile</option>
+                  {profiles.map((profile) => (
+                    <option key={profile.identity.id} value={profile.identity.id}>
+                      {profile.identity.name}
+                    </option>
+                  ))}
+                </select>
+                <button className="btn ghost" disabled={busy || !selectedProfile} onClick={openProfile} type="button">
+                  Open profile
+                </button>
+              </>
+            ) : null}
+            {profiles?.length === 0 ? (
+              <span className="drop-tray-note">No supported profiles match this save size.</span>
+            ) : null}
+            {profiles === null ? (
+              <button className="btn ghost" disabled={busy} onClick={() => void loadProfiles()} type="button">
+                Choose game profile
+              </button>
+            ) : null}
+          </div>
+        </div>
       </FileCard>
     </div>
   ) : null;
