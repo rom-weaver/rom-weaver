@@ -68,6 +68,12 @@ describe("getCheatPatchKind", () => {
     entry.record.codeKind = "pro-action-rocky";
     expect(() => getCheatPatchKind([...mixed, entry])).toThrow("different code type");
   });
+
+  it("lets auto-detection handle a mix of auto-detected kinds", () => {
+    const actionReplay = romCheat("d", "Walk through walls", "7E0DBE3F");
+    actionReplay.detectedKind = "pro-action-replay";
+    expect(getCheatPatchKind([...mixed, actionReplay])).toBe("auto");
+  });
 });
 
 describe("getCheatPatchFormat", () => {

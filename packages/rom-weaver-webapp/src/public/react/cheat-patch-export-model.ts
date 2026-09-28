@@ -19,10 +19,20 @@ const getCheatPatchCodes = (records: readonly ClassifiedCheatRecord[]): string[]
     .map((entry) => String(entry.record.rawCode || "").trim())
     .filter((code) => !!code);
 
+// Auto-detection reads these kinds per code, so a mixed selection of them can still share one patch.
+const AUTO_DETECTED_KINDS = new Set<ManualCheatKindOverride>([
+  "auto",
+  "game-genie",
+  "pro-action-replay",
+  "xploder",
+  "gold-finger",
+]);
+
 const getCheatPatchKind = (records: readonly ClassifiedCheatRecord[]): ManualCheatKindOverride => {
   const kinds = new Set(getRomCheats(records).map((entry) => entry.record.codeKind ?? entry.detectedKind ?? "auto"));
-  if (kinds.size > 1) throw new Error("Create a separate patch for codes with a different code type.");
-  return kinds.values().next().value ?? "auto";
+  if (kinds.size <= 1) return kinds.values().next().value ?? "auto";
+  if ([...kinds].every((kind) => AUTO_DETECTED_KINDS.has(kind))) return "auto";
+  throw new Error("Create a separate patch for codes with a different code type.");
 };
 
 /** The patch format the create workflow accepts. */
