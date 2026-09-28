@@ -5,7 +5,7 @@ The native ROM smoke test uses a separate RetroArch and libretro core runtime bu
 <!-- START doctoc -->
 ## Table of contents
 
-- [Supported target](#supported-target)
+- [Supported targets](#supported-targets)
 - [Build the release artifacts](#build-the-release-artifacts)
 - [Verify and smoke-test the runtime](#verify-and-smoke-test-the-runtime)
 - [Runtime manifest contract](#runtime-manifest-contract)
@@ -13,9 +13,18 @@ The native ROM smoke test uses a separate RetroArch and libretro core runtime bu
 
 <!-- END doctoc -->
 
-## Supported target
+## Supported targets
 
-The first runtime target is `linux-x64-gnu`: Linux x86-64 with GNU libc 2.39 or later. The runtime contains:
+The runtime targets are:
+
+| Target | Host | Core library suffix |
+| --- | --- | --- |
+| `linux-x64-gnu` | Linux x86-64 with GNU libc 2.39 or later | `.so` |
+| `darwin-x64` | macOS Intel | `.dylib` |
+| `darwin-arm64` | macOS Apple Silicon | `.dylib` |
+| `win32-x64` | Windows x64 | `.dll` |
+
+Each runtime contains:
 
 - a headless RetroArch binary with networking and unused drivers disabled;
 - libretro cores for the supported ROM systems;
@@ -30,6 +39,12 @@ Each component retains its upstream license. Snes9x, Genesis Plus GX, and PicoDr
 ## Build the release artifacts
 
 Use separate empty build and output directories. The build needs `cc`, `c++`, `cmake`, `curl`, `gzip`, `make`, `nasm`, `node`, `python3`, `sha256sum`, and `tar`. It also needs OpenGL and zlib development libraries (`libgl-dev` and `zlib1g-dev` on Ubuntu).
+
+On macOS, use Xcode command-line tools and Homebrew's `cmake`, `make`, `gnu-tar`, `coreutils`, and `nasm`. Put the GNU tools' `libexec/gnubin` directories on `PATH`.
+
+On Windows, build in an MSYS2 UCRT64 shell with GCC, CMake, Node, Python, NASM, and GNU make, tar, and coreutils. The result runs as a native Windows executable. Users do not need MSYS2 to install or run it.
+
+The build selects the current host architecture. It does not cross-compile runtime packages.
 
 ```sh
 root=$HOME/.cache/rom-weaver-emulator
@@ -49,9 +64,9 @@ $build --build-dir "$root/build" --output-dir "$root/output"
 
 The build creates three release files:
 
-- `rom-weaver-emulator-linux-x64-gnu.tar.gz`;
-- `rom-weaver-emulator-linux-x64-gnu.tar.gz.sha256`;
-- `rom-weaver-emulator-sources.tar.gz`.
+- `rom-weaver-emulator-PLATFORM.tar.gz`;
+- `rom-weaver-emulator-PLATFORM.tar.gz.sha256`;
+- `rom-weaver-emulator-sources-PLATFORM.tar.gz`.
 
 The source archive contains the exact upstream source archives, source lock, build and smoke scripts, verifier, and license files. These materials let users rebuild the runtime from the pinned sources. Build dates can make rebuilt binary bytes differ.
 
@@ -85,7 +100,7 @@ The PPSSPP source recipe waits for asynchronous startup before it returns the fi
 
 ## Runtime manifest contract
 
-`manifest.json` has `schemaVersion: 2` and `platform: "linux-x64-gnu"`. Its `retroarch` object records `path`, the 40-character source `revision`, and `sha256`.
+`manifest.json` has `schemaVersion: 2` and one of the supported target names as its `platform`. Its `retroarch` object records `path`, the 40-character source `revision`, and `sha256`. The executable path is `bin/retroarch.exe` on Windows and `bin/retroarch` on Linux and macOS.
 
 Each `cores` entry records `id`, `platform`, `path`, `revision`, `sha256`, `extensions`, `options`, and `firmware`. Extensions drive automatic core selection. Options become an isolated RetroArch core-options file. Firmware paths describe files the user must supply through `--system-dir`.
 
@@ -97,7 +112,7 @@ The CLI rejects extra manifest fields, unsafe or duplicate paths, symbolic links
 
 ## Release flow
 
-CI builds and smoke-tests the runtime from the pinned source lock. The release fan-out attaches the runtime archive, its SHA-256 sidecar, and the complete source archive while the GitHub release is still a draft. Draft publication waits for these artifacts and checks to succeed.
+CI builds and smoke-tests all four runtimes on their native runners from the pinned source lock. The release fan-out attaches each runtime archive, its SHA-256 sidecar, and its source archive while the GitHub release is still a draft. Draft publication waits for every platform's artifacts and checks to succeed.
 
 The runtime checksum is the deliberate exception to the project's general rule against release checksum sidecars. `rom-weaver emulator install` needs the public sidecar before it downloads and installs the optional runtime.
 
