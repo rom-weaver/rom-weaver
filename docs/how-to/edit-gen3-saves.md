@@ -31,7 +31,7 @@ The editor also accepts the [supported save containers](../reference/save-editor
 
 1. [Enable beta tools](browser-settings.md#enable-beta-tools), then open [Saves](https://rom-weaver.com/save-editor).
 2. Add the game save file.
-3. Select the game if recognition asks for a choice.
+3. Select the game if recognition asks for a choice. For another supported profile, select **Choose game profile**, then **Open profile**.
 4. Read the integrity results and warnings before you change any fields.
 5. Use **Find a property** to find the field you need.
 6. Change editable fields, then select **Preview changes**.
@@ -72,6 +72,8 @@ For another emulator, back up its current save, then import the downloaded copy 
 ## Read the recognition result
 
 Choose the correct game when recognition is ambiguous. Do not force a different title to make an unsupported save appear editable.
+
+For a catalog profile, select **Choose game profile** and choose the matching game, region, and slot. Select **Open profile** to check it. Opening another profile clears pending edits. The original file stays unchanged.
 
 The [recognition reference](../reference/save-editor.md#recognition) describes paired layouts and the result values.
 

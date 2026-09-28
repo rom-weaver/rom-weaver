@@ -11,10 +11,7 @@ The Save Editor changes persistent game data. It does not change emulator save s
 - [Recognition](#recognition)
 - [Integrity rules](#integrity-rules)
 - [Save generation](#save-generation)
-- [Runtime schema packs](#runtime-schema-packs)
-  - [Layout selection and recovery](#layout-selection-and-recovery)
-  - [Field values and validation](#field-values-and-validation)
-  - [Edit transactions](#edit-transactions)
+- [Built-in schema catalog](#built-in-schema-catalog)
 - [Save containers](#save-containers)
 - [Physical save formats](#physical-save-formats)
 - [Unsupported data](#unsupported-data)
@@ -49,6 +46,8 @@ The Save Editor changes persistent game data. It does not change emulator save s
 | The Legend of Zelda: A Link to the Past | Super Nintendo   | Raw 8 KiB SRAM    | Needs a valid file marker and checksum                  |
 
 The Pokémon handlers cover the English layouts named above. A matching file size alone does not prove support.
+
+The default registry also includes 48 fixed profiles for 21 titles. The [catalog](../../data/save-schemas/README.md) lists their profile counts and creation support.
 
 ## Editable fields
 
@@ -123,99 +122,25 @@ The Zelda save follows the original file initialization. Its image contains one 
 
 Fresh Pokémon generation is unavailable because structure and checksum checks do not prove a playable game state. Earlier generated Pokémon files may pass those checks while missing game initialization data. Pokémon templates require a save made by the matching game. Direct Rust handler calls enforce the same generation capability; synthetic Pokémon initializers remain test-only.
 
-Template generation supports every editable game above. It validates an existing save, applies optional field assignments, and writes a separate file. Without assignments, the output is byte-identical to the template. Container wrappers are retained. A template cannot be the output path.
+Template generation supports every editable registry entry. It validates an existing save, applies optional field assignments, and writes a separate file. Without assignments, the output is byte-identical to the template. Container wrappers are retained. A template cannot be the output path.
 
 `save list-games` reports the game definitions and the IDs that support fresh generation. `save create` requires an output path unless it runs with `--dry-run`.
 
 Procedures: [Create saves in the browser](../how-to/create-game-saves-browser.md) and [Create saves with the CLI](../how-to/create-game-saves-cli.md).
 
-## Runtime schema packs
+## Built-in schema catalog
 
-A schema pack defines layouts and editing rules without rebuilding the application. Built-in games use bundled schema packs through the same interpreter. The CLI accepts `--schema PATH` on every `save` command. The browser accepts a local JSON pack through **Load schema pack**. The repository catalog and its profile counts are in [`data/save-schemas/README.md`](../../data/save-schemas/README.md).
+The application includes every supported game definition in its default registry. The catalog contains the original Pokémon, Super Mario World, and A Link to the Past definitions and 48 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. The catalog and its profile counts are in [`data/save-schemas/README.md`](../../data/save-schemas/README.md).
 
-The top-level object contains `schema_version` (`1`) and a nonempty `games` array. Optional `$schema` metadata identifies an authoring schema; the interpreter never fetches it. Optional `pack_revision` is a positive 32-bit revision for the pack data. It does not enable interpreter features. Optional `profiles` defines reusable game properties. Optional `choices` defines reusable choice arrays. Optional `records` defines reusable field and record trees. Optional `text_codecs` maps codec names to declarative character encodings.
+The 48 additional profiles require explicit game selection. The original game families retain automatic recognition.
 
-A game always contains its own `id` and `name`. Without `profile`, it also contains `platform`, `save_size`, and `fields`. A profile can supply the other game properties. Game properties replace profile properties at one level; arrays and objects do not merge. Profiles cannot contain `id`, `name`, or another `profile`. Optional members include `description`, `records`, `signatures`, `checksums`, `mirrors`, and `generation`. Advanced layouts also define `layout`, `logical_size`, `recognition`, `recovery`, validation checks, and write effects. Game metadata can preserve `family`, `handler_id`, `save_format`, `save_format_name`, `known_rom_sha1`, and `checksum_sizes`. `handler_id` is output metadata; it cannot select native code.
+A profile represents one fixed slot, player, region, or storage variant. Profile count is not title count. A compatible physical format or save size does not make an unrecognized game editable.
 
-| Member          | Representation                                                                                                                                           |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Field           | `id`, `label`, byte `offset`, and `type`; optional `description`, `editable`, `min`, `max`, `bit`, `length`, `inverted`, `copies`, `choices`, and `mask` |
-| Record instance | `record`; optional byte `offset`, `id`, `count`, `stride` or `stride_bits`, `index_start`, `index_width`, `index_radix`, `count_from`, and `group`       |
-| Signature       | `offset` and a `bytes` array                                                                                                                             |
-| Checksum        | `algorithm`, `offset`, optional `target`, optional `unit`, one `start`/`length` input or a `spans` array, and optional `exclude` ranges                  |
-| Mirror          | `source`, `target`, and `length`, all in bytes; optional `validate`                                                                                      |
-| Generation      | A `fill` byte and a `patches` array of `offset`/`bytes` objects                                                                                          |
+The built-in definitions use the shared storage, layout, checksum, recovery, and text engines. Game-specific Rust callbacks implement rules that need conditional fields, checked arithmetic, or linked writes. The CLI and browser use the same registry and editing engine.
 
-Storage types are `u8`, `u16_le`, `u16_be`, `u24_le`, `u24_be`, `u32_le`, `u32_be`, `i8`, `i16_le`, `i16_be`, `i32_le`, `i32_be`, `bool`, `bit`, `ascii`, `bcd_le`, and `bcd_be`. Integers expose their full stored range unless `min` or `max` narrows it. BCD fields use one through four bytes and store two decimal digits per byte. Their byte order controls the order of the packed decimal byte pairs.
+Adding or changing a game definition requires an application update. The CLI does not load layout packs, and the browser does not import them. `save export-schema` exports the fields of an inspected save for user interfaces and automation. Its JSON output is not an importable game definition.
 
-`bit` requires a bit index from 0 through 7. `bool` and `bit` can set `inverted` to exchange the stored zero and one meanings. `ascii` requires a byte length from 1 through 255. A flat field's `offset` and `copies` are absolute. A record field's offsets and copies are relative to the instance base and its stride. An edit encodes the same value at the primary offset and every copy; reads use the primary offset. Copies do not validate equality before an edit.
-
-A record template is a legacy field array or an object with `fields`, `records`, or both. Records can contain records to a maximum depth of 16. Cycles are invalid. `offset` defaults to 0, and `id` defaults to an empty prefix. `count` defaults to 1 and has a maximum of 4,096. A larger count needs one positive `stride` in bytes or `stride_bits` in bits. `stride_bits` accepts only records made of `bit` fields and cannot contain nested records. `index_start` and `index_width` default to 0. `index_width` has a maximum of 10. `index_radix` is 10 by default and also accepts 16. Expansion substitutes `{index}`, `{index_upper}`, and `{ordinal}` in field text, instance IDs, and groups. `{index_upper}` is the uppercase form of the formatted index. `{ordinal}` is the one-based repetition number. A child inherits its containing record's `group` unless it supplies one. Rule scalars marked `relative: true` move with the containing record base and repetition stride. Other rule references retain their absolute addresses. For bit strides, relative rule scalars require a single-bit mask. `presentation.relative_offset` advances the reported offset by the repetition displacement, without adding the instance base.
-
-`count_from` controls how many entries are visible, but `count` remains the fixed capacity and expansion bound. Its scalar uses an absolute offset unless `relative: true` makes it relative to the containing record. A negative stored count or a count above capacity makes the document invalid. Traversal, expanded fields, storage locations, and metadata are bounded before the interpreter clones fields.
-
-Numeric fields can define `choices` as unique name and integer-value pairs. A field can use `choices_ref` instead to select a top-level reusable choice array. It cannot define both. All reusable choice arrays are validated, including unused arrays. Choice names cannot start with `raw:`. The CLI and browser use the existing named-option controls. If stored data has an unknown value, readers expose `raw:<decimal>` as the current choice. An unrelated edit preserves that value.
-
-Unsigned binary integer fields can set a nonzero, contiguous `mask`. Reads shift the masked bits down to expose the logical value. Writes preserve neighboring bits. Signed integers, BCD, booleans, individual bits, and text do not accept a mask.
-
-Checksum algorithms are:
-
-| Family                | Algorithms                                             | Stored result                                                                              |
-| --------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| Subtractive sum       | `sum8`, `sum16_le`, `sum16_be`, `sum32_le`, `sum32_be` | `target - accumulated`, modulo the result width                                            |
-| Additive sum          | `add8`, `add16_le`, `add16_be`, `add32_le`, `add32_be` | `target + accumulated`, modulo the result width                                            |
-| XOR                   | `xor8`, `xor16_le`, `xor16_be`, `xor32_le`, `xor32_be` | `target XOR accumulated`                                                                   |
-| Modulo-255 complement | `sum8_mod255_complement`                               | `(byte sum modulo 255) XOR 255`                                                            |
-| Folded word sum       | `sum32_le_fold16`                                      | Sum little-endian 32-bit words, add the upper and lower halves, and store the low 16 bits  |
-| CRC-16                | `crc16_ccitt_false_le`                                 | CRC-CCITT-FALSE with polynomial `0x1021`, initial value `0xffff`, and little-endian output |
-
-`target` defaults to zero. The algorithm suffix controls the output width and byte order. The optional `unit` controls how input bytes become values: `u8` by default, or `u16_le`, `u16_be`, `u32_le`, or `u32_be`. Input lengths must be divisible by the unit width. The modulo-255 and CRC algorithms accept only `u8` and no target. The folded word sum requires `u32_le` units and no target.
-
-A checksum uses either one `start`/`length` range or a nonempty `spans` array. Spans are concatenated in order and cannot overlap. Each `exclude` range must fit inside one input span. Excluded bytes contribute zero while their positions remain in the input. Exclusion ranges cannot overlap.
-
-An edit validates all assignments before it copies the input. It then encodes all fields and their copies, repairs checksums, copies mirror ranges, reparses the result, and checks that every assignment round-trips. A no-op edit preserves every byte. A mirror validates source and target equality by default. `validate: false` accepts a different target before an edit but still replaces it from the source afterward. Generation fills the image and applies patches. Optional `values` then use tagged `SaveValue` objects such as `{"u32":3}`, `{"i32":-1}`, `{"bool":true}`, `{"text":"AB"}`, or `{"enum":"fast"}`. Flat generation encodes all defaults, runs field and game effects and checks, repairs integrity, and validates the exact values. Layout initializers must already be structurally valid. Their defaults use normal copy selection and write-back, which preserves empty groups. Generation is unavailable when its initializer is absent.
-
-### Layout selection and recovery
-
-`layout.groups` defines independent logical regions. Each group contains fixed candidate mappings or a tagged section scan. Mapping spans associate logical byte offsets with physical offsets. Unmapped bytes retain their original offsets. `logical_size` defaults to the physical save size. Top-level signatures, checksums, mirrors, fields, and rules address this logical image. Candidate integrity rules address the physical save.
-
-Fixed candidates declare signatures, checksums, predicates, optional counters, and section metadata. `checksum_blocks` is a shorthand for blocks that each own one checksum. Each block adds that checksum, its repair, and a section. Section IDs start at 0 and follow the block order. A block with a `mirror` offset also adds an equality predicate and a repair that copy the checksum there. Block checksums read byte units, so `sum32_le_fold16` is not available. A candidate with `checksum_blocks` declares no `checksums`, `repairs`, or `sections`, and it accepts at most 256 blocks. Tagged candidates declare sector positions, section IDs, footer positions, checksum input lengths, and checksum operations. The interpreter resolves addresses before reading or editing fields.
-
-Selection uses the first valid copy or the newest counter. Counter selection can recognize the maximum-to-zero rollover and reject ties. Recognition can inspect valid copies without requiring an unambiguous active copy.
-
-A group's write policy patches the selected copy, patches valid copies, or copies the complete selected region to every copy. The complete-copy policy runs only for touched groups. A requested no-op field counts as touched when another field changes in the same batch. An entirely unchanged batch does not repair copies.
-
-`recovery` declares outcomes for incomplete, damaged, unrecoverable, and differing copies. Each outcome controls integrity state, editability, issues, warnings, and optional parse or edit errors. `active_group` reports the selected group index; otherwise the document reports its selected copy. `all_copy_sections` exposes every copy's section metadata when the format requires it.
-
-### Field values and validation
-
-Fields can name a layout `group` and define `present_when` or `editable_when` predicates. A field's `presentation` preserves its reported section, offset, kind, constraints, step, encoding, and warnings separately from storage. `section_id` and `offset` are required. An omitted `kind`, `constraints`, `step`, or `encoding` keeps the value derived from the field. An explicit `null` step or encoding clears it.
-
-`text_codec` selects a codec from the pack's `text_codecs`. Codecs declare byte or word units, glyph tables or UTF-16 mappings, terminators, skipped units, padding, bit lanes, and invalid-input policies. Conditional replacement tables support context-dependent character encodings.
-
-A numeric field can define an `xor` expression for stored-value encryption and a `read` expression for a derived value. Read-only `format` fields concatenate text and numeric expressions. `value_override` defines a conditional displayed value and read-only state. `unknown_choice` defines a read-only fallback for unknown enum codes; the default remains `raw:<decimal>`.
-
-Expressions contain integers, scalar reads, checked arithmetic, bit operations, and conditional values. Predicates combine comparisons, byte-range checks, `all`, `any`, and `not`. Expression depth is limited to 16 and validation work to 4,096 nodes per expression. There are no scripts, loops, or native callbacks.
-
-Recognition checks determine candidates. `checks` validate parsed logical data. `document_checks` report invalid values and disable editing. `edit_checks` run before editing and after the complete batch. Numeric edit constraints remain separate from checks on existing stored values. A check with `repeat` expands into `count` copies. Each copy moves rule scalars marked `relative: true` by `stride` bytes. Expanded checks count toward the 4,096-check limit.
-
-### Edit transactions
-
-Assignments are validated before writes begin. Each field's `on_edit` stores run in request order after its main write. Game-level `after_edit` stores run after all assignments. Completed-batch checks therefore see linked edits together.
-
-The interpreter writes the resolved logical data to the declared physical copies. It repairs affected checksums and executes dependent checksum or mirror repairs in their declared order. It then reparses the output and checks every requested value. A failed check returns no edited bytes. Dry runs perform the same checks and return the resulting document without output bytes.
-
-Layout initializers provide complete valid bytes, including initialized copies and their checksums. Uninitialized files remain empty. Flat-layout initializers retain automatic checksum and mirror finalization.
-
-The interpreter rejects duplicate JSON object keys, unknown properties and versions, duplicate IDs, duplicate choice names or values, invalid ranges, and conflicting writes. Packs cannot replace built-in games. Limits are 2 MiB per pack, 8 MiB after profile and choice expansion, 2 MiB of expanded field metadata per game, 64 games, 4,096 expanded fields per game, 4,096 field storage locations per game, and 8 MiB per raw save. Expanded primary field offsets and copies both count as storage locations. Record traversal is also bounded before field cloning. Flat layouts use at most 128 synthetic 64-KiB sections. Explicit layouts expose their declared physical sections. Flat layouts without signatures or checksums require an explicit game choice. Packs cannot execute code or fetch network resources.
-
-Game IDs contain 1–128 lowercase ASCII letters, digits, underscores, or hyphens and start with a letter or digit. Field IDs and record names contain dot-separated nonempty segments of ASCII letters, digits, underscores, or hyphens. A record template is nonempty. Other text values have a 1,024-byte limit. A pack contains at most 4,096 template fields in total. Each game contains at most 4,096 record instances. Each signatures, checksums, mirrors, patches, copies, choices, spans, or exclusions array contains at most 4,096 entries. Total integrity work across a pack cannot exceed 64 MiB. This total includes signatures, checksum inputs, mirror sources, layout candidates, predicates, expressions, checks, and write effects.
-
-Catalog profiles are separate game definitions for fixed slots, players, regions, or storage variants. Profile count is not title count. Integer and BCD fields use their stored range by default. A stored value or combination can still be invalid during play.
-
-After schema version 1 is released, a new interpreter operation or changed required meaning needs a new `schema_version`. Readers keep support for released versions. An unknown version fails explicitly; readers do not downgrade it. `pack_revision` tracks data revisions only.
-
-`save export-schema` still exports the fields of an inspected save. Its output is not an importable layout pack because it omits byte storage and integrity rules.
+Integer and packed-decimal fields use their stored range unless a definition sets a narrower constraint. A stored value or combination can still be invalid during play. Unknown numeric choice values appear as `raw:<decimal>` and survive unrelated edits.
 
 ## Save containers
 
@@ -256,4 +181,4 @@ The Mupen64Plus combined save is the libretro core's `.srm`: EEPROM, four Contro
 
 Pokémon generations after V and other Zelda games remain unsupported. The editor does not change party Pokémon or box contents. Generation IV and V Pokédex data and Generation IV inventory remain unsupported. Fields absent from a game's schema have no editing path; this is not unrestricted byte editing.
 
-A physical format match or a removed container does not make a save editable. The built-in games in [Supported games](#supported-games) and profiles from an explicitly loaded schema pack have an editor. Emulator save states are rejected.
+A physical format match or a removed container does not make a save editable. Only games in the built-in registry have an editor. Emulator save states are rejected.

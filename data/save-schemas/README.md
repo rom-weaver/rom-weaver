@@ -1,53 +1,47 @@
-# Save schema catalog
+# Save schema source catalog
 
-These JSON packs describe save layouts and editing rules for the shared schema interpreter. Loading a changed pack does not require an application rebuild. [`schema-v1.schema.json`](schema-v1.schema.json) defines the authoring format. Runtime validation also checks byte bounds, overlapping writes, and work limits.
+The application defines its save layouts and editing rules as typed Rust under [`crates/rom-weaver-core/src/save/schema/catalog/`](../../crates/rom-weaver-core/src/save/schema/catalog). This directory keeps the source attribution and license for those definitions. It does not contain runtime schema packs.
 
-The `builtin-*.json` packs in [`crates/rom-weaver-core/data/save-schemas`](../../crates/rom-weaver-core/data/save-schemas) are compiled into the application and load automatically. They replace the seven game-specific editors in production. The previous Rust implementations remain test-only references for recognition, documents, recovery, and byte-for-byte editing comparisons.
+The default registry includes the original seven game-family definitions and all 48 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. A profile selects one fixed region, slot, player, or storage variant.
 
-| Built-in pack                    | Games                                           |
-| -------------------------------- | ----------------------------------------------- |
-| `builtin-pokemon-gen1.json`      | Red, Blue, Yellow                               |
-| `builtin-pokemon-gen2.json`      | Gold, Silver, Crystal                           |
-| `builtin-pokemon-gen3.json`      | Ruby, Sapphire, Emerald, FireRed, LeafGreen     |
-| `builtin-pokemon-gen4.json`      | Diamond, Pearl, Platinum, HeartGold, SoulSilver |
-| `builtin-pokemon-gen5.json`      | Black, White, Black 2, White 2                  |
-| `builtin-super-mario-world.json` | Super Mario World                               |
-| `builtin-zelda-alttp.json`       | The Legend of Zelda: A Link to the Past         |
+| Original catalog module | Games |
+| --- | --- |
+| `builtin_pokemon_gen1.rs` | Red, Blue, Yellow |
+| `builtin_pokemon_gen2.rs` | Gold, Silver, Crystal |
+| `builtin_pokemon_gen3.rs` | Ruby, Sapphire, Emerald, FireRed, LeafGreen |
+| `builtin_pokemon_gen4.rs` | Diamond, Pearl, Platinum, HeartGold, SoulSilver |
+| `builtin_pokemon_gen5.rs` | Black, White, Black 2, White 2 |
+| `builtin_super_mario_world.rs` | Super Mario World |
+| `builtin_zelda_alttp.rs` | The Legend of Zelda: A Link to the Past |
 
-These packs declare copy selection, text codecs, conditional fields, validation, linked writes, and checksum repair. The built-in SNES packs recover valid backup copies and expose all recoverable files. Each pack embeds its required text codecs.
+| Catalog module | Titles | Profiles | Fields | Creation |
+| --- | ---: | ---: | ---: | --- |
+| `donkey_kong_country.rs` | 1 | 6 | 24 | Template only |
+| `donkey_kong_country_2_diddy_s_kong_quest.rs` | 1 | 3 | 30 | Template only |
+| `donkey_kong_country_3_dixie_kong_s_double_trouble.rs` | 1 | 3 | 42 | Template only |
+| `final_fantasy_nes.rs` | 1 | 1 | 311 | Template only |
+| `mario_party.rs` | 1 | 1 | 15 | Template only |
+| `mario_party_2.rs` | 1 | 1 | 11 | Template only |
+| `pokemon_generation_i.rs` | 3 | 3 | 1,031 | Template only |
+| `pokemon_generation_ii.rs` | 3 | 3 | 1,806 | Template only |
+| `secret_of_mana.rs` | 1 | 4 | 52 | Template only |
+| `solatorobo_red_the_hunter.rs` | 1 | 1 | 16 | Template only |
+| `super_mario_64.rs` | 1 | 4 | 180 | Template only |
+| `super_mario_kart.rs` | 1 | 1 | 364 | Template only |
+| `super_mario_rpg.rs` | 1 | 4 | 68 | Template only |
+| `super_mario_world.rs` | 1 | 3 | 699 | File 1 fresh; all profiles template |
+| `super_metroid.rs` | 1 | 6 | 96 | Template only |
+| `wario_land_super_mario_land_3.rs` | 1 | 1 | 210 | Template only |
+| `zelda_a_link_to_the_past.rs` | 1 | 3 | 381 | File 1 fresh; all profiles template |
+| **Total** | **21** | **48** | **5,336** | **2 fresh profiles** |
 
-The following table lists the additional importable profiles. Their IDs differ from the built-in game IDs.
-
-One title can have several profiles. A profile selects one region, slot, player, or storage variant and has its own game ID. The field count is the sum across profiles, so repeated slot layouts count once per profile.
-
-| Pack                                                     | Titles | Profiles |    Fields | Creation                            |
-| -------------------------------------------------------- | -----: | -------: | --------: | ----------------------------------- |
-| `donkey-kong-country.json`                               |      1 |        6 |        24 | Template only                       |
-| `donkey-kong-country-2-diddy-s-kong-quest.json`          |      1 |        3 |        30 | Template only                       |
-| `donkey-kong-country-3-dixie-kong-s-double-trouble.json` |      1 |        3 |        42 | Template only                       |
-| `final-fantasy-nes.json`                                 |      1 |        1 |       311 | Template only                       |
-| `mario-party.json`                                       |      1 |        1 |        15 | Template only                       |
-| `mario-party-2.json`                                     |      1 |        1 |        11 | Template only                       |
-| `pokemon-generation-i.json`                              |      3 |        3 |     1,031 | Template only                       |
-| `pokemon-generation-ii.json`                             |      3 |        3 |     1,806 | Template only                       |
-| `secret-of-mana.json`                                    |      1 |        4 |        52 | Template only                       |
-| `solatorobo-red-the-hunter.json`                         |      1 |        1 |        16 | Template only                       |
-| `super-mario-64.json`                                    |      1 |        4 |       180 | Template only                       |
-| `super-mario-kart.json`                                  |      1 |        1 |       364 | Template only                       |
-| `super-mario-rpg.json`                                   |      1 |        4 |        68 | Template only                       |
-| `super-mario-world.json`                                 |      1 |        3 |       699 | File 1 fresh; all profiles template |
-| `super-metroid.json`                                     |      1 |        6 |        96 | Template only                       |
-| `wario-land-super-mario-land-3.json`                     |      1 |        1 |       210 | Template only                       |
-| `zelda-a-link-to-the-past.json`                          |      1 |        3 |       381 | File 1 fresh; all profiles template |
-| **Total**                                                | **21** |   **48** | **5,336** | **2 fresh profiles**                |
-
-Fresh creation uses a verified initializer. Template creation starts from an existing valid save and preserves bytes outside the requested edits and integrity repairs. A profile without an initializer cannot create a fresh save. Reusable top-level profiles reduce repeated game properties, but each game keeps its own ID and name. Game properties replace profile properties without deep merging, so layouts, recovery rules, and generation initializers can differ by selectable game profile.
+Fresh creation uses a verified initializer. Template creation starts from an existing valid save and preserves bytes outside the requested edits and integrity repairs. A profile without an initializer cannot create a fresh save.
 
 The A Link to the Past profiles require a valid primary file. They accept a stale backup and replace it from the repaired primary after an edit. They do not recover a damaged primary from its backup. The Super Mario World profiles require matching primary and backup files.
 
-Integer and packed-decimal fields use the full stored range unless the source proves a narrower storage rule. The game can reject combinations that fit the storage. Raw numeric option codes can also include states that normal play does not produce. Field descriptions identify known coupling and omitted edits.
+Integer and packed-decimal fields use the full stored range unless the source proves a narrower storage rule. A game can reject combinations that fit the storage. Raw numeric options can include states that normal play does not produce.
 
-The Generation I and II packs use nested record templates for repeated Pokédex fields. Their expanded field IDs and byte locations match the earlier flat definitions. Reusable choices define their text-speed values: `fast` (1), `medium` (3), and `slow` (5). These composition changes do not add fresh Pokémon generation; every Pokémon profile still requires a template.
+The Generation I and II definitions use Rust loops and shared constructors for repeated Pokédex fields. Their field IDs and byte locations remain unchanged. Shared choices define `fast` (1), `medium` (3), and `slow` (5). Every Pokémon profile requires a template.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -62,7 +56,7 @@ The Super Mario World layouts and initializer follow [SMWDisX `rammap.asm`](http
 
 The Generation I layouts follow [pret/pokered](https://github.com/pret/pokered/tree/a1a22aaf84d1675bcdbaeb194592379d586d838e) and [PKHeX `SAV1Offsets.cs`](https://github.com/kwsch/PKHeX/blob/e0e63bc87837ad2d9c8f8fda4efdbf5f2933db08/PKHeX.Core/Saves/Substructures/Gen12/SAV1Offsets.cs). The Generation II layouts follow [pret/pokegold](https://github.com/pret/pokegold/blob/656583c939d30f920a316177311a502dd222b57c5/layout.link), [pret/pokecrystal](https://github.com/pret/pokecrystal/blob/7a7881d0d62e0ddbd82dcf10e7116807487ac651/layout.link), and [PKHeX `SAV2Offsets.cs`](https://github.com/kwsch/PKHeX/blob/e0e63bc87837ad2d9c8f8fda4efdbf5f2933db08/PKHeX.Core/Saves/Substructures/Gen12/SAV2Offsets.cs). The A Link to the Past layouts follow [jpdasm `symbols_sram.asm`](https://github.com/spannerisms/jpdasm/blob/d078addd79e888c0d048fe5250d2c665ccf61628/symbols_sram.asm) and [zelda3 `select_file.c`](https://github.com/snesrev/zelda3/blob/fbbb3f967a51fafe642e6140d0753979e73b4090/src/select_file.c).
 
-The other packs derive from Game Tools Collection commit [`fd8ca0beba05723fcfdb5af83c453ba9bea1221a`](https://github.com/RyudoSynbios/game-tools-collection/tree/fd8ca0beba05723fcfdb5af83c453ba9bea1221a):
+The other definitions derive from Game Tools Collection commit [`fd8ca0beba05723fcfdb5af83c453ba9bea1221a`](https://github.com/RyudoSynbios/game-tools-collection/tree/fd8ca0beba05723fcfdb5af83c453ba9bea1221a):
 
 | Titles                         | Layout                                                                                                                                                                                                                                                                                                                                                                           | Integrity and write rules                                                                                                                                                                                                                                                                                                                                            |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -81,8 +75,4 @@ The other packs derive from Game Tools Collection commit [`fd8ca0beba05723fcfdb5
 
 Game Tools Collection is copyright 2024 RyudoSynbios and is used under the [MIT License](LICENSE-GAME-TOOLS-COLLECTION).
 
-- [Schema reference](../../docs/reference/save-editor.md#runtime-schema-packs)
-- [Load a pack with the CLI](../../docs/how-to/create-game-saves-cli.md#load-a-schema-pack)
-- [Load a pack in the browser](../../docs/how-to/create-game-saves-browser.md#load-a-schema-pack)
-
-Packs are local data files. This directory does not start a database server or download updates. A layout or encoding outside the available operations needs a reusable interpreter operation. Packs cannot name native game handlers or execute scripts.
+The catalog uses the shared schema engine and native callbacks. Adding or changing a definition requires an application update.
