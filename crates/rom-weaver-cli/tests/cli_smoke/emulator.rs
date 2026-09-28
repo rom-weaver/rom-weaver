@@ -25,14 +25,20 @@ fn runtime(temp: &TempDir, body: &str) -> PathBuf {
     fs::write(retroarch.path(), script.as_bytes()).expect("fake RetroArch");
     fs::set_permissions(retroarch.path(), fs::Permissions::from_mode(0o755))
         .expect("executable fake RetroArch");
-    let core = cores.child("fceumm_libretro.so");
+    let core_extension = if cfg!(target_os = "macos") {
+        "dylib"
+    } else {
+        "so"
+    };
+    let core_name = format!("fceumm_libretro.{core_extension}");
+    let core = cores.child(&core_name);
     fs::write(core.path(), b"fake core").expect("fake core");
     let manifest = serde_json::json!({
-        "schemaVersion": 1, "platform": "linux-x64-gnu",
+        "schemaVersion": 1, "platform": if cfg!(target_arch = "aarch64") { "darwin-arm64" } else if cfg!(target_os = "macos") { "darwin-x64" } else { "linux-x64-gnu" },
         "retroarch": {"path": "bin/retroarch", "revision": "1".repeat(40),
             "sha256": sha256(script.as_bytes())},
         "cores": [{"id": "fceumm", "platform": "nes",
-            "path": "cores/fceumm_libretro.so", "revision": "2".repeat(40),
+            "path": format!("cores/{core_name}"), "revision": "2".repeat(40),
             "sha256": sha256(b"fake core")}],
     });
     fs::write(
@@ -208,7 +214,12 @@ fn test_dry_run_does_not_require_runtime_or_write() {
 }
 
 fn add_core(runtime: &Path, id: &str, extensions: &[&str], firmware: &[&str]) {
-    let file = format!("cores/{id}_libretro.so");
+    let extension = if cfg!(target_os = "macos") {
+        "dylib"
+    } else {
+        "so"
+    };
+    let file = format!("cores/{id}_libretro.{extension}");
     fs::write(runtime.join(&file), b"another core").unwrap();
     let path = runtime.join("manifest.json");
     let mut manifest: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();

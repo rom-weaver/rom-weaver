@@ -71,11 +71,20 @@ mod extract_batch_plan;
 #[path = "cli_smoke/formats.rs"]
 mod formats;
 
-#[path = "cli_smoke/format_coverage.rs"]
-mod format_coverage;
-#[cfg(all(target_os = "linux", target_arch = "x86_64", target_env = "gnu"))]
+#[cfg(all(
+    unix,
+    any(
+        all(target_os = "linux", target_arch = "x86_64", target_env = "gnu"),
+        all(
+            target_os = "macos",
+            any(target_arch = "x86_64", target_arch = "aarch64")
+        )
+    )
+))]
 #[path = "cli_smoke/emulator.rs"]
 mod emulator;
+#[path = "cli_smoke/format_coverage.rs"]
+mod format_coverage;
 
 #[path = "cli_smoke/dry_run.rs"]
 mod dry_run;

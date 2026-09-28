@@ -13,8 +13,23 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
+#[cfg(all(target_os = "linux", target_arch = "x86_64", target_env = "gnu"))]
 const PLATFORM: &str = "linux-x64-gnu";
-const ARCHIVE_NAME: &str = "rom-weaver-emulator-linux-x64-gnu.tar.gz";
+#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+const PLATFORM: &str = "darwin-x64";
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+const PLATFORM: &str = "darwin-arm64";
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+const PLATFORM: &str = "win32-x64";
+#[cfg(not(any(
+    all(target_os = "linux", target_arch = "x86_64", target_env = "gnu"),
+    all(
+        target_os = "macos",
+        any(target_arch = "x86_64", target_arch = "aarch64")
+    ),
+    all(target_os = "windows", target_arch = "x86_64")
+)))]
+const PLATFORM: &str = "unsupported";
 const MAX_ARCHIVE_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_UNPACKED_BYTES: u64 = 512 * 1024 * 1024;
 
@@ -26,7 +41,7 @@ pub(crate) struct EmulatorCommand {
 
 #[derive(Debug, Subcommand)]
 enum EmulatorSubcommand {
-    /// Install the optional emulator runtime for this release (Linux x64/glibc).
+    /// Install the optional emulator runtime for this release.
     Install(InstallCommand),
     /// Check the installed runtime and show its source revisions.
     Info {
@@ -116,13 +131,9 @@ fn invalid(message: impl Into<String>) -> RomWeaverError {
 }
 
 fn supported_host() -> Result<()> {
-    if !cfg!(all(
-        target_os = "linux",
-        target_arch = "x86_64",
-        target_env = "gnu"
-    )) {
+    if PLATFORM == "unsupported" {
         return Err(invalid(
-            "native ROM testing currently requires the Linux x64/glibc CLI; use browser Test on this host",
+            "native ROM testing supports Linux x64/glibc, macOS x64/arm64, and Windows x64; use browser Test on this host",
         ));
     }
     Ok(())
@@ -169,11 +180,12 @@ fn read_bounded(path: &Path, limit: u64) -> Result<Vec<u8>> {
 }
 
 fn checked_file(root: &Path, relative: &str) -> Result<PathBuf> {
+    if !safe_runtime_path(relative) {
+        return Err(invalid("runtime file paths must be safe relative paths"));
+    }
     let mut path = root.to_path_buf();
     for component in Path::new(relative).components() {
-        if !matches!(component, Component::Normal(_)) {
-            return Err(invalid("runtime file paths must be relative"));
-        }
+        debug_assert!(matches!(component, Component::Normal(_)));
         path.push(component);
         let metadata = fs::symlink_metadata(&path).io_op(IoOp::Inspect, &path)?;
         if metadata.file_type().is_symlink() {
@@ -230,11 +242,11 @@ pub(crate) fn resolve(directory: Option<&Path>) -> Result<EmulatorRuntime> {
         || manifest.cores.is_empty()
         || manifest.cores.len() > 256
     {
-        return Err(invalid(
-            "unsupported emulator runtime manifest; expected v1 or v2 Linux x64/glibc runtime",
-        ));
+        return Err(invalid(format!(
+            "unsupported emulator runtime manifest; expected v1 or v2 {PLATFORM} runtime"
+        )));
     }
-    let retroarch = verify_file(&root, &manifest.retroarch, "bin/retroarch")?;
+    let retroarch = verify_file(&root, &manifest.retroarch, retroarch_path())?;
     let mut ids = HashSet::new();
     let mut cores = Vec::new();
     for mut core in manifest.cores {
@@ -255,7 +267,7 @@ pub(crate) fn resolve(directory: Option<&Path>) -> Result<EmulatorRuntime> {
                 revision: core.revision.clone(),
                 sha256: core.sha256,
             },
-            &format!("cores/{}_libretro.so", core.id),
+            &format!("cores/{}_libretro.{}", core.id, core_extension()),
         )?;
         cores.push(EmulatorCore {
             id: core.id,
@@ -354,6 +366,65 @@ pub(crate) fn safe_relative_path(path: &Path) -> bool {
             .all(|part| matches!(part, Component::Normal(_)))
 }
 
+fn retroarch_path() -> &'static str {
+    if cfg!(windows) {
+        "bin/retroarch.exe"
+    } else {
+        "bin/retroarch"
+    }
+}
+
+fn core_extension() -> &'static str {
+    if cfg!(windows) {
+        "dll"
+    } else if cfg!(target_os = "macos") {
+        "dylib"
+    } else {
+        "so"
+    }
+}
+
+fn safe_runtime_path(value: &str) -> bool {
+    if value.is_empty() || value.contains('\\') || value.contains(':') {
+        return false;
+    }
+    value.split('/').all(|part| {
+        if part.is_empty()
+            || matches!(part, "." | "..")
+            || part.ends_with('.')
+            || part.ends_with(' ')
+        {
+            return false;
+        }
+        let stem = part.split('.').next().unwrap_or_default();
+        !matches!(
+            stem.to_ascii_lowercase().as_str(),
+            "con"
+                | "prn"
+                | "aux"
+                | "nul"
+                | "com1"
+                | "com2"
+                | "com3"
+                | "com4"
+                | "com5"
+                | "com6"
+                | "com7"
+                | "com8"
+                | "com9"
+                | "lpt1"
+                | "lpt2"
+                | "lpt3"
+                | "lpt4"
+                | "lpt5"
+                | "lpt6"
+                | "lpt7"
+                | "lpt8"
+                | "lpt9"
+        )
+    })
+}
+
 fn download(url: &str, limit: u64) -> Result<Vec<u8>> {
     tracing::debug!(url, "downloading emulator runtime asset");
     let agent: ureq::Agent = ureq::Agent::config_builder()
@@ -385,12 +456,20 @@ fn unpack(bytes: &[u8], destination: &Path) -> Result<()> {
         let mut entry = entry?;
         let path = entry.path()?.into_owned();
         let mut relative = PathBuf::new();
-        if path.to_string_lossy().contains('\\') {
-            return Err(invalid(
-                "runtime archive paths must not contain backslashes",
-            ));
+        let path_text = path
+            .to_str()
+            .ok_or_else(|| invalid("runtime archive path is not UTF-8"))?;
+        let mut normalized = path_text.trim_end_matches('/');
+        while let Some(stripped) = normalized.strip_prefix("./") {
+            normalized = stripped;
         }
-        for part in path.components() {
+        if normalized == "." {
+            normalized = "";
+        }
+        if !normalized.is_empty() && !safe_runtime_path(normalized) {
+            return Err(invalid("runtime archive contains an unsafe path"));
+        }
+        for part in Path::new(normalized).components() {
             match part {
                 Component::CurDir => {}
                 Component::Normal(name) => relative.push(name),
@@ -406,8 +485,8 @@ fn unpack(bytes: &[u8], destination: &Path) -> Result<()> {
         if relative.as_os_str().is_empty() && kind.is_dir() {
             continue;
         }
-        if relative.as_os_str().is_empty() || !paths.insert(relative.clone()) || paths.len() > 8192
-        {
+        let collision_key = relative.to_string_lossy().to_ascii_lowercase();
+        if relative.as_os_str().is_empty() || !paths.insert(collision_key) || paths.len() > 8192 {
             return Err(invalid(
                 "runtime archive contains duplicate or excessive entries",
             ));
@@ -436,7 +515,7 @@ fn unpack(bytes: &[u8], destination: &Path) -> Result<()> {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mode = if relative == Path::new("bin/retroarch") {
+            let mode = if relative == Path::new(retroarch_path()) {
                 0o755
             } else {
                 0o644
@@ -450,8 +529,9 @@ fn unpack(bytes: &[u8], destination: &Path) -> Result<()> {
 fn install(args: &InstallCommand, dry_run: bool) -> Result<Value> {
     supported_host()?;
     let directory = runtime_directory(args.runtime_dir.as_deref())?;
+    let archive_name = format!("rom-weaver-emulator-{PLATFORM}.tar.gz");
     let url = format!(
-        "https://github.com/rom-weaver/rom-weaver/releases/download/v{}/{ARCHIVE_NAME}",
+        "https://github.com/rom-weaver/rom-weaver/releases/download/v{}/{archive_name}",
         env!("CARGO_PKG_VERSION")
     );
     if let Some(digest) = &args.sha256
@@ -486,7 +566,9 @@ fn install(args: &InstallCommand, dry_run: bool) -> Result<Value> {
             std::str::from_utf8(&checksum).map_err(|_| invalid("runtime checksum is not UTF-8"))?;
         let mut fields = checksum.split_whitespace();
         let digest = fields.next().unwrap_or_default();
-        if !hex_digest(digest, 64) || fields.next() != Some(ARCHIVE_NAME) || fields.next().is_some()
+        if !hex_digest(digest, 64)
+            || fields.next() != Some(archive_name.as_str())
+            || fields.next().is_some()
         {
             return Err(invalid("invalid runtime archive checksum file"));
         }
@@ -554,6 +636,16 @@ pub(crate) fn run(command: &EmulatorCommand, dry_run: bool) -> Result<Value> {
     }
 }
 
-#[cfg(all(test, target_os = "linux", target_arch = "x86_64", target_env = "gnu"))]
+#[cfg(all(
+    test,
+    any(
+        all(target_os = "linux", target_arch = "x86_64", target_env = "gnu"),
+        all(
+            target_os = "macos",
+            any(target_arch = "x86_64", target_arch = "aarch64")
+        ),
+        all(target_os = "windows", target_arch = "x86_64")
+    )
+))]
 #[path = "emulator_runtime/tests.rs"]
 mod tests;

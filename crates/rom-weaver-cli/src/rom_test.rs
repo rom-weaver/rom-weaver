@@ -23,6 +23,9 @@ use crate::{
 
 #[path = "rom_test/input.rs"]
 mod input;
+#[cfg(windows)]
+#[path = "rom_test/windows_process.rs"]
+mod windows_process;
 
 const MAX_CAPTURE_BYTES: u64 = 64 * 1024;
 const PNG_SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
@@ -230,6 +233,27 @@ fn execute(
         fs::create_dir_all(path).io_op(IoOp::CreateDir, path)?;
     }
     let mut command = Command::new(retroarch);
+    #[cfg(unix)]
+    command.env_clear().env("PATH", "/usr/bin:/bin");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+
+        let system_root = std::env::var_os("SystemRoot")
+            .or_else(|| std::env::var_os("WINDIR"))
+            .ok_or_else(|| {
+                RomWeaverError::Validation(
+                    "SystemRoot or WINDIR is required to start the emulator".to_string(),
+                )
+            })?;
+        command
+            .env_clear()
+            .creation_flags(windows_process::CREATE_SUSPENDED);
+        command
+            .env("SystemRoot", &system_root)
+            .env("WINDIR", &system_root)
+            .env("PATH", PathBuf::from(system_root).join("System32"));
+    }
     command
         .arg("--verbose")
         .arg("--config")
@@ -242,24 +266,27 @@ fn execute(
         .arg("--sram-mode=noload-nosave")
         .arg(rom)
         .current_dir(workspace)
-        .env_clear()
         .env("HOME", &home)
         .env("XDG_CACHE_HOME", &cache)
         .env("XDG_CONFIG_HOME", &config_home)
         .env("XDG_DATA_HOME", &data)
-        .env("PATH", "/usr/bin:/bin")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    #[cfg(windows)]
+    command
+        .env("USERPROFILE", &home)
+        .env("APPDATA", &config_home)
+        .env("LOCALAPPDATA", &data)
+        .env("TEMP", &cache)
+        .env("TMP", &cache);
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
         command.process_group(0);
     }
-    let mut process = RunningEmulator {
-        child: command.spawn().io_op(IoOp::Open, retroarch)?,
-        stopped: false,
-    };
+    let child = command.spawn().io_op(IoOp::Open, retroarch)?;
+    let mut process = RunningEmulator::new(child)?;
     let stdout = process.child.stdout.take().expect("piped stdout");
     let stderr = process.child.stderr.take().expect("piped stderr");
     let stdout_reader = thread::spawn(move || read_bounded(stdout));
@@ -309,12 +336,43 @@ fn read_bounded(mut reader: impl Read) -> Vec<u8> {
 struct RunningEmulator {
     child: Child,
     stopped: bool,
+    #[cfg(windows)]
+    job: Option<windows_process::Job>,
 }
 
 impl RunningEmulator {
+    fn new(child: Child) -> Result<Self> {
+        #[cfg(windows)]
+        return Self::new_windows(child);
+        #[cfg(not(windows))]
+        Ok(Self {
+            child,
+            stopped: false,
+        })
+    }
+
+    #[cfg(windows)]
+    fn new_windows(mut child: Child) -> Result<Self> {
+        let job = match windows_process::Job::assign(&child) {
+            Ok(job) => job,
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(error);
+            }
+        };
+        Ok(Self {
+            child,
+            stopped: false,
+            job: Some(job),
+        })
+    }
+
     fn stop(&mut self) {
         if !self.stopped {
             self.stopped = true;
+            #[cfg(windows)]
+            drop(self.job.take());
             kill_and_reap(&mut self.child);
         }
     }
@@ -503,9 +561,14 @@ fn cache_root() -> Result<PathBuf> {
     if let Some(path) = std::env::var_os("XDG_CACHE_HOME") {
         return Ok(PathBuf::from(path));
     }
+    #[cfg(windows)]
+    if let Some(path) = std::env::var_os("LOCALAPPDATA") {
+        return Ok(PathBuf::from(path));
+    }
     let home = std::env::var_os("HOME").ok_or_else(|| {
         RomWeaverError::Validation(
-            "HOME or XDG_CACHE_HOME is required for emulator test scratch files".to_string(),
+            "HOME, XDG_CACHE_HOME, or LOCALAPPDATA is required for emulator test scratch files"
+                .to_string(),
         )
     })?;
     Ok(PathBuf::from(home).join(".cache"))
