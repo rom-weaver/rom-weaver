@@ -1,5 +1,5 @@
 {
-  "$schema": "schema-v1.schema.json",
+  "$schema": "../../../../data/save-schemas/schema-v1.schema.json",
   "schema_version": 1,
   "pack_revision": 1,
   "text_codecs": {

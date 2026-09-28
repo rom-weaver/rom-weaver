@@ -121,7 +121,7 @@ fn check_documents(pack: &[u8], native: &dyn SaveGameHandler) {
 #[test]
 fn pokemon_generation_1_schema_matches_native_documents() {
     check_documents(
-        include_bytes!("../../../../../data/save-schemas/builtin-pokemon-gen1.json"),
+        include_bytes!("../../../data/save-schemas/builtin-pokemon-gen1.json"),
         &NativeGen1,
     );
 }
@@ -129,7 +129,7 @@ fn pokemon_generation_1_schema_matches_native_documents() {
 #[test]
 fn pokemon_generation_2_schema_matches_native_documents() {
     check_documents(
-        include_bytes!("../../../../../data/save-schemas/builtin-pokemon-gen2.json"),
+        include_bytes!("../../../data/save-schemas/builtin-pokemon-gen2.json"),
         &NativeGen2,
     );
 }
@@ -138,7 +138,7 @@ fn pokemon_generation_2_schema_matches_native_documents() {
 fn pokemon_generation_2_schema_matches_native_partial_recovery() {
     let native = NativeGen2;
     let handlers = SaveSchemaPack::from_json(include_bytes!(
-        "../../../../../data/save-schemas/builtin-pokemon-gen2.json"
+        "../../../data/save-schemas/builtin-pokemon-gen2.json"
     ))
     .unwrap()
     .into_handlers();
@@ -186,7 +186,7 @@ fn pokemon_schemas_match_native_occupied_inventory_fields() {
     );
     let cases: [InventoryCase; 2] = [
         (
-            include_bytes!("../../../../../data/save-schemas/builtin-pokemon-gen1.json"),
+            include_bytes!("../../../data/save-schemas/builtin-pokemon-gen1.json"),
             &NativeGen1,
             "pokemon-red",
             |bytes| {
@@ -198,7 +198,7 @@ fn pokemon_schemas_match_native_occupied_inventory_fields() {
             },
         ),
         (
-            include_bytes!("../../../../../data/save-schemas/builtin-pokemon-gen2.json"),
+            include_bytes!("../../../data/save-schemas/builtin-pokemon-gen2.json"),
             &NativeGen2,
             "pokemon-gold",
             |bytes| {

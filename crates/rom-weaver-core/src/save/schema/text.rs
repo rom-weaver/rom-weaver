@@ -830,8 +830,8 @@ mod tests {
     #[test]
     fn pokemon_gen1_and_gen2_builtin_codecs_bind() {
         for bytes in [
-            include_bytes!("../../../../../data/save-schemas/builtin-pokemon-gen1.json").as_slice(),
-            include_bytes!("../../../../../data/save-schemas/builtin-pokemon-gen2.json").as_slice(),
+            include_bytes!("../../../data/save-schemas/builtin-pokemon-gen1.json").as_slice(),
+            include_bytes!("../../../data/save-schemas/builtin-pokemon-gen2.json").as_slice(),
         ] {
             SaveSchemaPack::from_json(bytes).unwrap();
         }

@@ -5,14 +5,13 @@ fn snes() -> Vec<(Box<dyn SaveGameHandler>, SchemaSaveHandler, usize, usize)> {
     [
         (
             Box::new(super_mario_world::SuperMarioWorldHandler) as Box<dyn SaveGameHandler>,
-            include_bytes!("../../../../../data/save-schemas/builtin-super-mario-world.json")
-                .as_slice(),
+            include_bytes!("../../../data/save-schemas/builtin-super-mario-world.json").as_slice(),
             143,
             429,
         ),
         (
             Box::new(zelda_alttp::ZeldaAlttpHandler) as Box<dyn SaveGameHandler>,
-            include_bytes!("../../../../../data/save-schemas/builtin-zelda-alttp.json").as_slice(),
+            include_bytes!("../../../data/save-schemas/builtin-zelda-alttp.json").as_slice(),
             0x500,
             0xf00,
         ),

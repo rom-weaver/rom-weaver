@@ -94,7 +94,7 @@ fn check_pack(bytes: &[u8], native: &dyn SaveGameHandler, fixtures: impl Fn(&str
 fn pokemon_generation_3_schema_matches_native_documents_and_edits() {
     let native = PokemonGen3Handler;
     check_pack(
-        include_bytes!("../../../../../data/save-schemas/builtin-pokemon-gen3.json"),
+        include_bytes!("../../../data/save-schemas/builtin-pokemon-gen3.json"),
         &native,
         |id| {
             let identity = native
@@ -112,7 +112,7 @@ fn pokemon_generation_3_schema_matches_native_documents_and_edits() {
 fn pokemon_generation_4_schema_matches_native_documents_and_edits() {
     let native = PokemonGen4Handler;
     check_pack(
-        include_bytes!("../../../../../data/save-schemas/builtin-pokemon-gen4.json"),
+        include_bytes!("../../../data/save-schemas/builtin-pokemon-gen4.json"),
         &native,
         |id| {
             let identity = native
@@ -129,7 +129,7 @@ fn pokemon_generation_4_schema_matches_native_documents_and_edits() {
 #[test]
 fn pokemon_generation_5_schema_matches_native_documents_and_edits() {
     check_pack(
-        include_bytes!("../../../../../data/save-schemas/builtin-pokemon-gen5.json"),
+        include_bytes!("../../../data/save-schemas/builtin-pokemon-gen5.json"),
         &PokemonGen5Handler,
         fixture_for_id,
     );

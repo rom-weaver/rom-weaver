@@ -12,6 +12,7 @@ const SOURCE_EXTENSIONS = new Set([
   ".hh",
   ".hpp",
   ".inc",
+  ".json",
   ".m",
   ".mjs",
   ".mm",

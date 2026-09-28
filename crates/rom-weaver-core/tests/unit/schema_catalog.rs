@@ -4,11 +4,18 @@ use super::{SaveDetectionInput, SaveEdit, SaveGameRegistry, SaveValue};
 
 #[test]
 fn every_catalog_pack_loads_and_builtins_match_the_default_registry() {
-    let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/save-schemas");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let directories = [
+        root.join("../../data/save-schemas"),
+        root.join("data/save-schemas"),
+    ];
     let mut registry = SaveGameRegistry::default();
     let mut ids = HashSet::new();
     let mut count = 0;
-    for entry in fs::read_dir(directory).unwrap() {
+    for entry in directories
+        .into_iter()
+        .flat_map(|directory| fs::read_dir(directory).unwrap())
+    {
         let path = entry.unwrap().path();
         if path.extension().is_none_or(|extension| extension != "json")
             || path.file_name().unwrap() == "schema-v1.schema.json"
