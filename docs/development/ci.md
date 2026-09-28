@@ -64,7 +64,7 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
 | `rerun-infra-failures.yml` | failed first attempt of `ci.yml` or `parity.yml` | No | Rerun the failed jobs once when a job never got a runner or lost it |
 | `cloudflare-preview-cleanup.yml` | every 6 h, manual | No | Reap stale Cloudflare Pages preview deployments |
 | `release.yml` | manual, release PR merge | n/a | Release Please, then the publish fan-out |
-| `emulator-runtime.yml` | called by `ci.yml` and `release.yml` | **Yes** | Build and smoke-test the optional Linux NES runtime |
+| `emulator-runtime.yml` | called by `ci.yml` and `release.yml` | **Yes** | Build and smoke-test the optional Linux, macOS, and Windows ROM runtimes |
 | `release-retry.yml` | manual | n/a | Validate a failed/cancelled Release run and rerun its failed jobs and dependents |
 | `cargo-publish.yml` | `v*` tag push, manual | n/a | crates.io publish |
 | `npm-build.yml` | called by `release.yml` | n/a | Builds and dry-runs the 9 platform packages; identify data and CLI documentation on the draft |
@@ -234,7 +234,7 @@ security ── advisories (warn only, always green)
   **Shared with the release.** Both the target list ([`.github/cli-platforms.json`](#githubcli-platformsjson)) and the build itself ([`.github/actions/build-cli-platform`](#githubactionsbuild-cli-platform)) are shared with the release fan-out. So this job cannot cover a different set of targets - or build them differently - than the one that ships.
 
   **Compiler cache.** Native Cargo legs also use sccache with a persisted GitHub Actions store per platform package. Main populates it; pull requests and release jobs restore it read-only. Unchanged workspace crate compilations can be reused even though rust-cache removes their target artifacts. Cross-rs legs do not use the host wrapper, and the release profile and final fat-LTO link stay the same; compiler-cache statistics show the actual reuse.
-- **`emulator-runtime`** calls `emulator-runtime.yml` for Rust and runtime-build changes. The reusable workflow builds the pinned RetroArch and FCEUmm sources on Ubuntu 24.04, builds a no-default-features CLI, installs the generated archive through the CLI, and runs a real NES screenshot test. It uploads the runtime, checksum, and corresponding source archive for seven days. The required `Rust` aggregate fails when this selected job fails or skips.
+- **`emulator-runtime`** calls `emulator-runtime.yml` for Rust and runtime-build changes. Its matrix uses Ubuntu 24.04, macOS Intel/Apple Silicon, and Windows x64 runners. Each runner builds pinned RetroArch and all 21 cores, builds a no-default-features CLI, installs its runtime archive, and runs the ROM screenshot checks. Windows builds the runtime with MSYS2 UCRT64 and the CLI with MSVC. It uploads each runtime, checksum, and corresponding source archive for seven days. The required `CI gate` fails when this selected job fails or skips.
 - **`cli-linux-arm64`** runs the release CLI verification against the `linux-arm64-musl` binary that `cli-platforms` cross-builds, on a native `ubuntu-24.04-arm` runner. It runs only in the `full_native` tier.
 - There is **no separate `wasm-check` job**. It ran `cargo check -p rom-weaver-containers --lib` against `wasm32-wasip1-threads`, which `wasm` already compiles as a strict subset (the app build pulls `containers` in with default features), and whose cache key covers every input that could break it - so a cache hit means nothing checkable changed. The check remains part of the broad local `mise run ci` gate.
 - **`rust-macos`** runs the Rust test suite on `macos-15` (arm64) after merge to `main` (and on manual runs) - the platform the release fan-out ships CLI binaries for, but that nothing previously tested. The fan-out builds the shipped `darwin-arm64` binary on a newer image than this leg tests on (`.github/cli-platforms.json`); what keeps the shipped minimum below both is `MACOSX_DEPLOYMENT_TARGET`, not the runner version - see [macOS support floor](#macos-support-floor). It uses the same mise/setup-build-env path as the Linux jobs. fmt, clippy, typegen, and the policy checks are platform-independent and already gate in `rust-lint`.
@@ -573,7 +573,7 @@ The script imports nothing outside Node, so the dry-run and publish jobs install
 | --- | --- |
 | `semver-plan`, `semver-check` | nothing - `semver-plan` lists the published crates (and skips the check when every bump allows breaking changes) and `semver-check` runs one leg per crate, gating the publish on no accidental breaking API change |
 | `cargo-publish-dry-run` | nothing - gates npm and draft publication on crates.io accepting Cargo metadata |
-| `publish-emulator-runtime` | Linux x64/glibc NES runtime, SHA-256 sidecar, and complete corresponding source archive on the draft release |
+| `publish-emulator-runtime` | Linux, macOS Intel/Apple Silicon, and Windows x64 runtimes, SHA-256 sidecars, and corresponding source archives on the draft release |
 | `static-webapp` | `rom-weaver-webapp.tar.gz` on the draft release + signed build provenance |
 | `npm-build` | nothing registry-facing - builds and dry-runs the 9 platform packages, attaches the identify data and CLI documentation to the draft; runs beside `semver-check` |
 | `publish-npm` | 9 platform packages → launcher → unscoped alias, in that order; the one npm job that waits for `semver-check` |
@@ -725,7 +725,7 @@ Immutable releases separately make GitHub attest every release automatically, wi
 
 This replaced the `.sha256` sidecars that used to ship beside the main release assets. They were written by the job that wrote the binary, so they proved the download was intact and nothing about where it came from. The attestation covers both: it ties the asset to a workflow run and commit, and altered bytes hash to something it does not cover.
 
-The optional emulator runtime is the one exception. Its online installer must verify the archive before extraction, so the draft carries `rom-weaver-emulator-linux-x64-gnu.tar.gz.sha256` beside the runtime. The same job also attaches `rom-weaver-emulator-sources.tar.gz`, which contains the exact pinned upstream sources and build materials. Runtime build and smoke failures block `publish-release`, so a failure leaves a deletable draft.
+The optional emulator runtime is the one exception. Its online installer must verify the archive before extraction, so each platform's draft assets include `rom-weaver-emulator-PLATFORM.tar.gz.sha256`. The same job attaches `rom-weaver-emulator-sources-PLATFORM.tar.gz`, which contains that runtime's pinned upstream sources and build materials. All four runtime builds and smoke checks must succeed before `publish-release`, so a failure leaves a deletable draft.
 
 Attestations live in the repository's attestation store, not in the release's asset list. That is why adding them does not interact with [immutable releases](#draft-first-releases): nothing is attached to the draft, and the step is safe on a rerun and after the release is published.
 

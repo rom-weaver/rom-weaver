@@ -2,7 +2,7 @@
 
 Use the native CLI to start a ROM for a fixed frame count and capture the final frame. This is a smoke test. It proves that the ROM starts in the packaged emulator core. It does not test controller input, later gameplay, or game completion.
 
-Native testing supports the systems in the installed runtime on Linux x86-64 with GNU libc 2.39 or later. The packaged runtime uses headless RetroArch and libretro cores. The RetroArch frontend is built without networking. Native macOS and Windows runtimes are not available.
+Native testing supports Linux x86-64 with GNU libc 2.39 or later, macOS on Intel and Apple Silicon, and Windows x64. The packaged runtime uses headless RetroArch and libretro cores. The RetroArch frontend is built without networking.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -14,7 +14,7 @@ Native testing supports the systems in the installed runtime on Linux x86-64 wit
 
 ## Install the runtime
 
-Install the CLI version that you want to use. The N64 and PSP cores need the system OpenGL loader library, even with software rendering. mGBA needs the system zlib library. On Debian or Ubuntu, install these libraries:
+Install the CLI version that you want to use. On Linux, the N64 and PSP cores need the system OpenGL loader library, even with software rendering. mGBA needs the system zlib library. On Debian or Ubuntu, install these libraries:
 
 ```sh
 sudo apt-get install libgl1 zlib1g
@@ -26,9 +26,18 @@ No display server or GPU is required. Then install the matching runtime:
 rom-weaver emulator install
 ```
 
-The command downloads `rom-weaver-emulator-linux-x64-gnu.tar.gz` and its SHA-256 file from the matching GitHub release. A newly built version cannot download its runtime until that release is published.
+The command selects the runtime for the CLI's operating system and architecture. It downloads `rom-weaver-emulator-PLATFORM.tar.gz` and its SHA-256 file from the matching GitHub release. A newly built version cannot download its runtime until that release is published.
 
-For an offline install, download the runtime archive and obtain its SHA-256 value. Then run:
+For an offline install, select the archive that matches your CLI:
+
+| CLI host | `PLATFORM` |
+| --- | --- |
+| Linux x86-64 with GNU libc | `linux-x64-gnu` |
+| macOS Intel | `darwin-x64` |
+| macOS Apple Silicon | `darwin-arm64` |
+| Windows x64 | `win32-x64` |
+
+Download that runtime archive and obtain its SHA-256 value. Use Git Bash for these commands on Windows. This example uses Linux:
 
 ```sh
 archive=rom-weaver-emulator-linux-x64-gnu.tar.gz
