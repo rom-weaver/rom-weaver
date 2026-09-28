@@ -675,8 +675,21 @@ impl ChdContainerHandler {
                 "{context} compression failed: input too large for liblzma"
             )));
         }
+        // `lzma_stream_buffer_bound` assumes LZMA2, which stores incompressible chunks raw. Raw
+        // LZMA1 has no stored mode, so incompressible input (random or encrypted sectors) grows past
+        // that bound and liblzma returns LZMA_BUF_ERROR. The larger buffer lets the encode finish; a
+        // result bigger than the raw hunk then loses to the uncompressed map entry, as it does in
+        // chdman when its LZMA codec fails, so output bytes do not change.
+        let output_capacity = output_bound.max(input.len().saturating_mul(2).saturating_add(4096));
+        trace!(
+            input = input.len(),
+            output_bound,
+            output_capacity,
+            context,
+            "chd lzma raw encode buffer"
+        );
 
-        let mut output = vec![0u8; output_bound];
+        let mut output = vec![0u8; output_capacity];
         let mut output_pos = 0usize;
         let status = unsafe {
             liblzma_sys::lzma_raw_buffer_encode(

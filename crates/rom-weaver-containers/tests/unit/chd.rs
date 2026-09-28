@@ -1844,3 +1844,27 @@ fn chd_output_cleanup_never_deletes_refused_preexisting_output() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn chd_lzma_raw_encode_fits_incompressible_input_past_the_lzma2_bound() {
+    let mut state = 0x2545_f491_4f6c_dd1d_u64;
+    let input = (0..8 * 2352)
+        .map(|_| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state >> 24) as u8
+        })
+        .collect::<Vec<_>>();
+    let lzma2_bound = unsafe { liblzma_sys::lzma_stream_buffer_bound(input.len()) };
+
+    let encoded = ChdContainerHandler::compress_lzma_raw_no_header_no_eopm(&input, 9, "cd lzma")
+        .expect("incompressible input encodes");
+
+    assert!(encoded.len() > input.len(), "random sectors expand under LZMA1");
+    assert!(
+        encoded.len() > lzma2_bound,
+        "the old LZMA2-sized buffer ({lzma2_bound}) could not hold {} bytes",
+        encoded.len()
+    );
+}
