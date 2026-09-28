@@ -52,8 +52,7 @@ Use these boundaries:
 - `crates/rom-weaver-core/src/save/formats/` defines physical save formats.
 - `crates/rom-weaver-core/src/save/container.rs` unwraps save wrappers (GameShark SP `.sps`, `.xps`, `.gsv`; DeSmuME `.dsv`; DexDrive `.gme`; VGS `.mem`) before recognition and re-wraps edited bytes, so handlers always see raw save data. A new wrapper is one parser that returns the inner byte range; `wrap` splices edits back and keeps every other byte.
 - `crates/rom-weaver-core/src/save/formats/` is the physical format catalog, one file per platform. `candidate_save_formats` names every size match for an unsupported save; a format with a `signature` check sorts first. A catalog entry is a fact about a platform, not game recognition, so adding one never needs a handler.
-- `crates/rom-weaver-core/src/save/pokemon_gen3.rs` owns the Generation III game structure.
-- The other files in `src/save/` own the remaining Pokémon generations, Super Mario World, and A Link to the Past structures.
+- Bundled schema packs own the supported Pokémon, Super Mario World, and A Link to the Past game structures. Previous native implementations remain only as parity references in tests.
 - `SaveGameRegistry` maps a game choice to one game definition and exposes the shared handler operations.
 - `crates/rom-weaver-core/src/save/schema.rs` validates versioned JSON packs and interprets field storage, signatures, checksums, mirrors, and generation patches. A pack cannot replace a registered game ID.
 - `data/save-schemas/` stores schema packs as reviewable data. Packs use separate profiles for fixed slots, players, regions, or storage variants.
@@ -65,25 +64,27 @@ Use these boundaries:
 
 Return structured recognition, integrity, field, and change data. Do not make the browser or CLI parse human-readable strings to learn whether a save is safe to edit.
 
-Use a schema pack for fixed byte layouts. Keep encryption, rotating save slots, recovery rules, and other unsupported operations in native handlers. Add a shared interpreter operation only when a checked format needs it. Schema packs contain data, not executable scripts.
+Use a schema pack when its declarative layouts, copy selection, recovery, checks, effects, and text codecs represent the complete write path. Add a shared interpreter operation only when checked formats need it. Schema packs contain data, not executable scripts.
 
 The browser passes a selected pack through the existing worker file-staging path with each operation. Schema bytes stay on the device. The CLI loads the same pack with `--schema`. The pack is scoped to the command or editor session; it does not alter the installed application.
 
 ## Schema pack design
 
-Use a schema pack only when fixed offsets and the available declarative operations represent the complete write path. Use a native handler for encryption, active-copy selection, recovery, compression, or state-dependent writes.
+Use a schema pack only when the available declarative operations represent the complete write path. Unsupported encryption, compression, or state-dependent writes need an interpreter operation before a pack can use them.
 
 Define one profile for each independently selectable fixed layout. Slots and players can require distinct profiles when an edit must preserve the other records. Regions need separate profiles when offsets, text tables, signatures, or integrity ranges differ. Keep `save_size` equal to the normalized raw payload size after the container layer removes a wrapper.
 
+Use top-level `profiles` only to remove repeated game properties. Each game must keep its own `id` and `name`. A game property replaces the profile property as a whole; nested objects and arrays do not merge. Profiles cannot inherit from profiles. Keep recovery, layout, and generation differences explicit on each selectable game or its one profile.
+
 Fields can store signed and unsigned integers through 32 bits, packed BCD, ASCII, booleans, and individual bits. `inverted` changes the stored sense of a boolean or bit. `copies` writes one encoded field value to fixed duplicate offsets. Copies do not select or validate an active record.
 
-Use top-level record templates for repeated flat layouts. A game instance prefixes the template IDs and adds its base offset. A byte stride repeats any supported field layout. A bit stride repeats only `bit` fields. Keep records flat; one record cannot include another. Expanded IDs must remain stable because users store them in commands and automation.
+Use top-level record templates for repeated layouts. A template object can contain fields, nested record instances, or both. Nesting is limited to 16 levels and cannot contain cycles. Byte strides repeat any supported field tree. Bit strides repeat only flat `bit` records. Use `count_from` for a stored array length and keep `count` as its fixed capacity. A child inherits its containing record's group unless it supplies one. Expanded IDs must remain stable because users store them in commands and automation.
 
-Use named choices when stored numeric codes have stable names. Keep unknown codes readable as `raw:<decimal>` and preserve them during unrelated edits. Use a contiguous mask on unsigned binary integers when one field occupies part of the stored integer. A masked write must preserve every bit outside the mask.
+Use named choices when stored numeric codes have stable names. Put a shared choice array at the pack root and use `choices_ref` when several fields use it. Keep unknown codes readable as `raw:<decimal>` and preserve them during unrelated edits. Use a contiguous mask on unsigned binary integers when one field occupies part of the stored integer. A masked write must preserve every bit outside the mask.
 
 Checksum inputs can use one contiguous range or ordered spans. Exclusions contribute zero. The unit defines byte grouping and byte order independently from the checksum output. Additive, subtractive, XOR, modulo-255 complement, and CRC-CCITT-FALSE operations cover only their documented formulas. Do not approximate an unsupported integrity algorithm or omit it from an editable profile.
 
-Validate every assignment before copying the input. Encode all fields and copies before checksum repairs. Apply mirrors after checksums. Reparse the result and require every assignment to round-trip. A no-op must preserve the input bytes. A mirror validates equality by default. Set `validate: false` only when the format accepts a stale target and an edit must replace it from the source. Generation uses fill, patches, checksums, then mirrors. Add `generation` only when a source and fixture prove the initialized image is playable. A native test-fixture builder is not evidence of playable fresh generation.
+Validate every assignment before copying the input. Encode all fields and copies before checksum repairs. Apply mirrors after checksums. Reparse the result and require every assignment to round-trip. A no-op must preserve the input bytes. A mirror validates equality by default. Set `validate: false` only when the format accepts a stale target and an edit must replace it from the source. Flat generation applies fill, patches, and tagged field defaults before effects, checks, and integrity repair. Layout generation starts with a valid initializer and sends defaults through normal copy selection and write-back. Add `generation` only when a source and fixture prove the initialized image is playable. A test-fixture builder is not evidence of playable fresh generation.
 
 Separate structural integrity from game-valid meaning. Bounds, signatures, storage encodings, checksums, and mirrors establish structural integrity. They do not prove that a representable value or combination is playable.
 

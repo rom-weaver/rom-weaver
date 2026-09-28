@@ -41,16 +41,15 @@ One title can have several profiles. A profile selects one region, slot, player,
 | `zelda-a-link-to-the-past.json`                          |      1 |        3 |       381 | File 1 fresh; all profiles template |
 | **Total**                                                | **21** |   **48** | **5,336** | **2 fresh profiles**                |
 
-Fresh creation uses a verified initializer. Template creation starts from an existing valid save and preserves bytes outside the requested edits and integrity repairs. A profile without an initializer cannot create a fresh save.
+Fresh creation uses a verified initializer. Template creation starts from an existing valid save and preserves bytes outside the requested edits and integrity repairs. A profile without an initializer cannot create a fresh save. Reusable top-level profiles reduce repeated game properties, but each game keeps its own ID and name. Game properties replace profile properties without deep merging, so layouts, recovery rules, and generation initializers can differ by selectable game profile.
 
 The A Link to the Past profiles require a valid primary file. They accept a stale backup and replace it from the repaired primary after an edit. They do not recover a damaged primary from its backup. The Super Mario World profiles require matching primary and backup files.
 
 Integer and packed-decimal fields use the full stored range unless the source proves a narrower storage rule. The game can reject combinations that fit the storage. Raw numeric option codes can also include states that normal play does not produce. Field descriptions identify known coupling and omitted edits.
 
-The Generation I and II packs use record templates for the repeated Pokédex fields. Their expanded field IDs and byte locations match the earlier flat definitions. Their text-speed fields use the native `fast` (1), `medium` (3), and `slow` (5) choices.
+The Generation I and II packs use nested record templates for repeated Pokédex fields. Their expanded field IDs and byte locations match the earlier flat definitions. Reusable choices define their text-speed values: `fast` (1), `medium` (3), and `slow` (5). These composition changes do not add fresh Pokémon generation; every Pokémon profile still requires a template.
 
 <!-- START doctoc -->
-
 ## Table of contents
 
 - [Sources and attribution](#sources-and-attribution)
