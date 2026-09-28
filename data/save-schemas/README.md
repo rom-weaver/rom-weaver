@@ -1,6 +1,22 @@
 # Save schema catalog
 
-These JSON packs describe fixed save layouts for the runtime schema interpreter. Loading a changed pack does not require an application rebuild. [`schema-v1.schema.json`](schema-v1.schema.json) defines the authoring format. Runtime validation also checks byte bounds, overlapping writes, and work limits.
+These JSON packs describe save layouts and editing rules for the shared schema interpreter. Loading a changed pack does not require an application rebuild. [`schema-v1.schema.json`](schema-v1.schema.json) defines the authoring format. Runtime validation also checks byte bounds, overlapping writes, and work limits.
+
+The `builtin-*.json` packs are compiled into the application and load automatically. They replace the seven game-specific editors in production. The previous Rust implementations remain test-only references for recognition, documents, recovery, and byte-for-byte editing comparisons.
+
+| Built-in pack                    | Games                                           |
+| -------------------------------- | ----------------------------------------------- |
+| `builtin-pokemon-gen1.json`      | Red, Blue, Yellow                               |
+| `builtin-pokemon-gen2.json`      | Gold, Silver, Crystal                           |
+| `builtin-pokemon-gen3.json`      | Ruby, Sapphire, Emerald, FireRed, LeafGreen     |
+| `builtin-pokemon-gen4.json`      | Diamond, Pearl, Platinum, HeartGold, SoulSilver |
+| `builtin-pokemon-gen5.json`      | Black, White, Black 2, White 2                  |
+| `builtin-super-mario-world.json` | Super Mario World                               |
+| `builtin-zelda-alttp.json`       | The Legend of Zelda: A Link to the Past         |
+
+These packs declare copy selection, text codecs, conditional fields, validation, linked writes, and checksum repair. The built-in SNES packs recover valid backup copies and expose all recoverable files. Each pack embeds its required text codecs.
+
+The following table lists the additional importable profiles. Their IDs differ from the built-in game IDs.
 
 One title can have several profiles. A profile selects one region, slot, player, or storage variant and has its own game ID. The field count is the sum across profiles, so repeated slot layouts count once per profile.
 
@@ -69,4 +85,4 @@ Game Tools Collection is copyright 2024 RyudoSynbios and is used under the [MIT 
 - [Load a pack with the CLI](../../docs/how-to/create-game-saves-cli.md#load-a-schema-pack)
 - [Load a pack in the browser](../../docs/how-to/create-game-saves-browser.md#load-a-schema-pack)
 
-Packs are local data files. This directory does not start a database server or download updates. Encryption, compression, conditional slot selection, and unsupported transforms still require an interpreter operation or native handler.
+Packs are local data files. This directory does not start a database server or download updates. A layout or encoding outside the available operations needs a reusable interpreter operation. Packs cannot name native game handlers or execute scripts.
