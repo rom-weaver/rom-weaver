@@ -3,7 +3,9 @@ const CUE_FILE_LINE_REGEX = /^FILE\s+"?(.+?)"?\s+(\S+)$/i;
 const CUE_TRACK_LINE_REGEX = /^TRACK\s+(\d+)\s+(\S+)$/i;
 const CUE_PREGAP_LINE_REGEX = /^PREGAP\b/i;
 const CUE_INDEX_00_LINE_REGEX = /^INDEX\s+00\b/i;
-const CUE_BINARY_FILE_ENTRY_REGEX = /^(\s*)FILE\s+"?.+?"?\s+BINARY\s*$/im;
+// Horizontal whitespace only, so the match never swallows a CRLF sheet's carriage return.
+const CUE_BINARY_FILE_ENTRY_REGEX = /^([ \t]*)FILE[ \t]+"?.+?"?[ \t]+BINARY[ \t]*(\r?)$/im;
+const CUE_ANY_FILE_ENTRY_REGEX = /^([ \t]*)FILE[ \t]+"?.+?"?[ \t]+(\S+?)[ \t]*(\r?)$/im;
 const CUE_FILE_REFERENCE_REGEX = /^([ \t]*FILE[ \t]+)"?(.+?)"?([ \t]+\S+[ \t]*)$/gim;
 const LINE_BREAK_REGEX = /\r?\n/;
 
@@ -69,15 +71,23 @@ const parseCueFile = (cueText: string): ParsedCueFile => {
   return result;
 };
 
+// The first BINARY entry is the data track. A cue with no BINARY entry (an audio-only WAVE disc) points
+// its first FILE entry at the file instead and keeps that entry's type.
 const replaceCuePatchFileName = (cueText: string, binFileName: string) => {
-  let replaced = false;
   const safePatchFileName = String(binFileName || "disc.bin").replace(/"/g, "");
-  const updatedCueText = String(cueText || "").replace(CUE_BINARY_FILE_ENTRY_REGEX, (_line, indent: string) => {
-    replaced = true;
-    return `${indent}FILE "${safePatchFileName}" BINARY`;
-  });
-  if (!replaced) throw new Error("CD CHD cue does not contain a binary FILE entry");
-  return updatedCueText;
+  const text = String(cueText || "");
+  if (CUE_BINARY_FILE_ENTRY_REGEX.test(text)) {
+    return text.replace(
+      CUE_BINARY_FILE_ENTRY_REGEX,
+      (_line, indent: string, carriageReturn: string) => `${indent}FILE "${safePatchFileName}" BINARY${carriageReturn}`,
+    );
+  }
+  if (!CUE_ANY_FILE_ENTRY_REGEX.test(text)) throw new Error("CD CHD cue does not contain a FILE entry");
+  return text.replace(
+    CUE_ANY_FILE_ENTRY_REGEX,
+    (_line, indent: string, type: string, carriageReturn: string) =>
+      `${indent}FILE "${safePatchFileName}" ${type}${carriageReturn}`,
+  );
 };
 
 const replaceCueFileReferences = (cueText: string, resolveFileName: (fileName: string) => string | undefined) =>
