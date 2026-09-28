@@ -27,6 +27,7 @@ fn value_for_gen1_field(id: &str) -> SaveValue {
         "trainer.play_time.minutes" => SaveValue::U32(23),
         "trainer.play_time.seconds" => SaveValue::U32(34),
         "trainer.play_time.frames" => SaveValue::U32(45),
+        "options.text_speed" => SaveValue::Enum("slow".into()),
         "yellow.pikachu_friendship" => SaveValue::U32(255),
         "yellow.printer_brightness" => SaveValue::U32(127),
         "yellow.pikachu_beach_score" => SaveValue::U32(1234),
@@ -175,12 +176,15 @@ fn pokemon_gen2_schema_template_and_semantic_fixed_edits_match_native() {
                     && (!field.id.starts_with("options.")
                         || matches!(
                             field.id.as_str(),
-                            "options.battle_scene" | "options.battle_style"
+                            "options.battle_scene" | "options.battle_style" | "options.text_speed"
                         ))
             })
             .map(|field| SaveEdit {
                 field: field.id.clone(),
                 value: match field.value {
+                    SaveValue::Enum(_) if field.id == "options.text_speed" => {
+                        SaveValue::Enum("slow".into())
+                    }
                     SaveValue::Bool(_) if field.id.starts_with("options.battle_") => {
                         SaveValue::Bool(false)
                     }

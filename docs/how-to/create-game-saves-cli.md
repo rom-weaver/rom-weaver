@@ -73,6 +73,47 @@ rom-weaver save inspect mario.srm --schema "$schema" --game "$game"
 
 Pass `--schema` to each later command that uses this layout. Add `--template existing.srm` when the pack has no fresh initializer.
 
+Use a record template when consecutive bits share one layout. This compact pack excerpt creates `pokedex.seen.001` through `pokedex.seen.008` from one field definition:
+
+```json
+{
+  "schema_version": 1,
+  "records": {
+    "pokedex_flag": [
+      {
+        "id": "{index}",
+        "label": "Pokédex seen {index}",
+        "offset": 0,
+        "type": "bit",
+        "bit": 0
+      }
+    ]
+  },
+  "games": [
+    {
+      "id": "example-game",
+      "name": "Example Game",
+      "platform": "Game Boy",
+      "save_size": 32768,
+      "fields": [],
+      "records": [
+        {
+          "record": "pokedex_flag",
+          "offset": 952,
+          "id": "pokedex.seen",
+          "count": 8,
+          "stride_bits": 1,
+          "index_start": 1,
+          "index_width": 3
+        }
+      ]
+    }
+  ]
+}
+```
+
+Set the record `offset` to the first byte in the actual save layout. Use `stride` for byte spacing. Use `stride_bits` only for `bit` fields.
+
 The [schema reference](../reference/save-editor.md#runtime-schema-packs) defines the supported storage and integrity rules.
 
 ## Use an existing save as a template

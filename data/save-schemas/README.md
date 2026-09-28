@@ -12,8 +12,8 @@ One title can have several profiles. A profile selects one region, slot, player,
 | `final-fantasy-nes.json`                                 |      1 |        1 |       311 | Template only                       |
 | `mario-party.json`                                       |      1 |        1 |        15 | Template only                       |
 | `mario-party-2.json`                                     |      1 |        1 |        11 | Template only                       |
-| `pokemon-generation-i.json`                              |      3 |        3 |     1,037 | Template only                       |
-| `pokemon-generation-ii.json`                             |      3 |        3 |     1,812 | Template only                       |
+| `pokemon-generation-i.json`                              |      3 |        3 |     1,031 | Template only                       |
+| `pokemon-generation-ii.json`                             |      3 |        3 |     1,806 | Template only                       |
 | `secret-of-mana.json`                                    |      1 |        4 |        52 | Template only                       |
 | `solatorobo-red-the-hunter.json`                         |      1 |        1 |        16 | Template only                       |
 | `super-mario-64.json`                                    |      1 |        4 |       180 | Template only                       |
@@ -23,13 +23,22 @@ One title can have several profiles. A profile selects one region, slot, player,
 | `super-metroid.json`                                     |      1 |        6 |        96 | Template only                       |
 | `wario-land-super-mario-land-3.json`                     |      1 |        1 |       210 | Template only                       |
 | `zelda-a-link-to-the-past.json`                          |      1 |        3 |       381 | File 1 fresh; all profiles template |
-| **Total**                                                | **21** |   **48** | **5,348** | **2 fresh profiles**                |
+| **Total**                                                | **21** |   **48** | **5,336** | **2 fresh profiles**                |
 
 Fresh creation uses a verified initializer. Template creation starts from an existing valid save and preserves bytes outside the requested edits and integrity repairs. A profile without an initializer cannot create a fresh save.
 
 The A Link to the Past profiles require a valid primary file. They accept a stale backup and replace it from the repaired primary after an edit. They do not recover a damaged primary from its backup. The Super Mario World profiles require matching primary and backup files.
 
 Integer and packed-decimal fields use the full stored range unless the source proves a narrower storage rule. The game can reject combinations that fit the storage. Raw numeric option codes can also include states that normal play does not produce. Field descriptions identify known coupling and omitted edits.
+
+The Generation I and II packs use record templates for the repeated Pokédex fields. Their expanded field IDs and byte locations match the earlier flat definitions. Their text-speed fields use the native `fast` (1), `medium` (3), and `slow` (5) choices.
+
+<!-- START doctoc -->
+## Table of contents
+
+- [Sources and attribution](#sources-and-attribution)
+
+<!-- END doctoc -->
 
 ## Sources and attribution
 

@@ -12,6 +12,28 @@
     "schema_version": {
       "const": 1
     },
+    "pack_revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4294967295
+    },
+    "records": {
+      "type": "object",
+      "maxProperties": 4096,
+      "propertyNames": {
+        "minLength": 1,
+        "maxLength": 1024,
+        "pattern": "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$"
+      },
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 4096,
+        "items": {
+          "$ref": "#/$defs/field"
+        }
+      }
+    },
     "games": {
       "type": "array",
       "maxItems": 64,
@@ -56,7 +78,14 @@
           "type": "array",
           "maxItems": 4096,
           "items": {
-            "$ref": "#/$defs/field"
+            "$ref": "#/$defs/flat_field"
+          }
+        },
+        "records": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/record_instance"
           }
         },
         "signatures": {
@@ -93,6 +122,99 @@
       },
       "required": ["id", "name", "platform", "save_size", "fields"]
     },
+    "record_instance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "record": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8388608
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096,
+          "default": 1
+        },
+        "stride": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8388608
+        },
+        "stride_bits": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 67108864
+        },
+        "index_start": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "default": 0
+        },
+        "index_width": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10,
+          "default": 0
+        }
+      },
+      "required": ["record", "offset", "id"],
+      "allOf": [
+        {
+          "not": {
+            "required": ["stride", "stride_bits"]
+          }
+        },
+        {
+          "if": {
+            "required": ["count"],
+            "properties": {
+              "count": {
+                "minimum": 2
+              }
+            }
+          },
+          "then": {
+            "oneOf": [
+              {
+                "required": ["stride"]
+              },
+              {
+                "required": ["stride_bits"]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "flat_field": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/field"
+        },
+        {
+          "properties": {
+            "id": {
+              "pattern": "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$"
+            }
+          }
+        }
+      ]
+    },
     "field": {
       "type": "object",
       "additionalProperties": false,
@@ -101,7 +223,7 @@
           "type": "string",
           "maxLength": 1024,
           "minLength": 1,
-          "pattern": "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$"
+          "pattern": "^(?:[A-Za-z0-9_-]|\\{index\\})+(?:\\.(?:[A-Za-z0-9_-]|\\{index\\})+)*$"
         },
         "label": {
           "type": "string",
@@ -172,6 +294,18 @@
             "minimum": 0,
             "maximum": 8388608
           }
+        },
+        "choices": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "#/$defs/choice"
+          }
+        },
+        "mask": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
         }
       },
       "required": ["id", "label", "offset", "type"],
@@ -276,8 +410,69 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "u8",
+                  "u16_le",
+                  "u16_be",
+                  "u24_le",
+                  "u24_be",
+                  "u32_le",
+                  "u32_be",
+                  "i8",
+                  "i16_le",
+                  "i16_be",
+                  "i32_le",
+                  "i32_be",
+                  "bcd_le",
+                  "bcd_be"
+                ]
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": ["choices"]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": ["u8", "u16_le", "u16_be", "u24_le", "u24_be", "u32_le", "u32_be"]
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": ["mask"]
+            }
+          }
         }
       ]
+    },
+    "choice": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^(?!raw:).+"
+        },
+        "value": {
+          "type": "integer",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        }
+      },
+      "required": ["name", "value"]
     },
     "span": {
       "type": "object",

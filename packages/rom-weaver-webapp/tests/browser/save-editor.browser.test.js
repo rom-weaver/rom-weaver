@@ -181,6 +181,32 @@ test("finds properties while retaining pending changes", async () => {
   await expect.element(page.getByLabelText("Money", { exact: true })).toHaveValue(12345);
 });
 
+test("previews named schema choices and preserves an unknown current code", async () => {
+  const result = documentResult();
+  result.document.fields.push({
+    constraints: { choices: ["fast", "medium", "slow", "raw:2"], max: null, max_length: null, min: null },
+    description: "Text delay",
+    editable: true,
+    encoding: null,
+    id: "options.text_speed",
+    kind: "enum",
+    label: "Text speed",
+    section_id: 0,
+    step: null,
+    value: { enum: "raw:2" },
+    warnings: [],
+  });
+  mocks.inspectSave.mockResolvedValueOnce(result);
+  await uploadSave();
+  const choices = page.getByRole("radiogroup", { name: "Text speed" });
+  await expect.element(choices.getByRole("radio", { name: "raw:2", exact: true })).toBeChecked();
+  await choices.getByRole("radio", { name: "slow", exact: true }).click();
+  await page.getByRole("button", { name: "Preview changes" }).click();
+  expect(mocks.previewSaveFields).toHaveBeenCalledWith(
+    expect.objectContaining({ assignments: ["options.text_speed=slow"] }),
+  );
+});
+
 test("tracks edits, resets one or all fields, previews, and downloads", async () => {
   await uploadSave();
   await page.getByLabelText("Name", { exact: true }).fill("MAY");

@@ -6,22 +6,38 @@ const TEST_SCHEMA_PACK = {
   games: [
     {
       checksums: [{ algorithm: "sum8", length: 63, offset: 63, start: 0, target: 255 }],
-      fields: [{ id: "player.coins", label: "Coins", offset: 4, type: "u16_le" }],
+      fields: [
+        { id: "player.coins", label: "Coins", offset: 4, type: "u16_le" },
+        {
+          choices: [
+            { name: "fast", value: 1 },
+            { name: "slow", value: 5 },
+          ],
+          id: "options.speed",
+          label: "Speed",
+          mask: 7,
+          offset: 6,
+          type: "u8",
+        },
+      ],
       generation: {
         fill: 0,
         patches: [
           { bytes: [82, 87], offset: 0 },
           { bytes: [77], offset: 20 },
+          { bytes: [161], offset: 6 },
         ],
       },
       id: "test-schema-game",
       mirrors: [],
       name: "Test schema game",
       platform: "custom",
+      records: [{ record: "flag", id: "progress", offset: 8, count: 9, stride_bits: 1, index_start: 1 }],
       save_size: 64,
       signatures: [{ bytes: [82, 87], offset: 0 }],
     },
   ],
+  records: { flag: [{ id: "seen_{index}", label: "Seen {index}", offset: 0, type: "bit", bit: 0 }] },
   schema_version: 1,
 };
 
@@ -126,7 +142,7 @@ test("the real WASM command path creates and edits a save from a local schema pa
     const create = await worker.runJson({
       args: {
         args: {
-          assignments: ["player.coins=65535"],
+          assignments: ["player.coins=65535", "options.speed=slow", "progress.seen_9=true"],
           game: "test-schema-game",
           output: createdPath,
           schema: schemaPath,
@@ -139,6 +155,8 @@ test("the real WASM command path creates and edits a save from a local schema pa
     const created = await readGuestFile(opfsHandle, createdPath);
     expect(created.byteLength).toBe(64);
     expect(Array.from(created.slice(0, 6))).toEqual([82, 87, 0, 0, 255, 255]);
+    expect(created[6]).toBe(165);
+    expect(Array.from(created.slice(8, 10))).toEqual([0, 1]);
     expect(created.reduce((sum, byte) => (sum + byte) & 0xff, 0)).toBe(255);
 
     const editedPath = "/work/schema-edited.sav";
@@ -159,6 +177,8 @@ test("the real WASM command path creates and edits a save from a local schema pa
     const edited = await readGuestFile(opfsHandle, editedPath);
     expect(Array.from(edited.slice(4, 6))).toEqual([0, 0]);
     expect(edited[20]).toBe(77);
+    expect(edited[6]).toBe(165);
+    expect(edited[9]).toBe(1);
     expect(edited.reduce((sum, byte) => (sum + byte) & 0xff, 0)).toBe(255);
   });
 });

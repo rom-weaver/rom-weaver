@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use serde::Deserialize;
 use tracing::{debug, trace};
@@ -21,6 +21,11 @@ const MAX_SECTIONS: usize = 128;
 const MAX_TEXT: usize = 1024;
 const MAX_GAME_ID: usize = 128;
 const MAX_INTEGRITY_BYTES: usize = 64 * 1024 * 1024;
+const MAX_RECORD_COUNT: usize = 4096;
+const MAX_EXPANDED_METADATA_BYTES: usize = 2 * 1024 * 1024;
+const EXPANDED_FIELD_COST: usize = 256;
+const EXPANDED_CHOICE_COST: usize = 32;
+const EXPANDED_COPY_COST: usize = 8;
 
 #[derive(Clone, Debug)]
 pub struct SaveSchemaPack {
@@ -40,16 +45,21 @@ impl SaveSchemaPack {
         if raw.schema_version != 1 {
             return Err(invalid("the save schema version is unsupported"));
         }
+        if raw.pack_revision.is_some_and(|revision| revision == 0) {
+            return Err(invalid("pack_revision must be positive"));
+        }
+        validate_record_templates(&raw.records)?;
         if raw.games.is_empty() || raw.games.len() > MAX_GAMES {
             return Err(invalid("a save schema pack must contain 1 to 64 games"));
         }
         let mut ids = HashSet::new();
         let mut games = Vec::with_capacity(raw.games.len());
         let mut integrity_bytes = 0usize;
-        for game in raw.games {
+        for mut game in raw.games {
             if !ids.insert(game.id.clone()) {
                 return Err(invalid("save schema game IDs must be unique"));
             }
+            expand_records(&mut game, &raw.records)?;
             let game = GameSchema::build(game)?;
             integrity_bytes = integrity_bytes
                 .checked_add(game.integrity_bytes()?)
@@ -256,6 +266,9 @@ struct RawPack {
     #[serde(default, rename = "$schema")]
     schema: Option<String>,
     schema_version: u32,
+    pack_revision: Option<u32>,
+    #[serde(default)]
+    records: BTreeMap<String, Vec<RawField>>,
     games: Vec<RawGame>,
 }
 
@@ -270,6 +283,8 @@ struct RawGame {
     save_size: usize,
     fields: Vec<RawField>,
     #[serde(default)]
+    records: Vec<RawRecordInstance>,
+    #[serde(default)]
     signatures: Vec<RawSignature>,
     #[serde(default)]
     checksums: Vec<RawChecksum>,
@@ -278,7 +293,7 @@ struct RawGame {
     generation: Option<RawGeneration>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawField {
     id: String,
@@ -297,6 +312,36 @@ struct RawField {
     inverted: bool,
     #[serde(default)]
     copies: Vec<usize>,
+    #[serde(default)]
+    choices: Vec<RawChoice>,
+    mask: Option<u32>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawChoice {
+    name: String,
+    value: i64,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawRecordInstance {
+    record: String,
+    offset: usize,
+    id: String,
+    #[serde(default = "one")]
+    count: usize,
+    stride: Option<usize>,
+    stride_bits: Option<usize>,
+    #[serde(default)]
+    index_start: usize,
+    #[serde(default)]
+    index_width: u8,
+}
+
+fn one() -> usize {
+    1
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -443,6 +488,14 @@ struct FieldSchema {
     editable: bool,
     inverted: bool,
     copies: Vec<usize>,
+    choices: Vec<Choice>,
+    mask: Option<u32>,
+}
+
+#[derive(Clone, Debug)]
+struct Choice {
+    name: String,
+    value: i64,
 }
 
 #[derive(Clone, Debug)]
@@ -471,6 +524,238 @@ struct Mirror {
 struct Generation {
     fill: u8,
     patches: Vec<SpanBytes>,
+}
+
+fn validate_record_templates(records: &BTreeMap<String, Vec<RawField>>) -> Result<()> {
+    if records.len() > MAX_COMPONENTS {
+        return Err(invalid("record templates exceed 4096 entries"));
+    }
+    let mut field_count = 0usize;
+    for (name, fields) in records {
+        validate_field_id(name)?;
+        if fields.is_empty() {
+            return Err(invalid("record templates must contain at least one field"));
+        }
+        field_count = field_count
+            .checked_add(fields.len())
+            .filter(|count| *count <= MAX_FIELDS)
+            .ok_or_else(|| invalid("record template fields exceed 4096 entries"))?;
+        for field in fields {
+            let mut rendered = field.clone();
+            rendered.id = rendered.id.replace("{index}", "0");
+            rendered.label = rendered.label.replace("{index}", "0");
+            rendered.description = rendered.description.replace("{index}", "0");
+            FieldSchema::build(rendered, MAX_SAVE_SIZE)?;
+        }
+    }
+    Ok(())
+}
+
+fn expand_records(game: &mut RawGame, records: &BTreeMap<String, Vec<RawField>>) -> Result<()> {
+    if game.records.len() > MAX_COMPONENTS {
+        return Err(invalid("record instances exceed 4096 entries"));
+    }
+    let mut expanded_count = game.fields.len();
+    let mut metadata_bytes = game.fields.iter().try_fold(0usize, |total, field| {
+        expanded_field_bytes(field, "", "").and_then(|bytes| {
+            total
+                .checked_add(bytes)
+                .filter(|total| *total <= MAX_EXPANDED_METADATA_BYTES)
+                .ok_or_else(|| invalid("expanded record metadata exceeds 2 MiB"))
+        })
+    })?;
+    let mut storage_count = game.fields.iter().try_fold(0usize, |count, field| {
+        count
+            .checked_add(field.copies.len() + 1)
+            .filter(|count| *count <= MAX_FIELDS)
+            .ok_or_else(|| invalid("fields and their copies exceed 4096 storage locations"))
+    })?;
+    for instance in &game.records {
+        let template = records
+            .get(&instance.record)
+            .ok_or_else(|| invalid("record instance references an unknown template"))?;
+        if instance.count == 0 || instance.count > MAX_RECORD_COUNT {
+            return Err(invalid("record instance count must be from 1 to 4096"));
+        }
+        if instance.index_width > 10 {
+            return Err(invalid("record instance index_width must be at most 10"));
+        }
+        if instance.index_start > u32::MAX as usize {
+            return Err(invalid("record instance index_start must fit u32"));
+        }
+        validate_field_id(&instance.id)?;
+        if instance.stride.is_some() && instance.stride_bits.is_some() {
+            return Err(invalid(
+                "record instance stride and stride_bits are mutually exclusive",
+            ));
+        }
+        if instance.count > 1
+            && instance.stride.is_none_or(|stride| stride == 0)
+            && instance.stride_bits.is_none_or(|stride| stride == 0)
+        {
+            return Err(invalid(
+                "repeated record instances require a positive stride or stride_bits",
+            ));
+        }
+        if instance.stride == Some(0) || instance.stride_bits == Some(0) {
+            return Err(invalid("record instance strides must be positive"));
+        }
+        if instance.stride.is_some_and(|stride| stride > MAX_SAVE_SIZE)
+            || instance
+                .stride_bits
+                .is_some_and(|stride| stride > MAX_SAVE_SIZE * 8)
+        {
+            return Err(invalid(
+                "record instance stride exceeds the save-size limit",
+            ));
+        }
+        if instance.stride_bits.is_some()
+            && template
+                .iter()
+                .any(|field| !matches!(field.storage, Storage::Bit))
+        {
+            return Err(invalid(
+                "stride_bits requires a record containing only bit fields",
+            ));
+        }
+        let additions = template
+            .len()
+            .checked_mul(instance.count)
+            .ok_or_else(|| invalid("expanded record fields exceed 4096 entries"))?;
+        expanded_count = expanded_count
+            .checked_add(additions)
+            .filter(|count| *count <= MAX_FIELDS)
+            .ok_or_else(|| invalid("expanded record fields exceed 4096 entries"))?;
+        let template_storage = template.iter().try_fold(0usize, |count, field| {
+            count
+                .checked_add(field.copies.len() + 1)
+                .ok_or_else(|| invalid("expanded record storage exceeds 4096 locations"))
+        })?;
+        storage_count = template_storage
+            .checked_mul(instance.count)
+            .and_then(|count| storage_count.checked_add(count))
+            .filter(|count| *count <= MAX_FIELDS)
+            .ok_or_else(|| invalid("expanded record storage exceeds 4096 locations"))?;
+        for repetition in 0..instance.count {
+            let index = instance
+                .index_start
+                .checked_add(repetition)
+                .filter(|index| *index <= u32::MAX as usize)
+                .ok_or_else(|| invalid("record index overflows"))?;
+            let index = if instance.index_width == 0 {
+                index.to_string()
+            } else {
+                format!("{index:0width$}", width = usize::from(instance.index_width))
+            };
+            for field in template {
+                metadata_bytes = metadata_bytes
+                    .checked_add(expanded_field_bytes(field, &instance.id, &index)?)
+                    .filter(|total| *total <= MAX_EXPANDED_METADATA_BYTES)
+                    .ok_or_else(|| invalid("expanded record metadata exceeds 2 MiB"))?;
+            }
+        }
+    }
+    let mut expanded = Vec::with_capacity(expanded_count);
+    expanded.append(&mut game.fields);
+    for instance in &game.records {
+        let template = &records[&instance.record];
+        for repetition in 0..instance.count {
+            let index = instance
+                .index_start
+                .checked_add(repetition)
+                .filter(|index| *index <= u32::MAX as usize)
+                .ok_or_else(|| invalid("record index overflows"))?;
+            let index = if instance.index_width == 0 {
+                index.to_string()
+            } else {
+                format!("{index:0width$}", width = usize::from(instance.index_width))
+            };
+            for source in template {
+                let mut field = source.clone();
+                field.id = format!("{}.{}", instance.id, field.id.replace("{index}", &index));
+                field.label = field.label.replace("{index}", &index);
+                field.description = field.description.replace("{index}", &index);
+                if let Some(stride_bits) = instance.stride_bits {
+                    shift_bit_field(&mut field, instance.offset, repetition, stride_bits)?;
+                } else {
+                    let stride = instance.stride.unwrap_or(0);
+                    let base = repetition
+                        .checked_mul(stride)
+                        .and_then(|value| instance.offset.checked_add(value))
+                        .ok_or_else(|| invalid("record field offset overflows"))?;
+                    field.offset = base
+                        .checked_add(field.offset)
+                        .ok_or_else(|| invalid("record field offset overflows"))?;
+                    for copy in &mut field.copies {
+                        *copy = base
+                            .checked_add(*copy)
+                            .ok_or_else(|| invalid("record field copy offset overflows"))?;
+                    }
+                }
+                expanded.push(field);
+            }
+        }
+    }
+    game.fields = expanded;
+    Ok(())
+}
+
+fn expanded_field_bytes(field: &RawField, prefix: &str, index: &str) -> Result<usize> {
+    let rendered_len = |value: &str| -> Result<usize> {
+        let replacements = value.matches("{index}").count();
+        value
+            .len()
+            .checked_sub(replacements * "{index}".len())
+            .and_then(|length| length.checked_add(replacements * index.len()))
+            .ok_or_else(|| invalid("expanded record metadata exceeds 2 MiB"))
+    };
+    let mut bytes = EXPANDED_FIELD_COST
+        .checked_add(rendered_len(&field.id)?)
+        .and_then(|bytes| bytes.checked_add(rendered_len(&field.label).ok()?))
+        .and_then(|bytes| bytes.checked_add(rendered_len(&field.description).ok()?))
+        .and_then(|bytes| bytes.checked_add(prefix.len() + usize::from(!prefix.is_empty())))
+        .and_then(|bytes| bytes.checked_add(field.copies.len() * EXPANDED_COPY_COST))
+        .ok_or_else(|| invalid("expanded record metadata exceeds 2 MiB"))?;
+    for choice in &field.choices {
+        bytes = bytes
+            .checked_add(EXPANDED_CHOICE_COST)
+            .and_then(|bytes| bytes.checked_add(choice.name.len()))
+            .ok_or_else(|| invalid("expanded record metadata exceeds 2 MiB"))?;
+    }
+    Ok(bytes)
+}
+
+fn shift_bit_field(
+    field: &mut RawField,
+    instance_offset: usize,
+    repetition: usize,
+    stride_bits: usize,
+) -> Result<()> {
+    let repetition_bits = repetition
+        .checked_mul(stride_bits)
+        .ok_or_else(|| invalid("record bit offset overflows"))?;
+    let shift = |offset: usize, bit: u8| -> Result<(usize, u8)> {
+        let bits = instance_offset
+            .checked_mul(8)
+            .and_then(|value| {
+                offset
+                    .checked_mul(8)
+                    .and_then(|offset| value.checked_add(offset))
+            })
+            .and_then(|value| value.checked_add(usize::from(bit)))
+            .and_then(|value| value.checked_add(repetition_bits))
+            .ok_or_else(|| invalid("record bit offset overflows"))?;
+        Ok((bits / 8, (bits % 8) as u8))
+    };
+    let bit = field.bit.expect("bit storage requires a bit");
+    (field.offset, field.bit) = {
+        let (offset, bit) = shift(field.offset, bit)?;
+        (offset, Some(bit))
+    };
+    for copy in &mut field.copies {
+        *copy = shift(*copy, bit)?.0;
+    }
+    Ok(())
 }
 
 impl GameSchema {
@@ -736,7 +1021,7 @@ impl FieldSchema {
         validate_field_id(&raw.id)?;
         bounded_text(&raw.label, "field label")?;
         bounded_text_allow_empty(&raw.description, "field description")?;
-        let (storage_len, intrinsic_min, intrinsic_max) = raw.storage.properties(raw.length)?;
+        let (storage_len, intrinsic_min, mut intrinsic_max) = raw.storage.properties(raw.length)?;
         if matches!(raw.storage, Storage::Bit) != raw.bit.is_some()
             || raw.bit.is_some_and(|bit| bit > 7)
         {
@@ -759,6 +1044,30 @@ impl FieldSchema {
                 "boolean, bit, and ascii fields do not accept min or max",
             ));
         }
+        if let Some(mask) = raw.mask {
+            if !raw.storage.is_unsigned_binary() {
+                return Err(invalid(
+                    "mask is allowed only on unsigned binary integer fields",
+                ));
+            }
+            if mask == 0 {
+                return Err(invalid(
+                    "field mask must be nonzero, contiguous, and fit its storage",
+                ));
+            }
+            let storage_mask = if storage_len == 4 {
+                u32::MAX
+            } else {
+                (1u32 << (storage_len * 8)) - 1
+            };
+            let shifted = mask >> mask.trailing_zeros();
+            if mask & !storage_mask != 0 || shifted & shifted.wrapping_add(1) != 0 {
+                return Err(invalid(
+                    "field mask must be nonzero, contiguous, and fit its storage",
+                ));
+            }
+            intrinsic_max = i64::from(shifted);
+        }
         check_span(raw.offset, storage_len, save_size, "field")?;
         if raw.copies.len() > MAX_FIELDS {
             return Err(invalid("field copies exceed 4096 entries"));
@@ -770,6 +1079,30 @@ impl FieldSchema {
         let max = raw.max.unwrap_or(intrinsic_max);
         if min < intrinsic_min || max > intrinsic_max || min > max {
             return Err(invalid("field min and max must fit its storage type"));
+        }
+        if raw.choices.len() > MAX_FIELDS {
+            return Err(invalid("field choices exceed 4096 entries"));
+        }
+        if !raw.choices.is_empty()
+            && matches!(raw.storage, Storage::Bool | Storage::Bit | Storage::Ascii)
+        {
+            return Err(invalid("choices are allowed only on integer fields"));
+        }
+        let mut choice_names = HashSet::new();
+        let mut choice_values = HashSet::new();
+        for choice in &raw.choices {
+            bounded_text(&choice.name, "choice name")?;
+            if choice.name.starts_with("raw:") {
+                return Err(invalid(
+                    "choice names must not use the reserved raw: prefix",
+                ));
+            }
+            if !choice_names.insert(&choice.name) || !choice_values.insert(choice.value) {
+                return Err(invalid("choice names and values must be unique"));
+            }
+            if choice.value < min || choice.value > max {
+                return Err(invalid("choice values must fit the field range"));
+            }
         }
         Ok(Self {
             id: raw.id,
@@ -784,38 +1117,82 @@ impl FieldSchema {
             editable: raw.editable.unwrap_or(true),
             inverted: raw.inverted,
             copies: raw.copies,
+            choices: raw
+                .choices
+                .into_iter()
+                .map(|choice| Choice {
+                    name: choice.name,
+                    value: choice.value,
+                })
+                .collect(),
+            mask: raw.mask,
         })
     }
     fn span(&self) -> (usize, usize) {
         (self.offset, self.offset + self.length)
     }
+    fn byte_mask(&self, absolute_offset: usize) -> u8 {
+        if absolute_offset < self.offset || absolute_offset >= self.offset + self.length {
+            return 0;
+        }
+        if matches!(self.storage, Storage::Bit) {
+            return 1 << self.bit.expect("validated bit");
+        }
+        let Some(mask) = self.mask else {
+            return u8::MAX;
+        };
+        let byte_index = absolute_offset - self.offset;
+        let shift = if matches!(
+            self.storage,
+            Storage::U16Be | Storage::U24Be | Storage::U32Be
+        ) {
+            (self.length - 1 - byte_index) * 8
+        } else {
+            byte_index * 8
+        };
+        (mask >> shift) as u8
+    }
     fn to_field(&self, bytes: &[u8]) -> Result<SaveField> {
         let value = self.read(bytes)?;
-        let kind = match self.storage {
-            Storage::Ascii => {
-                if self.editable {
-                    SaveFieldKind::Text
-                } else {
-                    SaveFieldKind::ReadOnlyText
+        let kind = if !self.choices.is_empty() {
+            SaveFieldKind::Enum
+        } else {
+            match self.storage {
+                Storage::Ascii => {
+                    if self.editable {
+                        SaveFieldKind::Text
+                    } else {
+                        SaveFieldKind::ReadOnlyText
+                    }
                 }
-            }
-            Storage::Bool => SaveFieldKind::Boolean,
-            Storage::Bit => SaveFieldKind::BitfieldBoolean,
-            Storage::I8 | Storage::I16Le | Storage::I16Be | Storage::I32Le | Storage::I32Be => {
-                if self.editable {
-                    SaveFieldKind::SignedInteger
-                } else {
-                    SaveFieldKind::ReadOnlyInteger
+                Storage::Bool => SaveFieldKind::Boolean,
+                Storage::Bit => SaveFieldKind::BitfieldBoolean,
+                Storage::I8 | Storage::I16Le | Storage::I16Be | Storage::I32Le | Storage::I32Be => {
+                    if self.editable {
+                        SaveFieldKind::SignedInteger
+                    } else {
+                        SaveFieldKind::ReadOnlyInteger
+                    }
                 }
-            }
-            _ => {
-                if self.editable {
-                    SaveFieldKind::UnsignedInteger
-                } else {
-                    SaveFieldKind::ReadOnlyInteger
+                _ => {
+                    if self.editable {
+                        SaveFieldKind::UnsignedInteger
+                    } else {
+                        SaveFieldKind::ReadOnlyInteger
+                    }
                 }
             }
         };
+        let mut choices = self
+            .choices
+            .iter()
+            .map(|choice| choice.name.clone())
+            .collect::<Vec<_>>();
+        if let SaveValue::Enum(value) = &value
+            && !choices.contains(value)
+        {
+            choices.push(value.clone());
+        }
         Ok(SaveField {
             id: self.id.clone(),
             label: self.label.clone(),
@@ -830,7 +1207,7 @@ impl FieldSchema {
                 max: (!matches!(self.storage, Storage::Bool | Storage::Bit | Storage::Ascii))
                     .then_some(self.max),
                 max_length: matches!(self.storage, Storage::Ascii).then_some(self.length as u8),
-                choices: Vec::new(),
+                choices,
             },
             description: self.description.clone(),
             warnings: Vec::new(),
@@ -840,7 +1217,7 @@ impl FieldSchema {
     }
     fn read(&self, bytes: &[u8]) -> Result<SaveValue> {
         let b = &bytes[self.offset..self.offset + self.length];
-        Ok(match self.storage {
+        let mut value = match self.storage {
             Storage::U8 => SaveValue::U32(b[0].into()),
             Storage::U16Le => SaveValue::U32(u16::from_le_bytes([b[0], b[1]]).into()),
             Storage::U16Be => SaveValue::U32(u16::from_be_bytes([b[0], b[1]]).into()),
@@ -885,7 +1262,28 @@ impl FieldSchema {
                 }
                 SaveValue::Text(String::from_utf8(b[..end].to_vec()).expect("ASCII is UTF-8"))
             }
-        })
+        };
+        if let Some(mask) = self.mask {
+            let raw = match value {
+                SaveValue::U32(value) => value,
+                _ => unreachable!("mask storage was validated"),
+            };
+            value = SaveValue::U32((raw & mask) >> mask.trailing_zeros());
+        }
+        if !self.choices.is_empty() {
+            let numeric = match value {
+                SaveValue::U32(value) => i64::from(value),
+                SaveValue::I32(value) => i64::from(value),
+                _ => unreachable!("choice storage was validated"),
+            };
+            let name = self
+                .choices
+                .iter()
+                .find(|choice| choice.value == numeric)
+                .map_or_else(|| format!("raw:{numeric}"), |choice| choice.name.clone());
+            value = SaveValue::Enum(name);
+        }
+        Ok(value)
     }
     fn write(&self, bytes: &mut [u8], value: &SaveValue) -> Result<()> {
         for offset in std::iter::once(&self.offset).chain(&self.copies) {
@@ -894,6 +1292,54 @@ impl FieldSchema {
         Ok(())
     }
     fn write_at(&self, dst: &mut [u8], value: &SaveValue) -> Result<()> {
+        let normalized = if let SaveValue::Enum(name) = value {
+            let choice_value = self
+                .choices
+                .iter()
+                .find(|choice| choice.name == *name)
+                .map(|choice| choice.value)
+                .or_else(|| name.strip_prefix("raw:")?.parse().ok())
+                .ok_or_else(|| {
+                    validation(
+                        "save_value_choice",
+                        "the requested enum value is not allowed",
+                    )
+                })?;
+            if choice_value < self.min || choice_value > self.max {
+                return Err(validation(
+                    "save_value_range",
+                    "the requested save value is outside its allowed range",
+                ));
+            }
+            Some(match self.storage {
+                Storage::I8 | Storage::I16Le | Storage::I16Be | Storage::I32Le | Storage::I32Be => {
+                    SaveValue::I32(choice_value as i32)
+                }
+                _ => SaveValue::U32(choice_value as u32),
+            })
+        } else {
+            None
+        };
+        let value = normalized.as_ref().unwrap_or(value);
+        if let Some(mask) = self.mask {
+            let SaveValue::U32(value) = value else {
+                return Err(validation(
+                    "save_value_kind",
+                    "the requested value has the wrong type",
+                ));
+            };
+            let shifted = value << mask.trailing_zeros();
+            if shifted & !mask != 0 {
+                return Err(validation(
+                    "save_value_range",
+                    "the requested save value is outside its allowed range",
+                ));
+            }
+            let existing = self.storage.read_unsigned(dst);
+            self.storage
+                .write_unsigned(dst, (existing & !mask) | shifted);
+            return Ok(());
+        }
         match (self.storage, value) {
             (Storage::U8, SaveValue::U32(v)) => dst[0] = *v as u8,
             (Storage::U16Le, SaveValue::U32(v)) => dst.copy_from_slice(&(*v as u16).to_le_bytes()),
@@ -953,6 +1399,45 @@ impl FieldSchema {
 }
 
 impl Storage {
+    fn is_unsigned_binary(self) -> bool {
+        matches!(
+            self,
+            Self::U8
+                | Self::U16Le
+                | Self::U16Be
+                | Self::U24Le
+                | Self::U24Be
+                | Self::U32Le
+                | Self::U32Be
+        )
+    }
+
+    fn read_unsigned(self, bytes: &[u8]) -> u32 {
+        match self {
+            Self::U8 => bytes[0].into(),
+            Self::U16Le => u16::from_le_bytes([bytes[0], bytes[1]]).into(),
+            Self::U16Be => u16::from_be_bytes([bytes[0], bytes[1]]).into(),
+            Self::U24Le => u32::from_le_bytes([bytes[0], bytes[1], bytes[2], 0]),
+            Self::U24Be => u32::from_be_bytes([0, bytes[0], bytes[1], bytes[2]]),
+            Self::U32Le => u32::from_le_bytes(bytes.try_into().expect("four bytes")),
+            Self::U32Be => u32::from_be_bytes(bytes.try_into().expect("four bytes")),
+            _ => unreachable!("unsigned storage was validated"),
+        }
+    }
+
+    fn write_unsigned(self, dst: &mut [u8], value: u32) {
+        match self {
+            Self::U8 => dst[0] = value as u8,
+            Self::U16Le => dst.copy_from_slice(&(value as u16).to_le_bytes()),
+            Self::U16Be => dst.copy_from_slice(&(value as u16).to_be_bytes()),
+            Self::U24Le => dst.copy_from_slice(&value.to_le_bytes()[..3]),
+            Self::U24Be => dst.copy_from_slice(&value.to_be_bytes()[1..]),
+            Self::U32Le => dst.copy_from_slice(&value.to_le_bytes()),
+            Self::U32Be => dst.copy_from_slice(&value.to_be_bytes()),
+            _ => unreachable!("unsigned storage was validated"),
+        }
+    }
+
     fn properties(self, length: Option<u8>) -> Result<(usize, i64, i64)> {
         Ok(match self {
             Self::U8 => (1, 0, u8::MAX.into()),
@@ -1270,14 +1755,23 @@ impl Generation {
 }
 
 fn validate_field_overlaps(fields: &[FieldSchema]) -> Result<()> {
-    for (i, a) in fields.iter().enumerate() {
-        for b in &fields[i + 1..] {
-            if overlaps(a.span(), b.span())
-                && (a.editable || b.editable)
-                && !(matches!(a.storage, Storage::Bit)
-                    && matches!(b.storage, Storage::Bit)
-                    && a.offset == b.offset
-                    && a.bit != b.bit)
+    let mut sorted = fields.iter().collect::<Vec<_>>();
+    sorted.sort_unstable_by_key(|field| field.offset);
+    let editable = sorted
+        .iter()
+        .copied()
+        .filter(|field| field.editable)
+        .collect::<Vec<_>>();
+    for a in &sorted {
+        let candidates = if a.editable { &sorted } else { &editable };
+        let start = candidates.partition_point(|field| field.offset < a.offset);
+        for b in candidates[start..]
+            .iter()
+            .take_while(|field| field.offset < a.offset + a.length)
+        {
+            if !std::ptr::eq(*a, *b)
+                && (a.span().0.max(b.span().0)..a.span().1.min(b.span().1))
+                    .any(|offset| a.byte_mask(offset) & b.byte_mask(offset) != 0)
             {
                 return Err(invalid("editable schema field storage overlaps"));
             }
@@ -1842,5 +2336,279 @@ mod tests {
         pack["games"][0]["checksums"] =
             serde_json::json!([{"algorithm":"add8","start":0,"length":3,"offset":8}]);
         assert!(SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap()).is_err());
+    }
+
+    #[test]
+    fn schema_authoring_expands_records_and_bit_strides() {
+        let pack = serde_json::json!({
+            "schema_version": 1,
+            "pack_revision": 2,
+            "records": {
+                "slot": [{
+                    "id": "value_{index}", "label": "Value {index}",
+                    "description": "Slot {index}", "offset": 1, "type": "u8",
+                    "copies": [5]
+                }],
+                "flags": [{
+                    "id": "seen_{index}", "label": "Seen {index}",
+                    "offset": 0, "type": "bit", "bit": 7
+                }]
+            },
+            "games": [{
+                "id": "records", "name": "Records", "platform": "test",
+                "save_size": 32, "fields": [],
+                "records": [
+                    {"record":"slot", "offset":2, "id":"save", "count":2,
+                     "stride":8, "index_start":1, "index_width":3},
+                    {"record":"flags", "offset":20, "id":"dex", "count":3,
+                     "stride_bits":1, "index_start":7}
+                ]
+            }]
+        });
+        let handler = SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap())
+            .unwrap()
+            .into_handlers()
+            .remove(0);
+        let input = SaveDetectionInput {
+            bytes: vec![0; 32],
+            selected_game: Some("records".into()),
+            rom_sha1: None,
+        };
+        let document = handler.parse(&input, &identity(&handler)).unwrap();
+        assert_eq!(
+            document
+                .fields
+                .iter()
+                .map(|field| field.id.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "save.value_001",
+                "save.value_002",
+                "dex.seen_7",
+                "dex.seen_8",
+                "dex.seen_9"
+            ]
+        );
+        assert_eq!(
+            (document.fields[0].offset, document.fields[1].offset),
+            (3, 11)
+        );
+        assert_eq!(
+            (document.fields[2].offset, document.fields[3].offset),
+            (20, 21)
+        );
+        let result = handler
+            .apply(
+                &input,
+                &identity(&handler),
+                &[SaveEdit {
+                    field: "save.value_002".into(),
+                    value: SaveValue::U32(9),
+                }],
+                false,
+            )
+            .unwrap();
+        let bytes = result.bytes.unwrap();
+        assert_eq!((bytes[11], bytes[15]), (9, 9));
+    }
+
+    #[test]
+    fn schema_authoring_rejects_invalid_record_contracts() {
+        let base = serde_json::json!({
+            "schema_version": 1,
+            "records": {"row":[{"id":"x_{index}","label":"X","offset":0,"type":"u8"}]},
+            "games":[{"id":"x","name":"X","platform":"x","save_size":2,"fields":[]}]
+        });
+        let mut cases = Vec::new();
+        let mut value = base.clone();
+        value["pack_revision"] = 0.into();
+        cases.push(value);
+        let mut value = base.clone();
+        value["records"]["row"][0]["unknown"] = true.into();
+        cases.push(value);
+        let mut value = base.clone();
+        value["games"][0]["records"] =
+            serde_json::json!([{"record":"missing","offset":0,"id":"r"}]);
+        cases.push(value);
+        let mut value = base.clone();
+        value["games"][0]["records"] =
+            serde_json::json!([{"record":"row","offset":0,"id":"r","count":2}]);
+        cases.push(value);
+        let mut value = base.clone();
+        value["games"][0]["records"] =
+            serde_json::json!([{"record":"row","offset":0,"id":"r","count":4097,"stride":1}]);
+        cases.push(value);
+        let mut value = base.clone();
+        value["games"][0]["records"] =
+            serde_json::json!([{"record":"row","offset":usize::MAX,"id":"r","count":2,"stride":1}]);
+        cases.push(value);
+        let mut value = base.clone();
+        value["games"][0]["records"] = serde_json::json!([{
+            "record":"row", "offset":0, "id":"r",
+            "index_start":u64::from(u32::MAX) + 1
+        }]);
+        cases.push(value);
+        let mut value = base.clone();
+        value["games"][0]["records"] = serde_json::json!([{
+            "record":"row", "offset":0, "id":"r", "count":2,
+            "stride":1, "index_start":u32::MAX
+        }]);
+        cases.push(value);
+        let mut value = base.clone();
+        value["games"][0]["records"] = serde_json::json!([{
+            "record":"row", "offset":0, "id":"r", "stride":MAX_SAVE_SIZE + 1
+        }]);
+        cases.push(value);
+        let mut value = base.clone();
+        value["games"][0]["records"] = serde_json::json!([{
+            "record":"row", "offset":0, "id":"r", "stride_bits":MAX_SAVE_SIZE * 8 + 1
+        }]);
+        cases.push(value);
+        let mut value = base.clone();
+        value["records"]["row"][0]["copies"] =
+            serde_json::Value::Array((0..4096).map(Into::into).collect());
+        value["games"][0]["save_size"] = 4096.into();
+        value["games"][0]["records"] = serde_json::json!([{"record":"row","offset":0,"id":"r"}]);
+        cases.push(value);
+        let mut value = base.clone();
+        value["records"]["row"][0]["choices"] = serde_json::Value::Array(
+            (0..100)
+                .map(|index| {
+                    serde_json::json!({
+                        "name": format!("choice-{index}-{}", "x".repeat(950)),
+                        "value": index
+                    })
+                })
+                .collect(),
+        );
+        value["games"][0]["save_size"] = 30.into();
+        value["games"][0]["records"] = serde_json::json!([
+            {"record":"row","offset":0,"id":"r","count":30,"stride":1}
+        ]);
+        cases.push(value);
+        for value in cases {
+            assert!(
+                SaveSchemaPack::from_json(&serde_json::to_vec(&value).unwrap()).is_err(),
+                "accepted {value}"
+            );
+        }
+        let mut unknown_version = base;
+        unknown_version["schema_version"] = 2.into();
+        assert!(SaveSchemaPack::from_json(&serde_json::to_vec(&unknown_version).unwrap()).is_err());
+
+        let boundary = serde_json::json!({
+            "schema_version":1,
+            "records":{"row":[{"id":"x_{index}","label":"X","offset":0,"type":"u8"}]},
+            "games":[{
+                "id":"x","name":"X","platform":"x","save_size":1,"fields":[],
+                "records":[{"record":"row","offset":0,"id":"r","index_start":u32::MAX}]
+            }]
+        });
+        assert!(SaveSchemaPack::from_json(&serde_json::to_vec(&boundary).unwrap()).is_ok());
+    }
+
+    #[test]
+    fn schema_authoring_choices_and_masks_preserve_unrelated_bits() {
+        let pack = serde_json::json!({
+            "schema_version":1,
+            "games":[{
+                "id":"mask", "name":"Mask", "platform":"test", "save_size":2,
+                "fields":[
+                    {"id":"mode","label":"Mode","offset":0,"type":"u16_le","mask":240,
+                     "choices":[{"name":"one","value":1},{"name":"two","value":2}]},
+                    {"id":"low","label":"Low","offset":0,"type":"u16_le","mask":15},
+                    {"id":"high","label":"High","offset":0,"type":"u16_le","mask":65280}
+                ]
+            }]
+        });
+        let handler = SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap())
+            .unwrap()
+            .into_handlers()
+            .remove(0);
+        let game = identity(&handler);
+        let input = SaveDetectionInput {
+            bytes: vec![0xb5, 0xaa],
+            selected_game: Some("mask".into()),
+            rom_sha1: None,
+        };
+        let document = handler.parse(&input, &game).unwrap();
+        assert_eq!(document.fields[0].value, SaveValue::Enum("raw:11".into()));
+        assert_eq!(
+            document.fields[0].constraints.choices,
+            ["one", "two", "raw:11"]
+        );
+        let result = handler
+            .apply(
+                &input,
+                &game,
+                &[SaveEdit {
+                    field: "mode".into(),
+                    value: SaveValue::Enum("two".into()),
+                }],
+                false,
+            )
+            .unwrap();
+        assert_eq!(result.bytes.unwrap(), [0x25, 0xaa]);
+        assert_eq!(
+            result.document.fields[0].value,
+            SaveValue::Enum("two".into())
+        );
+
+        let raw_result = handler
+            .apply(
+                &input,
+                &game,
+                &[SaveEdit {
+                    field: "mode".into(),
+                    value: SaveValue::Enum("raw:11".into()),
+                }],
+                false,
+            )
+            .unwrap();
+        assert!(!raw_result.preview.changed);
+    }
+
+    #[test]
+    fn schema_authoring_rejects_invalid_masks_choices_and_real_overlap() {
+        for fields in [
+            serde_json::json!([{"id":"x","label":"X","offset":0,"type":"u8","mask":0}]),
+            serde_json::json!([{"id":"x","label":"X","offset":0,"type":"u8","mask":5}]),
+            serde_json::json!([{"id":"x","label":"X","offset":0,"type":"i8","mask":1}]),
+            serde_json::json!([{"id":"x","label":"X","offset":0,"type":"bool","choices":[{"name":"x","value":1}]}]),
+            serde_json::json!([{"id":"x","label":"X","offset":0,"type":"u8","choices":[{"name":"raw:1","value":1}]}]),
+            serde_json::json!([
+                {"id":"x","label":"X","offset":0,"type":"u8","mask":15},
+                {"id":"y","label":"Y","offset":0,"type":"u8","mask":3}
+            ]),
+        ] {
+            let pack = serde_json::json!({"schema_version":1,"games":[{
+                "id":"x","name":"X","platform":"x","save_size":1,"fields":fields
+            }]});
+            assert!(
+                SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap()).is_err(),
+                "accepted {pack}"
+            );
+        }
+    }
+
+    #[test]
+    fn overlapping_read_only_views_still_protect_editable_storage() {
+        let mut fields = serde_json::json!([
+            {"id":"view","label":"View","offset":0,"type":"u16_le","editable":false},
+            {"id":"copy","label":"Copy","offset":1,"type":"u8","editable":false}
+        ]);
+        let load =
+            |fields: &serde_json::Value| {
+                SaveSchemaPack::from_json(&serde_json::to_vec(&serde_json::json!({
+                "schema_version":1,"games":[{
+                    "id":"views","name":"Views","platform":"test","save_size":2,"fields":fields
+                }]
+            })).unwrap())
+            };
+        assert!(load(&fields).is_ok());
+        fields[1]["editable"] = serde_json::json!(true);
+        assert!(load(&fields).is_err());
+        fields.as_array_mut().unwrap().reverse();
+        assert!(load(&fields).is_err());
     }
 }

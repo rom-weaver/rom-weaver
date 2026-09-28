@@ -126,19 +126,28 @@ Procedures: [Create saves in the browser](../how-to/create-game-saves-browser.md
 
 A schema pack adds fixed layouts without rebuilding the application. The CLI accepts `--schema PATH` on every `save` command. The browser accepts a local JSON pack through **Load schema pack**. The repository catalog and its profile counts are in [`data/save-schemas/README.md`](../../data/save-schemas/README.md).
 
-The top-level object contains `schema_version` (`1`) and a nonempty `games` array. Optional `$schema` metadata identifies an authoring schema; the interpreter never fetches it. A game contains `id`, `name`, `platform`, `save_size`, and `fields`. Optional members are `description`, `signatures`, `checksums`, `mirrors`, and `generation`.
+The top-level object contains `schema_version` (`1`) and a nonempty `games` array. Optional `$schema` metadata identifies an authoring schema; the interpreter never fetches it. Optional `pack_revision` is a positive 32-bit revision for the pack data. It does not enable interpreter features. Optional `records` defines reusable flat field arrays by name.
 
-| Member     | Representation                                                                                                                                 |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Field      | `id`, `label`, absolute byte `offset`, and `type`; optional `description`, `editable`, `min`, `max`, `bit`, `length`, `inverted`, and `copies` |
-| Signature  | `offset` and a `bytes` array                                                                                                                   |
-| Checksum   | `algorithm`, `offset`, optional `target`, optional `unit`, one `start`/`length` input or a `spans` array, and optional `exclude` ranges        |
-| Mirror     | `source`, `target`, and `length`, all in bytes; optional `validate`                                                                            |
-| Generation | A `fill` byte and a `patches` array of `offset`/`bytes` objects                                                                                |
+A game contains `id`, `name`, `platform`, `save_size`, and `fields`. Optional members are `description`, `records`, `signatures`, `checksums`, `mirrors`, and `generation`.
+
+| Member          | Representation                                                                                                                                           |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Field           | `id`, `label`, byte `offset`, and `type`; optional `description`, `editable`, `min`, `max`, `bit`, `length`, `inverted`, `copies`, `choices`, and `mask` |
+| Record instance | `record`, byte `offset`, and `id`; optional `count`, `stride` or `stride_bits`, `index_start`, and `index_width`                                         |
+| Signature       | `offset` and a `bytes` array                                                                                                                             |
+| Checksum        | `algorithm`, `offset`, optional `target`, optional `unit`, one `start`/`length` input or a `spans` array, and optional `exclude` ranges                  |
+| Mirror          | `source`, `target`, and `length`, all in bytes; optional `validate`                                                                                      |
+| Generation      | A `fill` byte and a `patches` array of `offset`/`bytes` objects                                                                                          |
 
 Storage types are `u8`, `u16_le`, `u16_be`, `u24_le`, `u24_be`, `u32_le`, `u32_be`, `i8`, `i16_le`, `i16_be`, `i32_le`, `i32_be`, `bool`, `bit`, `ascii`, `bcd_le`, and `bcd_be`. Integers expose their full stored range unless `min` or `max` narrows it. BCD fields use one through four bytes and store two decimal digits per byte. Their byte order controls the order of the packed decimal byte pairs.
 
-`bit` requires a bit index from 0 through 7. `bool` and `bit` can set `inverted` to exchange the stored zero and one meanings. `ascii` requires a byte length from 1 through 255. A field's `copies` array contains absolute offsets. An edit encodes the same value at the primary offset and every copy; reads use the primary offset. Copies do not validate equality before an edit.
+`bit` requires a bit index from 0 through 7. `bool` and `bit` can set `inverted` to exchange the stored zero and one meanings. `ascii` requires a byte length from 1 through 255. A flat field's `offset` and `copies` are absolute. A record field's offsets and copies are relative to the instance base and its stride. An edit encodes the same value at the primary offset and every copy; reads use the primary offset. Copies do not validate equality before an edit.
+
+A record instance expands one top-level record without nesting. `count` defaults to 1 and has a maximum of 4,096. A larger count needs one positive `stride` in bytes or `stride_bits` in bits. `stride_bits` accepts only records made of `bit` fields. `index_start` defaults to 0. `index_width` defaults to 0, has a maximum of 10, and adds leading zeroes. Expansion substitutes `{index}` only in field IDs, labels, and descriptions. The instance ID prefixes each field ID with a dot. Every expanded field, offset, copy, and storage location follows the normal validation limits.
+
+Numeric fields can define `choices` as unique name and integer-value pairs. Choice names cannot start with `raw:`. The CLI and browser use the existing named-option controls. If stored data has an unknown value, readers expose `raw:<decimal>` as the current choice. An unrelated edit preserves that value.
+
+Unsigned binary integer fields can set a nonzero, contiguous `mask`. Reads shift the masked bits down to expose the logical value. Writes preserve neighboring bits. Signed integers, BCD, booleans, individual bits, and text do not accept a mask.
 
 Checksum algorithms are:
 
@@ -154,13 +163,15 @@ Checksum algorithms are:
 
 A checksum uses either one `start`/`length` range or a nonempty `spans` array. Spans are concatenated in order and cannot overlap. Each `exclude` range must fit inside one input span. Excluded bytes contribute zero while their positions remain in the input. Exclusion ranges cannot overlap.
 
-An edit writes primary fields and their copies, repairs checksums, then copies mirror ranges. A mirror validates source and target equality by default. `validate: false` accepts a different target before an edit but still replaces it from the source afterward. Generation fills the image, applies patches, repairs checksums, then copies mirrors. Generation is unavailable when its initializer is absent. A structurally valid initializer does not prove that the game can load it.
+An edit validates all assignments before it copies the input. It then encodes all fields and their copies, repairs checksums, copies mirror ranges, reparses the result, and checks that every assignment round-trips. A no-op edit preserves every byte. A mirror validates source and target equality by default. `validate: false` accepts a different target before an edit but still replaces it from the source afterward. Generation fills the image, applies patches, repairs checksums, then copies mirrors. Generation is unavailable when its initializer is absent. Structural validation proves only that bytes satisfy the declared storage and integrity rules. It does not prove that the game accepts the values or combinations.
 
-The interpreter rejects unknown properties and versions, duplicate IDs, invalid ranges, and conflicting writes. Packs cannot replace built-in games. Limits are 2 MiB per pack, 64 games, 4,096 field storage locations per game, and 8 MiB per raw save. Primary field offsets and copies both count as storage locations. A save can contain at most 128 64-KiB sections. Layouts without signatures or checksums require an explicit game choice. Packs cannot execute code or fetch network resources.
+The interpreter rejects unknown properties and versions, duplicate IDs, duplicate choice names or values, invalid ranges, and conflicting writes. Packs cannot replace built-in games. Limits are 2 MiB per pack, 2 MiB of expanded field metadata per game, 64 games, 4,096 expanded fields per game, 4,096 field storage locations per game, and 8 MiB per raw save. Expanded primary field offsets and copies both count as storage locations. The metadata estimate includes each field and choice representation, copy offsets, rendered field text, instance prefixes, and choice names. The interpreter checks this limit before it clones record fields. A save can contain at most 128 64-KiB sections. Layouts without signatures or checksums require an explicit game choice. Packs cannot execute code or fetch network resources.
 
-Game IDs contain 1–128 lowercase ASCII letters, digits, underscores, or hyphens and start with a letter or digit. Field IDs contain dot-separated nonempty segments of ASCII letters, digits, underscores, or hyphens. Other text values have a 1,024-byte limit. Each signatures, checksums, mirrors, patches, copies, spans, or exclusions array contains at most 4,096 entries. Total signature, checksum-input, and mirror-source work across a pack cannot exceed 64 MiB.
+Game IDs contain 1–128 lowercase ASCII letters, digits, underscores, or hyphens and start with a letter or digit. Field IDs and record names contain dot-separated nonempty segments of ASCII letters, digits, underscores, or hyphens. A record template is nonempty. Other text values have a 1,024-byte limit. A pack contains at most 4,096 template fields in total. Each game contains at most 4,096 record instances. Each signatures, checksums, mirrors, patches, copies, choices, spans, or exclusions array contains at most 4,096 entries. Total signature, checksum-input, and mirror-source work across a pack cannot exceed 64 MiB.
 
 Catalog profiles are separate game definitions for fixed slots, players, regions, or storage variants. Profile count is not title count. Integer and BCD fields use their stored range by default. A stored value or combination can still be invalid during play.
+
+After schema version 1 is released, a new interpreter operation or changed required meaning needs a new `schema_version`. Readers keep support for released versions. An unknown version fails explicitly; readers do not downgrade it. `pack_revision` tracks data revisions only.
 
 `save export-schema` still exports the fields of an inspected save. Its output is not an importable layout pack because it omits byte storage and integrity rules.
 

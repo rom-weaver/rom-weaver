@@ -77,9 +77,17 @@ Define one profile for each independently selectable fixed layout. Slots and pla
 
 Fields can store signed and unsigned integers through 32 bits, packed BCD, ASCII, booleans, and individual bits. `inverted` changes the stored sense of a boolean or bit. `copies` writes one encoded field value to fixed duplicate offsets. Copies do not select or validate an active record.
 
+Use top-level record templates for repeated flat layouts. A game instance prefixes the template IDs and adds its base offset. A byte stride repeats any supported field layout. A bit stride repeats only `bit` fields. Keep records flat; one record cannot include another. Expanded IDs must remain stable because users store them in commands and automation.
+
+Use named choices when stored numeric codes have stable names. Keep unknown codes readable as `raw:<decimal>` and preserve them during unrelated edits. Use a contiguous mask on unsigned binary integers when one field occupies part of the stored integer. A masked write must preserve every bit outside the mask.
+
 Checksum inputs can use one contiguous range or ordered spans. Exclusions contribute zero. The unit defines byte grouping and byte order independently from the checksum output. Additive, subtractive, XOR, modulo-255 complement, and CRC-CCITT-FALSE operations cover only their documented formulas. Do not approximate an unsupported integrity algorithm or omit it from an editable profile.
 
-Field edits run before checksum repairs. Mirrors run last. A mirror validates equality by default. Set `validate: false` only when the format accepts a stale target and an edit must replace it from the source. Generation uses fill, patches, checksums, then mirrors. Add `generation` only when a source and fixture prove the initialized image is playable. A native test-fixture builder is not evidence of playable fresh generation.
+Validate every assignment before copying the input. Encode all fields and copies before checksum repairs. Apply mirrors after checksums. Reparse the result and require every assignment to round-trip. A no-op must preserve the input bytes. A mirror validates equality by default. Set `validate: false` only when the format accepts a stale target and an edit must replace it from the source. Generation uses fill, patches, checksums, then mirrors. Add `generation` only when a source and fixture prove the initialized image is playable. A native test-fixture builder is not evidence of playable fresh generation.
+
+Separate structural integrity from game-valid meaning. Bounds, signatures, storage encodings, checksums, and mirrors establish structural integrity. They do not prove that a representable value or combination is playable.
+
+Keep `pack_revision` for changes to pack data. It cannot select interpreter behavior. After the first schema release, add a schema version for a new operation or changed required meaning. Keep readers for earlier released versions and reject unknown versions explicitly. Never silently reinterpret a newer pack as an older version.
 
 Use the complete stored integer range by default. Add `min` or `max` only when the storage format proves the limit. Document playable limits and coupled states separately. Omit fields whose write hooks change data that the schema cannot update.
 

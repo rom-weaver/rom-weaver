@@ -95,6 +95,92 @@ fn write_custom_schema(temp: &TempDir) -> PathBuf {
 }
 
 #[test]
+fn save_schema_records_and_named_choices_share_the_cli_write_path() {
+    let temp = setup_temp_dir();
+    let mut pack = custom_schema_game("test-schema-game", 4);
+    pack["pack_revision"] = serde_json::json!(1);
+    pack["records"] = serde_json::json!({
+        "flag": [{"id": "seen_{index}", "label": "Seen {index}",
+            "offset": 0, "type": "bit", "bit": 0}]
+    });
+    pack["games"][0]["records"] = serde_json::json!([{
+        "record": "flag", "id": "progress", "offset": 8,
+        "count": 9, "stride_bits": 1, "index_start": 1, "index_width": 3
+    }]);
+    pack["games"][0]["fields"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "id": "options.speed", "label": "Speed", "offset": 6,
+            "type": "u8", "mask": 7,
+            "choices": [{"name": "fast", "value": 1}, {"name": "slow", "value": 5}]
+        }));
+    pack["games"][0]["generation"]["patches"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({"offset": 6, "bytes": [161]}));
+    let schema = temp.child("records.json");
+    fs::write(schema.path(), serde_json::to_vec(&pack).unwrap()).unwrap();
+    let save = temp.child("created.sav");
+    run_single_json_event(
+        &[
+            "save",
+            "create",
+            "--game",
+            "test-schema-game",
+            "--schema",
+            schema.path().to_str().unwrap(),
+            "--output",
+            save.path().to_str().unwrap(),
+            "options.speed=slow",
+            "progress.seen_009=true",
+            "--json",
+        ],
+        0,
+    );
+    let bytes = fs::read(save.path()).unwrap();
+    assert_eq!(bytes[6], 165);
+    assert_eq!(&bytes[8..10], &[0, 1]);
+    assert_eq!(
+        bytes.iter().fold(0u8, |sum, byte| sum.wrapping_add(*byte)),
+        255
+    );
+    let result = run_single_json_event(
+        &[
+            "save",
+            "get",
+            save.path().to_str().unwrap(),
+            "options.speed",
+            "--schema",
+            schema.path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(
+        result["details"]["save_editor"]["field"]["value"]["enum"],
+        "slow"
+    );
+    let output = temp.child("rejected.sav");
+    run_single_json_event(
+        &[
+            "save",
+            "set",
+            save.path().to_str().unwrap(),
+            "options.speed=turbo",
+            "--schema",
+            schema.path().to_str().unwrap(),
+            "--output",
+            output.path().to_str().unwrap(),
+            "--json",
+        ],
+        1,
+    );
+    assert!(!output.path().exists());
+    assert_eq!(fs::read(save.path()).unwrap(), bytes);
+}
+
+#[test]
 fn save_schema_pack_supports_all_read_and_edit_commands() {
     let temp = setup_temp_dir();
     let schema = write_custom_schema(&temp);
