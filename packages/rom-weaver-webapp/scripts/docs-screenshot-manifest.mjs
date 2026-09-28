@@ -89,6 +89,8 @@ const DOCS_SCREENSHOT_NAMES = [
   "first-sample-rom-weaver.webp",
   "compress-desktop-light.webp",
   "compress-mobile-dark.webp",
+  "compress-select-files-desktop-light.webp",
+  "compress-select-files-mobile-dark.webp",
 ];
 
 export {
