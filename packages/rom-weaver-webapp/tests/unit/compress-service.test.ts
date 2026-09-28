@@ -197,17 +197,19 @@ describe("compress service", () => {
         dispose: vi.fn(async () => undefined),
         fileName: path.split("/").pop(),
         path: `/extract/${path}`,
+        relativePath: path,
         size: stored?.size ?? 0,
         vfs: { getFile: vi.fn(async () => stored) },
       }) as unknown as PublicOutput;
-    // Serves one stored entry per extract call, keyed by the requested entry path.
-    const extractRuntime = (stored: Record<string, File | null>) => {
+    // One extract call writes every stored entry it is asked for, plus any listed companions.
+    const extractRuntime = (stored: Record<string, File | null>, companions: string[] = []) => {
       const outputs: PublicOutput[] = [];
       const extract = vi.fn(async ({ entries }: { entries: string[] }) => {
-        const path = entries[0] ?? "";
-        const output = extracted(path, stored[path] ?? null);
-        outputs.push(output);
-        return { entries: [], output, outputs: [output] };
+        const written = [...entries, ...companions].map((path) =>
+          extracted(path, path in stored ? (stored[path] ?? null) : file(path, "x")),
+        );
+        outputs.push(...written);
+        return { entries: [], output: written[0], outputs: written };
       });
       return { extract, outputs, runtime: { compression: { extract } } as unknown as WorkflowRuntime };
     };
@@ -227,6 +229,7 @@ describe("compress service", () => {
       const probe = vi.fn(async () => ({
         entries: [
           { filename: "Game/", fileType: "directory" },
+          { filename: "Game" },
           { filename: "Game/game.iso", size: 4096 },
           { filename: "Game/game.cue" },
         ],
@@ -234,42 +237,63 @@ describe("compress service", () => {
       const extract = vi.fn();
       const runtime = { compression: { extract, probe } } as unknown as WorkflowRuntime;
 
-      await expect(listCompressInput(file("game.zip"), runtime)).resolves.toEqual([
-        { path: "Game/game.iso", size: 4096 },
-        { path: "Game/game.cue" },
-      ]);
+      await expect(listCompressInput(file("game.zip"), runtime)).resolves.toEqual({
+        entries: [{ path: "Game/game.iso", size: 4096 }, { path: "Game/game.cue" }],
+      });
       expect(extract).not.toHaveBeenCalled();
     });
 
-    it("extracts only the named entries, one at a time, into stored files", async () => {
-      const { extract, outputs, runtime } = extractRuntime({
-        "disc/disc.cue": file("x", "cue"),
-        "disc/track.bin": file("y", "bin!"),
+    it("falls back to extracting everything when a container cannot be listed", async () => {
+      const probe = vi.fn(async () => {
+        throw new Error("xiso probe is not supported yet");
       });
+      const output = extracted("game.iso", file("game.iso", "iso!"));
+      const extract = vi.fn(async () => ({ entries: [], output, outputs: [output] }));
+      const runtime = { compression: { extract, probe } } as unknown as WorkflowRuntime;
+
+      const listing = await listCompressInput(file("game.xiso"), runtime);
+      expect(extract).toHaveBeenCalledWith(expect.objectContaining({ entries: [], extractAll: true }));
+      expect(listing.entries).toEqual([{ path: "game.iso", size: 4 }]);
+      expect(listing.extracted?.map((entry) => entry.file.name)).toEqual(["game.iso"]);
+      expect(output.dispose).not.toHaveBeenCalled();
+    });
+
+    it("rethrows the listing error when the fallback cannot extract either", async () => {
+      const probe = vi.fn(async () => {
+        throw new Error("Truncated ZIP file header");
+      });
+      const runtime = { compression: { probe } } as unknown as WorkflowRuntime;
+
+      await expect(listCompressInput(file("broken.zip"), runtime)).rejects.toThrow("Truncated ZIP file header");
+    });
+
+    it("extracts every picked entry in one pass and disposes companion files", async () => {
+      const { extract, outputs, runtime } = extractRuntime(
+        { "disc/disc.cue": file("x", "cue"), "disc/readme.txt": file("y", "note") },
+        ["disc/disc.bin"],
+      );
       const signal = new AbortController().signal;
-      const progress: Array<number | null | undefined> = [];
-      extract.mockImplementationOnce(async ({ entries, options }) => {
-        options.onProgress?.({ label: "", percent: 50, stage: "input" });
-        const output = extracted(entries[0] ?? "", file("x", "cue"));
-        outputs.push(output);
-        return { entries: [], output, outputs: [output] };
-      });
-      const entries = await extractCompressEntries(file("disc.zip"), ["disc/disc.cue", "disc/track.bin"], runtime, {
-        onProgress: (event) => progress.push(event.percent),
+      const onProgress = vi.fn();
+      const entries = await extractCompressEntries(file("disc.7z"), ["disc/disc.cue", "disc/readme.txt"], runtime, {
+        onProgress,
         signal,
       });
 
-      expect(extract.mock.calls.map(([request]) => [request.entries, request.options.directExtract])).toEqual([
-        [["disc/disc.cue"], true],
-        [["disc/track.bin"], true],
-      ]);
-      expect(progress).toEqual([25]);
+      expect(extract).toHaveBeenCalledOnce();
+      expect(extract).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entries: ["disc/disc.cue", "disc/readme.txt"],
+          options: expect.objectContaining({ extractSelected: true, onProgress, signal }),
+        }),
+      );
       expect(entries.map((entry) => [entry.path, entry.file.name, entry.file.size])).toEqual([
         ["disc/disc.cue", "disc.cue", 3],
-        ["disc/track.bin", "track.bin", 4],
+        ["disc/readme.txt", "readme.txt", 4],
       ]);
-      expect(await entries[1]?.file.text()).toBe("bin!");
-      expect(outputs.every((output) => vi.mocked(output.dispose).mock.calls.length === 0)).toBe(true);
+      expect(await entries[1]?.file.text()).toBe("note");
+      const companion = outputs.find((output) => output.fileName === "disc.bin");
+      expect(companion?.dispose).toHaveBeenCalledOnce();
+      expect(entries.every((entry) => vi.mocked(entry.output.dispose).mock.calls.length === 0)).toBe(true);
     });
 
     it("names entries that share a base name after their folders so they compress together", async () => {
@@ -292,7 +316,7 @@ describe("compress service", () => {
       await expect(getCompressFormats(entries.slice(0, 2).map((entry) => entry.file))).resolves.toEqual(["zip", "7z"]);
     });
 
-    it("disposes every extracted file when one cannot be read", async () => {
+    it("disposes every extracted file when a picked entry is missing or unreadable", async () => {
       const { outputs, runtime } = extractRuntime({ "a.bin": file("a", "a"), "b.bin": null });
 
       await expect(extractCompressEntries(file("pair.zip"), ["a.bin", "b.bin"], runtime)).rejects.toThrow(
@@ -300,22 +324,26 @@ describe("compress service", () => {
       );
       expect(outputs).toHaveLength(2);
       for (const output of outputs) expect(output.dispose).toHaveBeenCalledOnce();
+
+      const empty = { compression: { extract: vi.fn(async () => ({ entries: [], outputs: [] })) } };
+      await expect(
+        extractCompressEntries(file("pair.zip"), ["c.bin"], empty as unknown as WorkflowRuntime),
+      ).rejects.toThrow("Extraction returned no file for c.bin");
     });
 
-    it("stops and disposes the extracted files when the signal aborts", async () => {
+    it("disposes the extracted files when the signal aborts during extraction", async () => {
       const abort = new AbortController();
-      const { extract, outputs, runtime } = extractRuntime({ "a.bin": file("a", "a"), "b.bin": file("b", "b") });
+      const { extract, outputs, runtime } = extractRuntime({ "a.bin": file("a", "a") });
       extract.mockImplementationOnce(async ({ entries }) => {
         abort.abort();
-        const output = extracted(entries[0] ?? "", file("a", "a"));
-        outputs.push(output);
-        return { entries: [], output, outputs: [output] };
+        const written = entries.map((path) => extracted(path, file(path, "a")));
+        outputs.push(...written);
+        return { entries: [], output: written[0], outputs: written };
       });
 
-      await expect(
-        extractCompressEntries(file("a.zip"), ["a.bin", "b.bin"], runtime, { signal: abort.signal }),
-      ).rejects.toThrow("Opening cancelled");
-      expect(extract).toHaveBeenCalledOnce();
+      await expect(extractCompressEntries(file("a.zip"), ["a.bin"], runtime, { signal: abort.signal })).rejects.toThrow(
+        "Opening cancelled",
+      );
       expect(outputs[0]?.dispose).toHaveBeenCalledOnce();
     });
   });

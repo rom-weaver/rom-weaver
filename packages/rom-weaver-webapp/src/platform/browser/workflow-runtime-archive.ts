@@ -299,7 +299,16 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
       trace: { logLevel: workflowInput.options?.logLevel, onLog: workflowInput.options?.onLog },
     });
     try {
-      if (workflowInput.extractAll) {
+      // Extract-selected shares the extract-all output mapping: one pass writes every chosen entry, so a
+      // solid archive decodes once. It keeps nested archives packed, since the caller picked them as files.
+      const extractSelected = !workflowInput.extractAll && workflowInput.options?.extractSelected === true;
+      if (workflowInput.extractAll || extractSelected) {
+        const selectedEntries = extractSelected
+          ? (workflowInput.entries || []).map((entryName) => String(entryName || "").trim()).filter(Boolean)
+          : [];
+        if (extractSelected && !selectedEntries.length) {
+          throw new Error("Selected archive extraction requires at least one selected entry.");
+        }
         const outputScope = createRomWeaverOutputScope();
         try {
           const extracted = await invokeRomWeaverExtractAllWorker(
@@ -309,6 +318,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
               knownInputPaths: [archive.filePath],
               logLevel: workflowInput.options?.logLevel,
               noIgnore: true,
+              ...(extractSelected ? { noNestedExtract: true, select: selectedEntries } : {}),
               outDirPath: outputScope.rootPath,
               signal: workflowInput.options?.signal,
               splitBin: workflowInput.options?.chdSplitBin,

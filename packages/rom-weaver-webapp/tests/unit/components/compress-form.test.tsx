@@ -139,7 +139,9 @@ describe("CompressForm", () => {
     // Lists the given entries and extracts only what the form asks for, recording every stored copy.
     const archive = (contents: Record<string, string>) => {
       const extracted: Opened[] = [];
-      service.listCompressInput.mockResolvedValue(Object.keys(contents).map((path) => ({ path, size: 1 })));
+      service.listCompressInput.mockResolvedValue({
+        entries: Object.keys(contents).map((path) => ({ path, size: 1 })),
+      });
       service.extractCompressEntries.mockImplementation(async (_file: File, paths: string[]) =>
         paths.map((path) => {
           const entry = {
@@ -251,7 +253,7 @@ describe("CompressForm", () => {
       fireEvent.click(await screen.findByRole("button", { name: "Remove slow.zip", exact: true }));
       const signal = service.listCompressInput.mock.calls[0]?.[2]?.signal as AbortSignal;
       expect(signal.aborted).toBe(true);
-      await act(async () => finish([{ path: "a.bin" }, { path: "b.bin" }]));
+      await act(async () => finish({ entries: [{ path: "a.bin" }, { path: "b.bin" }] }));
       expect(screen.queryByRole("dialog")).toBeNull();
       expect(service.extractCompressEntries).not.toHaveBeenCalled();
       expect(document.querySelector("#compress-container .pending-card")).toBeNull();
@@ -283,6 +285,29 @@ describe("CompressForm", () => {
       unmount();
       await act(async () => finish());
       await waitFor(() => expect(late.every((entry) => entry.output.dispose.mock.calls.length === 1)).toBe(true));
+    });
+
+    it("stages picked files from a fallback extraction without extracting again", async () => {
+      const held = ["game.iso", "extra.bin"].map((path) => ({
+        file: new File([path], path),
+        output: { dispose: vi.fn(async () => undefined), size: 1 },
+        path,
+      }));
+      service.listCompressInput.mockResolvedValue({
+        entries: held.map((entry) => ({ path: entry.path, size: 1 })),
+        extracted: held,
+      });
+      render(<CompressForm />);
+      addFiles([new File(["xiso"], "game.xiso")]);
+      const [, extra] = (await screen.findAllByRole("checkbox")) as HTMLInputElement[];
+      if (extra) fireEvent.click(extra);
+      fireEvent.click(screen.getByRole("button", { name: "Add 1 file" }));
+
+      await ready();
+      expect(screen.getByRole("button", { name: "Remove game.iso", exact: true })).toBeTruthy();
+      expect(service.extractCompressEntries).not.toHaveBeenCalled();
+      await waitFor(() => expect(held[1]?.output.dispose).toHaveBeenCalledOnce());
+      expect(held[0]?.output.dispose).not.toHaveBeenCalled();
     });
 
     it("extracts nothing when the picker is cancelled", async () => {

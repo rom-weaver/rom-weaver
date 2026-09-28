@@ -34,6 +34,8 @@ type CompressSource = {
 type ListedCompressEntry = { path: string; size?: number };
 /** One file extracted from an opened archive. `output` owns the stored copy that `file` reads. */
 type OpenedCompressEntry = { file: File; output: PublicOutput; path: string };
+/** An archive's entries; `extracted` is set only when listing fell back to extracting everything. */
+type CompressArchiveListing = { entries: ListedCompressEntry[]; extracted?: OpenedCompressEntry[] };
 
 type ValidatedCompressInput = {
   cue?: File;
@@ -162,22 +164,7 @@ const isOpenableCompressInput = (file: File): boolean => isArchiveFileName(file.
 
 const getEntryBaseName = (path: string): string => path.split("/").filter(Boolean).pop() || path;
 
-/** Lists an archive's entries without extracting any of them. Directory entries are left out. */
-const listCompressInput = async (
-  file: File,
-  runtime: WorkflowRuntime,
-  options: Pick<CompressionWorkflowOptions, "onProgress" | "signal"> = {},
-): Promise<ListedCompressEntry[]> => {
-  const probe = runtime.compression.probe;
-  if (!probe) throw new Error("Reading archives is not available in this browser.");
-  logger.trace("list.start", { fileName: file.name, size: file.size });
-  const result = await probe({ source: file, options });
-  const entries = result.entries
-    .filter((entry) => entry.filename && !entry.filename.endsWith("/") && entry.fileType !== "directory")
-    .map((entry) => ({ path: entry.filename, ...(typeof entry.size === "number" ? { size: entry.size } : {}) }));
-  logger.trace("list.done", { entryCount: entries.length, fileName: file.name });
-  return entries;
-};
+const normalizeEntryPath = (path: string): string => path.replace(/\\/g, "/").replace(/^(\.\/|\/)+/, "");
 
 const disposeOpenedOutputs = async (outputs: PublicOutput[]) => {
   await Promise.all(
@@ -187,9 +174,89 @@ const disposeOpenedOutputs = async (outputs: PublicOutput[]) => {
   );
 };
 
-// Only the named entries are extracted, one at a time, so an unpicked multi-GB image never touches
-// browser storage. Each `File` is the disk-backed snapshot of its stored copy, so it is never read into
-// memory either. Callers MUST dispose every returned output.
+// Each `File` is the disk-backed snapshot of its stored copy, so it is never read into memory. Entries
+// keep their base name so CUE references still match; entries that share a base name in different
+// folders take their folder path instead, or every compress run rejects them as duplicates.
+const toOpenedEntries = async (
+  picked: Array<{ output: PublicOutput; path: string }>,
+): Promise<OpenedCompressEntry[]> => {
+  const baseNameCounts = new Map<string, number>();
+  for (const { path } of picked) {
+    const baseName = getEntryBaseName(path);
+    baseNameCounts.set(baseName, (baseNameCounts.get(baseName) ?? 0) + 1);
+  }
+  const entries: OpenedCompressEntry[] = [];
+  for (const { output, path } of picked) {
+    const stored = await output.vfs.getFile?.(output.path);
+    if (!stored) throw new Error(`Extracted file is not available: ${path}`);
+    const baseName = getEntryBaseName(path);
+    const name = (baseNameCounts.get(baseName) ?? 0) > 1 ? path.split("/").filter(Boolean).join(" - ") : baseName;
+    entries.push({
+      file: new File([stored], name, {
+        lastModified: stored.lastModified,
+        type: stored.type || "application/octet-stream",
+      }),
+      output,
+      path,
+    });
+  }
+  return entries;
+};
+
+const abortIfCancelled = (signal?: AbortSignal) => {
+  if (signal?.aborted) throw new DOMException("Opening cancelled", "AbortError");
+};
+
+/**
+ * Lists an archive's entries without extracting any of them. A container that cannot be listed (XISO
+ * has no probe) falls back to extracting everything; `extracted` then holds those entries, and the
+ * caller MUST dispose them.
+ */
+const listCompressInput = async (
+  file: File,
+  runtime: WorkflowRuntime,
+  options: Pick<CompressionWorkflowOptions, "onProgress" | "signal"> = {},
+): Promise<CompressArchiveListing> => {
+  let listError: unknown;
+  try {
+    const probe = runtime.compression.probe;
+    if (!probe) throw new Error("Reading archives is not available in this browser.");
+    logger.trace("list.start", { fileName: file.name, size: file.size });
+    const result = await probe({ source: file, options });
+    // Some formats (7z) list a folder as a plain entry, so a path that is another entry's parent is a folder.
+    const paths = result.entries.map((entry) => normalizeEntryPath(entry.filename || ""));
+    const entries = result.entries
+      .filter((entry, index) => {
+        const path = paths[index] ?? "";
+        if (!path || entry.filename.endsWith("/") || entry.fileType === "directory") return false;
+        return !paths.some((other) => other.startsWith(`${path}/`));
+      })
+      .map((entry) => ({ path: entry.filename, ...(typeof entry.size === "number" ? { size: entry.size } : {}) }));
+    logger.trace("list.done", { entryCount: entries.length, fileName: file.name });
+    if (entries.length) return { entries };
+  } catch (error) {
+    abortIfCancelled(options.signal);
+    listError = error;
+  }
+  const extract = runtime.compression.extract;
+  if (!extract) throw listError ?? new Error("Extraction is not available in this browser.");
+  logger.debug("list.fallback: extracting everything", { fileName: file.name, listError: String(listError ?? "") });
+  const result = await extract({ entries: [], extractAll: true, options, source: file });
+  try {
+    abortIfCancelled(options.signal);
+    const extracted = await toOpenedEntries(
+      result.outputs.map((output) => ({ output, path: output.relativePath || output.fileName })),
+    );
+    return { entries: extracted.map((entry) => ({ path: entry.path, size: entry.output.size })), extracted };
+  } catch (error) {
+    await disposeOpenedOutputs(result.outputs);
+    throw error;
+  }
+};
+
+// One pass writes every picked entry, so a solid archive decodes once and an unpicked multi-GB image
+// never touches browser storage. Files the pass writes beside the picked ones, such as a CD's bin for
+// its cue, are disposed at once. Callers MUST dispose every returned output.
 const extractCompressEntries = async (
   file: File,
   paths: string[],
@@ -198,56 +265,36 @@ const extractCompressEntries = async (
 ): Promise<OpenedCompressEntry[]> => {
   const extract = runtime.compression.extract;
   if (!extract) throw new Error("Extraction is not available in this browser.");
-  // Entries keep their base name so CUE references still match. Entries that share a base name in
-  // different folders take their folder path instead, or every compress run rejects them as duplicates.
-  const baseNameCounts = new Map<string, number>();
-  for (const path of paths)
-    baseNameCounts.set(getEntryBaseName(path), (baseNameCounts.get(getEntryBaseName(path)) ?? 0) + 1);
-  const entries: OpenedCompressEntry[] = [];
-  const outputs: PublicOutput[] = [];
+  logger.trace("extract.start", { fileName: file.name, paths });
+  const result = await extract({
+    entries: paths,
+    options: { extractSelected: true, onProgress: options.onProgress, signal: options.signal },
+    source: file,
+  });
+  const remaining = [...result.outputs];
   try {
-    for (const [index, path] of paths.entries()) {
-      if (options.signal?.aborted) throw new DOMException("Opening cancelled", "AbortError");
-      logger.trace("extract.entry", { fileName: file.name, index, path });
-      const result = await extract({
-        entries: [path],
-        options: {
-          directExtract: true,
-          onProgress: (event) =>
-            options.onProgress?.({
-              ...event,
-              percent:
-                typeof event.percent === "number"
-                  ? ((index + event.percent / 100) / paths.length) * 100
-                  : event.percent,
-            }),
-          signal: options.signal,
-        },
-        source: file,
-      });
-      outputs.push(...result.outputs);
-      const [output] = result.outputs;
+    abortIfCancelled(options.signal);
+    const picked = paths.map((path) => {
+      const wanted = normalizeEntryPath(path);
+      const byPath = remaining.findIndex(
+        (output) => normalizeEntryPath(output.relativePath || output.fileName) === wanted,
+      );
+      const index = byPath >= 0 ? byPath : remaining.findIndex((output) => output.fileName === getEntryBaseName(path));
+      const [output] = index >= 0 ? remaining.splice(index, 1) : [];
       if (!output) throw new Error(`Extraction returned no file for ${path}`);
-      const stored = await output.vfs.getFile?.(output.path);
-      if (!stored) throw new Error(`Extracted file is not available: ${path}`);
-      const baseName = getEntryBaseName(path);
-      const name = (baseNameCounts.get(baseName) ?? 0) > 1 ? path.split("/").filter(Boolean).join(" - ") : baseName;
-      entries.push({
-        file: new File([stored], name, {
-          lastModified: stored.lastModified,
-          type: stored.type || "application/octet-stream",
-        }),
-        output,
-        path,
-      });
+      return { output, path };
+    });
+    const entries = await toOpenedEntries(picked);
+    if (remaining.length) {
+      logger.trace("extract.companions-disposed", { fileNames: remaining.map((output) => output.fileName) });
+      await disposeOpenedOutputs(remaining);
     }
-    if (options.signal?.aborted) throw new DOMException("Opening cancelled", "AbortError");
+    logger.trace("extract.done", { entryCount: entries.length, fileName: file.name });
+    return entries;
   } catch (error) {
-    await disposeOpenedOutputs(outputs);
+    await disposeOpenedOutputs(result.outputs);
     throw error;
   }
-  logger.trace("extract.done", { entryCount: entries.length, fileName: file.name });
-  return entries;
 };
 
 const compressFiles = async (

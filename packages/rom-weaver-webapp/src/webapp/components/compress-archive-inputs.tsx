@@ -42,6 +42,8 @@ const useCompressArchiveInputs = ({ nextId, onAdd, onError }: CompressArchiveInp
   const [pending, setPending] = useState<PendingArchive[]>([]);
   const abortsRef = useRef(new Map<number, AbortController>());
   const ownedRef = useRef(new Map<number, PublicOutput>());
+  // Fallback-extracted files waiting on a picker that may never answer if the form unmounts.
+  const heldRef = useRef(new Map<number, PublicOutput[]>());
   const mountedRef = useRef(true);
 
   const chooseEntries = useCallback(
@@ -89,26 +91,42 @@ const useCompressArchiveInputs = ({ nextId, onAdd, onError }: CompressArchiveInp
       let entries: OpenedCompressEntry[] = [];
       try {
         const { browserRuntime } = await import("../../platform/browser/workflow-runtime.ts");
-        const listed = await listCompressInput(file, browserRuntime, progress);
+        const listing = await listCompressInput(file, browserRuntime, progress);
+        // A listing that fell back to full extraction already holds its files; `finally` disposes
+        // whatever is not staged.
+        entries = listing.extracted ?? [];
+        if (entries.length)
+          heldRef.current.set(
+            pendingId,
+            entries.map((entry) => entry.output),
+          );
         if (abort.signal.aborted || !mountedRef.current) return;
-        if (!listed.length) throw new Error(`No files were found in ${file.name}`);
-        const chosen = await chooseEntries(file.name, listed);
+        if (!listing.entries.length) throw new Error(`No files were found in ${file.name}`);
+        const chosen = await chooseEntries(file.name, listing.entries);
         if (abort.signal.aborted || !mountedRef.current) return;
         if (chosen === "keep") {
           logger.trace("open.kept", { fileName: file.name });
           onAdd([{ file, id: nextId(), sourceName: file.name }]);
           return;
         }
-        updatePending({ percent: null, phase: "extracting" });
-        entries = await extractCompressEntries(file, chosen, browserRuntime, progress);
-        if (abort.signal.aborted || !mountedRef.current) return;
-        const staged = entries.map((entry) => {
+        let picked: OpenedCompressEntry[];
+        if (listing.extracted) {
+          const chosenPaths = new Set(chosen);
+          picked = entries.filter((entry) => chosenPaths.has(entry.path));
+          entries = entries.filter((entry) => !chosenPaths.has(entry.path));
+        } else {
+          updatePending({ percent: null, phase: "extracting" });
+          entries = await extractCompressEntries(file, chosen, browserRuntime, progress);
+          if (abort.signal.aborted || !mountedRef.current) return;
+          picked = entries;
+          entries = [];
+        }
+        const staged = picked.map((entry) => {
           const id = nextId();
           ownedRef.current.set(id, entry.output);
           return { file: entry.file, id, sourceName: file.name };
         });
-        entries = [];
-        logger.trace("open.staged", { chosen: staged.length, fileName: file.name, listed: listed.length });
+        logger.trace("open.staged", { chosen: staged.length, fileName: file.name, listed: listing.entries.length });
         onAdd(staged);
       } catch (cause) {
         if (abort.signal.aborted || !mountedRef.current) return;
@@ -120,6 +138,7 @@ const useCompressArchiveInputs = ({ nextId, onAdd, onError }: CompressArchiveInp
         onError(`${file.name} could not be opened, so it was added unchanged. ${reason}`);
       } finally {
         abortsRef.current.delete(pendingId);
+        heldRef.current.delete(pendingId);
         void disposeOpenedOutputs(entries.map((entry) => entry.output));
         if (mountedRef.current) setPending((previous) => previous.filter((entry) => entry.id !== pendingId));
       }
@@ -139,11 +158,13 @@ const useCompressArchiveInputs = ({ nextId, onAdd, onError }: CompressArchiveInp
   useEffect(() => {
     mountedRef.current = true;
     const aborts = abortsRef.current;
+    const held = heldRef.current;
     const owned = ownedRef.current;
     return () => {
       mountedRef.current = false;
       for (const abort of aborts.values()) abort.abort();
-      void disposeOpenedOutputs([...owned.values()]);
+      void disposeOpenedOutputs([...[...held.values()].flat(), ...owned.values()]);
+      held.clear();
       owned.clear();
     };
   }, []);
