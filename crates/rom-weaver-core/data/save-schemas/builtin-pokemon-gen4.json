@@ -15,16 +15,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 116,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 65535,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -38,16 +29,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 118,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 65535,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -69,7 +51,6 @@
         "presentation": {
           "section_id": 0,
           "offset": 124,
-          "kind": "enum",
           "constraints": {
             "min": null,
             "max": null,
@@ -79,9 +60,7 @@
               "female"
             ]
           },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -94,17 +73,7 @@
         "max": 999999,
         "presentation": {
           "section_id": 0,
-          "offset": 120,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 999999,
-            "max_length": null,
-            "choices": []
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 120
         }
       },
       {
@@ -148,7 +117,6 @@
         "presentation": {
           "section_id": 0,
           "offset": 134,
-          "kind": "read_only_text",
           "constraints": {
             "min": null,
             "max": null,
@@ -156,8 +124,7 @@
             "choices": []
           },
           "step": null,
-          "encoding": null,
-          "warnings": []
+          "encoding": null
         }
       },
       {
@@ -170,17 +137,7 @@
         "max": 50000,
         "presentation": {
           "section_id": 0,
-          "offset": 132,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 50000,
-            "max_length": null,
-            "choices": []
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 132
         }
       },
       {
@@ -193,17 +150,7 @@
         "max": 65535,
         "presentation": {
           "section_id": 0,
-          "offset": 134,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 65535,
-            "max_length": null,
-            "choices": []
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 134
         }
       },
       {
@@ -216,17 +163,7 @@
         "max": 59,
         "presentation": {
           "section_id": 0,
-          "offset": 136,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 59,
-            "max_length": null,
-            "choices": []
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 136
         }
       },
       {
@@ -239,17 +176,7 @@
         "max": 59,
         "presentation": {
           "section_id": 0,
-          "offset": 137,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 59,
-            "max_length": null,
-            "choices": []
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 137
         }
       },
       {
@@ -262,17 +189,7 @@
         "max": 9999,
         "presentation": {
           "section_id": 0,
-          "offset": 26104,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 9999,
-            "max_length": null,
-            "choices": []
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 26104
         }
       },
       {
@@ -285,16 +202,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 126,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -307,16 +215,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 126,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -329,16 +228,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 126,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -351,16 +241,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 126,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -373,16 +254,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 126,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -395,16 +267,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 126,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -417,16 +280,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 126,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -439,16 +293,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 126,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       }
     ],
@@ -464,16 +309,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 120,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 65535,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -487,16 +323,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 122,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 65535,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -518,7 +345,6 @@
         "presentation": {
           "section_id": 0,
           "offset": 128,
-          "kind": "enum",
           "constraints": {
             "min": null,
             "max": null,
@@ -528,9 +354,7 @@
               "female"
             ]
           },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -543,17 +367,7 @@
         "max": 999999,
         "presentation": {
           "section_id": 0,
-          "offset": 124,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 999999,
-            "max_length": null,
-            "choices": []
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 124
         }
       },
       {
@@ -597,7 +411,6 @@
         "presentation": {
           "section_id": 0,
           "offset": 138,
-          "kind": "read_only_text",
           "constraints": {
             "min": null,
             "max": null,
@@ -605,8 +418,7 @@
             "choices": []
           },
           "step": null,
-          "encoding": null,
-          "warnings": []
+          "encoding": null
         }
       },
       {
@@ -619,17 +431,7 @@
         "max": 50000,
         "presentation": {
           "section_id": 0,
-          "offset": 136,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 50000,
-            "max_length": null,
-            "choices": []
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 136
         }
       },
       {
@@ -642,17 +444,7 @@
         "max": 65535,
         "presentation": {
           "section_id": 0,
-          "offset": 138,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 65535,
-            "max_length": null,
-            "choices": []
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 138
         }
       },
       {
@@ -665,17 +457,7 @@
         "max": 59,
         "presentation": {
           "section_id": 0,
-          "offset": 140,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 59,
-            "max_length": null,
-            "choices": []
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 140
         }
       },
       {
@@ -688,17 +470,7 @@
         "max": 59,
         "presentation": {
           "section_id": 0,
-          "offset": 141,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 59,
-            "max_length": null,
-            "choices": []
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 141
         }
       },
       {
@@ -711,17 +483,7 @@
         "max": 9999,
         "presentation": {
           "section_id": 0,
-          "offset": 29236,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 9999,
-            "max_length": null,
-            "choices": []
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 29236
         }
       },
       {
@@ -734,16 +496,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 130,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -756,16 +509,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 130,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -778,16 +522,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 130,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -800,16 +535,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 130,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -822,16 +548,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 130,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -844,16 +561,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 130,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -866,16 +574,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 130,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -888,16 +587,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 130,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       }
     ],
@@ -913,16 +603,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 116,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 65535,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -936,16 +617,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 118,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 65535,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -967,7 +639,6 @@
         "presentation": {
           "section_id": 0,
           "offset": 124,
-          "kind": "enum",
           "constraints": {
             "min": null,
             "max": null,
@@ -977,9 +648,7 @@
               "female"
             ]
           },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -992,17 +661,7 @@
         "max": 999999,
         "presentation": {
           "section_id": 0,
-          "offset": 120,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 999999,
-            "max_length": null,
-            "choices": []
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 120
         }
       },
       {
@@ -1046,7 +705,6 @@
         "presentation": {
           "section_id": 0,
           "offset": 134,
-          "kind": "read_only_text",
           "constraints": {
             "min": null,
             "max": null,
@@ -1054,8 +712,7 @@
             "choices": []
           },
           "step": null,
-          "encoding": null,
-          "warnings": []
+          "encoding": null
         }
       },
       {
@@ -1068,17 +725,7 @@
         "max": 50000,
         "presentation": {
           "section_id": 0,
-          "offset": 132,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 50000,
-            "max_length": null,
-            "choices": []
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 132
         }
       },
       {
@@ -1091,17 +738,7 @@
         "max": 65535,
         "presentation": {
           "section_id": 0,
-          "offset": 134,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 65535,
-            "max_length": null,
-            "choices": []
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 134
         }
       },
       {
@@ -1114,17 +751,7 @@
         "max": 59,
         "presentation": {
           "section_id": 0,
-          "offset": 136,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 59,
-            "max_length": null,
-            "choices": []
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 136
         }
       },
       {
@@ -1137,17 +764,7 @@
         "max": 59,
         "presentation": {
           "section_id": 0,
-          "offset": 137,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 59,
-            "max_length": null,
-            "choices": []
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 137
         }
       },
       {
@@ -1160,17 +777,7 @@
         "max": 9999,
         "presentation": {
           "section_id": 0,
-          "offset": 23480,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "min": 0,
-            "max": 9999,
-            "max_length": null,
-            "choices": []
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 23480
         }
       },
       {
@@ -1183,16 +790,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 126,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -1205,16 +803,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 126,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -1227,16 +816,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 126,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -1249,16 +829,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 126,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -1271,16 +842,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 126,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -1293,16 +855,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 126,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -1315,16 +868,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 126,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -1337,16 +881,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 126,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -1359,16 +894,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 131,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -1381,16 +907,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 131,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -1403,16 +920,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 131,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -1425,16 +933,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 131,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -1447,16 +946,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 131,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -1469,16 +959,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 131,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -1491,16 +972,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 131,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -1513,16 +985,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 131,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "min": null,
-            "max": null,
-            "max_length": null,
-            "choices": []
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       }
     ]
@@ -1538,9 +1001,7 @@
       "save_format_name": "Nintendo DS save 512 KiB",
       "save_size": 524288,
       "logical_size": 262144,
-      "checksum_sizes": [],
       "fields": [],
-      "generation": null,
       "checks": [
         {
           "assert": {
@@ -1608,33 +1069,22 @@
               {
                 "read": {
                   "offset": 136,
-                  "type": "u8"
+                  "type": "u8",
+                  "relative": true
                 }
               },
               59
             ]
           },
           "code": "save_play_time",
-          "message": "the save has an invalid play-time minute or second value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 137,
-                  "type": "u8"
-                }
-              },
-              59
-            ]
-          },
-          "code": "save_play_time",
-          "message": "the save has an invalid play-time minute or second value"
+          "message": "the save has an invalid play-time minute or second value",
+          "repeat": {
+            "count": 2,
+            "stride": 1
+          }
         }
       ],
       "recognition": {
-        "checks": [],
         "reasons": [
           "checksum_valid",
           "signature_valid",
@@ -2051,9 +1501,7 @@
       "save_format_name": "Nintendo DS save 512 KiB",
       "save_size": 524288,
       "logical_size": 262144,
-      "checksum_sizes": [],
       "fields": [],
-      "generation": null,
       "checks": [
         {
           "assert": {
@@ -2121,33 +1569,22 @@
               {
                 "read": {
                   "offset": 136,
-                  "type": "u8"
+                  "type": "u8",
+                  "relative": true
                 }
               },
               59
             ]
           },
           "code": "save_play_time",
-          "message": "the save has an invalid play-time minute or second value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 137,
-                  "type": "u8"
-                }
-              },
-              59
-            ]
-          },
-          "code": "save_play_time",
-          "message": "the save has an invalid play-time minute or second value"
+          "message": "the save has an invalid play-time minute or second value",
+          "repeat": {
+            "count": 2,
+            "stride": 1
+          }
         }
       ],
       "recognition": {
-        "checks": [],
         "reasons": [
           "checksum_valid",
           "signature_valid",
@@ -2564,9 +2001,7 @@
       "save_format_name": "Nintendo DS save 512 KiB",
       "save_size": 524288,
       "logical_size": 262144,
-      "checksum_sizes": [],
       "fields": [],
-      "generation": null,
       "checks": [
         {
           "assert": {
@@ -2634,33 +2069,22 @@
               {
                 "read": {
                   "offset": 140,
-                  "type": "u8"
+                  "type": "u8",
+                  "relative": true
                 }
               },
               59
             ]
           },
           "code": "save_play_time",
-          "message": "the save has an invalid play-time minute or second value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 141,
-                  "type": "u8"
-                }
-              },
-              59
-            ]
-          },
-          "code": "save_play_time",
-          "message": "the save has an invalid play-time minute or second value"
+          "message": "the save has an invalid play-time minute or second value",
+          "repeat": {
+            "count": 2,
+            "stride": 1
+          }
         }
       ],
       "recognition": {
-        "checks": [],
         "reasons": [
           "checksum_valid",
           "signature_valid",
@@ -3077,9 +2501,7 @@
       "save_format_name": "Nintendo DS save 512 KiB",
       "save_size": 524288,
       "logical_size": 262144,
-      "checksum_sizes": [],
       "fields": [],
-      "generation": null,
       "checks": [
         {
           "assert": {
@@ -3162,29 +2584,19 @@
               {
                 "read": {
                   "offset": 136,
-                  "type": "u8"
+                  "type": "u8",
+                  "relative": true
                 }
               },
               59
             ]
           },
           "code": "save_play_time",
-          "message": "the save has an invalid play-time minute or second value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 137,
-                  "type": "u8"
-                }
-              },
-              59
-            ]
-          },
-          "code": "save_play_time",
-          "message": "the save has an invalid play-time minute or second value"
+          "message": "the save has an invalid play-time minute or second value",
+          "repeat": {
+            "count": 2,
+            "stride": 1
+          }
         }
       ],
       "recognition": {
@@ -3621,9 +3033,7 @@
       "save_format_name": "Nintendo DS save 512 KiB",
       "save_size": 524288,
       "logical_size": 262144,
-      "checksum_sizes": [],
       "fields": [],
-      "generation": null,
       "checks": [
         {
           "assert": {
@@ -3706,29 +3116,19 @@
               {
                 "read": {
                   "offset": 136,
-                  "type": "u8"
+                  "type": "u8",
+                  "relative": true
                 }
               },
               59
             ]
           },
           "code": "save_play_time",
-          "message": "the save has an invalid play-time minute or second value"
-        },
-        {
-          "assert": {
-            "le": [
-              {
-                "read": {
-                  "offset": 137,
-                  "type": "u8"
-                }
-              },
-              59
-            ]
-          },
-          "code": "save_play_time",
-          "message": "the save has an invalid play-time minute or second value"
+          "message": "the save has an invalid play-time minute or second value",
+          "repeat": {
+            "count": 2,
+            "stride": 1
+          }
         }
       ],
       "recognition": {

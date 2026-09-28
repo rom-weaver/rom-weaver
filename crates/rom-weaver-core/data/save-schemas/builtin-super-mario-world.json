@@ -13,17 +13,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 0,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 0
         },
         "min": 0,
         "max": 255
@@ -38,17 +28,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 1,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 1
         },
         "min": 0,
         "max": 255
@@ -63,17 +43,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 2,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 2
         },
         "min": 0,
         "max": 255
@@ -88,17 +58,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 3,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 3
         },
         "min": 0,
         "max": 255
@@ -113,17 +73,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 4,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 4
         },
         "min": 0,
         "max": 255
@@ -138,17 +88,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 5,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 5
         },
         "min": 0,
         "max": 255
@@ -163,17 +103,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 6,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 6
         },
         "min": 0,
         "max": 255
@@ -188,17 +118,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 7,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 7
         },
         "min": 0,
         "max": 255
@@ -213,17 +133,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 8,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 8
         },
         "min": 0,
         "max": 255
@@ -238,17 +148,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 9,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 9
         },
         "min": 0,
         "max": 255
@@ -263,17 +163,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 10,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 10
         },
         "min": 0,
         "max": 255
@@ -288,17 +178,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 11,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 11
         },
         "min": 0,
         "max": 255
@@ -313,17 +193,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 12,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 12
         },
         "min": 0,
         "max": 255
@@ -338,17 +208,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 13,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 13
         },
         "min": 0,
         "max": 255
@@ -363,17 +223,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 14,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 14
         },
         "min": 0,
         "max": 255
@@ -388,17 +238,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 15,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 15
         },
         "min": 0,
         "max": 255
@@ -413,17 +253,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 16,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 16
         },
         "min": 0,
         "max": 255
@@ -438,17 +268,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 17,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 17
         },
         "min": 0,
         "max": 255
@@ -463,17 +283,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 18,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 18
         },
         "min": 0,
         "max": 255
@@ -488,17 +298,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 19,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 19
         },
         "min": 0,
         "max": 255
@@ -513,17 +313,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 20,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 20
         },
         "min": 0,
         "max": 255
@@ -538,17 +328,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 21,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 21
         },
         "min": 0,
         "max": 255
@@ -563,17 +343,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 22,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 22
         },
         "min": 0,
         "max": 255
@@ -588,17 +358,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 23,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 23
         },
         "min": 0,
         "max": 255
@@ -613,17 +373,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 24,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 24
         },
         "min": 0,
         "max": 255
@@ -638,17 +388,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 25,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 25
         },
         "min": 0,
         "max": 255
@@ -663,17 +403,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 26,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 26
         },
         "min": 0,
         "max": 255
@@ -688,17 +418,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 27,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 27
         },
         "min": 0,
         "max": 255
@@ -713,17 +433,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 28,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 28
         },
         "min": 0,
         "max": 255
@@ -738,17 +448,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 29,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 29
         },
         "min": 0,
         "max": 255
@@ -763,17 +463,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 30,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 30
         },
         "min": 0,
         "max": 255
@@ -788,17 +478,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 31,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 31
         },
         "min": 0,
         "max": 255
@@ -813,17 +493,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 32,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 32
         },
         "min": 0,
         "max": 255
@@ -838,17 +508,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 33,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 33
         },
         "min": 0,
         "max": 255
@@ -863,17 +523,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 34,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 34
         },
         "min": 0,
         "max": 255
@@ -888,17 +538,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 35,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 35
         },
         "min": 0,
         "max": 255
@@ -913,17 +553,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 36,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 36
         },
         "min": 0,
         "max": 255
@@ -938,17 +568,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 37,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 37
         },
         "min": 0,
         "max": 255
@@ -963,17 +583,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 38,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 38
         },
         "min": 0,
         "max": 255
@@ -988,17 +598,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 39,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 39
         },
         "min": 0,
         "max": 255
@@ -1013,17 +613,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 40,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 40
         },
         "min": 0,
         "max": 255
@@ -1038,17 +628,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 41,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 41
         },
         "min": 0,
         "max": 255
@@ -1063,17 +643,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 42,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 42
         },
         "min": 0,
         "max": 255
@@ -1088,17 +658,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 43,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 43
         },
         "min": 0,
         "max": 255
@@ -1113,17 +673,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 44,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 44
         },
         "min": 0,
         "max": 255
@@ -1138,17 +688,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 45,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 45
         },
         "min": 0,
         "max": 255
@@ -1163,17 +703,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 46,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 46
         },
         "min": 0,
         "max": 255
@@ -1188,17 +718,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 47,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 47
         },
         "min": 0,
         "max": 255
@@ -1213,17 +733,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 48,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 48
         },
         "min": 0,
         "max": 255
@@ -1238,17 +748,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 49,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 49
         },
         "min": 0,
         "max": 255
@@ -1263,17 +763,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 50,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 50
         },
         "min": 0,
         "max": 255
@@ -1288,17 +778,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 51,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 51
         },
         "min": 0,
         "max": 255
@@ -1313,17 +793,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 52,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 52
         },
         "min": 0,
         "max": 255
@@ -1338,17 +808,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 53,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 53
         },
         "min": 0,
         "max": 255
@@ -1363,17 +823,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 54,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 54
         },
         "min": 0,
         "max": 255
@@ -1388,17 +838,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 55,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 55
         },
         "min": 0,
         "max": 255
@@ -1413,17 +853,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 56,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 56
         },
         "min": 0,
         "max": 255
@@ -1438,17 +868,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 57,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 57
         },
         "min": 0,
         "max": 255
@@ -1463,17 +883,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 58,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 58
         },
         "min": 0,
         "max": 255
@@ -1488,17 +898,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 59,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 59
         },
         "min": 0,
         "max": 255
@@ -1513,17 +913,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 60,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 60
         },
         "min": 0,
         "max": 255
@@ -1538,17 +928,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 61,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 61
         },
         "min": 0,
         "max": 255
@@ -1563,17 +943,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 62,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 62
         },
         "min": 0,
         "max": 255
@@ -1588,17 +958,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 63,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 63
         },
         "min": 0,
         "max": 255
@@ -1613,17 +973,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 64,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 64
         },
         "min": 0,
         "max": 255
@@ -1638,17 +988,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 65,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 65
         },
         "min": 0,
         "max": 255
@@ -1663,17 +1003,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 66,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 66
         },
         "min": 0,
         "max": 255
@@ -1688,17 +1018,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 67,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 67
         },
         "min": 0,
         "max": 255
@@ -1713,17 +1033,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 68,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 68
         },
         "min": 0,
         "max": 255
@@ -1738,17 +1048,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 69,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 69
         },
         "min": 0,
         "max": 255
@@ -1763,17 +1063,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 70,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 70
         },
         "min": 0,
         "max": 255
@@ -1788,17 +1078,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 71,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 71
         },
         "min": 0,
         "max": 255
@@ -1813,17 +1093,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 72,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 72
         },
         "min": 0,
         "max": 255
@@ -1838,17 +1108,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 73,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 73
         },
         "min": 0,
         "max": 255
@@ -1863,17 +1123,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 74,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 74
         },
         "min": 0,
         "max": 255
@@ -1888,17 +1138,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 75,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 75
         },
         "min": 0,
         "max": 255
@@ -1913,17 +1153,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 76,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 76
         },
         "min": 0,
         "max": 255
@@ -1938,17 +1168,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 77,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 77
         },
         "min": 0,
         "max": 255
@@ -1963,17 +1183,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 78,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 78
         },
         "min": 0,
         "max": 255
@@ -1988,17 +1198,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 79,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 79
         },
         "min": 0,
         "max": 255
@@ -2013,17 +1213,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 80,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 80
         },
         "min": 0,
         "max": 255
@@ -2038,17 +1228,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 81,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 81
         },
         "min": 0,
         "max": 255
@@ -2063,17 +1243,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 82,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 82
         },
         "min": 0,
         "max": 255
@@ -2088,17 +1258,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 83,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 83
         },
         "min": 0,
         "max": 255
@@ -2113,17 +1273,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 84,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 84
         },
         "min": 0,
         "max": 255
@@ -2138,17 +1288,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 85,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 85
         },
         "min": 0,
         "max": 255
@@ -2163,17 +1303,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 86,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 86
         },
         "min": 0,
         "max": 255
@@ -2188,17 +1318,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 87,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 87
         },
         "min": 0,
         "max": 255
@@ -2213,17 +1333,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 88,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 88
         },
         "min": 0,
         "max": 255
@@ -2238,17 +1348,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 89,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 89
         },
         "min": 0,
         "max": 255
@@ -2263,17 +1363,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 90,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 90
         },
         "min": 0,
         "max": 255
@@ -2288,17 +1378,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 91,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 91
         },
         "min": 0,
         "max": 255
@@ -2313,17 +1393,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 92,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 92
         },
         "min": 0,
         "max": 255
@@ -2338,17 +1408,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 93,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 93
         },
         "min": 0,
         "max": 255
@@ -2363,17 +1423,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 94,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 94
         },
         "min": 0,
         "max": 255
@@ -2388,17 +1438,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 95,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 95
         },
         "min": 0,
         "max": 255
@@ -2415,16 +1455,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 96,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2439,16 +1470,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 96,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2463,16 +1485,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 96,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2487,16 +1500,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 96,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2511,16 +1515,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 96,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2535,16 +1530,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 96,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2559,16 +1545,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 96,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2583,16 +1560,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 96,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2607,16 +1575,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 97,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2631,16 +1590,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 97,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2655,16 +1605,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 97,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2679,16 +1620,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 97,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2703,16 +1635,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 97,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2727,16 +1650,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 97,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2751,16 +1665,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 97,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2775,16 +1680,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 97,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2799,16 +1695,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 98,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2823,16 +1710,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 98,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2847,16 +1725,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 98,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2871,16 +1740,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 98,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2895,16 +1755,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 98,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2919,16 +1770,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 98,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2943,16 +1785,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 98,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2967,16 +1800,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 98,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -2991,16 +1815,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 99,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3015,16 +1830,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 99,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3039,16 +1845,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 99,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3063,16 +1860,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 99,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3087,16 +1875,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 99,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3111,16 +1890,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 99,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3135,16 +1905,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 99,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3159,16 +1920,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 99,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3183,16 +1935,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 100,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3207,16 +1950,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 100,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3231,16 +1965,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 100,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3255,16 +1980,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 100,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3279,16 +1995,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 100,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3303,16 +2010,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 100,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3327,16 +2025,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 100,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3351,16 +2040,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 100,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3375,16 +2055,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 101,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3399,16 +2070,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 101,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3423,16 +2085,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 101,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3447,16 +2100,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 101,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3471,16 +2115,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 101,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3495,16 +2130,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 101,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3519,16 +2145,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 101,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3543,16 +2160,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 101,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3567,16 +2175,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 102,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3591,16 +2190,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 102,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3615,16 +2205,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 102,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3639,16 +2220,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 102,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3663,16 +2235,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 102,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3687,16 +2250,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 102,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3711,16 +2265,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 102,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3735,16 +2280,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 102,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3759,16 +2295,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 103,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3783,16 +2310,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 103,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3807,16 +2325,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 103,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3831,16 +2340,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 103,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3855,16 +2355,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 103,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3879,16 +2370,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 103,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3903,16 +2385,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 103,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3927,16 +2400,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 103,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3951,16 +2415,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 104,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3975,16 +2430,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 104,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -3999,16 +2445,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 104,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4023,16 +2460,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 104,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4047,16 +2475,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 104,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4071,16 +2490,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 104,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4095,16 +2505,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 104,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4119,16 +2520,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 104,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4143,16 +2535,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 105,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4167,16 +2550,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 105,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4191,16 +2565,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 105,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4215,16 +2580,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 105,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4239,16 +2595,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 105,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4263,16 +2610,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 105,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4287,16 +2625,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 105,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4311,16 +2640,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 105,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4335,16 +2655,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 106,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4359,16 +2670,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 106,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4383,16 +2685,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 106,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4407,16 +2700,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 106,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4431,16 +2715,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 106,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4455,16 +2730,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 106,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4479,16 +2745,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 106,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4503,16 +2760,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 106,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4527,16 +2775,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 107,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4551,16 +2790,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 107,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4575,16 +2805,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 107,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4599,16 +2820,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 107,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4623,16 +2835,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 107,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4647,16 +2850,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 107,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4671,16 +2865,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 107,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4695,16 +2880,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 107,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4719,16 +2895,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 108,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4743,16 +2910,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 108,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4767,16 +2925,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 108,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4791,16 +2940,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 108,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4815,16 +2955,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 108,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4839,16 +2970,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 108,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4863,16 +2985,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 108,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4887,16 +3000,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 108,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4911,16 +3015,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 109,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4935,16 +3030,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 109,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4959,16 +3045,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 109,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -4983,16 +3060,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 109,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -5007,16 +3075,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 109,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -5031,16 +3090,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 109,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -5055,16 +3105,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 109,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -5079,16 +3120,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 109,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -5103,16 +3135,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 110,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -5127,16 +3150,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 110,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -5151,16 +3165,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 110,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -5175,16 +3180,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 110,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -5199,16 +3195,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 110,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -5223,16 +3210,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 110,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -5247,16 +3225,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 110,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -5271,16 +3240,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 110,
-          "kind": "bitfield_boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -5293,17 +3253,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 111,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 111
         },
         "min": 0,
         "max": 255
@@ -5318,17 +3268,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 113,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 65535,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 113
         },
         "min": 0,
         "max": 65535
@@ -5343,17 +3283,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 117,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 65535,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 117
         },
         "min": 0,
         "max": 65535
@@ -5368,17 +3298,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 119,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 65535,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 119
         },
         "min": 0,
         "max": 65535
@@ -5393,17 +3313,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 125,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 65535,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 125
         },
         "min": 0,
         "max": 65535
@@ -5418,17 +3328,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 127,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 65535,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 127
         },
         "min": 0,
         "max": 65535
@@ -5443,17 +3343,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 112,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 112
         },
         "min": 0,
         "max": 255
@@ -5468,17 +3358,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 115,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 65535,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 115
         },
         "min": 0,
         "max": 65535
@@ -5493,17 +3373,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 121,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 65535,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 121
         },
         "min": 0,
         "max": 65535
@@ -5518,17 +3388,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 123,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 65535,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 123
         },
         "min": 0,
         "max": 65535
@@ -5543,17 +3403,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 129,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 65535,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 129
         },
         "min": 0,
         "max": 65535
@@ -5568,17 +3418,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 131,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 65535,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 131
         },
         "min": 0,
         "max": 65535
@@ -5594,16 +3434,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 133,
-          "kind": "boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -5617,16 +3448,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 134,
-          "kind": "boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -5640,16 +3462,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 135,
-          "kind": "boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -5663,16 +3476,7 @@
         "presentation": {
           "section_id": 0,
           "offset": 136,
-          "kind": "boolean",
-          "constraints": {
-            "choices": [],
-            "max": null,
-            "max_length": null,
-            "min": null
-          },
-          "step": null,
-          "encoding": null,
-          "warnings": []
+          "step": null
         }
       },
       {
@@ -5685,17 +3489,7 @@
         "group": "slot_{index}",
         "presentation": {
           "section_id": 0,
-          "offset": 140,
-          "kind": "unsigned_integer",
-          "constraints": {
-            "choices": [],
-            "max": 255,
-            "max_length": null,
-            "min": 0
-          },
-          "step": 1,
-          "encoding": null,
-          "warnings": []
+          "offset": 140
         },
         "min": 0,
         "max": 255
@@ -5777,14 +3571,12 @@
                         "offset": 141,
                         "target": 23130
                       },
-                      "signature": null,
                       "counter": {
                         "offset": 140,
                         "type": "u8"
                       }
                     }
-                  ],
-                  "signatures": []
+                  ]
                 },
                 {
                   "spans": [
@@ -5816,14 +3608,12 @@
                         "offset": 570,
                         "target": 23130
                       },
-                      "signature": null,
                       "counter": {
                         "offset": 569,
                         "type": "u8"
                       }
                     }
-                  ],
-                  "signatures": []
+                  ]
                 }
               ]
             },
@@ -5871,14 +3661,12 @@
                         "offset": 284,
                         "target": 23130
                       },
-                      "signature": null,
                       "counter": {
                         "offset": 283,
                         "type": "u8"
                       }
                     }
-                  ],
-                  "signatures": []
+                  ]
                 },
                 {
                   "spans": [
@@ -5910,14 +3698,12 @@
                         "offset": 713,
                         "target": 23130
                       },
-                      "signature": null,
                       "counter": {
                         "offset": 712,
                         "type": "u8"
                       }
                     }
-                  ],
-                  "signatures": []
+                  ]
                 }
               ]
             },
@@ -5965,14 +3751,12 @@
                         "offset": 427,
                         "target": 23130
                       },
-                      "signature": null,
                       "counter": {
                         "offset": 426,
                         "type": "u8"
                       }
                     }
-                  ],
-                  "signatures": []
+                  ]
                 },
                 {
                   "spans": [
@@ -6004,14 +3788,12 @@
                         "offset": 856,
                         "target": 23130
                       },
-                      "signature": null,
                       "counter": {
                         "offset": 855,
                         "type": "u8"
                       }
                     }
-                  ],
-                  "signatures": []
+                  ]
                 }
               ]
             },
