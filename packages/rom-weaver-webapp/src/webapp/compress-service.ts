@@ -13,8 +13,14 @@ import { getBaseFileName, getFileNameWithoutExtension } from "../lib/input/path-
 import { getChdAutoCreateMode } from "../lib/input/rom-specific-file-utils.ts";
 import { isLikelyDiscImageSize } from "../lib/compression/disc-image-policy.ts";
 import { ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS } from "../lib/compression/rom-specific-format-support.ts";
+import { createLogger } from "../lib/logging.ts";
+import { isArchiveFileName } from "../public/react/file-classification.ts";
 import type { WorkflowRuntime } from "../types/workflow-runtime-adapter.ts";
-import type { ApplyWorkflowOptions, PublicOutput } from "../types/workflow-runtime-types.ts";
+import type {
+  ApplyWorkflowOptions,
+  CompressionWorkflowOptions,
+  PublicOutput,
+} from "../types/workflow-runtime-types.ts";
 
 type ConcreteCompressFormat = "zip" | "7z" | RomSpecificCompressionFormat;
 
@@ -24,6 +30,9 @@ type CompressSource = {
   metadata?: Record<string, unknown>;
 };
 
+/** One file extracted from an opened archive. `output` owns the stored copy that `file` reads. */
+type OpenedCompressEntry = { file: File; output: PublicOutput; path: string };
+
 type ValidatedCompressInput = {
   cue?: File;
   files: File[];
@@ -31,6 +40,7 @@ type ValidatedCompressInput = {
   source: CompressSource;
 };
 
+const logger = createLogger("compress-service");
 const ARCHIVE_FORMATS = ["zip", "7z"] as const;
 const ROM_SPECIFIC_FORMATS = ["chd", "rvz", "z3ds"] as const;
 const getExtension = (fileName: string) => fileName.match(/\.([^./\\]+)$/)?.[1]?.toLowerCase() || "";
@@ -146,6 +156,50 @@ const createAssets = async (input: ValidatedCompressInput): Promise<InputAsset[]
   );
 };
 
+const isOpenableCompressInput = (file: File): boolean => isArchiveFileName(file.name);
+
+const disposeOpenedOutputs = async (outputs: PublicOutput[]) => {
+  await Promise.all(
+    outputs.map((output) =>
+      output.dispose().catch((cause: unknown) => logger.warn("Extracted file cleanup failed", { cause })),
+    ),
+  );
+};
+
+// Extracted files stay in browser storage; each `File` is the disk-backed snapshot, so large disc
+// images are never copied into memory. Callers MUST dispose every returned output.
+const openCompressInput = async (
+  file: File,
+  runtime: WorkflowRuntime,
+  options: Pick<CompressionWorkflowOptions, "onProgress" | "signal"> = {},
+): Promise<OpenedCompressEntry[]> => {
+  const extract = runtime.compression.extract;
+  if (!extract) throw new Error("Extraction is not available in this browser.");
+  logger.trace("open.start", { fileName: file.name, size: file.size });
+  const result = await extract({ source: file, entries: [], extractAll: true, options });
+  const entries: OpenedCompressEntry[] = [];
+  try {
+    if (options.signal?.aborted) throw new DOMException("Opening cancelled", "AbortError");
+    for (const output of result.outputs) {
+      const stored = await output.vfs.getFile?.(output.path);
+      if (!stored) throw new Error(`Extracted file is not available: ${output.relativePath || output.fileName}`);
+      entries.push({
+        file: new File([stored], output.fileName, {
+          lastModified: stored.lastModified,
+          type: stored.type || "application/octet-stream",
+        }),
+        output,
+        path: output.relativePath || output.fileName,
+      });
+    }
+  } catch (error) {
+    await disposeOpenedOutputs(result.outputs);
+    throw error;
+  }
+  logger.trace("open.done", { entryCount: entries.length, fileName: file.name });
+  return entries;
+};
+
 const compressFiles = async (
   files: File[],
   options: ApplyWorkflowOptions,
@@ -198,5 +252,12 @@ const compressFiles = async (
   }
 };
 
-export type { CompressSource };
-export { compressFiles, getCompressFormats, getCompressSource };
+export type { CompressSource, OpenedCompressEntry };
+export {
+  compressFiles,
+  disposeOpenedOutputs,
+  getCompressFormats,
+  getCompressSource,
+  isOpenableCompressInput,
+  openCompressInput,
+};

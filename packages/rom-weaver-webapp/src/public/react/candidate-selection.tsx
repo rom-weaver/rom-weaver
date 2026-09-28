@@ -43,6 +43,8 @@ function CandidateSelectionDialog({
   if (!state) return null;
   const { request } = state;
   const localizer = createBrowserLocalizer();
+  // Patch prompts add patch entries; every other multi-select prompt adds plain files.
+  const isPatchRole = request.role === "patch";
   const displayItems = getCandidateDisplayItems(request, localizer);
   const selectableCount = displayItems.filter(({ candidate }) => candidate.selectable).length;
   const items: SelectionItem[] = displayItems.map(({ candidate, sizeLabel, warningLabel }) => {
@@ -62,7 +64,7 @@ function CandidateSelectionDialog({
     return {
       defaultSelected: defaultSelected || undefined,
       id: candidate.id,
-      matches: defaultSelected || undefined,
+      matches: (defaultSelected && isPatchRole) || undefined,
       name: nameWithFolder,
       note: warningLabel || undefined,
       selectable: candidate.selectable,
@@ -82,7 +84,7 @@ function CandidateSelectionDialog({
       subtitle={
         selectableCount
           ? multiSelect
-            ? localizer.message("ui.select.patchesHint")
+            ? localizer.message(isPatchRole ? "ui.select.patchesHint" : "ui.select.filesHint")
             : localizer.message(isMultiRomPrompt ? "ui.select.multipleRoms" : "ui.select.multipleCandidates")
           : localizer.message("ui.select.noSelectableFiles")
       }
@@ -96,7 +98,10 @@ function CandidateSelectionDialog({
           items={items}
           onCancel={onCancel}
           onSubmit={onSelectMany}
-          submitLabel={(count) => (count === 1 ? "Add 1 patch" : `Add ${count} patches`)}
+          submitLabel={(count) => {
+            if (!isPatchRole) return count === 1 ? "Add 1 file" : `Add ${count} files`;
+            return count === 1 ? "Add 1 patch" : `Add ${count} patches`;
+          }}
         />
       ) : (
         <SelectionTree items={items} onSelect={onSelect} />

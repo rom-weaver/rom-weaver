@@ -1490,6 +1490,11 @@ msgstr "Extract timing ({workers} threads)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.opening"
+msgstr "Extracting"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.stage.extractingWith"
 msgstr "Extracting & {verb}…"
 
@@ -3085,6 +3090,11 @@ msgstr "See your changes in play."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.select.filesHint"
+msgstr "Select the files you want to add, then choose Add files."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.select.patchesHint"
 msgstr "Select the patches you want to add, then choose Add patches."
 
@@ -3925,7 +3935,7 @@ msgstr "Your collection is yours. The tool should act like it."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.compress.local"
-msgstr "Your files stay in this browser. ZIP and 7z preserve the original files, including patches and archives."
+msgstr "Your files stay in this browser. Archives and compressed disc images open so you can choose the files inside."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

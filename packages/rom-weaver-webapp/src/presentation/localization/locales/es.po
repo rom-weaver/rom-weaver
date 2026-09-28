@@ -1490,6 +1490,11 @@ msgstr "Tiempo de extracción ({workers} hilos)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.opening"
+msgstr "Extrayendo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.stage.extractingWith"
 msgstr "Extrayendo y {verb}…"
 
@@ -3085,6 +3090,11 @@ msgstr "con partidas guardadas que permanecen en este dispositivo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.select.filesHint"
+msgstr "Elige los archivos que quieres agregar y luego pulsa Agregar archivos."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.select.patchesHint"
 msgstr "Elige los parches que quieres agregar y luego pulsa Agregar parches."
 
@@ -3925,7 +3935,7 @@ msgstr "Tu colección es tuya. La herramienta debe actuar como tal."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.compress.local"
-msgstr "Tus archivos permanecen en este navegador. ZIP y 7z conservan los archivos originales, incluidos parches y archivos comprimidos."
+msgstr "Tus archivos permanecen en este navegador. Los archivos comprimidos y las imágenes de disco comprimidas se abren para que elijas los archivos que contienen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

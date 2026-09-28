@@ -97,6 +97,40 @@ describe("CandidateSelectionDialog", () => {
     expect(onSelectMany).toHaveBeenCalledWith(["patch-a", "patch-c"]);
   });
 
+  it("uses file wording without the patch match tag for a non-patch multi-select", () => {
+    const onSelectMany = vi.fn();
+    render(
+      <CandidateSelectionDialog
+        onCancel={vi.fn()}
+        onSelect={vi.fn()}
+        onSelectMany={onSelectMany}
+        state={{
+          request: {
+            candidates: ["disc.cue", "track.bin"].map((fileName, index) => ({
+              defaultSelected: true,
+              fileName,
+              id: String(index),
+              kind: "rom" as const,
+              selectable: true,
+              type: "file" as const,
+            })),
+            multiSelect: true,
+            role: "input",
+            sourceName: "disc.zip",
+            warnings: [],
+          },
+          resolve: vi.fn(),
+          reject: vi.fn(),
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Select the files you want to add, then choose Add files.")).toBeTruthy();
+    expect(screen.queryByText("matches patch")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Add 2 files" }));
+    expect(onSelectMany).toHaveBeenCalledWith(["0", "1"]);
+  });
+
   it("shows a no-selectable state and forwards modal cancellation", () => {
     const onCancel = vi.fn();
     render(

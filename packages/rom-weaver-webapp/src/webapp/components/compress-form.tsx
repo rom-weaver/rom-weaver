@@ -7,6 +7,7 @@ import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { buildOutputCompressionPanel } from "../../public/react/components/ds/compress-panel.tsx";
 import { Notice } from "../../public/react/components/ds/feedback.tsx";
 import { FileCard } from "../../public/react/components/ds/file-card.tsx";
+import { StageStatus, stageBarValue } from "../../public/react/components/ds/staging-meta.tsx";
 import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
 import { OutputRunAction, WorkflowOutputStep } from "../../public/react/components/ds/workflow-output-step.tsx";
@@ -21,7 +22,14 @@ import {
   useUiLocalizer,
 } from "../../public/react/settings-context.tsx";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
-import { compressFiles, type CompressSource, getCompressFormats, getCompressSource } from "../compress-service.ts";
+import {
+  compressFiles,
+  type CompressSource,
+  getCompressFormats,
+  getCompressSource,
+  isOpenableCompressInput,
+} from "../compress-service.ts";
+import { useCompressArchiveInputs } from "./compress-archive-inputs.tsx";
 
 type CompressFormProps = { pageDrop?: PageFileDrop | null; onSessionChange?: (active: boolean) => void };
 type CompressionFormat = Awaited<ReturnType<typeof getCompressFormats>>[number];
@@ -51,7 +59,19 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
   const abortRef = useRef<AbortController | null>(null);
   const runIdRef = useRef(0);
   const handledDropRef = useRef(0);
-  const staging = files.length > 0 && inputInfo?.files !== files;
+  const nextId = useCallback(() => ++nextFileId.current, []);
+  const addStaged = useCallback((entries: Array<{ file: File; id: number }>) => {
+    if (entries.length) setStagedFiles((previous) => [...previous, ...entries]);
+  }, []);
+  const {
+    cancel: cancelOpening,
+    dialog: selectionDialog,
+    open: openArchive,
+    pending: pendingArchives,
+    release: releaseArchiveEntry,
+  } = useCompressArchiveInputs({ nextId, onAdd: addStaged, onError: setError });
+  const opening = pendingArchives.length > 0;
+  const staging = opening || (files.length > 0 && inputInfo?.files !== files);
   const disabled = busy || downloadBusy;
   const activeSettings = { ...settings, ...overrides };
   const formats = inputInfo?.files === files ? inputInfo.formats : [];
@@ -76,10 +96,10 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
       if (!added.length || disabled) return;
       clearOutput();
       setError("");
-      const entries = added.map((file) => ({ file, id: ++nextFileId.current }));
-      setStagedFiles((previous) => [...previous, ...entries]);
+      addStaged(added.filter((file) => !isOpenableCompressInput(file)).map((file) => ({ file, id: nextId() })));
+      for (const file of added.filter(isOpenableCompressInput)) void openArchive(file);
     },
-    [clearOutput, disabled],
+    [addStaged, clearOutput, disabled, nextId, openArchive],
   );
 
   useEffect(() => {
@@ -107,8 +127,8 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
   }, [pageDrop, stageFiles]);
 
   useEffect(() => {
-    onSessionChange?.(files.length > 0 || !!output);
-  }, [files.length, onSessionChange, output]);
+    onSessionChange?.(files.length > 0 || opening || !!output);
+  }, [files.length, onSessionChange, opening, output]);
 
   useEffect(() => {
     let state: "running" | "staging" | "failed" | "done" | "ready" | "idle" = "idle";
@@ -197,7 +217,7 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
       <UnifiedDropZone
         addLabel={localizer.message("ui.drop.addFiles")}
         afterDropZone={
-          stagedFiles.length ? (
+          stagedFiles.length || opening ? (
             <div className="cards compress-files">
               {stagedFiles.map(({ file, id }) => (
                 <FileCard
@@ -210,16 +230,37 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
                       : () => {
                           clearOutput();
                           setError("");
+                          releaseArchiveEntry(id);
                           setStagedFiles((previous) => previous.filter((entry) => entry.id !== id));
                         }
                   }
                   removeLabel={localizer.message("ui.compress.removeFile", { name: file.name })}
                 />
               ))}
+              {pendingArchives.map((archive) => (
+                <FileCard
+                  className="pending-card"
+                  key={archive.id}
+                  meta={
+                    <>
+                      <span className="fsize mono">{formatByteSize(archive.size)}</span>
+                      <StageStatus
+                        id={`compress-open-${archive.id}`}
+                        label={localizer.message("ui.compress.opening")}
+                        percent={archive.percent}
+                      />
+                    </>
+                  }
+                  name={<span className="nm mono">{archive.name}</span>}
+                  onRemove={() => cancelOpening(archive.id)}
+                  removeLabel={localizer.message("ui.compress.removeFile", { name: archive.name })}
+                  stageBar={stageBarValue(true, archive.percent)}
+                />
+              ))}
             </div>
           ) : null
         }
-        big={!files.length}
+        big={!(files.length || opening)}
         disabled={disabled}
         heroLabel={localizer.message("ui.compress.drop")}
         heroLabelCoarse={localizer.message("ui.compress.tap")}
@@ -290,6 +331,7 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
           {error}
         </Notice>
       ) : null}
+      {selectionDialog}
     </section>
   );
 };

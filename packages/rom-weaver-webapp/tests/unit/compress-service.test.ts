@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import type { WorkflowRuntime } from "../../src/types/workflow-runtime-adapter.ts";
 import type { ApplyWorkflowOptions, PublicOutput } from "../../src/types/workflow-runtime-types.ts";
-import { compressFiles, getCompressFormats, getCompressSource } from "../../src/webapp/compress-service.ts";
+import {
+  compressFiles,
+  getCompressFormats,
+  getCompressSource,
+  isOpenableCompressInput,
+  openCompressInput,
+} from "../../src/webapp/compress-service.ts";
 
 const file = (name: string, contents: string | Uint8Array = "rom") => new File([contents], name);
 const options = (compression: "zip" | "7z" | "chd" | "rvz" | "z3ds"): ApplyWorkflowOptions => ({
@@ -182,5 +188,77 @@ describe("compress service", () => {
       "conversion failed",
     );
     expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  describe("openCompressInput", () => {
+    const extracted = (relativePath: string, stored: File | null) =>
+      ({
+        dispose: vi.fn(async () => undefined),
+        fileName: relativePath.split("/").pop(),
+        path: `/extract/${relativePath}`,
+        relativePath,
+        size: stored?.size ?? 0,
+        vfs: { getFile: vi.fn(async () => stored) },
+      }) as unknown as PublicOutput;
+    const extractRuntime = (outputs: PublicOutput[]) => {
+      const extract = vi.fn(async () => ({ entries: [], output: outputs[0], outputs }));
+      return { extract, runtime: { compression: { extract } } as unknown as WorkflowRuntime };
+    };
+
+    it("opens archives and compressed disc images but not plain files", () => {
+      expect(
+        ["game.zip", "disc.chd", "disc.RVZ", "game.7z"].map((name) => isOpenableCompressInput(file(name))),
+      ).toEqual([true, true, true, true]);
+      expect(["game.iso", "fix.bps", "track.bin"].map((name) => isOpenableCompressInput(file(name)))).toEqual([
+        false,
+        false,
+        false,
+      ]);
+    });
+
+    it("extracts every entry into a stored file named after the entry", async () => {
+      const outputs = [
+        extracted("disc/disc.cue", file("x.bin", "cue")),
+        extracted("disc/track.bin", file("y", "bin!")),
+      ];
+      const { extract, runtime } = extractRuntime(outputs);
+      const signal = new AbortController().signal;
+      const entries = await openCompressInput(file("disc.zip"), runtime, { signal });
+
+      expect(extract).toHaveBeenCalledWith(
+        expect.objectContaining({ entries: [], extractAll: true, options: expect.objectContaining({ signal }) }),
+      );
+      expect(entries.map((entry) => [entry.path, entry.file.name, entry.file.size])).toEqual([
+        ["disc/disc.cue", "disc.cue", 3],
+        ["disc/track.bin", "track.bin", 4],
+      ]);
+      expect(await entries[1]?.file.text()).toBe("bin!");
+      expect(outputs.every((output) => vi.mocked(output.dispose).mock.calls.length === 0)).toBe(true);
+    });
+
+    it("disposes every extracted file when one cannot be read", async () => {
+      const outputs = [extracted("a.bin", file("a", "a")), extracted("b.bin", null)];
+      const { runtime } = extractRuntime(outputs);
+
+      await expect(openCompressInput(file("pair.zip"), runtime)).rejects.toThrow(
+        "Extracted file is not available: b.bin",
+      );
+      for (const output of outputs) expect(output.dispose).toHaveBeenCalledOnce();
+    });
+
+    it("disposes the extracted files when the signal aborts during extraction", async () => {
+      const outputs = [extracted("a.bin", file("a", "a"))];
+      const abort = new AbortController();
+      const extract = vi.fn(async () => {
+        abort.abort();
+        return { entries: [], output: outputs[0], outputs };
+      });
+      const runtime = { compression: { extract } } as unknown as WorkflowRuntime;
+
+      await expect(openCompressInput(file("a.zip"), runtime, { signal: abort.signal })).rejects.toThrow(
+        "Opening cancelled",
+      );
+      expect(outputs[0]?.dispose).toHaveBeenCalledOnce();
+    });
   });
 });
