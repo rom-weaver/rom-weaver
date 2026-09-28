@@ -16,22 +16,22 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
   compress: Object.freeze({
     description:
-      "Create ZIP and 7z archives, or compress compatible disc images to CHD, RVZ, and Z3DS, locally in your browser. No uploads or account required.",
+      "Compress ISO or BIN/CUE to CHD, GameCube and Wii ISO to RVZ, and Nintendo 3DS ROMs to Z3DS in your browser. Create ZIP and 7z archives. No uploads.",
     slug: "compress",
-    title: `${SITE_NAME}: Compress ROMs and files online`,
+    title: `${SITE_NAME}: Compress ROMs to CHD, RVZ, and Z3DS online`,
   }),
   extract: Object.freeze({
     description:
-      "Extract supported ROM archives and disc images locally in your browser. Download individual files or an uncompressed ZIP. No uploads or account required.",
+      "Extract Z3DS, ZCCI, ZCXI, ZCIA, Z3DSX, CHD, RVZ, and supported ROM archives locally in your browser. Download uncompressed files without uploads.",
     slug: "extract",
-    title: `${SITE_NAME}: Extract ROM archives online`,
+    title: `${SITE_NAME}: Extract Z3DS files and ROM archives online`,
   }),
   // The apex. An empty slug is deliberate: the canonical URL is the bare origin.
   home: Object.freeze({
     description:
-      "A browser ROM toolkit: patch, compress, extract, convert, identify, bake in cheat codes, and edit supported game saves. Works offline after setup. Play supported games with EmulatorJS. No uploads or telemetry.",
+      "Patch ROMs in your browser. Open archives, apply patches in order, and choose your output format. Your files stay on your device. No uploads or account required.",
     slug: "",
-    title: `${SITE_NAME}: Local-first ROM and disc image toolkit`,
+    title: `Patch ROMs in your browser | ${SITE_NAME}`,
   }),
   identify: Object.freeze({
     description:
@@ -43,7 +43,7 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
     description:
       "Apply BPS, IPS, UPS, xdelta, and other ROM patches privately in your browser with checksum validation and ordered patch chains. No uploads or account required.",
     slug: "apply-patches",
-    title: `${SITE_NAME}: Apply ROM patches online`,
+    title: `ROM Patcher Online: BPS, IPS, UPS & xdelta | ${SITE_NAME}`,
   }),
   test: Object.freeze({
     description: "Test patched and local ROMs in EmulatorJS directly in your browser. No uploads or account required.",

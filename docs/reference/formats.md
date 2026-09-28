@@ -10,6 +10,7 @@ The [feature map](features.md) explains the capabilities in plain words. [Cheat 
 - [Legend](#legend)
 - [Patch formats](#patch-formats)
 - [Container and compression formats](#container-and-compression-formats)
+  - [Z3DS filename variants](#z3ds-filename-variants)
 - [Create-time codecs](#create-time-codecs)
 - [Checksum support](#checksum-support)
 - [Trim support](#trim-support)
@@ -95,6 +96,24 @@ For everyday extract, convert, and compress steps, see [Extract, convert, and co
 > ¹ XISO extraction rebuilds the detected XDVDFS filesystem as a normalized ISO. Detailed `probe` reports and XISO creation are not supported.
 >
 > ² CHD parent and differential support exists in the Rust container API. The native CLI does not expose it. `extract --split-bin` affects CD images only.
+
+### Z3DS filename variants
+
+The browser's Z3DS output option selects the compressed extension from the source filename. Each subtype stores one Nintendo 3DS file.
+
+| Source extension | Compressed extension | Extracted extension |
+| --- | --- | --- |
+| `.3ds` | `.z3ds` | Payload-dependent; `.3ds` if unrecognized |
+| `.cci` | `.zcci` | `.cci` |
+| `.cxi`, `.app` | `.zcxi` | `.cxi` |
+| `.cia` | `.zcia` | `.cia` |
+| `.3dsx` | `.z3dsx` | `.3dsx` |
+
+For `.z3ds`, the payload signature determines the extracted extension: NCSD becomes `.cci`, NCCH becomes `.cxi`, CIA becomes `.cia`, and 3DSX becomes `.3dsx`.
+
+Z3DS compression and extraction preserve the payload bytes. They do not decrypt files or convert between cartridge images, CIA packages, and homebrew executables.
+
+Browser procedures: [compress Nintendo 3DS files](../how-to/convert-to-z3ds-browser.md) and [extract Z3DS files](../how-to/extract-z3ds-browser.md).
 
 ## Create-time codecs
 

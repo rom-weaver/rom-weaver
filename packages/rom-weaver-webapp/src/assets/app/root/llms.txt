@@ -6,13 +6,19 @@
 
 - [Apply ROM patches](https://rom-weaver.com/apply-patches): Apply patches with format detection, checksum validation, and ordered patch chains.
 - [Create ROM patches](https://rom-weaver.com/create-patch): Create patches with format-aware settings and distributable bundles.
-- [Compress files](https://rom-weaver.com/compress): Create ZIP or 7z archives, or compress compatible disc images to CHD, RVZ, or Z3DS.
+- [Compress files](https://rom-weaver.com/compress): Convert ISO or BIN/CUE to CHD, GameCube and Wii ISO to RVZ, and Nintendo 3DS ROMs to Z3DS; create ZIP or 7z archives.
+- [Extract files](https://rom-weaver.com/extract): Decompress Z3DS, ZCCI, ZCXI, ZCIA, Z3DSX, CHD, RVZ, and supported archives locally in the browser.
 - [Identify a ROM](https://rom-weaver.com/identify-rom): Match a ROM's game, region, revision, and known dump name by checksum, locally in the browser.
 - [Documentation](https://rom-weaver.com/docs): Tutorials, how-to guides, reference tables, and explanation, for the browser app and the CLI.
 - [What rom-weaver supports](https://rom-weaver.com/docs/features): Plain-language feature map, browser and CLI availability, and links to exact support limits.
 - [Identify ROMs in the browser](https://rom-weaver.com/docs/identify-roms-browser): Look up files, search names or checksums, and compare fingerprints.
 - [Extract files in the browser](https://rom-weaver.com/docs/extract-files-browser): Take files out of an archive or disc image and download them singly or as one ZIP.
 - [Compress files in the browser](https://rom-weaver.com/docs/convert-roms-browser): Package files or compress compatible disc images without applying a patch.
+- [Convert RVZ to ISO in the browser](https://rom-weaver.com/docs/convert-rvz-to-iso): Extract a GameCube or Wii RVZ disc image to ISO on your device.
+- [Convert ISO or BIN/CUE to CHD in the browser](https://rom-weaver.com/docs/convert-to-chd): Compress a supported disc image to CHD without applying a patch.
+- [Convert ISO to RVZ in the browser](https://rom-weaver.com/docs/convert-to-rvz): Compress a GameCube or Wii disc image to RVZ with the Compress tool.
+- [Compress Nintendo 3DS ROMs to Z3DS in the browser](https://rom-weaver.com/docs/convert-to-z3ds): Create Z3DS, ZCCI, ZCXI, ZCIA, or Z3DSX files from uncompressed Nintendo 3DS inputs.
+- [Extract Z3DS files in the browser](https://rom-weaver.com/docs/extract-z3ds): Decompress Z3DS, ZCCI, ZCXI, ZCIA, and Z3DSX files to their underlying Nintendo 3DS formats.
 - [Trim ROMs in the browser](https://rom-weaver.com/docs/trim-roms-browser): Remove supported padding and download a separate copy.
 - [Undo PPF in the browser](https://rom-weaver.com/docs/undo-ppf-browser): Restore bytes recorded in a PPF3 patch with undo data.
 - [Settings and offline use](https://rom-weaver.com/docs/browser-settings): Preferences, beta tools, offline preparation, and local storage.

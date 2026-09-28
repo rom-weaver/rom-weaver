@@ -269,7 +269,9 @@ describe("apply workflow view - empty bench", () => {
       "first-weave.zip",
     );
     expect(container.querySelector(".sample-tutorial-start-dismiss")).toBeTruthy();
-    expect(container.querySelector(".hero-guide")).toBeNull();
+    expect(container.querySelector(".hero-guide")?.getAttribute("href")).toBe(
+      mode === "apply" ? "/docs/apply-rom-patches" : undefined,
+    );
   });
 
   it("keeps file input hooks unique when Apply and Bundle stay mounted", () => {
