@@ -54,6 +54,16 @@ const DOC_SOURCES = Object.freeze([
     slug: "docs/convert-roms-browser",
   }),
   Object.freeze({
+    file: "how-to/convert-rvz-to-iso-browser.md",
+    label: "Convert RVZ to ISO (browser)",
+    slug: "docs/convert-rvz-to-iso",
+  }),
+  Object.freeze({
+    file: "how-to/convert-to-chd-browser.md",
+    label: "Convert ISO or BIN/CUE to CHD (browser)",
+    slug: "docs/convert-to-chd",
+  }),
+  Object.freeze({
     file: "how-to/trim-roms-browser.md",
     label: "Trim ROMs (browser)",
     slug: "docs/trim-roms-browser",

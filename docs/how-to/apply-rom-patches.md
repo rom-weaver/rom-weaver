@@ -92,6 +92,16 @@ The On or Off switch temporarily skips a patch. This is useful for optional add-
 
 After changing an input, the order, or a switch, read each patch's **Checks** summary again. **Input checks** describe the state the patch was authored for. An embedded **Output** check describes that patch's standalone result. It does not verify a combined result when earlier patches changed the same source.
 
+For example, suppose a project supplies `translation.bps` and `translation-fix.bps`. Its notes say the fix requires the translated ROM.
+
+1. Add the clean ROM and both patches to **0x01 Inputs**.
+2. Put `translation.bps` first and set its input to **Original ROM**.
+3. Put `translation-fix.bps` second and set its input to **Previous patch output**.
+4. Open **Checks** on both cards and resolve any input mismatches.
+5. Choose the output format, select **APPLY & DOWNLOAD**, and save the result.
+
+This example is hypothetical. Use the order and input states from your patch author's notes.
+
 ## Choose the output and apply
 
 If **APPLY & DOWNLOAD** is disabled, wait for reading and checksumming to finish. Read the nearby notice and resolve any failed checks.

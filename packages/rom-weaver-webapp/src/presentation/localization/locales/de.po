@@ -475,6 +475,11 @@ msgstr "Beide Patches anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.applyDescription"
+msgstr "Wende BPS-, IPS-, UPS- und xdelta-Patches an. Öffne Archive, wende Patches der Reihe nach an und wähle dein Ausgabeformat. Deine Dateien bleiben auf deinem Gerät."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.file.patchTarget"
 msgstr "Patch anwenden auf"
 
@@ -1635,6 +1640,11 @@ msgstr "Startseite"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.applyGuide"
+msgstr "So wendest du ROM-Patches an"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.identified"
 msgstr "Erkannt"
 
@@ -1817,6 +1827,11 @@ msgstr "Eine ROM trimmen."
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.identifyPacksNote"
 msgstr "Diese offline vorhalten. Nicht angehakte Datenbanken werden weiterhin bei Bedarf geladen, wenn ein ROM sie braucht; das Abwählen entfernt die zwischengespeicherte Kopie."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.titleEmphasis"
+msgstr "Deine Dateien bleiben auf deinem Gerät."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2270,11 +2285,6 @@ msgstr "Ein Durchlauf, kein manuelles Entpacken, keine Zwischendateien. Speicher
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.titleEmphasis"
-msgstr "Ein Werkzeugkasten."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis2"
 msgstr "Ein Werkzeugkasten."
 
@@ -2297,6 +2307,11 @@ msgstr "{flow} öffnen"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.webappItem4"
 msgstr "Öffne einen Bundle-Link, und die Patch-Kette wird für dich vorbereitet."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.lede"
+msgstr "Öffne Archive, wende Patches der Reihe nach an und wähle dein Ausgabeformat."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2535,13 +2550,13 @@ msgstr "Patch-Position"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.applyDescription"
-msgstr "Patche ROMs und Disc-Images mit einem oder mehreren Patches, Cheats oder einem Bundle. Öffne komprimierte Dateien direkt und lade das Ergebnis herunter oder teile ein wiederverwendbares Bundle."
+msgid "ui.home.title"
+msgstr "Patche ROMs in deinem Browser."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.lede"
-msgstr "Patche, komprimiere, extrahiere, konvertiere und identifiziere ROMs, verwende Cheats und bearbeite Spielstände im Browser oder Terminal. Deine Dateien bleiben auf deinem Gerät."
+msgid "ui.hero.thesis"
+msgstr "Patche ROMs in deinem Browser."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2610,22 +2625,22 @@ msgstr "Mögliche Plattformen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "settings.postApplyDownloadBehavior"
-msgstr "Download nach Anwenden"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.postDownload"
 msgstr "Download nach Anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "settings.postApplyTestBehavior"
-msgstr "Test nach Anwenden"
+msgid "settings.postApplyDownloadBehavior"
+msgstr "Download nach Anwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.postTest"
+msgstr "Test nach Anwenden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.postApplyTestBehavior"
 msgstr "Test nach Anwenden"
 
 #. js-lingui-explicit-id
@@ -3635,12 +3650,12 @@ msgstr "Anleitungsschritte"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "settings.defaultCompression"
+msgid "ui.output.type"
 msgstr "Typ"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.output.type"
+msgid "settings.defaultCompression"
 msgstr "Typ"
 
 #~ msgid "ui.apply.validation.overrideChecksum"
@@ -3871,16 +3886,6 @@ msgstr "Deine Sammlung gehört dir. Das Werkzeug sollte sich so verhalten."
 #: src/presentation/localization/messages.ts
 msgid "ui.home.eyebrow"
 msgstr "Dein Werkzeugkasten für ROMs und Disc-Images"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.title"
-msgstr "Dein ROM-Arbeitsablauf."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis"
-msgstr "Dein ROM-Arbeitsablauf. Ein Werkzeugkasten."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

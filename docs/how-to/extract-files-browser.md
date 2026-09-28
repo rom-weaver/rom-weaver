@@ -4,6 +4,8 @@ Use Extract to take files out of an archive or disc image. Download one file, or
 
 To change a ROM's container instead, follow [Convert a ROM](convert-roms-browser.md). For terminal procedures, see the [CLI archive guide](work-with-archives.md).
 
+To extract one GameCube or Wii disc, follow [Convert RVZ to ISO](convert-rvz-to-iso-browser.md).
+
 <!-- START doctoc -->
 ## Table of contents
 
