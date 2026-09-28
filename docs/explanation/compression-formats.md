@@ -25,9 +25,11 @@ A compressed disc image such as CHD or RVZ is a purpose-built container for one 
 
 ## Compressed disc images: CHD and RVZ
 
-**CHD** is a purpose-built container for media images. The official [chdman documentation](https://docs.mamedev.org/tools/chdman.html) covers raw, hard-disk, CD, and DVD images. rom-weaver creates CHD from `.cue`/`.gdi`/`.iso` inputs; the command is in [Extract, convert, and compress archives](../how-to/work-with-archives.md#compress-a-rom-or-disc-image-instead).
+**CHD** is a purpose-built container for media images. The official [chdman documentation](https://docs.mamedev.org/tools/chdman.html) covers raw, hard-disk, CD, and DVD images. rom-weaver creates CHD from `.cue`/`.gdi`/`.iso` inputs. Use the [browser CHD guide](../how-to/convert-to-chd-browser.md) or the [CLI archive guide](../how-to/work-with-archives.md#compress-a-rom-or-disc-image-instead).
 
 **RVZ** is Dolphin's format for GameCube and Wii discs. It understands disc padding, and [Dolphin](https://dolphin-emu.org/docs/faq/) plays it directly.
+
+Use [Convert RVZ to ISO](../how-to/convert-rvz-to-iso-browser.md) when another tool needs an ISO.
 
 rom-weaver's parity suite checks that chdman and dolphin-tool can extract its CHD and RVZ outputs byte for byte, and that rom-weaver can extract the reference tools' outputs. The compressed container bytes and sizes may differ.
 

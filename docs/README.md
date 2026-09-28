@@ -45,6 +45,8 @@ Guided app samples: [Apply](https://rom-weaver.com/apply-patches?guide=apply), [
 | Take files out of an archive | [Extract files](how-to/extract-files-browser.md) |
 | Package files or compress a disc image | [Compress files](how-to/convert-roms-browser.md) |
 | Make a game's file smaller | [Compress files](how-to/convert-roms-browser.md), or [trim padding](how-to/trim-roms-browser.md) |
+| Convert RVZ to ISO | [Extract an ISO from RVZ](how-to/convert-rvz-to-iso-browser.md) |
+| Convert ISO or BIN/CUE to CHD | [Create a CHD](how-to/convert-to-chd-browser.md) |
 | Use cheat codes | [Add cheats](how-to/use-browser-cheats.md) |
 | Play a game or back up progress | [Test a ROM](how-to/test-roms-in-browser.md) |
 | Change saved progress | [Edit a save](how-to/edit-gen3-saves.md) or [create a fresh save](how-to/create-game-saves-browser.md) |
@@ -72,6 +74,8 @@ Procedures for specific tasks.
 - [Identify a ROM and compare checksums](how-to/identify-roms-browser.md)
 - [Extract files from an archive or disc image](how-to/extract-files-browser.md)
 - [Compress files or disc images](how-to/convert-roms-browser.md)
+- [Convert RVZ to ISO](how-to/convert-rvz-to-iso-browser.md)
+- [Convert ISO or BIN/CUE to CHD](how-to/convert-to-chd-browser.md)
 - [Trim a ROM](how-to/trim-roms-browser.md)
 - [Undo a PPF patch](how-to/undo-ppf-browser.md)
 - [Test a ROM in the browser](how-to/test-roms-in-browser.md)

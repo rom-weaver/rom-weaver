@@ -162,10 +162,10 @@ describe("HomePage", () => {
       ),
     ).map((link) => link.getAttribute("href"));
     expect(links).toEqual(["/tools/apply-patches", "/tools/create-patch", "/tools/bundle-patches", "/tools/test-rom"]);
-    expect(container.querySelector("#home-title")?.textContent).toContain("Your ROM workflow.");
+    expect(container.querySelector("#home-title")?.textContent).toContain("Patch ROMs in your browser.");
     expect(container.querySelectorAll("a[href='/tools/apply-patches']")).toHaveLength(1);
     expect(container.querySelector("a[href='/tools/docs/features']")?.textContent).toContain("See what");
-    expect(container.textContent).toContain("One toolkit.");
+    expect(container.textContent).toContain("Keep your files on your device.");
     expect(container.querySelector(".home-try")?.textContent).toContain("Walk through a sample");
     expect(container.querySelector(".home-loom-caption")?.textContent).toContain("One pass");
     expect(container.querySelector(".home-loom-disc-flow")?.textContent).toContain("game.chdextractgame.iso");
@@ -233,7 +233,7 @@ describe("HomePage", () => {
         <HomePage baseUrl="https://example.com/tools/" />
       </RomWeaverSettingsProvider>,
     );
-    expect(container.querySelector("#home-title")?.textContent).toContain("Dein ROM-Arbeitsablauf.");
+    expect(container.querySelector("#home-title")?.textContent).toContain("Patche ROMs in deinem Browser.");
     expect(container.querySelector("a.btn.primary")?.textContent).toContain("Patches anwenden");
     expect(container.textContent).toContain("Befehlszeile");
 
@@ -242,7 +242,7 @@ describe("HomePage", () => {
         <HomePage baseUrl="https://example.com/tools/" />
       </RomWeaverSettingsProvider>,
     );
-    expect(container.querySelector("#home-title")?.textContent).toContain("Tu flujo de trabajo para ROM.");
+    expect(container.querySelector("#home-title")?.textContent).toContain("Aplica parches a ROMs en tu navegador.");
     expect(container.querySelector("a.btn.primary")?.textContent).toContain("Aplicar parches");
     expect(container.textContent).toContain("Línea de comandos");
   });

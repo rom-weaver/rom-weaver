@@ -29,9 +29,9 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   // The apex. An empty slug is deliberate: the canonical URL is the bare origin.
   home: Object.freeze({
     description:
-      "A browser ROM toolkit: patch, compress, extract, convert, identify, bake in cheat codes, and edit supported game saves. Works offline after setup. Play supported games with EmulatorJS. No uploads or telemetry.",
+      "Patch ROMs in your browser. Open archives, apply patches in order, and choose your output format. Your files stay on your device. No uploads or account required.",
     slug: "",
-    title: `${SITE_NAME}: Local-first ROM and disc image toolkit`,
+    title: `Patch ROMs in your browser | ${SITE_NAME}`,
   }),
   identify: Object.freeze({
     description:
@@ -43,7 +43,7 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
     description:
       "Apply BPS, IPS, UPS, xdelta, and other ROM patches privately in your browser with checksum validation and ordered patch chains. No uploads or account required.",
     slug: "apply-patches",
-    title: `${SITE_NAME}: Apply ROM patches online`,
+    title: `ROM Patcher Online: BPS, IPS, UPS & xdelta | ${SITE_NAME}`,
   }),
   test: Object.freeze({
     description: "Test patched and local ROMs in EmulatorJS directly in your browser. No uploads or account required.",

@@ -4,6 +4,8 @@ Use Compress to package files in a ZIP or 7z archive. You can also create CHD, R
 
 To take every file out of an archive, use [Extract files](extract-files-browser.md). For directory packaging, use the [CLI archive guide](work-with-archives.md).
 
+For common disc tasks, use [Convert RVZ to ISO](convert-rvz-to-iso-browser.md) or [Convert ISO or BIN/CUE to CHD](convert-to-chd-browser.md).
+
 <!-- START doctoc -->
 ## Table of contents
 

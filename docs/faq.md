@@ -153,7 +153,7 @@ Work through [Fix a checksum error](how-to/fix-checksum-errors.md).
 
 ### Can I compress or extract without a patch?
 
-[Extract files in the browser](how-to/extract-files-browser.md), [convert a ROM in the browser](how-to/convert-roms-browser.md), or [use CLI archive commands](how-to/work-with-archives.md).
+[Extract files in the browser](how-to/extract-files-browser.md) or [convert a ROM in the browser](how-to/convert-roms-browser.md). For disc formats, see [RVZ to ISO](how-to/convert-rvz-to-iso-browser.md) and [ISO or BIN/CUE to CHD](how-to/convert-to-chd-browser.md). For terminal workflows, use [CLI archive commands](how-to/work-with-archives.md).
 
 ### Can I make a trimmed ROM larger again?
 
