@@ -1,0 +1,269 @@
+{
+  "codecs": {
+    "pokemon_gen1_english": {
+      "unit": "u8",
+      "max_chars": 7,
+      "max_units": 11,
+      "terminators": [80],
+      "fill": 80,
+      "mapping": {
+        "kind": "table",
+        "ranges": [
+          { "first": "A", "last": "Z", "first_code": 128 },
+          { "first": "a", "last": "z", "first_code": 160 },
+          { "first": "0", "last": "9", "first_code": 246 }
+        ],
+        "glyphs": {
+          " ": 127,
+          "(": 154,
+          ")": 155,
+          ":": 156,
+          ";": 157,
+          "[": 158,
+          "]": 159,
+          "é": 186,
+          "'": 224,
+          "{": 225,
+          "}": 226,
+          "-": 227,
+          "?": 230,
+          "!": 231,
+          ".": 232,
+          "♂": 239,
+          "¥": 240,
+          "×": 241,
+          "/": 243,
+          ",": 244,
+          "♀": 245
+        }
+      },
+      "decode_invalid": {
+        "kind": "literal",
+        "template": "Unsupported Gen I character byte {code:#x}"
+      },
+      "missing_terminator": { "kind": "accept" },
+      "errors": {
+        "decode_invalid": {
+          "code": "save_text_codec",
+          "message": "the save has unsupported trainer text"
+        },
+        "encode_invalid": {
+          "code": "save_name_character",
+          "message": "the requested name contains a character unsupported by the English save encoding"
+        },
+        "missing_terminator": {
+          "code": "save_text_codec",
+          "message": "Trainer name has no terminator"
+        },
+        "too_long": {
+          "code": "save_name_length",
+          "message": "the trainer name is longer than seven characters"
+        }
+      }
+    },
+    "pokemon_gen2_english": {
+      "unit": "u8",
+      "max_chars": 7,
+      "max_units": 11,
+      "terminators": [80],
+      "fill": 80,
+      "mapping": {
+        "kind": "table",
+        "ranges": [
+          { "first": "A", "last": "Z", "first_code": 128 },
+          { "first": "a", "last": "z", "first_code": 160 },
+          { "first": "0", "last": "9", "first_code": 246 }
+        ],
+        "glyphs": {
+          " ": 127,
+          "(": 154,
+          ")": 155,
+          ":": 156,
+          ";": 157,
+          "[": 158,
+          "]": 159,
+          "Ä": 192,
+          "Ö": 193,
+          "Ü": 194,
+          "ä": 195,
+          "ö": 196,
+          "ü": 197,
+          "←": 223,
+          "'": 224,
+          "{": 225,
+          "}": 226,
+          "-": 227,
+          "?": 230,
+          "!": 231,
+          ".": 232,
+          "&": 233,
+          "é": 234,
+          "→": 235,
+          "♂": 239,
+          "¥": 240,
+          "×": 241,
+          "/": 243,
+          ",": 244,
+          "♀": 245
+        }
+      },
+      "decode_invalid": {
+        "kind": "literal",
+        "template": "Unsupported Gen II character byte {code:#x}"
+      },
+      "missing_terminator": {
+        "kind": "literal",
+        "value": "Trainer name has no terminator"
+      },
+      "errors": {
+        "decode_invalid": {
+          "code": "save_text_codec",
+          "message": "the save has unsupported trainer text"
+        },
+        "encode_invalid": {
+          "code": "save_name_character",
+          "message": "the requested name contains a character unsupported by the English save encoding"
+        },
+        "missing_terminator": {
+          "code": "save_text_codec",
+          "message": "Trainer name has no terminator"
+        },
+        "too_long": {
+          "code": "save_name_length",
+          "message": "the trainer name is longer than seven characters"
+        }
+      }
+    },
+    "pokemon_gen3_english": {
+      "unit": "u8",
+      "max_chars": 7,
+      "max_units": 7,
+      "terminators": [255],
+      "fill": 0,
+      "write_terminator": 255,
+      "mapping": {
+        "kind": "table",
+        "ranges": [
+          { "first": "0", "last": "9", "first_code": 161 },
+          { "first": "A", "last": "Z", "first_code": 187 },
+          { "first": "a", "last": "z", "first_code": 213 }
+        ],
+        "glyphs": {
+          " ": 0,
+          "!": 171,
+          "?": 172,
+          ".": 173,
+          "-": 174,
+          "…": 176,
+          "“": 177,
+          "”": 178,
+          "‘": 179,
+          "’": 180,
+          "♂": 181,
+          "♀": 182,
+          ",": 184,
+          "/": 186
+        },
+        "aliases": { "'": "’" }
+      },
+      "decode_invalid": { "kind": "error" },
+      "missing_terminator": { "kind": "accept" },
+      "errors": {
+        "decode_invalid": {
+          "code": "save_text_codec",
+          "message": "the save has unsupported trainer text"
+        },
+        "encode_invalid": {
+          "code": "save_text_codec",
+          "message": "the trainer name uses unsupported text"
+        },
+        "missing_terminator": {
+          "code": "save_text_codec",
+          "message": "the trainer name has no terminator"
+        },
+        "too_long": {
+          "code": "save_name_length",
+          "message": "the trainer name is longer than seven characters"
+        }
+      }
+    },
+    "pokemon_gen5_utf16le": {
+      "unit": "u16_le",
+      "max_chars": 7,
+      "max_units": 7,
+      "terminators": [0, 65535],
+      "fill": 0,
+      "write_terminator": 65535,
+      "mapping": {
+        "kind": "unicode",
+        "decode_replacements": { "9325": 9794, "9326": 9792 }
+      },
+      "decode_invalid": { "kind": "error" },
+      "missing_terminator": { "kind": "accept" },
+      "errors": {
+        "decode_invalid": {
+          "code": "save_text_codec",
+          "message": "the save has invalid UTF-16 trainer text"
+        },
+        "encode_invalid": {
+          "code": "save_text_codec",
+          "message": "the trainer name uses invalid UTF-16 text"
+        },
+        "missing_terminator": {
+          "code": "save_text_codec",
+          "message": "the trainer name has no terminator"
+        },
+        "too_long": {
+          "code": "save_name_length",
+          "message": "the trainer name is longer than seven UTF-16 code units"
+        }
+      },
+      "encode_transforms": [
+        {
+          "when_all": [
+            { "min": 0, "max": 4095 },
+            { "min": 57344, "max": 61439 },
+            { "values": [9792, 9794] }
+          ],
+          "replacements": { "9794": 9325, "9792": 9326 }
+        }
+      ]
+    },
+    "zelda_alttp_english_name": {
+      "unit": "u16_le",
+      "max_chars": 6,
+      "max_units": 6,
+      "skip": [89],
+      "fill": 89,
+      "lane": { "logical_to_storage": [0, 1, 2, 3, 5, 6, 7, 8] },
+      "mapping": {
+        "kind": "table",
+        "ranges": [
+          { "first": "A", "last": "Z", "first_code": 0 },
+          { "first": "a", "last": "z", "first_code": 26 }
+        ],
+        "glyphs": { " ": 95 }
+      },
+      "decode_invalid": { "kind": "replacement", "character": "�" },
+      "missing_terminator": { "kind": "accept" },
+      "errors": {
+        "decode_invalid": {
+          "code": "save_text_codec",
+          "message": "the save has unsupported player-name text"
+        },
+        "encode_invalid": {
+          "code": "save_name_charset",
+          "message": "the player name contains a character outside the original keyboard"
+        },
+        "missing_terminator": {
+          "code": "save_text_codec",
+          "message": "the player name has no terminator"
+        },
+        "too_long": {
+          "code": "save_name_length",
+          "message": "the player name is longer than six characters"
+        }
+      }
+    }
+  }
+}

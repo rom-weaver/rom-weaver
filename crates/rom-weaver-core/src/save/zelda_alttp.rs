@@ -1474,6 +1474,7 @@ fn validation(code: &'static str, message: &'static str) -> RomWeaverError {
 
 #[cfg(test)]
 mod tests {
+    use super::super::builtin::ZeldaAlttpHandler;
     use super::*;
     use crate::save::SaveGameRegistry;
 

@@ -1,0 +1,4159 @@
+{
+  "$schema": "./schema-v1.schema.json",
+  "schema_version": 1,
+  "pack_revision": 1,
+  "records": {
+    "dp_fields": [
+      {
+        "id": "trainer.id",
+        "label": "Trainer ID",
+        "description": "Public trainer identifier",
+        "offset": 116,
+        "type": "u16_le",
+        "min": 0,
+        "max": 65535,
+        "presentation": {
+          "section_id": 0,
+          "offset": 116,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 65535,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.secret_id",
+        "label": "Secret ID",
+        "description": "Hidden trainer identifier",
+        "offset": 118,
+        "type": "u16_le",
+        "min": 0,
+        "max": 65535,
+        "presentation": {
+          "section_id": 0,
+          "offset": 118,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 65535,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.gender",
+        "label": "Gender",
+        "description": "Player gender",
+        "offset": 124,
+        "type": "u8",
+        "choices": [
+          {
+            "name": "male",
+            "value": 0
+          },
+          {
+            "name": "female",
+            "value": 1
+          }
+        ],
+        "presentation": {
+          "section_id": 0,
+          "offset": 124,
+          "kind": "enum",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": [
+              "male",
+              "female"
+            ]
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.money",
+        "label": "Money",
+        "description": "Money carried by the player",
+        "offset": 120,
+        "type": "u32_le",
+        "min": 0,
+        "max": 999999,
+        "presentation": {
+          "section_id": 0,
+          "offset": 120,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 999999,
+            "max_length": null,
+            "choices": []
+          },
+          "step": 1,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.play_time",
+        "label": "Play time",
+        "description": "Time played",
+        "offset": 134,
+        "type": "ascii",
+        "length": 1,
+        "editable": false,
+        "format": [
+          {
+            "value": {
+              "read": {
+                "offset": 134,
+                "type": "u16_le"
+              }
+            }
+          },
+          ":",
+          {
+            "value": {
+              "read": {
+                "offset": 136,
+                "type": "u8"
+              }
+            },
+            "width": 2
+          },
+          ":",
+          {
+            "value": {
+              "read": {
+                "offset": 137,
+                "type": "u8"
+              }
+            },
+            "width": 2
+          }
+        ],
+        "presentation": {
+          "section_id": 0,
+          "offset": 134,
+          "kind": "read_only_text",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.coins",
+        "label": "Coins",
+        "description": "Game Corner coins",
+        "offset": 132,
+        "type": "u16_le",
+        "min": 0,
+        "max": 50000,
+        "presentation": {
+          "section_id": 0,
+          "offset": 132,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 50000,
+            "max_length": null,
+            "choices": []
+          },
+          "step": 1,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.play_time_hours",
+        "label": "Play time hours",
+        "description": "Hours played",
+        "offset": 134,
+        "type": "u16_le",
+        "min": 0,
+        "max": 65535,
+        "presentation": {
+          "section_id": 0,
+          "offset": 134,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 65535,
+            "max_length": null,
+            "choices": []
+          },
+          "step": 1,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.play_time_minutes",
+        "label": "Play time minutes",
+        "description": "Minutes in the current hour",
+        "offset": 136,
+        "type": "u8",
+        "min": 0,
+        "max": 59,
+        "presentation": {
+          "section_id": 0,
+          "offset": 136,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 59,
+            "max_length": null,
+            "choices": []
+          },
+          "step": 1,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.play_time_seconds",
+        "label": "Play time seconds",
+        "description": "Seconds in the current minute",
+        "offset": 137,
+        "type": "u8",
+        "min": 0,
+        "max": 59,
+        "presentation": {
+          "section_id": 0,
+          "offset": 137,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 59,
+            "max_length": null,
+            "choices": []
+          },
+          "step": 1,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.battle_points",
+        "label": "Battle Points",
+        "description": "Battle Frontier points",
+        "offset": 26104,
+        "type": "u16_le",
+        "min": 0,
+        "max": 9999,
+        "presentation": {
+          "section_id": 0,
+          "offset": 26104,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 9999,
+            "max_length": null,
+            "choices": []
+          },
+          "step": 1,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_1",
+        "label": "Coal Badge",
+        "description": "Gym badge flag",
+        "offset": 126,
+        "type": "bit",
+        "bit": 0,
+        "presentation": {
+          "section_id": 0,
+          "offset": 126,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_2",
+        "label": "Forest Badge",
+        "description": "Gym badge flag",
+        "offset": 126,
+        "type": "bit",
+        "bit": 1,
+        "presentation": {
+          "section_id": 0,
+          "offset": 126,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_3",
+        "label": "Cobble Badge",
+        "description": "Gym badge flag",
+        "offset": 126,
+        "type": "bit",
+        "bit": 2,
+        "presentation": {
+          "section_id": 0,
+          "offset": 126,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_4",
+        "label": "Fen Badge",
+        "description": "Gym badge flag",
+        "offset": 126,
+        "type": "bit",
+        "bit": 3,
+        "presentation": {
+          "section_id": 0,
+          "offset": 126,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_5",
+        "label": "Relic Badge",
+        "description": "Gym badge flag",
+        "offset": 126,
+        "type": "bit",
+        "bit": 4,
+        "presentation": {
+          "section_id": 0,
+          "offset": 126,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_6",
+        "label": "Mine Badge",
+        "description": "Gym badge flag",
+        "offset": 126,
+        "type": "bit",
+        "bit": 5,
+        "presentation": {
+          "section_id": 0,
+          "offset": 126,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_7",
+        "label": "Icicle Badge",
+        "description": "Gym badge flag",
+        "offset": 126,
+        "type": "bit",
+        "bit": 6,
+        "presentation": {
+          "section_id": 0,
+          "offset": 126,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_8",
+        "label": "Beacon Badge",
+        "description": "Gym badge flag",
+        "offset": 126,
+        "type": "bit",
+        "bit": 7,
+        "presentation": {
+          "section_id": 0,
+          "offset": 126,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      }
+    ],
+    "pt_fields": [
+      {
+        "id": "trainer.id",
+        "label": "Trainer ID",
+        "description": "Public trainer identifier",
+        "offset": 120,
+        "type": "u16_le",
+        "min": 0,
+        "max": 65535,
+        "presentation": {
+          "section_id": 0,
+          "offset": 120,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 65535,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.secret_id",
+        "label": "Secret ID",
+        "description": "Hidden trainer identifier",
+        "offset": 122,
+        "type": "u16_le",
+        "min": 0,
+        "max": 65535,
+        "presentation": {
+          "section_id": 0,
+          "offset": 122,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 65535,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.gender",
+        "label": "Gender",
+        "description": "Player gender",
+        "offset": 128,
+        "type": "u8",
+        "choices": [
+          {
+            "name": "male",
+            "value": 0
+          },
+          {
+            "name": "female",
+            "value": 1
+          }
+        ],
+        "presentation": {
+          "section_id": 0,
+          "offset": 128,
+          "kind": "enum",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": [
+              "male",
+              "female"
+            ]
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.money",
+        "label": "Money",
+        "description": "Money carried by the player",
+        "offset": 124,
+        "type": "u32_le",
+        "min": 0,
+        "max": 999999,
+        "presentation": {
+          "section_id": 0,
+          "offset": 124,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 999999,
+            "max_length": null,
+            "choices": []
+          },
+          "step": 1,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.play_time",
+        "label": "Play time",
+        "description": "Time played",
+        "offset": 138,
+        "type": "ascii",
+        "length": 1,
+        "editable": false,
+        "format": [
+          {
+            "value": {
+              "read": {
+                "offset": 138,
+                "type": "u16_le"
+              }
+            }
+          },
+          ":",
+          {
+            "value": {
+              "read": {
+                "offset": 140,
+                "type": "u8"
+              }
+            },
+            "width": 2
+          },
+          ":",
+          {
+            "value": {
+              "read": {
+                "offset": 141,
+                "type": "u8"
+              }
+            },
+            "width": 2
+          }
+        ],
+        "presentation": {
+          "section_id": 0,
+          "offset": 138,
+          "kind": "read_only_text",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.coins",
+        "label": "Coins",
+        "description": "Game Corner coins",
+        "offset": 136,
+        "type": "u16_le",
+        "min": 0,
+        "max": 50000,
+        "presentation": {
+          "section_id": 0,
+          "offset": 136,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 50000,
+            "max_length": null,
+            "choices": []
+          },
+          "step": 1,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.play_time_hours",
+        "label": "Play time hours",
+        "description": "Hours played",
+        "offset": 138,
+        "type": "u16_le",
+        "min": 0,
+        "max": 65535,
+        "presentation": {
+          "section_id": 0,
+          "offset": 138,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 65535,
+            "max_length": null,
+            "choices": []
+          },
+          "step": 1,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.play_time_minutes",
+        "label": "Play time minutes",
+        "description": "Minutes in the current hour",
+        "offset": 140,
+        "type": "u8",
+        "min": 0,
+        "max": 59,
+        "presentation": {
+          "section_id": 0,
+          "offset": 140,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 59,
+            "max_length": null,
+            "choices": []
+          },
+          "step": 1,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.play_time_seconds",
+        "label": "Play time seconds",
+        "description": "Seconds in the current minute",
+        "offset": 141,
+        "type": "u8",
+        "min": 0,
+        "max": 59,
+        "presentation": {
+          "section_id": 0,
+          "offset": 141,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 59,
+            "max_length": null,
+            "choices": []
+          },
+          "step": 1,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.battle_points",
+        "label": "Battle Points",
+        "description": "Battle Frontier points",
+        "offset": 29236,
+        "type": "u16_le",
+        "min": 0,
+        "max": 9999,
+        "presentation": {
+          "section_id": 0,
+          "offset": 29236,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 9999,
+            "max_length": null,
+            "choices": []
+          },
+          "step": 1,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_1",
+        "label": "Coal Badge",
+        "description": "Gym badge flag",
+        "offset": 130,
+        "type": "bit",
+        "bit": 0,
+        "presentation": {
+          "section_id": 0,
+          "offset": 130,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_2",
+        "label": "Forest Badge",
+        "description": "Gym badge flag",
+        "offset": 130,
+        "type": "bit",
+        "bit": 1,
+        "presentation": {
+          "section_id": 0,
+          "offset": 130,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_3",
+        "label": "Cobble Badge",
+        "description": "Gym badge flag",
+        "offset": 130,
+        "type": "bit",
+        "bit": 2,
+        "presentation": {
+          "section_id": 0,
+          "offset": 130,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_4",
+        "label": "Fen Badge",
+        "description": "Gym badge flag",
+        "offset": 130,
+        "type": "bit",
+        "bit": 3,
+        "presentation": {
+          "section_id": 0,
+          "offset": 130,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_5",
+        "label": "Relic Badge",
+        "description": "Gym badge flag",
+        "offset": 130,
+        "type": "bit",
+        "bit": 4,
+        "presentation": {
+          "section_id": 0,
+          "offset": 130,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_6",
+        "label": "Mine Badge",
+        "description": "Gym badge flag",
+        "offset": 130,
+        "type": "bit",
+        "bit": 5,
+        "presentation": {
+          "section_id": 0,
+          "offset": 130,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_7",
+        "label": "Icicle Badge",
+        "description": "Gym badge flag",
+        "offset": 130,
+        "type": "bit",
+        "bit": 6,
+        "presentation": {
+          "section_id": 0,
+          "offset": 130,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_8",
+        "label": "Beacon Badge",
+        "description": "Gym badge flag",
+        "offset": 130,
+        "type": "bit",
+        "bit": 7,
+        "presentation": {
+          "section_id": 0,
+          "offset": 130,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      }
+    ],
+    "hgss_fields": [
+      {
+        "id": "trainer.id",
+        "label": "Trainer ID",
+        "description": "Public trainer identifier",
+        "offset": 116,
+        "type": "u16_le",
+        "min": 0,
+        "max": 65535,
+        "presentation": {
+          "section_id": 0,
+          "offset": 116,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 65535,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.secret_id",
+        "label": "Secret ID",
+        "description": "Hidden trainer identifier",
+        "offset": 118,
+        "type": "u16_le",
+        "min": 0,
+        "max": 65535,
+        "presentation": {
+          "section_id": 0,
+          "offset": 118,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 65535,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.gender",
+        "label": "Gender",
+        "description": "Player gender",
+        "offset": 124,
+        "type": "u8",
+        "choices": [
+          {
+            "name": "male",
+            "value": 0
+          },
+          {
+            "name": "female",
+            "value": 1
+          }
+        ],
+        "presentation": {
+          "section_id": 0,
+          "offset": 124,
+          "kind": "enum",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": [
+              "male",
+              "female"
+            ]
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.money",
+        "label": "Money",
+        "description": "Money carried by the player",
+        "offset": 120,
+        "type": "u32_le",
+        "min": 0,
+        "max": 999999,
+        "presentation": {
+          "section_id": 0,
+          "offset": 120,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 999999,
+            "max_length": null,
+            "choices": []
+          },
+          "step": 1,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.play_time",
+        "label": "Play time",
+        "description": "Time played",
+        "offset": 134,
+        "type": "ascii",
+        "length": 1,
+        "editable": false,
+        "format": [
+          {
+            "value": {
+              "read": {
+                "offset": 134,
+                "type": "u16_le"
+              }
+            }
+          },
+          ":",
+          {
+            "value": {
+              "read": {
+                "offset": 136,
+                "type": "u8"
+              }
+            },
+            "width": 2
+          },
+          ":",
+          {
+            "value": {
+              "read": {
+                "offset": 137,
+                "type": "u8"
+              }
+            },
+            "width": 2
+          }
+        ],
+        "presentation": {
+          "section_id": 0,
+          "offset": 134,
+          "kind": "read_only_text",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.coins",
+        "label": "Coins",
+        "description": "Game Corner coins",
+        "offset": 132,
+        "type": "u16_le",
+        "min": 0,
+        "max": 50000,
+        "presentation": {
+          "section_id": 0,
+          "offset": 132,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 50000,
+            "max_length": null,
+            "choices": []
+          },
+          "step": 1,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.play_time_hours",
+        "label": "Play time hours",
+        "description": "Hours played",
+        "offset": 134,
+        "type": "u16_le",
+        "min": 0,
+        "max": 65535,
+        "presentation": {
+          "section_id": 0,
+          "offset": 134,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 65535,
+            "max_length": null,
+            "choices": []
+          },
+          "step": 1,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.play_time_minutes",
+        "label": "Play time minutes",
+        "description": "Minutes in the current hour",
+        "offset": 136,
+        "type": "u8",
+        "min": 0,
+        "max": 59,
+        "presentation": {
+          "section_id": 0,
+          "offset": 136,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 59,
+            "max_length": null,
+            "choices": []
+          },
+          "step": 1,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "trainer.play_time_seconds",
+        "label": "Play time seconds",
+        "description": "Seconds in the current minute",
+        "offset": 137,
+        "type": "u8",
+        "min": 0,
+        "max": 59,
+        "presentation": {
+          "section_id": 0,
+          "offset": 137,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 59,
+            "max_length": null,
+            "choices": []
+          },
+          "step": 1,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.battle_points",
+        "label": "Battle Points",
+        "description": "Battle Frontier points",
+        "offset": 23480,
+        "type": "u16_le",
+        "min": 0,
+        "max": 9999,
+        "presentation": {
+          "section_id": 0,
+          "offset": 23480,
+          "kind": "unsigned_integer",
+          "constraints": {
+            "min": 0,
+            "max": 9999,
+            "max_length": null,
+            "choices": []
+          },
+          "step": 1,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_1",
+        "label": "Zephyr Badge",
+        "description": "Gym badge flag",
+        "offset": 126,
+        "type": "bit",
+        "bit": 0,
+        "presentation": {
+          "section_id": 0,
+          "offset": 126,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_2",
+        "label": "Hive Badge",
+        "description": "Gym badge flag",
+        "offset": 126,
+        "type": "bit",
+        "bit": 1,
+        "presentation": {
+          "section_id": 0,
+          "offset": 126,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_3",
+        "label": "Plain Badge",
+        "description": "Gym badge flag",
+        "offset": 126,
+        "type": "bit",
+        "bit": 2,
+        "presentation": {
+          "section_id": 0,
+          "offset": 126,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_4",
+        "label": "Fog Badge",
+        "description": "Gym badge flag",
+        "offset": 126,
+        "type": "bit",
+        "bit": 3,
+        "presentation": {
+          "section_id": 0,
+          "offset": 126,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_5",
+        "label": "Storm Badge",
+        "description": "Gym badge flag",
+        "offset": 126,
+        "type": "bit",
+        "bit": 4,
+        "presentation": {
+          "section_id": 0,
+          "offset": 126,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_6",
+        "label": "Mineral Badge",
+        "description": "Gym badge flag",
+        "offset": 126,
+        "type": "bit",
+        "bit": 5,
+        "presentation": {
+          "section_id": 0,
+          "offset": 126,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_7",
+        "label": "Glacier Badge",
+        "description": "Gym badge flag",
+        "offset": 126,
+        "type": "bit",
+        "bit": 6,
+        "presentation": {
+          "section_id": 0,
+          "offset": 126,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_8",
+        "label": "Rising Badge",
+        "description": "Gym badge flag",
+        "offset": 126,
+        "type": "bit",
+        "bit": 7,
+        "presentation": {
+          "section_id": 0,
+          "offset": 126,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_9",
+        "label": "Boulder Badge",
+        "description": "Gym badge flag",
+        "offset": 131,
+        "type": "bit",
+        "bit": 0,
+        "presentation": {
+          "section_id": 0,
+          "offset": 131,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_10",
+        "label": "Cascade Badge",
+        "description": "Gym badge flag",
+        "offset": 131,
+        "type": "bit",
+        "bit": 1,
+        "presentation": {
+          "section_id": 0,
+          "offset": 131,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_11",
+        "label": "Thunder Badge",
+        "description": "Gym badge flag",
+        "offset": 131,
+        "type": "bit",
+        "bit": 2,
+        "presentation": {
+          "section_id": 0,
+          "offset": 131,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_12",
+        "label": "Rainbow Badge",
+        "description": "Gym badge flag",
+        "offset": 131,
+        "type": "bit",
+        "bit": 3,
+        "presentation": {
+          "section_id": 0,
+          "offset": 131,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_13",
+        "label": "Soul Badge",
+        "description": "Gym badge flag",
+        "offset": 131,
+        "type": "bit",
+        "bit": 4,
+        "presentation": {
+          "section_id": 0,
+          "offset": 131,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_14",
+        "label": "Marsh Badge",
+        "description": "Gym badge flag",
+        "offset": 131,
+        "type": "bit",
+        "bit": 5,
+        "presentation": {
+          "section_id": 0,
+          "offset": 131,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_15",
+        "label": "Volcano Badge",
+        "description": "Gym badge flag",
+        "offset": 131,
+        "type": "bit",
+        "bit": 6,
+        "presentation": {
+          "section_id": 0,
+          "offset": 131,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      },
+      {
+        "id": "progress.badge_16",
+        "label": "Earth Badge",
+        "description": "Gym badge flag",
+        "offset": 131,
+        "type": "bit",
+        "bit": 7,
+        "presentation": {
+          "section_id": 0,
+          "offset": 131,
+          "kind": "bitfield_boolean",
+          "constraints": {
+            "min": null,
+            "max": null,
+            "max_length": null,
+            "choices": []
+          },
+          "step": null,
+          "encoding": null,
+          "warnings": []
+        }
+      }
+    ]
+  },
+  "games": [
+    {
+      "id": "pokemon-diamond",
+      "name": "Pokémon Diamond",
+      "platform": "nds",
+      "family": "pokemon-gen4-dppt",
+      "handler_id": "pokemon-gen4",
+      "save_format": "nintendo_ds_512k",
+      "save_format_name": "Nintendo DS save 512 KiB",
+      "save_size": 524288,
+      "logical_size": 262144,
+      "checksum_sizes": [],
+      "fields": [],
+      "generation": null,
+      "checks": [
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 124,
+                  "type": "u8"
+                }
+              },
+              1
+            ]
+          },
+          "code": "save_gender",
+          "message": "the save has an invalid player gender value"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 120,
+                  "type": "u32_le"
+                }
+              },
+              999999
+            ]
+          },
+          "code": "save_money",
+          "message": "the save has a money value above the game limit"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 132,
+                  "type": "u16_le"
+                }
+              },
+              50000
+            ]
+          },
+          "code": "save_coins",
+          "message": "the save has coins above the game limit"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 26104,
+                  "type": "u16_le"
+                }
+              },
+              9999
+            ]
+          },
+          "code": "save_battle_points",
+          "message": "the save has battle points above the game limit"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 136,
+                  "type": "u8"
+                }
+              },
+              59
+            ]
+          },
+          "code": "save_play_time",
+          "message": "the save has an invalid play-time minute or second value"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 137,
+                  "type": "u8"
+                }
+              },
+              59
+            ]
+          },
+          "code": "save_play_time",
+          "message": "the save has an invalid play-time minute or second value"
+        }
+      ],
+      "recognition": {
+        "checks": [],
+        "reasons": [
+          "checksum_valid",
+          "signature_valid",
+          "counter_uniform"
+        ],
+        "confidence": "high",
+        "selected_reason": true,
+        "empty_top_level_reasons": true
+      },
+      "recovery": {
+        "no_valid": {
+          "code": "save_checksum",
+          "message": "the main save block checksum is invalid"
+        },
+        "incomplete": {
+          "state": "valid_with_warnings",
+          "disable_editing": true,
+          "issue": {
+            "code": "redundant_slot_empty",
+            "message": "The redundant save copy is empty"
+          },
+          "warning": "The redundant save copy is empty; the editor preserves it",
+          "edit_error": {
+            "code": "save_integrity_partial",
+            "message": "normal edits need two valid Pokémon HeartGold or SoulSilver save copies"
+          }
+        },
+        "damaged": {
+          "state": "partially_recoverable",
+          "disable_editing": true,
+          "issue": {
+            "code": "redundant_slot_invalid",
+            "message": "One redundant save copy failed integrity checks"
+          },
+          "warning": "One redundant save copy is invalid; normal editing is disabled",
+          "edit_error": {
+            "code": "save_integrity_partial",
+            "message": "normal edits need two valid Pokémon HeartGold or SoulSilver save copies"
+          }
+        }
+      },
+      "layout": {
+        "groups": [
+          {
+            "id": "save",
+            "logical_offset": 0,
+            "logical_length": 262144,
+            "copies": {
+              "kind": "fixed",
+              "candidates": [
+                {
+                  "spans": [
+                    {
+                      "logical_offset": 0,
+                      "physical_offset": 0,
+                      "length": 262144
+                    }
+                  ],
+                  "predicates": [
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 49396,
+                            "type": "u32_le"
+                          }
+                        },
+                        49408
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 49400,
+                            "type": "u32_le"
+                          }
+                        },
+                        537265699
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 49404,
+                            "type": "u16_le"
+                          }
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 123604,
+                            "type": "u32_le"
+                          }
+                        },
+                        74208
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 123608,
+                            "type": "u32_le"
+                          }
+                        },
+                        537265699
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 123612,
+                            "type": "u16_le"
+                          }
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 49392,
+                            "type": "u32_le"
+                          }
+                        },
+                        {
+                          "read": {
+                            "offset": 123600,
+                            "type": "u32_le"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "checksums": [
+                    {
+                      "algorithm": "crc16_ccitt_false_le",
+                      "start": 0,
+                      "length": 49392,
+                      "offset": 49406
+                    },
+                    {
+                      "algorithm": "crc16_ccitt_false_le",
+                      "start": 49408,
+                      "length": 74192,
+                      "offset": 123614
+                    }
+                  ],
+                  "repairs": [
+                    {
+                      "kind": "checksum",
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 0,
+                        "length": 49392,
+                        "offset": 49406
+                      }
+                    },
+                    {
+                      "kind": "checksum",
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 49408,
+                        "length": 74192,
+                        "offset": 123614
+                      }
+                    }
+                  ],
+                  "counter": {
+                    "offset": 49392,
+                    "type": "u32_le"
+                  },
+                  "sections": [
+                    {
+                      "id": 0,
+                      "physical_offset": 0,
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 0,
+                        "length": 49392,
+                        "offset": 49406
+                      },
+                      "signature": {
+                        "offset": 49400,
+                        "type": "u32_le"
+                      },
+                      "counter": {
+                        "offset": 49392,
+                        "type": "u32_le"
+                      }
+                    },
+                    {
+                      "id": 1,
+                      "physical_offset": 49408,
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 49408,
+                        "length": 74192,
+                        "offset": 123614
+                      },
+                      "signature": {
+                        "offset": 123608,
+                        "type": "u32_le"
+                      },
+                      "counter": {
+                        "offset": 123600,
+                        "type": "u32_le"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "spans": [
+                    {
+                      "logical_offset": 0,
+                      "physical_offset": 262144,
+                      "length": 262144
+                    }
+                  ],
+                  "predicates": [
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 311540,
+                            "type": "u32_le"
+                          }
+                        },
+                        49408
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 311544,
+                            "type": "u32_le"
+                          }
+                        },
+                        537265699
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 311548,
+                            "type": "u16_le"
+                          }
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 385748,
+                            "type": "u32_le"
+                          }
+                        },
+                        74208
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 385752,
+                            "type": "u32_le"
+                          }
+                        },
+                        537265699
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 385756,
+                            "type": "u16_le"
+                          }
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 311536,
+                            "type": "u32_le"
+                          }
+                        },
+                        {
+                          "read": {
+                            "offset": 385744,
+                            "type": "u32_le"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "checksums": [
+                    {
+                      "algorithm": "crc16_ccitt_false_le",
+                      "start": 262144,
+                      "length": 49392,
+                      "offset": 311550
+                    },
+                    {
+                      "algorithm": "crc16_ccitt_false_le",
+                      "start": 311552,
+                      "length": 74192,
+                      "offset": 385758
+                    }
+                  ],
+                  "repairs": [
+                    {
+                      "kind": "checksum",
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 262144,
+                        "length": 49392,
+                        "offset": 311550
+                      }
+                    },
+                    {
+                      "kind": "checksum",
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 311552,
+                        "length": 74192,
+                        "offset": 385758
+                      }
+                    }
+                  ],
+                  "counter": {
+                    "offset": 311536,
+                    "type": "u32_le"
+                  },
+                  "sections": [
+                    {
+                      "id": 0,
+                      "physical_offset": 262144,
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 262144,
+                        "length": 49392,
+                        "offset": 311550
+                      },
+                      "signature": {
+                        "offset": 311544,
+                        "type": "u32_le"
+                      },
+                      "counter": {
+                        "offset": 311536,
+                        "type": "u32_le"
+                      }
+                    },
+                    {
+                      "id": 1,
+                      "physical_offset": 311552,
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 311552,
+                        "length": 74192,
+                        "offset": 385758
+                      },
+                      "signature": {
+                        "offset": 385752,
+                        "type": "u32_le"
+                      },
+                      "counter": {
+                        "offset": 385744,
+                        "type": "u32_le"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            "selection": "newest_counter_max_to_zero",
+            "write": "selected",
+            "empty": [
+              255
+            ]
+          }
+        ]
+      },
+      "records": [
+        {
+          "record": "dp_fields",
+          "offset": 0,
+          "id": ""
+        }
+      ]
+    },
+    {
+      "id": "pokemon-pearl",
+      "name": "Pokémon Pearl",
+      "platform": "nds",
+      "family": "pokemon-gen4-dppt",
+      "handler_id": "pokemon-gen4",
+      "save_format": "nintendo_ds_512k",
+      "save_format_name": "Nintendo DS save 512 KiB",
+      "save_size": 524288,
+      "logical_size": 262144,
+      "checksum_sizes": [],
+      "fields": [],
+      "generation": null,
+      "checks": [
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 124,
+                  "type": "u8"
+                }
+              },
+              1
+            ]
+          },
+          "code": "save_gender",
+          "message": "the save has an invalid player gender value"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 120,
+                  "type": "u32_le"
+                }
+              },
+              999999
+            ]
+          },
+          "code": "save_money",
+          "message": "the save has a money value above the game limit"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 132,
+                  "type": "u16_le"
+                }
+              },
+              50000
+            ]
+          },
+          "code": "save_coins",
+          "message": "the save has coins above the game limit"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 26104,
+                  "type": "u16_le"
+                }
+              },
+              9999
+            ]
+          },
+          "code": "save_battle_points",
+          "message": "the save has battle points above the game limit"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 136,
+                  "type": "u8"
+                }
+              },
+              59
+            ]
+          },
+          "code": "save_play_time",
+          "message": "the save has an invalid play-time minute or second value"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 137,
+                  "type": "u8"
+                }
+              },
+              59
+            ]
+          },
+          "code": "save_play_time",
+          "message": "the save has an invalid play-time minute or second value"
+        }
+      ],
+      "recognition": {
+        "checks": [],
+        "reasons": [
+          "checksum_valid",
+          "signature_valid",
+          "counter_uniform"
+        ],
+        "confidence": "high",
+        "selected_reason": true,
+        "empty_top_level_reasons": true
+      },
+      "recovery": {
+        "no_valid": {
+          "code": "save_checksum",
+          "message": "the main save block checksum is invalid"
+        },
+        "incomplete": {
+          "state": "valid_with_warnings",
+          "disable_editing": true,
+          "issue": {
+            "code": "redundant_slot_empty",
+            "message": "The redundant save copy is empty"
+          },
+          "warning": "The redundant save copy is empty; the editor preserves it",
+          "edit_error": {
+            "code": "save_integrity_partial",
+            "message": "normal edits need two valid Pokémon HeartGold or SoulSilver save copies"
+          }
+        },
+        "damaged": {
+          "state": "partially_recoverable",
+          "disable_editing": true,
+          "issue": {
+            "code": "redundant_slot_invalid",
+            "message": "One redundant save copy failed integrity checks"
+          },
+          "warning": "One redundant save copy is invalid; normal editing is disabled",
+          "edit_error": {
+            "code": "save_integrity_partial",
+            "message": "normal edits need two valid Pokémon HeartGold or SoulSilver save copies"
+          }
+        }
+      },
+      "layout": {
+        "groups": [
+          {
+            "id": "save",
+            "logical_offset": 0,
+            "logical_length": 262144,
+            "copies": {
+              "kind": "fixed",
+              "candidates": [
+                {
+                  "spans": [
+                    {
+                      "logical_offset": 0,
+                      "physical_offset": 0,
+                      "length": 262144
+                    }
+                  ],
+                  "predicates": [
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 49396,
+                            "type": "u32_le"
+                          }
+                        },
+                        49408
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 49400,
+                            "type": "u32_le"
+                          }
+                        },
+                        537265699
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 49404,
+                            "type": "u16_le"
+                          }
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 123604,
+                            "type": "u32_le"
+                          }
+                        },
+                        74208
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 123608,
+                            "type": "u32_le"
+                          }
+                        },
+                        537265699
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 123612,
+                            "type": "u16_le"
+                          }
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 49392,
+                            "type": "u32_le"
+                          }
+                        },
+                        {
+                          "read": {
+                            "offset": 123600,
+                            "type": "u32_le"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "checksums": [
+                    {
+                      "algorithm": "crc16_ccitt_false_le",
+                      "start": 0,
+                      "length": 49392,
+                      "offset": 49406
+                    },
+                    {
+                      "algorithm": "crc16_ccitt_false_le",
+                      "start": 49408,
+                      "length": 74192,
+                      "offset": 123614
+                    }
+                  ],
+                  "repairs": [
+                    {
+                      "kind": "checksum",
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 0,
+                        "length": 49392,
+                        "offset": 49406
+                      }
+                    },
+                    {
+                      "kind": "checksum",
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 49408,
+                        "length": 74192,
+                        "offset": 123614
+                      }
+                    }
+                  ],
+                  "counter": {
+                    "offset": 49392,
+                    "type": "u32_le"
+                  },
+                  "sections": [
+                    {
+                      "id": 0,
+                      "physical_offset": 0,
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 0,
+                        "length": 49392,
+                        "offset": 49406
+                      },
+                      "signature": {
+                        "offset": 49400,
+                        "type": "u32_le"
+                      },
+                      "counter": {
+                        "offset": 49392,
+                        "type": "u32_le"
+                      }
+                    },
+                    {
+                      "id": 1,
+                      "physical_offset": 49408,
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 49408,
+                        "length": 74192,
+                        "offset": 123614
+                      },
+                      "signature": {
+                        "offset": 123608,
+                        "type": "u32_le"
+                      },
+                      "counter": {
+                        "offset": 123600,
+                        "type": "u32_le"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "spans": [
+                    {
+                      "logical_offset": 0,
+                      "physical_offset": 262144,
+                      "length": 262144
+                    }
+                  ],
+                  "predicates": [
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 311540,
+                            "type": "u32_le"
+                          }
+                        },
+                        49408
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 311544,
+                            "type": "u32_le"
+                          }
+                        },
+                        537265699
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 311548,
+                            "type": "u16_le"
+                          }
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 385748,
+                            "type": "u32_le"
+                          }
+                        },
+                        74208
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 385752,
+                            "type": "u32_le"
+                          }
+                        },
+                        537265699
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 385756,
+                            "type": "u16_le"
+                          }
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 311536,
+                            "type": "u32_le"
+                          }
+                        },
+                        {
+                          "read": {
+                            "offset": 385744,
+                            "type": "u32_le"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "checksums": [
+                    {
+                      "algorithm": "crc16_ccitt_false_le",
+                      "start": 262144,
+                      "length": 49392,
+                      "offset": 311550
+                    },
+                    {
+                      "algorithm": "crc16_ccitt_false_le",
+                      "start": 311552,
+                      "length": 74192,
+                      "offset": 385758
+                    }
+                  ],
+                  "repairs": [
+                    {
+                      "kind": "checksum",
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 262144,
+                        "length": 49392,
+                        "offset": 311550
+                      }
+                    },
+                    {
+                      "kind": "checksum",
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 311552,
+                        "length": 74192,
+                        "offset": 385758
+                      }
+                    }
+                  ],
+                  "counter": {
+                    "offset": 311536,
+                    "type": "u32_le"
+                  },
+                  "sections": [
+                    {
+                      "id": 0,
+                      "physical_offset": 262144,
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 262144,
+                        "length": 49392,
+                        "offset": 311550
+                      },
+                      "signature": {
+                        "offset": 311544,
+                        "type": "u32_le"
+                      },
+                      "counter": {
+                        "offset": 311536,
+                        "type": "u32_le"
+                      }
+                    },
+                    {
+                      "id": 1,
+                      "physical_offset": 311552,
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 311552,
+                        "length": 74192,
+                        "offset": 385758
+                      },
+                      "signature": {
+                        "offset": 385752,
+                        "type": "u32_le"
+                      },
+                      "counter": {
+                        "offset": 385744,
+                        "type": "u32_le"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            "selection": "newest_counter_max_to_zero",
+            "write": "selected",
+            "empty": [
+              255
+            ]
+          }
+        ]
+      },
+      "records": [
+        {
+          "record": "dp_fields",
+          "offset": 0,
+          "id": ""
+        }
+      ]
+    },
+    {
+      "id": "pokemon-platinum",
+      "name": "Pokémon Platinum",
+      "platform": "nds",
+      "family": "pokemon-gen4-dppt",
+      "handler_id": "pokemon-gen4",
+      "save_format": "nintendo_ds_512k",
+      "save_format_name": "Nintendo DS save 512 KiB",
+      "save_size": 524288,
+      "logical_size": 262144,
+      "checksum_sizes": [],
+      "fields": [],
+      "generation": null,
+      "checks": [
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 128,
+                  "type": "u8"
+                }
+              },
+              1
+            ]
+          },
+          "code": "save_gender",
+          "message": "the save has an invalid player gender value"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 124,
+                  "type": "u32_le"
+                }
+              },
+              999999
+            ]
+          },
+          "code": "save_money",
+          "message": "the save has a money value above the game limit"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 136,
+                  "type": "u16_le"
+                }
+              },
+              50000
+            ]
+          },
+          "code": "save_coins",
+          "message": "the save has coins above the game limit"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 29236,
+                  "type": "u16_le"
+                }
+              },
+              9999
+            ]
+          },
+          "code": "save_battle_points",
+          "message": "the save has battle points above the game limit"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 140,
+                  "type": "u8"
+                }
+              },
+              59
+            ]
+          },
+          "code": "save_play_time",
+          "message": "the save has an invalid play-time minute or second value"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 141,
+                  "type": "u8"
+                }
+              },
+              59
+            ]
+          },
+          "code": "save_play_time",
+          "message": "the save has an invalid play-time minute or second value"
+        }
+      ],
+      "recognition": {
+        "checks": [],
+        "reasons": [
+          "checksum_valid",
+          "signature_valid",
+          "counter_uniform"
+        ],
+        "confidence": "high",
+        "selected_reason": true,
+        "empty_top_level_reasons": true
+      },
+      "recovery": {
+        "no_valid": {
+          "code": "save_checksum",
+          "message": "the main save block checksum is invalid"
+        },
+        "incomplete": {
+          "state": "valid_with_warnings",
+          "disable_editing": true,
+          "issue": {
+            "code": "redundant_slot_empty",
+            "message": "The redundant save copy is empty"
+          },
+          "warning": "The redundant save copy is empty; the editor preserves it",
+          "edit_error": {
+            "code": "save_integrity_partial",
+            "message": "normal edits need two valid Pokémon HeartGold or SoulSilver save copies"
+          }
+        },
+        "damaged": {
+          "state": "partially_recoverable",
+          "disable_editing": true,
+          "issue": {
+            "code": "redundant_slot_invalid",
+            "message": "One redundant save copy failed integrity checks"
+          },
+          "warning": "One redundant save copy is invalid; normal editing is disabled",
+          "edit_error": {
+            "code": "save_integrity_partial",
+            "message": "normal edits need two valid Pokémon HeartGold or SoulSilver save copies"
+          }
+        }
+      },
+      "layout": {
+        "groups": [
+          {
+            "id": "save",
+            "logical_offset": 0,
+            "logical_length": 262144,
+            "copies": {
+              "kind": "fixed",
+              "candidates": [
+                {
+                  "spans": [
+                    {
+                      "logical_offset": 0,
+                      "physical_offset": 0,
+                      "length": 262144
+                    }
+                  ],
+                  "predicates": [
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 53024,
+                            "type": "u32_le"
+                          }
+                        },
+                        53036
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 53028,
+                            "type": "u32_le"
+                          }
+                        },
+                        537265699
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 53032,
+                            "type": "u16_le"
+                          }
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 127236,
+                            "type": "u32_le"
+                          }
+                        },
+                        74212
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 127240,
+                            "type": "u32_le"
+                          }
+                        },
+                        537265699
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 127244,
+                            "type": "u16_le"
+                          }
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 53020,
+                            "type": "u32_le"
+                          }
+                        },
+                        {
+                          "read": {
+                            "offset": 127232,
+                            "type": "u32_le"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "checksums": [
+                    {
+                      "algorithm": "crc16_ccitt_false_le",
+                      "start": 0,
+                      "length": 53020,
+                      "offset": 53034
+                    },
+                    {
+                      "algorithm": "crc16_ccitt_false_le",
+                      "start": 53036,
+                      "length": 74196,
+                      "offset": 127246
+                    }
+                  ],
+                  "repairs": [
+                    {
+                      "kind": "checksum",
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 0,
+                        "length": 53020,
+                        "offset": 53034
+                      }
+                    },
+                    {
+                      "kind": "checksum",
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 53036,
+                        "length": 74196,
+                        "offset": 127246
+                      }
+                    }
+                  ],
+                  "counter": {
+                    "offset": 53020,
+                    "type": "u32_le"
+                  },
+                  "sections": [
+                    {
+                      "id": 0,
+                      "physical_offset": 0,
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 0,
+                        "length": 53020,
+                        "offset": 53034
+                      },
+                      "signature": {
+                        "offset": 53028,
+                        "type": "u32_le"
+                      },
+                      "counter": {
+                        "offset": 53020,
+                        "type": "u32_le"
+                      }
+                    },
+                    {
+                      "id": 1,
+                      "physical_offset": 53036,
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 53036,
+                        "length": 74196,
+                        "offset": 127246
+                      },
+                      "signature": {
+                        "offset": 127240,
+                        "type": "u32_le"
+                      },
+                      "counter": {
+                        "offset": 127232,
+                        "type": "u32_le"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "spans": [
+                    {
+                      "logical_offset": 0,
+                      "physical_offset": 262144,
+                      "length": 262144
+                    }
+                  ],
+                  "predicates": [
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 315168,
+                            "type": "u32_le"
+                          }
+                        },
+                        53036
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 315172,
+                            "type": "u32_le"
+                          }
+                        },
+                        537265699
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 315176,
+                            "type": "u16_le"
+                          }
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 389380,
+                            "type": "u32_le"
+                          }
+                        },
+                        74212
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 389384,
+                            "type": "u32_le"
+                          }
+                        },
+                        537265699
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 389388,
+                            "type": "u16_le"
+                          }
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 315164,
+                            "type": "u32_le"
+                          }
+                        },
+                        {
+                          "read": {
+                            "offset": 389376,
+                            "type": "u32_le"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "checksums": [
+                    {
+                      "algorithm": "crc16_ccitt_false_le",
+                      "start": 262144,
+                      "length": 53020,
+                      "offset": 315178
+                    },
+                    {
+                      "algorithm": "crc16_ccitt_false_le",
+                      "start": 315180,
+                      "length": 74196,
+                      "offset": 389390
+                    }
+                  ],
+                  "repairs": [
+                    {
+                      "kind": "checksum",
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 262144,
+                        "length": 53020,
+                        "offset": 315178
+                      }
+                    },
+                    {
+                      "kind": "checksum",
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 315180,
+                        "length": 74196,
+                        "offset": 389390
+                      }
+                    }
+                  ],
+                  "counter": {
+                    "offset": 315164,
+                    "type": "u32_le"
+                  },
+                  "sections": [
+                    {
+                      "id": 0,
+                      "physical_offset": 262144,
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 262144,
+                        "length": 53020,
+                        "offset": 315178
+                      },
+                      "signature": {
+                        "offset": 315172,
+                        "type": "u32_le"
+                      },
+                      "counter": {
+                        "offset": 315164,
+                        "type": "u32_le"
+                      }
+                    },
+                    {
+                      "id": 1,
+                      "physical_offset": 315180,
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 315180,
+                        "length": 74196,
+                        "offset": 389390
+                      },
+                      "signature": {
+                        "offset": 389384,
+                        "type": "u32_le"
+                      },
+                      "counter": {
+                        "offset": 389376,
+                        "type": "u32_le"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            "selection": "newest_counter_max_to_zero",
+            "write": "selected",
+            "empty": [
+              255
+            ]
+          }
+        ]
+      },
+      "records": [
+        {
+          "record": "pt_fields",
+          "offset": 0,
+          "id": ""
+        }
+      ]
+    },
+    {
+      "id": "pokemon-heartgold",
+      "name": "Pokémon HeartGold",
+      "platform": "nds",
+      "family": "pokemon-gen4-hgss",
+      "handler_id": "pokemon-gen4",
+      "save_format": "nintendo_ds_512k",
+      "save_format_name": "Nintendo DS save 512 KiB",
+      "save_size": 524288,
+      "logical_size": 262144,
+      "checksum_sizes": [],
+      "fields": [],
+      "generation": null,
+      "checks": [
+        {
+          "assert": {
+            "eq": [
+              {
+                "read": {
+                  "offset": 128,
+                  "type": "u8"
+                }
+              },
+              7
+            ]
+          },
+          "code": "save_game_version",
+          "message": "the trainer profile does not match the selected game"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 124,
+                  "type": "u8"
+                }
+              },
+              1
+            ]
+          },
+          "code": "save_gender",
+          "message": "the save has an invalid player gender value"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 120,
+                  "type": "u32_le"
+                }
+              },
+              999999
+            ]
+          },
+          "code": "save_money",
+          "message": "the save has a money value above the game limit"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 132,
+                  "type": "u16_le"
+                }
+              },
+              50000
+            ]
+          },
+          "code": "save_coins",
+          "message": "the save has coins above the game limit"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 23480,
+                  "type": "u16_le"
+                }
+              },
+              9999
+            ]
+          },
+          "code": "save_battle_points",
+          "message": "the save has battle points above the game limit"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 136,
+                  "type": "u8"
+                }
+              },
+              59
+            ]
+          },
+          "code": "save_play_time",
+          "message": "the save has an invalid play-time minute or second value"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 137,
+                  "type": "u8"
+                }
+              },
+              59
+            ]
+          },
+          "code": "save_play_time",
+          "message": "the save has an invalid play-time minute or second value"
+        }
+      ],
+      "recognition": {
+        "checks": [
+          {
+            "assert": {
+              "eq": [
+                {
+                  "read": {
+                    "offset": 128,
+                    "type": "u8"
+                  }
+                },
+                7
+              ]
+            },
+            "code": "save_game_version",
+            "message": "the trainer profile does not match the selected game"
+          }
+        ],
+        "reasons": [
+          "checksum_valid",
+          "signature_valid",
+          "counter_uniform"
+        ],
+        "confidence": "high",
+        "selected_reason": true,
+        "empty_top_level_reasons": true
+      },
+      "recovery": {
+        "no_valid": {
+          "code": "save_checksum",
+          "message": "the main save block checksum is invalid"
+        },
+        "incomplete": {
+          "state": "valid_with_warnings",
+          "disable_editing": true,
+          "issue": {
+            "code": "redundant_slot_empty",
+            "message": "The redundant save copy is empty"
+          },
+          "warning": "The redundant save copy is empty; the editor preserves it",
+          "edit_error": {
+            "code": "save_integrity_partial",
+            "message": "normal edits need two valid Pokémon HeartGold or SoulSilver save copies"
+          }
+        },
+        "damaged": {
+          "state": "partially_recoverable",
+          "disable_editing": true,
+          "issue": {
+            "code": "redundant_slot_invalid",
+            "message": "One redundant save copy failed integrity checks"
+          },
+          "warning": "One redundant save copy is invalid; normal editing is disabled",
+          "edit_error": {
+            "code": "save_integrity_partial",
+            "message": "normal edits need two valid Pokémon HeartGold or SoulSilver save copies"
+          }
+        }
+      },
+      "layout": {
+        "groups": [
+          {
+            "id": "save",
+            "logical_offset": 0,
+            "logical_length": 262144,
+            "copies": {
+              "kind": "fixed",
+              "candidates": [
+                {
+                  "spans": [
+                    {
+                      "logical_offset": 0,
+                      "physical_offset": 0,
+                      "length": 262144
+                    }
+                  ],
+                  "predicates": [
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 63004,
+                            "type": "u32_le"
+                          }
+                        },
+                        63016
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 63008,
+                            "type": "u32_le"
+                          }
+                        },
+                        537265699
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 63012,
+                            "type": "u16_le"
+                          }
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 137732,
+                            "type": "u32_le"
+                          }
+                        },
+                        74512
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 137736,
+                            "type": "u32_le"
+                          }
+                        },
+                        537265699
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 137740,
+                            "type": "u16_le"
+                          }
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 63000,
+                            "type": "u32_le"
+                          }
+                        },
+                        {
+                          "read": {
+                            "offset": 137728,
+                            "type": "u32_le"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "checksums": [
+                    {
+                      "algorithm": "crc16_ccitt_false_le",
+                      "start": 0,
+                      "length": 63000,
+                      "offset": 63014
+                    },
+                    {
+                      "algorithm": "crc16_ccitt_false_le",
+                      "start": 63232,
+                      "length": 74496,
+                      "offset": 137742
+                    }
+                  ],
+                  "repairs": [
+                    {
+                      "kind": "checksum",
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 0,
+                        "length": 63000,
+                        "offset": 63014
+                      }
+                    },
+                    {
+                      "kind": "checksum",
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 63232,
+                        "length": 74496,
+                        "offset": 137742
+                      }
+                    }
+                  ],
+                  "counter": {
+                    "offset": 63000,
+                    "type": "u32_le"
+                  },
+                  "sections": [
+                    {
+                      "id": 0,
+                      "physical_offset": 0,
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 0,
+                        "length": 63000,
+                        "offset": 63014
+                      },
+                      "signature": {
+                        "offset": 63008,
+                        "type": "u32_le"
+                      },
+                      "counter": {
+                        "offset": 63000,
+                        "type": "u32_le"
+                      }
+                    },
+                    {
+                      "id": 1,
+                      "physical_offset": 63232,
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 63232,
+                        "length": 74496,
+                        "offset": 137742
+                      },
+                      "signature": {
+                        "offset": 137736,
+                        "type": "u32_le"
+                      },
+                      "counter": {
+                        "offset": 137728,
+                        "type": "u32_le"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "spans": [
+                    {
+                      "logical_offset": 0,
+                      "physical_offset": 262144,
+                      "length": 262144
+                    }
+                  ],
+                  "predicates": [
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 325148,
+                            "type": "u32_le"
+                          }
+                        },
+                        63016
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 325152,
+                            "type": "u32_le"
+                          }
+                        },
+                        537265699
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 325156,
+                            "type": "u16_le"
+                          }
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 399876,
+                            "type": "u32_le"
+                          }
+                        },
+                        74512
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 399880,
+                            "type": "u32_le"
+                          }
+                        },
+                        537265699
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 399884,
+                            "type": "u16_le"
+                          }
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 325144,
+                            "type": "u32_le"
+                          }
+                        },
+                        {
+                          "read": {
+                            "offset": 399872,
+                            "type": "u32_le"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "checksums": [
+                    {
+                      "algorithm": "crc16_ccitt_false_le",
+                      "start": 262144,
+                      "length": 63000,
+                      "offset": 325158
+                    },
+                    {
+                      "algorithm": "crc16_ccitt_false_le",
+                      "start": 325376,
+                      "length": 74496,
+                      "offset": 399886
+                    }
+                  ],
+                  "repairs": [
+                    {
+                      "kind": "checksum",
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 262144,
+                        "length": 63000,
+                        "offset": 325158
+                      }
+                    },
+                    {
+                      "kind": "checksum",
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 325376,
+                        "length": 74496,
+                        "offset": 399886
+                      }
+                    }
+                  ],
+                  "counter": {
+                    "offset": 325144,
+                    "type": "u32_le"
+                  },
+                  "sections": [
+                    {
+                      "id": 0,
+                      "physical_offset": 262144,
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 262144,
+                        "length": 63000,
+                        "offset": 325158
+                      },
+                      "signature": {
+                        "offset": 325152,
+                        "type": "u32_le"
+                      },
+                      "counter": {
+                        "offset": 325144,
+                        "type": "u32_le"
+                      }
+                    },
+                    {
+                      "id": 1,
+                      "physical_offset": 325376,
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 325376,
+                        "length": 74496,
+                        "offset": 399886
+                      },
+                      "signature": {
+                        "offset": 399880,
+                        "type": "u32_le"
+                      },
+                      "counter": {
+                        "offset": 399872,
+                        "type": "u32_le"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            "selection": "newest_counter_max_to_zero",
+            "write": "selected",
+            "empty": [
+              255
+            ]
+          }
+        ]
+      },
+      "records": [
+        {
+          "record": "hgss_fields",
+          "offset": 0,
+          "id": ""
+        }
+      ]
+    },
+    {
+      "id": "pokemon-soulsilver",
+      "name": "Pokémon SoulSilver",
+      "platform": "nds",
+      "family": "pokemon-gen4-hgss",
+      "handler_id": "pokemon-gen4",
+      "save_format": "nintendo_ds_512k",
+      "save_format_name": "Nintendo DS save 512 KiB",
+      "save_size": 524288,
+      "logical_size": 262144,
+      "checksum_sizes": [],
+      "fields": [],
+      "generation": null,
+      "checks": [
+        {
+          "assert": {
+            "eq": [
+              {
+                "read": {
+                  "offset": 128,
+                  "type": "u8"
+                }
+              },
+              8
+            ]
+          },
+          "code": "save_game_version",
+          "message": "the trainer profile does not match the selected game"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 124,
+                  "type": "u8"
+                }
+              },
+              1
+            ]
+          },
+          "code": "save_gender",
+          "message": "the save has an invalid player gender value"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 120,
+                  "type": "u32_le"
+                }
+              },
+              999999
+            ]
+          },
+          "code": "save_money",
+          "message": "the save has a money value above the game limit"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 132,
+                  "type": "u16_le"
+                }
+              },
+              50000
+            ]
+          },
+          "code": "save_coins",
+          "message": "the save has coins above the game limit"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 23480,
+                  "type": "u16_le"
+                }
+              },
+              9999
+            ]
+          },
+          "code": "save_battle_points",
+          "message": "the save has battle points above the game limit"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 136,
+                  "type": "u8"
+                }
+              },
+              59
+            ]
+          },
+          "code": "save_play_time",
+          "message": "the save has an invalid play-time minute or second value"
+        },
+        {
+          "assert": {
+            "le": [
+              {
+                "read": {
+                  "offset": 137,
+                  "type": "u8"
+                }
+              },
+              59
+            ]
+          },
+          "code": "save_play_time",
+          "message": "the save has an invalid play-time minute or second value"
+        }
+      ],
+      "recognition": {
+        "checks": [
+          {
+            "assert": {
+              "eq": [
+                {
+                  "read": {
+                    "offset": 128,
+                    "type": "u8"
+                  }
+                },
+                8
+              ]
+            },
+            "code": "save_game_version",
+            "message": "the trainer profile does not match the selected game"
+          }
+        ],
+        "reasons": [
+          "checksum_valid",
+          "signature_valid",
+          "counter_uniform"
+        ],
+        "confidence": "high",
+        "selected_reason": true,
+        "empty_top_level_reasons": true
+      },
+      "recovery": {
+        "no_valid": {
+          "code": "save_checksum",
+          "message": "the main save block checksum is invalid"
+        },
+        "incomplete": {
+          "state": "valid_with_warnings",
+          "disable_editing": true,
+          "issue": {
+            "code": "redundant_slot_empty",
+            "message": "The redundant save copy is empty"
+          },
+          "warning": "The redundant save copy is empty; the editor preserves it",
+          "edit_error": {
+            "code": "save_integrity_partial",
+            "message": "normal edits need two valid Pokémon HeartGold or SoulSilver save copies"
+          }
+        },
+        "damaged": {
+          "state": "partially_recoverable",
+          "disable_editing": true,
+          "issue": {
+            "code": "redundant_slot_invalid",
+            "message": "One redundant save copy failed integrity checks"
+          },
+          "warning": "One redundant save copy is invalid; normal editing is disabled",
+          "edit_error": {
+            "code": "save_integrity_partial",
+            "message": "normal edits need two valid Pokémon HeartGold or SoulSilver save copies"
+          }
+        }
+      },
+      "layout": {
+        "groups": [
+          {
+            "id": "save",
+            "logical_offset": 0,
+            "logical_length": 262144,
+            "copies": {
+              "kind": "fixed",
+              "candidates": [
+                {
+                  "spans": [
+                    {
+                      "logical_offset": 0,
+                      "physical_offset": 0,
+                      "length": 262144
+                    }
+                  ],
+                  "predicates": [
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 63004,
+                            "type": "u32_le"
+                          }
+                        },
+                        63016
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 63008,
+                            "type": "u32_le"
+                          }
+                        },
+                        537265699
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 63012,
+                            "type": "u16_le"
+                          }
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 137732,
+                            "type": "u32_le"
+                          }
+                        },
+                        74512
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 137736,
+                            "type": "u32_le"
+                          }
+                        },
+                        537265699
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 137740,
+                            "type": "u16_le"
+                          }
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 63000,
+                            "type": "u32_le"
+                          }
+                        },
+                        {
+                          "read": {
+                            "offset": 137728,
+                            "type": "u32_le"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "checksums": [
+                    {
+                      "algorithm": "crc16_ccitt_false_le",
+                      "start": 0,
+                      "length": 63000,
+                      "offset": 63014
+                    },
+                    {
+                      "algorithm": "crc16_ccitt_false_le",
+                      "start": 63232,
+                      "length": 74496,
+                      "offset": 137742
+                    }
+                  ],
+                  "repairs": [
+                    {
+                      "kind": "checksum",
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 0,
+                        "length": 63000,
+                        "offset": 63014
+                      }
+                    },
+                    {
+                      "kind": "checksum",
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 63232,
+                        "length": 74496,
+                        "offset": 137742
+                      }
+                    }
+                  ],
+                  "counter": {
+                    "offset": 63000,
+                    "type": "u32_le"
+                  },
+                  "sections": [
+                    {
+                      "id": 0,
+                      "physical_offset": 0,
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 0,
+                        "length": 63000,
+                        "offset": 63014
+                      },
+                      "signature": {
+                        "offset": 63008,
+                        "type": "u32_le"
+                      },
+                      "counter": {
+                        "offset": 63000,
+                        "type": "u32_le"
+                      }
+                    },
+                    {
+                      "id": 1,
+                      "physical_offset": 63232,
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 63232,
+                        "length": 74496,
+                        "offset": 137742
+                      },
+                      "signature": {
+                        "offset": 137736,
+                        "type": "u32_le"
+                      },
+                      "counter": {
+                        "offset": 137728,
+                        "type": "u32_le"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "spans": [
+                    {
+                      "logical_offset": 0,
+                      "physical_offset": 262144,
+                      "length": 262144
+                    }
+                  ],
+                  "predicates": [
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 325148,
+                            "type": "u32_le"
+                          }
+                        },
+                        63016
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 325152,
+                            "type": "u32_le"
+                          }
+                        },
+                        537265699
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 325156,
+                            "type": "u16_le"
+                          }
+                        },
+                        0
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 399876,
+                            "type": "u32_le"
+                          }
+                        },
+                        74512
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 399880,
+                            "type": "u32_le"
+                          }
+                        },
+                        537265699
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 399884,
+                            "type": "u16_le"
+                          }
+                        },
+                        1
+                      ]
+                    },
+                    {
+                      "eq": [
+                        {
+                          "read": {
+                            "offset": 325144,
+                            "type": "u32_le"
+                          }
+                        },
+                        {
+                          "read": {
+                            "offset": 399872,
+                            "type": "u32_le"
+                          }
+                        }
+                      ]
+                    }
+                  ],
+                  "checksums": [
+                    {
+                      "algorithm": "crc16_ccitt_false_le",
+                      "start": 262144,
+                      "length": 63000,
+                      "offset": 325158
+                    },
+                    {
+                      "algorithm": "crc16_ccitt_false_le",
+                      "start": 325376,
+                      "length": 74496,
+                      "offset": 399886
+                    }
+                  ],
+                  "repairs": [
+                    {
+                      "kind": "checksum",
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 262144,
+                        "length": 63000,
+                        "offset": 325158
+                      }
+                    },
+                    {
+                      "kind": "checksum",
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 325376,
+                        "length": 74496,
+                        "offset": 399886
+                      }
+                    }
+                  ],
+                  "counter": {
+                    "offset": 325144,
+                    "type": "u32_le"
+                  },
+                  "sections": [
+                    {
+                      "id": 0,
+                      "physical_offset": 262144,
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 262144,
+                        "length": 63000,
+                        "offset": 325158
+                      },
+                      "signature": {
+                        "offset": 325152,
+                        "type": "u32_le"
+                      },
+                      "counter": {
+                        "offset": 325144,
+                        "type": "u32_le"
+                      }
+                    },
+                    {
+                      "id": 1,
+                      "physical_offset": 325376,
+                      "checksum": {
+                        "algorithm": "crc16_ccitt_false_le",
+                        "start": 325376,
+                        "length": 74496,
+                        "offset": 399886
+                      },
+                      "signature": {
+                        "offset": 399880,
+                        "type": "u32_le"
+                      },
+                      "counter": {
+                        "offset": 399872,
+                        "type": "u32_le"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            "selection": "newest_counter_max_to_zero",
+            "write": "selected",
+            "empty": [
+              255
+            ]
+          }
+        ]
+      },
+      "records": [
+        {
+          "record": "hgss_fields",
+          "offset": 0,
+          "id": ""
+        }
+      ]
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     fmt, io,
     path::{Path, PathBuf},
 };
@@ -54,30 +55,30 @@ impl RomWeaverErrorKind {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidationCodeError {
-    code: &'static str,
-    message: Option<&'static str>,
+    code: Cow<'static, str>,
+    message: Option<Cow<'static, str>>,
     fields: Vec<ValidationField>,
 }
 
 impl ValidationCodeError {
-    pub fn new(code: &'static str) -> Self {
+    pub fn new(code: impl Into<Cow<'static, str>>) -> Self {
         Self {
-            code,
+            code: code.into(),
             message: None,
             fields: Vec::new(),
         }
     }
 
-    pub fn code(&self) -> &'static str {
-        self.code
+    pub fn code(&self) -> &str {
+        &self.code
     }
 
     pub fn fields(&self) -> &[ValidationField] {
         &self.fields
     }
 
-    pub fn with_message(mut self, message: &'static str) -> Self {
-        self.message = Some(message);
+    pub fn with_message(mut self, message: impl Into<Cow<'static, str>>) -> Self {
+        self.message = Some(message.into());
         self
     }
 
@@ -96,7 +97,7 @@ impl ValidationCodeError {
 
 impl fmt::Display for ValidationCodeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(message) = self.message {
+        if let Some(message) = &self.message {
             write!(f, "{} [{}]", message, self.code)?;
         } else {
             write!(f, "{}", self.code)?;

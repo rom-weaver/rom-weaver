@@ -59,7 +59,9 @@ fn pokemon_gen1_schema_template_and_representable_edits_match_native() {
             .find(|definition| definition.identity.id == schema_id)
             .unwrap()
             .identity;
-        let native_bytes = PokemonGen1Handler.generate(&native_game).unwrap();
+        let native_bytes = super::pokemon_gen1::PokemonGen1Handler
+            .generate(&native_game)
+            .unwrap();
         assert!(registry.generate(schema_id).is_err());
 
         let schema_input = input(native_bytes.clone(), schema_id);
@@ -163,7 +165,9 @@ fn pokemon_gen2_schema_template_and_semantic_fixed_edits_match_native() {
             .find(|definition| definition.identity.id == schema_id)
             .unwrap()
             .identity;
-        let native_bytes = PokemonGen2Handler.generate(&native_game).unwrap();
+        let native_bytes = super::pokemon_gen2::PokemonGen2Handler
+            .generate(&native_game)
+            .unwrap();
         assert!(registry.generate(&schema_id).is_err());
 
         let schema_input = input(native_bytes.clone(), &schema_id);

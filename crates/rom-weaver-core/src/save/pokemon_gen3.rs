@@ -1548,6 +1548,7 @@ fn validation(code: &'static str, message: &'static str) -> RomWeaverError {
 
 #[cfg(test)]
 mod tests {
+    use super::super::builtin::PokemonGen3Handler;
     use super::*;
 
     fn fixture(family: Family) -> Vec<u8> {
@@ -1613,7 +1614,9 @@ mod tests {
         for definition in handler.definitions() {
             assert!(!handler.supports_generation(&definition.identity));
             let family = family_for_game(&definition.identity).unwrap();
-            let bytes = handler.generate(&definition.identity).unwrap();
+            let bytes = super::PokemonGen3Handler
+                .generate(&definition.identity)
+                .unwrap();
             assert_eq!(bytes.len(), GEN3_SAVE_SIZE);
             assert!(bytes[2 * SLOT_SIZE..].iter().all(|byte| *byte == 0xFF));
 
@@ -1653,7 +1656,7 @@ mod tests {
             name: "Pokémon Platinum".into(),
             family: "pokemon-gen4".into(),
         };
-        assert!(PokemonGen3Handler.generate(&unknown).is_err());
+        assert!(super::PokemonGen3Handler.generate(&unknown).is_err());
     }
 
     #[test]

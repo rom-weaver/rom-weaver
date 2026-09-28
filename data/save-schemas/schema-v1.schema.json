@@ -34,6 +34,11 @@
         }
       }
     },
+    "text_codecs": {
+      "type": "object",
+      "maxProperties": 4096,
+      "additionalProperties": { "$ref": "#/$defs/text_codec" }
+    },
     "games": {
       "type": "array",
       "maxItems": 64,
@@ -118,7 +123,27 @@
               "type": "null"
             }
           ]
-        }
+        },
+        "family": { "type": ["string", "null"], "maxLength": 1024 },
+        "handler_id": { "type": ["string", "null"], "maxLength": 1024 },
+        "save_format": { "type": ["string", "null"], "maxLength": 1024 },
+        "save_format_name": { "type": ["string", "null"], "maxLength": 1024 },
+        "known_rom_sha1": { "type": "array", "maxItems": 4096, "items": { "type": "string" } },
+        "checksum_sizes": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": { "type": "integer", "minimum": 0, "maximum": 65535 }
+        },
+        "logical_size": { "type": ["integer", "null"], "minimum": 1, "maximum": 8388608 },
+        "layout": { "anyOf": [{ "$ref": "#/$defs/layout" }, { "type": "null" }] },
+        "recognition": { "anyOf": [{ "$ref": "#/$defs/recognition" }, { "type": "null" }] },
+        "checks": { "$ref": "#/$defs/checks" },
+        "document_checks": { "$ref": "#/$defs/checks" },
+        "edit_checks": { "$ref": "#/$defs/checks" },
+        "after_edit": { "type": "array", "maxItems": 4096, "items": { "$ref": "#/$defs/store" } },
+        "recovery": { "anyOf": [{ "$ref": "#/$defs/recovery" }, { "type": "null" }] },
+        "include_implicit_changes": { "type": "boolean" },
+        "all_copy_sections": { "type": "boolean" }
       },
       "required": ["id", "name", "platform", "save_size", "fields"]
     },
@@ -139,9 +164,9 @@
         },
         "id": {
           "type": "string",
-          "minLength": 1,
+          "minLength": 0,
           "maxLength": 1024,
-          "pattern": "^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)*$"
+          "pattern": "^(?:[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*)?$"
         },
         "count": {
           "type": "integer",
@@ -306,7 +331,22 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 4294967295
-        }
+        },
+        "group": { "type": ["string", "null"] },
+        "present_when": { "anyOf": [{ "$ref": "#/$defs/predicate" }, { "type": "null" }] },
+        "editable_when": { "anyOf": [{ "$ref": "#/$defs/predicate" }, { "type": "null" }] },
+        "read": { "anyOf": [{ "$ref": "#/$defs/expr" }, { "type": "null" }] },
+        "xor": { "anyOf": [{ "$ref": "#/$defs/expr" }, { "type": "null" }] },
+        "text_codec": { "type": ["string", "null"] },
+        "on_edit": { "type": "array", "maxItems": 128, "items": { "$ref": "#/$defs/store" } },
+        "format": {
+          "type": ["array", "null"],
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/format_part" }
+        },
+        "presentation": { "anyOf": [{ "$ref": "#/$defs/presentation" }, { "type": "null" }] },
+        "value_override": { "anyOf": [{ "$ref": "#/$defs/value_override" }, { "type": "null" }] },
+        "unknown_choice": { "anyOf": [{ "$ref": "#/$defs/unknown_choice" }, { "type": "null" }] }
       },
       "required": ["id", "label", "offset", "type"],
       "allOf": [
@@ -518,7 +558,8 @@
             "xor16_be",
             "xor32_le",
             "xor32_be",
-            "sum8_mod255_complement"
+            "sum8_mod255_complement",
+            "sum32_le_fold16"
           ]
         },
         "start": {
@@ -697,6 +738,694 @@
         }
       },
       "required": ["offset", "length"]
+    },
+    "scalar": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "offset": { "type": "integer", "minimum": 0, "maximum": 8388608 },
+        "relative": { "type": "boolean" },
+        "type": {
+          "enum": [
+            "u8",
+            "u16_le",
+            "u16_be",
+            "u24_le",
+            "u24_be",
+            "u32_le",
+            "u32_be",
+            "i8",
+            "i16_le",
+            "i16_be",
+            "i32_le",
+            "i32_be",
+            "bool"
+          ]
+        },
+        "mask": { "type": ["integer", "null"], "minimum": 1, "maximum": 4294967295 }
+      },
+      "required": ["offset", "type"]
+    },
+    "expr": {
+      "oneOf": [
+        { "type": "integer", "minimum": -9223372036854775808, "maximum": 9223372036854775807 },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "maxProperties": 1,
+          "properties": {
+            "read": { "$ref": "#/$defs/scalar" },
+            "add": { "type": "array", "items": { "$ref": "#/$defs/expr" } },
+            "sub": { "$ref": "#/$defs/expr_pair" },
+            "mul": { "$ref": "#/$defs/expr_pair" },
+            "div": { "$ref": "#/$defs/expr_pair" },
+            "mod": { "$ref": "#/$defs/expr_pair" },
+            "bit_and": { "$ref": "#/$defs/expr_pair" },
+            "bit_or": { "$ref": "#/$defs/expr_pair" },
+            "xor": { "$ref": "#/$defs/expr_pair" },
+            "if": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "condition": { "$ref": "#/$defs/predicate" },
+                "then": { "$ref": "#/$defs/expr" },
+                "otherwise": { "$ref": "#/$defs/expr" }
+              },
+              "required": ["condition", "then", "otherwise"]
+            },
+            "at": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "offset": { "$ref": "#/$defs/expr" },
+                "type": {
+                  "enum": [
+                    "u8",
+                    "u16_le",
+                    "u16_be",
+                    "u24_le",
+                    "u24_be",
+                    "u32_le",
+                    "u32_be",
+                    "i8",
+                    "i16_le",
+                    "i16_be",
+                    "i32_le",
+                    "i32_be",
+                    "bool"
+                  ]
+                }
+              },
+              "required": ["offset", "type"]
+            }
+          }
+        }
+      ]
+    },
+    "expr_pair": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "$ref": "#/$defs/expr" }
+    },
+    "predicate": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "all": { "type": "array", "items": { "$ref": "#/$defs/predicate" } },
+        "any": { "type": "array", "items": { "$ref": "#/$defs/predicate" } },
+        "not": { "$ref": "#/$defs/predicate" },
+        "eq": { "$ref": "#/$defs/expr_pair" },
+        "ne": { "$ref": "#/$defs/expr_pair" },
+        "lt": { "$ref": "#/$defs/expr_pair" },
+        "le": { "$ref": "#/$defs/expr_pair" },
+        "uniform": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "offset": { "type": "integer", "minimum": 0 },
+            "length": { "type": "integer", "minimum": 1 },
+            "values": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 256,
+              "items": { "type": "integer", "minimum": 0, "maximum": 255 }
+            }
+          },
+          "required": ["offset", "length", "values"]
+        },
+        "equal": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "left": { "type": "integer", "minimum": 0 },
+            "right": { "type": "integer", "minimum": 0 },
+            "length": { "type": "integer", "minimum": 1 }
+          },
+          "required": ["left", "right", "length"]
+        }
+      }
+    },
+    "store": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "when": { "anyOf": [{ "$ref": "#/$defs/predicate" }, { "type": "null" }] },
+        "destination": { "$ref": "#/$defs/scalar" },
+        "value": { "$ref": "#/$defs/expr" }
+      },
+      "required": ["destination", "value"]
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "when": { "anyOf": [{ "$ref": "#/$defs/predicate" }, { "type": "null" }] },
+        "assert": { "$ref": "#/$defs/predicate" },
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "section_id": { "type": ["integer", "null"], "minimum": 0, "maximum": 255 },
+        "warning": { "type": ["string", "null"] }
+      },
+      "required": ["assert", "code", "message"]
+    },
+    "checks": { "type": "array", "maxItems": 4096, "items": { "$ref": "#/$defs/check" } },
+    "presentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "relative_offset": { "type": "boolean" },
+        "section_id": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "offset": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "kind": {
+          "enum": [
+            "text",
+            "unsigned_integer",
+            "signed_integer",
+            "boolean",
+            "enum",
+            "read_only_text",
+            "read_only_integer",
+            "bitfield_boolean",
+            "list",
+            "table",
+            "object"
+          ]
+        },
+        "constraints": { "$ref": "#/$defs/constraints" },
+        "step": { "type": ["integer", "null"], "minimum": 0, "maximum": 4294967295 },
+        "encoding": { "type": ["string", "null"] },
+        "warnings": { "type": "array", "maxItems": 128, "items": { "type": "string" } }
+      },
+      "required": ["section_id", "offset", "kind", "constraints", "step", "encoding"]
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min": { "type": ["integer", "null"] },
+        "max": { "type": ["integer", "null"] },
+        "max_length": { "type": ["integer", "null"], "minimum": 0, "maximum": 255 },
+        "choices": { "type": "array", "maxItems": 4096, "items": { "type": "string" } }
+      },
+      "required": ["min", "max", "max_length", "choices"]
+    },
+    "format_part": {
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "value": { "$ref": "#/$defs/expr" },
+            "width": { "type": "integer", "minimum": 0, "maximum": 20 }
+          },
+          "required": ["value"]
+        }
+      ]
+    },
+    "value_override": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "when": { "$ref": "#/$defs/predicate" },
+        "value": {},
+        "read_only": { "type": "boolean" },
+        "description": { "type": ["string", "null"] },
+        "warnings": { "type": ["array", "null"], "items": { "type": "string" } }
+      },
+      "required": ["when", "value"]
+    },
+    "unknown_choice": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "value": { "type": "string" }, "warning": { "type": "string" } },
+      "required": ["value", "warning"]
+    },
+    "layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "groups": { "type": "array", "maxItems": 128, "items": { "$ref": "#/$defs/layout_group" } }
+      },
+      "required": ["groups"]
+    },
+    "layout_group": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "logical_offset": { "type": "integer", "minimum": 0 },
+        "logical_length": { "type": "integer", "minimum": 1 },
+        "copies": { "$ref": "#/$defs/layout_copies" },
+        "selection": {
+          "enum": [
+            "first_valid",
+            "newest_counter",
+            "newest_counter_max_to_zero",
+            "newest_counter_error_on_tie",
+            "newest_counter_max_to_zero_error_on_tie"
+          ]
+        },
+        "write": { "enum": ["selected", "patch_all_valid", "clone_selected_to_all"] },
+        "empty": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "type": "integer", "minimum": 0, "maximum": 255 }
+        },
+        "empty_if_no_signature": { "type": "boolean" }
+      },
+      "required": ["id", "logical_offset", "logical_length", "copies"]
+    },
+    "layout_copies": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "fixed" },
+            "candidates": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 128,
+              "items": { "$ref": "#/$defs/fixed_candidate" }
+            }
+          },
+          "required": ["kind", "candidates"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "tagged" },
+            "candidates": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 128,
+              "items": { "$ref": "#/$defs/tagged_candidate" }
+            },
+            "sections": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4096,
+              "items": { "$ref": "#/$defs/tagged_section" }
+            },
+            "section_size": { "type": "integer", "minimum": 1 },
+            "id_offset": { "type": "integer", "minimum": 0 },
+            "checksum_offset": { "type": "integer", "minimum": 0 },
+            "checksum_algorithm": {
+              "enum": [
+                "sum8",
+                "sum16_le",
+                "sum16_be",
+                "sum32_le",
+                "sum32_be",
+                "add8",
+                "add16_le",
+                "add16_be",
+                "add32_le",
+                "add32_be",
+                "xor8",
+                "xor16_le",
+                "xor16_be",
+                "xor32_le",
+                "xor32_be",
+                "sum8_mod255_complement",
+                "sum32_le_fold16",
+                "crc16_ccitt_false_le"
+              ]
+            },
+            "checksum_unit": { "enum": ["u8", "u16_le", "u16_be", "u32_le", "u32_be"] },
+            "signature_offset": { "type": "integer", "minimum": 0 },
+            "counter_offset": { "type": "integer", "minimum": 0 },
+            "signature": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+          },
+          "required": [
+            "kind",
+            "candidates",
+            "sections",
+            "section_size",
+            "id_offset",
+            "checksum_offset",
+            "signature_offset",
+            "counter_offset",
+            "signature"
+          ]
+        }
+      ]
+    },
+    "mapping_span": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "logical_offset": { "type": "integer", "minimum": 0 },
+        "physical_offset": { "type": "integer", "minimum": 0 },
+        "length": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["logical_offset", "physical_offset", "length"]
+    },
+    "fixed_candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "spans": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4096,
+          "items": { "$ref": "#/$defs/mapping_span" }
+        },
+        "signatures": { "type": "array", "items": { "$ref": "#/$defs/span" } },
+        "checksums": { "type": "array", "items": { "$ref": "#/$defs/checksum" } },
+        "repairs": { "type": "array", "items": { "$ref": "#/$defs/repair" } },
+        "predicates": { "type": "array", "items": { "$ref": "#/$defs/predicate" } },
+        "sections": { "type": "array", "items": { "$ref": "#/$defs/fixed_section" } },
+        "counter": { "anyOf": [{ "$ref": "#/$defs/scalar" }, { "type": "null" }] }
+      },
+      "required": ["spans"]
+    },
+    "repair": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "checksum" },
+            "checksum": { "$ref": "#/$defs/checksum" }
+          },
+          "required": ["kind", "checksum"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "mirror" },
+            "source": { "type": "integer", "minimum": 0 },
+            "target": { "type": "integer", "minimum": 0 },
+            "length": { "type": "integer", "minimum": 1 }
+          },
+          "required": ["kind", "source", "target", "length"]
+        }
+      ]
+    },
+    "fixed_section": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "physical_offset": { "type": "integer", "minimum": 0 },
+        "checksum": { "$ref": "#/$defs/checksum" },
+        "signature": { "anyOf": [{ "$ref": "#/$defs/scalar" }, { "type": "null" }] },
+        "counter": { "anyOf": [{ "$ref": "#/$defs/scalar" }, { "type": "null" }] }
+      },
+      "required": ["id", "physical_offset", "checksum"]
+    },
+    "tagged_candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "offset": { "type": "integer", "minimum": 0 },
+        "section_count": { "type": "integer", "minimum": 1, "maximum": 4096 }
+      },
+      "required": ["offset", "section_count"]
+    },
+    "tagged_section": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "logical_offset": { "type": "integer", "minimum": 0 },
+        "length": { "type": "integer", "minimum": 1 },
+        "checksum_length": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["id", "logical_offset", "length", "checksum_length"]
+    },
+    "recognition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "checks": { "$ref": "#/$defs/checks" },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "checksum_valid",
+              "signature_valid",
+              "counter_uniform",
+              "selected_game",
+              "checksum_mismatch",
+              "missing_section",
+              "duplicate_section",
+              "invalid_signature",
+              "non_uniform_counter",
+              "wrong_size",
+              "unsupported_layout"
+            ]
+          }
+        },
+        "confidence": { "enum": ["low", "medium", "high"] },
+        "incomplete_confidence": {
+          "type": ["string", "null"],
+          "enum": ["low", "medium", "high", null]
+        },
+        "selected_reason": { "type": "boolean" },
+        "empty_top_level_reasons": { "type": "boolean" }
+      },
+      "required": ["reasons", "confidence"]
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "code": { "type": "string" }, "message": { "type": "string" } },
+      "required": ["code", "message"]
+    },
+    "recovery_outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "state": {
+          "enum": [
+            "valid",
+            "valid_with_warnings",
+            "invalid",
+            "partially_recoverable",
+            "unsupported"
+          ]
+        },
+        "disable_editing": { "type": "boolean" },
+        "issue": { "anyOf": [{ "$ref": "#/$defs/failure" }, { "type": "null" }] },
+        "warning": { "type": ["string", "null"] },
+        "field_warning": { "type": ["string", "null"] },
+        "edit_error": { "anyOf": [{ "$ref": "#/$defs/failure" }, { "type": "null" }] },
+        "parse_error": { "anyOf": [{ "$ref": "#/$defs/failure" }, { "type": "null" }] },
+        "section_id": { "type": "boolean" }
+      },
+      "required": ["state"]
+    },
+    "recovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "no_valid": { "$ref": "#/$defs/failure" },
+        "incomplete": { "anyOf": [{ "$ref": "#/$defs/recovery_outcome" }, { "type": "null" }] },
+        "damaged": { "anyOf": [{ "$ref": "#/$defs/recovery_outcome" }, { "type": "null" }] },
+        "unrecoverable": { "anyOf": [{ "$ref": "#/$defs/recovery_outcome" }, { "type": "null" }] },
+        "differing": { "anyOf": [{ "$ref": "#/$defs/recovery_outcome" }, { "type": "null" }] },
+        "active_group": { "type": "boolean" },
+        "zero_counter": { "type": "boolean" }
+      },
+      "required": ["no_valid"]
+    },
+    "text_codec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "unit": { "enum": ["u8", "u16_le", "u16_be"] },
+        "max_chars": { "type": "integer", "minimum": 1 },
+        "max_units": { "type": ["integer", "null"], "minimum": 1 },
+        "terminators": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0, "maximum": 65535 }
+        },
+        "skip": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 65535 } },
+        "fill": { "type": "integer", "minimum": 0, "maximum": 65535 },
+        "write_terminator": { "type": ["integer", "null"], "minimum": 0, "maximum": 65535 },
+        "lane": { "anyOf": [{ "$ref": "#/$defs/bit_lane" }, { "type": "null" }] },
+        "mapping": { "$ref": "#/$defs/text_mapping" },
+        "decode_invalid": { "$ref": "#/$defs/decode_invalid" },
+        "missing_terminator": { "$ref": "#/$defs/missing_terminator" },
+        "errors": { "$ref": "#/$defs/text_errors" },
+        "encode_transforms": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/conditional_replacement" }
+        }
+      },
+      "required": [
+        "unit",
+        "max_chars",
+        "fill",
+        "mapping",
+        "decode_invalid",
+        "missing_terminator",
+        "errors"
+      ]
+    },
+    "bit_lane": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "logical_to_storage": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "type": "integer", "minimum": 0, "maximum": 31 }
+        }
+      },
+      "required": ["logical_to_storage"]
+    },
+    "text_mapping": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "table" },
+            "ranges": { "type": "array", "items": { "$ref": "#/$defs/glyph_range" } },
+            "glyphs": {
+              "type": "object",
+              "additionalProperties": { "type": "integer", "minimum": 0, "maximum": 65535 }
+            },
+            "aliases": {
+              "type": "object",
+              "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 1 }
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "unicode" },
+            "decode_replacements": {
+              "type": "object",
+              "additionalProperties": { "type": "integer", "minimum": 0, "maximum": 65535 }
+            }
+          },
+          "required": ["kind"]
+        }
+      ]
+    },
+    "glyph_range": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "first": { "type": "string", "minLength": 1, "maxLength": 1 },
+        "last": { "type": "string", "minLength": 1, "maxLength": 1 },
+        "first_code": { "type": "integer", "minimum": 0, "maximum": 65535 }
+      },
+      "required": ["first", "last", "first_code"]
+    },
+    "decode_invalid": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "kind": { "const": "error" } },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "replacement" },
+            "character": { "type": "string", "minLength": 1, "maxLength": 1 }
+          },
+          "required": ["kind", "character"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "kind": { "const": "literal" }, "template": { "type": "string" } },
+          "required": ["kind", "template"]
+        }
+      ]
+    },
+    "missing_terminator": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "kind": { "enum": ["accept", "error"] } },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "kind": { "const": "literal" }, "value": { "type": "string" } },
+          "required": ["kind", "value"]
+        }
+      ]
+    },
+    "text_error": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "code": { "type": "string" }, "message": { "type": "string" } },
+      "required": ["code", "message"]
+    },
+    "text_errors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "decode_invalid": { "$ref": "#/$defs/text_error" },
+        "encode_invalid": { "$ref": "#/$defs/text_error" },
+        "missing_terminator": { "$ref": "#/$defs/text_error" },
+        "too_long": { "$ref": "#/$defs/text_error" }
+      },
+      "required": ["decode_invalid", "encode_invalid", "missing_terminator", "too_long"]
+    },
+    "conditional_replacement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "when_all": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/codepoint_set" }
+        },
+        "replacements": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0, "maximum": 65535 }
+        }
+      },
+      "required": ["when_all", "replacements"]
+    },
+    "codepoint_set": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "min": { "type": "integer", "minimum": 0, "maximum": 1114111 },
+            "max": { "type": "integer", "minimum": 0, "maximum": 1114111 }
+          },
+          "required": ["min", "max"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "values": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "integer", "minimum": 0, "maximum": 1114111 }
+            }
+          },
+          "required": ["values"]
+        }
+      ]
     },
     "checksum_span": {
       "type": "object",

@@ -1023,6 +1023,7 @@ fn validation(code: &'static str, message: &'static str) -> RomWeaverError {
 
 #[cfg(test)]
 mod tests {
+    use super::super::builtin::PokemonGen1Handler;
     use super::*;
 
     fn save(yellow: bool) -> Vec<u8> {
@@ -1291,7 +1292,7 @@ mod tests {
         let handler = PokemonGen1Handler;
         for id in ["pokemon-red", "pokemon-blue", "pokemon-yellow"] {
             let game = identity(id);
-            let bytes = SaveGameHandler::generate(&handler, &game).unwrap();
+            let bytes = SaveGameHandler::generate(&super::PokemonGen1Handler, &game).unwrap();
             assert_eq!(bytes.len(), GEN1_SAVE_SIZE);
             assert!(valid_checksum(&bytes));
             assert_eq!(bytes[BAG_COUNT], 0);
@@ -1314,6 +1315,6 @@ mod tests {
             name: "Pokémon Gold".into(),
             family: "pokemon-gen2-gs".into(),
         };
-        assert!(SaveGameHandler::generate(&PokemonGen1Handler, &game).is_err());
+        assert!(SaveGameHandler::generate(&super::PokemonGen1Handler, &game).is_err());
     }
 }

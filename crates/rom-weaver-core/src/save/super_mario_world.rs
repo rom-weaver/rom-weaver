@@ -685,6 +685,7 @@ fn validation(code: &'static str, message: &'static str) -> RomWeaverError {
 
 #[cfg(test)]
 mod tests {
+    use super::super::builtin::SuperMarioWorldHandler;
     use super::*;
 
     fn identity() -> SaveGameIdentity {

@@ -976,6 +976,7 @@ fn validation(code: &'static str, message: &'static str) -> RomWeaverError {
 
 #[cfg(test)]
 mod tests {
+    use super::super::builtin::PokemonGen4Handler;
     use super::*;
 
     const MAIN_FOOTER_OFFSET: usize = MAIN_BLOCK_SIZE - FOOTER_SIZE;
@@ -1088,7 +1089,7 @@ mod tests {
         for title in Title::ALL {
             let identity = title.identity();
             assert!(!handler.supports_generation(&identity));
-            let bytes = handler.generate(&identity).unwrap();
+            let bytes = super::PokemonGen4Handler.generate(&identity).unwrap();
             assert_eq!(bytes.len(), GEN4_SAVE_SIZE, "{}", title.id());
 
             let input = SaveDetectionInput {
@@ -1150,9 +1151,10 @@ mod tests {
 
     #[test]
     fn generation_writes_both_layout_footers_and_checksums() {
-        let handler = PokemonGen4Handler;
         for title in Title::ALL {
-            let bytes = handler.generate(&title.identity()).unwrap();
+            let bytes = super::PokemonGen4Handler
+                .generate(&title.identity())
+                .unwrap();
             let layout = title.layout();
             for slot in 0..2u8 {
                 let base = usize::from(slot) * COPY_SIZE;
@@ -1184,9 +1186,10 @@ mod tests {
 
     #[test]
     fn generated_hgss_profile_identifies_the_selected_version() {
-        let handler = PokemonGen4Handler;
         for title in [Title::HeartGold, Title::SoulSilver] {
-            let bytes = handler.generate(&title.identity()).unwrap();
+            let bytes = super::PokemonGen4Handler
+                .generate(&title.identity())
+                .unwrap();
             let trainer = title.layout().trainer_offset;
             assert_eq!(bytes[trainer + 0x1C], title.version());
             assert_eq!(
@@ -1200,7 +1203,7 @@ mod tests {
 
     #[test]
     fn generation_rejects_an_identity_owned_by_another_handler() {
-        let error = PokemonGen4Handler
+        let error = super::PokemonGen4Handler
             .generate(&SaveGameIdentity {
                 id: "not-pokemon-gen4".into(),
                 name: "Unsupported".into(),

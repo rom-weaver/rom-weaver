@@ -1,7 +1,7 @@
-use super::pokemon_gen3::{Family, PokemonGen3Handler, SIGNATURE, checksum};
+use super::pokemon_gen3::{Family, SIGNATURE, checksum};
 use crate::save::{
-    SaveDetectionInput, SaveEdit, SaveGameHandler, SaveGameRegistry, SaveIntegrityState,
-    SaveRecognitionOutcome, SaveValue,
+    PokemonGen3Handler, SaveDetectionInput, SaveEdit, SaveGameHandler, SaveGameRegistry,
+    SaveIntegrityState, SaveRecognitionOutcome, SaveValue,
 };
 
 const SECTION_SIZE: usize = 0x1000;
@@ -96,9 +96,9 @@ fn value(document: &crate::save::SaveDocument, id: &str) -> SaveValue {
         .clone()
 }
 
-fn error_code(error: crate::RomWeaverError) -> &'static str {
+fn error_code(error: crate::RomWeaverError) -> String {
     match error {
-        crate::RomWeaverError::ValidationCode(error) => error.code(),
+        crate::RomWeaverError::ValidationCode(error) => error.code().to_owned(),
         other => panic!("expected a coded validation error, got {other:?}"),
     }
 }
@@ -807,7 +807,9 @@ fn gen3_inventory_can_fill_clear_and_replace_every_pocket_slot() {
             Family::Frlg => "pokemon-firered",
         });
         let source = input(
-            PokemonGen3Handler.generate(&identity).unwrap(),
+            super::pokemon_gen3::PokemonGen3Handler
+                .generate(&identity)
+                .unwrap(),
             Some(&identity.id),
         );
         let document = PokemonGen3Handler.parse(&source, &identity).unwrap();
@@ -931,7 +933,9 @@ fn gen3_pokedex_keeps_seen_mirrors_and_reports_implicit_changes() {
             Family::Frlg => "pokemon-firered",
         });
         let source = input(
-            PokemonGen3Handler.generate(&identity).unwrap(),
+            super::pokemon_gen3::PokemonGen3Handler
+                .generate(&identity)
+                .unwrap(),
             Some(&identity.id),
         );
         let edits = (1..=386)
@@ -1017,7 +1021,12 @@ fn gen4_trainer_ids_cover_full_u16_range_and_preserve_backup() {
     let handler = crate::save::PokemonGen4Handler;
     for definition in handler.definitions() {
         let identity = definition.identity;
-        let source = input(handler.generate(&identity).unwrap(), Some(&identity.id));
+        let source = input(
+            super::pokemon_gen4::PokemonGen4Handler
+                .generate(&identity)
+                .unwrap(),
+            Some(&identity.id),
+        );
         for boundary in [0, 65535] {
             let edits = [
                 SaveEdit {

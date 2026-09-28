@@ -1472,6 +1472,7 @@ fn validation(code: &'static str, message: &'static str) -> RomWeaverError {
 
 #[cfg(test)]
 mod tests {
+    use super::super::builtin::PokemonGen2Handler;
     use super::*;
 
     fn save(family: Family) -> Vec<u8> {
@@ -2012,7 +2013,7 @@ mod tests {
             ("pokemon-crystal", Family::Crystal),
         ] {
             let game = identity(id);
-            let bytes = SaveGameHandler::generate(&handler, &game).unwrap();
+            let bytes = SaveGameHandler::generate(&super::PokemonGen2Handler, &game).unwrap();
             assert_eq!(bytes.len(), GEN2_SAVE_SIZE);
             for layout in slot_layouts(family) {
                 assert!(valid_slot(&bytes, &layout));

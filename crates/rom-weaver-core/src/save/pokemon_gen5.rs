@@ -1723,8 +1723,13 @@ const B2W2_BLOCKS: [Block; 74] = [
 ];
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
+    use super::super::builtin::PokemonGen5Handler;
     use super::*;
+
+    pub(crate) fn fixture_for_id(id: &str) -> Vec<u8> {
+        fixture(title_for_id(id).expect("test fixture requires a Generation V title"))
+    }
 
     fn fixture(title: Title) -> Vec<u8> {
         let mut bytes = vec![0xff; GEN5_SAVE_SIZE];

@@ -1,6 +1,21 @@
-use std::collections::{BTreeMap, HashSet};
+#[cfg(test)]
+mod advanced_parity;
+#[cfg(test)]
+mod early_parity;
+mod field;
+mod layout;
+#[cfg(test)]
+mod parity;
+mod rules;
+#[cfg(test)]
+mod rules_tests;
+mod runtime;
+mod text;
 
-use serde::Deserialize;
+use std::collections::{BTreeMap, HashSet};
+use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
 use tracing::{debug, trace};
 
 use super::{
@@ -48,10 +63,18 @@ impl SaveSchemaPack {
         if raw.pack_revision.is_some_and(|revision| revision == 0) {
             return Err(invalid("pack_revision must be positive"));
         }
+        for (name, codec) in &raw.text_codecs {
+            codec.validate(name)?;
+        }
         validate_record_templates(&raw.records)?;
         if raw.games.is_empty() || raw.games.len() > MAX_GAMES {
             return Err(invalid("a save schema pack must contain 1 to 64 games"));
         }
+        let codecs = raw
+            .text_codecs
+            .into_iter()
+            .map(|(name, codec)| (name, Arc::new(codec)))
+            .collect();
         let mut ids = HashSet::new();
         let mut games = Vec::with_capacity(raw.games.len());
         let mut integrity_bytes = 0usize;
@@ -60,7 +83,10 @@ impl SaveSchemaPack {
                 return Err(invalid("save schema game IDs must be unique"));
             }
             expand_records(&mut game, &raw.records)?;
-            let game = GameSchema::build(game)?;
+            let mut game = GameSchema::build(game)?;
+            for field in &mut game.fields {
+                field.bind_codec(&codecs)?;
+            }
             integrity_bytes = integrity_bytes
                 .checked_add(game.integrity_bytes()?)
                 .ok_or_else(|| invalid("schema integrity work exceeds 64 MiB"))?;
@@ -111,7 +137,9 @@ impl SaveGameHandler for SchemaSaveHandler {
         for patch in &generation.patches {
             bytes[patch.offset..patch.offset + patch.bytes.len()].copy_from_slice(&patch.bytes);
         }
-        self.game.repair_integrity(&mut bytes);
+        if self.game.runtime.layout.is_none() {
+            self.game.repair_integrity(&mut bytes);
+        }
         let input = self.game.input(bytes.clone());
         self.game.parse_document(&input, game)?;
         debug!(game = %self.game.id, "generated schema save");
@@ -119,6 +147,9 @@ impl SaveGameHandler for SchemaSaveHandler {
     }
 
     fn recognize(&self, input: &SaveDetectionInput) -> SaveRecognition {
+        if self.game.runtime.recognition.is_some() {
+            return self.game.recognize_configured(input);
+        }
         let unsupported = |reason: SaveRecognitionReason| SaveRecognition {
             outcome: SaveRecognitionOutcome::Unsupported {
                 reasons: vec![reason.clone()],
@@ -142,10 +173,16 @@ impl SaveGameHandler for SchemaSaveHandler {
         {
             return unsupported(SaveRecognitionReason::UnsupportedLayout);
         }
-        if !self.game.signatures_valid(&input.bytes) {
+        let Ok(resolved) = self.game.resolve(&input.bytes, false) else {
+            return unsupported(SaveRecognitionReason::ChecksumMismatch);
+        };
+        let bytes = resolved
+            .as_ref()
+            .map_or(input.bytes.as_slice(), |layout| layout.bytes.as_slice());
+        if !self.game.signatures_valid(bytes) {
             return unsupported(SaveRecognitionReason::InvalidSignature);
         }
-        if !self.game.checksums_valid(&input.bytes) || !self.game.mirrors_valid(&input.bytes) {
+        if !self.game.checksums_valid(bytes) || !self.game.mirrors_valid(bytes) {
             return unsupported(SaveRecognitionReason::ChecksumMismatch);
         }
         let mut reasons = Vec::new();
@@ -188,75 +225,7 @@ impl SaveGameHandler for SchemaSaveHandler {
         edits: &[SaveEdit],
         dry_run: bool,
     ) -> Result<SaveEditResult> {
-        self.game.check_identity(game)?;
-        let document = self.game.parse_document(input, game)?;
-        if !matches!(
-            document.integrity.state,
-            SaveIntegrityState::Valid | SaveIntegrityState::ValidWithWarnings
-        ) {
-            return Err(validation(
-                "save_integrity_invalid",
-                "the save failed schema integrity checks",
-            ));
-        }
-        let mut preview = validate_save_edits(&document, edits)?;
-        if !preview.changed {
-            return Ok(SaveEditResult {
-                preview,
-                bytes: None,
-                document,
-            });
-        }
-        let mut bytes = input.bytes.clone();
-        for edit in edits {
-            let field = self
-                .game
-                .fields
-                .iter()
-                .find(|field| field.id == edit.field)
-                .expect("validated schema edit field exists");
-            field.write(&mut bytes, &edit.value)?;
-        }
-        self.game.repair_integrity(&mut bytes);
-        preview.touched_sections = input
-            .bytes
-            .iter()
-            .zip(&bytes)
-            .enumerate()
-            .filter_map(|(offset, (before, after))| {
-                (before != after).then_some((offset / 65536) as u8)
-            })
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect();
-        preview.touched_sections.sort_unstable();
-        let output_input = self.game.input(bytes.clone());
-        let output = self.game.parse_document(&output_input, game)?;
-        if !matches!(
-            output.integrity.state,
-            SaveIntegrityState::Valid | SaveIntegrityState::ValidWithWarnings
-        ) {
-            return Err(invalid("the edited save failed schema integrity checks"));
-        }
-        for edit in edits {
-            if output
-                .fields
-                .iter()
-                .find(|field| field.id == edit.field)
-                .map(|field| &field.value)
-                != Some(&edit.value)
-            {
-                return Err(invalid(
-                    "the edited value did not round trip through the schema",
-                ));
-            }
-        }
-        trace!(game = %self.game.id, edits = edits.len(), dry_run, "applied schema save edits");
-        Ok(SaveEditResult {
-            preview,
-            bytes: (!dry_run).then_some(bytes),
-            document: output,
-        })
+        self.game.apply_edits(input, game, edits, dry_run)
     }
 }
 
@@ -269,6 +238,8 @@ struct RawPack {
     pack_revision: Option<u32>,
     #[serde(default)]
     records: BTreeMap<String, Vec<RawField>>,
+    #[serde(default)]
+    text_codecs: BTreeMap<String, text::TextCodec>,
     games: Vec<RawGame>,
 }
 
@@ -291,6 +262,8 @@ struct RawGame {
     #[serde(default)]
     mirrors: Vec<RawMirror>,
     generation: Option<RawGeneration>,
+    #[serde(flatten)]
+    runtime: runtime::Runtime,
 }
 
 #[derive(Clone, Deserialize)]
@@ -315,6 +288,8 @@ struct RawField {
     #[serde(default)]
     choices: Vec<RawChoice>,
     mask: Option<u32>,
+    #[serde(flatten)]
+    behavior: field::FieldBehavior,
 }
 
 #[derive(Clone, Deserialize)]
@@ -344,7 +319,7 @@ fn one() -> usize {
     1
 }
 
-#[derive(Clone, Copy, Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 enum Storage {
     U8,
@@ -373,7 +348,7 @@ struct RawSignature {
     bytes: Vec<u8>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawChecksum {
     algorithm: ChecksumAlgorithm,
@@ -408,6 +383,7 @@ enum ChecksumAlgorithm {
     Xor32Le,
     Xor32Be,
     Sum8Mod255Complement,
+    Sum32LeFold16,
     Crc16CcittFalseLe,
 }
 
@@ -472,6 +448,7 @@ struct GameSchema {
     checksums: Vec<Checksum>,
     mirrors: Vec<Mirror>,
     generation: Option<Generation>,
+    runtime: runtime::Runtime,
 }
 
 #[derive(Clone, Debug)]
@@ -490,6 +467,8 @@ struct FieldSchema {
     copies: Vec<usize>,
     choices: Vec<Choice>,
     mask: Option<u32>,
+    behavior: field::FieldBehavior,
+    codec: Option<Arc<text::TextCodec>>,
 }
 
 #[derive(Clone, Debug)]
@@ -583,7 +562,9 @@ fn expand_records(game: &mut RawGame, records: &BTreeMap<String, Vec<RawField>>)
         if instance.index_start > u32::MAX as usize {
             return Err(invalid("record instance index_start must fit u32"));
         }
-        validate_field_id(&instance.id)?;
+        if !instance.id.is_empty() {
+            validate_field_id(&instance.id)?;
+        }
         if instance.stride.is_some() && instance.stride_bits.is_some() {
             return Err(invalid(
                 "record instance stride and stride_bits are mutually exclusive",
@@ -672,9 +653,28 @@ fn expand_records(game: &mut RawGame, records: &BTreeMap<String, Vec<RawField>>)
             };
             for source in template {
                 let mut field = source.clone();
-                field.id = format!("{}.{}", instance.id, field.id.replace("{index}", &index));
+                field.id = if instance.id.is_empty() {
+                    field.id.replace("{index}", &index)
+                } else {
+                    format!("{}.{}", instance.id, field.id.replace("{index}", &index))
+                };
+                let repetition_bits = repetition
+                    .checked_mul(
+                        instance
+                            .stride_bits
+                            .unwrap_or_else(|| instance.stride.unwrap_or(0) * 8),
+                    )
+                    .ok_or_else(|| invalid("record displacement overflows"))?;
+                field.behavior.shift(
+                    instance.offset,
+                    repetition_bits,
+                    instance.stride_bits.is_some(),
+                )?;
                 field.label = field.label.replace("{index}", &index);
                 field.description = field.description.replace("{index}", &index);
+                if let Some(group) = &mut field.behavior.group {
+                    *group = group.replace("{index}", &index);
+                }
                 if let Some(stride_bits) = instance.stride_bits {
                     shift_bit_field(&mut field, instance.offset, repetition, stride_bits)?;
                 } else {
@@ -710,7 +710,8 @@ fn expanded_field_bytes(field: &RawField, prefix: &str, index: &str) -> Result<u
             .ok_or_else(|| invalid("expanded record metadata exceeds 2 MiB"))
     };
     let mut bytes = EXPANDED_FIELD_COST
-        .checked_add(rendered_len(&field.id)?)
+        .checked_add(field.behavior.metadata_bytes()?)
+        .and_then(|bytes| bytes.checked_add(rendered_len(&field.id).ok()?))
         .and_then(|bytes| bytes.checked_add(rendered_len(&field.label).ok()?))
         .and_then(|bytes| bytes.checked_add(rendered_len(&field.description).ok()?))
         .and_then(|bytes| bytes.checked_add(prefix.len() + usize::from(!prefix.is_empty())))
@@ -761,6 +762,8 @@ fn shift_bit_field(
 impl GameSchema {
     fn build(raw: RawGame) -> Result<Self> {
         validate_game_id(&raw.id)?;
+        raw.runtime.validate(raw.save_size)?;
+        let logical_size = raw.runtime.logical_size.unwrap_or(raw.save_size);
         bounded_text(&raw.name, "game name")?;
         bounded_text(&raw.platform, "platform")?;
         bounded_text_allow_empty(&raw.description, "description")?;
@@ -791,10 +794,22 @@ impl GameSchema {
             if !field_ids.insert(field.id.clone()) {
                 return Err(invalid("schema field IDs must be unique per game"));
             }
-            fields.push(FieldSchema::build(field, raw.save_size)?);
+            if let Some(group) = &field.behavior.group
+                && raw
+                    .runtime
+                    .layout
+                    .as_ref()
+                    .is_none_or(|layout| !layout.has_group(group))
+            {
+                return Err(invalid("a field references an unknown layout group"));
+            }
+            fields.push(FieldSchema::build(field, logical_size)?);
         }
         let mut storage_fields = Vec::new();
         for field in &fields {
+            if field.behavior.format.is_some() {
+                continue;
+            }
             if storage_fields.len() + field.copies.len() + 1 > MAX_FIELDS {
                 return Err(invalid(
                     "fields and their copies exceed 4096 storage locations",
@@ -812,7 +827,7 @@ impl GameSchema {
             .signatures
             .into_iter()
             .map(|value| {
-                check_nonempty_span(value.offset, value.bytes.len(), raw.save_size, "signature")?;
+                check_nonempty_span(value.offset, value.bytes.len(), logical_size, "signature")?;
                 Ok(SpanBytes {
                     offset: value.offset,
                     bytes: value.bytes,
@@ -822,12 +837,12 @@ impl GameSchema {
         let checksums = raw
             .checksums
             .into_iter()
-            .map(|value| Checksum::build(value, raw.save_size))
+            .map(|value| Checksum::build(value, logical_size))
             .collect::<Result<Vec<_>>>()?;
         let mirrors = raw
             .mirrors
             .into_iter()
-            .map(|value| Mirror::build(value, raw.save_size))
+            .map(|value| Mirror::build(value, logical_size))
             .collect::<Result<Vec<_>>>()?;
         validate_reserved_overlaps(&storage_fields, &signatures, &checksums, &mirrors)?;
         let generation = raw
@@ -844,39 +859,61 @@ impl GameSchema {
             checksums,
             mirrors,
             generation,
+            runtime: raw.runtime,
         })
     }
 
     fn integrity_bytes(&self) -> Result<usize> {
-        self.signatures
-            .iter()
-            .map(|signature| signature.bytes.len())
-            .chain(self.checksums.iter().map(|checksum| checksum.length))
-            .chain(self.mirrors.iter().map(|mirror| mirror.length))
-            .try_fold(0usize, |total, length| {
-                total
-                    .checked_add(length)
-                    .ok_or_else(|| invalid("schema integrity work exceeds 64 MiB"))
-            })
+        rules::sum_work(
+            self.signatures
+                .iter()
+                .map(|signature| Ok(signature.bytes.len()))
+                .chain(self.checksums.iter().map(|checksum| Ok(checksum.length)))
+                .chain(self.mirrors.iter().map(|mirror| Ok(mirror.length)))
+                .chain(self.fields.iter().map(|field| field.behavior.work_bytes()))
+                .chain(std::iter::once(self.runtime.work_bytes()))
+                .chain(
+                    self.runtime
+                        .layout
+                        .iter()
+                        .map(|layout| layout.integrity_bytes(self.save_size)),
+                ),
+        )
     }
 
     fn identity(&self) -> SaveGameIdentity {
         SaveGameIdentity {
             id: self.id.clone(),
             name: self.name.clone(),
-            family: "schema-v1".into(),
+            family: self
+                .runtime
+                .family
+                .clone()
+                .unwrap_or_else(|| "schema-v1".into()),
         }
     }
     fn definition(&self) -> SaveGameDefinition {
         SaveGameDefinition {
             identity: self.identity(),
             platform: self.platform.clone(),
-            save_format: format!("schema:{}", self.id),
-            save_format_name: self.name.clone(),
-            handler_id: "schema-v1".into(),
+            save_format: self
+                .runtime
+                .save_format
+                .clone()
+                .unwrap_or_else(|| format!("schema:{}", self.id)),
+            save_format_name: self
+                .runtime
+                .save_format_name
+                .clone()
+                .unwrap_or_else(|| self.name.clone()),
+            handler_id: self
+                .runtime
+                .handler_id
+                .clone()
+                .unwrap_or_else(|| "schema-v1".into()),
             supported_save_sizes: vec![self.save_size as u32],
-            known_rom_sha1: Vec::new(),
-            checksum_sizes: Vec::new(),
+            known_rom_sha1: self.runtime.known_rom_sha1.clone(),
+            checksum_sizes: self.runtime.checksum_sizes.clone(),
         }
     }
     fn matches(&self, game: &SaveGameIdentity) -> bool {
@@ -900,10 +937,11 @@ impl GameSchema {
         }
     }
 
-    fn parse_document(
+    fn parse_flat_document(
         &self,
         input: &SaveDetectionInput,
         game: &SaveGameIdentity,
+        resolved: Option<&layout::Resolved>,
     ) -> Result<SaveDocument> {
         if input
             .selected_game
@@ -915,7 +953,7 @@ impl GameSchema {
                 "the selected game does not match this schema",
             ));
         }
-        if input.bytes.len() != self.save_size {
+        if input.bytes.len() != self.runtime.logical_size.unwrap_or(self.save_size) {
             return Err(validation(
                 "save_size_invalid",
                 "the save size does not match the schema",
@@ -952,11 +990,22 @@ impl GameSchema {
             SaveIntegrityState::Valid
         };
         let section_valid = !matches!(state, SaveIntegrityState::Invalid);
-        let mut fields = self
-            .fields
-            .iter()
-            .map(|field| field.to_field(&input.bytes))
-            .collect::<Result<Vec<_>>>()?;
+        let mut fields = Vec::new();
+        for field in &self.fields {
+            if field.behavior.group.as_deref().is_some_and(|id| {
+                resolved.is_some_and(|layout| {
+                    !layout
+                        .groups
+                        .iter()
+                        .any(|group| group.id == id && group.selected.is_some())
+                })
+            }) {
+                continue;
+            }
+            if field.present(&input.bytes)? {
+                fields.push(field.to_field(&input.bytes)?);
+            }
+        }
         if matches!(state, SaveIntegrityState::Invalid) {
             for field in &mut fields {
                 field.editable = false;
@@ -1068,6 +1117,10 @@ impl FieldSchema {
             }
             intrinsic_max = i64::from(shifted);
         }
+        raw.behavior.validate(save_size)?;
+        if raw.behavior.format.is_some() && raw.editable.unwrap_or(true) {
+            return Err(invalid("formatted fields must be read-only"));
+        }
         check_span(raw.offset, storage_len, save_size, "field")?;
         if raw.copies.len() > MAX_FIELDS {
             return Err(invalid("field copies exceed 4096 entries"));
@@ -1126,6 +1179,8 @@ impl FieldSchema {
                 })
                 .collect(),
             mask: raw.mask,
+            behavior: raw.behavior,
+            codec: None,
         })
     }
     fn span(&self) -> (usize, usize) {
@@ -1193,7 +1248,7 @@ impl FieldSchema {
         {
             choices.push(value.clone());
         }
-        Ok(SaveField {
+        let mut output = SaveField {
             id: self.id.clone(),
             label: self.label.clone(),
             section_id: (self.offset / 65536) as u8,
@@ -1213,10 +1268,58 @@ impl FieldSchema {
             warnings: Vec::new(),
             step: Some(1),
             encoding: matches!(self.storage, Storage::Ascii).then(|| "ascii".into()),
-        })
+        };
+        if let Some(presentation) = &self.behavior.presentation {
+            output.section_id = presentation.section_id;
+            output.offset = presentation.offset;
+            output.kind = presentation.kind.clone();
+            output.constraints = presentation.constraints.clone();
+            output.step = presentation.step;
+            output.encoding = presentation.encoding.clone();
+            output.warnings = presentation.warnings.clone();
+        }
+        if self
+            .behavior
+            .editable_when
+            .as_ref()
+            .is_some_and(|predicate| !predicate.test(bytes).unwrap_or(false))
+        {
+            output.editable = false;
+        }
+        if let Some(override_) = &self.behavior.value_override
+            && override_.when.test(bytes)?
+        {
+            if override_.read_only {
+                output.editable = false;
+            }
+            if let Some(description) = &override_.description {
+                output.description = description.clone();
+            }
+            if let Some(warnings) = &override_.warnings {
+                output.warnings = warnings.clone();
+            }
+        }
+        if let Some(unknown) = &self.behavior.unknown_choice
+            && output.value == SaveValue::Enum(unknown.value.clone())
+        {
+            output.editable = false;
+            output.warnings.push(unknown.warning.clone());
+        }
+        Ok(output)
     }
     fn read(&self, bytes: &[u8]) -> Result<SaveValue> {
+        if let Some(value) = self.behavior.formatted(bytes)? {
+            return Ok(value);
+        }
+        if let Some(override_) = &self.behavior.value_override
+            && override_.when.test(bytes)?
+        {
+            return Ok(override_.value.clone());
+        }
         let b = &bytes[self.offset..self.offset + self.length];
+        if let Some(codec) = &self.codec {
+            return codec.decode(b).map(SaveValue::Text);
+        }
         let mut value = match self.storage {
             Storage::U8 => SaveValue::U32(b[0].into()),
             Storage::U16Le => SaveValue::U32(u16::from_le_bytes([b[0], b[1]]).into()),
@@ -1270,6 +1373,26 @@ impl FieldSchema {
             };
             value = SaveValue::U32((raw & mask) >> mask.trailing_zeros());
         }
+        if let Some(xor) = &self.behavior.xor {
+            let SaveValue::U32(raw) = value else {
+                return Err(invalid("XOR requires unsigned integer storage"));
+            };
+            value = SaveValue::U32(raw ^ (xor.eval(bytes)? as u32));
+        }
+        if let Some(read) = &self.behavior.read {
+            let raw = read.eval(bytes)?;
+            value = match self.storage {
+                Storage::Bool | Storage::Bit => SaveValue::Bool(raw != 0),
+                Storage::I8 | Storage::I16Le | Storage::I16Be | Storage::I32Le | Storage::I32Be => {
+                    SaveValue::I32(
+                        i32::try_from(raw).map_err(|_| invalid("read expression exceeds i32"))?,
+                    )
+                }
+                _ => SaveValue::U32(
+                    u32::try_from(raw).map_err(|_| invalid("read expression exceeds u32"))?,
+                ),
+            };
+        }
         if !self.choices.is_empty() {
             let numeric = match value {
                 SaveValue::U32(value) => i64::from(value),
@@ -1280,14 +1403,42 @@ impl FieldSchema {
                 .choices
                 .iter()
                 .find(|choice| choice.value == numeric)
-                .map_or_else(|| format!("raw:{numeric}"), |choice| choice.name.clone());
+                .map_or_else(
+                    || {
+                        self.behavior.unknown_choice.as_ref().map_or_else(
+                            || format!("raw:{numeric}"),
+                            |unknown| unknown.value.clone(),
+                        )
+                    },
+                    |choice| choice.name.clone(),
+                );
             value = SaveValue::Enum(name);
         }
         Ok(value)
     }
     fn write(&self, bytes: &mut [u8], value: &SaveValue) -> Result<()> {
+        let transformed = if let Some(xor) = &self.behavior.xor {
+            let SaveValue::U32(value) = value else {
+                return Err(invalid("XOR writes require unsigned values"));
+            };
+            Some(SaveValue::U32(value ^ xor.eval(bytes)? as u32))
+        } else {
+            None
+        };
+        let value = transformed.as_ref().unwrap_or(value);
         for offset in std::iter::once(&self.offset).chain(&self.copies) {
-            self.write_at(&mut bytes[*offset..*offset + self.length], value)?;
+            let destination = &mut bytes[*offset..*offset + self.length];
+            if let Some(codec) = &self.codec {
+                let SaveValue::Text(value) = value else {
+                    return Err(invalid("text codec writes require text values"));
+                };
+                codec.encode(value, destination)?;
+            } else {
+                self.write_at(destination, value)?;
+            }
+        }
+        for effect in &self.behavior.on_edit {
+            effect.apply(bytes)?;
         }
         Ok(())
     }
@@ -1554,6 +1705,13 @@ impl Checksum {
                 "this checksum requires byte inputs and does not accept target",
             ));
         }
+        if matches!(raw.algorithm, ChecksumAlgorithm::Sum32LeFold16)
+            && (raw.target.is_some() || !matches!(raw.unit, ChecksumUnit::U32Le))
+        {
+            return Err(invalid(
+                "sum32_le_fold16 requires u32_le input units and does not accept target",
+            ));
+        }
         if raw
             .target
             .is_some_and(|target| target > raw.algorithm.mask())
@@ -1650,6 +1808,20 @@ impl Checksum {
         }
         if matches!(self.algorithm, ChecksumAlgorithm::Sum8Mod255Complement) {
             return input.fold(0u32, |sum, byte| (sum + u32::from(byte)) % 255) ^ 255;
+        }
+        if matches!(self.algorithm, ChecksumAlgorithm::Sum32LeFold16) {
+            let mut input = input;
+            let mut sum = 0u32;
+            for _ in 0..self.length / 4 {
+                let word = u32::from_le_bytes([
+                    input.next().expect("validated u32 unit"),
+                    input.next().expect("validated u32 unit"),
+                    input.next().expect("validated u32 unit"),
+                    input.next().expect("validated u32 unit"),
+                ]);
+                sum = sum.wrapping_add(word);
+            }
+            return u32::from((sum as u16).wrapping_add((sum >> 16) as u16));
         }
         let xor = matches!(
             self.algorithm,

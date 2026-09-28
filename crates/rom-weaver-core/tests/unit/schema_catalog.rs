@@ -3,7 +3,7 @@ use std::{collections::HashSet, fs, path::Path};
 use super::{SaveDetectionInput, SaveEdit, SaveGameRegistry, SaveValue};
 
 #[test]
-fn every_catalog_pack_loads_without_replacing_another_game() {
+fn every_catalog_pack_loads_and_builtins_match_the_default_registry() {
     let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/save-schemas");
     let mut registry = SaveGameRegistry::default();
     let mut ids = HashSet::new();
@@ -17,14 +17,37 @@ fn every_catalog_pack_loads_without_replacing_another_game() {
         }
         let bytes = fs::read(&path).unwrap();
         let pack: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-        registry = registry
-            .with_schema_pack_json(&bytes)
+        let schema = super::SaveSchemaPack::from_json(&bytes)
             .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+        if path
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .starts_with("builtin-")
+        {
+            for handler in schema.into_handlers() {
+                for definition in super::SaveGameHandler::definitions(&handler) {
+                    assert!(registry.definitions().contains(&definition));
+                }
+            }
+        } else {
+            registry = registry
+                .with_schema_pack_json(&bytes)
+                .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+        }
         for game in pack["games"].as_array().unwrap() {
             let id = game["id"].as_str().unwrap();
             assert!(ids.insert(id.to_owned()), "duplicate catalog game: {id}");
             assert!(
-                !game["fields"].as_array().unwrap().is_empty(),
+                !game["fields"].as_array().unwrap().is_empty()
+                    || game["records"]
+                        .as_array()
+                        .is_some_and(|records| records.iter().any(|record| {
+                            pack["records"][record["record"].as_str().unwrap()]
+                                .as_array()
+                                .is_some_and(|fields| !fields.is_empty())
+                        })),
                 "empty catalog game: {id}"
             );
             if game

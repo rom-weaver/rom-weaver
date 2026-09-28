@@ -1,12 +1,20 @@
+mod builtin;
 mod container;
 pub mod formats;
+#[cfg(test)]
 mod pokemon_gen1;
+#[cfg(test)]
 mod pokemon_gen2;
+#[cfg(test)]
 mod pokemon_gen3;
+#[cfg(test)]
 mod pokemon_gen4;
+#[cfg(test)]
 mod pokemon_gen5;
 mod schema;
+#[cfg(test)]
 mod super_mario_world;
+#[cfg(test)]
 mod zelda_alttp;
 
 use std::borrow::Cow;
@@ -18,18 +26,15 @@ use ts_rs::TS;
 
 use crate::{Result, RomWeaverError, ValidationCodeError};
 
+pub use builtin::{
+    PokemonGen1Handler, PokemonGen2Handler, PokemonGen3Handler, PokemonGen4Handler,
+    PokemonGen5Handler, SuperMarioWorldHandler, ZeldaAlttpHandler,
+};
 pub use container::{SaveContainer, SaveContainerKind, unwrap_save_container};
 pub use formats::{
     SaveFormatCandidate, SaveFormatDefinition, all_save_formats, candidate_save_formats,
 };
-pub use pokemon_gen1::PokemonGen1Handler;
-pub use pokemon_gen2::PokemonGen2Handler;
-pub use pokemon_gen3::PokemonGen3Handler;
-pub use pokemon_gen4::PokemonGen4Handler;
-pub use pokemon_gen5::PokemonGen5Handler;
 pub use schema::{SaveSchemaPack, SchemaSaveHandler};
-pub use super_mario_world::SuperMarioWorldHandler;
-pub use zelda_alttp::ZeldaAlttpHandler;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
