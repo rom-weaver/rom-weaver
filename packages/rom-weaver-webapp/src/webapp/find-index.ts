@@ -109,6 +109,10 @@ const KIND_LIMIT: Record<FindKind, number> = { tool: 4, app: 4, setting: 4, guid
 // These terms mirror the browser workflows and the CLI spellings. Keep a CLI-
 // only command on its guide instead of sending it to a similar browser tool.
 const TOOL_FIND_DETAILS: Record<string, { hint: MessageId; keywords: string }> = {
+  compress: {
+    hint: "ui.find.cliArchiveHint",
+    keywords: "compress pack archive disc image CHD RVZ Z3DS ZIP 7z",
+  },
   creator: {
     hint: "ui.hero.createDescription",
     keywords: "create patch patch create make build xdelta xdelta3 vcdiff bdf bsdiff bsdiff40",

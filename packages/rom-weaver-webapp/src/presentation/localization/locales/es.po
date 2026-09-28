@@ -900,6 +900,11 @@ msgstr "Elija el juego que necesita"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.compressThesis2"
+msgstr "Elige el formato de salida."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.output.body"
 msgstr "Elige el nombre, formato, compresión y encabezado de salida. Luego pulsa Aplicar y descargar para aplicar ambos parches."
 
@@ -980,8 +985,23 @@ msgstr "comprimir"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.run"
+msgstr "Comprimir"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.compress"
 msgstr "Comprimir"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.compressThesis"
+msgstr "Comprime tus archivos."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.compress.running"
+msgstr "Comprimiendo archivos…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1087,6 +1107,11 @@ msgstr "Crea parches, comparte paquetes reutilizables y prueba ROM en tu navegad
 #: src/presentation/localization/messages.ts
 msgid "ui.related.createTool"
 msgstr "Herramienta Crear"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.compressDescription"
+msgstr "Crea archivos ZIP o 7z con tus archivos. Comprime imágenes de disco y ROM compatibles a CHD, RVZ o Z3DS. Todo se ejecuta localmente en tu navegador."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1287,6 +1312,11 @@ msgstr "Arrastra para reordenar · haz clic para editar la posición · teclas d
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.dropFiles"
 msgstr "Soltar archivos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.compress.drop"
+msgstr "Suelta archivos para comprimirlos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2610,22 +2640,22 @@ msgstr "Plataformas posibles"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "settings.postApplyDownloadBehavior"
-msgstr "Descarga después de aplicar"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.postDownload"
 msgstr "Descarga después de aplicar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "settings.postApplyTestBehavior"
-msgstr "Prueba después de aplicar"
+msgid "settings.postApplyDownloadBehavior"
+msgstr "Descarga después de aplicar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.postTest"
+msgstr "Prueba después de aplicar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.postApplyTestBehavior"
 msgstr "Prueba después de aplicar"
 
 #. js-lingui-explicit-id
@@ -2807,6 +2837,11 @@ msgstr "Eliminar"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.removeCheck"
 msgstr "Eliminar comprobación de {check}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.compress.removeFile"
+msgstr "Eliminar {name}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3270,6 +3305,11 @@ msgstr "Sistema"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.tap"
+msgstr "Toca para añadir archivos que comprimir"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.drop.heroCoarse"
 msgstr "Toca para agregar ROM, parches, paquetes o archivos"
 
@@ -3635,12 +3675,12 @@ msgstr "Instrucciones del tutorial"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "settings.defaultCompression"
+msgid "ui.output.type"
 msgstr "Tipo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.output.type"
+msgid "settings.defaultCompression"
 msgstr "Tipo"
 
 #~ msgid "ui.apply.validation.overrideChecksum"
@@ -3866,6 +3906,11 @@ msgstr "por tu suma de verificación"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.localFirstTitle"
 msgstr "Tu colección es tuya. La herramienta debe actuar como tal."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.compress.local"
+msgstr "Tus archivos permanecen en este navegador. ZIP y 7z conservan los archivos originales, incluidos parches y archivos comprimidos."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -115,6 +115,15 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         ),
         WORKFLOW_SEO_ROUTES.extract,
       );
+      const compressHtml = injectLdJson(
+        createWorkflowRouteHtml(
+          withRoutePreloadLinks(withShell("compress"), routePreloadLinks.get("compress")),
+          WORKFLOW_SEO_ROUTES.compress,
+          channel,
+          channelLabel,
+        ),
+        WORKFLOW_SEO_ROUTES.compress,
+      );
       const identifyHtml = injectLdJson(
         createWorkflowRouteHtml(
           withRoutePreloadLinks(withShell("identify"), routePreloadLinks.get("identify")),
@@ -162,6 +171,7 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         ["apply-patches", applyHtml],
         ["bundle-patches", bundleHtml],
         ["create-patch", createHtml],
+        ["compress", compressHtml],
         ["extract", extractHtml],
         ["identify-rom", identifyHtml],
         ["test-rom", testHtml],

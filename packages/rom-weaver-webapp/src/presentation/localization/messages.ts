@@ -10,6 +10,22 @@ import type { MessageId } from "./catalog.ts";
  * during Babel transforms. Plurals use ICU `{count, plural, ...}` messages.
  */
 const MESSAGES: Record<MessageId, MessageDescriptor> = {
+  "ui.hero.compressThesis": msg({ id: "ui.hero.compressThesis", message: "Compress your files." }),
+  "ui.hero.compressThesis2": msg({ id: "ui.hero.compressThesis2", message: "Choose the output format." }),
+  "ui.hero.compressDescription": msg({
+    id: "ui.hero.compressDescription",
+    message:
+      "Create ZIP or 7z archives from your files. Compress compatible disc images and ROMs to CHD, RVZ, or Z3DS. Everything runs locally in your browser.",
+  }),
+  "ui.compress.drop": msg({ id: "ui.compress.drop", message: "Drop files to compress them" }),
+  "ui.compress.tap": msg({ id: "ui.compress.tap", message: "Tap to add files to compress" }),
+  "ui.compress.local": msg({
+    id: "ui.compress.local",
+    message: "Your files stay in this browser. ZIP and 7z preserve the original files, including patches and archives.",
+  }),
+  "ui.compress.removeFile": msg({ id: "ui.compress.removeFile", message: "Remove {name}" }),
+  "ui.compress.running": msg({ id: "ui.compress.running", message: "Compressing files…" }),
+  "ui.compress.run": msg({ id: "ui.compress.run", message: "Compress" }),
   "ui.drop.inputHandling": msg({ id: "ui.drop.inputHandling", message: "Input handling" }),
   "ui.drop.inputs": msg({ id: "ui.drop.inputs", message: "Inputs" }),
   "ui.identifyDrawer.archiveMember": msg({ id: "ui.identifyDrawer.archiveMember", message: "Archive member" }),

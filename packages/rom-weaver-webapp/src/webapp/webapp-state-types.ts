@@ -1,4 +1,13 @@
-type WorkflowView = "patcher" | "creator" | "extract" | "identify" | "trim" | "ppf-undo" | "save-editor" | "test";
+type WorkflowView =
+  | "patcher"
+  | "creator"
+  | "compress"
+  | "extract"
+  | "identify"
+  | "trim"
+  | "ppf-undo"
+  | "save-editor"
+  | "test";
 /** "home" is the apex landing route: a WebappView the shell renders, but not a workflow. */
 type WebappView = WorkflowView | "bundle" | "docs" | "home" | "whats-new";
 
@@ -37,6 +46,10 @@ type PpfUndoSessionState = {
   active: boolean;
 };
 
+type CompressSessionState = {
+  active: boolean;
+};
+
 type SaveEditorSessionState = {
   active: boolean;
 };
@@ -68,10 +81,12 @@ const createEmptyTrimSessionState = (): TrimSessionState => ({
 });
 
 const createEmptyPpfUndoSessionState = (): PpfUndoSessionState => ({ active: false });
+const createEmptyCompressSessionState = (): CompressSessionState => ({ active: false });
 
 const createEmptySaveEditorSessionState = (): SaveEditorSessionState => ({ active: false });
 
 export type {
+  CompressSessionState,
   CreatorSessionState,
   PatcherSessionState,
   StartupState,
@@ -83,6 +98,7 @@ export type {
   WorkflowView,
 };
 export {
+  createEmptyCompressSessionState,
   createEmptyCreatorSessionState,
   createEmptyPatcherSessionState,
   createEmptyPpfUndoSessionState,

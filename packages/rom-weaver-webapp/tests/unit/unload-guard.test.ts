@@ -20,4 +20,8 @@ describe("settingsDraftHasChanges (numeric-aware equality)", () => {
   it("flags an active Save Editor session", () => {
     expect(shouldWarnBeforeUnload({ saveEditorActive: true })).toBe(true);
   });
+
+  it("flags an active compression session", () => {
+    expect(shouldWarnBeforeUnload({ compressActive: true })).toBe(true);
+  });
 });

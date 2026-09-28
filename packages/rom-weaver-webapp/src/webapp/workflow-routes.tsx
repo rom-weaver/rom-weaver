@@ -7,6 +7,7 @@ import type { IdentifyFormProps } from "./components/identify-form.tsx";
 import type { HomePageProps } from "./components/home-page.tsx";
 import type { WhatsNewPageProps } from "./whats-new-page.tsx";
 import type { WebappView } from "./webapp-state-types.ts";
+import type { CompressFormProps } from "./components/compress-form.tsx";
 
 /**
  * Each workflow loads in a separate chunk so the entry bundle does not include every form.
@@ -18,6 +19,7 @@ const logger = createLogger("workflow-routes");
 type WorkflowRouteProps = {
   bundle: ApplyPatchFormProps;
   creator: CreatePatchFormProps;
+  compress: CompressFormProps;
   docs: {
     active: boolean;
     onSelectTab?: (id: string) => void;
@@ -114,6 +116,9 @@ const HomeRoute = createWorkflowRoute("home", () =>
 const ExtractRoute = createWorkflowRoute("extract", () =>
   import("./components/extract-form.tsx").then((module) => ({ default: module.ExtractForm })),
 );
+const CompressRoute = createWorkflowRoute("compress", () =>
+  import("./components/compress-form.tsx").then((module) => ({ default: module.CompressForm })),
+);
 const IdentifyRoute = createWorkflowRoute("identify", () =>
   import("./components/identify-form.tsx").then((module) => ({ default: module.IdentifyForm })),
 );
@@ -136,6 +141,7 @@ const WhatsNewRoute = createWorkflowRoute("whats-new", () =>
 const WORKFLOW_ROUTES = {
   bundle: BundleWorkflowRoute,
   creator: CreatorRoute,
+  compress: CompressRoute,
   docs: DocsRoute,
   extract: ExtractRoute,
   home: HomeRoute,
@@ -149,6 +155,7 @@ const WORKFLOW_ROUTES = {
 } as const;
 
 const CreatePatchRoute = CreatorRoute.Component;
+const CompressRouteForm = CompressRoute.Component;
 const DocsPageRoute = DocsRoute.Component;
 const ApplyPatchRoute = PatcherRoute.Component;
 const BundleRoute = BundleWorkflowRoute.Component;
@@ -176,6 +183,7 @@ export {
   ApplyPatchRoute,
   BundleRoute,
   CreatePatchRoute,
+  CompressRouteForm,
   DocsNavigationRoute,
   DocsPageRoute,
   EmulatorTestRoute,

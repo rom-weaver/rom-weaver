@@ -65,6 +65,7 @@ const applyHtml = read("apply-patches.html");
 const bundleHtml = read("bundle-patches.html");
 const notFoundHtml = read("404.html");
 const createHtml = read("create-patch.html");
+const compressHtml = read("compress.html");
 const extractHtml = read("extract.html");
 const identifyHtml = read("identify-rom.html");
 const testHtml = read("test-rom.html");
@@ -269,6 +270,17 @@ assertIncludes(bundleHtml, WORKFLOW_SEO_ROUTES.bundle.description, "bundle descr
 assertIncludes(read("bundle/index.html"), WORKFLOW_SEO_ROUTES.bundle.description, "static-host bundle description");
 assertIncludes(createHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.creator.slug}"`, "create canonical");
 assertIncludes(createHtml, WORKFLOW_SEO_ROUTES.creator.description, "create description");
+assertIncludes(
+  compressHtml,
+  `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.compress.slug}"`,
+  "compress canonical",
+);
+assertIncludes(compressHtml, WORKFLOW_SEO_ROUTES.compress.description, "compress description");
+assertIncludes(
+  read("compress/index.html"),
+  WORKFLOW_SEO_ROUTES.compress.description,
+  "static-host compress description",
+);
 assertIncludes(read("create/index.html"), WORKFLOW_SEO_ROUTES.creator.description, "static-host create description");
 assertIncludes(extractHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.extract.slug}"`, "extract canonical");
 assertIncludes(extractHtml, WORKFLOW_SEO_ROUTES.extract.description, "extract description");
@@ -577,6 +589,7 @@ for (const slug of [
   ...DOC_ROUTES.map((route) => route.slug),
   "apply",
   "create",
+  "compress",
   "identify",
   "ppf-undo",
   "save-editor",

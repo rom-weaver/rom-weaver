@@ -14,6 +14,12 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
     slug: "create-patch",
     title: `${SITE_NAME}: Create ROM patches online`,
   }),
+  compress: Object.freeze({
+    description:
+      "Create ZIP and 7z archives, or compress compatible disc images to CHD, RVZ, and Z3DS, locally in your browser. No uploads or account required.",
+    slug: "compress",
+    title: `${SITE_NAME}: Compress ROMs and files online`,
+  }),
   extract: Object.freeze({
     description:
       "Extract supported ROM archives and disc images locally in your browser. Download individual files or an uncompressed ZIP. No uploads or account required.",
