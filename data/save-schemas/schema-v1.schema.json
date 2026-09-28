@@ -1119,11 +1119,16 @@
       "required": ["spans"]
     },
     "checksum_blocks": {
-      "description": "Each block adds a checksum, an optional mirror predicate and repair, and a section with the next ID.",
+      "description": "Each block adds a byte-unit checksum, an optional mirror predicate and repair, and a section with the next ID. A candidate with blocks declares no checksums, repairs, or sections.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "algorithm": { "$ref": "#/$defs/checksum/properties/algorithm" },
+        "algorithm": {
+          "allOf": [
+            { "$ref": "#/$defs/checksum/properties/algorithm" },
+            { "not": { "const": "sum32_le_fold16" } }
+          ]
+        },
         "signature": { "anyOf": [{ "$ref": "#/$defs/scalar" }, { "type": "null" }] },
         "blocks": {
           "type": "array",

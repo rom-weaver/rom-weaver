@@ -377,4 +377,30 @@ fn checksum_blocks_expand_into_checksums_mirrors_and_sections() {
             .to_string()
             .contains("0 to 255")
     );
+    for (member, value) in [
+        (
+            "checksums",
+            json!([{"algorithm":"add8","start":0,"length":1,"offset":2}]),
+        ),
+        (
+            "repairs",
+            json!([{"kind":"mirror","source":0,"target":2,"length":1}]),
+        ),
+        (
+            "sections",
+            json!([{"id":1,"physical_offset":0,
+            "checksum":{"algorithm":"add8","start":0,"length":1,"offset":2}}]),
+        ),
+    ] {
+        let mut mixed = game(json!([{"start":0,"length":4,"offset":4}]));
+        mixed["layout"]["groups"][0]["copies"]["candidates"][0][member] = value;
+        let pack = json!({"schema_version":1,"games":[mixed]});
+        assert!(
+            SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap())
+                .unwrap_err()
+                .to_string()
+                .contains("cannot be combined"),
+            "{member}"
+        );
+    }
 }

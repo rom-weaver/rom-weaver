@@ -863,9 +863,15 @@ fn validate_spans(
 }
 
 impl Candidate {
+    /// Blocks own the candidate's checksums, repairs, and sections, so their
+    /// repair order and section IDs never interleave with explicit entries.
     fn expand_blocks(&mut self, blocks: ChecksumBlocks) -> Result<()> {
-        let first_id = self.sections.len();
-        if first_id + blocks.blocks.len() > usize::from(u8::MAX) + 1 {
+        if !self.checksums.is_empty() || !self.repairs.is_empty() || !self.sections.is_empty() {
+            return Err(invalid(
+                "checksum_blocks cannot be combined with checksums, repairs, or sections",
+            ));
+        }
+        if blocks.blocks.len() > usize::from(u8::MAX) + 1 {
             return Err(invalid("fixed section IDs must fit from 0 to 255"));
         }
         let width = blocks.algorithm.width();
@@ -897,7 +903,7 @@ impl Candidate {
                 });
             }
             self.sections.push(FixedSection {
-                id: (first_id + index) as u8,
+                id: index as u8,
                 physical_offset: block.start,
                 checksum,
                 signature: blocks.signature.clone(),
