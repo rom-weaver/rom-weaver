@@ -105,6 +105,19 @@ impl Runtime {
                 .chain(self.after_edit.iter().map(Store::work_bytes)),
         )
     }
+    pub fn expand_checks(&mut self) -> Result<()> {
+        for checks in [
+            &mut self.checks,
+            &mut self.document_checks,
+            &mut self.edit_checks,
+        ]
+        .into_iter()
+        .chain(self.recognition.iter_mut().map(|config| &mut config.checks))
+        {
+            rules::expand_checks(checks)?;
+        }
+        Ok(())
+    }
     pub fn validate(&self, save_size: usize) -> Result<()> {
         let size = self.logical_size.unwrap_or(save_size);
         if size == 0 || size > MAX_SAVE_SIZE {

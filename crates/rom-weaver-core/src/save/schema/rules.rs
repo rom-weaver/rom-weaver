@@ -517,6 +517,61 @@ pub(super) struct Check {
     pub message: String,
     pub section_id: Option<u8>,
     pub warning: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeat: Option<CheckRepeat>,
+}
+
+/// Repeats one check over evenly spaced records. Each copy moves the rule
+/// scalars marked `relative: true` by `stride` bytes.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct CheckRepeat {
+    pub count: usize,
+    pub stride: usize,
+}
+
+/// Replaces every repeated check with its copies, in repetition order.
+pub(super) fn expand_checks(checks: &mut Vec<Check>) -> Result<()> {
+    if checks.iter().all(|check| check.repeat.is_none()) {
+        return Ok(());
+    }
+    let total = checks.iter().try_fold(0usize, |total, check| {
+        let count = check.repeat.map_or(1, |repeat| repeat.count);
+        total
+            .checked_add(count)
+            .filter(|total| *total <= super::MAX_COMPONENTS)
+            .ok_or_else(|| invalid("expanded checks exceed 4096 entries"))
+    })?;
+    let mut expanded = Vec::with_capacity(total);
+    for check in checks.drain(..) {
+        let Some(repeat) = check.repeat else {
+            expanded.push(check);
+            continue;
+        };
+        if repeat.count == 0 {
+            return Err(invalid("check repeat count must be from 1 to 4096"));
+        }
+        if repeat.stride == 0 || repeat.stride > super::MAX_SAVE_SIZE {
+            return Err(invalid(
+                "check repeat stride must be positive and within the save-size limit",
+            ));
+        }
+        for repetition in 0..repeat.count {
+            let bits = repetition
+                .checked_mul(repeat.stride)
+                .and_then(|bytes| bytes.checked_mul(8))
+                .ok_or_else(|| invalid("check repeat displacement overflows"))?;
+            let mut copy = check.clone();
+            copy.repeat = None;
+            if let Some(when) = &mut copy.when {
+                when.shift(0, bits, false)?;
+            }
+            copy.assert.shift(0, bits, false)?;
+            expanded.push(copy);
+        }
+    }
+    *checks = expanded;
+    Ok(())
 }
 
 impl Check {

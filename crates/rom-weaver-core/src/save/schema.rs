@@ -521,9 +521,9 @@ fn validate_record_templates(records: &BTreeMap<String, Vec<RawField>>) -> Resul
             .ok_or_else(|| invalid("record template fields exceed 4096 entries"))?;
         for field in fields {
             let mut rendered = field.clone();
-            rendered.id = rendered.id.replace("{index}", "0");
-            rendered.label = rendered.label.replace("{index}", "0");
-            rendered.description = rendered.description.replace("{index}", "0");
+            rendered.id = render_index(&rendered.id, "0", "1");
+            rendered.label = render_index(&rendered.label, "0", "1");
+            rendered.description = render_index(&rendered.description, "0", "1");
             FieldSchema::build(rendered, MAX_SAVE_SIZE)?;
         }
     }
@@ -536,7 +536,7 @@ fn expand_records(game: &mut RawGame, records: &BTreeMap<String, Vec<RawField>>)
     }
     let mut expanded_count = game.fields.len();
     let mut metadata_bytes = game.fields.iter().try_fold(0usize, |total, field| {
-        expanded_field_bytes(field, "", "").and_then(|bytes| {
+        expanded_field_bytes(field, "", "", "").and_then(|bytes| {
             total
                 .checked_add(bytes)
                 .filter(|total| *total <= MAX_EXPANDED_METADATA_BYTES)
@@ -628,9 +628,10 @@ fn expand_records(game: &mut RawGame, records: &BTreeMap<String, Vec<RawField>>)
             } else {
                 format!("{index:0width$}", width = usize::from(instance.index_width))
             };
+            let ordinal = (repetition + 1).to_string();
             for field in template {
                 metadata_bytes = metadata_bytes
-                    .checked_add(expanded_field_bytes(field, &instance.id, &index)?)
+                    .checked_add(expanded_field_bytes(field, &instance.id, &index, &ordinal)?)
                     .filter(|total| *total <= MAX_EXPANDED_METADATA_BYTES)
                     .ok_or_else(|| invalid("expanded record metadata exceeds 2 MiB"))?;
             }
@@ -651,12 +652,17 @@ fn expand_records(game: &mut RawGame, records: &BTreeMap<String, Vec<RawField>>)
             } else {
                 format!("{index:0width$}", width = usize::from(instance.index_width))
             };
+            let ordinal = (repetition + 1).to_string();
             for source in template {
                 let mut field = source.clone();
                 field.id = if instance.id.is_empty() {
-                    field.id.replace("{index}", &index)
+                    render_index(&field.id, &index, &ordinal)
                 } else {
-                    format!("{}.{}", instance.id, field.id.replace("{index}", &index))
+                    format!(
+                        "{}.{}",
+                        instance.id,
+                        render_index(&field.id, &index, &ordinal)
+                    )
                 };
                 let repetition_bits = repetition
                     .checked_mul(
@@ -670,10 +676,10 @@ fn expand_records(game: &mut RawGame, records: &BTreeMap<String, Vec<RawField>>)
                     repetition_bits,
                     instance.stride_bits.is_some(),
                 )?;
-                field.label = field.label.replace("{index}", &index);
-                field.description = field.description.replace("{index}", &index);
+                field.label = render_index(&field.label, &index, &ordinal);
+                field.description = render_index(&field.description, &index, &ordinal);
                 if let Some(group) = &mut field.behavior.group {
-                    *group = group.replace("{index}", &index);
+                    *group = render_index(group, &index, &ordinal);
                 }
                 if let Some(stride_bits) = instance.stride_bits {
                     shift_bit_field(&mut field, instance.offset, repetition, stride_bits)?;
@@ -700,20 +706,26 @@ fn expand_records(game: &mut RawGame, records: &BTreeMap<String, Vec<RawField>>)
     Ok(())
 }
 
-fn expanded_field_bytes(field: &RawField, prefix: &str, index: &str) -> Result<usize> {
-    let rendered_len = |value: &str| -> Result<usize> {
-        let replacements = value.matches("{index}").count();
-        value
-            .len()
-            .checked_sub(replacements * "{index}".len())
-            .and_then(|length| length.checked_add(replacements * index.len()))
-            .ok_or_else(|| invalid("expanded record metadata exceeds 2 MiB"))
-    };
+/// Substitutes `{index}` (the instance index) and `{ordinal}` (the one-based
+/// repetition number) so zero-based IDs can keep one-based labels.
+fn render_index(value: &str, index: &str, ordinal: &str) -> String {
+    value
+        .replace("{index}", index)
+        .replace("{ordinal}", ordinal)
+}
+
+fn expanded_field_bytes(
+    field: &RawField,
+    prefix: &str,
+    index: &str,
+    ordinal: &str,
+) -> Result<usize> {
+    let rendered_len = |value: &str| render_index(value, index, ordinal).len();
     let mut bytes = EXPANDED_FIELD_COST
         .checked_add(field.behavior.metadata_bytes()?)
-        .and_then(|bytes| bytes.checked_add(rendered_len(&field.id).ok()?))
-        .and_then(|bytes| bytes.checked_add(rendered_len(&field.label).ok()?))
-        .and_then(|bytes| bytes.checked_add(rendered_len(&field.description).ok()?))
+        .and_then(|bytes| bytes.checked_add(rendered_len(&field.id)))
+        .and_then(|bytes| bytes.checked_add(rendered_len(&field.label)))
+        .and_then(|bytes| bytes.checked_add(rendered_len(&field.description)))
         .and_then(|bytes| bytes.checked_add(prefix.len() + usize::from(!prefix.is_empty())))
         .and_then(|bytes| bytes.checked_add(field.copies.len() * EXPANDED_COPY_COST))
         .ok_or_else(|| invalid("expanded record metadata exceeds 2 MiB"))?;
@@ -760,8 +772,9 @@ fn shift_bit_field(
 }
 
 impl GameSchema {
-    fn build(raw: RawGame) -> Result<Self> {
+    fn build(mut raw: RawGame) -> Result<Self> {
         validate_game_id(&raw.id)?;
+        raw.runtime.expand_checks()?;
         raw.runtime.validate(raw.save_size)?;
         let logical_size = raw.runtime.logical_size.unwrap_or(raw.save_size);
         bounded_text(&raw.name, "game name")?;
@@ -1272,10 +1285,18 @@ impl FieldSchema {
         if let Some(presentation) = &self.behavior.presentation {
             output.section_id = presentation.section_id;
             output.offset = presentation.offset;
-            output.kind = presentation.kind.clone();
-            output.constraints = presentation.constraints.clone();
-            output.step = presentation.step;
-            output.encoding = presentation.encoding.clone();
+            if let Some(kind) = &presentation.kind {
+                output.kind = kind.clone();
+            }
+            if let Some(constraints) = &presentation.constraints {
+                output.constraints = constraints.clone();
+            }
+            if let Some(step) = presentation.step {
+                output.step = step;
+            }
+            if let Some(encoding) = &presentation.encoding {
+                output.encoding = encoding.clone();
+            }
             output.warnings = presentation.warnings.clone();
         }
         if self

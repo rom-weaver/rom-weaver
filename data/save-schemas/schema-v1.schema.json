@@ -248,7 +248,7 @@
           "type": "string",
           "maxLength": 1024,
           "minLength": 1,
-          "pattern": "^(?:[A-Za-z0-9_-]|\\{index\\})+(?:\\.(?:[A-Za-z0-9_-]|\\{index\\})+)*$"
+          "pattern": "^(?:[A-Za-z0-9_-]|\\{index\\}|\\{ordinal\\})+(?:\\.(?:[A-Za-z0-9_-]|\\{index\\}|\\{ordinal\\})+)*$"
         },
         "label": {
           "type": "string",
@@ -888,12 +888,23 @@
         "code": { "type": "string" },
         "message": { "type": "string" },
         "section_id": { "type": ["integer", "null"], "minimum": 0, "maximum": 255 },
-        "warning": { "type": ["string", "null"] }
+        "warning": { "type": ["string", "null"] },
+        "repeat": {
+          "description": "Repeats the check; each copy moves relative rule scalars by stride bytes.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "count": { "type": "integer", "minimum": 1, "maximum": 4096 },
+            "stride": { "type": "integer", "minimum": 1, "maximum": 8388608 }
+          },
+          "required": ["count", "stride"]
+        }
       },
       "required": ["assert", "code", "message"]
     },
     "checks": { "type": "array", "maxItems": 4096, "items": { "$ref": "#/$defs/check" } },
     "presentation": {
+      "description": "An omitted kind, constraints, step, or encoding keeps the value derived from the field. An explicit null step or encoding clears it.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -920,7 +931,7 @@
         "encoding": { "type": ["string", "null"] },
         "warnings": { "type": "array", "maxItems": 128, "items": { "type": "string" } }
       },
-      "required": ["section_id", "offset", "kind", "constraints", "step", "encoding"]
+      "required": ["section_id", "offset"]
     },
     "constraints": {
       "type": "object",

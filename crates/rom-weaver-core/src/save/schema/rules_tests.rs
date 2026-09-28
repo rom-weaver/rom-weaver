@@ -169,3 +169,92 @@ fn logical_integrity_ranges_are_checked_before_recognition() {
         assert!(SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap()).is_err());
     }
 }
+
+#[test]
+fn repeated_checks_move_relative_reads_and_keep_absolute_reads() {
+    let game = |repeat: serde_json::Value| {
+        json!({
+            "id":"slots", "name":"Slots", "platform":"test", "save_size":8, "fields":[],
+            "checks":[{
+                "assert":{"le":[{"read":{"offset":1,"type":"u8","relative":true}},{"read":{"offset":0,"type":"u8"}}]},
+                "code":"slot_range", "message":"a slot exceeds the limit", "repeat":repeat
+            }]
+        })
+    };
+    let handler = load(game(json!({"count":3,"stride":2})));
+    let game_id = handler.definitions().remove(0).identity;
+    let parse = |bytes: Vec<u8>| {
+        handler.parse(
+            &SaveDetectionInput {
+                bytes,
+                selected_game: Some(game_id.id.clone()),
+                rom_sha1: None,
+            },
+            &game_id,
+        )
+    };
+    assert!(parse(vec![5, 5, 0, 5, 0, 5, 0, 9]).is_ok());
+    let RomWeaverError::ValidationCode(error) = parse(vec![5, 5, 0, 5, 0, 6, 0, 0]).unwrap_err()
+    else {
+        panic!("the third repetition must fail with a validation code");
+    };
+    assert_eq!(error.code(), "slot_range");
+    for repeat in [json!({"count":0,"stride":2}), json!({"count":3,"stride":0})] {
+        let pack = json!({"schema_version":1,"games":[game(repeat)]});
+        assert!(
+            SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap())
+                .unwrap_err()
+                .to_string()
+                .contains("check repeat")
+        );
+    }
+    let pack = json!({"schema_version":1,"games":[game(json!({"count":5,"stride":2}))]});
+    assert!(SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap()).is_err());
+}
+
+#[test]
+fn record_ordinals_and_omitted_presentation_members_follow_the_field() {
+    let pack = json!({"schema_version":1,"records":{"slot":[{
+        "id":"slot_{index}","label":"Slot {ordinal}","offset":0,"type":"u8","min":0,"max":9,
+        "presentation":{"section_id":3,"offset":0,"relative_offset":true}
+    },{
+        "id":"name_{index}","label":"Name {ordinal}","offset":1,"type":"ascii","length":1,
+        "presentation":{"section_id":3,"offset":1,"relative_offset":true,"step":null,"encoding":null}
+    }]},"games":[{"id":"slots","name":"Slots","platform":"test","save_size":8,"fields":[],
+        "records":[{"id":"bag","record":"slot","offset":2,"count":2,"stride":2}]}]});
+    let handler = SaveSchemaPack::from_json(&serde_json::to_vec(&pack).unwrap())
+        .unwrap()
+        .into_handlers()
+        .remove(0);
+    let game = handler.definitions().remove(0).identity;
+    let document = handler
+        .parse(
+            &SaveDetectionInput {
+                bytes: vec![0, 0, 4, b'A', 7, b'B', 0, 0],
+                selected_game: Some(game.id.clone()),
+                rom_sha1: None,
+            },
+            &game,
+        )
+        .unwrap();
+    let fields = &document.fields;
+    let slot = fields
+        .iter()
+        .find(|field| field.id == "bag.slot_1")
+        .unwrap();
+    assert_eq!(slot.label, "Slot 2");
+    assert_eq!((slot.section_id, slot.offset), (3, 2));
+    assert_eq!(slot.kind, SaveFieldKind::UnsignedInteger);
+    assert_eq!(
+        (slot.constraints.min, slot.constraints.max),
+        (Some(0), Some(9))
+    );
+    assert_eq!(slot.step, Some(1));
+    let name = fields
+        .iter()
+        .find(|field| field.id == "bag.name_0")
+        .unwrap();
+    assert_eq!(name.label, "Name 1");
+    assert_eq!((name.step, name.encoding.as_deref()), (None, None));
+    assert_eq!(name.constraints.max_length, Some(1));
+}

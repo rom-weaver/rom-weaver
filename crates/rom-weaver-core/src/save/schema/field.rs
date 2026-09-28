@@ -53,6 +53,9 @@ pub(super) enum FormatPart {
     },
 }
 
+/// Overrides the reported field metadata. An omitted `kind`, `constraints`,
+/// `step`, or `encoding` keeps the value derived from the field; an explicit
+/// `null` step or encoding clears it.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Presentation {
@@ -60,12 +63,33 @@ pub(super) struct Presentation {
     pub relative_offset: bool,
     pub section_id: u8,
     pub offset: u16,
-    pub kind: SaveFieldKind,
-    pub constraints: SaveConstraint,
-    pub step: Option<u32>,
-    pub encoding: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<SaveFieldKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub constraints: Option<SaveConstraint>,
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub step: Option<Option<u32>>,
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub encoding: Option<Option<String>>,
     #[serde(default)]
     pub warnings: Vec<String>,
+}
+
+/// Keeps a present `null` distinct from an omitted member.
+fn present<'de, D, T>(deserializer: D) -> std::result::Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
 }
 
 impl FieldBehavior {
@@ -208,15 +232,19 @@ impl FieldBehavior {
             super::bounded_text_allow_empty(&choice.warning, "unknown choice warning")?;
         }
         if let Some(presentation) = &self.presentation {
+            let choices = presentation
+                .constraints
+                .as_ref()
+                .map_or(&[][..], |constraints| &constraints.choices);
             for text in presentation
                 .warnings
                 .iter()
-                .chain(&presentation.constraints.choices)
-                .chain(&presentation.encoding)
+                .chain(choices)
+                .chain(presentation.encoding.iter().flatten())
             {
                 super::bounded_text_allow_empty(text, "field presentation")?;
             }
-            if presentation.warnings.len() > 128 || presentation.constraints.choices.len() > 4096 {
+            if presentation.warnings.len() > 128 || choices.len() > 4096 {
                 return Err(invalid("field presentation exceeds its collection limit"));
             }
         }

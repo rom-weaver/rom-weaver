@@ -146,7 +146,7 @@ Storage types are `u8`, `u16_le`, `u16_be`, `u24_le`, `u24_be`, `u32_le`, `u32_b
 
 `bit` requires a bit index from 0 through 7. `bool` and `bit` can set `inverted` to exchange the stored zero and one meanings. `ascii` requires a byte length from 1 through 255. A flat field's `offset` and `copies` are absolute. A record field's offsets and copies are relative to the instance base and its stride. An edit encodes the same value at the primary offset and every copy; reads use the primary offset. Copies do not validate equality before an edit.
 
-A record instance expands one top-level record without nesting. `count` defaults to 1 and has a maximum of 4,096. A larger count needs one positive `stride` in bytes or `stride_bits` in bits. `stride_bits` accepts only records made of `bit` fields. `index_start` defaults to 0. `index_width` defaults to 0, has a maximum of 10, and adds leading zeroes. Expansion substitutes `{index}` in field IDs, labels, descriptions, and group names. A nonempty instance ID prefixes each field ID with a dot. An empty ID retains the template IDs. Rule scalars marked `relative: true` move with the instance offset and stride. Other rule references retain their absolute addresses. For bit strides, relative rule scalars require a single-bit mask. `presentation.relative_offset` advances the reported offset by the repetition displacement, without adding the instance base. Every expanded field, offset, copy, and storage location follows the normal validation limits.
+A record instance expands one top-level record without nesting. `count` defaults to 1 and has a maximum of 4,096. A larger count needs one positive `stride` in bytes or `stride_bits` in bits. `stride_bits` accepts only records made of `bit` fields. `index_start` defaults to 0. `index_width` defaults to 0, has a maximum of 10, and adds leading zeroes. Expansion substitutes `{index}` and `{ordinal}` in field IDs, labels, descriptions, and group names. `{index}` starts at `index_start`; `{ordinal}` is the one-based repetition number. A nonempty instance ID prefixes each field ID with a dot. An empty ID retains the template IDs. Rule scalars marked `relative: true` move with the instance offset and stride. Other rule references retain their absolute addresses. For bit strides, relative rule scalars require a single-bit mask. `presentation.relative_offset` advances the reported offset by the repetition displacement, without adding the instance base. Every expanded field, offset, copy, and storage location follows the normal validation limits.
 
 Numeric fields can define `choices` as unique name and integer-value pairs. Choice names cannot start with `raw:`. The CLI and browser use the existing named-option controls. If stored data has an unknown value, readers expose `raw:<decimal>` as the current choice. An unrelated edit preserves that value.
 
@@ -183,7 +183,7 @@ A group's write policy patches the selected copy, patches valid copies, or copie
 
 ### Field values and validation
 
-Fields can name a layout `group` and define `present_when` or `editable_when` predicates. A field's `presentation` preserves its reported section, offset, kind, constraints, step, encoding, and warnings separately from storage.
+Fields can name a layout `group` and define `present_when` or `editable_when` predicates. A field's `presentation` preserves its reported section, offset, kind, constraints, step, encoding, and warnings separately from storage. `section_id` and `offset` are required. An omitted `kind`, `constraints`, `step`, or `encoding` keeps the value derived from the field. An explicit `null` step or encoding clears it.
 
 `text_codec` selects a codec from the pack's `text_codecs`. Codecs declare byte or word units, glyph tables or UTF-16 mappings, terminators, skipped units, padding, bit lanes, and invalid-input policies. Conditional replacement tables support context-dependent character encodings.
 
@@ -191,7 +191,7 @@ A numeric field can define an `xor` expression for stored-value encryption and a
 
 Expressions contain integers, scalar reads, checked arithmetic, bit operations, and conditional values. Predicates combine comparisons, byte-range checks, `all`, `any`, and `not`. Expression depth is limited to 16 and validation work to 4,096 nodes per expression. There are no scripts, loops, or native callbacks.
 
-Recognition checks determine candidates. `checks` validate parsed logical data. `document_checks` report invalid values and disable editing. `edit_checks` run before editing and after the complete batch. Numeric edit constraints remain separate from checks on existing stored values.
+Recognition checks determine candidates. `checks` validate parsed logical data. `document_checks` report invalid values and disable editing. `edit_checks` run before editing and after the complete batch. Numeric edit constraints remain separate from checks on existing stored values. A check with `repeat` expands into `count` copies. Each copy moves rule scalars marked `relative: true` by `stride` bytes. Expanded checks count toward the 4,096-check limit.
 
 ### Edit transactions
 
