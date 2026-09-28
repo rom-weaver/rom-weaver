@@ -2,7 +2,7 @@
 
 These JSON packs describe save layouts and editing rules for the shared schema interpreter. Loading a changed pack does not require an application rebuild. [`schema-v1.schema.json`](schema-v1.schema.json) defines the authoring format. Runtime validation also checks byte bounds, overlapping writes, and work limits.
 
-The `builtin-*.json` packs are compiled into the application and load automatically. They replace the seven game-specific editors in production. The previous Rust implementations remain test-only references for recognition, documents, recovery, and byte-for-byte editing comparisons.
+The `builtin-*.json` packs in [`crates/rom-weaver-core/data/save-schemas`](../../crates/rom-weaver-core/data/save-schemas) are compiled into the application and load automatically. They replace the seven game-specific editors in production. The previous Rust implementations remain test-only references for recognition, documents, recovery, and byte-for-byte editing comparisons.
 
 | Built-in pack                    | Games                                           |
 | -------------------------------- | ----------------------------------------------- |
@@ -50,6 +50,7 @@ Integer and packed-decimal fields use the full stored range unless the source pr
 The Generation I and II packs use record templates for the repeated Pokédex fields. Their expanded field IDs and byte locations match the earlier flat definitions. Their text-speed fields use the native `fast` (1), `medium` (3), and `slow` (5) choices.
 
 <!-- START doctoc -->
+
 ## Table of contents
 
 - [Sources and attribution](#sources-and-attribution)
