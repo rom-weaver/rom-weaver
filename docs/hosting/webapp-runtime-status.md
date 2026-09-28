@@ -39,4 +39,6 @@ The thread count is shown as `· 10 threads` on desktop and `· 10T` on mobile t
 
 ## Theme
 
-The masthead theme control switches between light and dark themes. Documentation screenshots use the selected theme.
+The theme control offers light, dark, and system appearance. System appearance follows the device preference. Documentation screenshots use the active theme.
+
+Procedure: [Change browser preferences](../how-to/browser-settings.md#change-preferences).

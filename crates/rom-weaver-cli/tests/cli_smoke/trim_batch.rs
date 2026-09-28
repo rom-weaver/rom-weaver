@@ -1241,6 +1241,42 @@ fn trim_revert_marker_round_trips_byte_identical() {
 }
 
 #[test]
+fn trim_revert_marker_round_trips_in_place_padding() {
+    let temp = setup_temp_dir();
+    let source = temp.child("game.gba");
+    for pad_byte in [0x00, 0xFF] {
+        let original = build_test_padded_rom(0x3456, 0x4000, pad_byte);
+        fs::write(source.path(), &original).expect("fixture");
+        command_stdout(
+            &[
+                "trim",
+                "--input",
+                source.path().to_str().expect("path"),
+                "--revert-marker",
+                "--in-place",
+                "--json",
+            ],
+            0,
+        );
+        let trimmed = fs::read(source.path()).expect("trimmed ROM");
+        assert_eq!(trimmed.len(), 0x3456 + 14);
+        assert_eq!(trimmed[0x3456 + 4], pad_byte);
+        command_stdout(
+            &[
+                "trim",
+                "--input",
+                source.path().to_str().expect("path"),
+                "--revert",
+                "--in-place",
+                "--json",
+            ],
+            0,
+        );
+        assert_eq!(fs::read(source.path()).expect("restored ROM"), original);
+    }
+}
+
+#[test]
 fn trim_without_revert_marker_writes_no_footer() {
     let temp = setup_temp_dir();
     let source = temp.child("game.gba");

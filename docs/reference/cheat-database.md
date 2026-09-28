@@ -6,6 +6,7 @@
 - [Supported systems](#supported-systems)
 - [Delivery classes](#delivery-classes)
 - [Match classes](#match-classes)
+- [Patch export](#patch-export)
 - [Data source](#data-source)
 - [CLI database directory](#cli-database-directory)
 - [Storage and network behavior](#storage-and-network-behavior)
@@ -50,6 +51,20 @@ An unsupported row shows its reason and cannot be selected. Reasons include: the
 | None | rom-weaver found no automatic game match. |
 
 Title and manual matches can target another region or revision.
+
+## Patch export
+
+The browser's **Save as patch** action exports one supported ROM cheat. Its automatic format depends on the ROM size:
+
+| ROM size | Patch format |
+| --- | --- |
+| Less than 16 MiB | IPS |
+| 16 MiB through 256 MiB | BPS |
+| More than 256 MiB | xdelta |
+
+The 256 MiB cutoff is rom-weaver's creation policy, not a limit of the BPS format.
+
+Procedure: [Save a ROM cheat as a patch](../how-to/use-browser-cheats.md#save-a-rom-cheat-as-a-patch).
 
 ## Data source
 

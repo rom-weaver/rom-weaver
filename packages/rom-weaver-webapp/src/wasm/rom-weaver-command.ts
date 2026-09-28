@@ -2,6 +2,8 @@ import {
   assertKnownRomWeaverBundleCommandType,
   assertKnownRomWeaverCommandType,
   assertKnownRomWeaverPatchCommandType,
+  isKnownRomWeaverSaveCommandType,
+  isKnownRomWeaverToolsCommandType,
 } from "./generated/rom-weaver-command-types.ts";
 import type {
   RomWeaverCommand,
@@ -121,7 +123,7 @@ export function createRomWeaverCommand<TType extends RomWeaverCommandLabel>(
     case "save-get":
     case "save-set":
     case "save-export-schema":
-      return { args: { args, type: type.slice("save-".length) }, type: "save" } as unknown as RomWeaverCommand;
+      return { args: { args, type: type.slice("save-".length) }, type: "save" } as RomWeaverCommand;
     default:
       return assertNever(type);
   }
@@ -456,12 +458,13 @@ function normalizeRomWeaverToolsCommand(toolsCommand: RomWeaverToolsCommand): Ro
   if (!isObjectRecord(toolsCommand) || Array.isArray(toolsCommand)) {
     throw new TypeError("rom-weaver tools command requires an object `args` payload");
   }
-  if (toolsCommand.type !== "ppf-undo") {
-    throw new TypeError(`unsupported tools command: ${String(toolsCommand.type)}`);
+  const toolsType = toolsCommand.type;
+  if (!isKnownRomWeaverToolsCommandType(toolsType)) {
+    throw new TypeError(`unsupported tools command: ${String(toolsType)}`);
   }
   const toolsArgs =
     isObjectRecord(toolsCommand.args) && !Array.isArray(toolsCommand.args) ? { ...toolsCommand.args } : {};
-  return { args: { args: toolsArgs, type: "ppf-undo" }, type: "tools" } as RomWeaverCommand;
+  return { args: { args: toolsArgs, type: toolsType }, type: "tools" } as RomWeaverCommand;
 }
 
 function normalizeRomWeaverSaveCommand(saveCommand: RomWeaverSaveCommand): RomWeaverCommand {
@@ -469,11 +472,11 @@ function normalizeRomWeaverSaveCommand(saveCommand: RomWeaverSaveCommand): RomWe
     throw new TypeError("rom-weaver save command requires an object `args` payload");
   }
   const saveType = String(saveCommand.type || "");
-  if (!["identify", "inspect", "get", "set", "export-schema", "create", "list-games"].includes(saveType)) {
+  if (!isKnownRomWeaverSaveCommandType(saveType)) {
     throw new TypeError(`unsupported save command: ${saveType}`);
   }
   const saveArgs = isObjectRecord(saveCommand.args) ? { ...saveCommand.args } : {};
-  return { args: { args: saveArgs, type: saveType }, type: "save" } as unknown as RomWeaverCommand;
+  return { args: { args: saveArgs, type: saveType }, type: "save" } as RomWeaverCommand;
 }
 
 function readRomWeaverSaveCommandBranch(saveCommand: RomWeaverSaveCommand): RomWeaverSaveCommandBranch {

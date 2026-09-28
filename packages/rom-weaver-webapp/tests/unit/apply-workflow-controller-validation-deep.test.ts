@@ -16,6 +16,7 @@ type Stage = {
   state: Record<string, unknown>;
 };
 type Probe = {
+  getSnapshot: ApplyWorkflowController<Source, unknown>["getSnapshot"];
   inputSession?: { role: "input"; sources: Source[]; stages: Stage[]; synthetic: boolean; view: Stage };
   latestChainPlans: Map<string, unknown>;
   patches: Stage[];
@@ -90,6 +91,7 @@ describe("ApplyWorkflowController.validatePatches", () => {
     mocks.validateApplyPatchTargets.mockImplementation(async (pending, adapters) => {
       adapters?.onChainPlan("asset-1", plan);
     });
+    const initial = controller.getSnapshot();
 
     await controller.validatePatches({
       chainMeta: new Map([
@@ -104,6 +106,15 @@ describe("ApplyWorkflowController.validatePatches", () => {
       target: { id: "asset-1" },
     });
     expect(controller.latestChainPlans.get("asset-1")).toEqual(plan);
+    const validated = controller.getSnapshot();
+    expect(validated.chainPlans.get("asset-1")).toBe(plan);
+    expect(initial.chainPlans.size).toBe(0);
+    await controller.validatePatches();
+    expect(controller.getSnapshot().chainPlans).toBe(validated.chainPlans);
+    mocks.validateApplyPatchTargets.mockResolvedValue(undefined);
+    await controller.validatePatches({ disabledIndexes: new Set([0, 1]) });
+    expect(controller.getSnapshot().chainPlans.size).toBe(0);
+    expect(validated.chainPlans.get("asset-1")).toBe(plan);
   });
 
   it("skips disabled and incomplete patches, and clears plans for removed targets", async () => {

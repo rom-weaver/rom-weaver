@@ -673,6 +673,132 @@ fn build_chd_v5_header_lays_out_fixed_fields() {
     assert!(no_parent[104..124].iter().all(|byte| *byte == 0));
 }
 
+fn v5_header_for_map_test(
+    logical_bytes: u64,
+    map_offset: u64,
+    hunk_bytes: u32,
+    compressed: bool,
+) -> [u8; 124] {
+    let handler = ChdContainerHandler;
+    let mut codecs = [ChdCodec::NONE; CHD_MAX_COMPRESSORS];
+    if compressed {
+        codecs[0] = ChdCodec::ZLIB;
+    }
+    handler.build_chd_v5_header(logical_bytes, map_offset, hunk_bytes, 1, codecs, None)
+}
+
+#[test]
+fn v5_map_preflight_rejects_impossible_uncompressed_map_before_open() {
+    let bytes = v5_header_for_map_test(1 << 28, 124, 1, false);
+    let error = ChdReadSession::validate_v5_map_allocation(
+        &mut Cursor::new(bytes),
+        Path::new("hostile.chd"),
+        124,
+    )
+    .unwrap_err();
+    assert!(
+        error.contains("past the 124-byte file"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn v5_map_preflight_rejects_uncompressed_map_past_eof() {
+    let bytes = v5_header_for_map_test(4, 124, 1, false);
+    let error = ChdReadSession::validate_v5_map_allocation(
+        &mut Cursor::new(bytes),
+        Path::new("truncated-map.chd"),
+        124,
+    )
+    .unwrap_err();
+    assert!(
+        error.contains("past the 124-byte file"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn v5_map_preflight_rejects_oversized_compressed_map_expansion() {
+    let mut bytes = v5_header_for_map_test(1 << 28, 124, 1, true).to_vec();
+    bytes.extend_from_slice(&[0_u8; 16]);
+    let file_len = bytes.len() as u64;
+    let error = ChdReadSession::validate_v5_map_allocation(
+        &mut Cursor::new(bytes),
+        Path::new("hostile-compressed.chd"),
+        file_len,
+    )
+    .unwrap_err();
+    assert!(
+        error.contains("can encode at most 0"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn v5_map_preflight_rejects_compressed_payload_past_eof() {
+    let mut bytes = v5_header_for_map_test(1, 124, 1, true).to_vec();
+    bytes.extend_from_slice(&32_u32.to_be_bytes());
+    bytes.extend_from_slice(&[0_u8; 12]);
+    let file_len = bytes.len() as u64;
+    let error = ChdReadSession::validate_v5_map_allocation(
+        &mut Cursor::new(bytes),
+        Path::new("truncated-compressed-map.chd"),
+        file_len,
+    )
+    .unwrap_err();
+    assert!(
+        error.contains("past the 140-byte file"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn v5_map_preflight_allows_compressed_expansion_larger_than_file() {
+    let mut bytes = v5_header_for_map_test(4384, 124, 1, true).to_vec();
+    bytes.extend_from_slice(&2_u32.to_be_bytes());
+    bytes.extend_from_slice(&[0_u8; 12]);
+    bytes.extend_from_slice(&[0_u8; 2]);
+    let file_len = bytes.len() as u64;
+    ChdReadSession::validate_v5_map_allocation(
+        &mut Cursor::new(bytes),
+        Path::new("valid-span.chd"),
+        file_len,
+    )
+    .unwrap();
+}
+
+#[test]
+fn v5_map_preflight_rejects_hunk_count_above_encoding_boundary() {
+    let mut bytes = v5_header_for_map_test(4385, 124, 1, true).to_vec();
+    bytes.extend_from_slice(&2_u32.to_be_bytes());
+    bytes.extend_from_slice(&[0_u8; 12]);
+    bytes.extend_from_slice(&[0_u8; 2]);
+    let file_len = bytes.len() as u64;
+    let error = ChdReadSession::validate_v5_map_allocation(
+        &mut Cursor::new(bytes),
+        Path::new("impossible-expansion.chd"),
+        file_len,
+    )
+    .unwrap_err();
+    assert!(
+        error.contains("can encode at most 4384"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn v5_map_preflight_accepts_in_file_uncompressed_map() {
+    let mut bytes = v5_header_for_map_test(4, 124, 1, false).to_vec();
+    bytes.extend_from_slice(&[0_u8; 16]);
+    let file_len = bytes.len() as u64;
+    ChdReadSession::validate_v5_map_allocation(
+        &mut Cursor::new(bytes),
+        Path::new("valid-uncompressed.chd"),
+        file_len,
+    )
+    .unwrap();
+}
+
 #[test]
 fn rust_metadata_entries_per_media_kind() {
     let handler = ChdContainerHandler;

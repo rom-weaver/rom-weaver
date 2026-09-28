@@ -4,6 +4,7 @@ type ApplyWorkflowSnapshot = ReturnType<ApplyWorkflow["getSnapshot"]>;
 type ApplyWorkflowSnapshotSource = Pick<ApplyWorkflow, "getSnapshot" | "subscribe">;
 
 type ApplyWorkflowFormSnapshot = {
+  chainPlans: ApplyWorkflowSnapshot["chainPlans"];
   inputReady: boolean;
   outputCompression: ApplyWorkflowSnapshot["output"]["outputFormat"] | undefined;
   outputName: string;
@@ -14,6 +15,7 @@ type ApplyWorkflowFormSnapshot = {
 };
 
 const EMPTY_APPLY_WORKFLOW_SNAPSHOT: ApplyWorkflowFormSnapshot = {
+  chainPlans: new Map(),
   inputReady: false,
   outputCompression: undefined,
   outputName: "",
@@ -24,6 +26,7 @@ const EMPTY_APPLY_WORKFLOW_SNAPSHOT: ApplyWorkflowFormSnapshot = {
 };
 
 const sameApplyWorkflowFormSnapshot = (left: ApplyWorkflowFormSnapshot, right: ApplyWorkflowFormSnapshot) =>
+  left.chainPlans === right.chainPlans &&
   left.inputReady === right.inputReady &&
   left.outputCompression === right.outputCompression &&
   left.outputName === right.outputName &&
@@ -46,6 +49,7 @@ const createApplyWorkflowSnapshotStore = () => {
 
     const current = workflow.getSnapshot();
     const next: ApplyWorkflowFormSnapshot = {
+      chainPlans: current.chainPlans.size ? current.chainPlans : EMPTY_APPLY_WORKFLOW_SNAPSHOT.chainPlans,
       inputReady: current.input?.status === "ready" && !!current.input.selectedCandidateId,
       outputCompression: current.output.outputFormat,
       outputName: invalidatedOutputSourceKey === outputSourceKey ? "" : current.output.outputName,

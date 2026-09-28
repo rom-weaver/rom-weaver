@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { isCompressionCodecFieldKey } from "../lib/compression/codec-fields.ts";
+import type { Localizer } from "../presentation/localization/index.ts";
 import { CodecCombobox } from "../public/react/components/ds/codec-combobox.tsx";
 import { CompressInfoContent } from "../public/react/components/ds/compress-panel.tsx";
 import { DropdownSelect } from "../public/react/components/ds/dropdown-select.tsx";
@@ -16,6 +17,7 @@ import {
   getSettingsFieldDefaultValue,
   getSettingsFieldMax,
   getSettingsFieldMin,
+  getSettingsFieldLabel,
   getSettingsFieldPlaceholder,
   getSettingsFieldSuggestion,
   getSettingsFieldSuggestionDataLocalize,
@@ -136,11 +138,16 @@ const getChoiceCheckboxValue = (fieldKey: SettingsFieldKey, draftSettings: Setti
   return String(getSettingsFieldDefaultValue(fieldKey));
 };
 
-const renderFieldInfo = (fieldKey: SettingsFieldKey, draftSettings: SettingsDraftState, uiState: SettingsUiState) => {
+const renderFieldInfo = (
+  fieldKey: SettingsFieldKey,
+  draftSettings: SettingsDraftState,
+  uiState: SettingsUiState,
+  localizer: Localizer,
+) => {
   const suggestion = getSettingsFieldSuggestion(fieldKey, draftSettings, uiState);
   if (!suggestion) return null;
   const suggestionDataLocalize = getSettingsFieldSuggestionDataLocalize(fieldKey, draftSettings, uiState);
-  const label = SETTINGS_FIELD_METADATA[fieldKey].label || fieldKey;
+  const label = getSettingsFieldLabel(fieldKey, localizer);
   const content =
     fieldKey === "compressionProfile" ? <CompressInfoContent info={COMPRESSION_PROFILE_FIELD_INFO} /> : suggestion;
   return (
@@ -163,12 +170,13 @@ const renderFieldInfo = (fieldKey: SettingsFieldKey, draftSettings: SettingsDraf
  * The first radio carries the field ID so the row label targets it.
  */
 const AccentPicker = ({ fieldKey, draftSettings, uiState, onDraftChange }: FieldRenderProps) => {
+  const localizer = useUiLocalizer();
   const field = SETTINGS_FIELD_METADATA[fieldKey];
   const disabled = isSettingsFieldDisabled(fieldKey, draftSettings, uiState);
   const value = getFieldValue(fieldKey, draftSettings) || getDefaultValueString(fieldKey);
   const selected = ACCENTS.find((accent) => accent.value === value);
   return (
-    <span aria-label={field.label} className="accent-picker" role="radiogroup">
+    <span aria-label={getSettingsFieldLabel(fieldKey, localizer)} className="accent-picker" role="radiogroup">
       {ACCENTS.map((accent, index) => (
         <label className="accent-chip" key={accent.value} title={accent.label}>
           <input
@@ -225,6 +233,7 @@ const ThemeSetting = () => {
 
 /** The control element (select / text / number input) for a non-toggle field. */
 const FieldControl = ({ fieldKey, draftSettings, uiState, validation, onDraftChange }: FieldRenderProps) => {
+  const localizer = useUiLocalizer();
   const field = SETTINGS_FIELD_METADATA[fieldKey];
   const disabled = isSettingsFieldDisabled(fieldKey, draftSettings, uiState);
   if (fieldKey === "accent") {
@@ -269,7 +278,7 @@ const FieldControl = ({ fieldKey, draftSettings, uiState, validation, onDraftCha
         forceInvalid={validation.invalidFields.includes(field.id)}
         id={field.id}
         inputClassName={value === "" && placeholder ? "input mono settings-placeholder-value" : "input mono"}
-        label={field.label || fieldKey}
+        label={getSettingsFieldLabel(fieldKey, localizer)}
         multiple={fieldKey === "chdCreateCdCodecs" || fieldKey === "chdCreateDvdCodecs"}
         onChange={(nextValue) => onDraftChange(fieldKey, nextValue)}
         options={field.codecOptions || []}
@@ -297,12 +306,13 @@ const FieldControl = ({ fieldKey, draftSettings, uiState, validation, onDraftCha
 };
 
 const SettingsRow = (props: FieldRenderProps) => {
+  const localizer = useUiLocalizer();
   const field = SETTINGS_FIELD_METADATA[props.fieldKey];
   return (
     <div className="setrow">
       <span className="slabel">
-        <label htmlFor={field.id}>{field.label}</label>
-        {renderFieldInfo(props.fieldKey, props.draftSettings, props.uiState)}
+        <label htmlFor={field.id}>{getSettingsFieldLabel(props.fieldKey, localizer)}</label>
+        {renderFieldInfo(props.fieldKey, props.draftSettings, props.uiState, localizer)}
       </span>
       <span className="sctl">
         <FieldControl {...props} />
@@ -312,6 +322,7 @@ const SettingsRow = (props: FieldRenderProps) => {
 };
 
 const SettingsToggle = ({ fieldKey, draftSettings, uiState, onDraftChange }: FieldRenderProps) => {
+  const localizer = useUiLocalizer();
   const field = SETTINGS_FIELD_METADATA[fieldKey];
   const disabled = isSettingsFieldDisabled(fieldKey, draftSettings, uiState);
   const checked =
@@ -328,14 +339,15 @@ const SettingsToggle = ({ fieldKey, draftSettings, uiState, onDraftChange }: Fie
           onChange={(event) => handleSettingsEvent(event.currentTarget, onDraftChange)}
           type="checkbox"
         />
-        {field.label}
+        {getSettingsFieldLabel(fieldKey, localizer)}
       </label>
-      {renderFieldInfo(fieldKey, draftSettings, uiState)}
+      {renderFieldInfo(fieldKey, draftSettings, uiState, localizer)}
     </div>
   );
 };
 
 const SettingsRange = ({ fieldKey, draftSettings, uiState, validation, onDraftChange }: FieldRenderProps) => {
+  const localizer = useUiLocalizer();
   const field = SETTINGS_FIELD_METADATA[fieldKey];
   const scaleLabels = field.scaleLabels || [];
   const current = scaleLabels[uiState.compressionProfileIndex] || "";
@@ -343,8 +355,8 @@ const SettingsRange = ({ fieldKey, draftSettings, uiState, validation, onDraftCh
     <div className="srange">
       <div className="srange-head">
         <span className="srange-label">
-          <label htmlFor={field.id}>{field.label}</label>
-          {renderFieldInfo(fieldKey, draftSettings, uiState)}
+          <label htmlFor={field.id}>{getSettingsFieldLabel(fieldKey, localizer)}</label>
+          {renderFieldInfo(fieldKey, draftSettings, uiState, localizer)}
         </span>
         <span className="v">{current}</span>
       </div>

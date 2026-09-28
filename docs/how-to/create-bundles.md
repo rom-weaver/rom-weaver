@@ -18,15 +18,15 @@ New to bundles? [What a bundle is](../explanation/bundles.md) covers what one co
 
 ## Choose what to include
 
-Use **Bundle + patches** for a normal public release. It includes the recipe and patches. It records checksums for the expected ROM but does not include that ROM. Each user supplies their own legal copy.
+Leave **Include ROM in bundle** clear for a patch-only release. The archive contains the recipe, patches, and expected ROM checksums. Each user supplies the matching ROM.
 
-Use **Bundle + ROM + patches** only for homebrew, your own backups, public domain material, or another ROM you are allowed to redistribute. A convenient button does not grant permission to share copyrighted game data.
+Select **Include ROM in bundle** only for a ROM you can redistribute, such as your own homebrew. Packaging does not grant redistribution rights.
 
-Set **Compression type** to ZIP unless your audience specifically wants 7z. Browsers and operating systems open ZIP easily. If you choose **ROM specific only**, bundle output falls back to a ZIP archive. ZIP and 7z contain the same recipe information.
+Keep ZIP for a broadly readable download. Bundle archives use 7z when the Apply output uses 7z compression; other output formats produce ZIP bundles.
 
 ## Build the patch recipe
 
-1. Open [Apply Patches](https://rom-weaver.com/apply-patches).
+1. Open [Bundle](https://rom-weaver.com/bundle-patches).
 2. Add the clean ROM and every patch.
 3. Put the patches in execution order. Drag a numbered handle, click it to choose a position, or focus it and use the arrow keys.
 4. Open each patch's three-dot **Patch actions** menu and choose **Edit details**. Add a readable name and, when useful, a description, version, and author. People see this information when they open the bundle.
@@ -53,32 +53,26 @@ Order is part of the recipe. Move a card only when you know the patch was author
 
 ## Turn on bundle output and download it
 
-In **0x05 Apply**:
+1. Expand **Apply** and set the output filename and format users should receive after patching.
+2. Open **Share this patch recipe (for patch creators)**.
+3. Leave **Include ROM in bundle** clear for a patch-only release.
+4. Select **Share bundle** and wait for the checks and download.
+5. Save the archive. The control becomes **Download ZIP Bundle** or **Download 7z Bundle** for another copy.
 
-1. Set the output filename and format users should receive after patching.
-2. Open **Options**.
-3. Find **Bundle Patches**. It starts at **Hide bundle creation**. Turn bundle output on by choosing **Bundle + patches** for a normal public release. Set **Compression type** to ZIP or 7z in the output options; **ROM specific only** uses ZIP for the bundle archive.
-4. Confirm or edit **Expected source ROM filename**. This name helps users find the ROM. Checksums prove that its contents match.
-5. Clear the filename to omit the name hint. A different name warns without blocking the weave.
-
-Create the download:
-
-1. Choose the **Create ZIP Bundle** or **Create 7z Bundle** action that matches **Compression type**.
-2. Wait while rom-weaver calculates checksums and checks the recipe.
-3. When the button changes to the matching **Download** action, choose it and save the archive.
+The expected filename helps users find the ROM. Checksums establish whether its contents match; a different filename alone does not block applying.
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/bundle-output-mobile-light.avif" width="1170" height="2013">
-    <source type="image/avif" srcset="/docs/screenshots/bundle-output-desktop-light.avif" width="2242" height="1399">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/bundle-output-mobile-light.webp" width="1170" height="2013">
-    <img src="/docs/screenshots/bundle-output-desktop-light.webp" width="2242" height="1399" alt="Cropped Apply output card with Bundle plus patches selected and the bundle creation control in the light theme">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/bundle-output-mobile-light.avif" width="1170" height="453">
+    <source type="image/avif" srcset="../screenshots/bundle-output-desktop-light.avif" width="1770" height="302">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/bundle-output-mobile-light.webp" width="1170" height="453">
+    <img src="../screenshots/bundle-output-desktop-light.webp" alt="Bundle sharing controls with Include ROM in bundle left clear in the light theme" width="1770" height="302">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="/docs/screenshots/bundle-output-mobile-dark.avif" width="1170" height="2013">
-    <source type="image/avif" srcset="/docs/screenshots/bundle-output-desktop-dark.avif" width="2242" height="1399">
-    <source media="(max-width: 520px)" type="image/webp" srcset="/docs/screenshots/bundle-output-mobile-dark.webp" width="1170" height="2013">
-    <img src="/docs/screenshots/bundle-output-desktop-dark.webp" width="2242" height="1399" alt="Cropped Apply output card with Bundle plus patches selected and the bundle creation control in the dark theme">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/bundle-output-mobile-dark.avif" width="1170" height="453">
+    <source type="image/avif" srcset="../screenshots/bundle-output-desktop-dark.avif" width="1770" height="302">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/bundle-output-mobile-dark.webp" width="1170" height="453">
+    <img src="../screenshots/bundle-output-desktop-dark.webp" alt="Bundle sharing controls with Include ROM in bundle left clear in the dark theme" width="1770" height="302">
   </picture>
   <figcaption>Bundle creation packages the staged recipe without applying the patches.</figcaption>
 </figure>

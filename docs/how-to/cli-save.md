@@ -1,6 +1,6 @@
 # Edit a game save from the CLI
 
-Use the `save` commands to inspect a game save, preview a field change, and write an edited copy. The examples use Pokémon Emerald. The [Save Editor reference](../reference/save-editor.md) lists every supported game and its editable fields. For browser steps, see [Edit a Generation III save](edit-gen3-saves.md#use-the-browser).
+Use the `save` commands to inspect a game save, preview a field change, and write an edited copy. The examples use Pokémon Emerald. The [Save Editor reference](../reference/save-editor.md) lists every supported game and its editable fields. For browser steps, see [Edit a game save in the browser](edit-gen3-saves.md#use-the-browser).
 
 Keep a backup before you edit. Use the game's persistent save file, not an emulator save state.
 

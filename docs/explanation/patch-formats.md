@@ -21,9 +21,9 @@ BPS, IPS, xdelta, PPF, and a dozen more. This guide explains what actually separ
 
 ## Applying a patch? Use the format you received
 
-Use whatever format you were handed. rom-weaver applies 21 patch families; the [full format table](../reference/formats.md#patch-formats) shows whether yours is supported before you consider converting it.
+An existing patch's format is already chosen. The [format table](../reference/formats.md#patch-formats) lists what rom-weaver can apply and create.
 
-Converting a patch to another format does not fix a checksum error either. The format is not the problem; the starting file is. Go to [Fix a checksum error](../how-to/fix-checksum-errors.md) instead.
+Converting a patch does not fix a source checksum mismatch. The mismatch concerns the starting bytes, not the patch format. [Fix a checksum error](../how-to/fix-checksum-errors.md) gives the procedure.
 
 This guide is for people publishing a patch.
 
@@ -35,7 +35,7 @@ Some store a checksum of the original inside the patch. When a user feeds in the
 
 That difference decides most of your choice. For cartridge-sized files, size and speed usually matter less than whether users can detect a mistake. Disc-sized files make patch size and tool support more important.
 
-No format records everything, though. None of them know which region you meant or which revision, so write the region, the revision, the header state, the patch order, and the expected checksums in your release notes regardless.
+No format records every human requirement. Region, revision, header state, patch order, and expected checksums still need clear [release notes](../how-to/create-rom-patches.md#write-useful-release-notes).
 
 ## BPS
 
@@ -47,7 +47,7 @@ That makes it a strong default for cartridge games when your audience has a BPS-
 
 IPS is widely supported by older patchers. Its records write bytes at fixed offsets, and it can also specify a final file size. It stores no checksum of the original, so an IPS patcher cannot confirm it was handed the right starting file. rom-weaver reads the record layout for hints (see [How rom-weaver picks a patch's bytes](#how-rom-weaver-picks-a-patchs-bytes)), but hints are not proof.
 
-Pick IPS when reaching old tools matters more than catching user error, and always publish the expected checksums beside the download.
+IPS favors compatibility with old tools over built-in error detection. Published source checksums can fill that information gap.
 
 IPS also has a hard limit built into its 24-bit offsets: it cannot encode a change that starts at or beyond 16 MiB. Create stops offering IPS when either input reaches that boundary. IPS32 widens the offsets so larger files work. rom-weaver applies and creates both.
 
@@ -55,7 +55,7 @@ IPS also has a hard limit built into its 24-bit offsets: it cannot encode a chan
 
 UPS stores checksums of the input and the output, so it can catch a wrong starting file the way BPS does.
 
-Pick UPS when the tools or the community you are publishing into expect it. rom-weaver applies and creates it.
+UPS remains useful in communities whose tools expect it. rom-weaver applies and creates it.
 
 ## xdelta and VCDIFF
 
@@ -63,19 +63,19 @@ VCDIFF is a general-purpose format for describing the difference between any two
 
 It handles large binaries and disc images well, which is why disc projects reach for it. Patches turn up as `.xdelta`, `.delta`, `.dat`, and `.vcdiff`.
 
-Do not assume an xdelta patch identifies its source for you; that depends on how it was made. Publish the checksums and the exact command you expect users to run. rom-weaver applies and creates xdelta and VCDIFF.
+An xdelta patch's source checks depend on how it was made. Separate published checksums remove that uncertainty. rom-weaver applies and creates xdelta and VCDIFF.
 
 ## PPF
 
 PPF was designed for disc patching and remains in use. Different PPF versions can do different things, so your release notes carry more weight than usual here.
 
-Discs need more care than cartridges in general. A file ending in `.bin` or `.iso` tells you almost nothing: track layout, image format, and which dump it came from all change the bytes. Get your users onto the exact disc image you built against before you treat a mismatch as a patcher bug.
+Disc layouts add another source of mismatch. A `.bin` or `.iso` extension does not identify the track layout, image format, or dump. Those differences change the bytes a patch expects.
 
 rom-weaver applies and creates PPF.
 
 ## Other supported formats
 
-rom-weaver also handles SOLID, GDIFF, HDiffPatch/HPatchZ, APS, APSGBA, RUP, PAT, EBP, BDF/BSDIFF40, BSP, MOD, DLDI, DPS, and the Dreamcast-specific DCP workflow. Support for applying and support for creating are not the same for every one of these.
+Less common formats often reflect one platform's tools or a specialized workflow, such as Dreamcast DCP. Apply support and creation support can differ.
 
 The [full format table](../reference/formats.md#patch-formats) is the authoritative list of names, extensions, and what rom-weaver can currently apply and create.
 

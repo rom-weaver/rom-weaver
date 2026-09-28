@@ -1,6 +1,8 @@
 # Supported formats
 
-This is the authoritative support matrix for everything rom-weaver reads and writes. It covers every patch format the tool can apply and create, every container and format-specific compressed ROM or disc image it can probe, extract, and build, and the codecs available at create time. It also lists the checksum, trim, and header capabilities that surround them.
+This reference lists patch formats, containers, codecs, checksums, trim support, header handling, and browser emulators.
+
+The [feature map](features.md) explains the capabilities in plain words. [Cheat systems](cheat-database.md) and [editable game saves](save-editor.md) have separate support tables.
 
 <!-- START doctoc -->
 ## Table of contents

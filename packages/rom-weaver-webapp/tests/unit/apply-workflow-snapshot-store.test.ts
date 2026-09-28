@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ApplyWorkflow } from "../../src/platform/browser/browser-api.ts";
+import type { PatchValidationPlan } from "../../src/wasm/index.ts";
 import { createApplyWorkflowSnapshotStore } from "../../src/public/react/apply-workflow-snapshot-store.ts";
 
 type Snapshot = ReturnType<ApplyWorkflow["getSnapshot"]>;
@@ -7,6 +8,7 @@ type Snapshot = ReturnType<ApplyWorkflow["getSnapshot"]>;
 const createWorkflow = (initial: Partial<Snapshot> = {}) => {
   let snapshot = {
     busy: false,
+    chainPlans: new Map(),
     id: "test-workflow",
     input: null,
     output: {
@@ -43,6 +45,22 @@ const createWorkflow = (initial: Partial<Snapshot> = {}) => {
 };
 
 describe("Apply workflow snapshot store", () => {
+  it("publishes chain plans without changing the snapshot for unrelated state", () => {
+    const store = createApplyWorkflowSnapshotStore();
+    const workflow = createWorkflow();
+    store.setWorkflow(workflow);
+    const initial = store.getSnapshot();
+    const chainPlans: Snapshot["chainPlans"] = new Map([["input-1", { status: "valid" } as PatchValidationPlan]]);
+    workflow.change({ chainPlans });
+    const validated = store.getSnapshot();
+    expect(validated).not.toBe(initial);
+    expect(validated.chainPlans).toBe(chainPlans);
+    workflow.change({ busy: true });
+    expect(store.getSnapshot()).toBe(validated);
+    workflow.change({ chainPlans: new Map() });
+    expect(store.getSnapshot().chainPlans).toBe(initial.chainPlans);
+    expect(validated.chainPlans.size).toBe(1);
+  });
   it("selects stable readiness and output values without subscribing to progress", () => {
     const store = createApplyWorkflowSnapshotStore();
     const workflow = createWorkflow();

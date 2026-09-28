@@ -1,6 +1,6 @@
 # Trim revert footer (`RWT\x01`)
 
-`rom-weaver trim --revert-marker` (alias `--reversible`) records the removed padding length and one fill byte in a footer. `rom-weaver trim --revert` uses those values to restore the file length and padding. Exact reconstruction requires unchanged ROM data and removed bytes that all match the recorded fill byte. Use a separate output file when exact restoration matters: the current in-place path reads the fill byte after truncating the source, so it can record a different byte. A plain `trim` writes no footer.
+`rom-weaver trim --revert-marker` (alias `--reversible`) records the removed padding length and one fill byte in a footer. `rom-weaver trim --revert` uses those values to restore the file length and padding. Exact reconstruction requires unchanged ROM data and removed bytes that all match the recorded fill byte. The fill byte is recorded before trimming, including in-place operations. A plain `trim` writes no footer.
 
 The trimmed file is `[trimmed ROM data][footer]`. Readers that ignore bytes beyond the ROM's used data can ignore the footer. The footer format does not guarantee compatibility with every emulator or flashcart.
 

@@ -355,6 +355,11 @@ msgstr "About rom-weaver, its licence and its privacy"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.accent"
+msgstr "Accent"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.accent"
 msgstr "Accent"
 
@@ -467,6 +472,11 @@ msgstr "Apply anyway despite patch and ROM check mismatch"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.output.title"
 msgstr "Apply both patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.applyDescription"
+msgstr "Apply BPS, IPS, UPS, and xdelta patches. Open archives, apply patches in order, and choose your output format. Your files stay on your device."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -682,6 +692,11 @@ msgstr "Build the patch stack"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkEdit"
 msgstr "Bulk edit"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.bundlePackage"
+msgstr "Bundle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1062,11 +1077,6 @@ msgstr "Create {format} Bundle"
 #: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.createRom"
 msgstr "Create {format} ROM Bundle"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.createBundle"
-msgstr "Start guided bundle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1630,6 +1640,11 @@ msgstr "Home"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.applyGuide"
+msgstr "How to apply ROM patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.identified"
 msgstr "Ident"
 
@@ -1812,6 +1827,11 @@ msgstr "Trim a ROM."
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.identifyPacksNote"
 msgstr "Keep these offline. Unticked databases are still downloaded on demand when a ROM needs them; unticking one removes its cached copy."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.titleEmphasis"
+msgstr "Keep your files on your device."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2095,6 +2115,11 @@ msgstr "Name from identified title"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.identifiedOutputName"
+msgstr "Name outputs after the identified title"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.names"
 msgstr "Names"
 
@@ -2260,11 +2285,6 @@ msgstr "One pass, no unpacking by hand, no intermediate files. Save it as a bund
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.titleEmphasis"
-msgstr "One toolkit."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis2"
 msgstr "One toolkit."
 
@@ -2287,6 +2307,11 @@ msgstr "Open {flow}"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.webappItem4"
 msgstr "Open a bundle link and the patch chain is staged for you."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.lede"
+msgstr "Open archives, apply patches in order, and choose your output format."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2525,13 +2550,13 @@ msgstr "Patch position"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.applyDescription"
-msgstr "Patch ROMs and disc images with one or more patches, cheats, or a bundle. Open compressed files directly, then download the result or share a reusable bundle."
+msgid "ui.home.title"
+msgstr "Patch ROMs in your browser."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.lede"
-msgstr "Patch, compress, extract, convert, identify, use cheats, and edit game saves in your browser or terminal. Your files stay on your device."
+msgid "ui.hero.thesis"
+msgstr "Patch ROMs in your browser."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2605,7 +2630,17 @@ msgstr "Post Apply Download"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "settings.postApplyDownloadBehavior"
+msgstr "Post Apply Download"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.postTest"
+msgstr "Post Apply Test"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.postApplyTestBehavior"
 msgstr "Post Apply Test"
 
 #. js-lingui-explicit-id
@@ -3160,6 +3195,11 @@ msgstr "Start guided Apply"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.tutorial.createBundle"
+msgstr "Start guided bundle"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.rom.title"
 msgstr "Start with the ROM"
 
@@ -3177,6 +3217,11 @@ msgstr "Storage"
 #: src/presentation/localization/messages.ts
 msgid "error.STORAGE_UNAVAILABLE"
 msgstr "Storage is unavailable."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.emulatorSaveStorageEnabled"
+msgstr "Store emulator saves on this device"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3608,6 +3653,11 @@ msgstr "Tutorial instructions"
 msgid "ui.output.type"
 msgstr "Type"
 
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.defaultCompression"
+msgstr "Type"
+
 #~ msgid "ui.apply.validation.overrideChecksum"
 #~ msgstr "Apply anyway despite patch and ROM check mismatch"
 
@@ -3836,16 +3886,6 @@ msgstr "Your collection is yours. The tool should act like it."
 #: src/presentation/localization/messages.ts
 msgid "ui.home.eyebrow"
 msgstr "Your ROM and disc image toolkit"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.home.title"
-msgstr "Your ROM workflow."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis"
-msgstr "Your ROM workflow. One toolkit."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

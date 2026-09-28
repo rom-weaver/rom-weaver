@@ -2773,6 +2773,30 @@ fn parse_patch_rejects_malformed_headers() {
 }
 
 #[test]
+fn parse_patch_rejects_application_headers_past_eof() {
+    for declared_len in [4, 1 << 30] {
+        let mut bytes = vec![0xD6, 0xC3, 0xC4, 0, HDR_APP_HEADER];
+        encode_varint(&mut bytes, declared_len);
+        bytes.extend_from_slice(b"abc");
+        let error = parse_patch(&mut Cursor::new(bytes)).expect_err("truncated application header");
+        assert!(matches!(error, RomWeaverError::Validation(_)));
+        assert!(error.to_string().contains("extends past"), "{error}");
+    }
+}
+
+#[test]
+fn parse_patch_reads_application_header_at_eof() {
+    for header in [b"".as_slice(), b"abc".as_slice()] {
+        let mut bytes = vec![0xD6, 0xC3, 0xC4, 0, HDR_APP_HEADER];
+        encode_varint(&mut bytes, header.len() as u64);
+        bytes.extend_from_slice(header);
+        let parsed = parse_patch(&mut Cursor::new(bytes)).expect("complete application header");
+        assert_eq!(parsed.app_header.as_deref(), Some(header));
+        assert!(parsed.windows.is_empty());
+    }
+}
+
+#[test]
 fn parse_patch_rejects_malformed_window_headers() {
     let bad_win = parse_patch(&mut Cursor::new(vec![0xD6, 0xC3, 0xC4, 0x00, 0x00, 0x08]))
         .expect_err("unknown window flags must be rejected");

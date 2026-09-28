@@ -170,6 +170,18 @@ const rewriteDocImage = (href, sourceFile) => {
   return href;
 };
 
+/** @param {string} html @param {string} sourceFile */
+const rewriteRawDocImages = (html, sourceFile) =>
+  html.replace(/<(?:img|source)\b[^>]*>/gi, (tag) =>
+    tag.replace(/\b(src|srcset)=(['"])(.*?)\2/gi, (_attribute, name, quote, value) => {
+      const rewritten =
+        name.toLowerCase() === "src"
+          ? rewriteDocImage(value, sourceFile)
+          : String(value).replace(/[^\s,]+/g, (candidate) => rewriteDocImage(candidate, sourceFile));
+      return `${name}=${quote}${rewritten}${quote}`;
+    }),
+  );
+
 // Lucide's `link` glyph (https://lucide.dev/icons/link), inlined because this
 // HTML is a marked render-time string, so the lucide-react component the rest
 // of the app uses cannot mount here.
@@ -191,6 +203,9 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
   const sectionHeadingRenderer = createHeadingRenderer({ unwrapLinks: true });
   const parser = new Marked({
     renderer: {
+      html(token) {
+        return rewriteRawDocImages(token.text, sourceFile);
+      },
       code(token) {
         defaultRenderer.parser = this.parser;
         const code = defaultRenderer.code(token).replace("<pre>", '<pre tabindex="0">');

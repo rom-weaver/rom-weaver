@@ -33,7 +33,7 @@ rom-weaver loads a tiny homebrew NES ROM and two patches written for this guide.
 
 ## Step 2: look at what loaded
 
-The guide points at four parts of the Apply page. Look at each one before you touch anything.
+The guide points at four parts of the Apply page. Use **Continue** to read each tip, then **Done** to close the guide.
 
 1. The **ROM** card shows the starting file and its checksums.
 2. The **Patches** cards show two independent changes. One changes `HELLO` to `ROM`. The other changes `WORLD` to `WEAVER`.
@@ -42,25 +42,27 @@ The guide points at four parts of the Apply page. Look at each one before you to
 
 ## Step 3: apply the patches
 
-In the **Apply** section, choose **APPLY & DOWNLOAD**.
+In **Apply**, select **.nes** in **Output format**, then choose **APPLY & DOWNLOAD**.
+
+This downloads the ROM itself, not a ZIP archive. The checksum in the next step describes that ROM.
 
 Your browser downloads a new ROM. The sample ROM you started from is untouched.
 
 <figure class="docs-screenshot-pair" aria-label="The practice ROM before and after both patches">
   <figure class="docs-screenshot">
-    <img src="/docs/screenshots/first-sample-hello-world.webp" width="1024" height="768" alt="The original homebrew sample ROM displaying HELLO WORLD in an NES emulator">
+    <img src="../screenshots/first-sample-hello-world.webp" alt="The original homebrew sample ROM displaying HELLO WORLD in an NES emulator" width="1024" height="768">
     <figcaption>Before: the clean practice ROM.</figcaption>
   </figure>
   <figure class="docs-screenshot">
-    <img src="/docs/screenshots/first-sample-rom-weaver.webp" width="1024" height="768" alt="The homebrew sample ROM displaying ROM WEAVER after both patches">
+    <img src="../screenshots/first-sample-rom-weaver.webp" alt="The homebrew sample ROM displaying ROM WEAVER after both patches" width="1024" height="768">
     <figcaption>After: both patches applied.</figcaption>
   </figure>
 </figure>
 
 ## Step 4: check that you got the right bytes
 
-1. Keep the downloaded ROM, then open a fresh [Apply Patches page](https://rom-weaver.com/apply-patches).
-2. Add only the downloaded ROM and wait for checksumming to finish.
+1. Keep the downloaded ROM, then open [Identify](https://rom-weaver.com/identify-rom).
+2. Add the downloaded ROM and wait for checksumming to finish.
 3. Open **Checks** on its ROM card and compare its SHA-1 with the value below.
 
 The finished sample displays `ROM WEAVER`. Its SHA-1 is:

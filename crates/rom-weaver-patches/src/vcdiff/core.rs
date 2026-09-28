@@ -824,12 +824,8 @@ pub(super) fn parse_patch<R: Read + Seek>(reader: &mut R) -> Result<ParsedPatch>
 
     let app_header = if hdr_indicator & HDR_APP_HEADER != 0 {
         let (app_header_len, _) = read_varint(reader)?;
-        let len = usize::try_from(app_header_len).map_err(|_| {
-            RomWeaverError::Validation("application header is too large to fit in memory".into())
-        })?;
-        let mut bytes = vec![0; len];
-        reader.read_exact(&mut bytes)?;
-        Some(bytes)
+        let start = reader.stream_position()?;
+        Some(read_section(reader, start, app_header_len)?)
     } else {
         None
     };

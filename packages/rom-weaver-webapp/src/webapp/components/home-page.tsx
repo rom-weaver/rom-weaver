@@ -112,7 +112,7 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
                 <ApplyBandaidIcon />
                 {localizer.message("ui.home.applyPatchCta")}
               </a>
-              <a className="btn ghost lg" href={`${route("docs")}/supported-formats`}>
+              <a className="btn ghost lg" href={`${route("docs")}/features`}>
                 <ListChecks aria-hidden="true" />
                 {localizer.message("ui.home.formatsEyebrow")}
               </a>

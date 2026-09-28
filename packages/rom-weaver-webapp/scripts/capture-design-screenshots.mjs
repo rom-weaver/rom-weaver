@@ -5,7 +5,10 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import avifEncode, { init as initAvif } from "@jsquash/avif/encode.js";
 import { chromium } from "playwright";
+import { createFirstSampleAssets } from "./first-sample-assets.mjs";
+import { decodeRgba } from "./optimize-png.mjs";
 import {
   DOCS_SCREENSHOT_CASES,
   DOCS_SCREENSHOT_FORMATS,
@@ -88,10 +91,56 @@ const captureRegion = async (page, selector) => {
   };
 };
 
+const prepareScreenshot = async (page, name) => {
+  if (name === "identify-checks") {
+    await page.locator("#identify-input-picker").setInputFiles({
+      buffer: createFirstSampleAssets().originalRom,
+      mimeType: "application/octet-stream",
+      name: "hello-world.nes",
+    });
+    await page.getByRole("button", { name: "Copy SHA-1", exact: true }).first().waitFor();
+    return;
+  }
+  if (name === "save-editor") {
+    await page.getByRole("button", { name: "Choose a game", exact: true }).click();
+    await page.getByRole("button", { name: "Create save", exact: true }).click();
+    await page.getByRole("searchbox", { name: "Find a property" }).fill("player name");
+    await page.getByRole("textbox", { name: "File 1 player name" }).fill("HERO");
+    await page.getByRole("button", { name: "Preview changes", exact: true }).click();
+    await page.getByText(/1 field changes · integrity valid/).waitFor();
+    return;
+  }
+  if (name === "test-player") {
+    const player = page.frameLocator("iframe");
+    if (await page.evaluate(() => navigator.maxTouchPoints > 0)) {
+      await player.locator(".ejs_start_button").click();
+    }
+    await player.locator("canvas").waitFor({ state: "visible" });
+    return;
+  }
+  if (name === "cheat-step") {
+    await page.getByRole("button", { name: /Add cheats to the patch order/ }).click();
+    await page.getByRole("button", { name: "Add code manually", exact: true }).click();
+    await page.getByRole("textbox", { name: "Description", exact: true }).fill("Example ROM write");
+    await page.getByRole("textbox", { name: "Cheat code", exact: true }).fill("SXIOPO");
+    await page.getByRole("button", { name: "Check code", exact: true }).click();
+    await page.getByRole("button", { name: "Add this cheat", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Add cheats", exact: true });
+    await dialog.getByRole("button", { name: "Close", exact: true }).click();
+    await dialog.waitFor({ state: "hidden" });
+    await page.getByRole("checkbox", { name: "Include Example ROM write", exact: true }).waitFor();
+  }
+};
+
 const capture = async () => {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  await initAvif(
+    await WebAssembly.compile(
+      fs.readFileSync(path.join(PACKAGE_DIR, "node_modules/@jsquash/avif/codec/enc/avif_enc.wasm")),
+    ),
+  );
   const launchOptions = process.env.ROM_WEAVER_SYSTEM_CHROME === "1" ? { channel: "chrome" } : {};
-  const browser = await chromium.launch(launchOptions);
+  const browser = await chromium.launch({ ...launchOptions, args: ["--mute-audio"] });
   try {
     for (const viewport of DOCS_SCREENSHOT_VIEWPORTS) {
       for (const theme of DOCS_SCREENSHOT_THEMES) {
@@ -113,31 +162,29 @@ const capture = async () => {
             await exitGuide.evaluate((button) => button.click());
             await exitGuide.waitFor({ state: "detached" });
           }
-          if (captureCase.openOutputOptions) {
-            const output = page.locator("#rom-weaver-row-output-file-name");
-            // Anchored to the bundle drawer specifically. The output row holds
-            // more than one drawer, so a bare `.cks` matches several and the
-            // field waited for below lives only in this one.
-            const options = output.locator("#rom-weaver-bundle-job > .cks > .cks-head");
-            if ((await options.getAttribute("aria-expanded")) === "false") await options.click();
-            await output.locator("#rom-weaver-bundle-export-format").waitFor({ state: "visible" });
-          }
-          if (captureCase.openApplyStep) {
-            const output = page.locator("#rom-weaver-row-output-file-name");
-            const collapse = output.locator(".step-collapse");
-            if ((await collapse.getAttribute("aria-expanded")) === "false") await collapse.click();
-            await output.locator("#rom-weaver-input-output-file-name").waitFor({ state: "visible" });
-          }
+          await prepareScreenshot(page, captureCase.name);
           await waitForStableContent(page);
           await assertNoDevBadge(page);
           await page.locator(".skip-link").evaluate((element) => element.setAttribute("hidden", ""));
+          await page.locator(".dock").evaluate((element) => {
+            element.style.visibility = "hidden";
+          });
           const outputName = `${captureCase.name}-${viewport.name}-${theme}`;
           const { crop, shot } = await captureRegion(page, captureCase.target);
-          for (const { extension, imageMagickArgs } of DOCS_SCREENSHOT_FORMATS) {
-            const image = execFileSync(IMAGE_MAGICK, ["png:-", "-crop", crop, "+repage", ...imageMagickArgs], {
-              input: shot,
-              maxBuffer: 64 * 1024 * 1024,
-            });
+          const cropped = execFileSync(IMAGE_MAGICK, ["png:-", "-crop", crop, "+repage", "-depth", "8", "PNG24:-"], {
+            input: shot,
+            maxBuffer: 64 * 1024 * 1024,
+          });
+          for (const { extension } of DOCS_SCREENSHOT_FORMATS) {
+            const image =
+              extension === "avif"
+                ? Buffer.from(await avifEncode(decodeRgba(cropped), { quality: 80 }))
+                : execFileSync(
+                    IMAGE_MAGICK,
+                    ["png:-", "-define", "webp:lossless=true", "-define", "webp:method=6", "webp:-"],
+                    { input: cropped, maxBuffer: 64 * 1024 * 1024 },
+                  );
+            if (!image.length) throw new Error(`Screenshot encoder returned no ${extension} data for ${outputName}`);
             fs.writeFileSync(path.join(OUTPUT_DIR, `${outputName}.${extension}`), image);
           }
           await context.close();

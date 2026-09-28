@@ -61,7 +61,7 @@ Open [rom-weaver.com/apply-patches](https://rom-weaver.com/apply-patches). Add y
 
 For offline use, first cache the app and any needed identify packs, cheat databases, and emulator cores. Remote files still need a connection. See [offline behavior](docs/explanation/local-first.md#offline) and [privacy](docs/legal/privacy.md).
 
-Start with [your first patch](docs/tutorials/first-patch.md) to practise on supplied homebrew files. The [browser guides](docs/README.md#in-the-browser) cover applying, creating, bundling, and testing ROM patches.
+Start with [your first patch](docs/tutorials/first-patch.md) to practise on supplied homebrew files. Use the [task chooser](docs/README.md#choose-a-task) for the other browser workflows.
 
 ## Self-hosting
 
@@ -112,25 +112,18 @@ The CLI and browser share one Rust engine. Browser workers and storage add costs
 
 ## Features
 
-- **Apply and create patches.** Twenty-one formats, including IPS, BPS, UPS, xdelta/VCDIFF, PPF, RUP, BDF/BSDIFF40, APS, and DCP (Dreamcast), with ordered multi-patch chains, checksum validation when the format or bundle supplies expected values, and cheat-code baking. Three of them (DCP, BSP, and HDiffPatch) can only be applied, not created.
-- **Play and test in the browser.** Run supported games with EmulatorJS, including patched output. Keep game saves and save states in browser storage, and import or export them. See [browser testing](docs/how-to/test-roms-in-browser.md) and [supported platforms](docs/reference/formats.md#browser-emulator-support).
-- **Use cheat codes.** Select codes from the built-in database or enter your own. Bake supported ROM cheats into a game or export them as a patch. Codes that require runtime memory writes cannot be baked. See [browser cheats](docs/how-to/use-browser-cheats.md).
-- **Edit supported game saves.** The beta Save Editor inspects and edits supported fields, validates checksums, and writes an edited copy. Game and layout support is specific; emulator save states are not editable game saves. See the [Save Editor reference](docs/reference/save-editor.md) and [CLI save guide](docs/how-to/cli-save.md).
-- **Inspect and extract containers.** ZIP, 7z, RAR, the tar family, CHD, RVZ, Z3DS, CSO, PBP, GCZ, WIA, WBFS, and more, including nested archives.
-- **Create format-specific compressed containers.** ZIP, 7z, CHD, RVZ, and Z3DS with codec-aware compression settings. CHD and RVZ outputs are checked for round-trip compatibility with chdman and dolphin-tool.
-- **Checksum and verify.** CRC32, MD5, SHA-1, SHA-256, BLAKE3, and friends, with copier-header detection, header repair, and header-aware checksum variants.
-- **Trim and restore.** Trimming for NDS, GBA, 3DS, XISO, and RVZ scrub. NDS, GBA, and 3DS can be padded back out. An optional footer records the original length and one padding byte; exact restoration has [limits](docs/how-to/cli-trim.md#make-the-trim-reversible).
-- **Share workflows.** Distributable [`rom-weaver-bundle.json`](./docs/rom-weaver-bundle-v2.schema.json) bundles pin patch order, checksums, and output naming so others can replay the exact workflow.
-- **Local-first and private.** Everything runs on your machine. The webapp is an installable PWA that works offline with cached assets. Your files are never uploaded, and rom-weaver sends no telemetry.
-- **One engine, two frontends.** The same Rust core powers the terminal CLI and the threaded WASM webapp. CLI operation commands can emit line-delimited JSON for scripting.
+- **Change games.** Apply or create patches, arrange patch chains, bake supported cheats, and share patch bundles.
+- **Prepare files.** Identify games and revisions, compare checksums, extract archives, convert containers, compress files, trim padding, and undo PPF3 patches with undo data.
+- **Play and manage progress.** Test supported games in the browser. Import or export emulator saves, edit supported game saves, and create fresh supported saves.
+- **Work locally.** Process files without uploads or accounts. Cached app assets work offline; CLI commands support scripts and JSON output.
 
-The complete format, codec, and checksum compatibility tables are maintained in [Supported formats](./docs/reference/formats.md).
+The [plain-language feature map](docs/reference/features.md) links every feature to its browser or CLI guide. Exact limits live in the [format tables](docs/reference/formats.md), [cheat reference](docs/reference/cheat-database.md), and [save reference](docs/reference/save-editor.md).
 
 ## Notices
 
 ### Beta status
 
-rom-weaver is beta software and follows Semantic Versioning, but until v1.0, breaking changes may still happen between minor releases. Patching, compressing, extracting, and bundling are covered by automated tests. Hands-on testing happens on macOS and Linux; Windows is covered by hosted CI but has seen much less real-world use, so expect rougher edges there and please report anything Windows-specific. If you rely on the APIs or CLI flags, expect things to be a bit tougher: those interfaces may still change as the project heads toward v1.0. Trim and Tools are still beta, so they are disabled by default in the webapp and can be enabled in Settings. The `rom-weaver-core`, `-checksum`, `-containers`, and `-patches` crates are published to crates.io only so `rom-weaver-cli` can use them. The CLI and the webapp are the supported interfaces; using those crates as libraries in another project is not supported.
+rom-weaver is beta software and follows Semantic Versioning, but until v1.0, breaking changes may still happen between minor releases. Patching, compressing, extracting, and bundling are covered by automated tests. Hands-on testing happens on macOS and Linux; Windows is covered by hosted CI but has seen much less real-world use, so expect rougher edges there and please report anything Windows-specific. If you rely on the APIs or CLI flags, expect things to be a bit tougher: those interfaces may still change as the project heads toward v1.0. Some browser features are hidden behind [the beta setting](docs/how-to/browser-settings.md#enable-beta-tools). The [feature map](docs/reference/features.md#app-and-automation) lists them. The `rom-weaver-core`, `-checksum`, `-containers`, and `-patches` crates are published to crates.io only so `rom-weaver-cli` can use them. The CLI and the webapp are the supported interfaces; using those crates as libraries in another project is not supported.
 
 ### First complete public release
 
@@ -146,7 +139,7 @@ Localized translations are early and may be entirely wrong in places. Manual edi
 
 ## Screenshots
 
-[View every screenshot at full size.](./docs/development/screenshots.md)
+[Screenshot inventory and capture instructions.](./docs/development/screenshots.md)
 
 <table>
   <thead>
@@ -197,7 +190,7 @@ Localized translations are early and may be entirely wrong in places. Manual edi
 
 ## Documentation
 
-Start with the browser-first [documentation home](https://rom-weaver.com/docs) or the repository [documentation index](./docs/README.md). The web docs include a task and tool picker, guided samples, focused screenshots, and a [FAQ](./docs/faq.md). CLI, deployment, integration, development, architecture, and format references each have their own guides.
+Start with the browser-first [documentation home](https://rom-weaver.com/docs) or the repository [documentation index](./docs/README.md). Both link to the task chooser, feature map, guided samples, and [FAQ](./docs/faq.md). CLI, deployment, integration, development, architecture, and format references have their own pages.
 
 ## Contributing and support
 

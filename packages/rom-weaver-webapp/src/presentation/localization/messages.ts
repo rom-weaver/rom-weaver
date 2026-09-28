@@ -679,8 +679,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.home.installWith": msg({ id: "ui.home.installWith", message: "Install with one of" }),
   "ui.home.lede": msg({
     id: "ui.home.lede",
-    message:
-      "Patch, compress, extract, convert, identify, use cheats, and edit game saves in your browser or terminal. Your files stay on your device.",
+    message: "Open archives, apply patches in order, and choose your output format.",
   }),
   "ui.home.localFirstEyebrow": msg({ id: "ui.home.localFirstEyebrow", message: "Why local-first" }),
   "ui.home.localFirstTitle": msg({
@@ -720,8 +719,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.home.reads": msg({ id: "ui.home.reads", message: "reads" }),
   "ui.home.readsAndWrites": msg({ id: "ui.home.readsAndWrites", message: "reads and writes" }),
   "ui.home.selfHostingGuide": msg({ id: "ui.home.selfHostingGuide", message: "Self-hosting guide" }),
-  "ui.home.title": msg({ id: "ui.home.title", message: "Your ROM workflow." }),
-  "ui.home.titleEmphasis": msg({ id: "ui.home.titleEmphasis", message: "One toolkit." }),
+  "ui.home.title": msg({ id: "ui.home.title", message: "Patch ROMs in your browser." }),
+  "ui.home.titleEmphasis": msg({ id: "ui.home.titleEmphasis", message: "Keep your files on your device." }),
   "ui.home.tryAfter": msg({
     id: "ui.home.tryAfter",
     message: ": a tiny homebrew NES ROM and two patches, already in order.",
@@ -867,6 +866,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "settings.betaToolsEnabled",
     message: "Enable beta tools (Trim, PPF undo, Save Editor, and cheats)",
   }),
+  "settings.accent": msg({ id: "settings.accent", message: "Accent" }),
+  "settings.bundlePackage": msg({ id: "settings.bundlePackage", message: "Bundle" }),
   "settings.byteUnits": msg({ id: "settings.byteUnits", message: "File size units" }),
   "settings.chdCreateCdCodecs": msg({ id: "settings.chdCreateCdCodecs", message: "CD Codecs" }),
   "settings.chdCreateDvdCodecs": msg({ id: "settings.chdCreateDvdCodecs", message: "DVD Codecs" }),
@@ -875,7 +876,16 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "settings.detailedViewEnabled",
     message: "Show detailed file information",
   }),
+  "settings.defaultCompression": msg({ id: "settings.defaultCompression", message: "Type" }),
+  "settings.emulatorSaveStorageEnabled": msg({
+    id: "settings.emulatorSaveStorageEnabled",
+    message: "Store emulator saves on this device",
+  }),
   "settings.fixChecksum": msg({ id: "settings.fixChecksum", message: "Fix ROM header" }),
+  "settings.identifiedOutputName": msg({
+    id: "settings.identifiedOutputName",
+    message: "Name outputs after the identified title",
+  }),
   "settings.language": msg({ id: "settings.language", message: "Language" }),
   "settings.levelOverride": msg({ id: "settings.levelOverride", message: "Level override" }),
   "settings.logLevel": msg({ id: "settings.logLevel", message: "Log level" }),
@@ -887,6 +897,14 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "settings.offlineCopyHelp": msg({
     id: "settings.offlineCopyHelp",
     message: "Automatically download the app for offline use unless data saver is on.",
+  }),
+  "settings.postApplyDownloadBehavior": msg({
+    id: "settings.postApplyDownloadBehavior",
+    message: "Post Apply Download",
+  }),
+  "settings.postApplyTestBehavior": msg({
+    id: "settings.postApplyTestBehavior",
+    message: "Post Apply Test",
   }),
   "settings.requireInputChecksumMatch": msg({
     id: "settings.requireInputChecksumMatch",
@@ -1054,8 +1072,9 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.hero.applyDescription": msg({
     id: "ui.hero.applyDescription",
     message:
-      "Patch ROMs and disc images with one or more patches, cheats, or a bundle. Open compressed files directly, then download the result or share a reusable bundle.",
+      "Apply BPS, IPS, UPS, and xdelta patches. Open archives, apply patches in order, and choose your output format. Your files stay on your device.",
   }),
+  "ui.hero.applyGuide": msg({ id: "ui.hero.applyGuide", message: "How to apply ROM patches" }),
   "ui.hero.bundleDescription": msg({
     id: "ui.hero.bundleDescription",
     message: "Stage a ROM and its patches, describe the recipe, and share a reusable bundle.",
@@ -1109,7 +1128,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.footer.local",
     message: "On-device. Offline support. No telemetry.",
   }),
-  "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Your ROM workflow. One toolkit." }),
+  "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Patch ROMs in your browser." }),
   "ui.hero.thesis2": msg({ id: "ui.hero.thesis2", message: "One toolkit." }),
   "ui.hero.testThesis": msg({
     id: "ui.hero.testThesis",

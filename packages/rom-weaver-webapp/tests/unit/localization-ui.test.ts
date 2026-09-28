@@ -7,7 +7,7 @@ import {
   LOCALE_OPTIONS,
   negotiateLocale,
 } from "../../src/presentation/localization/index.ts";
-import { SETTINGS_FIELD_METADATA } from "../../src/webapp/settings/settings-metadata.ts";
+import { getSettingsFieldLabel, SETTINGS_FIELD_METADATA } from "../../src/webapp/settings/settings-metadata.ts";
 
 // Every catalog but English is a lazy chunk; the contract tests below read
 // the translations synchronously, so land them all first.
@@ -56,7 +56,14 @@ const LOAD_BEARING_UI_IDS = [
   "ui.patch.bulkSelectionOptional",
   "ui.patch.bulkSelectionUnchanged",
   "ui.step.apply",
+  "settings.accent",
+  "settings.bundlePackage",
   "settings.byteUnits",
+  "settings.defaultCompression",
+  "settings.emulatorSaveStorageEnabled",
+  "settings.identifiedOutputName",
+  "settings.postApplyDownloadBehavior",
+  "settings.postApplyTestBehavior",
 ] as const;
 
 describe("ui catalog", () => {
@@ -91,6 +98,17 @@ describe("ui catalog", () => {
     // settings.* labels exist in en; a hypothetical untranslated id must not
     // surface the raw key in production catalogs that do have the en entry.
     expect(es.message("settings.language")).toBe("Idioma");
+  });
+
+  it("localizes settings labels through the active catalog", () => {
+    const es = createLocalizer("es");
+    const de = createLocalizer("de");
+    expect(getSettingsFieldLabel("accent", es)).toBe("Color de acento");
+    expect(getSettingsFieldLabel("bundlePackage", es)).toBe("Paquete");
+    expect(getSettingsFieldLabel("emulatorSaveStorageEnabled", de)).toBe(
+      "Emulator-Spielstände auf diesem Gerät speichern",
+    );
+    expect(getSettingsFieldLabel("postApplyTestBehavior", de)).toBe("Test nach Anwenden");
   });
 });
 

@@ -6,6 +6,7 @@ export {
   getSettingsFieldDefaultValue,
   getSettingsFieldMax,
   getSettingsFieldMin,
+  getSettingsFieldLabel,
   getSettingsFieldPlaceholder,
   getSettingsFieldSuggestion,
   getSettingsFieldSuggestionDataLocalize,

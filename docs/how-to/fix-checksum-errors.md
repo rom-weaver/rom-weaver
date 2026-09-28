@@ -1,6 +1,10 @@
-# Fix a checksum error in the browser
+# Fix a ROM checksum mismatch in the browser
 
-rom-weaver says the bytes do not match what a patch or bundle expects. Stop there and find the difference before creating an output.
+Use this guide when Apply shows **Not the expected ROM** or **The patch checks did not match this ROM.**
+
+Check the required region, revision, header, and patch order before you retry.
+
+Use [Identify](identify-roms-browser.md) to check an unknown file. Return to [Apply](apply-rom-patches.md) after the expected and actual checks match.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -31,9 +35,11 @@ The Apply cards separate clues from proof.
 
 An expected filename mismatch is advisory. Authors often write a useful name into a bundle, but users may legally dump or rename the same bytes under another name. If size and checksum match, a different name alone does not make the ROM wrong.
 
-An expected checksum mismatch is strict. An expected size mismatch is also strict. Those messages describe the file contents, not the label on the file.
+An expected checksum mismatch describes different bytes. An expected size mismatch also describes different content. These checks are stronger than the filename.
 
-Open **Checks** on the ROM and patch cards. Read the expected value and actual value carefully. A green match means that exact check passed at that step. A red mismatch is the problem to solve.
+Open **Checks** on the ROM and patch cards. Read each **Expected** and actual value. A green match passed. A red mismatch needs investigation.
+
+Apply can offer an override in **0x04 Apply**. The override bypasses verification. It does not repair, convert, or identify the ROM.
 
 ## Check these causes in order
 
@@ -100,6 +106,6 @@ Go back to the clean copy you preserved before patching. If you do not have a kn
 
 Do not use the output from an older release unless the new patch explicitly says it is incremental.
 
-Do not reach for the checksum override to get past a mismatch - it skips the check without repairing the file, and the result can fail hours into play. [Why forcing past a mismatch is risky](../explanation/how-patching-works.md#why-forcing-past-a-mismatch-is-risky) explains what an override is actually for.
+Do not use the override to repair a mismatch. It skips the check without changing the input, and the result can fail later. [Why forcing past a mismatch is risky](../explanation/how-patching-works.md#why-forcing-past-a-mismatch-is-risky) explains its limited purpose.
 
 Once the checks match, return to [Apply a ROM patch](apply-rom-patches.md). If you need terminal diagnostics, see [Validate a patch chain](cli-apply.md#check-patches-without-writing-anything). The [FAQ](../faq.md) covers related filename, privacy, and format questions.

@@ -1,110 +1,100 @@
-# Edit a Generation III save
+# Edit a game save in the browser
 
-Use the Save Editor to inspect and change an English retail Pokémon Ruby, Sapphire, Emerald, FireRed, or LeafGreen game save. It changes trainer details, money, coins, play time, options, badges, and quantities in occupied inventory slots. Emerald also supports Battle Points. It does not change Pokémon data or item IDs.
+Change supported properties in a game save and download a separate copy. Keep the original until you test the result.
 
-The [Save Editor development guide](../development/save-editor.md) describes the handler design and contributor flow.
+The [Save Editor support reference](../reference/save-editor.md) lists the exact games, layouts, and editable fields.
 
 <!-- START doctoc -->
 ## Table of contents
 
 - [Check the input file](#check-the-input-file)
 - [Use the browser](#use-the-browser)
-- [Use the CLI](#use-the-cli)
+- [Test the edited copy](#test-the-edited-copy)
 - [Read the recognition result](#read-the-recognition-result)
 - [Understand the safety checks](#understand-the-safety-checks)
 - [Supported and unsupported data](#supported-and-unsupported-data)
 - [Keep the original file](#keep-the-original-file)
+- [Use the CLI](#use-the-cli)
 - [Related](#related)
 
 <!-- END doctoc -->
 
 ## Check the input file
 
-Use a game save file, not an emulator save state. A game save contains the persistent data that the game writes to cartridge save memory. These Generation III games use 128 KiB Flash saves, not SRAM.
+Export the game's battery save or SRAM from your emulator. Do not use an emulator save state.
 
-An emulator save state stores CPU, memory, and emulator state. It is not a game save and the Save Editor rejects it. Export the game's SRAM or battery save from the emulator instead.
+Check the [supported games and input sizes](../reference/save-editor.md#supported-games). A matching size alone does not prove support.
 
-GameShark SP exports also work. The Save Editor reads a SharkPortSave file (`.sps`, `.xps`) and a GameShark SP snapshot (`.gsv`). It edits the game save inside the wrapper. The output keeps the wrapper metadata and recomputes the SharkPortSave checksum. The `.gsv` wrapper has no checksum. [Save containers](../reference/save-editor.md#save-containers) lists every wrapper the editor removes.
-
-This guide covers these English retail layouts:
-
-- Pokémon Ruby;
-- Pokémon Sapphire;
-- Pokémon Emerald;
-- Pokémon FireRed;
-- Pokémon LeafGreen.
-
-It does not claim support for Japanese, European, Australian, Korean, or other regional layouts. Do not infer regional support from a matching file size.
+The editor also accepts the [supported save containers](../reference/save-editor.md#save-containers). Keep their original extension when you restore the edited copy.
 
 ## Use the browser
 
-1. Open More, then select Save Editor. The Save Editor is a beta tool, so turn on beta tools in Settings first.
-2. Add the 128 KiB game save file.
-3. Select the game when the page asks for one.
-4. Read the recognition result and the active-slot status.
-5. Change only the fields that the page marks as editable.
-6. Review the change summary.
-7. Download the new save file.
-8. To test it here, upload the same game's ROM on the Test page. Return to Save Editor and select **Test save in ROM**. The Test page reloads the ROM with the edited save.
+1. [Enable beta tools](browser-settings.md#enable-beta-tools), then open [Saves](https://rom-weaver.com/save-editor).
+2. Add the game save file.
+3. Select the game if recognition asks for a choice.
+4. Read the integrity results and warnings before you change any fields.
+5. Use **Find a property** to find the field you need.
+6. Change editable fields, then select **Preview changes**.
+7. Check the change summary and select **Download edited copy**.
 
-The browser keeps the input file unchanged. It downloads an edited copy after the checks pass. Keep the input file until the edited save works in the target emulator or cartridge hardware.
+Filtering does not discard changes in hidden fields. Use [Create game saves](create-game-saves-browser.md) for a fresh supported save.
 
-The Test button is available when the loaded ROM has the same platform as the save. A platform match does not prove that the ROM is the same game. Check the game title before you test.
+<figure class="docs-screenshot">
+  <picture data-docs-screenshot-theme="light">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/save-editor-mobile-light.avif" width="1170" height="2627">
+    <source type="image/avif" srcset="../screenshots/save-editor-desktop-light.avif" width="1770" height="1669">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/save-editor-mobile-light.webp" width="1170" height="2627">
+    <img src="../screenshots/save-editor-desktop-light.webp" alt="Save Editor filtered to the player name with a checked LINK to HERO change in the light theme" width="1770" height="1669">
+  </picture>
+  <picture data-docs-screenshot-theme="dark">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/save-editor-mobile-dark.avif" width="1170" height="2627">
+    <source type="image/avif" srcset="../screenshots/save-editor-desktop-dark.avif" width="1770" height="1669">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/save-editor-mobile-dark.webp" width="1170" height="2627">
+    <img src="../screenshots/save-editor-desktop-dark.webp" alt="Save Editor filtered to the player name with a checked LINK to HERO change in the dark theme" width="1770" height="1669">
+  </picture>
+  <figcaption>A generated Zelda save, filtered to one property, with an edit preview. The original stays unchanged.</figcaption>
+</figure>
 
-Use **Find a property** to filter by name, group, or description. Hidden fields keep their pending changes. For a fresh save, see [Create saves in the browser](create-game-saves-browser.md).
+## Test the edited copy
 
-## Use the CLI
+1. Select **Choose ROM and test** after the edit passes its checks.
+2. On Test, add the ROM for the same game and revision.
+3. Check that the game loads your progress and that the changed properties work.
 
-[Edit a game save from the CLI](cli-save.md) covers identification, field inspection, previews, and writing an edited copy.
+If Test already has a compatible ROM, **Test save in ROM** reloads it with the edited save.
+
+The browser keeps one pending test save across reloads. It clears that copy after a ROM opens with it or you select **Discard save**.
+
+The compatibility check covers the platform and a linked ROM hash when available. Without that hash, check the game title yourself.
+
+For another emulator, back up its current save, then import the downloaded copy with that emulator's save-import control.
 
 ## Read the recognition result
 
-The editor reports one of these outcomes:
+Choose the correct game when recognition is ambiguous. Do not force a different title to make an unsupported save appear editable.
 
-- **Recognized:** the selected game matches the save layout and all 14 sections in the active slot pass their checksums.
-- **Recognized with a game choice:** the bytes fit a paired layout, but the editor needs your choice of Ruby or Sapphire, or FireRed or LeafGreen.
-- **Valid with a warning:** one slot passes and the other is empty. The editor permits edits and preserves the empty slot.
-- **Partially recoverable:** one slot passes and the other is damaged. The editor shows the valid slot but does not allow edits.
-- **Corrupt or unsupported:** no complete valid slot exists, or the file does not match a supported English retail layout.
-
-Emerald can identify itself from its save checksum layout. Ruby/Sapphire and FireRed/LeafGreen need a manual game choice. These handlers do not use a ROM SHA-1 to distinguish the paired games.
+The [recognition reference](../reference/save-editor.md#recognition) describes paired layouts and the result values.
 
 ## Understand the safety checks
 
-Generation III saves contain two rotating save slots. Each slot contains 14 logical sections. Every section has an ID, a checksum, a signature, and a save counter.
+Stop if integrity checks block editing. Restore a known-good backup; the editor does not repair damaged sections.
 
-The editor checks both slots, chooses the newest complete valid slot, and refuses to write when it cannot prove a complete active slot. It recomputes checksums for changed sections and writes a valid edited copy. It preserves the source bytes outside the supported edits.
-
-The editor can edit a valid slot when the unused backup slot is empty. It keeps the empty slot unchanged and shows a warning.
-
-The editor does not repair a damaged section. Keep the original and restore it from a known-good backup before you try an edit again.
+The [integrity reference](../reference/save-editor.md#integrity-rules) describes the checks for each game family.
 
 ## Supported and unsupported data
 
-The editable field groups include:
-
-- trainer name, in the game's original character encoding;
-- trainer gender;
-- money and coins;
-- play time and options;
-- quantities in occupied inventory slots;
-- Battle Points in Emerald;
-- gym badge flags.
-
-These fields are read-only:
-
-- trainer IDs;
-- the formatted play-time summary;
-- the Emerald or FireRed/LeafGreen security key.
-
-The editor does not edit inventory, item quantities, item IDs, party Pokémon, boxed Pokémon, or other save sections. It also does not edit emulator save states, regional layouts, or partially corrupt saves.
+Check the [field tables](../reference/save-editor.md#editable-fields) before an edit. Support for a container or platform does not imply support for every game.
 
 ## Keep the original file
 
-Store the original save in a separate backup location. Test the downloaded copy before you replace the save file used by an emulator. If the game does not load the edited copy, restore the original and report the recognition result, game choice, and checksum status.
+Keep a separate original backup. If the edited copy fails to load, restore it and record the game choice and integrity result.
+
+## Use the CLI
+
+[Edit a game save from the CLI](cli-save.md) covers terminal inspection, previews, and writing an edited copy.
 
 ## Related
 
-- [Save Editor development guide](../development/save-editor.md): handler architecture and the eight-step contributor flow.
-- [Test a ROM in the browser](test-roms-in-browser.md): emulator SRAM and save state import and export.
-- [CLI reference](../reference/cli.md): command output, flags, and exit codes.
+- [Test a ROM](test-roms-in-browser.md): game saves, save states, and backups.
+- [Save Editor support](../reference/save-editor.md): exact limits and integrity rules.
+- [Save Editor development](../development/save-editor.md): handler architecture and contributor flow.

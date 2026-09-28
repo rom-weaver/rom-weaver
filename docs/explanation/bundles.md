@@ -70,9 +70,9 @@ Packaged payloads are separate from check states. Several patch entries can refe
 
 ## When to make one
 
-Make a bundle when a release has more than one patch, has optional pieces, or expects a specific ROM you want checked automatically.
+Bundles are useful for releases with several patches, optional pieces, or a specific ROM that needs automatic checks.
 
-Skip it for a single patch with no options. One file plus a documented checksum is already simple enough, and a bundle would add a step for no gain.
+A single patch with no options already has a simple handoff: one file and a documented checksum. A bundle adds less value in that case.
 
 ## Links can carry them
 

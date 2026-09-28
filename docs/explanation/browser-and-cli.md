@@ -27,11 +27,11 @@ What differs is the interface, and that difference is deliberate.
 The browser presents file details and workflow choices together:
 
 - **It explains what it found.** Cards show checksums, expected names, header state, and archive contents before you commit to anything.
-- **It needs no install.** Open a URL and work.
+- **It needs no install.** The app runs from a web address.
 - **It has guided samples.** You can learn the workflow on homebrew files before touching a real ROM.
 - **It works on phones and tablets**, within their memory limits.
 
-Use it when you are learning, patching a handful of files, or want the warnings to tell you why something is wrong.
+These properties suit learning and occasional patching, where visible checks help explain a mismatch.
 
 ## What the CLI is good at
 
@@ -42,7 +42,7 @@ The CLI is the better tool when the work repeats or the files are large:
 - **Its flags are quotable.** A release note can carry the exact command readers should run.
 - **It emits JSON.** Other tools can consume its output.
 
-Use it for scripts, batches, CI, repeatable release commands, and heavy jobs.
+These properties suit scripts, batches, CI, repeatable release commands, and large jobs.
 
 ## Why the documentation does not mix them
 
@@ -52,9 +52,9 @@ That is why installation, terminal examples, and flags live in the CLI pages and
 
 ## If you are unsure
 
-Start in the browser. It is the fastest way to understand what a patch job involves, and nothing you produce there has to be redone if you later move to the CLI.
+The browser lowers the setup cost of a first job. The CLI lowers the repetition cost of later jobs and avoids browser storage limits.
 
-Move to the CLI when you notice yourself doing the same thing a third time, or when a browser tab runs out of room on a large disc image.
+The [feature map](../reference/features.md) distinguishes shared capabilities from browser-only playback and interface-specific controls.
 
 ## Related
 

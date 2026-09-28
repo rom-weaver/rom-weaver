@@ -159,6 +159,14 @@ describe("normalizeRomWeaverRunRequest", () => {
       args: { args: {}, type: "ppf-undo" },
       type: "tools",
     });
+    expect(
+      normalizeRomWeaverRunRequest(
+        asCommand({ args: { args: { input: "/save.sav", path: "player.lives" }, type: "get" }, type: "save" }),
+      ).command,
+    ).toEqual({
+      args: { args: { input: "/save.sav", path: "player.lives" }, type: "get" },
+      type: "save",
+    });
   });
 
   it("rejects an input that is not an object", () => {
@@ -188,6 +196,9 @@ describe("normalizeRomWeaverRunRequest", () => {
     expect(() => normalizeRomWeaverRunRequest(asCommand({ args: [], type: "tools" }))).toThrow(
       "rom-weaver tools command requires an object `args` payload",
     );
+    expect(() => normalizeRomWeaverRunRequest(asCommand({ args: [], type: "save" }))).toThrow(
+      "rom-weaver save command requires an object `args` payload",
+    );
   });
 
   it("rejects an unknown sub-command type", () => {
@@ -199,6 +210,15 @@ describe("normalizeRomWeaverRunRequest", () => {
     );
     expect(() => normalizeRomWeaverRunRequest(asCommand({ args: { type: "reverse" }, type: "tools" }))).toThrow(
       "unsupported tools command: reverse",
+    );
+    expect(() => normalizeRomWeaverRunRequest(asCommand({ args: { type: "reverse" }, type: "save" }))).toThrow(
+      "unsupported save command: reverse",
+    );
+    expect(() => normalizeRomWeaverRunRequest(asCommand({ args: { type: " ppf-undo " }, type: "tools" }))).toThrow(
+      "unsupported tools command:  ppf-undo ",
+    );
+    expect(() => normalizeRomWeaverRunRequest(asCommand({ args: { type: " get " }, type: "save" }))).toThrow(
+      "unsupported save command:  get ",
     );
   });
 });
