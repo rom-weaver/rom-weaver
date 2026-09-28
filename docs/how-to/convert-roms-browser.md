@@ -20,17 +20,16 @@ For common disc tasks, use [Convert RVZ to ISO](convert-rvz-to-iso-browser.md) o
 1. Open [Compress](https://rom-weaver.com/compress).
 2. Add the files that you want to package or compress.
 3. For a CUE disc, add the CUE file and every referenced track file.
-4. When you add an archive or a compressed disc image, Compress extracts it. If it holds more than one file, select the files to add, then select the **Add** button.
+4. When you add an archive or a compressed disc image, Compress extracts it. Select the files to add, then select the **Add** button.
+5. To add the archive itself without extracting it, turn on **Keep packed**, then select the **Add** button.
 
 <figure class="docs-screenshot">
   <picture>
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/compress-select-files-mobile-dark.webp" width="358" height="352">
-    <img src="../screenshots/compress-select-files-desktop-light.webp" alt="File picker for an archive with three entries, two selected, and an Add 2 files button" width="1117" height="336">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/compress-select-files-mobile-dark.webp" width="358" height="386">
+    <img src="../screenshots/compress-select-files-desktop-light.webp" alt="File picker for an archive with three entries, two selected, a Keep packed switch, and an Add 2 files button" width="1117" height="375">
   </picture>
   <figcaption>Select the files inside an archive that you want to compress.</figcaption>
 </figure>
-
-To keep an archive packed inside a new ZIP or 7z, [package its folder with the CLI](work-with-archives.md#create-a-zip-or-7z).
 
 ZIP and 7z accept arbitrary file sets. CHD accepts compatible disc images and ROMs. RVZ accepts GameCube and Wii ISO images. Z3DS accepts Nintendo 3DS images.
 
