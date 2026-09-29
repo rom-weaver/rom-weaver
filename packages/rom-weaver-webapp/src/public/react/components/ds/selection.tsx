@@ -68,19 +68,25 @@ const SelectionTree = ({ items, onSelect }: { items: SelectionItem[]; onSelect: 
  * confirm button submits the chosen ids. Used when a source exposes several patches that may each be
  * added to the patch stack.
  */
+/** Off-by-default switch that replaces the picked entries with the whole source. */
+type KeepSourceOption = { label: string; onSubmit: () => void; submitLabel: string };
+
 const SelectionCheckList = ({
   disabled,
   items,
+  keepSource,
   onCancel,
   onSubmit,
   submitLabel,
 }: {
   disabled?: boolean;
   items: SelectionItem[];
+  keepSource?: KeepSourceOption;
   onCancel?: () => void;
   onSubmit: (ids: string[]) => void;
   submitLabel?: (count: number) => string;
 }) => {
+  const [keeping, setKeeping] = useState(false);
   const selectableItems = items.filter((item) => item.selectable);
   const selectableIds = selectableItems.map((item) => item.id);
   const defaultIds = selectableItems.filter((item) => item.defaultSelected).map((item) => item.id);
@@ -106,10 +112,11 @@ const SelectionCheckList = ({
           item.selectable ? (
             // The highlighted row IS the selection state - the checkbox stays
             // real but visually hidden (.pick-input) for keyboard + SR.
-            <label className={join("selnode", "selrow", "selcheck", "pick-row")} key={item.id}>
+            <label className={join("selnode", "selrow", "selcheck", "pick-row", keeping && "skip")} key={item.id}>
               <input
                 checked={selectedIds.includes(item.id)}
                 className="pick-input"
+                disabled={keeping}
                 onChange={() => toggle(item.id)}
                 type="checkbox"
               />
@@ -122,8 +129,20 @@ const SelectionCheckList = ({
           ),
         )}
       </div>
+      {keepSource ? (
+        <label className="selkeep">
+          <input
+            aria-checked={keeping}
+            checked={keeping}
+            onChange={(event) => setKeeping(event.currentTarget.checked)}
+            role="switch"
+            type="checkbox"
+          />
+          <span>{keepSource.label}</span>
+        </label>
+      ) : null}
       <div className="selfoot">
-        {selectableItems.length > 1 ? (
+        {selectableItems.length > 1 && !keeping ? (
           <>
             <button className="btn ghost selall" onClick={toggleAll} type="button">
               {allSelected ? "Clear all" : "Select all"}
@@ -138,14 +157,20 @@ const SelectionCheckList = ({
             Cancel
           </button>
         ) : null}
-        <button
-          className="btn primary selconfirm"
-          disabled={disabled || !selectedIds.length}
-          onClick={() => onSubmit(selectedIds)}
-          type="button"
-        >
-          {submitLabel ? submitLabel(selectedIds.length) : `Add ${selectedIds.length} selected`}
-        </button>
+        {keeping && keepSource ? (
+          <button className="btn primary selconfirm" disabled={disabled} onClick={keepSource.onSubmit} type="button">
+            {keepSource.submitLabel}
+          </button>
+        ) : (
+          <button
+            className="btn primary selconfirm"
+            disabled={disabled || !selectedIds.length}
+            onClick={() => onSubmit(selectedIds)}
+            type="button"
+          >
+            {submitLabel ? submitLabel(selectedIds.length) : `Add ${selectedIds.length} selected`}
+          </button>
+        )}
       </div>
     </div>
   );

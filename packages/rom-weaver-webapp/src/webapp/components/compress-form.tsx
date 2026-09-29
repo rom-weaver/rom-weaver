@@ -7,6 +7,7 @@ import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { buildOutputCompressionPanel } from "../../public/react/components/ds/compress-panel.tsx";
 import { Notice } from "../../public/react/components/ds/feedback.tsx";
 import { FileCard } from "../../public/react/components/ds/file-card.tsx";
+import { StageStatus, stageBarValue } from "../../public/react/components/ds/staging-meta.tsx";
 import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
 import { OutputRunAction, WorkflowOutputStep } from "../../public/react/components/ds/workflow-output-step.tsx";
@@ -21,7 +22,14 @@ import {
   useUiLocalizer,
 } from "../../public/react/settings-context.tsx";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
-import { compressFiles, type CompressSource, getCompressFormats, getCompressSource } from "../compress-service.ts";
+import {
+  compressFiles,
+  type CompressSource,
+  getCompressFormats,
+  getCompressSource,
+  isOpenableCompressInput,
+} from "../compress-service.ts";
+import { useCompressArchiveInputs } from "./compress-archive-inputs.tsx";
 
 type CompressFormProps = { pageDrop?: PageFileDrop | null; onSessionChange?: (active: boolean) => void };
 type CompressionFormat = Awaited<ReturnType<typeof getCompressFormats>>[number];
@@ -35,7 +43,7 @@ const disposeOutput = (output: PublicOutput | null) => {
 const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
   const localizer = useUiLocalizer();
   const settings = useRomWeaverSettings();
-  const [stagedFiles, setStagedFiles] = useState<Array<{ file: File; id: number }>>([]);
+  const [stagedFiles, setStagedFiles] = useState<Array<{ file: File; id: number; sourceName?: string }>>([]);
   const files = useMemo(() => stagedFiles.map((entry) => entry.file), [stagedFiles]);
   const nextFileId = useRef(0);
   const [inputInfo, setInputInfo] = useState<InputInfo | null>(null);
@@ -45,13 +53,25 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
   const [output, setOutput] = useState<PublicOutput | null>(null);
   const [busy, setBusy] = useState(false);
   const [downloadBusy, setDownloadBusy] = useState(false);
-  const [percent, setPercent] = useState<number | null>(null);
+  const [progress, setProgress] = useState<{ label: string; percent: number | null } | null>(null);
   const [error, setError] = useState("");
   const outputRef = useRef<PublicOutput | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const runIdRef = useRef(0);
   const handledDropRef = useRef(0);
-  const staging = files.length > 0 && inputInfo?.files !== files;
+  const nextId = useCallback(() => ++nextFileId.current, []);
+  const addStaged = useCallback((entries: Array<{ file: File; id: number; sourceName?: string }>) => {
+    if (entries.length) setStagedFiles((previous) => [...previous, ...entries]);
+  }, []);
+  const {
+    cancel: cancelOpening,
+    dialog: selectionDialog,
+    open: openArchive,
+    pending: pendingArchives,
+    release: releaseArchiveEntry,
+  } = useCompressArchiveInputs({ nextId, onAdd: addStaged, onError: setError });
+  const opening = pendingArchives.length > 0;
+  const staging = opening || (files.length > 0 && inputInfo?.files !== files);
   const disabled = busy || downloadBusy;
   const activeSettings = { ...settings, ...overrides };
   const formats = inputInfo?.files === files ? inputInfo.formats : [];
@@ -61,7 +81,8 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
   const source = inputInfo?.files === files ? inputInfo.source : null;
   const formatOptions = createOutputOptions(formats, source);
   const panel = buildCompressPanel(format, activeSettings, source);
-  const generatedName = getFileNameWithoutExtension(files[0]?.name || "archive");
+  // Entries from an opened archive are named after the archive rather than whichever entry came first.
+  const generatedName = getFileNameWithoutExtension(stagedFiles[0]?.sourceName || files[0]?.name || "archive");
   const name = outputName || generatedName;
   const totalSize = files.reduce((sum, file) => sum + file.size, 0);
 
@@ -76,10 +97,10 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
       if (!added.length || disabled) return;
       clearOutput();
       setError("");
-      const entries = added.map((file) => ({ file, id: ++nextFileId.current }));
-      setStagedFiles((previous) => [...previous, ...entries]);
+      addStaged(added.filter((file) => !isOpenableCompressInput(file)).map((file) => ({ file, id: nextId() })));
+      for (const file of added.filter(isOpenableCompressInput)) void openArchive(file);
     },
-    [clearOutput, disabled],
+    [addStaged, clearOutput, disabled, nextId, openArchive],
   );
 
   useEffect(() => {
@@ -107,8 +128,8 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
   }, [pageDrop, stageFiles]);
 
   useEffect(() => {
-    onSessionChange?.(files.length > 0 || !!output);
-  }, [files.length, onSessionChange, output]);
+    onSessionChange?.(files.length > 0 || opening || !!output);
+  }, [files.length, onSessionChange, opening, output]);
 
   useEffect(() => {
     let state: "running" | "staging" | "failed" | "done" | "ready" | "idle" = "idle";
@@ -137,7 +158,7 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
     abortRef.current = abort;
     clearOutput();
     setBusy(true);
-    setPercent(null);
+    setProgress(null);
     setError("");
     try {
       const { browserRuntime } = await import("../../platform/browser/workflow-runtime.ts");
@@ -150,8 +171,11 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
           signal: abort.signal,
           onLog: options.logging?.sink,
           onProgress: (event) => {
-            if (runId === runIdRef.current && !abort.signal.aborted && typeof event.percent === "number")
-              setPercent(event.percent);
+            if (runId !== runIdRef.current || abort.signal.aborted) return;
+            setProgress((previous) => ({
+              label: event.label || previous?.label || "",
+              percent: typeof event.percent === "number" ? event.percent : (previous?.percent ?? null),
+            }));
           },
         },
         browserRuntime,
@@ -169,7 +193,7 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
       if (runId === runIdRef.current) {
         abortRef.current = null;
         setBusy(false);
-        setPercent(null);
+        setProgress(null);
       }
     }
   };
@@ -193,24 +217,53 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
     <section className="panel compress-tool" id="compress-container">
       <UnifiedDropZone
         addLabel={localizer.message("ui.drop.addFiles")}
-        afterDropZone={stagedFiles.map(({ file, id }) => (
-          <FileCard
-            key={id}
-            meta={<span className="fsize mono">{formatByteSize(file.size)}</span>}
-            name={file.name}
-            onRemove={
-              disabled
-                ? undefined
-                : () => {
-                    clearOutput();
-                    setError("");
-                    setStagedFiles((previous) => previous.filter((entry) => entry.id !== id));
+        afterDropZone={
+          stagedFiles.length || opening ? (
+            <div className="cards compress-files">
+              {stagedFiles.map(({ file, id }) => (
+                <FileCard
+                  key={id}
+                  meta={<span className="fsize mono">{formatByteSize(file.size)}</span>}
+                  name={<span className="nm mono">{file.name}</span>}
+                  onRemove={
+                    disabled
+                      ? undefined
+                      : () => {
+                          clearOutput();
+                          setError("");
+                          releaseArchiveEntry(id);
+                          setStagedFiles((previous) => previous.filter((entry) => entry.id !== id));
+                        }
                   }
-            }
-            removeLabel={localizer.message("ui.compress.removeFile", { name: file.name })}
-          />
-        ))}
-        big={!files.length}
+                  removeLabel={localizer.message("ui.compress.removeFile", { name: file.name })}
+                />
+              ))}
+              {pendingArchives.map((archive) => (
+                <FileCard
+                  className="pending-card"
+                  key={archive.id}
+                  meta={
+                    <>
+                      <span className="fsize mono">{formatByteSize(archive.size)}</span>
+                      <StageStatus
+                        id={`compress-open-${archive.id}`}
+                        label={localizer.message(
+                          archive.phase === "reading" ? "ui.compress.reading" : "ui.compress.opening",
+                        )}
+                        percent={archive.percent}
+                      />
+                    </>
+                  }
+                  name={<span className="nm mono">{archive.name}</span>}
+                  onRemove={() => cancelOpening(archive.id)}
+                  removeLabel={localizer.message("ui.compress.removeFile", { name: archive.name })}
+                  stageBar={stageBarValue(true, archive.percent)}
+                />
+              ))}
+            </div>
+          ) : null
+        }
+        big={!(files.length || opening)}
         disabled={disabled}
         heroLabel={localizer.message("ui.compress.drop")}
         heroLabelCoarse={localizer.message("ui.compress.tap")}
@@ -234,9 +287,9 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
               progress={
                 busy
                   ? {
-                      label: localizer.message("ui.compress.running"),
-                      percent,
-                      value: percent === null ? "" : `${Math.round(percent)}%`,
+                      label: progress?.label || localizer.message("ui.compress.running"),
+                      percent: progress?.percent ?? null,
+                      value: typeof progress?.percent === "number" ? `${Math.round(progress.percent)}%` : "",
                       onCancel: () => abortRef.current?.abort(),
                     }
                   : undefined
@@ -281,6 +334,7 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
           {error}
         </Notice>
       ) : null}
+      {selectionDialog}
     </section>
   );
 };

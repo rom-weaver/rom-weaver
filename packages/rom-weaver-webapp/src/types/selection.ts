@@ -39,6 +39,8 @@ type CandidateSelectionRequest = {
   candidates: SelectionCandidate[];
   /** When true, the host may pick several candidates at once (each becomes its own patch entry). */
   multiSelect?: boolean;
+  /** Label for an off-by-default switch that adds the source itself instead of its candidates. */
+  keepSourceLabel?: string;
   role: SelectionRole;
   sourceIndex?: number;
   sourceName: string;
@@ -47,7 +49,7 @@ type CandidateSelectionRequest = {
 
 /** A resolved selection. `id` is always the primary (first) pick; `ids` carries the full ordered set
  * for a multi-select request. */
-type SelectionChoice = { id: string; ids?: string[] };
+type SelectionChoice = { id: string; ids?: string[]; keepSource?: boolean };
 
 type SelectFile = (request: CandidateSelectionRequest) => Promise<SelectionChoice> | SelectionChoice;
 

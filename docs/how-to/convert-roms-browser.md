@@ -22,6 +22,16 @@ To decompress images, use [RVZ to ISO](convert-rvz-to-iso-browser.md) or [Extrac
 1. Open [Compress](https://rom-weaver.com/compress).
 2. Add the files that you want to package or compress.
 3. For a CUE disc, add the CUE file and every referenced track file.
+4. When you add an archive or a compressed disc image, Compress lists the files inside it. Select the files to add, then select the **Add** button. Compress extracts only the selected files.
+5. To add the archive itself without extracting it, turn on **Keep packed**, then select the **Add** button.
+
+<figure class="docs-screenshot">
+  <picture>
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/compress-select-files-mobile-dark.webp" width="358" height="386">
+    <img src="../screenshots/compress-select-files-desktop-light.webp" alt="File picker for an archive with three entries, two selected, a Keep packed switch, and an Add 2 files button" width="1117" height="375">
+  </picture>
+  <figcaption>Select the files inside an archive that you want to compress.</figcaption>
+</figure>
 
 ZIP and 7z accept arbitrary file sets. CHD accepts compatible disc images and ROMs. RVZ accepts GameCube and Wii ISO images. Z3DS accepts Nintendo 3DS images.
 
@@ -34,15 +44,13 @@ ZIP and 7z accept arbitrary file sets. CHD accepts compatible disc images and RO
 
 <figure class="docs-screenshot">
   <picture>
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/compress-mobile-dark.webp" width="370" height="634">
-    <img src="../screenshots/compress-desktop-light.webp" alt="Compress with input files, output filename, format, codec, level, and download button" width="1133" height="737">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/compress-mobile-dark.webp" width="370" height="639">
+    <img src="../screenshots/compress-desktop-light.webp" alt="Compress with input files, output filename, format, codec, level, and download button" width="1133" height="775">
   </picture>
   <figcaption>Choose a format and compression options, then download the finished file.</figcaption>
 </figure>
 
 The format picker offers outputs that match the selected inputs. Renaming a filename extension does not convert its contents.
-
-For conversion, extract the ROM or disc image first. Add the extracted files to Compress.
 
 Compress does not apply patches. Use [Apply](apply-rom-patches.md) when you need to change ROM contents.
 

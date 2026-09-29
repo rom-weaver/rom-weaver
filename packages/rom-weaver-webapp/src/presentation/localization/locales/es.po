@@ -1490,6 +1490,11 @@ msgstr "Tiempo de extracción ({workers} hilos)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.opening"
+msgstr "Extrayendo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.stage.extractingWith"
 msgstr "Extrayendo y {verb}…"
 
@@ -1847,6 +1852,11 @@ msgstr "Conservar encabezado: la salida parcheada conserva el encabezado de la R
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.extractThesis2"
 msgstr "Quédate solo con los archivos que necesitas."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.compress.keepPacked"
+msgstr "Mantener comprimido"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2765,6 +2775,11 @@ msgstr "Lee la guía de Create"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.reading"
+msgstr "Leyendo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.reading"
 msgstr "Leyendo"
 
@@ -3082,6 +3097,11 @@ msgstr "Ver formatos compatibles"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis2"
 msgstr "con partidas guardadas que permanecen en este dispositivo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.select.filesHint"
+msgstr "Elige los archivos que quieres agregar y luego pulsa Agregar archivos."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3925,7 +3945,7 @@ msgstr "Tu colección es tuya. La herramienta debe actuar como tal."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.compress.local"
-msgstr "Tus archivos permanecen en este navegador. ZIP y 7z conservan los archivos originales, incluidos parches y archivos comprimidos."
+msgstr "Tus archivos permanecen en este navegador. Los archivos comprimidos y las imágenes de disco comprimidas se abren para que elijas los archivos que contienen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

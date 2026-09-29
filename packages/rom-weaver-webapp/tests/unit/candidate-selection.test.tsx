@@ -97,6 +97,80 @@ describe("CandidateSelectionDialog", () => {
     expect(onSelectMany).toHaveBeenCalledWith(["patch-a", "patch-c"]);
   });
 
+  it("uses file wording without the patch match tag for a non-patch multi-select", () => {
+    const onSelectMany = vi.fn();
+    render(
+      <CandidateSelectionDialog
+        onCancel={vi.fn()}
+        onSelect={vi.fn()}
+        onSelectMany={onSelectMany}
+        state={{
+          request: {
+            candidates: ["disc.cue", "track.bin"].map((fileName, index) => ({
+              defaultSelected: true,
+              fileName,
+              id: String(index),
+              kind: "rom" as const,
+              selectable: true,
+              type: "file" as const,
+            })),
+            multiSelect: true,
+            role: "input",
+            sourceName: "disc.zip",
+            warnings: [],
+          },
+          resolve: vi.fn(),
+          reject: vi.fn(),
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Select the files you want to add, then choose Add files.")).toBeTruthy();
+    expect(screen.queryByText("matches patch")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Add 2 files" }));
+    expect(onSelectMany).toHaveBeenCalledWith(["0", "1"]);
+  });
+
+  it("offers an off-by-default keep-source switch that replaces the picked entries", () => {
+    const onKeepSource = vi.fn();
+    const onSelectMany = vi.fn();
+    render(
+      <CandidateSelectionDialog
+        onCancel={vi.fn()}
+        onKeepSource={onKeepSource}
+        onSelect={vi.fn()}
+        onSelectMany={onSelectMany}
+        state={{
+          request: {
+            candidates: [
+              { defaultSelected: true, fileName: "game.sfc", id: "0", kind: "rom", selectable: true, type: "file" },
+            ],
+            keepSourceLabel: "Keep packed",
+            multiSelect: true,
+            role: "input",
+            sourceName: "game.zip",
+            warnings: [],
+          },
+          resolve: vi.fn(),
+          reject: vi.fn(),
+        }}
+      />,
+    );
+
+    const keep = screen.getByRole("switch", { name: "Keep packed" }) as HTMLInputElement;
+    const entry = screen.getByRole("checkbox") as HTMLInputElement;
+    expect(keep.checked).toBe(false);
+    expect(entry.disabled).toBe(false);
+    fireEvent.click(keep);
+    expect(entry.disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Add 1 file" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Add archive" }));
+    expect(onKeepSource).toHaveBeenCalledOnce();
+    fireEvent.click(keep);
+    fireEvent.click(screen.getByRole("button", { name: "Add 1 file" }));
+    expect(onSelectMany).toHaveBeenCalledWith(["0"]);
+  });
+
   it("shows a no-selectable state and forwards modal cancellation", () => {
     const onCancel = vi.fn();
     render(
@@ -156,5 +230,35 @@ describe("useCandidateSelection", () => {
       message: "Selection skipped",
     });
     expect(onCancelSelection).toHaveBeenCalledWith(first);
+  });
+
+  it("opens each queued keep-source request with the switch off", async () => {
+    const request = (sourceName: string): CandidateSelectionPrompt => ({
+      candidates: [
+        { defaultSelected: true, fileName: "game.sfc", id: "0", kind: "rom", selectable: true, type: "file" },
+      ],
+      keepSourceLabel: "Keep packed",
+      multiSelect: true,
+      role: "input",
+      sourceName,
+      warnings: [],
+    });
+    const { result } = renderHook(() => useCandidateSelection());
+    const view = render(result.current.candidateSelectionDialog);
+    let first: Promise<unknown> = Promise.resolve();
+    let second: Promise<unknown> = Promise.resolve();
+    act(() => {
+      first = result.current.selectFile(request("a.zip"));
+      second = result.current.selectFile(request("b.zip"));
+    });
+    view.rerender(result.current.candidateSelectionDialog);
+    fireEvent.click(screen.getByRole("switch", { name: "Keep packed" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add archive" }));
+    await expect(first).resolves.toEqual({ id: "", ids: [], keepSource: true });
+
+    view.rerender(result.current.candidateSelectionDialog);
+    expect((screen.getByRole("switch", { name: "Keep packed" }) as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Add 1 file" }));
+    await expect(second).resolves.toEqual({ id: "0", ids: ["0"] });
   });
 });

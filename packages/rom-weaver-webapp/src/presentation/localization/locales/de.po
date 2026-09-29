@@ -1490,6 +1490,11 @@ msgstr "Zeit zum Extrahieren ({workers} Threads)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.opening"
+msgstr "Wird entpackt"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.stage.extractingWith"
 msgstr "Entpacken und {verb}…"
 
@@ -1847,6 +1852,11 @@ msgstr "Header behalten: Die gepatchte Ausgabe enthält den ROM-Header."
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.extractThesis2"
 msgstr "Nur die Dateien behalten, die du brauchst."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.compress.keepPacked"
+msgstr "Gepackt lassen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2765,6 +2775,11 @@ msgstr "Lies die Create-Anleitung"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.reading"
+msgstr "Wird gelesen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.reading"
 msgstr "Lesen"
 
@@ -3082,6 +3097,11 @@ msgstr "Unterstützte Formate ansehen"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis2"
 msgstr "mit Spielständen, die auf diesem Gerät bleiben."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.select.filesHint"
+msgstr "Wähle die Dateien, die du hinzufügen willst, und drücke dann Dateien hinzufügen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3925,7 +3945,7 @@ msgstr "Deine Sammlung gehört dir. Das Werkzeug sollte sich so verhalten."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.compress.local"
-msgstr "Deine Dateien bleiben in diesem Browser. ZIP und 7z bewahren die Originaldateien, einschließlich Patches und Archiven."
+msgstr "Deine Dateien bleiben in diesem Browser. Archive und komprimierte Disc-Images werden geöffnet, damit du die enthaltenen Dateien auswählen kannst."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

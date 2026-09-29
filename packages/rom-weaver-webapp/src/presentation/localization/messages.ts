@@ -21,8 +21,12 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.compress.tap": msg({ id: "ui.compress.tap", message: "Tap to add files to compress" }),
   "ui.compress.local": msg({
     id: "ui.compress.local",
-    message: "Your files stay in this browser. ZIP and 7z preserve the original files, including patches and archives.",
+    message:
+      "Your files stay in this browser. Archives and compressed disc images open so you can choose the files inside.",
   }),
+  "ui.compress.keepPacked": msg({ id: "ui.compress.keepPacked", message: "Keep packed" }),
+  "ui.compress.reading": msg({ id: "ui.compress.reading", message: "Reading" }),
+  "ui.compress.opening": msg({ id: "ui.compress.opening", message: "Extracting" }),
   "ui.compress.removeFile": msg({ id: "ui.compress.removeFile", message: "Remove {name}" }),
   "ui.compress.running": msg({ id: "ui.compress.running", message: "Compressing files…" }),
   "ui.compress.run": msg({ id: "ui.compress.run", message: "Compress" }),
@@ -317,6 +321,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.select.noSelectableFiles": msg({
     id: "ui.select.noSelectableFiles",
     message: "No selectable files in this source",
+  }),
+  "ui.select.filesHint": msg({
+    id: "ui.select.filesHint",
+    message: "Select the files you want to add, then choose Add files.",
   }),
   "ui.select.patchesHint": msg({
     id: "ui.select.patchesHint",

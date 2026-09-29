@@ -13,8 +13,15 @@ import { getBaseFileName, getFileNameWithoutExtension } from "../lib/input/path-
 import { getChdAutoCreateMode } from "../lib/input/rom-specific-file-utils.ts";
 import { isLikelyDiscImageSize } from "../lib/compression/disc-image-policy.ts";
 import { ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS } from "../lib/compression/rom-specific-format-support.ts";
+import { createLogger } from "../lib/logging.ts";
+import { replaceCueFileReferences } from "../workers/protocol/cue-file-utils.ts";
+import { isArchiveFileName } from "../public/react/file-classification.ts";
 import type { WorkflowRuntime } from "../types/workflow-runtime-adapter.ts";
-import type { ApplyWorkflowOptions, PublicOutput } from "../types/workflow-runtime-types.ts";
+import type {
+  ApplyWorkflowOptions,
+  CompressionWorkflowOptions,
+  PublicOutput,
+} from "../types/workflow-runtime-types.ts";
 
 type ConcreteCompressFormat = "zip" | "7z" | RomSpecificCompressionFormat;
 
@@ -24,6 +31,13 @@ type CompressSource = {
   metadata?: Record<string, unknown>;
 };
 
+/** One entry listed in an archive, by its path inside the archive. */
+type ListedCompressEntry = { path: string; size?: number };
+/** One file extracted from an opened archive. `output` owns the stored copy that `file` reads. */
+type OpenedCompressEntry = { file: File; output: PublicOutput; path: string };
+/** An archive's entries; `extracted` is set only when listing fell back to extracting everything. */
+type CompressArchiveListing = { entries: ListedCompressEntry[]; extracted?: OpenedCompressEntry[] };
+
 type ValidatedCompressInput = {
   cue?: File;
   files: File[];
@@ -31,6 +45,7 @@ type ValidatedCompressInput = {
   source: CompressSource;
 };
 
+const logger = createLogger("compress-service");
 const ARCHIVE_FORMATS = ["zip", "7z"] as const;
 const ROM_SPECIFIC_FORMATS = ["chd", "rvz", "z3ds"] as const;
 const getExtension = (fileName: string) => fileName.match(/\.([^./\\]+)$/)?.[1]?.toLowerCase() || "";
@@ -146,6 +161,194 @@ const createAssets = async (input: ValidatedCompressInput): Promise<InputAsset[]
   );
 };
 
+const isOpenableCompressInput = (file: File): boolean => isArchiveFileName(file.name);
+
+const getEntryBaseName = (path: string): string => path.split("/").filter(Boolean).pop() || path;
+
+const normalizeEntryPath = (path: string): string => path.replace(/\\/g, "/").replace(/^(\.\/|\/)+/, "");
+
+const disposeOpenedOutputs = async (outputs: PublicOutput[]) => {
+  await Promise.all(
+    outputs.map((output) =>
+      output.dispose().catch((cause: unknown) => logger.warn("Extracted file cleanup failed", { cause })),
+    ),
+  );
+};
+
+// Each `File` is the disk-backed snapshot of its stored copy, so it is never read into memory. Entries
+// keep their base name so CUE references still match; entries that share a base name in different
+// folders take their folder path instead, or every compress run rejects them as duplicates.
+const MAX_CUE_REWRITE_BYTES = 1024 * 1024;
+
+const resolveCueReference = (cuePath: string, reference: string): string => {
+  const folder = cuePath.split("/").slice(0, -1);
+  const parts: string[] = [];
+  for (const part of [...folder, ...reference.replace(/\\/g, "/").split("/")]) {
+    if (!part || part === ".") continue;
+    if (part === "..") parts.pop();
+    else parts.push(part);
+  }
+  return parts.join("/");
+};
+
+// CUE text is decoded one byte per character so every byte the rewrite does not touch round-trips
+// exactly, whatever code page the sheet was written in. Replacement names outside Latin-1 are UTF-8.
+const decodeBytes = (bytes: Uint8Array): string => Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
+const encodeBytes = (text: string): Uint8Array<ArrayBuffer> => {
+  const bytes: number[] = [];
+  for (const character of text) {
+    const code = character.codePointAt(0) ?? 0;
+    if (code < 256) bytes.push(code);
+    else bytes.push(...new TextEncoder().encode(character));
+  }
+  return new Uint8Array(bytes);
+};
+
+// Staged entries sit side by side under new names, so a CUE that reached its tracks through folders
+// MUST point at the staged names, or a ZIP or 7z made from them holds a sheet with missing tracks.
+const rewriteCueReferences = async (cue: File, cuePath: string, nameByPath: Map<string, string>): Promise<File> => {
+  if (cue.size > MAX_CUE_REWRITE_BYTES) return cue;
+  const text = decodeBytes(new Uint8Array(await cue.arrayBuffer()));
+  let changed = false;
+  const rewritten = replaceCueFileReferences(text, (reference) => {
+    const name = nameByPath.get(resolveCueReference(cuePath, reference).toLowerCase());
+    if (!name || name === reference) return undefined;
+    changed = true;
+    return name;
+  });
+  if (!changed) return cue;
+  logger.trace("cue.references-rewritten", { cuePath });
+  return new File([encodeBytes(rewritten)], cue.name, { lastModified: cue.lastModified, type: cue.type });
+};
+
+const toOpenedEntries = async (
+  picked: Array<{ output: PublicOutput; path: string }>,
+): Promise<OpenedCompressEntry[]> => {
+  const baseNameCounts = new Map<string, number>();
+  for (const { path } of picked) {
+    const baseName = getEntryBaseName(path);
+    baseNameCounts.set(baseName, (baseNameCounts.get(baseName) ?? 0) + 1);
+  }
+  const nameOf = (path: string) => {
+    const baseName = getEntryBaseName(path);
+    return (baseNameCounts.get(baseName) ?? 0) > 1 ? path.split("/").filter(Boolean).join(" - ") : baseName;
+  };
+  const nameByPath = new Map(picked.map(({ path }) => [normalizeEntryPath(path).toLowerCase(), nameOf(path)]));
+  const entries: OpenedCompressEntry[] = [];
+  for (const { output, path } of picked) {
+    const stored = await output.vfs.getFile?.(output.path);
+    if (!stored) throw new Error(`Extracted file is not available: ${path}`);
+    const file = new File([stored], nameOf(path), {
+      lastModified: stored.lastModified,
+      type: stored.type || "application/octet-stream",
+    });
+    entries.push({
+      file: /\.cue$/i.test(path) ? await rewriteCueReferences(file, normalizeEntryPath(path), nameByPath) : file,
+      output,
+      path,
+    });
+  }
+  return entries;
+};
+
+// The runtime's entry selection reads `*`, `?`, and `[...]` as wildcards and has no escape, so a name
+// like `game[1].iso` would also extract `game1.iso`. A one-character class matches each literally.
+const toExactSelectPattern = (path: string): string => path.replace(/[[*?]/g, (character) => `[${character}]`);
+
+const abortIfCancelled = (signal?: AbortSignal) => {
+  if (signal?.aborted) throw new DOMException("Opening cancelled", "AbortError");
+};
+
+/**
+ * Lists an archive's entries without extracting any of them. A container that cannot be listed (XISO
+ * has no probe) falls back to extracting everything; `extracted` then holds those entries, and the
+ * caller MUST dispose them.
+ */
+const listCompressInput = async (
+  file: File,
+  runtime: WorkflowRuntime,
+  options: Pick<CompressionWorkflowOptions, "onProgress" | "signal"> = {},
+): Promise<CompressArchiveListing> => {
+  let listError: unknown;
+  try {
+    const probe = runtime.compression.probe;
+    if (!probe) throw new Error("Reading archives is not available in this browser.");
+    logger.trace("list.start", { fileName: file.name, size: file.size });
+    const result = await probe({ source: file, options });
+    // Some formats (7z) list a folder as a plain entry, so a path that is another entry's parent is a folder.
+    const paths = result.entries.map((entry) => normalizeEntryPath(entry.filename || ""));
+    const entries = result.entries
+      .filter((entry, index) => {
+        const path = paths[index] ?? "";
+        if (!path || entry.filename.endsWith("/") || entry.fileType === "directory") return false;
+        return !paths.some((other) => other.startsWith(`${path}/`));
+      })
+      .map((entry) => ({ path: entry.filename, ...(typeof entry.size === "number" ? { size: entry.size } : {}) }));
+    logger.trace("list.done", { entryCount: entries.length, fileName: file.name });
+    if (entries.length) return { entries };
+  } catch (error) {
+    abortIfCancelled(options.signal);
+    listError = error;
+  }
+  const extract = runtime.compression.extract;
+  if (!extract) throw listError ?? new Error("Extraction is not available in this browser.");
+  logger.debug("list.fallback: extracting everything", { fileName: file.name, listError: String(listError ?? "") });
+  const result = await extract({ entries: [], extractAll: true, options, source: file });
+  try {
+    abortIfCancelled(options.signal);
+    const extracted = await toOpenedEntries(
+      result.outputs.map((output) => ({ output, path: output.relativePath || output.fileName })),
+    );
+    return { entries: extracted.map((entry) => ({ path: entry.path, size: entry.output.size })), extracted };
+  } catch (error) {
+    await disposeOpenedOutputs(result.outputs);
+    throw error;
+  }
+};
+
+// One pass writes every picked entry, so a solid archive decodes once and an unpicked multi-GB image
+// never touches browser storage. Files the pass writes beside the picked ones, such as a CD's bin for
+// its cue, are disposed at once. Callers MUST dispose every returned output.
+const extractCompressEntries = async (
+  file: File,
+  paths: string[],
+  runtime: WorkflowRuntime,
+  options: Pick<CompressionWorkflowOptions, "onProgress" | "signal"> = {},
+): Promise<OpenedCompressEntry[]> => {
+  const extract = runtime.compression.extract;
+  if (!extract) throw new Error("Extraction is not available in this browser.");
+  logger.trace("extract.start", { fileName: file.name, paths });
+  const result = await extract({
+    entries: paths.map(toExactSelectPattern),
+    options: { extractSelected: true, onProgress: options.onProgress, signal: options.signal },
+    source: file,
+  });
+  const remaining = [...result.outputs];
+  try {
+    abortIfCancelled(options.signal);
+    const picked = paths.map((path) => {
+      const wanted = normalizeEntryPath(path);
+      const byPath = remaining.findIndex(
+        (output) => normalizeEntryPath(output.relativePath || output.fileName) === wanted,
+      );
+      const index = byPath >= 0 ? byPath : remaining.findIndex((output) => output.fileName === getEntryBaseName(path));
+      const [output] = index >= 0 ? remaining.splice(index, 1) : [];
+      if (!output) throw new Error(`Extraction returned no file for ${path}`);
+      return { output, path };
+    });
+    const entries = await toOpenedEntries(picked);
+    if (remaining.length) {
+      logger.trace("extract.companions-disposed", { fileNames: remaining.map((output) => output.fileName) });
+      await disposeOpenedOutputs(remaining);
+    }
+    logger.trace("extract.done", { entryCount: entries.length, fileName: file.name });
+    return entries;
+  } catch (error) {
+    await disposeOpenedOutputs(result.outputs);
+    throw error;
+  }
+};
+
 const compressFiles = async (
   files: File[],
   options: ApplyWorkflowOptions,
@@ -198,5 +401,13 @@ const compressFiles = async (
   }
 };
 
-export type { CompressSource };
-export { compressFiles, getCompressFormats, getCompressSource };
+export type { CompressSource, ListedCompressEntry, OpenedCompressEntry };
+export {
+  compressFiles,
+  disposeOpenedOutputs,
+  getCompressFormats,
+  getCompressSource,
+  extractCompressEntries,
+  isOpenableCompressInput,
+  listCompressInput,
+};

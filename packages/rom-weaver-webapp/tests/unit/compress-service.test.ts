@@ -1,7 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import type { WorkflowRuntime } from "../../src/types/workflow-runtime-adapter.ts";
 import type { ApplyWorkflowOptions, PublicOutput } from "../../src/types/workflow-runtime-types.ts";
-import { compressFiles, getCompressFormats, getCompressSource } from "../../src/webapp/compress-service.ts";
+import {
+  compressFiles,
+  getCompressFormats,
+  getCompressSource,
+  extractCompressEntries,
+  isOpenableCompressInput,
+  listCompressInput,
+} from "../../src/webapp/compress-service.ts";
 
 const file = (name: string, contents: string | Uint8Array = "rom") => new File([contents], name);
 const options = (compression: "zip" | "7z" | "chd" | "rvz" | "z3ds"): ApplyWorkflowOptions => ({
@@ -182,5 +189,208 @@ describe("compress service", () => {
       "conversion failed",
     );
     expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  describe("archive inputs", () => {
+    const extracted = (path: string, stored: File | null) =>
+      ({
+        dispose: vi.fn(async () => undefined),
+        fileName: path.split("/").pop(),
+        path: `/extract/${path}`,
+        relativePath: path,
+        size: stored?.size ?? 0,
+        vfs: { getFile: vi.fn(async () => stored) },
+      }) as unknown as PublicOutput;
+    // One extract call writes every stored entry it is asked for, plus any listed companions.
+    const extractRuntime = (stored: Record<string, File | null>, companions: string[] = []) => {
+      const outputs: PublicOutput[] = [];
+      const extract = vi.fn(async ({ entries }: { entries: string[] }) => {
+        const written = [...entries, ...companions].map((path) =>
+          extracted(path, path in stored ? (stored[path] ?? null) : file(path, "x")),
+        );
+        outputs.push(...written);
+        return { entries: [], output: written[0], outputs: written };
+      });
+      return { extract, outputs, runtime: { compression: { extract } } as unknown as WorkflowRuntime };
+    };
+
+    it("opens archives and compressed disc images but not plain files", () => {
+      expect(
+        ["game.zip", "disc.chd", "disc.RVZ", "game.7z"].map((name) => isOpenableCompressInput(file(name))),
+      ).toEqual([true, true, true, true]);
+      expect(["game.iso", "fix.bps", "track.bin"].map((name) => isOpenableCompressInput(file(name)))).toEqual([
+        false,
+        false,
+        false,
+      ]);
+    });
+
+    it("lists entries without extracting and leaves out directories", async () => {
+      const probe = vi.fn(async () => ({
+        entries: [
+          { filename: "Game/", fileType: "directory" },
+          { filename: "Game" },
+          { filename: "Game/game.iso", size: 4096 },
+          { filename: "Game/game.cue" },
+        ],
+      }));
+      const extract = vi.fn();
+      const runtime = { compression: { extract, probe } } as unknown as WorkflowRuntime;
+
+      await expect(listCompressInput(file("game.zip"), runtime)).resolves.toEqual({
+        entries: [{ path: "Game/game.iso", size: 4096 }, { path: "Game/game.cue" }],
+      });
+      expect(extract).not.toHaveBeenCalled();
+    });
+
+    it("falls back to extracting everything when a container cannot be listed", async () => {
+      const probe = vi.fn(async () => {
+        throw new Error("xiso probe is not supported yet");
+      });
+      const output = extracted("game.iso", file("game.iso", "iso!"));
+      const extract = vi.fn(async () => ({ entries: [], output, outputs: [output] }));
+      const runtime = { compression: { extract, probe } } as unknown as WorkflowRuntime;
+
+      const listing = await listCompressInput(file("game.xiso"), runtime);
+      expect(extract).toHaveBeenCalledWith(expect.objectContaining({ entries: [], extractAll: true }));
+      expect(listing.entries).toEqual([{ path: "game.iso", size: 4 }]);
+      expect(listing.extracted?.map((entry) => entry.file.name)).toEqual(["game.iso"]);
+      expect(output.dispose).not.toHaveBeenCalled();
+    });
+
+    it("rethrows the listing error when the fallback cannot extract either", async () => {
+      const probe = vi.fn(async () => {
+        throw new Error("Truncated ZIP file header");
+      });
+      const runtime = { compression: { probe } } as unknown as WorkflowRuntime;
+
+      await expect(listCompressInput(file("broken.zip"), runtime)).rejects.toThrow("Truncated ZIP file header");
+    });
+
+    it("extracts every picked entry in one pass and disposes companion files", async () => {
+      const { extract, outputs, runtime } = extractRuntime(
+        { "disc/disc.cue": file("x", "cue"), "disc/readme.txt": file("y", "note") },
+        ["disc/disc.bin"],
+      );
+      const signal = new AbortController().signal;
+      const onProgress = vi.fn();
+      const entries = await extractCompressEntries(file("disc.7z"), ["disc/disc.cue", "disc/readme.txt"], runtime, {
+        onProgress,
+        signal,
+      });
+
+      expect(extract).toHaveBeenCalledOnce();
+      expect(extract).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entries: ["disc/disc.cue", "disc/readme.txt"],
+          options: expect.objectContaining({ extractSelected: true, onProgress, signal }),
+        }),
+      );
+      expect(entries.map((entry) => [entry.path, entry.file.name, entry.file.size])).toEqual([
+        ["disc/disc.cue", "disc.cue", 3],
+        ["disc/readme.txt", "readme.txt", 4],
+      ]);
+      expect(await entries[1]?.file.text()).toBe("note");
+      const companion = outputs.find((output) => output.fileName === "disc.bin");
+      expect(companion?.dispose).toHaveBeenCalledOnce();
+      expect(entries.every((entry) => vi.mocked(entry.output.dispose).mock.calls.length === 0)).toBe(true);
+    });
+
+    it("points a picked cue's folder references at the staged track names and keeps other bytes", async () => {
+      const cueBytes = new Uint8Array([
+        ...new TextEncoder().encode('TITLE "Caf'),
+        0xe9,
+        ...new TextEncoder().encode('"\r\nFILE "tracks\\track 01.bin" BINARY\r\nFILE "../other.bin" BINARY\r\n'),
+      ]);
+      const { runtime } = extractRuntime({
+        "Disc/game.cue": new File([cueBytes], "game.cue"),
+        "Disc/tracks/track 01.bin": file("t", "bin"),
+      });
+      const entries = await extractCompressEntries(
+        file("disc.zip"),
+        ["Disc/game.cue", "Disc/tracks/track 01.bin"],
+        runtime,
+      );
+
+      const cue = entries[0]?.file;
+      if (!cue) throw new Error("The cue entry is missing");
+      const rewritten = new Uint8Array(await cue.arrayBuffer());
+      expect(entries.map((entry) => entry.file.name)).toEqual(["game.cue", "track 01.bin"]);
+      expect(rewritten[10]).toBe(0xe9);
+      expect(new TextDecoder("latin1").decode(rewritten.slice(12))).toBe(
+        '\r\nFILE "track 01.bin" BINARY\r\nFILE "../other.bin" BINARY\r\n',
+      );
+    });
+
+    it("leaves a cue whose references already match unchanged", async () => {
+      const cue = file("game.cue", 'FILE "game.bin" BINARY\n');
+      const { runtime } = extractRuntime({ "game.cue": cue, "game.bin": file("b", "bin") });
+      const entries = await extractCompressEntries(file("disc.zip"), ["game.cue", "game.bin"], runtime);
+
+      expect(await entries[0]?.file.text()).toBe('FILE "game.bin" BINARY\n');
+    });
+
+    it("selects names with wildcard characters literally", async () => {
+      const { extract, runtime } = extractRuntime({});
+      extract.mockImplementationOnce(async () => {
+        const output = extracted("game[1] (v1.0?).iso", file("g", "iso"));
+        return { entries: [], output, outputs: [output] };
+      });
+      const entries = await extractCompressEntries(file("set.zip"), ["game[1] (v1.0?).iso"], runtime);
+
+      expect(extract.mock.calls[0]?.[0].entries).toEqual(["game[[]1] (v1.0[?]).iso"]);
+      expect(entries.map((entry) => entry.file.name)).toEqual(["game[1] (v1.0?).iso"]);
+    });
+
+    it("names entries that share a base name after their folders so they compress together", async () => {
+      const { runtime } = extractRuntime({
+        "Disc 1/readme.txt": file("a", "one"),
+        "Disc 2/readme.txt": file("b", "two"),
+        "Disc 1/game.cue": file("c", "cue"),
+      });
+      const entries = await extractCompressEntries(
+        file("set.zip"),
+        ["Disc 1/readme.txt", "Disc 2/readme.txt", "Disc 1/game.cue"],
+        runtime,
+      );
+
+      expect(entries.map((entry) => entry.file.name)).toEqual([
+        "Disc 1 - readme.txt",
+        "Disc 2 - readme.txt",
+        "game.cue",
+      ]);
+      await expect(getCompressFormats(entries.slice(0, 2).map((entry) => entry.file))).resolves.toEqual(["zip", "7z"]);
+    });
+
+    it("disposes every extracted file when a picked entry is missing or unreadable", async () => {
+      const { outputs, runtime } = extractRuntime({ "a.bin": file("a", "a"), "b.bin": null });
+
+      await expect(extractCompressEntries(file("pair.zip"), ["a.bin", "b.bin"], runtime)).rejects.toThrow(
+        "Extracted file is not available: b.bin",
+      );
+      expect(outputs).toHaveLength(2);
+      for (const output of outputs) expect(output.dispose).toHaveBeenCalledOnce();
+
+      const empty = { compression: { extract: vi.fn(async () => ({ entries: [], outputs: [] })) } };
+      await expect(
+        extractCompressEntries(file("pair.zip"), ["c.bin"], empty as unknown as WorkflowRuntime),
+      ).rejects.toThrow("Extraction returned no file for c.bin");
+    });
+
+    it("disposes the extracted files when the signal aborts during extraction", async () => {
+      const abort = new AbortController();
+      const { extract, outputs, runtime } = extractRuntime({ "a.bin": file("a", "a") });
+      extract.mockImplementationOnce(async ({ entries }) => {
+        abort.abort();
+        const written = entries.map((path) => extracted(path, file(path, "a")));
+        outputs.push(...written);
+        return { entries: [], output: written[0], outputs: written };
+      });
+
+      await expect(extractCompressEntries(file("a.zip"), ["a.bin"], runtime, { signal: abort.signal })).rejects.toThrow(
+        "Opening cancelled",
+      );
+      expect(outputs[0]?.dispose).toHaveBeenCalledOnce();
+    });
   });
 });
