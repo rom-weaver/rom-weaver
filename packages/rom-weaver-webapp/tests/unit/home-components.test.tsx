@@ -161,7 +161,13 @@ describe("HomePage", () => {
           ".home-webapp a[href^='/tools/']:not([href*='/docs']):not([href*='?'])",
       ),
     ).map((link) => link.getAttribute("href"));
-    expect(links).toEqual(["/tools/apply-patches", "/tools/create-patch", "/tools/bundle-patches", "/tools/test-rom"]);
+    expect(links).toEqual([
+      "/tools/apply-patches",
+      "/tools/create-patch",
+      "/tools/bundle-patches",
+      "/tools/test-rom",
+      "/tools/checksum",
+    ]);
     expect(container.querySelector("#home-title")?.textContent).toContain("Patch ROMs in your browser.");
     expect(container.querySelectorAll("a[href='/tools/apply-patches']")).toHaveLength(1);
     expect(container.querySelector("a[href='/tools/docs/features']")?.textContent).toContain("See what");
@@ -185,7 +191,7 @@ describe("HomePage", () => {
     expect(container.querySelector(".home-loom-disc-flow .home-loom-source-swatch")).not.toBeNull();
     expect(container.querySelector(".home-loom-output-flow .home-loom-output-swatch")).not.toBeNull();
     expect(container.querySelector(".home-loom-result")?.textContent).toBe("result");
-    expect(container.querySelectorAll(".home-hero-capabilities a")).toHaveLength(4);
+    expect(container.querySelectorAll(".home-hero-capabilities a")).toHaveLength(5);
     expect(
       Array.from(container.querySelectorAll(".home-install-code")).every(
         (code) => code instanceof HTMLTextAreaElement && code.readOnly,

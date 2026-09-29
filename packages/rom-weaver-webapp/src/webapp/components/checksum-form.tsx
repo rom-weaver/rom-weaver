@@ -297,209 +297,225 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
 
   return (
     <section className="panel checksum-tool" id="checksum-container">
-      <UnifiedDropZone
-        addLabel="Replace the file"
-        big={sourceEmpty}
-        disabled={calculating}
-        heroLabel="Drop a file to checksum it"
-        heroLabelCoarse="Tap to add a file"
-        info={<p>Checksums are calculated locally. Your file never leaves this browser.</p>}
-        inputId="checksum-input-picker"
-        lead={{
-          line1: "ui.hero.checksumThesis",
-          line2: "ui.hero.checksumThesis2",
-          description: "ui.hero.checksumDescription",
-        }}
-        multiple={false}
-        onFiles={handleDrop}
-      />
-      <fieldset className="checksum-algos" disabled={calculating || staging}>
-        <legend>Checksums to calculate</legend>
-        {CHECKSUM_ALGORITHMS.map((algorithm) => (
-          <label className="checkrow" key={algorithm.id}>
+      {sourceEmpty ? (
+        <UnifiedDropZone
+          addLabel="Replace the file"
+          big={sourceEmpty}
+          disabled={calculating}
+          heroLabel="Drop a file to checksum it"
+          heroLabelCoarse="Tap to add a file"
+          info={<p>Checksums are calculated locally. Your file never leaves this browser.</p>}
+          inputId="checksum-input-picker"
+          lead={{
+            line1: "ui.hero.checksumThesis",
+            line2: "ui.hero.checksumThesis2",
+            description: "ui.hero.checksumDescription",
+          }}
+          multiple={false}
+          onFiles={handleDrop}
+          title="Input"
+        />
+      ) : (
+        <WorkflowRomInputStep
+          dropZone={{
+            disabled: calculating,
+            inputId: "checksum-input-picker",
+            label: "Replace the file",
+            multiple: false,
+            onFiles: handleDrop,
+          }}
+          fault={hasSourceQueueWarning(input) || (!!error && !files.length)}
+          id="checksum-source"
+          info={
+            <InfoPopover title="File input">
+              <ul>
+                <li>When Auto extract is on, choose a file if the archive contains several.</li>
+                <li>Turn Auto extract off to checksum an archive without opening it.</li>
+              </ul>
+            </InfoPopover>
+          }
+          items={[
+            {
+              card: {
+                extract: {
+                  fileName: input?.fileName || source.name,
+                  fileSize: input?.size,
+                  parentCompressions: input?.parentCompressions,
+                  timing: formatOptionalElapsedMs(input?.decompressionTimeMs),
+                },
+                meta: staging ? (
+                  <>
+                    <span className="fsize mono">{formatByteSize(input?.size ?? source.size)}</span>
+                    <StageStatus
+                      id="checksum-input-stage"
+                      label={stageStatusLabel("Checksumming", !stagingChecksum, localizer)}
+                      percent={stagePct}
+                    />
+                  </>
+                ) : (
+                  <span className="fsize mono">{formatByteSize(input?.size ?? source.size)}</span>
+                ),
+                onRemove: () => updateSource(null),
+                panels: {
+                  ...(input?.identification ? { identification: input.identification } : {}),
+                  identifyPending: false,
+                  info: {
+                    bytes: primary?.size,
+                    checksums: primary?.checksums,
+                    checksumVariants: primary?.checksumVariants,
+                    defaultOpen: false,
+                  },
+                },
+                removeLabel: "Remove file",
+                stageBar: stageBarValue(staging, stagePct),
+                state: hasSourceQueueWarning(input) ? "bad" : input?.status === "ready" ? "ok" : undefined,
+              },
+              id: "checksum-input-card",
+            },
+          ]}
+          notice={
+            sourceNotice ? (
+              <Notice id="checksum-source-notice" level={getSourceNoticeLevel(input)}>
+                {sourceNotice}
+              </Notice>
+            ) : null
+          }
+          num="0x01"
+          title="Input"
+          woven={files.length > 0}
+        />
+      )}
+      <StepSection id="checksum-options" num="0x02" title={localizer.message("ui.output.options")}>
+        <fieldset className="checksum-algos" disabled={calculating || staging}>
+          <legend>Checksums to calculate</legend>
+          <div className="checksum-algo-grid">
+            {CHECKSUM_ALGORITHMS.map((algorithm) => (
+              <label className="checksum-algo" key={algorithm.id}>
+                <input
+                  checked={algorithms.includes(algorithm.id)}
+                  id={`checksum-algo-${algorithm.id}`}
+                  onChange={(event) => toggleAlgorithm(algorithm.id, event.currentTarget.checked)}
+                  type="checkbox"
+                />
+                <span>{algorithm.label}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <div className="checksum-extract">
+          <label className="checkrow">
             <input
-              checked={algorithms.includes(algorithm.id)}
-              id={`checksum-algo-${algorithm.id}`}
-              onChange={(event) => toggleAlgorithm(algorithm.id, event.currentTarget.checked)}
+              aria-describedby="checksum-extract-description"
+              checked={autoExtract}
+              disabled={calculating || staging}
+              id="checksum-auto-extract"
+              onChange={(event) => setAutoExtract(event.currentTarget.checked)}
               type="checkbox"
             />
-            <span>{algorithm.label}</span>
+            <span>Auto extract</span>
           </label>
-        ))}
-      </fieldset>
-      <label className="checkrow">
-        <input
-          checked={autoExtract}
-          disabled={calculating || staging}
-          id="checksum-auto-extract"
-          onChange={(event) => setAutoExtract(event.currentTarget.checked)}
-          type="checkbox"
-        />
-        <span>Auto extract</span>
-      </label>
-      <p className="pdesc">
-        Open archives and containers before calculating checksums. Turn off to checksum the original file.
-      </p>
+          <p className="pdesc" id="checksum-extract-description">
+            Open archives and containers before calculating checksums. Turn off to checksum the original file.
+          </p>
+        </div>
+      </StepSection>
       {sourceEmpty ? null : (
-        <>
-          <WorkflowRomInputStep
-            fault={hasSourceQueueWarning(input) || (!!error && !files.length)}
-            id="checksum-source"
-            info={
-              <InfoPopover title="File input">
-                <ul>
-                  <li>When Auto extract is on, choose a file if the archive contains several.</li>
-                  <li>Turn Auto extract off to checksum an archive without opening it.</li>
-                </ul>
-              </InfoPopover>
-            }
-            items={[
-              {
-                card: {
-                  extract: {
-                    fileName: input?.fileName || source.name,
-                    fileSize: input?.size,
-                    parentCompressions: input?.parentCompressions,
-                    timing: formatOptionalElapsedMs(input?.decompressionTimeMs),
-                  },
-                  meta: staging ? (
+        <StepSection
+          className="checksum-results"
+          fault={!!compare && !compare.match && !compare.uncomputed.length}
+          id="checksum-results"
+          info={
+            <InfoPopover title="Checksums">
+              <ul>
+                <li>Switch on an algorithm, then calculate it. Click a value to copy it.</li>
+                <li>Paste an expected checksum to compare it with every computed value.</li>
+                <li>Headerless and other variants appear when the ROM has a known header or byte order.</li>
+              </ul>
+            </InfoPopover>
+          }
+          num="0x03"
+          title="Checksums"
+          woven={!!compare?.match}
+        >
+          {source && !staging && missing.length ? (
+            calculating ? (
+              <FileProgress
+                {...(toWorkflowChecksumProgressProps(progress) || { indeterminate: true, label: "Checksum" })}
+                cancelLabel="Cancel checksum"
+                id="checksum-calculate-progress"
+                onCancel={() => workflowRef.current?.abort()}
+              />
+            ) : (
+              <RunButton icon={<Hash aria-hidden="true" />} id="checksum-calculate" onClick={() => void calculate()}>
+                {`Calculate ${missing
+                  .map((algorithm) => CHECKSUM_ALGORITHMS.find((entry) => entry.id === algorithm)?.label)
+                  .join(", ")}`}
+              </RunButton>
+            )
+          ) : null}
+          {primary ? (
+            <ChecksumList defaultOpen label={localizer.message("ui.checks.title")}>
+              {sets.map((set, index) => (
+                <Fragment key={set.id}>
+                  {set.label || index > 0 ? (
+                    <div className="ck-group">
+                      <div className="ck-group-head">{set.label}</div>
+                      <ChecksumSetRows
+                        algorithms={algorithms}
+                        compare={compare}
+                        expected={expected}
+                        pending={calculating}
+                        set={set}
+                      />
+                    </div>
+                  ) : (
                     <>
-                      <span className="fsize mono">{formatByteSize(input?.size ?? source.size)}</span>
-                      <StageStatus
-                        id="checksum-input-stage"
-                        label={stageStatusLabel("Checksumming", !stagingChecksum, localizer)}
-                        percent={stagePct}
+                      <ChecksumSetRows
+                        algorithms={algorithms}
+                        bytes={primary.size}
+                        compare={compare}
+                        expected={expected}
+                        pending={calculating}
+                        set={set}
                       />
                     </>
-                  ) : (
-                    <span className="fsize mono">{formatByteSize(input?.size ?? source.size)}</span>
-                  ),
-                  onRemove: () => updateSource(null),
-                  panels: {
-                    ...(input?.identification ? { identification: input.identification } : {}),
-                    identifyPending: false,
-                    info: {
-                      bytes: primary?.size,
-                      checksums: primary?.checksums,
-                      checksumVariants: primary?.checksumVariants,
-                      defaultOpen: false,
-                    },
-                  },
-                  removeLabel: "Remove file",
-                  stageBar: stageBarValue(staging, stagePct),
-                  state: hasSourceQueueWarning(input) ? "bad" : input?.status === "ready" ? "ok" : undefined,
-                },
-                id: "checksum-input-card",
-              },
-            ]}
-            notice={
-              sourceNotice ? (
-                <Notice id="checksum-source-notice" level={getSourceNoticeLevel(input)}>
-                  {sourceNotice}
-                </Notice>
-              ) : null
-            }
-            num="0x02"
-            title="Input"
-            woven={files.length > 0}
-          />
-          <StepSection
-            className="checksum-results"
-            fault={!!compare && !compare.match && !compare.uncomputed.length}
-            id="checksum-results"
-            info={
-              <InfoPopover title="Checksums">
-                <ul>
-                  <li>Switch on an algorithm, then calculate it. Click a value to copy it.</li>
-                  <li>Paste an expected checksum to compare it with every computed value.</li>
-                  <li>Headerless and other variants appear when the ROM has a known header or byte order.</li>
-                </ul>
-              </InfoPopover>
-            }
-            num="0x03"
-            title="Checksums"
-            woven={!!compare?.match}
-          >
-            {source && !staging && missing.length ? (
-              calculating ? (
-                <FileProgress
-                  {...(toWorkflowChecksumProgressProps(progress) || { indeterminate: true, label: "Checksum" })}
-                  cancelLabel="Cancel checksum"
-                  id="checksum-calculate-progress"
-                  onCancel={() => workflowRef.current?.abort()}
-                />
-              ) : (
-                <RunButton icon={<Hash aria-hidden="true" />} id="checksum-calculate" onClick={() => void calculate()}>
-                  {`Calculate ${missing
-                    .map((algorithm) => CHECKSUM_ALGORITHMS.find((entry) => entry.id === algorithm)?.label)
-                    .join(", ")}`}
-                </RunButton>
-              )
-            ) : null}
-            {primary ? (
-              <ChecksumList defaultOpen label={localizer.message("ui.checks.title")}>
-                {sets.map((set, index) => (
-                  <Fragment key={set.id}>
-                    {set.label || index > 0 ? (
-                      <div className="ck-group">
-                        <div className="ck-group-head">{set.label}</div>
-                        <ChecksumSetRows
-                          algorithms={algorithms}
-                          compare={compare}
-                          expected={expected}
-                          pending={calculating}
-                          set={set}
-                        />
-                      </div>
-                    ) : (
-                      <>
-                        <ChecksumSetRows
-                          algorithms={algorithms}
-                          bytes={primary.size}
-                          compare={compare}
-                          expected={expected}
-                          pending={calculating}
-                          set={set}
-                        />
-                      </>
-                    )}
-                  </Fragment>
-                ))}
-              </ChecksumList>
-            ) : null}
-            <label className="checksum-compare" htmlFor="checksum-compare-input">
-              <span>Compare with an expected checksum</span>
-              <input
-                aria-invalid={expectedInvalid || undefined}
-                autoComplete="off"
-                className="input mono"
-                id="checksum-compare-input"
-                onChange={(event) => setExpectedText(event.currentTarget.value)}
-                placeholder="Paste a CRC32, MD5, SHA-1, or other checksum"
-                spellCheck={false}
-                type="text"
-                value={expectedText}
-              />
-            </label>
-            {expectedInvalid ? (
-              <Notice level="error">A checksum contains only the digits 0-9 and the letters a-f.</Notice>
-            ) : null}
-            {compare?.match && matchedSet ? (
-              <p className="pdesc checksum-verdict" id="checksum-compare-verdict">
-                Match: the {matchedLabel} of this file{matchedSet.label ? ` (${matchedSet.label})` : ""}.
-              </p>
-            ) : null}
-            {compare && !compare.match && files.length ? (
-              <Notice id="checksum-compare-verdict" level={compare.uncomputed.length ? "warn" : "error"}>
-                {compare.uncomputed.length
-                  ? `No computed checksum matches. Calculate ${compare.uncomputed.join(" or ")} to compare this value.`
-                  : expected.length && !CHECKSUM_ALGORITHMS.some((entry) => entry.hexLength === expected.length)
-                    ? `No supported algorithm makes a ${expected.length}-character checksum.`
-                    : "No computed checksum matches. This is not the expected file, or it needs a different header or byte order."}
-              </Notice>
-            ) : null}
-          </StepSection>
-        </>
+                  )}
+                </Fragment>
+              ))}
+            </ChecksumList>
+          ) : null}
+          <label className="checksum-compare" htmlFor="checksum-compare-input">
+            <span>Compare with an expected checksum</span>
+            <input
+              aria-invalid={expectedInvalid || undefined}
+              autoComplete="off"
+              className="input mono"
+              id="checksum-compare-input"
+              onChange={(event) => setExpectedText(event.currentTarget.value)}
+              placeholder="Paste a CRC32, MD5, SHA-1, or other checksum"
+              spellCheck={false}
+              type="text"
+              value={expectedText}
+            />
+          </label>
+          {expectedInvalid ? (
+            <Notice level="error">A checksum contains only the digits 0-9 and the letters a-f.</Notice>
+          ) : null}
+          {compare?.match && matchedSet ? (
+            <p className="pdesc checksum-verdict" id="checksum-compare-verdict">
+              Match: the {matchedLabel} of this file{matchedSet.label ? ` (${matchedSet.label})` : ""}.
+            </p>
+          ) : null}
+          {compare && !compare.match && files.length ? (
+            <Notice id="checksum-compare-verdict" level={compare.uncomputed.length ? "warn" : "error"}>
+              {compare.uncomputed.length
+                ? `No computed checksum matches. Calculate ${compare.uncomputed.join(" or ")} to compare this value.`
+                : expected.length && !CHECKSUM_ALGORITHMS.some((entry) => entry.hexLength === expected.length)
+                  ? `No supported algorithm makes a ${expected.length}-character checksum.`
+                  : "No computed checksum matches. This is not the expected file, or it needs a different header or byte order."}
+            </Notice>
+          ) : null}
+        </StepSection>
       )}
       {error ? (
         <Notice level="error" onDismiss={() => setError("")}>

@@ -362,14 +362,69 @@
   gap: var(--sp-m);
 }
 .rw-app .checksum-algos {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
-  /* Each .checkrow brings its own block margin, so rows need no extra gap. */
-  gap: 0 var(--sp-m);
   min-width: 0;
   padding: 0;
   margin: 0;
   border: 0;
+}
+.rw-app .checksum-algos legend {
+  padding: 0;
+  margin-block-end: var(--sp-s);
+  font-size: 0.78rem;
+  color: var(--ink-3);
+}
+.rw-app .checksum-algo-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-s);
+}
+.rw-app .checksum-algo {
+  display: flex;
+  gap: var(--sp-s);
+  align-items: center;
+  min-height: 44px;
+  padding: var(--sp-s) var(--sp-m);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--ink-2);
+  cursor: pointer;
+  background: var(--well);
+  border: 1px solid var(--seam-soft);
+  border-radius: var(--r-s);
+}
+.rw-app .checksum-algo:has(:checked) {
+  color: var(--thread-text);
+  background: color-mix(in oklab, var(--thread) 7%, var(--well));
+  border-color: color-mix(in oklab, var(--thread) 35%, var(--seam-soft));
+}
+.rw-app .checksum-algo:has(:focus-visible) {
+  outline: 2px solid var(--thread-text);
+  outline-offset: 2px;
+}
+@media (hover: hover) {
+  .rw-app .checksum-algo:has(:enabled):hover {
+    border-color: var(--thread-text);
+  }
+}
+.rw-app .checksum-algo:has(:enabled):active {
+  border-color: var(--thread-text);
+}
+.rw-app .checksum-algo:has(:disabled) {
+  cursor: default;
+  opacity: 0.55;
+}
+.rw-app .checksum-extract {
+  padding-block-start: var(--sp-m);
+  margin-block-start: var(--sp-m);
+  border-block-start: 1px solid var(--seam-soft);
+}
+.rw-app .checksum-extract .pdesc {
+  margin-block-end: 0;
+}
+@media (max-width: 599px) {
+  .rw-app .checksum-algo-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 .rw-app .checksum-compare {
   display: grid;

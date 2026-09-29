@@ -16,7 +16,7 @@ For ROM title lookup, use [Identify a ROM](identify-roms-browser.md). For termin
 ## Calculate checksums
 
 1. Open [Checksum file](https://rom-weaver.com/checksum).
-2. Select the algorithms to calculate. CRC32, MD5, and SHA-1 are selected by default.
+2. Select the algorithms in **Options**. CRC32, MD5, and SHA-1 are selected by default.
 3. Leave **Auto extract** checked to open archives and containers. Clear it to checksum the original file.
 4. Add one file. If an archive contains several files, choose the file to check.
 5. Wait for **Checksums** to show the results.
@@ -24,8 +24,8 @@ For ROM title lookup, use [Identify a ROM](identify-roms-browser.md). For termin
 You can add a text file, patch, ROM, archive, or any other file. Select a checksum row to copy its value.
 
 <figure class="docs-screenshot">
-  <img src="../screenshots/checksum-initial-light.webp" alt="The checksum page opens with file input, algorithm choices, and Auto extract checked" width="1280" height="960">
-  <figcaption>Choose algorithms and extraction before adding a file.</figcaption>
+  <img src="../screenshots/checksum-initial-light.webp" alt="The checksum page shows 0x01 Input and 0x02 Options, with algorithm choices and Auto extract checked" width="1280" height="960">
+  <figcaption>Choose algorithms and extraction in Options before adding a file.</figcaption>
 </figure>
 
 ## Add an algorithm
@@ -46,8 +46,8 @@ The [checksum support table](../reference/formats.md#checksum-support) lists eve
 
 <figure class="docs-screenshot">
   <picture>
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/checksum-mobile-dark.webp" width="390" height="1094">
-    <img src="../screenshots/checksum-desktop-light.webp" alt="File checksum choices, Auto extract, and a matching SHA-256" width="1280" height="960">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/checksum-mobile-dark.webp" width="390" height="1200">
+    <img src="../screenshots/checksum-desktop-light.webp" alt="File checksum choices, Auto extract, and a matching SHA-256" width="1280" height="1016">
   </picture>
   <figcaption>A pasted SHA-256 matches the calculated value.</figcaption>
 </figure>

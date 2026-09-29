@@ -92,6 +92,7 @@ const DOCS_SCREENSHOT_NAMES = [
   "compress-select-files-desktop-light.webp",
   "compress-select-files-mobile-dark.webp",
   "checksum-desktop-light.webp",
+  "checksum-home-light.webp",
   "checksum-initial-light.webp",
   "checksum-mobile-dark.webp",
 ];
