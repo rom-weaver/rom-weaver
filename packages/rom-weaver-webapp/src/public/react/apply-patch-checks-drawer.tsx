@@ -33,6 +33,7 @@ const PatchChecksDrawer = ({
   chainChip,
   disabled,
   index,
+  integrated,
   isChainInput,
   isChainOutput,
   item,
@@ -54,6 +55,8 @@ const PatchChecksDrawer = ({
    * editable. */
   disabled?: boolean;
   index: number;
+  /** Simple view: the drawer is the card's only section, so it joins the card. */
+  integrated?: boolean;
   /** First/last enabled patch in the stack: user-entered input checks on the chain
    * input verify the ROM live (and gate the apply); output checks on the chain
    * output verify the run's result. Mid-chain checks are metadata only - they
@@ -174,6 +177,7 @@ const PatchChecksDrawer = ({
       className="patch-checks"
       bodyClassName={compact ? "ckrows patch-check-columns" : "ckrows patch-checks-body"}
       defaultOpen={hasBuiltIn || hasUserChecks}
+      integrated={integrated}
       label={localizer.message("ui.patch.checks")}
       match={ok ? undefined : match}
       summary={patchType ? <DrawerReadout>{patchType}</DrawerReadout> : undefined}

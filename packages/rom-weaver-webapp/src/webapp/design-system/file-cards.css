@@ -8,14 +8,17 @@
   gap: var(--sp-l);
 }
 .rw-app .card {
+  /* An integrated drawer (drawers.css) bleeds to the card edge with these. */
+  --card-pad: var(--sp-m);
+  --card-r: var(--r-m);
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-s);
-  padding: var(--sp-m);
+  padding: var(--card-pad);
   background: var(--plate-2);
   border: 1px solid var(--seam);
-  border-radius: var(--r-m) var(--r-m) var(--card-end-radius, var(--r-m)) var(--card-end-radius, var(--r-m));
+  border-radius: var(--card-r) var(--card-r) var(--card-end-radius, var(--card-r)) var(--card-end-radius, var(--card-r));
   transition:
     gap 0.16s var(--ease),
     border-color 0.15s,
@@ -438,6 +441,10 @@
   gap: var(--sp-s);
   min-height: 0;
   overflow: clip;
+}
+/* An integrated drawer bleeds past the body to reach the card edge. */
+.rw-app .patch-body-inner:has(> .cks.is-integrated) {
+  overflow: visible;
 }
 /* Keep disabled patches editable while visually de-emphasizing them. */
 .rw-app .card.is-disabled {

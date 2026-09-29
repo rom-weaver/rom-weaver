@@ -28,9 +28,9 @@
   }
   /* Preserve full status outlines while making room for hashes. */
   .rw-app .card {
+    --card-pad: 7px;
+    --card-r: var(--r-s);
     gap: var(--sp-xs);
-    padding: 7px;
-    border-radius: var(--r-s) var(--r-s) var(--card-end-radius, var(--r-s)) var(--card-end-radius, var(--r-s));
   }
   .rw-app .card-name {
     gap: var(--sp-2xs);

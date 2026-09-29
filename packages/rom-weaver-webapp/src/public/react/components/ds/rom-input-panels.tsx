@@ -114,8 +114,18 @@ const RomInputPanels = ({
     </>
   );
   const renderInfo = () => {
-    if (isDisc) return <DiscTracksPanel lead={checksLead} summary={summary} timing={info.timing} tracks={tracks} />;
-    if (showInfo) return <SourceInfoList {...info} lead={checksLead} summary={summary} />;
+    if (isDisc)
+      return (
+        <DiscTracksPanel
+          integrated={!detailedViewEnabled}
+          lead={checksLead}
+          summary={summary}
+          timing={info.timing}
+          tracks={tracks}
+        />
+      );
+    if (showInfo)
+      return <SourceInfoList {...info} integrated={!detailedViewEnabled} lead={checksLead} summary={summary} />;
     return null;
   };
   // Shared card drawer order: the disc index sheets, then the single Checks

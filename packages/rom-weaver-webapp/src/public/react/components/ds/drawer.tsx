@@ -60,6 +60,7 @@ const Drawer = ({
   className,
   bodyClassName = "ckrows",
   headingRef,
+  integrated = false,
   children,
 }: {
   /** Independent trailing control, rendered beside rather than inside the drawer toggle. */
@@ -76,6 +77,9 @@ const Drawer = ({
   /** Class of the wrapper inside the drawer body (`ckrows`, `trackrows`, `optsbody`, …). */
   bodyClassName?: string;
   headingRef?: RefObject<HTMLButtonElement | null>;
+  /** Render as a flush section of the enclosing card instead of a nested well -
+   * for a card whose only section is this drawer (the Simple view). */
+  integrated?: boolean;
   children: ReactNode;
 }) => {
   const bodyId = useId();
@@ -87,7 +91,7 @@ const Drawer = ({
     onToggle?.(next);
   };
   return (
-    <div className={join("cks", className, isOpen && "is-open")}>
+    <div className={join("cks", className, integrated && "is-integrated", isOpen && "is-open")}>
       <button
         aria-controls={bodyId}
         aria-expanded={isOpen}

@@ -127,6 +127,7 @@ const ChecksumList = ({
   lead,
   bodyClassName,
   className,
+  integrated,
   children,
 }: {
   action?: ReactNode;
@@ -144,6 +145,7 @@ const ChecksumList = ({
   lead?: ReactNode;
   bodyClassName?: string;
   className?: string;
+  integrated?: boolean;
   children: ReactNode;
 }) => {
   // Timings are diagnostic; only the detailed view shows them.
@@ -155,6 +157,7 @@ const ChecksumList = ({
       bodyClassName={bodyClassName}
       className={className}
       defaultOpen={defaultOpen}
+      integrated={integrated}
       label={label}
       labelIcon={<ListChecks aria-hidden="true" />}
       onToggle={onToggle}
@@ -221,6 +224,7 @@ const PendingChecks = ({
   open,
   onToggle,
   summary,
+  integrated,
 }: {
   groups: ChecksumPendingGroup[];
   label?: ReactNode;
@@ -229,11 +233,13 @@ const PendingChecks = ({
   open?: boolean;
   onToggle?: (open: boolean) => void;
   summary?: ReactNode;
+  integrated?: boolean;
 }) => {
   const localizer = useUiLocalizer();
   return (
     <ChecksumList
       defaultOpen={defaultOpen}
+      integrated={integrated}
       label={label ?? localizer.message("ui.checks.title")}
       onToggle={onToggle}
       open={open}

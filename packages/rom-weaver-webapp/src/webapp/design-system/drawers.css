@@ -21,6 +21,8 @@
   --ck-v-divisor: 26;
   /* Share a theme-aware seam across full and paired rows. */
   --ck-seam: var(--seam-soft);
+  /* The body's inline inset, which check rows bleed back through. */
+  --cks-pad: 10px;
   position: relative;
   background: var(--well);
   border: 1px solid var(--seam-soft);
@@ -122,6 +124,44 @@
 :root[data-theme="light"] .cks.is-open > .cks-head {
   border-block-end-color: var(--seam-strong);
 }
+/* Simple view: a card's only drawer is a flush section of the card, not a
+   well nested inside it. A seam across the full card width replaces the well's
+   border, and the head and rows share the card's own padding. */
+.rw-app .cks.is-integrated {
+  --cks-pad: var(--card-pad, 10px);
+  margin-inline: calc(-1 * var(--card-pad, 0px));
+  background: transparent;
+  border: 0;
+  border-block-start: 1px solid var(--seam-soft);
+  border-radius: 0;
+}
+.rw-app .cks.is-integrated:last-child {
+  margin-block-end: calc(-1 * var(--card-pad, 0px));
+  border-end-start-radius: max(0px, var(--card-end-radius, var(--card-r, 0px)) - 1px);
+  border-end-end-radius: max(0px, var(--card-end-radius, var(--card-r, 0px)) - 1px);
+}
+.rw-app .cks.is-integrated.is-open,
+:root[data-theme] .cks.is-integrated.is-open {
+  background: transparent;
+  border-block-start-color: var(--seam-soft);
+}
+.rw-app .cks.is-integrated > .cks-head {
+  padding-inline: var(--cks-pad);
+}
+.rw-app .cks.is-integrated:has(> .drawer-action) > .cks-head {
+  padding-inline-end: calc(var(--cks-pad) + 27px);
+}
+.rw-app .cks.is-integrated > .drawer-action {
+  inset-inline-end: var(--cks-pad);
+}
+.rw-app .cks.is-integrated.is-open > .cks-head {
+  background: transparent;
+  border-block-end-color: transparent;
+}
+/* The card border, unlike a well's, would meet the last row edge to edge. */
+.rw-app .cks.is-integrated > .cks-body > .cks-inner > :last-child {
+  margin-block-end: 8px;
+}
 .rw-app .cks > .cks-head {
   appearance: none;
   border: 0;
@@ -212,7 +252,7 @@
 }
 /* A margin, unlike padding, lets closed drawers fully collapse. */
 .rw-app .cks .cks-inner {
-  padding-inline: 10px;
+  padding-inline: var(--cks-pad);
   border-end-start-radius: calc(var(--r-s) - 1px);
   border-end-end-radius: calc(var(--r-s) - 1px);
 }
@@ -523,10 +563,10 @@
   text-align: start;
   appearance: none;
 }
-/* Extend ordinary rows through the drawer's 10px inset. */
+/* Extend ordinary rows through the drawer's inset. */
 .rw-app .ck:not(.req) {
-  width: calc(100% + 20px);
-  margin-inline: -10px;
+  width: calc(100% + 2 * var(--cks-pad, 10px));
+  margin-inline: calc(-1 * var(--cks-pad, 10px));
 }
 /* Drop duplicate borders without overlapping adjacent touch targets. */
 .rw-app .ck:not(.req) + .ck:not(.req) {
@@ -594,7 +634,7 @@
   grid-template-columns: 1fr 1fr;
   column-gap: 0;
   align-items: start;
-  margin-inline: -10px;
+  margin-inline: calc(-1 * var(--cks-pad, 10px));
 }
 .rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half, > .ck.ck-hash) > * {
   grid-column: 1 / -1;

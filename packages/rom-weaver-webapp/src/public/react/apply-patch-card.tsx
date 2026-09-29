@@ -304,6 +304,7 @@ const PatchCard = ({
             chainChip={chainChip}
             disabled={isDisabled}
             index={index}
+            integrated={!detailedViewEnabled}
             isChainInput={isChainInput}
             isChainOutput={isChainOutput}
             item={item}
