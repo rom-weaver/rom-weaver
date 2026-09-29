@@ -108,7 +108,7 @@ const Masthead = ({
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuMounted, setMenuMounted] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
-  const [docsExpanded, setDocsExpanded] = useState(true);
+  const [docsExpanded, setDocsExpanded] = useState(currentTab === "docs");
   useEffect(() => {
     if (currentTab === "docs" && docsSlug) setDocsExpanded(true);
   }, [currentTab, docsSlug]);

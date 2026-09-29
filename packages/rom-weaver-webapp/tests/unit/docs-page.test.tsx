@@ -607,12 +607,14 @@ Fixture description.
   });
 
   it.each(["home", "patcher", "identify", "whats-new"])(
-    "shows Docs expanded on %s without marking a guide current",
+    "expands Docs from %s without marking a guide current",
     async (currentTab) => {
       render(docsShell("docs", currentTab));
       const disclosure = document.querySelector(".side-nav .nav-docs-disclosure") as HTMLElement;
       const toggle = disclosure.querySelector(".nav-docs-toggle") as HTMLButtonElement;
-      expect(toggle.getAttribute("aria-expanded")).toBe("true");
+      expect(toggle.getAttribute("aria-expanded")).toBe("false");
+      expect(disclosure.querySelector(".guide-nav")).toBeNull();
+      fireEvent.click(toggle);
       await vi.waitFor(() => expect(disclosure.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length));
       expect(disclosure.querySelector('a[aria-current="page"]')).toBeNull();
       fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);

@@ -73,7 +73,7 @@ describe("the navigation both layouts share", () => {
   });
 
   it("puts Docs in the last section with an expanded page tree in both layouts", () => {
-    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+    const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="docs" />));
 
     for (const scope of Object.values(navs(container))) {
       const groups = Array.from(scope.querySelectorAll(".nav-group"));
