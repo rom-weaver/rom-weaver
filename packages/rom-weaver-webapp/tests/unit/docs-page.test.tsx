@@ -29,7 +29,7 @@ const docsShell = (slug: string, currentTab = "docs") => (
       onOpenLog={() => undefined}
       onOpenSettings={() => undefined}
       onOpenStatus={() => undefined}
-      tabs={[{ id: "docs", group: "docs", label: "Docs", railLabel: "Overview", href: "/docs", icon: <svg /> }]}
+      tabs={[{ id: "docs", group: "docs", label: "Docs", href: "/docs", icon: <svg /> }]}
     />
     <DocsPage active slug={slug} />
   </RomWeaverSettingsProvider>
@@ -674,23 +674,20 @@ Fixture description.
   });
 
   it.each(["home", "patcher", "identify", "whats-new"])(
-    "shows Docs subheadings on %s without marking a guide current",
+    "shows a single Docs link on %s without mounting guide navigation",
     async (currentTab) => {
       render(docsShell("docs", currentTab));
-      const nav = document.querySelector(".side-nav .guide-nav") as HTMLElement;
-      expect(nav.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
-      expect(nav.querySelector('a[aria-current="page"]')).toBeNull();
-      expect(document.querySelector(".nav-docs-toggle")).toBeNull();
+      expect(document.querySelector(".side-nav .guide-nav")).toBeNull();
+      expect(document.querySelector('.side-nav a[href="/docs"]')?.textContent).toBe("Docs");
       fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
-      const phoneNav = document.querySelector(".menu-sheet .guide-nav") as HTMLElement;
-      expect(phoneNav.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
-      expect(phoneNav.querySelector('a[aria-current="page"]')).toBeNull();
+      expect(document.querySelector(".menu-sheet .guide-nav")).toBeNull();
+      expect(document.querySelector('.menu-sheet a[href="/docs"]')?.textContent).toBe("Docs");
     },
   );
 
   it("keeps Overview and FAQ as direct links in both layouts", () => {
     renderDocsShell("docs");
-    fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
+    fireEvent.click(document.querySelector(".docs-browse-trigger") as HTMLElement);
     for (const selector of [".side-nav", ".menu-sheet"]) {
       const nav = document.querySelector(selector) as HTMLElement;
       const links = nav.querySelectorAll('a[href="/docs"]');
@@ -712,16 +709,19 @@ Fixture description.
     expect(currentLink?.closest("details")?.querySelector("summary")?.textContent).toBe("Patching & bundles");
   });
 
-  it("puts guides in the phone navigation and Find in the dock", async () => {
+  it("gives Docs its own navigation and Find control without the workflow dock", async () => {
     renderDocsShell("docs/cli");
-    fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
+    expect(document.querySelector(".dock")).toBeNull();
+    expect(document.querySelector('.side-nav a[href="/apply-patches"]')?.textContent).toBe("Back to tools");
+    expect(document.querySelector(".side-nav .nav-group")?.textContent).not.toContain("Settings");
+    fireEvent.click(document.querySelector(".docs-browse-trigger") as HTMLElement);
     await vi.waitFor(() =>
       expect(document.querySelectorAll(".menu-sheet .guide-nav-list a")).toHaveLength(DOC_ROUTES.length),
     );
     expect(document.querySelector('.menu-sheet .guide-nav a[aria-current="page"]')?.textContent).toBe("CLI reference");
     fireEvent.click(document.querySelector(".menu-sheet .guide-nav-list a") as HTMLElement);
     expect((document.querySelector(".menu-sheet") as HTMLElement).hidden).toBe(true);
-    fireEvent.click(document.querySelector(".dock-find") as HTMLElement);
+    fireEvent.click(document.querySelector('.docs-mobile-toolbar button[aria-label="Find"]') as HTMLElement);
     expect((document.querySelector(".menu-sheet") as HTMLElement).hidden).toBe(true);
     const input = document.querySelector(".find-input") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "OPFS" } });

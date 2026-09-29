@@ -1,4 +1,15 @@
-import { Cloud, HardDrive, Heart, House, Newspaper, ScrollText, Search, Settings } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  Cloud,
+  HardDrive,
+  Heart,
+  House,
+  Newspaper,
+  ScrollText,
+  Search,
+  Settings,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DocsNavigation } from "../docs-navigation.tsx";
 import { BrandMark } from "./brand-mark.tsx";
@@ -147,6 +158,22 @@ const Masthead = ({
   );
   const closeFind = useCallback(() => setFindOpen(false), []);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const menuRoute = useRef(`${currentTab}:${docsSlug}`);
+  useEffect(() => {
+    const route = `${currentTab}:${docsSlug}`;
+    if (menuRoute.current === route) return;
+    menuRoute.current = route;
+    setMenuOpen(false);
+  }, [currentTab, docsSlug]);
+  useEffect(() => {
+    if (currentTab !== "docs") return;
+    const desktop = window.matchMedia("(min-width: 1000px)");
+    const closeDesktopMenu = () => {
+      if (desktop.matches) setMenuOpen(false);
+    };
+    desktop.addEventListener("change", closeDesktopMenu);
+    return () => desktop.removeEventListener("change", closeDesktopMenu);
+  }, [currentTab]);
   const onFindAction = (action: FindAction) => {
     if (action.type === "view") onSelectTab(action.view);
     else if (action.type === "identify") onIdentifyQuery?.(action.selection);
@@ -185,7 +212,7 @@ const Masthead = ({
      close control in its own right. Only attributes set here are cleared, so a
      dialog that inerted the same node keeps its own. */
   useEffect(() => {
-    if (!menuOpen) return undefined;
+    if (!menuOpen || currentTab === "docs") return undefined;
     const sheet = document.getElementById("menu-sheet");
     const covered = Array.from(sheet?.parentElement?.children ?? []).filter(
       (node) => node !== sheet && !node.matches(".dock, .scrim") && !node.hasAttribute("inert"),
@@ -194,7 +221,7 @@ const Masthead = ({
     return () => {
       for (const node of covered) node.removeAttribute("inert");
     };
-  }, [menuOpen]);
+  }, [currentTab, menuOpen]);
 
   // Pointer-down rather than click so a press that starts outside dismisses
   // before the target's own handler runs.
@@ -370,22 +397,32 @@ const Masthead = ({
     tabs,
   ]);
 
-  const withDocsNavigation = (navSections: NavSectionData[], onNavigate?: () => void): NavSectionData[] =>
-    navSections.map((section) => {
-      if (section.id !== "docs") return section;
-      return {
-        ...section,
-        entries: [],
-        content: (
-          <DocsNavigation
-            currentSlug={currentTab === "docs" ? docsSlug : ""}
-            onNavigate={onNavigate}
-            onSelectOverview={currentTab === "docs" ? undefined : () => onSelectTab("docs")}
-            overviewId={onNavigate ? undefined : "tab-docs"}
-          />
-        ),
-      };
-    });
+  const docsSections = (onNavigate?: () => void): NavSectionData[] => [
+    {
+      id: "project",
+      title: "",
+      entries: [
+        {
+          id: "back-to-tools",
+          label: "Back to tools",
+          href: "/apply-patches",
+          icon: <ArrowLeft aria-hidden="true" />,
+        },
+      ],
+    },
+    {
+      id: "docs",
+      title: "Documentation",
+      entries: [],
+      content: (
+        <DocsNavigation
+          currentSlug={docsSlug}
+          onNavigate={onNavigate}
+          overviewId={onNavigate ? undefined : "tab-docs"}
+        />
+      ),
+    },
+  ];
   // No beta workflow claims a dock slot, so the dock needs no reveal pass.
   const dockTabs = tabs.filter((tab) => tab.dock && !tab.beta);
   // Docs and the landing page bring their own h1, so the brand steps down to a
@@ -484,7 +521,7 @@ const Masthead = ({
           so the identity block and the top bar each land in their own grid cell
           while staying inside a single landmark - two `header` elements at this
           level would leave the page with two banners. */}
-      <header className="shell-banner">
+      <header className="shell-banner" data-docs={currentTab === "docs" ? "true" : undefined}>
         {/* One column on desktop, one page header on the phone. */}
         <div className="side-col">
           <div className="shell-head">
@@ -513,13 +550,50 @@ const Masthead = ({
               </div>
             </div>
           </div>
+          {currentTab === "docs" ? (
+            <div className="docs-mobile-toolbar">
+              <a href="/apply-patches">
+                <ArrowLeft aria-hidden="true" />
+                Back to tools
+              </a>
+              <button
+                aria-controls="menu-sheet"
+                aria-expanded={menuOpen}
+                className="docs-browse-trigger"
+                onClick={() => {
+                  setFindOpen(false);
+                  setMenuMounted(true);
+                  setMenuOpen((open) => !open);
+                }}
+                ref={menuTriggerRef}
+                type="button"
+              >
+                Browse docs
+                <ChevronDown aria-hidden="true" />
+              </button>
+              <button
+                aria-label="Find"
+                aria-controls="find-palette"
+                aria-expanded={findOpen}
+                aria-haspopup="dialog"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setFindOpen((open) => !open);
+                }}
+                ref={dockFindRef}
+                type="button"
+              >
+                <Search aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
           {/* Desktop: every destination the app has, named, in one column. */}
           <aside className="side-rail">
             <SideNav
               appearance={appearanceTiles("rail", true)}
               localizer={localizer}
               navLabel={navLabel}
-              sections={withDocsNavigation(sections)}
+              sections={currentTab === "docs" ? docsSections() : sections}
             />
           </aside>
         </div>
@@ -572,44 +646,48 @@ const Masthead = ({
           />
         </span>
       ) : null}
-      <PhoneDock
-        current={currentTab}
-        findLabel={localizer.message("ui.find.label")}
-        findOpen={findOpen}
-        findTriggerRef={dockFindRef}
-        menuLabel={localizer.message("ui.tools.menu")}
-        menuOpen={menuOpen}
-        navLabel={navLabel}
-        onSelect={onSelectTab}
-        onToggleFind={() => {
-          setMenuOpen(false);
-          setFindOpen((open) => !open);
-        }}
-        onToggleMenu={() => {
-          setFindOpen(false);
-          onPreloadLog?.();
-          setMenuMounted(true);
-          setMenuOpen((open) => !open);
-        }}
-        tabs={dockTabs}
-        triggerRef={menuTriggerRef}
-      />
+      {currentTab === "docs" ? null : (
+        <PhoneDock
+          current={currentTab}
+          findLabel={localizer.message("ui.find.label")}
+          findOpen={findOpen}
+          findTriggerRef={dockFindRef}
+          menuLabel={localizer.message("ui.tools.menu")}
+          menuOpen={menuOpen}
+          navLabel={navLabel}
+          onSelect={onSelectTab}
+          onToggleFind={() => {
+            setMenuOpen(false);
+            setFindOpen((open) => !open);
+          }}
+          onToggleMenu={() => {
+            setFindOpen(false);
+            onPreloadLog?.();
+            setMenuMounted(true);
+            setMenuOpen((open) => !open);
+          }}
+          tabs={dockTabs}
+          triggerRef={menuTriggerRef}
+        />
+      )}
       {/* The parser-time resolver runs here, after the identity slots exist. */}
       <span className="shell-identity" hidden />
       <MenuSheet
+        documentation={currentTab === "docs"}
         appearance={appearanceTiles(MENU_TOOL_SCOPE, true)}
         localizer={localizer}
         onClose={closeMenu}
         open={menuOpen}
         opened={menuMounted}
-        sections={withDocsNavigation(
-          [
-            ...sections.filter((section) => section.id !== "project" && section.id !== "docs"),
-            ...sections.filter((section) => section.id === "project"),
-            ...sections.filter((section) => section.id === "docs"),
-          ],
-          closeMenu,
-        )}
+        sections={
+          currentTab === "docs"
+            ? docsSections(closeMenu)
+            : [
+                ...sections.filter((section) => section.id !== "project" && section.id !== "docs"),
+                ...sections.filter((section) => section.id === "project"),
+                ...sections.filter((section) => section.id === "docs"),
+              ]
+        }
         toolOpen={openTool === `theme:${MENU_TOOL_SCOPE}` || openTool === `accent:${MENU_TOOL_SCOPE}`}
         triggerRef={menuTriggerRef}
       />
@@ -618,7 +696,7 @@ const Masthead = ({
       <button
         aria-label={localizer.message("ui.common.close")}
         className="scrim"
-        hidden={!menuOpen}
+        hidden={!menuOpen || currentTab === "docs"}
         onClick={closeMenu}
         type="button"
       />

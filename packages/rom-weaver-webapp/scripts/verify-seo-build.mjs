@@ -354,10 +354,12 @@ assertIncludes(
   `name="robots" content="${production ? "index, follow" : "noindex, nofollow"}"`,
   "home robots metadata",
 );
-// Docs is a named row in the nav the static shell renders in full, so the
-// crawlable path to the guides no longer depends on expanding a menu.
-assertIncludes(applyHtml, 'href="/docs" id="tab-docs"', "apply guides link");
-assertIncludes(createHtml, 'href="/docs" id="tab-docs"', "create guides link");
+// Tool pages expose one crawlable Docs destination without carrying the full
+// guide tree in their app shell.
+assertIncludes(applyHtml, 'class="nav-row" href="/docs" id="tab-docs"', "apply Docs link");
+assertIncludes(createHtml, 'class="nav-row" href="/docs" id="tab-docs"', "create Docs link");
+assertCount(applyHtml, 'class="guide-nav"', 0, "apply has no Docs navigation tree");
+assertCount(createHtml, 'class="guide-nav"', 0, "create has no Docs navigation tree");
 
 for (const name of DOCS_SCREENSHOT_NAMES) {
   const screenshotPath = path.join(distDir, "docs", "screenshots", name);
@@ -401,6 +403,7 @@ for (const route of DOC_ROUTES) {
   assertIncludes(docsHtml, `>${route.title}</h1>`, `${route.slug} heading title`);
   if ((docsHtml.match(/<h1\b/g) || []).length !== 1) throw new Error(`${route.slug} must contain exactly one h1`);
   assertIncludes(docsHtml, `data-markdown-source="${route.source}"`, `${route.slug} Markdown source`);
+  assertIncludes(docsHtml, 'class="guide-nav"', `${route.slug} Docs navigation tree`);
   assertIncludes(docsHtml, 'href="/docs" id="tab-docs"', `${route.slug} Docs overview link`);
   assertCount(
     docsHtml,

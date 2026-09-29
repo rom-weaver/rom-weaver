@@ -168,11 +168,10 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   },
   {
     group: "docs",
-    href: "docs",
+    href: "/docs",
     icon: <BookOpen aria-hidden="true" />,
     id: "docs",
     label: "Docs",
-    railLabel: "Overview",
   },
 ];
 

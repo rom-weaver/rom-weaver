@@ -1112,6 +1112,107 @@
 }
 /* ── the layout threshold ──
    ▼ The single number that decides which of the two shells is on screen. */
+.rw-app .docs-mobile-toolbar {
+  display: none;
+}
+.rw-app .docs-menu-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px var(--gutter);
+  font-size: 1rem;
+  border-bottom: 1px solid var(--seam);
+}
+.rw-app .docs-menu-header button,
+.rw-app .docs-mobile-toolbar button,
+.rw-app .docs-mobile-toolbar a {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  text-decoration: none;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-s);
+}
+.rw-app .docs-menu-header svg,
+.rw-app .docs-mobile-toolbar svg {
+  width: 18px;
+  height: 18px;
+}
+@media (hover: hover) {
+  .rw-app .docs-menu-header button:hover,
+  .rw-app .docs-mobile-toolbar button:hover,
+  .rw-app .docs-mobile-toolbar a:hover {
+    background: var(--well);
+  }
+}
+.rw-app .docs-menu-header button:active,
+.rw-app .docs-mobile-toolbar button:active,
+.rw-app .docs-mobile-toolbar a:active {
+  background: var(--well);
+}
+.rw-app .menu-sheet-docs {
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  max-block-size: 100dvh;
+  height: 100dvh;
+  padding-inline: 0;
+  padding-top: var(--safe-t);
+  padding-bottom: var(--safe-b);
+  margin: 0;
+  color: var(--ink);
+  border: 0;
+}
+.rw-app .menu-sheet-docs .menu-sheet-body {
+  flex: 1;
+}
+.rw-app .menu-sheet-docs .guide-shelf > summary {
+  min-height: 44px;
+  background: transparent;
+}
+@media (hover: hover) {
+  .rw-app .menu-sheet-docs .guide-shelf > summary:hover {
+    background: var(--well);
+  }
+}
+.rw-app .menu-sheet-docs .guide-shelf > summary:active {
+  background: var(--well);
+}
+.rw-app .menu-sheet-docs .guide-shelf-title {
+  font-size: 0.95rem;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.rw-app .menu-sheet-docs .guide-branch-topics {
+  padding-left: 12px;
+  margin-left: 8px;
+  border-left: 1px solid var(--seam);
+}
+.rw-app .menu-sheet-docs .guide-branch-topics .guide-shelf-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.rw-app .menu-sheet-docs .guide-nav-list a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px;
+  font-size: 0.9rem;
+}
+.rw-app .menu-sheet-docs .nav-group-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
 @media (min-width: 1000px) {
   .rw-app .brand {
     grid-template-columns: 44px minmax(0, 1fr);
@@ -1176,6 +1277,17 @@
 @media (max-width: 999px) {
   .rw-app {
     --dock-h: calc(53px + max(3px, var(--safe-b)));
+  }
+  .rw-app:has(.shell-banner[data-docs="true"]) {
+    --dock-h: 0px;
+  }
+  .rw-app .docs-mobile-toolbar {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    justify-content: space-between;
+    padding-block: 4px;
+    border-bottom: 1px solid var(--seam);
   }
   .rw-app .side-rail,
   .rw-app .topbar {

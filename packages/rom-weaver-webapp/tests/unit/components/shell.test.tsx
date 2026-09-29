@@ -48,7 +48,7 @@ const TABS = [
     label: "Test ROM",
     railLabel: "Test",
   },
-  { group: "docs", href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs", railLabel: "Overview" },
+  { group: "docs", href: "/docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
   {
     beta: true,
     group: "roms",
@@ -130,6 +130,7 @@ describe("Masthead", () => {
       "Settings",
       "Theme",
       "Accent",
+      "Docs",
     ]);
 
     // The brand and Home row both reach the app's base route.
@@ -296,9 +297,8 @@ describe("Masthead", () => {
     expect(onSelectTab).toHaveBeenCalledWith("whats-new");
   });
 
-  it("marks the current page in the nav, including a view with no dock slot", () => {
+  it("marks the current tool page in the nav, including a view with no dock slot", () => {
     for (const [view, label] of [
-      ["docs", "Overview"],
       ["trim", "Trim"],
       ["whats-new", "What\u2019s new"],
     ] as const) {
@@ -309,6 +309,15 @@ describe("Masthead", () => {
       expect(container.querySelector('.dock [aria-current="page"]')).toBeNull();
       unmount();
     }
+  });
+
+  it("marks Overview in the dedicated Docs navigation", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="docs" />));
+    const side = container.querySelector(".side-nav") as HTMLElement;
+    expect(side.querySelector('.guide-nav [aria-current="page"]')?.textContent).toBe("Overview");
+    expect(side.querySelector('[href="/apply-patches"]')?.textContent).toContain("Back to tools");
+    expect(container.querySelector(".dock")).toBeNull();
+    expect(container.querySelector(".guide-nav")).not.toBeNull();
   });
 
   it("puts project links before the separator and device controls after it", () => {

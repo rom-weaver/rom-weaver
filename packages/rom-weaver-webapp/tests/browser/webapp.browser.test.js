@@ -214,18 +214,18 @@ test("WebappRoot keeps the beta workflows out of the nav while the setting is of
   expect(navRow("Identify")).toBeTruthy();
   navRow("Identify").click();
   await expect.poll(() => document.querySelector("#identify-input-picker") !== null).toBe(true);
-  // Overview MUST remain reachable inside the always-available Docs sections.
-  const docsLink = navRow("Overview");
+  // Tool pages MUST offer one Docs destination, not the full guide tree.
+  const docsLink = navRow("Docs");
   expect(docsLink).toBeTruthy();
   expect(docsLink.closest("summary")).toBeNull();
   expect(document.querySelector(".nav-docs-toggle")).toBeNull();
   expect(docsLink.closest("details")).toBeNull();
-  expect(docsLink.closest(".guide-nav")).toBeTruthy();
+  expect(document.querySelector(".guide-nav")).toBeNull();
   expect(navRow("Home")).toBeTruthy();
 });
 
 test("Docs topic headings keep their width and wrapping when expanded", async () => {
-  mountWebappRoot();
+  mountWebappRoot({ initialView: "docs" });
   await expect.poll(() => document.querySelector(".side-nav .guide-nav")).toBeTruthy();
   await document.fonts.ready;
   for (const [width, height, scope] of [
@@ -233,7 +233,10 @@ test("Docs topic headings keep their width and wrapping when expanded", async ()
     [390, 844, ".menu-sheet"],
   ]) {
     await page.viewport(width, height);
-    if (width < 1000) await openMenuSheet();
+    if (width < 1000) {
+      document.querySelector(".docs-browse-trigger").click();
+      await expect.poll(() => document.querySelector(".menu-sheet")?.hidden).toBe(false);
+    }
     const nav = document.querySelector(`${scope} .guide-nav`);
     expect(nav.querySelectorAll(":scope > .guide-nav-list a")).toHaveLength(2);
     expect(nav.querySelector(".guide-shelf-title")?.textContent).toBe("Browser guides");
@@ -262,6 +265,34 @@ test("Docs topic headings keep their width and wrapping when expanded", async ()
       await expect.poll(() => branch.open).toBe(false);
     }
   }
+  await page.viewport(1280, 900);
+});
+
+test("mobile Docs owns a modal navigation panel without the workflow dock", async () => {
+  await page.viewport(390, 844);
+  mountWebappRoot({ initialView: "docs" });
+  await expect.poll(() => document.querySelector(".docs-browse-trigger")).toBeTruthy();
+  expect(document.querySelector(".dock")).toBeNull();
+  const trigger = document.querySelector(".docs-browse-trigger");
+  trigger.focus();
+  trigger.click();
+  await expect.poll(() => document.querySelector(".menu-sheet-docs:modal")).toBeTruthy();
+  const panel = document.querySelector(".menu-sheet-docs");
+  const close = panel.querySelector('[aria-label="Close navigation"]');
+  expect(document.activeElement).toBe(close);
+  expect(panel.querySelectorAll(".nav-row")).toHaveLength(1);
+  expect(panel.querySelector(".nav-row")?.textContent).toBe("Back to tools");
+  expect(panel.querySelectorAll(".guide-nav a")).toHaveLength(61);
+  expect(panel.getBoundingClientRect().height).toBe(844);
+  expect(panel.querySelector(".guide-shelf > summary").getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  close.click();
+  await expect.poll(() => panel.open).toBe(false);
+  await expect.poll(() => document.activeElement).toBe(trigger);
+  trigger.click();
+  await expect.poll(() => panel.open).toBe(true);
+  await page.viewport(1000, 844);
+  await expect.poll(() => panel.open).toBe(false);
+  expect(document.querySelector('.side-nav a[href="/apply-patches"]')?.textContent).toBe("Back to tools");
   await page.viewport(1280, 900);
 });
 
@@ -318,7 +349,7 @@ test("enabled PPF undo and Identify are named in the nav on desktop and phone", 
     expect(getComputedStyle(document.querySelector(".panel-view-toggle")).display).not.toBe("none");
     // Mobile Status stays in the dock; other destinations keep their groups.
     if (width < 1000) await openMenuSheet();
-    for (const name of ["Overview", "Settings", "Storage", "Logs", "Support"]) {
+    for (const name of ["Docs", "Settings", "Storage", "Logs", "Support"]) {
       expect(navRow(name, scope)).toBeTruthy();
     }
     if (width < 1000) expect(document.querySelector(".phone-runtime .sub-status")).toBeTruthy();
@@ -662,7 +693,7 @@ test("the phone header carries device controls and project links, and Menu carri
     "Theme",
     "Accent",
     "Home",
-    "Overview",
+    "Docs",
     "GitHub",
     "Support",
   ]) {
@@ -781,13 +812,10 @@ test("the Menu sheet uses its content height and stays above the dock", async ()
   await new Promise((resolve) => setTimeout(resolve, 2500));
   expect(sheet.getBoundingClientRect().height).toBeCloseTo(start.sheetHeight, 1);
   expect(project.getBoundingClientRect().top).toBeCloseTo(start.projectTop, 1);
-  for (const branch of sheet.querySelectorAll(".guide-branch")) {
-    branch.querySelector("summary").click();
-    await expect.poll(() => branch.open).toBe(true);
-  }
+  expect(sheet.querySelector(".guide-nav")).toBeNull();
   await page.viewport(390, 844);
   expect(sheet.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
-  expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+  expect(body.scrollHeight).toBe(body.clientHeight);
   expect(sheet.getBoundingClientRect().bottom).toBeCloseTo(dock.getBoundingClientRect().top, 1);
   await page.viewport(390, 520);
   expect(sheet.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);

@@ -1,6 +1,6 @@
-import { Menu, Search } from "lucide-react";
+import { Menu, Search, X } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { Localizer } from "../../presentation/localization/index.ts";
 import type { MessageId } from "../../presentation/localization/catalog.ts";
 import { join } from "./shell-common.tsx";
@@ -177,7 +177,7 @@ const SideNav = ({
   <nav aria-label={navLabel} className="side-nav">
     {sections.map((section) => (
       <div className="nav-group" key={section.id}>
-        <h2 className="nav-group-label">{section.title}</h2>
+        {section.title ? <h2 className="nav-group-label">{section.title}</h2> : null}
         {section.entries.map((entry) => (
           <div hidden={entry.hidden} key={entry.id}>
             <NavRow className="nav-row" entry={entry} idPrefix="tab-" localizer={localizer} />
@@ -268,6 +268,7 @@ const PhoneDock = ({
 
 const MenuSheet = ({
   appearance,
+  documentation = false,
   localizer,
   onClose,
   open,
@@ -278,6 +279,7 @@ const MenuSheet = ({
 }: {
   /** Theme and accent rows join This Device after the sheet opens. */
   appearance: ReactNode;
+  documentation?: boolean;
   localizer: Localizer;
   onClose: () => void;
   open: boolean;
@@ -290,8 +292,19 @@ const MenuSheet = ({
   toolOpen: boolean;
   triggerRef: RefObject<HTMLButtonElement | null>;
 }) => {
+  const closeRef = useRef<HTMLButtonElement | null>(null);
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
   useEffect(() => {
-    if (!open || toolOpen) return undefined;
+    if (!documentation) return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (open) {
+      if (!dialog.open) dialog.showModal();
+      closeRef.current?.focus();
+    } else if (dialog.open) dialog.close();
+  }, [open, documentation]);
+  useEffect(() => {
+    if (!open || toolOpen || documentation) return undefined;
     const dismiss = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
@@ -300,16 +313,32 @@ const MenuSheet = ({
     };
     document.addEventListener("keydown", dismiss);
     return () => document.removeEventListener("keydown", dismiss);
-  }, [onClose, open, toolOpen, triggerRef]);
+  }, [documentation, onClose, open, toolOpen, triggerRef]);
 
-  return (
-    <nav aria-label={localizer.message("ui.tools.menu")} className="menu-sheet" hidden={!open} id="menu-sheet">
+  const contents = (
+    <>
+      {documentation ? (
+        <div className="docs-menu-header">
+          <strong>Browse docs</strong>
+          <button
+            aria-label="Close navigation"
+            onClick={() => {
+              onClose();
+              window.requestAnimationFrame(() => triggerRef.current?.focus());
+            }}
+            ref={closeRef}
+            type="button"
+          >
+            <X aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
       <div className="menu-sheet-body">
         {opened
           ? sections.map((section) => (
               <div className="nav-group" key={section.id}>
-                <h2 className="nav-group-label">{section.title}</h2>
-                {/* Workflow rows SHOULD pair up on phones; Docs keeps its topic hierarchy below them. */}
+                {section.title ? <h2 className="nav-group-label">{section.title}</h2> : null}
+                {/* Tool rows pair up on phones; Docs uses a single-column index. */}
                 <div className="nav-group-grid">
                   {section.entries.map((entry) => (
                     <div hidden={entry.hidden} key={entry.id}>
@@ -323,6 +352,27 @@ const MenuSheet = ({
             ))
           : null}
       </div>
+    </>
+  );
+  if (documentation)
+    return (
+      <dialog
+        aria-label="Documentation navigation"
+        className="menu-sheet menu-sheet-docs"
+        hidden={!open}
+        id="menu-sheet"
+        onCancel={(event) => {
+          event.preventDefault();
+          onClose();
+        }}
+        ref={dialogRef}
+      >
+        {contents}
+      </dialog>
+    );
+  return (
+    <nav aria-label={localizer.message("ui.tools.menu")} className="menu-sheet" hidden={!open} id="menu-sheet">
+      {contents}
     </nav>
   );
 };
