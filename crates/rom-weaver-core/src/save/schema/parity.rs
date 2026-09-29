@@ -43,7 +43,7 @@ fn alternate(field: &SaveField) -> Option<SaveValue> {
 
 fn assert_result(a: Result<SaveEditResult>, b: Result<SaveEditResult>, context: &str) {
     match (a, b) {
-        (Ok(a), Ok(b)) => assert_eq!(a, b, "{context}"),
+        (Ok(a), Ok(b)) => legacy_contract::assert_edit(b, a),
         (Err(RomWeaverError::ValidationCode(a)), Err(RomWeaverError::ValidationCode(b))) => {
             assert_eq!(a.code(), b.code(), "{context}")
         }
@@ -76,7 +76,7 @@ fn snes_schemas_preserve_documents_edits_and_duplicate_recovery() {
             };
             assert_eq!(native.recognize(&input), schema.recognize(&input));
             let document = native.parse(&input, &game).unwrap();
-            assert_eq!(document, schema.parse(&input, &game).unwrap());
+            legacy_contract::assert_document(schema.parse(&input, &game).unwrap(), &document);
             for field in document.fields.iter().filter(|field| field.editable) {
                 let Some(value) = alternate(field) else {
                     continue;
@@ -138,9 +138,9 @@ fn snes_schemas_preserve_different_valid_copies_and_mixed_noop_repairs() {
             .unwrap();
         let mut differing = input.clone();
         differing.bytes[backup..backup + length].copy_from_slice(&changed[backup..backup + length]);
-        assert_eq!(
-            native.parse(&differing, &game).unwrap(),
-            schema.parse(&differing, &game).unwrap()
+        legacy_contract::assert_document(
+            schema.parse(&differing, &game).unwrap(),
+            &native.parse(&differing, &game).unwrap(),
         );
         let mut damaged = input.clone();
         damaged.bytes[backup + length] ^= 1;

@@ -1,4 +1,4 @@
-use super::{SchemaSaveHandler, catalog};
+use super::{SchemaSaveHandler, catalog, legacy_contract};
 use crate::save::{
     SaveDetectionInput, SaveEdit, SaveGameHandler, SaveValue,
     pokemon_gen1::PokemonGen1Handler as NativeGen1, pokemon_gen2::PokemonGen2Handler as NativeGen2,
@@ -31,36 +31,7 @@ fn check_documents(handlers: Vec<SchemaSaveHandler>, native: &dyn SaveGameHandle
         );
         let actual = schema.parse(&source, &definition.identity).unwrap();
         let expected = native.parse(&source, &definition.identity).unwrap();
-        if actual != expected {
-            let first = actual
-                .fields
-                .iter()
-                .zip(&expected.fields)
-                .position(|(actual, expected)| actual != expected);
-            panic!(
-                "{} document mismatch: fields {} != {}, first field {first:?}: actual={:?}, expected={:?}, metadata={}",
-                definition.identity.id,
-                actual.fields.len(),
-                expected.fields.len(),
-                first.and_then(|index| actual.fields.get(index)),
-                first.and_then(|index| expected.fields.get(index)),
-                format_args!(
-                    "identity={} slot={} counter={} integrity={} sections={:?}/{:?} platform={} format={} format_name={} handler={} size={} warnings={}",
-                    actual.identity == expected.identity,
-                    actual.active_slot == expected.active_slot,
-                    actual.counter == expected.counter,
-                    actual.integrity == expected.integrity,
-                    actual.sections,
-                    expected.sections,
-                    actual.platform == expected.platform,
-                    actual.save_format == expected.save_format,
-                    actual.save_format_name == expected.save_format_name,
-                    actual.handler_id == expected.handler_id,
-                    actual.save_size == expected.save_size,
-                    actual.warnings == expected.warnings,
-                ),
-            );
-        }
+        legacy_contract::assert_document(actual, &expected);
         let edits = expected
             .fields
             .iter()
@@ -92,28 +63,7 @@ fn check_documents(handlers: Vec<SchemaSaveHandler>, native: &dyn SaveGameHandle
         let expected = native
             .apply(&source, &definition.identity, &edits, false)
             .unwrap();
-        if actual != expected {
-            let first = actual.bytes.as_ref().zip(expected.bytes.as_ref()).and_then(
-                |(actual, expected)| {
-                    actual
-                        .iter()
-                        .zip(expected)
-                        .position(|(actual, expected)| actual != expected)
-                },
-            );
-            panic!(
-                "{} edit mismatch: first byte {first:?}, touched={:?}/{:?}, valid={}/{}, recalculated={}/{}, changes={}, document={}",
-                definition.identity.id,
-                actual.preview.touched_sections,
-                expected.preview.touched_sections,
-                actual.preview.output_valid,
-                expected.preview.output_valid,
-                actual.preview.integrity_recalculated,
-                expected.preview.integrity_recalculated,
-                actual.preview.changes == expected.preview.changes,
-                actual.document == expected.document,
-            );
-        }
+        legacy_contract::assert_edit(actual, expected);
     }
 }
 
@@ -144,9 +94,9 @@ fn pokemon_generation_2_schema_matches_native_partial_recovery() {
         };
         bytes[backup_checksum] ^= 1;
         let source = input(bytes, &definition.identity.id);
-        assert_eq!(
+        legacy_contract::assert_document(
             schema.parse(&source, &definition.identity).unwrap(),
-            native.parse(&source, &definition.identity).unwrap(),
+            &native.parse(&source, &definition.identity).unwrap(),
         );
         let edit = [SaveEdit {
             field: "trainer.money".into(),
@@ -225,9 +175,9 @@ fn pokemon_schemas_match_native_occupied_inventory_fields() {
             .into_iter()
             .find(|handler| handler.definitions()[0].identity.id == id)
             .unwrap();
-        assert_eq!(
+        legacy_contract::assert_document(
             schema.parse(&source, &definition.identity).unwrap(),
-            native.parse(&source, &definition.identity).unwrap(),
+            &native.parse(&source, &definition.identity).unwrap(),
         );
     }
 }

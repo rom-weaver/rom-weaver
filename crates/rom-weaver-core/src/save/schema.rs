@@ -14,6 +14,8 @@ mod tests;
 use generation::{Generation, GenerationDefinition};
 pub mod layout;
 #[cfg(test)]
+mod legacy_contract;
+#[cfg(test)]
 mod parity;
 pub mod rules;
 #[cfg(test)]
