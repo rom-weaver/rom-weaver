@@ -38,6 +38,14 @@ The [checksum support table](../reference/formats.md#checksum-support) lists eve
 1. Paste the expected value into **Compare with an expected checksum**.
 2. Read the result under the field.
 
+<figure class="docs-screenshot">
+  <picture>
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/checksum-mobile-dark.webp" width="370" height="823">
+    <img src="../screenshots/checksum-desktop-light.webp" alt="Checksum ROM with CRC32, MD5, SHA-1, and SHA-256 values, and a pasted SHA-256 that matches" width="973" height="776">
+  </picture>
+  <figcaption>A pasted SHA-256 matches the calculated value.</figcaption>
+</figure>
+
 A match names the algorithm and the bytes that matched. When the ROM has a copier header or a different byte order, rom-weaver also lists those variants, and a match on a variant names it. Give a patch the form of the ROM that its author specifies.
 
 A value of 8 or 64 characters can belong to more than one algorithm. If rom-weaver asks you to calculate another algorithm, turn it on and calculate it.
