@@ -46,6 +46,8 @@ type ExtractPanelProps = {
   fileEntries?: ExtractionFileEntry[];
   parentCompressions?: ExtractionParentLevel[];
   timing?: string;
+  /** Render as a flush section of the enclosing card (see Drawer). */
+  integrated?: boolean;
 };
 
 type ExtractNameProps = Pick<ExtractPanelProps, "fileName" | "folderPath"> & {
@@ -231,6 +233,7 @@ const ExtractDrawer = ({
   fileName,
   fileSize,
   fileEntries,
+  integrated,
   parentCompressions,
   timing,
   typeLabel,
@@ -285,6 +288,7 @@ const ExtractDrawer = ({
     <Drawer
       bodyClassName="taskbody"
       className="extract-d"
+      integrated={integrated}
       label={localizer.message("ui.file.files")}
       labelIcon={<Archive aria-hidden="true" />}
       readouts={

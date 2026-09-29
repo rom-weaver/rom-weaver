@@ -124,8 +124,8 @@
 :root[data-theme="light"] .cks.is-open > .cks-head {
   border-block-end-color: var(--seam-strong);
 }
-/* Simple view: a card's only drawer is a flush section of the card, not a
-   well nested inside it. A seam across the full card width replaces the well's
+/* A file card's drawers are flush sections of the card, not wells nested
+   inside it. A seam across the full card width replaces the well's
    border, the head shares the card's own padding, and check rows bleed to the
    card edge. */
 .rw-app .cks.is-integrated {
@@ -158,6 +158,10 @@
 .rw-app .cks.is-integrated.is-open > .cks-head {
   background: transparent;
   border-block-end-color: transparent;
+}
+/* Stacked sections share one seam: the card's gap would split them apart. */
+.rw-app .cks.is-integrated + .cks.is-integrated {
+  margin-block-start: calc(-1 * var(--card-gap, 0px));
 }
 /* The card border, unlike a well's, would meet the last row edge to edge. */
 .rw-app .cks.is-integrated > .cks-body > .cks-inner > :last-child {

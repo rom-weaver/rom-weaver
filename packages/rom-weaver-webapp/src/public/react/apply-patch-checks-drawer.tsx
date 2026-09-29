@@ -55,7 +55,7 @@ const PatchChecksDrawer = ({
    * editable. */
   disabled?: boolean;
   index: number;
-  /** Simple view: the drawer is the card's only section, so it joins the card. */
+  /** Render as a flush section of the patch card (see Drawer). */
   integrated?: boolean;
   /** First/last enabled patch in the stack: user-entered input checks on the chain
    * input verify the ROM live (and gate the apply); output checks on the chain

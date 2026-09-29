@@ -30,13 +30,12 @@
   .rw-app .card {
     --card-pad: 7px;
     --card-r: var(--r-s);
-    gap: var(--sp-xs);
+    --card-gap: var(--sp-xs);
   }
   .rw-app .card-name {
     gap: var(--sp-2xs);
   }
-  .rw-app .card-actions,
-  .rw-app .patch-body-inner {
+  .rw-app .card-actions {
     gap: var(--sp-xs);
   }
   /* Retain a 30px drawer-header tap floor; phone controls and padding are

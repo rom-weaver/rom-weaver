@@ -829,6 +829,9 @@ describe("apply workflow view - staged bench", () => {
     // first paint, mirroring the ROM card. No Options drawer yet: a staging
     // patch offers no header choice.
     expect(patchLabels).toEqual(["Files", "Checks"]);
+    // Detailed view stacks the drawers as flush sections of each card.
+    expect(container.querySelectorAll("#rom-weaver-list-input-stack .cks:not(.is-integrated)")).toHaveLength(0);
+    expect(container.querySelectorAll("#rom-weaver-list-patch-stack .cks:not(.is-integrated)")).toHaveLength(0);
   });
 
   it("renders a staging disc as one card with byte-weighted overall progress", () => {

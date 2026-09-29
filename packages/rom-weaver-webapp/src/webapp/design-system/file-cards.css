@@ -11,10 +11,11 @@
   /* An integrated drawer (drawers.css) bleeds to the card edge with these. */
   --card-pad: var(--sp-m);
   --card-r: var(--r-m);
+  --card-gap: var(--sp-s);
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--sp-s);
+  gap: var(--card-gap);
   padding: var(--card-pad);
   background: var(--plate-2);
   border: 1px solid var(--seam);
@@ -438,7 +439,7 @@
 .rw-app .patch-body-inner {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-s);
+  gap: var(--card-gap);
   min-height: 0;
   overflow: clip;
 }

@@ -77,8 +77,7 @@ const Drawer = ({
   /** Class of the wrapper inside the drawer body (`ckrows`, `trackrows`, `optsbody`, …). */
   bodyClassName?: string;
   headingRef?: RefObject<HTMLButtonElement | null>;
-  /** Render as a flush section of the enclosing card instead of a nested well -
-   * for a card whose only section is this drawer (the Simple view). */
+  /** Render as a flush section of the enclosing card instead of a nested well. */
   integrated?: boolean;
   children: ReactNode;
 }) => {
