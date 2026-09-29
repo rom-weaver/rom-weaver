@@ -122,6 +122,7 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
             type="button"
           >
             <RefreshCw aria-hidden="true" className={loading ? "spin" : undefined} />
+            <span>Refresh</span>
           </button>
           <button className="btn slim ghost" onClick={beginImport} type="button">
             <Upload aria-hidden="true" /> Import save

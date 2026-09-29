@@ -152,28 +152,19 @@
    out of width the tabs are what should give - wrapping instead sent the close
    button down to a line of its own, adrift at the far side of the dialog from
    the rail it belongs to. */
-/* The tabs ARE the title here, so the rail rides the head's own bottom rule
-   rather than floating above it - the selected tab's weft then reads as a mark
-   on a rail instead of a stray underline in open space. */
 .rw-app .log-dlg .dlg-head {
   flex-wrap: nowrap;
-  row-gap: var(--sp-m);
-  align-items: flex-end;
-  padding-block-end: 0;
+  padding-block: var(--sp-m);
 }
-/* Close shares the rail's row but not its baseline - sitting it on the rule
-   would read as one more tab. Every other control moved to the bar below.
-   It also drops the box every other dialog's close wears: in a rail of bare
-   text tabs the border was the only chrome on screen, so a 15px glyph rattling
-   inside it read as an empty frame rather than a control. Bare, at the tabs'
-   own weight, it belongs to the rail. The touch halo still carries it past
-   44px. */
+/* Close parks at the head's far end, bare and round so it cannot be read as a
+   fifth segment of the tab control. The touch halo still carries it past 44px. */
 .rw-app .log-dlg .dlg-head > .dlg-x {
   flex: none;
   width: 34px;
   height: 34px;
-  margin-block-end: var(--sp-s);
+  margin-inline-start: auto;
   border-color: transparent;
+  border-radius: 999px;
 }
 .rw-app .log-dlg .dlg-head > .dlg-x svg {
   width: 18px;
@@ -313,9 +304,10 @@
 .rw-app .storage-section-opfs {
   flex: 1 1 auto;
 }
-/* The OPFS title belongs to the control stack. This keeps the filter between
-   the section name and the data it filters. */
+/* The OPFS title leads the row of buttons that act on it, so the name and its
+   actions read as one toolbar above the filter. */
 .rw-app .dlg-subhead .storage-section-title {
+  align-self: center;
   margin: 0;
 }
 .rw-app .opfs-inspector {
@@ -405,12 +397,6 @@
   background: color-mix(in oklab, var(--fault) 9%, transparent);
   border: 1px solid color-mix(in oklab, var(--fault) 32%, var(--seam));
   border-radius: var(--r-s);
-}
-.rw-app .log-actions .log-icon-btn,
-.rw-app .log-refresh {
-  flex: 0 0 30px;
-  inline-size: 30px;
-  padding-inline: 0;
 }
 .rw-app .log-refresh svg {
   width: 15px;
@@ -898,9 +884,42 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
 .rw-app .subrail::-webkit-scrollbar {
   display: none;
 }
+/* The dialog's own rail is a segmented control: the tabs switch the whole
+   sheet, so they sit in one well with the selected tab raised out of it. The
+   raise is a thread-tinted plate, not a solid thread fill, so it cannot be
+   confused with the filled toggles inside the logs tab or the masthead's mode
+   rail. */
 .rw-app .dialog-subrail {
-  padding: 0;
-  background: transparent;
+  flex: 0 1 auto;
+  gap: 2px;
+  padding: 3px;
+  background: var(--well);
+  border: 1px solid var(--seam-strong);
+  border-radius: var(--r-m);
+}
+.rw-app .dialog-subrail .subtab {
+  min-height: 32px;
+  padding: 0 14px;
+  border-block-end: 0;
+  border-radius: calc(var(--r-m) - 3px);
+}
+.rw-app .dialog-subrail .subtab[aria-selected="true"] {
+  color: var(--thread-text);
+  background: color-mix(in oklab, var(--thread) 12%, var(--plate));
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--thread) 45%, transparent),
+    0 1px 3px -1px color-mix(in oklab, var(--ink) 30%, transparent);
+}
+.rw-app .dialog-subrail .subtab[aria-selected="true"] svg {
+  color: var(--thread);
+}
+@media (hover: hover) {
+  .rw-app .dialog-subrail .subtab:not([aria-selected="true"]):hover {
+    background: color-mix(in oklab, var(--ink) 6%, transparent);
+  }
+}
+.rw-app .dialog-subrail .subtab:not([aria-selected="true"]):active {
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
 }
 .rw-app .subtab {
   display: inline-flex;
@@ -949,6 +968,10 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
 @media (forced-colors: active) {
   .rw-app .subtab[aria-selected="true"] {
     border-block-end-color: SelectedItem;
+  }
+  .rw-app .dialog-subrail .subtab[aria-selected="true"] {
+    outline: 2px solid SelectedItem;
+    outline-offset: -2px;
   }
 }
 
@@ -1321,10 +1344,6 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
 }
 .rw-app .emulator-saves-actions .btn {
   min-height: 30px;
-}
-.rw-app .emulator-saves-actions .btn:first-child {
-  width: 30px;
-  padding-inline: 0;
 }
 .rw-app .emulator-saves-actions svg,
 .rw-app .emulator-save-actions svg {

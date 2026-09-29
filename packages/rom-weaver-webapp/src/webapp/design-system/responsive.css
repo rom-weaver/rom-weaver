@@ -163,7 +163,11 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
     grid-column: span 4;
     gap: 0;
+    padding: 0;
     overflow: visible;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
   }
   /* One column apiece: four tabs and the way out. */
   .rw-app .log-dlg .dialog-subrail .subtab,
@@ -190,6 +194,7 @@
     background: transparent;
     border: 0;
     border-radius: var(--r-s);
+    isolation: isolate;
   }
   .rw-app .log-dlg .dialog-subrail .subtab svg,
   .rw-app .log-dlg .dlg-head > .dlg-x svg {
@@ -204,22 +209,26 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* The dock's stitch: a thread on the bar's own top seam, not a rule under a
-     label - an underline down here would read as a stray mark rather than a
-     mark on a rail. */
+  /* A tinted pill behind the selected icon marks the tab in thumb view: the
+     icon is what the eye finds first in a bottom bar, and a hairline on the
+     bar's top seam was too faint to spot from the label row. */
   .rw-app .log-dlg .dialog-subrail .subtab[aria-selected="true"] {
     color: var(--thread-text);
     background: transparent;
     border: 0;
+    box-shadow: none;
   }
   .rw-app .log-dlg .dialog-subrail .subtab[aria-selected="true"]::before {
     position: absolute;
-    inset-block-start: -5px;
-    inset-inline: 8px;
-    block-size: 2px;
+    inset-block-start: 2px;
+    inset-inline-start: 50%;
+    z-index: -1;
+    inline-size: min(56px, 100% - 4px);
+    block-size: 28px;
     content: "";
-    background: var(--thread);
-    border-radius: 1px;
+    background: color-mix(in oklab, var(--thread) 18%, transparent);
+    border-radius: 999px;
+    translate: -50% 0;
   }
   /* The close column is a column like any other, so it needs no halo of its
      own - it is already past 48px in both directions. */
@@ -241,46 +250,68 @@
     flex: 1 1 0;
     min-height: 44px;
   }
-  /**
-   * The level or refresh control shares a row with copy/download; the view toggle and filter each span a separate row.
-   */
+  /* Every action row on the sheet is one strip of equal-width, labelled 44px
+     buttons. The copy/download wrapper dissolves so its buttons share the row
+     with the level select or refresh; a title or the view toggle takes a row of
+     its own above them. The level select keeps its content width, because a
+     clipped "level: tr…" hides the one value it exists to show. */
   .rw-app .log-dlg .dlg-subhead .log-controls {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    display: flex;
+    flex-wrap: wrap;
     gap: var(--sp-s);
   }
+  .rw-app .log-dlg .dlg-subhead .log-actions {
+    display: contents;
+  }
+  .rw-app .log-dlg .dlg-subhead .log-refresh,
+  .rw-app .log-dlg .log-actions .log-icon-btn {
+    flex: 1 1 0;
+    min-inline-size: 0;
+  }
+  .rw-app .log-dlg .dlg-subhead .btn span {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .rw-app .log-dlg .dlg-subhead .storage-section-title {
+    flex-basis: 100%;
+  }
   .rw-app .log-dlg .dlg-subhead .logview {
-    grid-column: 1 / -1;
+    flex-basis: 100%;
     width: 100%;
     min-height: 44px;
   }
   .rw-app .log-dlg .dlg-subhead .logview .seg-btn {
     height: 38px;
   }
-  .rw-app .log-dlg .dlg-subhead .loglevel {
-    margin-inline-start: 0;
-  }
-  /* Refresh takes the level select's slot on the storage tab, so it auto-places
-     into the first column - pinning it to the second instead pushed the copy
-     and download pair onto a row of its own. */
+  .rw-app .log-dlg .dlg-subhead .loglevel,
   .rw-app .log-dlg .dlg-subhead .log-refresh {
-    justify-self: start;
-    inline-size: 44px;
-    height: 44px;
     margin-inline-start: 0;
   }
   .rw-app .log-dlg .dlg-subhead .loglevel .select,
-  .rw-app .log-dlg .dlg-subhead .log-filter {
-    height: 44px;
-  }
+  .rw-app .log-dlg .dlg-subhead .log-filter,
+  .rw-app .log-dlg .dlg-subhead .log-refresh,
   .rw-app .log-dlg .log-actions .log-icon-btn {
-    flex-basis: 44px;
-    inline-size: 44px;
     height: 44px;
   }
-  .rw-app .log-actions {
-    flex: none;
-    order: 0;
+  /* The offline download and the emulator-save actions follow the same strip:
+     full-width, equal columns, thumb height. */
+  .rw-app .log-dlg .sw-cache-action .btn {
+    flex: 1 1 100%;
+    min-height: 44px;
+  }
+  .rw-app .log-dlg .emulator-saves-heading {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .rw-app .log-dlg .emulator-saves-actions {
+    flex-wrap: nowrap;
+    gap: var(--sp-s);
+  }
+  .rw-app .log-dlg .emulator-saves-actions .btn {
+    flex: 1 1 0;
+    min-height: 44px;
   }
   .rw-app .log-dlg .tracelog {
     flex: 1 1 auto;

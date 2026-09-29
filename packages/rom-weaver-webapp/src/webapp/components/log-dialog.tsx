@@ -835,24 +835,22 @@ const LogExportActions = ({
   return (
     <div className="dlg-actions log-actions">
       <button
-        aria-label={localizer.message("ui.common.copy")}
         className={`btn slim ghost log-icon-btn${copied ? " copied" : ""}${failed ? " copy-failed" : ""}`}
         onClick={() => copy(exportText, "Log copy failed")}
-        title={localizer.message("ui.common.copy")}
         type="button"
       >
         {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+        <span>{localizer.message("ui.common.copy")}</span>
       </button>
       <button
-        aria-label={localizer.message("ui.result.download")}
         className="btn slim ghost log-icon-btn"
         onClick={() => {
           void triggerBrowserDownload(exportText, logDownloadName(showingOpfs, showingPrevious));
         }}
-        title={localizer.message("ui.result.download")}
         type="button"
       >
         <Download aria-hidden="true" />
+        <span>{localizer.message("ui.result.download")}</span>
       </button>
     </div>
   );
@@ -1003,17 +1001,17 @@ const LogsStoragePanel = ({
     <>
       {showingOpfs ? <EmulatorSavesPanel active /> : null}
       <div className="dlg-subhead">
-        {showingOpfs ? (
-          <h3 className="dlg-section-title storage-section-title" id="storage-opfs-title">
-            OPFS
-          </h3>
-        ) : null}
         {/* The controls take the row; the filter gets the next one to itself.
             Sharing one row meant the filter and the view toggle fought for the
             same width, and on a phone both lost - the toggle ellipsed its labels
             while the filter shrank to a slot too narrow to read what you had
             typed. */}
         <div className="log-controls">
+          {showingOpfs ? (
+            <h3 className="dlg-section-title storage-section-title" id="storage-opfs-title">
+              OPFS
+            </h3>
+          ) : null}
           {tab === "logs" && hasPrevious ? (
             <LogViewToggle localizer={localizer} onChange={onViewChange} showingPrevious={showingPrevious} />
           ) : null}
@@ -1023,10 +1021,10 @@ const LogsStoragePanel = ({
               className="btn slim ghost log-refresh"
               disabled={opfsLoading}
               onClick={onRefreshOpfs}
-              title="Refresh OPFS"
               type="button"
             >
               <RefreshCw aria-hidden="true" className={opfsLoading ? "spin" : undefined} />
+              <span>Refresh</span>
             </button>
           ) : (
             <LogLevelSelect currentLevel={currentLevel} localizer={localizer} onLevelChange={onLevelChange} />
