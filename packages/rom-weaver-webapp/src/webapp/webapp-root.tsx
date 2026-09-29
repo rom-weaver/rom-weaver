@@ -674,10 +674,12 @@ function WebappRoot({
                 onPreloadSettings={preloadSettingsPanel}
               />
             ) : null}
-            <PanelViewToggle
-              detailed={state.settings.detailedViewEnabled === true}
-              onChange={actions.onDetailedViewEnabledChange}
-            />
+            {view === "checksum" ? null : (
+              <PanelViewToggle
+                detailed={state.settings.detailedViewEnabled === true}
+                onChange={actions.onDetailedViewEnabledChange}
+              />
+            )}
             <ResetButton onReset={actions.onReset} />
           </div>
         )}

@@ -1,5 +1,6 @@
 import { Hash } from "lucide-react";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { getBaseFileName } from "../../lib/input/path-utils.ts";
 import type {
   ChecksumWorkflowFile,
   ChecksumWorkflowSourceState,
@@ -11,7 +12,8 @@ import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { useCandidateSelection } from "../../public/react/candidate-selection.tsx";
 import { ChecksumList, ChecksumRow, PendingChecksumRow } from "../../public/react/components/ds/checksum-list.tsx";
 import { FileProgress, Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
-import { InfoPopover, StepSection } from "../../public/react/components/ds/layout.tsx";
+import { FileCard } from "../../public/react/components/ds/file-card.tsx";
+import { DropZone, InfoPopover, StepSection } from "../../public/react/components/ds/layout.tsx";
 import {
   StageStatus,
   stageBarValue,
@@ -19,14 +21,12 @@ import {
   stageStatusLabel,
 } from "../../public/react/components/ds/staging-meta.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
-import { WorkflowRomInputStep } from "../../public/react/components/ds/workflow-rom-input-step.tsx";
 import { useInputSelectionHandler } from "../../public/react/input-selection-handler.ts";
 import type { CandidateSelectionPrompt, PageFileDrop } from "../../public/react/public-types.ts";
 import { useApplySettings, useRomWeaverAssetBaseUrl, useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { usePageDropForwarder, useWorkbenchActivity } from "../../public/react/workflow-form-effects.ts";
 import {
   createReactWorkflowId,
-  formatOptionalElapsedMs,
   getSourceNoticeLevel,
   getSourceNoticeMessage,
   hasSourceQueueWarning,
@@ -316,14 +316,7 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
           title="Input"
         />
       ) : (
-        <WorkflowRomInputStep
-          dropZone={{
-            disabled: calculating,
-            inputId: "checksum-input-picker",
-            label: "Replace the file",
-            multiple: false,
-            onFiles: handleDrop,
-          }}
+        <StepSection
           fault={hasSourceQueueWarning(input) || (!!error && !files.length)}
           id="checksum-source"
           info={
@@ -334,16 +327,14 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
               </ul>
             </InfoPopover>
           }
-          items={[
-            {
-              card: {
-                extract: {
-                  fileName: input?.fileName || source.name,
-                  fileSize: input?.size,
-                  parentCompressions: input?.parentCompressions,
-                  timing: formatOptionalElapsedMs(input?.decompressionTimeMs),
-                },
-                meta: staging ? (
+          num="0x01"
+          title="Input"
+          woven={files.length > 0}
+        >
+          <div className="cards workflow-file-list">
+            <FileCard
+              meta={
+                staging ? (
                   <>
                     <span className="fsize mono">{formatByteSize(input?.size ?? source.size)}</span>
                     <StageStatus
@@ -354,36 +345,32 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
                   </>
                 ) : (
                   <span className="fsize mono">{formatByteSize(input?.size ?? source.size)}</span>
-                ),
-                onRemove: () => updateSource(null),
-                panels: {
-                  ...(input?.identification ? { identification: input.identification } : {}),
-                  identifyPending: false,
-                  info: {
-                    bytes: primary?.size,
-                    checksums: primary?.checksums,
-                    checksumVariants: primary?.checksumVariants,
-                    defaultOpen: false,
-                  },
-                },
-                removeLabel: "Remove file",
-                stageBar: stageBarValue(staging, stagePct),
-                state: hasSourceQueueWarning(input) ? "bad" : input?.status === "ready" ? "ok" : undefined,
-              },
-              id: "checksum-input-card",
-            },
-          ]}
-          notice={
-            sourceNotice ? (
-              <Notice id="checksum-source-notice" level={getSourceNoticeLevel(input)}>
-                {sourceNotice}
-              </Notice>
-            ) : null
-          }
-          num="0x01"
-          title="Input"
-          woven={files.length > 0}
-        />
+                )
+              }
+              name={
+                <span className="nm" title={getBaseFileName(input?.fileName || source.name)}>
+                  {getBaseFileName(input?.fileName || source.name)}
+                </span>
+              }
+              onRemove={() => updateSource(null)}
+              removeLabel="Remove file"
+              stageBar={stageBarValue(staging, stagePct)}
+              state={hasSourceQueueWarning(input) ? "bad" : input?.status === "ready" ? "ok" : undefined}
+            />
+          </div>
+          <DropZone
+            disabled={calculating}
+            inputId="checksum-input-picker"
+            label="Replace the file"
+            multiple={false}
+            onFiles={handleDrop}
+          />
+          {sourceNotice ? (
+            <Notice id="checksum-source-notice" level={getSourceNoticeLevel(input)}>
+              {sourceNotice}
+            </Notice>
+          ) : null}
+        </StepSection>
       )}
       <StepSection
         headerExtra={
