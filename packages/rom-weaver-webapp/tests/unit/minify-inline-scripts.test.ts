@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { minifyDocumentHead } from "../../scripts/vite-config/minify-document-inline-scripts.mjs";
 import { minifyInlineScripts } from "../../scripts/minify-inline-scripts.mjs";
 
 describe("inline script minification", () => {
@@ -35,5 +36,17 @@ describe("inline script minification", () => {
 
   it("reports the document when a script does not parse", () => {
     expect(() => minifyInlineScripts("<script>const = ;</script>", "docs/faq.html")).toThrow(/docs\/faq\.html/);
+  });
+});
+
+describe("document head minification", () => {
+  it("keeps script, style, and body whitespace while removing head spacing", () => {
+    const script = '<script>window.text = "a>  <b"; // Keep the newline.\nwindow.ok = true;</script>';
+    const style = '<style>body::before { content: "a>  <b"; }</style>';
+    const body = "<body><span>a</span> <span>b</span><pre>  text\n</pre></body>";
+    const html = `<head><meta charset="UTF-8">\n  ${script}\n  ${style}\n  <title>Title</title></head>${body}`;
+    expect(minifyDocumentHead(html)).toBe(
+      `<head><meta charset="UTF-8">${script}${style}<title>Title</title></head>${body}`,
+    );
   });
 });
