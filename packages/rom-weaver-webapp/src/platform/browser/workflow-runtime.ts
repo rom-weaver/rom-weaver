@@ -1,3 +1,4 @@
+import { invokeRomWeaverChecksumWorker } from "../../lib/runtime/wasm-checksum-command.ts";
 import { getPathBaseName } from "../../lib/path-utils.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
 import { createRomWeaverOutputScope } from "../../lib/runtime/run-output-paths.ts";
@@ -617,6 +618,22 @@ const createBrowserCheatRuntime = (workerIo: RuntimeWorkerIo): NonNullable<Workf
   },
 });
 
+const createBrowserChecksumRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["checksum"] => ({
+  run: async ({ source, fileName, ...options }) => {
+    const staged = await workerIo.stageSource({
+      fallbackFileName: fileName,
+      pathPrefix: "checksum-input",
+      scope: "checksum",
+      source,
+    });
+    try {
+      return await invokeRomWeaverChecksumWorker({ ...options, sourcePath: staged.filePath });
+    } finally {
+      await staged.cleanup();
+    }
+  },
+});
+
 const createBrowserRuntime = (): WorkflowRuntime => {
   configureBrowserSourcePrimitives();
   const workerIo = createBrowserRuntimeVfsIo({
@@ -629,6 +646,7 @@ const createBrowserRuntime = (): WorkflowRuntime => {
     },
     bundle: createBrowserBundleRuntime(workerIo),
     cheat: createBrowserCheatRuntime(workerIo),
+    checksum: createBrowserChecksumRuntime(workerIo),
     compression: createBrowserCompressionRuntime(workerIo),
     ingest: createBrowserIngestRuntime(workerIo),
     name: "browser",

@@ -11,7 +11,6 @@ import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { useCandidateSelection } from "../../public/react/candidate-selection.tsx";
 import { ChecksumList, ChecksumRow, PendingChecksumRow } from "../../public/react/components/ds/checksum-list.tsx";
 import { FileProgress, Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
-import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
 import { InfoPopover, StepSection } from "../../public/react/components/ds/layout.tsx";
 import {
   StageStatus,
@@ -21,17 +20,9 @@ import {
 } from "../../public/react/components/ds/staging-meta.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
 import { WorkflowRomInputStep } from "../../public/react/components/ds/workflow-rom-input-step.tsx";
-import { ARCHIVE_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "../../public/react/file-classification.ts";
-import { getFileInputAcceptAttributes } from "../../public/react/file-input-accept";
 import { useInputSelectionHandler } from "../../public/react/input-selection-handler.ts";
 import type { CandidateSelectionPrompt, PageFileDrop } from "../../public/react/public-types.ts";
 import { useApplySettings, useRomWeaverAssetBaseUrl, useUiLocalizer } from "../../public/react/settings-context.tsx";
-import {
-  getRomDropNotice,
-  getRomDropNoticeLevel,
-  routeSingleRom,
-  selectRomDropCandidate,
-} from "../../public/react/unified-drop-routing.ts";
 import { usePageDropForwarder, useWorkbenchActivity } from "../../public/react/workflow-form-effects.ts";
 import {
   createReactWorkflowId,
@@ -48,11 +39,6 @@ import {
 } from "../../public/react/workflow-run-hooks.ts";
 
 const logger = createLogger("checksum-form");
-
-const CHECKSUM_SUPPORTED_FILES = [
-  { extensions: ROM_FILE_EXTENSIONS, label: "ROMs" },
-  { extensions: ARCHIVE_FILE_EXTENSIONS, label: "Archives & containers" },
-] as const;
 
 /* Every algorithm the checksum engine supports (`rom-weaver formats`), with the
    hex length its digest has. Staging always computes the first three. */
@@ -157,6 +143,7 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
   const cancelSelectionRef = useRef<(request: CandidateSelectionPrompt) => void>(() => undefined);
   const { candidateSelectionDialog, selectFile } = useCandidateSelection({
+    fileInput: true,
     onCancelSelection: (request) => cancelSelectionRef.current(request),
   });
   // Matches webapp-root's `currentView` so root routing targets this tab's dialog.
@@ -168,7 +155,9 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
   const [algorithms, setAlgorithms] = useState<string[]>(DEFAULT_ALGORITHMS);
   const [expectedText, setExpectedText] = useState("");
   const [error, setError] = useState("");
-  const [dropRouting, setDropRouting] = useState<ReturnType<typeof routeSingleRom> | null>(null);
+  const [autoExtract, setAutoExtract] = useState(true);
+  const algorithmsRef = useRef(algorithms);
+  algorithmsRef.current = algorithms;
   const { clearProgressForStage, createProgressHandler, progress, setProgress } = useWorkflowProgressState({});
   const workflowRef = useRef<InstanceType<typeof BrowserChecksumWorkflow> | null>(null);
   const workflowIdRef = useRef(createReactWorkflowId("react-checksum"));
@@ -186,7 +175,6 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
   );
 
   const updateSource = useCallback((file: File | null) => {
-    setDropRouting(null);
     setError("");
     setSource(file);
   }, []);
@@ -197,21 +185,8 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
   };
 
   const handleDrop = (files: File[]) => {
-    const routed = routeSingleRom(files);
-    if (routed.roms.length > 1) {
-      setDropRouting(null);
-      void selectRomDropCandidate(routed.roms, localizer.message("ui.step.rom"), selectFile).then((selected) => {
-        if (!selected) {
-          setDropRouting(routed.ignoredPatches.length ? { ...routed, unused: [] } : null);
-          return;
-        }
-        updateSource(selected);
-        setDropRouting({ ...routed, source: selected, unused: [] });
-      });
-      return;
-    }
-    if (routed.source) updateSource(routed.source);
-    setDropRouting(routed);
+    const file = files[0];
+    if (file) updateSource(file);
   };
   usePageDropForwarder(pageDrop, handleDrop, handledPageDropIdRef);
 
@@ -244,7 +219,7 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
       setStaging(true);
       logger.debug("staging ROM", { fileName: source.name, size: source.size });
       try {
-        await workflow.setInput(source);
+        await workflow.setInput(source, { algorithms: algorithmsRef.current, autoExtract });
         if (current) setInput(workflow.getInput());
       } catch (cause) {
         if (!current) return;
@@ -266,10 +241,10 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
       if (workflowRef.current === workflow) workflowRef.current = null;
       void workflow?.dispose().catch(() => undefined);
     };
-  }, [assetBaseUrl, clearProgressForStage, createProgressHandler, selectFile, showError, source]);
+  }, [assetBaseUrl, autoExtract, clearProgressForStage, createProgressHandler, selectFile, showError, source]);
 
   const files = input?.status === "ready" ? input.files : [];
-  const missing = algorithms.filter((algorithm) => files.some((file) => !file.checksums[algorithm]));
+  const missing = algorithms.filter((algorithm) => !files.length || files.some((file) => !file.checksums[algorithm]));
 
   const calculate = async () => {
     const workflow = workflowRef.current;
@@ -317,27 +292,18 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
     : toWorkflowFileProgressProps(staging ? progress : null);
   const stagePct = stagePercent(stagingProgress);
   const primary = files[0];
-  const dropNotice = dropRouting ? getRomDropNotice(dropRouting, localizer) : "";
   const sourceNotice = getSourceNoticeMessage(input);
   const sourceEmpty = !source;
 
   return (
     <section className="panel checksum-tool" id="checksum-container">
       <UnifiedDropZone
-        accept={getFileInputAcceptAttributes().unifiedRom}
-        addLabel="Replace the ROM"
-        afterDropZone={
-          dropNotice ? (
-            <Notice id="checksum-input-notice" level={dropRouting ? getRomDropNoticeLevel(dropRouting) : "warn"}>
-              {dropNotice}
-            </Notice>
-          ) : null
-        }
+        addLabel="Replace the file"
         big={sourceEmpty}
         disabled={calculating}
-        heroLabel="Drop a ROM to checksum it"
-        heroLabelCoarse="Tap to add a ROM"
-        info={<p>Checksums are calculated locally. Your ROM never leaves this browser.</p>}
+        heroLabel="Drop a file to checksum it"
+        heroLabelCoarse="Tap to add a file"
+        info={<p>Checksums are calculated locally. Your file never leaves this browser.</p>}
         inputId="checksum-input-picker"
         lead={{
           line1: "ui.hero.checksumThesis",
@@ -346,25 +312,44 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
         }}
         multiple={false}
         onFiles={handleDrop}
-        supported={CHECKSUM_SUPPORTED_FILES}
       />
-      {sourceEmpty ? (
-        <GhostSteps
-          steps={[
-            { num: "0x02", title: localizer.message("ui.step.rom") },
-            { num: "0x03", title: "Checksums" },
-          ]}
+      <fieldset className="checksum-algos" disabled={calculating || staging}>
+        <legend>Checksums to calculate</legend>
+        {CHECKSUM_ALGORITHMS.map((algorithm) => (
+          <label className="checkrow" key={algorithm.id}>
+            <input
+              checked={algorithms.includes(algorithm.id)}
+              id={`checksum-algo-${algorithm.id}`}
+              onChange={(event) => toggleAlgorithm(algorithm.id, event.currentTarget.checked)}
+              type="checkbox"
+            />
+            <span>{algorithm.label}</span>
+          </label>
+        ))}
+      </fieldset>
+      <label className="checkrow">
+        <input
+          checked={autoExtract}
+          disabled={calculating || staging}
+          id="checksum-auto-extract"
+          onChange={(event) => setAutoExtract(event.currentTarget.checked)}
+          type="checkbox"
         />
-      ) : (
+        <span>Auto extract</span>
+      </label>
+      <p className="pdesc">
+        Open archives and containers before calculating checksums. Turn off to checksum the original file.
+      </p>
+      {sourceEmpty ? null : (
         <>
           <WorkflowRomInputStep
             fault={hasSourceQueueWarning(input) || (!!error && !files.length)}
             id="checksum-source"
             info={
-              <InfoPopover title="ROM input">
+              <InfoPopover title="File input">
                 <ul>
-                  <li>Archives and disc images are extracted; pick the ROM if several are found.</li>
-                  <li>The checksums describe the ROM itself, not the archive that held it.</li>
+                  <li>When Auto extract is on, choose a file if the archive contains several.</li>
+                  <li>Turn Auto extract off to checksum an archive without opening it.</li>
                 </ul>
               </InfoPopover>
             }
@@ -392,7 +377,7 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
                   onRemove: () => updateSource(null),
                   panels: {
                     ...(input?.identification ? { identification: input.identification } : {}),
-                    identifyPending: staging,
+                    identifyPending: false,
                     info: {
                       bytes: primary?.size,
                       checksums: primary?.checksums,
@@ -400,7 +385,7 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
                       defaultOpen: false,
                     },
                   },
-                  removeLabel: "Remove ROM",
+                  removeLabel: "Remove file",
                   stageBar: stageBarValue(staging, stagePct),
                   state: hasSourceQueueWarning(input) ? "bad" : input?.status === "ready" ? "ok" : undefined,
                 },
@@ -415,7 +400,7 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
               ) : null
             }
             num="0x02"
-            title={localizer.message("ui.step.rom")}
+            title="Input"
             woven={files.length > 0}
           />
           <StepSection
@@ -435,21 +420,7 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
             title="Checksums"
             woven={!!compare?.match}
           >
-            <fieldset className="checksum-algos" disabled={calculating}>
-              <legend className="sr-only">Algorithms</legend>
-              {CHECKSUM_ALGORITHMS.map((algorithm) => (
-                <label className="checkrow" key={algorithm.id}>
-                  <input
-                    checked={algorithms.includes(algorithm.id)}
-                    id={`checksum-algo-${algorithm.id}`}
-                    onChange={(event) => toggleAlgorithm(algorithm.id, event.currentTarget.checked)}
-                    type="checkbox"
-                  />
-                  <span>{algorithm.label}</span>
-                </label>
-              ))}
-            </fieldset>
-            {files.length && missing.length ? (
+            {source && !staging && missing.length ? (
               calculating ? (
                 <FileProgress
                   {...(toWorkflowChecksumProgressProps(progress) || { indeterminate: true, label: "Checksum" })}
@@ -515,7 +486,7 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
             ) : null}
             {compare?.match && matchedSet ? (
               <p className="pdesc checksum-verdict" id="checksum-compare-verdict">
-                Match: the {matchedLabel} of this ROM{matchedSet.label ? ` (${matchedSet.label})` : ""}.
+                Match: the {matchedLabel} of this file{matchedSet.label ? ` (${matchedSet.label})` : ""}.
               </p>
             ) : null}
             {compare && !compare.match && files.length ? (
@@ -524,7 +495,7 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
                   ? `No computed checksum matches. Calculate ${compare.uncomputed.join(" or ")} to compare this value.`
                   : expected.length && !CHECKSUM_ALGORITHMS.some((entry) => entry.hexLength === expected.length)
                     ? `No supported algorithm makes a ${expected.length}-character checksum.`
-                    : "No computed checksum matches. This is not the expected ROM, or it needs a different header or byte order."}
+                    : "No computed checksum matches. This is not the expected file, or it needs a different header or byte order."}
               </Notice>
             ) : null}
           </StepSection>

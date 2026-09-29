@@ -1,201 +1,119 @@
 import { describe, expect, it, vi } from "vitest";
-
 import { ChecksumWorkflowController } from "../../src/lib/workflow/checksum-workflow-controller.ts";
+import type { WorkflowRuntime } from "../../src/types/workflow-runtime-adapter.ts";
 
-// Drives the controller through its private staging surface with a fake
-// `ingest` runtime, as trim-workflow-controller.test.ts does - no real wasm.
-
-const file = (fileName: string, extras: Record<string, unknown> = {}) => ({
-  _sourceRef: { fileName, size: 8, source: `/work/${fileName}` },
-  fileName,
-  fileSize: 8,
-  ...extras,
-});
-
-const asset = (id: string, kind: "cue" | "rom" | "track", extras: Record<string, unknown> = {}) => ({
-  file: file(`${id}.bin`),
-  fileName: `${id}.bin`,
-  id,
-  kind,
-  patchable: kind === "rom",
+const source = { name: "notes.txt", size: 8 };
+const result = {
+  fileName: "notes.txt",
+  checksums: { crc32: "12345678", md5: "a".repeat(32), sha1: "b".repeat(40) },
   size: 8,
-  ...extras,
-});
-
-const stage = (status: "needsSelection" | "ready", assets: unknown[] = []) => ({
-  parentCompressions: [],
-  preparedInputAssets: assets,
-  source: { name: "game.zip" },
-  state: {
-    candidates: [],
-    fileName: "game.zip",
-    id: "input-1",
-    parentCompressions: [],
-    role: "input" as const,
-    status,
-    warnings: [],
-    ...(status === "ready" ? { selectedCandidateId: "a" } : {}),
-  },
-});
-
-const ingestResult = (checksums: Record<string, string>, extras: Record<string, unknown> = {}) => ({
-  result: { assets: [{ checksums, isRom: true, ...extras }], isRom: true },
-});
-
-type Exposed = ChecksumWorkflowController<unknown> & {
-  hashAssets: (stage: unknown, algorithms: readonly string[] | undefined) => Promise<void>;
-  inputStage?: ReturnType<typeof stage>;
-  inputStages: { releaseSession: (session?: unknown) => Promise<void> };
+};
+const setup = () => {
+  const run = vi.fn<NonNullable<WorkflowRuntime["checksum"]>["run"]>().mockResolvedValue(result);
+  const releaseSources = vi.fn(async () => undefined);
+  const controller = new ChecksumWorkflowController({
+    checksum: { run },
+    workerIo: { releaseSources },
+  } as unknown as WorkflowRuntime);
+  return { controller, releaseSources, run };
 };
 
-const createController = (run: (input: Record<string, unknown>) => Promise<unknown>) =>
-  new ChecksumWorkflowController<unknown>({ ingest: { run } } as never, {}) as unknown as Exposed;
-
-describe("ChecksumWorkflowController.calculate validation", () => {
-  it("throws INVALID_INPUT when no ROM has been staged", async () => {
-    const controller = createController(vi.fn());
+describe("ChecksumWorkflowController", () => {
+  it("requires a file before calculating", async () => {
+    const { controller } = setup();
     await expect(controller.calculate(["sha256"])).rejects.toMatchObject({ code: "INVALID_INPUT" });
   });
 
-  it("throws AMBIGUOUS_SELECTION while the staged input needs a selection", async () => {
-    const controller = createController(vi.fn());
-    controller.inputStage = stage("needsSelection");
-    await expect(controller.calculate(["sha256"])).rejects.toMatchObject({ code: "AMBIGUOUS_SELECTION" });
-  });
-});
-
-describe("ChecksumWorkflowController staging pass", () => {
-  it("reuses digests that extraction already computed", async () => {
-    const run = vi.fn();
-    const controller = createController(run);
-    const rom = asset("rom", "rom", {
-      file: file("rom.bin", {
-        checksums: { crc32: "a1b2c3d4", md5: "m".repeat(32), sha1: "s".repeat(40) },
-        identification: { matches: [], status: "unknown" },
-      }),
-    });
-    controller.inputStage = stage("ready", [rom]);
-
-    await controller.hashAssets(controller.inputStage, undefined);
-
-    expect(run).not.toHaveBeenCalled();
+  it("accepts a non-ROM file and enables extraction by default", async () => {
+    const { controller, run } = setup();
+    await controller.setInput(source);
+    expect(run).toHaveBeenCalledWith(
+      expect.objectContaining({ algorithms: ["crc32", "md5", "sha1"], autoExtract: true, source }),
+    );
     expect(controller.getInput()).toMatchObject({
-      files: [{ checksums: { crc32: "a1b2c3d4" }, fileName: "rom.bin" }],
-      identification: { status: "unknown" },
+      fileName: "notes.txt",
+      files: [{ checksums: result.checksums, size: 8 }],
+      status: "ready",
     });
   });
 
-  it("hashes the standard set with identification when nothing was precomputed", async () => {
-    const run = vi.fn(async () =>
-      ingestResult(
-        { crc32: "D4C3B2A1", md5: "M".repeat(32), sha1: "S".repeat(40) },
-        { identification: { matches: [], status: "unknown" } },
-      ),
-    );
-    const controller = createController(run);
-    controller.inputStage = stage("ready", [asset("rom", "rom")]);
-
-    await controller.hashAssets(controller.inputStage, undefined);
-
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({ checksumAlgorithms: ["crc32", "md5", "sha1"] }));
-    expect(run.mock.calls[0]?.[0]).not.toHaveProperty("identify", false);
-    expect(controller.getInput()?.files[0]?.checksums).toEqual({
-      crc32: "d4c3b2a1",
-      md5: "m".repeat(32),
-      sha1: "s".repeat(40),
+  it("names the extracted member instead of its archive", async () => {
+    const { controller, run } = setup();
+    run.mockResolvedValue({ ...result, fileName: "b.bin" });
+    await controller.setInput({ name: "bundle.zip", size: 100 });
+    expect(controller.getInput()).toMatchObject({
+      fileName: "b.bin",
+      sourceSize: 100,
+      files: [{ fileName: "b.bin", size: 8 }],
     });
-  });
-});
-
-describe("ChecksumWorkflowController.calculate", () => {
-  it("hashes only the missing algorithms, skips identify, and merges variants", async () => {
-    const run = vi.fn(async () =>
-      ingestResult(
-        { sha256: "A".repeat(64) },
-        { checksumVariants: [{ checksums: { sha256: "b".repeat(64) }, id: "remove-header", label: "Headerless" }] },
-      ),
-    );
-    const controller = createController(run);
-    const rom = asset("rom", "rom", {
-      checksums: { crc32: "11111111", md5: "m".repeat(32), sha1: "s".repeat(40) },
-      checksumVariants: [{ checksums: { crc32: "22222222" }, id: "remove-header", label: "Headerless" }],
-    });
-    controller.inputStage = stage("ready", [rom]);
-
-    const input = await controller.calculate(["crc32", "sha256"]);
-
-    expect(run).toHaveBeenCalledTimes(1);
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({ checksumAlgorithms: ["sha256"], identify: false }));
-    expect(input.files[0]?.checksums).toMatchObject({ crc32: "11111111", sha256: "a".repeat(64) });
-    expect(input.files[0]?.checksumVariants).toEqual([
-      { checksums: { crc32: "22222222", sha256: "b".repeat(64) }, id: "remove-header", label: "Headerless" },
-    ]);
+    await controller.calculate(["sha256"]);
+    expect(run).toHaveBeenLastCalledWith(expect.objectContaining({ fileName: "bundle.zip" }));
   });
 
-  it("lists every hashed track, primary first, and skips the cue sheet", async () => {
-    const run = vi.fn(async () => ingestResult({ crc16: "abcd" }));
-    const controller = createController(run);
-    controller.inputStage = stage("ready", [
-      asset("disc", "cue"),
-      asset("track02", "track", { trackNumber: 2 }),
-      asset("track01", "rom", { trackNumber: 1 }),
-    ]);
+  it("honors initial algorithm choices and disables extraction", async () => {
+    const { controller, run } = setup();
+    await controller.setInput({ name: "game.zip", size: 8 }, { algorithms: ["sha256"], autoExtract: false });
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ algorithms: ["sha256"], autoExtract: false }));
+  });
 
-    const input = await controller.calculate(["crc16"]);
+  it("waits for an algorithm when none is selected", async () => {
+    const { controller, run } = setup();
+    await controller.setInput(source, { algorithms: [] });
+    expect(run).not.toHaveBeenCalled();
+    await controller.calculate(["crc32"]);
+    expect(run).toHaveBeenCalledOnce();
+  });
 
-    expect(input.files.map((entry) => entry.fileName)).toEqual(["track01.bin", "track02.bin"]);
-    expect(input.files[1]).toMatchObject({ checksums: { crc16: "abcd" }, trackNumber: 2 });
+  it("keeps checksums from one resolved archive member together", async () => {
+    const { controller, run } = setup();
+    await controller.setInput(source);
+    run.mockResolvedValue({
+      fileName: "notes.txt",
+      checksums: { ...result.checksums, sha256: "c".repeat(64) },
+      size: 8,
+    });
+    await controller.calculate(["sha256"]);
+    expect(run).toHaveBeenLastCalledWith(expect.objectContaining({ algorithms: ["crc32", "md5", "sha1", "sha256"] }));
+    await controller.calculate(["sha256"]);
     expect(run).toHaveBeenCalledTimes(2);
+    const snapshot = controller.getInput();
+    if (!snapshot?.files[0]) throw new Error("Checksum file is missing");
+    snapshot.files[0].checksums.sha256 = "changed";
+    expect(controller.getInput()?.files[0]?.checksums.sha256).toBe("c".repeat(64));
   });
 
-  it("stays usable after an aborted pass", async () => {
-    let release: (() => void) | undefined;
-    const run = vi.fn(
-      (input: Record<string, unknown>) =>
-        new Promise((resolve, reject) => {
-          const signal = input.signal as AbortSignal;
-          signal.addEventListener("abort", () => reject(Object.assign(new Error("cancelled"), { code: "CANCELLED" })));
-          release = () => resolve(ingestResult({ blake3: "c".repeat(64) }));
+  it("keeps the last result and permits retry after cancellation", async () => {
+    const { controller, run } = setup();
+    await controller.setInput(source);
+    run.mockImplementationOnce(
+      ({ signal }) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(Object.assign(new Error("cancelled"), { code: "CANCELLED" })));
         }),
     );
-    const controller = createController(run);
-    controller.inputStage = stage("ready", [asset("rom", "rom", { checksums: { crc32: "1", md5: "2", sha1: "3" } })]);
-
-    const aborted = controller.calculate(["blake3"]);
-    await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(1));
-    controller.abort();
-    await expect(aborted).rejects.toMatchObject({ code: "CANCELLED" });
-
-    const retried = controller.calculate(["blake3"]);
+    const pass = controller.calculate(["blake3"]);
     await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(2));
-    release?.();
-    await expect(retried).resolves.toMatchObject({ files: [{ checksums: { blake3: "c".repeat(64) } }] });
-  });
-
-  it("ignores an abort that arrives while no pass runs", async () => {
-    const run = vi.fn(async () => ingestResult({ blake3: "c".repeat(64) }));
-    const controller = createController(run);
-    controller.inputStage = stage("ready", [asset("rom", "rom", { checksums: { crc32: "1", md5: "2", sha1: "3" } })]);
-
     controller.abort();
-
+    await expect(pass).rejects.toMatchObject({ code: "CANCELLED" });
+    expect(controller.getInput()?.files[0]?.checksums).toEqual(result.checksums);
+    run.mockResolvedValue({
+      fileName: "notes.txt",
+      checksums: { ...result.checksums, blake3: "d".repeat(64) },
+      size: 8,
+    });
     await expect(controller.calculate(["blake3"])).resolves.toMatchObject({
-      files: [{ checksums: { blake3: "c".repeat(64) } }],
+      files: [{ checksums: { blake3: "d".repeat(64) } }],
     });
   });
-});
 
-describe("ChecksumWorkflowController.dispose", () => {
-  it("releases the staged input once", async () => {
-    const controller = createController(vi.fn());
-    const releaseSession = vi.fn(async () => undefined);
-    controller.inputStages.releaseSession = releaseSession;
-    controller.inputStage = stage("needsSelection");
-
+  it("releases inputs when replacing and disposing them", async () => {
+    const { controller, releaseSources } = setup();
+    await controller.setInput(source);
+    await controller.setInput({ name: "empty.txt", size: 0 });
+    expect(releaseSources).toHaveBeenCalledWith([source]);
     await controller.dispose();
     await controller.dispose();
-
-    expect(releaseSession).toHaveBeenCalledTimes(1);
+    expect(releaseSources).toHaveBeenCalledTimes(2);
     expect(controller.getInput()).toBeNull();
   });
 });

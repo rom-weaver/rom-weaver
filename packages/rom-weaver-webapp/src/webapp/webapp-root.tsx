@@ -126,11 +126,11 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     railLabel: "Identify",
   },
   {
-    group: "roms",
+    group: "files",
     href: "checksum",
     icon: <Hash aria-hidden="true" />,
     id: "checksum",
-    label: "Checksum ROM",
+    label: "Checksum file",
     railLabel: "Checksum",
   },
   {

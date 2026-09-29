@@ -263,6 +263,7 @@ impl CliApp {
                     context,
                     &thread_execution,
                     &source_label,
+                    candidate_name,
                 )
             },
         )
@@ -397,6 +398,12 @@ impl CliApp {
 
         let filter = Self::libarchive_read_filter_for_stream_format(stream_format)?;
         let source_label = format!("checksum source streamed from {stream_format} container");
+        let output_name = Self::inferred_stream_extract_output_path(source, stream_format)
+            .and_then(|path| {
+                path.file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+            })
+            .unwrap_or_else(|| "Extracted file".to_string());
         with_raw_stream_reader(source, stream_format, filter, 64 * 1024, |stream_reader| {
             self.checksum_stream_reader(
                 stream_reader,
@@ -404,6 +411,7 @@ impl CliApp {
                 context,
                 &thread_execution,
                 &source_label,
+                &output_name,
             )
         })
     }
@@ -415,14 +423,17 @@ impl CliApp {
         context: &OperationContext,
         thread_execution: &Option<ThreadExecution>,
         source_label: &str,
+        file_name: &str,
     ) -> Result<OperationReport> {
         let algorithms = algo
             .iter()
             .map(|algorithm| algorithm.to_ascii_lowercase())
             .collect::<Vec<_>>();
         let checksum_algorithm_count = algorithms.len();
+        let mut size = 0;
         let values =
             checksum_reader_values_with_progress(reader, &algorithms, context, &mut |progress| {
+                size = progress.processed_bytes;
                 self.emit_running(
                     OperationLabel {
                         command: "checksum",
@@ -437,7 +448,7 @@ impl CliApp {
             })?;
         let mut label = Self::render_streamed_checksum_label(&algorithms, &values.values);
         label.push_str(&format!("; {source_label}"));
-        Ok(Self::attach_checksum_details(
+        let mut report = Self::attach_checksum_details(
             OperationReport::succeeded(
                 OperationFamily::Checksum,
                 Some(self.checksum.name().to_string()),
@@ -447,7 +458,12 @@ impl CliApp {
                 Some(values.execution),
             ),
             values.values,
-        ))
+        );
+        let mut details = operation_report_details(&mut report);
+        details.insert("size".to_string(), json!(size));
+        details.insert("file_name".to_string(), json!(file_name));
+        report.details = Some(Value::Object(details));
+        Ok(report)
     }
 
     pub(super) fn libarchive_read_filter_for_stream_format(

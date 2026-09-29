@@ -37,15 +37,15 @@ vi.mock("../../../src/public/react/workflow-loader.ts", () => {
     getInput = () => this.input;
     off = vi.fn();
     on = vi.fn();
-    setInput = async (source: File) => {
-      this.input = await workflow.setInput(source);
+    setInput = async (source: File, options: unknown) => {
+      this.input = await workflow.setInput(source, options);
     };
   }
   return { loadBrowserApi: async () => ({ ChecksumWorkflow }) };
 });
 
 const addRom = () =>
-  fireEvent.change(screen.getByLabelText("Drop a ROM to checksum it"), {
+  fireEvent.change(screen.getByLabelText("Drop a file to checksum it"), {
     target: { files: [new File(["rom"], "game.sfc")] },
   });
 
@@ -54,6 +54,14 @@ describe("ChecksumForm", () => {
     vi.clearAllMocks();
     workflow.instances.length = 0;
     workflow.setInput.mockResolvedValue(readyInput({ crc32: CRC32, md5: "m".repeat(32), sha1: "s".repeat(40) }));
+  });
+
+  it("shows algorithm and extraction choices before an input is added", () => {
+    render(<ChecksumForm />);
+    expect((screen.getByLabelText("Auto extract") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("CRC32") as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByLabelText("SHA-256")).toBeTruthy();
+    expect(screen.getByLabelText("Drop a file to checksum it").getAttribute("accept")).toBeNull();
   });
 
   it("shows the staged checksums and calculates a newly selected algorithm", async () => {
@@ -75,6 +83,20 @@ describe("ChecksumForm", () => {
     expect(screen.queryByRole("button", { name: /^Calculate/ })).toBeNull();
   });
 
+  it("accepts text files and passes the initial options", async () => {
+    render(<ChecksumForm />);
+    fireEvent.click(screen.getByLabelText("Auto extract"));
+    fireEvent.click(screen.getByLabelText("SHA-256"));
+    const file = new File(["hello"], "notes.txt");
+    fireEvent.change(screen.getByLabelText("Drop a file to checksum it"), { target: { files: [file] } });
+    await waitFor(() =>
+      expect(workflow.setInput).toHaveBeenCalledWith(file, {
+        algorithms: ["crc32", "md5", "sha1", "sha256"],
+        autoExtract: false,
+      }),
+    );
+  });
+
   it("compares a pasted checksum with the computed values", async () => {
     render(<ChecksumForm />);
     addRom();
@@ -82,10 +104,10 @@ describe("ChecksumForm", () => {
     const compare = screen.getByLabelText("Compare with an expected checksum");
 
     fireEvent.change(compare, { target: { value: ` 0x${CRC32.toUpperCase()} ` } });
-    expect(screen.getByText("Match: the CRC32 of this ROM.")).toBeTruthy();
+    expect(screen.getByText("Match: the CRC32 of this file.")).toBeTruthy();
 
     fireEvent.change(compare, { target: { value: "e".repeat(40) } });
-    expect(screen.getByText(/No computed checksum matches\. This is not the expected ROM/)).toBeTruthy();
+    expect(screen.getByText(/No computed checksum matches\. This is not the expected file/)).toBeTruthy();
 
     // CRC32C and Adler-32 share CRC32's length, so an 8-digit miss is not final.
     fireEvent.change(compare, { target: { value: "deadbeef" } });
@@ -117,7 +139,7 @@ describe("ChecksumForm", () => {
 
     fireEvent.change(screen.getByLabelText("Compare with an expected checksum"), { target: { value: "0badf00d" } });
 
-    expect(screen.getByText("Match: the CRC32 of this ROM (Headerless).")).toBeTruthy();
+    expect(screen.getByText("Match: the CRC32 of this file (Headerless).")).toBeTruthy();
   });
 
   it("does not match a checksum whose algorithm is switched off", async () => {
@@ -213,10 +235,10 @@ describe("ChecksumForm", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Calculate BLAKE3" }));
     expect(await screen.findByRole("button", { name: "Cancel checksum" })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove ROM" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove file" }));
 
     await waitFor(() =>
-      expect((screen.getByLabelText("Drop a ROM to checksum it") as HTMLInputElement).disabled).toBe(false),
+      expect((screen.getByLabelText("Drop a file to checksum it") as HTMLInputElement).disabled).toBe(false),
     );
   });
 
@@ -225,7 +247,7 @@ describe("ChecksumForm", () => {
     addRom();
     await screen.findAllByText(CRC32);
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove ROM" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove file" }));
 
     const [instance] = workflow.instances as Array<{ dispose: ReturnType<typeof vi.fn> }>;
     await waitFor(() => expect(instance?.dispose).toHaveBeenCalled());

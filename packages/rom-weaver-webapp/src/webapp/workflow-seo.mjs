@@ -16,9 +16,9 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
   checksum: Object.freeze({
     description:
-      "Calculate CRC32, MD5, SHA-1, SHA-256, and other checksums of a ROM locally in your browser, even inside an archive. Compare them with an expected value. No uploads or account required.",
+      "Calculate CRC32, MD5, SHA-1, SHA-256, and other checksums of any file locally in your browser, with optional archive extraction. Compare them with an expected value. No uploads or account required.",
     slug: "checksum",
-    title: `${SITE_NAME}: Checksum a ROM online`,
+    title: `${SITE_NAME}: Checksum a file online`,
   }),
   compress: Object.freeze({
     description:
