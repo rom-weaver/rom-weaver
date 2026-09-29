@@ -385,7 +385,28 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
           woven={files.length > 0}
         />
       )}
-      <StepSection id="checksum-options" num="0x02" title={localizer.message("ui.output.options")}>
+      <StepSection
+        headerExtra={
+          <div className="checksum-extract">
+            <label className="panel-view-toggle">
+              <input
+                checked={autoExtract}
+                disabled={calculating || staging}
+                id="checksum-auto-extract"
+                onChange={(event) => setAutoExtract(event.currentTarget.checked)}
+                type="checkbox"
+              />
+              <span>Auto extract</span>
+            </label>
+            <InfoPopover title="About Auto extract">
+              <p>Open archives and containers before calculating checksums. Turn off to checksum the original file.</p>
+            </InfoPopover>
+          </div>
+        }
+        id="checksum-options"
+        num="0x02"
+        title={localizer.message("ui.output.options")}
+      >
         <fieldset className="checksum-algos" disabled={calculating || staging}>
           <legend>Checksums to calculate</legend>
           <div className="checksum-algo-grid">
@@ -402,22 +423,6 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
             ))}
           </div>
         </fieldset>
-        <div className="checksum-extract">
-          <label className="checkrow">
-            <input
-              aria-describedby="checksum-extract-description"
-              checked={autoExtract}
-              disabled={calculating || staging}
-              id="checksum-auto-extract"
-              onChange={(event) => setAutoExtract(event.currentTarget.checked)}
-              type="checkbox"
-            />
-            <span>Auto extract</span>
-          </label>
-          <p className="pdesc" id="checksum-extract-description">
-            Open archives and containers before calculating checksums. Turn off to checksum the original file.
-          </p>
-        </div>
       </StepSection>
       {sourceEmpty ? null : (
         <StepSection

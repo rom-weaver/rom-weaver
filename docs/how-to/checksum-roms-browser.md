@@ -47,7 +47,7 @@ The [checksum support table](../reference/formats.md#checksum-support) lists eve
 <figure class="docs-screenshot">
   <picture>
     <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/checksum-mobile-dark.webp" width="390" height="1200">
-    <img src="../screenshots/checksum-desktop-light.webp" alt="File checksum choices, Auto extract, and a matching SHA-256" width="1280" height="1016">
+    <img src="../screenshots/checksum-desktop-light.webp" alt="File checksum choices, Auto extract, and a matching SHA-256" width="1280" height="960">
   </picture>
   <figcaption>A pasted SHA-256 matches the calculated value.</figcaption>
 </figure>

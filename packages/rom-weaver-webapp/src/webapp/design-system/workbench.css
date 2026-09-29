@@ -414,12 +414,11 @@
   opacity: 0.55;
 }
 .rw-app .checksum-extract {
-  padding-block-start: var(--sp-m);
-  margin-block-start: var(--sp-m);
-  border-block-start: 1px solid var(--seam-soft);
-}
-.rw-app .checksum-extract .pdesc {
-  margin-block-end: 0;
+  display: flex;
+  gap: var(--sp-m);
+  align-items: center;
+  align-self: center;
+  margin-inline-start: auto;
 }
 @media (max-width: 599px) {
   .rw-app .checksum-algo-grid {
