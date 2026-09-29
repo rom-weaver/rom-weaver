@@ -47,6 +47,8 @@ const chdModeFromMetadata = (metadata: SourceMetadata | null | undefined): ChdCo
 type ByteProbeableSource = {
   _u8array?: Uint8Array;
   fileName?: string;
+  fileSize?: number;
+  size?: number;
   getExtension?: () => string;
   readIntoAt?: (buffer: Uint8Array, bufferOffset?: number, len?: number, fileOffset?: number) => number | undefined;
 };
@@ -58,6 +60,16 @@ const getChdAutoCreateMode = (source: ByteProbeableSource & { metadata?: SourceM
   if (mode) return mode;
   if (source.metadata?.cuePath) return "cd";
   const fileName = String(source.fileName || "");
+  const size = source.fileSize ?? source.size;
+  // The fallback MUST match ChdContainerHandler::infer_create_kind in crates/rom-weaver-containers/src/chd/infer.rs.
+  if (
+    /\.iso$/i.test(fileName) &&
+    typeof size === "number" &&
+    size > 0 &&
+    size <= 450_000 * 2048 &&
+    (size % 2048 === 0 || size % 2352 === 0)
+  )
+    return "cd";
   return CUE_EXTENSION_REGEX.test(fileName) || BIN_EXTENSION_REGEX.test(fileName) ? "cd" : "dvd";
 };
 

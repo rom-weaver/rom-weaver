@@ -905,6 +905,11 @@ msgstr "Choose the game you need"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.compressThesis2"
+msgstr "Choose the output format."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.output.body"
 msgstr "Choose the output name, format, compression, and header. Then press Apply & download to apply both patches."
 
@@ -985,8 +990,23 @@ msgstr "compress"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.run"
+msgstr "Compress"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.compress"
 msgstr "Compress"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.compressThesis"
+msgstr "Compress your files."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.compress.running"
+msgstr "Compressing files…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1092,6 +1112,11 @@ msgstr "Create patches, share reusable bundles, and test ROMs in your browser."
 #: src/presentation/localization/messages.ts
 msgid "ui.related.createTool"
 msgstr "Create tool"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.compressDescription"
+msgstr "Create ZIP or 7z archives from your files. Compress compatible disc images and ROMs to CHD, RVZ, or Z3DS. Everything runs locally in your browser."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1295,6 +1320,11 @@ msgstr "Drop files"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.drop"
+msgstr "Drop files to compress them"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.drop.hero"
 msgstr "Drop or click to add ROMs, patches, bundles, or archives"
 
@@ -1457,6 +1487,11 @@ msgstr "Extract timing"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.extractTimingThreads"
 msgstr "Extract timing ({workers} threads)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.compress.opening"
+msgstr "Extracting"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1817,6 +1852,11 @@ msgstr "Keep header: the patched output carries the ROM header."
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.extractThesis2"
 msgstr "Keep only the files you need."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.compress.keepPacked"
+msgstr "Keep packed"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2735,6 +2775,11 @@ msgstr "Read the Create guide"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.reading"
+msgstr "Reading"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.reading"
 msgstr "Reading"
 
@@ -2822,6 +2867,11 @@ msgstr "Remove"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.removeCheck"
 msgstr "Remove {check} check"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.compress.removeFile"
+msgstr "Remove {name}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3047,6 +3097,11 @@ msgstr "See what’s supported"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis2"
 msgstr "See your changes in play."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.select.filesHint"
+msgstr "Select the files you want to add, then choose Add files."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3282,6 +3337,11 @@ msgstr "Switches tab"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.system"
 msgstr "System"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.compress.tap"
+msgstr "Tap to add files to compress"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3881,6 +3941,11 @@ msgstr "your checksum"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.localFirstTitle"
 msgstr "Your collection is yours. The tool should act like it."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.compress.local"
+msgstr "Your files stay in this browser. Archives and compressed disc images open so you can choose the files inside."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

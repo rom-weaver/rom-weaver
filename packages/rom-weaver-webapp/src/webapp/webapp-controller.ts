@@ -15,6 +15,8 @@ import {
 } from "./settings/settings-state.ts";
 import { createStore } from "./vanilla-store.ts";
 import {
+  type CompressSessionState,
+  createEmptyCompressSessionState,
   type CreatorSessionState,
   createEmptyCreatorSessionState,
   createEmptyPatcherSessionState,
@@ -37,6 +39,7 @@ const VALID_WORKFLOW_VIEWS: readonly WebappView[] = [
   "bundle",
   "patcher",
   "creator",
+  "compress",
   "docs",
   "extract",
   "identify",
@@ -61,6 +64,7 @@ const normalizeWorkflowViewForSettings = (view: WebappView, settings: SettingsSt
 const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
   bundle: "bundle-patches",
   creator: "create-patch",
+  compress: "compress",
   // The landing page is the app base itself, so its slug is empty and
   // writeWorkflowViewToPath resolves it back to readAppBaseUrl.
   home: "",
@@ -85,6 +89,8 @@ const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
   "bundle.html": "bundle",
   "create-patch": "creator",
   "create-patch.html": "creator",
+  compress: "compress",
+  "compress.html": "compress",
   extract: "extract",
   "extract.html": "extract",
   "identify-rom": "identify",
@@ -176,6 +182,7 @@ const writeWorkflowViewToPath = (view: WebappView, historyMode: RouteHistoryMode
 };
 
 type WebappState = {
+  compressSession: CompressSessionState;
   creatorSession: CreatorSessionState;
   currentView: WebappView;
   patcherSession: PatcherSessionState;
@@ -270,6 +277,7 @@ const createWebappRootController = (options: ControllerOptions) => {
   const initialView = readWorkflowViewFromPath() || DEFAULT_WORKFLOW_VIEW;
   writeWorkflowViewToPath(initialView, options.initialHistoryMode ?? "replace");
   const store = createStore<WebappState>(() => ({
+    compressSession: createEmptyCompressSessionState(),
     creatorSession: createEmptyCreatorSessionState(),
     currentView: initialView,
     draftSettings: copySettings(settings),
@@ -425,6 +433,7 @@ const createWebappRootController = (options: ControllerOptions) => {
     resetPage() {
       const state = store.getState();
       setState({
+        compressSession: createEmptyCompressSessionState(),
         creatorSession: createEmptyCreatorSessionState(),
         draftSettings: copySettings(state.settings),
         patcherSession: createEmptyPatcherSessionState(),
@@ -597,6 +606,11 @@ const createWebappRootController = (options: ControllerOptions) => {
       const nextActive = !!active;
       if (store.getState().ppfUndoSession.active === nextActive) return;
       setState({ ppfUndoSession: { active: nextActive } });
+    },
+    setCompressSessionState(active: unknown) {
+      const nextActive = !!active;
+      if (store.getState().compressSession.active === nextActive) return;
+      setState({ compressSession: { active: nextActive } });
     },
     setSaveEditorSessionState(active: unknown) {
       const nextActive = !!active;

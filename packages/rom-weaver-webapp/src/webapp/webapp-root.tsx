@@ -1,4 +1,5 @@
 import {
+  Archive,
   BookOpen,
   FileArchive,
   Gamepad2,
@@ -65,6 +66,7 @@ import {
   ApplyPatchRoute,
   BundleRoute,
   CreatePatchRoute,
+  CompressRouteForm,
   DocsPageRoute,
   EmulatorTestRoute,
   ExtractRouteForm,
@@ -120,6 +122,14 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     id: "identify",
     label: "Identify ROM",
     railLabel: "Identify",
+  },
+  {
+    group: "files",
+    href: "compress",
+    icon: <Archive aria-hidden="true" />,
+    id: "compress",
+    label: "Compress files",
+    railLabel: "Compress",
   },
   {
     group: "files",
@@ -179,6 +189,7 @@ const syncWorkflowSeoMetadata = (view: WebappView) => {
   let route = null;
   if (view === "creator") route = WORKFLOW_SEO_ROUTES.creator;
   else if (view === "bundle") route = WORKFLOW_SEO_ROUTES.bundle;
+  else if (view === "compress") route = WORKFLOW_SEO_ROUTES.compress;
   else if (view === "extract") route = WORKFLOW_SEO_ROUTES.extract;
   else if (view === "home") route = WORKFLOW_SEO_ROUTES.home;
   else if (view === "identify") route = WORKFLOW_SEO_ROUTES.identify;
@@ -667,6 +678,7 @@ function WebappRoot({
     patcherFormEdited: !!(state.patcherSession.outputName.trim() || state.patcherSession.outputCompression !== "none"),
     romFilePresent: state.patcherSession.romFilePresent,
     ppfUndoActive: state.ppfUndoSession?.active ?? false,
+    compressActive: state.compressSession?.active ?? false,
     saveEditorActive: state.saveEditorSession?.active ?? false,
     trimState: state.trimSession,
     webappState: state,
@@ -818,6 +830,13 @@ function WebappRoot({
                   />,
                 )}
                 {workflowPanel("extract", <ExtractRouteForm pageDrop={pageDropFor("extract")} />)}
+                {workflowPanel(
+                  "compress",
+                  <CompressRouteForm
+                    onSessionChange={actions.onCompressSessionChange}
+                    pageDrop={pageDropFor("compress")}
+                  />,
+                )}
                 {workflowPanel(
                   "identify",
                   <IdentifyRouteForm

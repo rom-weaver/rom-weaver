@@ -325,6 +325,7 @@ const getNavigationGuardState = () => {
     },
     romFilePresent: state.patcherSession.romFilePresent,
     ppfUndoActive: state.ppfUndoSession.active,
+    compressActive: state.compressSession.active,
     saveEditorActive: state.saveEditorSession.active,
     trimState: {
       outputName: state.trimSession.outputName,
@@ -386,6 +387,7 @@ import.meta.hot?.on("vite:beforeFullReload", (payload) => {
 // the view used for hydration or React discards the server-rendered content.
 const PRERENDERED_VIEWS = new Set<WebappView>([
   "bundle",
+  "compress",
   "creator",
   "docs",
   "home",
@@ -535,6 +537,7 @@ const renderWebappRoot = (): undefined => {
         requestGuidedSampleStart(guide);
       },
       onPpfUndoSessionChange: (active) => webappController.setPpfUndoSessionState(active),
+      onCompressSessionChange: (active) => webappController.setCompressSessionState(active),
       onSaveEditorSessionChange: (active) => webappController.setSaveEditorSessionState(active),
       onTrimOutputFormatChange: (format) => webappController.setTrimOutputFormat(format),
       onTrimSettingsChange: (settings) => webappController.setTrimSettingsState(settings),

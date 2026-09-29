@@ -39,6 +39,7 @@ type PendingChangeInputState = {
   creatorState?: CreatorState;
   trimState?: TrimState;
   ppfUndoActive?: RuntimeValue;
+  compressActive?: RuntimeValue;
   saveEditorActive?: RuntimeValue;
   patchStackState?: PendingPatchStackState;
   outputState?: PendingOutputState;
@@ -101,6 +102,7 @@ const getPendingChangeState = ({
   creatorState,
   trimState,
   ppfUndoActive,
+  compressActive,
   saveEditorActive,
   patcherFormEdited,
   patchStackState,
@@ -108,6 +110,7 @@ const getPendingChangeState = ({
   romFilePresent,
 }: PendingChangeInputState): PendingChangeState => ({
   creator: creatorHasPendingChanges(creatorState),
+  compress: !!compressActive,
   extract: false,
   identify: false,
   patcher: patcherHasPendingChanges({
@@ -128,6 +131,7 @@ const shouldWarnBeforeUnload = (state: PendingChangeInputState): boolean => {
   return (
     pendingChangeState.patcher ||
     pendingChangeState.creator ||
+    pendingChangeState.compress ||
     pendingChangeState.trim ||
     pendingChangeState["ppf-undo"] ||
     pendingChangeState["save-editor"] ||
@@ -144,6 +148,7 @@ const getUnloadConfirmationMessage = (state: PendingChangeInputState): string =>
   const pendingChangeState = getPendingChangeState(state);
   if (pendingChangeState.settings) return UNSAVED_SETTINGS_UNLOAD_MESSAGE;
   if (pendingChangeState.creator) return "You have unsaved patch creator inputs. Reload and lose those changes?";
+  if (pendingChangeState.compress) return "You have an in-progress compression session. Reload and lose those changes?";
   if (pendingChangeState.trim) return "You have an in-progress trim session. Reload and lose those changes?";
   if (pendingChangeState["ppf-undo"]) return "You have an in-progress PPF undo session. Reload and lose those changes?";
   if (pendingChangeState["save-editor"]) return "You have unsaved save edits. Reload and lose those changes?";
