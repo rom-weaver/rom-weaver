@@ -1098,7 +1098,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message:
       "Apply BPS, IPS, UPS, and xdelta patches. Open archives, apply patches in order, and choose your output format. Your files stay on your device.",
   }),
-  "ui.hero.applyGuide": msg({ id: "ui.hero.applyGuide", message: "How to apply ROM patches" }),
+  "ui.hero.applyGuide": msg({ id: "ui.hero.applyGuide", message: "Read the Apply guide" }),
   "ui.hero.bundleDescription": msg({
     id: "ui.hero.bundleDescription",
     message: "Stage a ROM and its patches, describe the recipe, and share a reusable bundle.",

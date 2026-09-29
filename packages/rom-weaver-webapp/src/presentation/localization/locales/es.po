@@ -1676,7 +1676,7 @@ msgstr "Inicio"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.applyGuide"
-msgstr "Cómo aplicar parches a ROMs"
+msgstr "Lee la guía de Apply"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

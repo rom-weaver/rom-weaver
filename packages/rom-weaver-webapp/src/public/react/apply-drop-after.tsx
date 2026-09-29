@@ -5,6 +5,7 @@ import { Drawer, DrawerReadout } from "./components/ds/drawer.tsx";
 import { ExtractName } from "./components/ds/extraction-tree.tsx";
 import { FileCard } from "./components/ds/file-card.tsx";
 import { SampleTutorialStart } from "./components/ds/sample-tutorial.tsx";
+import { resolveAssetUrl } from "./asset-url.ts";
 import { resolveGuidedSampleHref } from "./guided-sample-start.ts";
 import { StageStatus } from "./components/ds/staging-meta.tsx";
 import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
@@ -155,7 +156,15 @@ export const ApplyDropAfter = ({
   return (
     <SampleTutorialStart
       documentation={
-        bundlePage ? { href: "/docs/create-bundles", label: localizer.message("ui.hero.bundleGuide") } : undefined
+        bundlePage
+          ? {
+              href: resolveAssetUrl(assetBaseUrl, "docs/create-bundles"),
+              label: localizer.message("ui.hero.bundleGuide"),
+            }
+          : {
+              href: resolveAssetUrl(assetBaseUrl, "docs/apply-rom-patches"),
+              label: localizer.message("ui.hero.applyGuide"),
+            }
       }
       downloadHref={downloadHref}
       downloadLabel={localizer.message("ui.apply.tutorial.downloadTestBundle")}

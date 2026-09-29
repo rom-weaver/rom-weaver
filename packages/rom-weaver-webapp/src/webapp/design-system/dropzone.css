@@ -597,15 +597,6 @@
   font-size: 0.88rem;
   font-weight: 400;
 }
-.rw-app .simple-hero .hero-guide {
-  display: block;
-  width: fit-content;
-  padding: 12px 8px;
-  font-size: 0.8rem;
-  color: var(--thread-text);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
 .rw-app .simple-hero .hero-help {
   display: flex;
   flex-wrap: wrap;

@@ -38,7 +38,7 @@ type UnifiedDropZoneProps = {
   /** Full per-bucket extension support for the format disclosure and input help. */
   supported?: readonly SupportedFileGroup[];
   /** Per-workflow thesis lines for the empty-state lead (defaults to the apply copy). */
-  lead?: { line1: MessageId; line2: MessageId; description: MessageId; guide?: { href: string; label: MessageId } };
+  lead?: { line1: MessageId; line2: MessageId; description: MessageId };
   /** Step number/title; the inputs step is 0x01 in every workflow. */
   num?: string;
   title?: ReactNode;
@@ -142,11 +142,6 @@ const UnifiedDropZone = ({
       {afterDropZone}
       {big ? (
         <div className="hero-help">
-          {lead.guide ? (
-            <a className="hero-guide" href={lead.guide.href}>
-              {localizer.message(lead.guide.label)}
-            </a>
-          ) : null}
           {supportedFormats ? (
             <details className="hero-formats-help">
               <summary>{localizer.message("ui.hero.supportedFormats")}</summary>

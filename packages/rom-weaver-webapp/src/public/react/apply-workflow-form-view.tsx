@@ -794,10 +794,6 @@ function ApplyWorkflowFormView({
                 line1: "ui.hero.thesis",
                 line2: "ui.hero.thesis2",
                 description: "ui.hero.applyDescription",
-                guide: {
-                  href: resolveAssetUrl(assetBaseUrl, "docs/apply-rom-patches"),
-                  label: "ui.hero.applyGuide",
-                },
               }
         }
         onDropStart={() => setDropStarted(true)}
