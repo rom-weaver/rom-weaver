@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Docs navigation · rom-weaver prototypes</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0c0f13; --panel:#161b21; --raised:#1c222a; --line:#39414e; --text:#edf0f5; --muted:#a5aebc; --accent:#f08439; --tint:#30251f; }
+    :root[data-theme="light"] { color-scheme:light; --bg:#ece9e1; --panel:#fff; --raised:#f7f5ef; --line:#d4d2ca; --text:#1a1d22; --muted:#62686f; --accent:#954600; --tint:#f9ede0; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font:14px/1.5 system-ui,sans-serif; }
+    button,input { font:inherit; }
+    button,a,summary { -webkit-tap-highlight-color:transparent; }
+    button { color:inherit; cursor:pointer; }
+    button:focus-visible,a:focus-visible,summary:focus-visible,input:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+    button:active,a:active,summary:active { background:var(--tint); }
+    [hidden] { display:none !important; }
+    .lab { padding:22px 32px; border-bottom:1px solid var(--line); background:var(--panel); }
+    .lab-top { display:flex; justify-content:space-between; align-items:center; gap:20px; }
+    .eyebrow { color:var(--accent); font:600 10px/1.5 ui-monospace,monospace; letter-spacing:.16em; text-transform:uppercase; }
+    .lab h1 { font-size:22px; margin:3px 0 14px; letter-spacing:-.6px; }
+    .theme,.mobile-menu { padding:8px 12px; background:var(--raised); border:1px solid var(--line); border-radius:6px; }
+    .options { display:flex; gap:8px; flex-wrap:wrap; }
+    .option { padding:10px 16px; border:1px solid var(--line); border-radius:6px; background:transparent; color:var(--muted); text-decoration:none; }
+    .option[aria-current="true"] { border-color:var(--accent); color:var(--text); background:var(--tint); }
+    .option b { color:var(--accent); margin-right:10px; font-family:ui-monospace,monospace; }
+    .tradeoff { color:var(--muted); margin:13px 0 0; font-size:12px; }
+    .shell { max-width:1440px; margin:auto; padding:0 28px; }
+    .masthead { height:77px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); }
+    .brand { font-size:22px; font-weight:750; letter-spacing:-1px; display:flex; align-items:center; gap:11px; }
+    .mark { display:grid; place-items:center; width:33px; height:33px; color:var(--bg); background:var(--accent); border-radius:6px; font:900 26px/1 system-ui; }
+    .version { color:var(--muted); font:11px ui-monospace,monospace; margin-left:7px; letter-spacing:0; }
+    .private { color:var(--muted); font-size:12px; }
+    .private span { color:#82be99; margin-right:6px; }
+    .frame { display:grid; grid-template-columns:184px minmax(0,1fr); gap:30px; position:relative; }
+    .sidebar { padding:20px 12px 35px 0; border-right:1px solid var(--line); }
+    .group { margin-bottom:18px; }
+    .group h2 { padding:0 9px; margin:0 0 5px; color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.1em; }
+    .nav-item { width:100%; display:flex; align-items:center; gap:11px; border:0; background:none; padding:7px 9px; text-align:left; font-size:13px; text-decoration:none; color:var(--muted); border-radius:5px; }
+    .nav-item svg { width:16px; height:16px; flex:none; }
+    .nav-item.current { color:var(--text); background:var(--tint); }
+    .nav-item.current svg { color:var(--accent); }
+    .nav-item .arrow { margin-left:auto; }
+    .content { min-width:0; padding:24px 0 50px; }
+    .toolbar { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:22px; }
+    .crumb { color:var(--muted); font-size:12px; }
+    .crumb span { margin:0 10px; }
+    .browse { display:flex; align-items:center; gap:12px; padding:9px 13px; border:1px solid var(--line); border-radius:6px; background:var(--panel); font-size:12px; white-space:nowrap; }
+    .browse[aria-expanded="true"] { border-color:var(--accent); color:var(--accent); }
+    .reading { display:grid; grid-template-columns:minmax(0,1fr) 158px; gap:36px; }
+    .article { min-width:0; background:var(--panel); padding:30px 34px; border:1px solid var(--line); border-radius:8px; }
+    .article h1 { font-size:36px; line-height:1.13; letter-spacing:-1.3px; margin:10px 0 15px; font-weight:720; }
+    .lede { font-size:16px; line-height:1.65; color:var(--muted); margin:0 0 25px; max-width:600px; }
+    .article h2 { font-size:20px; margin:30px 0 12px; letter-spacing:-.4px; }
+    .article p,.article li { color:var(--muted); }
+    .article li { padding:4px 0; }
+    .note { border-left:3px solid var(--accent); background:var(--tint); padding:13px 16px; font-size:13px; }
+    .note p { margin:0; color:var(--text); }
+    .sample { margin-top:16px; padding:16px; border:1px solid var(--line); border-radius:6px; display:flex; justify-content:space-between; gap:12px; align-items:center; }
+    .sample strong { display:block; font-size:13px; }
+    .sample small { color:var(--muted); }
+    .sample-label { color:var(--accent); font-size:12px; }
+    .outline { font-size:12px; padding-top:8px; }
+    .outline h2 { margin:0 0 13px; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+    .outline a { display:block; padding:8px 0 8px 12px; border-left:1px solid var(--line); text-decoration:none; color:var(--muted); }
+    .outline a:first-of-type { color:var(--accent); border-color:var(--accent); }
+    .catalog { border:1px solid var(--line); background:var(--panel); border-radius:8px; margin-bottom:24px; overflow:hidden; }
+    .catalog-head { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 17px; border-bottom:1px solid var(--line); }
+    .catalog-head h2 { margin:0; font-size:14px; }
+    .close { border:0; background:none; border-radius:5px; width:32px; height:32px; font-size:20px; }
+    .search { display:block; width:calc(100% - 32px); margin:16px; background:var(--bg); border:1px solid var(--line); border-radius:5px; color:var(--text); padding:10px 12px; }
+    .catalog-body { display:grid; grid-template-columns:170px minmax(0,1fr); min-height:220px; max-height:320px; }
+    .categories { border-right:1px solid var(--line); padding:0 10px 16px; overflow:auto; }
+    .category { display:block; width:100%; border:0; border-radius:4px; background:none; padding:9px 10px; text-align:left; color:var(--muted); font-size:12px; }
+    .category[aria-pressed="true"] { color:var(--accent); background:var(--tint); }
+    .pages { min-width:0; overflow:auto; padding:0 14px 16px; }
+    .page-link { display:block; color:var(--text); text-decoration:none; padding:9px 12px; border-radius:5px; font-size:13px; }
+    .page-link small { display:block; color:var(--muted); margin-top:2px; font-size:11px; }
+    .page-link[aria-current="page"] { color:var(--accent); background:var(--tint); }
+    .flyout { position:fixed; inset:min(260px, 20dvh) auto auto max(216px, calc((100vw - 1440px)/2 + 216px)); width:390px; max-height:calc(80dvh - 16px); z-index:5; box-shadow:0 15px 60px #0008; margin:0; overflow:auto; }
+    .flyout .catalog-body { grid-template-columns:125px minmax(0,1fr); }
+    .tree { max-height:240px; overflow:auto; overscroll-behavior:contain; border-left:1px solid var(--line); margin:8px 0 10px 15px; padding-left:6px; scrollbar-width:thin; }
+    .tree details { border-bottom:1px solid var(--line); }
+    .tree summary { cursor:pointer; color:var(--muted); padding:9px 3px; font-size:11px; }
+    .tree .page-link { font-size:11px; padding:8px 5px; }
+    .tree .page-link small { display:none; }
+    .tree-foot { color:var(--muted); font-size:10px; text-align:center; margin:0 0 12px; }
+    .mobile-menu { display:none; }
+    .toast { position:fixed; bottom:22px; left:50%; transform:translateX(-50%); z-index:10; padding:12px 18px; border:1px solid var(--line); border-radius:7px; background:var(--panel); box-shadow:0 4px 24px #0005; max-width:90vw; }
+    @media (hover:hover) { button:hover,.page-link:hover,.nav-item:hover,summary:hover,.option:hover { background:var(--raised); color:var(--text); } }
+    @media (max-width:1050px) { .reading { grid-template-columns:minmax(0,1fr); } .outline { display:none; } }
+    @media (max-width:700px) {
+      .lab { padding:16px; } .lab h1 { font-size:20px; } .option { padding:8px 10px; font-size:12px; } .option b { margin-right:5px; }
+      .shell { padding:0 16px; } .masthead { height:66px; } .brand { font-size:19px; } .version,.private { display:none; }
+      .mobile-menu { display:block; } .frame { display:block; } .sidebar { display:none; } .sidebar.mobile-open { display:block; position:absolute; top:0; left:0; width:210px; max-height:70dvh; overflow:auto; z-index:4; background:var(--panel); padding:16px; border:1px solid var(--line); box-shadow:0 15px 60px #0008; }
+      .content { padding-top:18px; } .toolbar { gap:10px; flex-wrap:wrap; } .article { padding:24px 20px; } .article h1 { font-size:30px; } .lede { font-size:15px; }
+      .catalog-body { grid-template-columns:115px minmax(0,1fr); } .categories { padding-inline:6px; } .pages { padding-inline:7px; } .category { padding:9px 7px; }
+      .flyout { inset:auto 12px 12px; width:auto; max-height:70dvh; } .flyout .catalog-body { max-height:38dvh; } .sample { align-items:start; flex-direction:column; }
+    }
+  </style>
+</head>
+<body>
+  <header class="lab">
+    <div class="lab-top"><div><div class="eyebrow">Navigation study · interactive prototypes</div><h1>Give the guides their own space.</h1></div><button class="theme" type="button">Light theme</button></div>
+    <nav class="options" aria-label="Prototype options">
+      <a class="option" href="#panel" data-mode="panel"><b>A</b> Guide panel</a>
+      <a class="option" href="#flyout" data-mode="flyout"><b>B</b> Side flyout</a>
+      <a class="option" href="#tree" data-mode="tree"><b>C</b> Compact tree</a>
+    </nav>
+    <p class="tradeoff" id="tradeoff"></p>
+  </header>
+  <div class="shell">
+    <header class="masthead"><div class="brand"><span class="mark" aria-hidden="true">w</span>rom-weaver<span class="version">DESIGN PREVIEW</span></div><div class="private"><span>●</span> Your files stay on your device</div><button class="mobile-menu" aria-expanded="false" type="button">Menu</button></header>
+    <div class="frame">
+      <nav class="sidebar" aria-label="Primary navigation">
+        <div class="group"><h2>Project</h2><button class="nav-item stub" data-icon="home">Home</button><button class="nav-item current" id="docs-button" data-icon="book">Docs<span class="arrow" aria-hidden="true">›</span></button><div id="tree-slot"></div><button class="nav-item stub" data-icon="news">What's new</button></div>
+        <div class="group"><h2>Patches</h2><button class="nav-item stub" data-icon="patch">Apply</button><button class="nav-item stub" data-icon="plus">Create</button><button class="nav-item stub" data-icon="box">Bundle</button></div>
+        <div class="group"><h2>ROMs</h2><button class="nav-item stub" data-icon="search">Identify</button><button class="nav-item stub" data-icon="trim">Trim</button><button class="nav-item stub" data-icon="save">Saves</button><button class="nav-item stub" data-icon="play">Emulate</button></div>
+        <div class="group"><h2>Files</h2><button class="nav-item stub" data-icon="box">Convert</button><button class="nav-item stub" data-icon="check">Checksum</button></div>
+        <div class="group"><h2>This device</h2><button class="nav-item stub" data-icon="save">Storage</button><button class="nav-item stub" data-icon="settings">Settings</button></div>
+      </nav>
+      <main class="content">
+        <div class="toolbar"><div class="crumb">Docs<span>/</span><span id="breadcrumb">Browser guides</span></div><button class="browse" id="browse" aria-expanded="true" aria-controls="catalog" type="button">☷ <span>Browse guides</span><span aria-hidden="true">⌄</span></button></div>
+        <div id="panel-slot"></div>
+        <div class="reading">
+          <article class="article"><div class="eyebrow" id="article-category">Browser guides</div><h1 id="article-title">Apply ROM patches</h1><p class="lede" id="article-description">Turn an original ROM and a patch into a game ready to play. All processing happens on your device.</p><div class="note"><p>Keep your original ROM. The patched result downloads as a new file.</p></div><h2 id="before">Before you start</h2><p>Have these two files ready:</p><ul><li>The original ROM that the patch expects.</li><li>The patch you want to apply.</li></ul><div class="sample"><div><strong>New to patching?</strong><small>Start with the sample files in the tutorial.</small></div><span class="sample-label">Apply your first patch →</span></div><h2 id="add">Add your files</h2><p>Open Apply and add your ROM and patch. The app identifies the files and checks whether they match.</p><h2 id="download">Apply and download</h2><p>Check the output options, then apply the patch. Save the result when it is ready.</p></article>
+          <aside class="outline"><h2>On this page</h2><a href="#before">Before you start</a><a href="#add">Add your files</a><a href="#download">Apply and download</a></aside>
+        </div>
+      </main>
+    </div>
+  </div>
+  <section class="catalog" id="catalog" aria-label="Browse documentation">
+    <div class="catalog-head"><h2>Browse guides</h2><button class="close" aria-label="Close guide browser" type="button">×</button></div>
+    <input class="search" type="search" aria-label="Filter guides" placeholder="Find a guide…">
+    <div class="catalog-body"><div class="categories" role="group" aria-label="Guide categories"></div><nav class="pages" aria-label="Documentation pages"></nav></div>
+  </section>
+  <div class="toast" role="status" hidden></div>
+  <script>
+    const groups = {
+      'Start here': [['Documentation','Find the right guide for your task.'],['Apply your first patch','Learn with supplied sample files.'],['Frequently asked questions','Quick answers and links to detailed guides.']],
+      'Browser guides': [['Apply ROM patches','Choose inputs, apply patches, and download your result.'],['Create a patch','Share changes between two ROM files.'],['Create a bundle','Package patches and a repeatable workflow.'],['Convert ROM formats','Change compression and container formats.'],['Fix checksum errors','Find why a patch and ROM do not match.'],['Identify a ROM','Check a file against known ROM data.']],
+      'CLI guides': [['Install the CLI','Set up rom-weaver on your computer.'],['Apply your first patch (CLI)','Run a complete patch workflow.'],['CLI reference','Commands, arguments, and output formats.'],['Batch processing','Run workflows on multiple files.']],
+      'Concepts': [['Browser and CLI','Two ways to use the same engine.'],['Formats and compatibility','Understand ROM containers and patches.'],['Checksums','Understand file identity and verification.'],['Bundles','Understand reusable patch recipes.']],
+      'Hosting': [['Self-hosting','Run your own webapp.'],['Webapp integration','Link to a prepared workflow.'],['Privacy','Understand where your data goes.']]
+    };
+    const descriptions = {
+      panel: 'A · Recommended. The app navigation stays compact. The guide panel opens above the article and closes after selection.',
+      flyout: 'B · Quick access from Docs. The sidebar keeps its height, but the flyout covers part of the article. On phones it becomes a bottom sheet.',
+      tree: 'C · Closest to today. Guides stay in the sidebar within a 240px scroll area. This adds a second scroll area and keeps some tools lower.'
+    };
+    const paths = {home:'m3 10 9-7 9 7v11h-6v-7H9v7H3z',book:'M4 4h7v16H4z M13 4h7v16h-7',news:'M4 4h16v16H4z M8 8h8 M8 12h8 M8 16h4',patch:'M4 8h16v8H4z M8 4v16 M16 4v16',plus:'M12 4v16 M4 12h16',box:'m3 7 9-4 9 4v10l-9 4-9-4z M3 7l9 4 9-4 M12 11v10',search:'M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14 M15 15l6 6',trim:'M5 3v14h16 M3 7h14v14',save:'M4 3h13l3 3v15H4z M8 3v6h8V3 M8 14h8v7H8z',play:'m7 4 13 8-13 8z',check:'m4 12 5 5L20 5',settings:'M4 7h16 M4 17h16 M9 3v8 M15 13v8'};
+    const catalog=document.querySelector('#catalog');
+    const docsButton=document.querySelector('#docs-button');
+    const browse=document.querySelector('#browse');
+    const search=catalog.querySelector('input');
+    let mode='panel', category='Browser guides', current='Apply ROM patches', opened=true, toastTimer;
+    document.querySelectorAll('[data-icon]').forEach(button=>{
+      const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+      svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.5');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');
+      const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',paths[button.dataset.icon]);svg.append(path);button.prepend(svg);
+    });
+    function pageLink(title,description,group) {
+      const link=document.createElement('a');link.className='page-link';link.href='#guide';link.textContent=title;
+      if(title===current) link.setAttribute('aria-current','page');
+      const small=document.createElement('small');small.textContent=description;link.append(small);
+      link.addEventListener('click',event=>{event.preventDefault();current=title;category=group;
+        document.querySelector('#article-title').textContent=title;
+        document.querySelector('#article-description').textContent=title==='Apply ROM patches'?'Turn an original ROM and a patch into a game ready to play. All processing happens on your device.':description+' This preview uses sample article content to compare navigation layouts.';
+        document.querySelector('#article-category').textContent=group;document.querySelector('#breadcrumb').textContent=group;
+        setOpen(false);renderPages();renderTree();document.querySelector('.sidebar').classList.remove('mobile-open');document.querySelector('.mobile-menu').setAttribute('aria-expanded','false');
+        const heading=document.querySelector('#article-title');heading.tabIndex=-1;heading.focus({preventScroll:true});
+      });return link;
+    }
+    function renderPages() {
+      const categories=catalog.querySelector('.categories');categories.replaceChildren();
+      for(const group of Object.keys(groups)) {const button=document.createElement('button');button.className='category';button.textContent=group;button.type='button';button.setAttribute('aria-pressed',String(category===group));button.onclick=()=>{category=group;search.value='';renderPages();};categories.append(button);}
+      const pages=catalog.querySelector('.pages');pages.replaceChildren();const query=search.value.toLowerCase().trim();
+      for(const [group,entries] of Object.entries(groups)) {if(!query && group!==category)continue;for(const [title,description] of entries) {if(query && !(title+' '+description).toLowerCase().includes(query))continue;pages.append(pageLink(title,description,group));}}
+      if(!pages.childElementCount){const empty=document.createElement('p');empty.textContent='No matching guides. Try another word.';pages.append(empty);}
+    }
+    function renderTree() {
+      const slot=document.querySelector('#tree-slot');slot.replaceChildren();if(mode!=='tree')return;
+      const tree=document.createElement('div');tree.className='tree';tree.hidden=!opened;tree.id='docs-tree';
+      for(const [group,entries] of Object.entries(groups)){const details=document.createElement('details');details.open=group==='Start here'||group===category;const summary=document.createElement('summary');summary.textContent=group;details.append(summary);for(const [title,description] of entries)details.append(pageLink(title,description,group));tree.append(details);}
+      slot.append(tree);if(opened){const hint=document.createElement('p');hint.className='tree-foot';hint.textContent='Scroll within guides ↕';slot.append(hint);}
+    }
+    function setOpen(value,restoreFocus=false) {
+      opened=value;catalog.hidden=mode==='tree'||!opened;browse.setAttribute('aria-expanded',String(opened));docsButton.setAttribute('aria-expanded',String(opened));
+      if(mode==='tree')renderTree();if(restoreFocus)(mode==='panel'?browse:docsButton.offsetParent?docsButton:document.querySelector('.mobile-menu')).focus();
+    }
+    function setMode(value) {
+      mode=value;document.querySelectorAll('.option').forEach(link=>link.setAttribute('aria-current',String(link.dataset.mode===mode)));
+      document.querySelector('#tradeoff').textContent=descriptions[mode];catalog.classList.toggle('flyout',mode==='flyout');
+      (mode==='panel'?document.querySelector('#panel-slot'):document.body).append(catalog);browse.hidden=mode!=='panel';
+      docsButton.setAttribute('aria-controls',mode==='tree'?'docs-tree':'catalog');docsButton.querySelector('.arrow').hidden=mode==='panel';
+      search.value='';setOpen(true);renderPages();renderTree();
+    }
+    browse.onclick=()=>setOpen(!opened);docsButton.onclick=()=>{setOpen(!opened);if(opened&&mode==='flyout')search.focus();};catalog.querySelector('.close').onclick=()=>setOpen(false,true);search.oninput=renderPages;
+    document.addEventListener('keydown',event=>{if(event.key!=='Escape')return;const sidebar=document.querySelector('.sidebar');if(sidebar.classList.contains('mobile-open')){sidebar.classList.remove('mobile-open');const trigger=document.querySelector('.mobile-menu');trigger.setAttribute('aria-expanded','false');trigger.focus();return;}if(opened)setOpen(false,true);});
+    document.addEventListener('click',event=>{if(mode==='flyout'&&opened&&!catalog.contains(event.target)&&!docsButton.contains(event.target)&&!event.target.closest('.option'))setOpen(false);});
+    window.addEventListener('hashchange',()=>{const value=location.hash.slice(1);if(Object.hasOwn(descriptions,value))setMode(value);});
+    document.querySelector('.theme').onclick=event=>{const dark=document.documentElement.dataset.theme==='dark';document.documentElement.dataset.theme=dark?'light':'dark';event.currentTarget.textContent=dark?'Dark theme':'Light theme';};
+    document.querySelector('.mobile-menu').onclick=event=>{const visible=document.querySelector('.sidebar').classList.toggle('mobile-open');event.currentTarget.setAttribute('aria-expanded',String(visible));};
+    document.querySelectorAll('.stub').forEach(button=>button.onclick=()=>{const toast=document.querySelector('.toast');toast.textContent=button.textContent+' remains reachable. App tools are outside this prototype.';toast.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.hidden=true,3000);});
+    setMode(Object.hasOwn(descriptions,location.hash.slice(1))?location.hash.slice(1):'panel');
+  </script>
+</body>
+</html>

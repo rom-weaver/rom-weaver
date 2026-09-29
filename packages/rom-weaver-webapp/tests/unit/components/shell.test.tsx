@@ -48,7 +48,7 @@ const TABS = [
     label: "Test ROM",
     railLabel: "Test",
   },
-  { group: "project", href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
+  { group: "project", href: "/docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
   {
     beta: true,
     group: "roms",
@@ -130,6 +130,14 @@ describe("Masthead", () => {
       "Settings",
       "Theme",
       "Accent",
+    ]);
+    const project = nav.querySelector("#tab-home")?.closest(".nav-group");
+    expect(Array.from(project?.querySelectorAll(".nav-row-label") ?? []).map((label) => label.textContent)).toEqual([
+      "Home",
+      "Docs",
+      "What\u2019s new",
+      "GitHub",
+      "Support",
     ]);
 
     // The brand and Home row both reach the app's base route.
@@ -295,19 +303,27 @@ describe("Masthead", () => {
     expect(onSelectTab).toHaveBeenCalledWith("whats-new");
   });
 
-  it("marks the current page in the nav, including a view with no dock slot", () => {
+  it("marks the current tool page in the nav, including a view with no dock slot", () => {
     for (const [view, label] of [
-      ["docs", "Docs"],
       ["trim", "Trim"],
       ["whats-new", "What\u2019s new"],
     ] as const) {
       const { container, unmount } = render(withSettings(<Masthead {...mastheadProps} currentTab={view} />));
       const current = container.querySelector('.side-nav [aria-current="page"]') as HTMLElement;
-      expect(current.querySelector(".nav-row-label")?.textContent).toBe(label);
+      expect(current.querySelector(".nav-row-label")?.textContent ?? current.textContent).toBe(label);
       // No dock slot claims to be the current page when the view is not docked.
       expect(container.querySelector('.dock [aria-current="page"]')).toBeNull();
       unmount();
     }
+  });
+
+  it("marks Overview in the dedicated Docs navigation", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="docs" />));
+    const side = container.querySelector(".side-nav") as HTMLElement;
+    expect(side.querySelector('.guide-nav [aria-current="page"]')?.textContent).toBe("Overview");
+    expect(side.querySelector('[href="/apply-patches"]')?.textContent).toContain("Back to tools");
+    expect(container.querySelector(".dock")).not.toBeNull();
+    expect(container.querySelector(".guide-nav")).not.toBeNull();
   });
 
   it("puts project links before the separator and device controls after it", () => {

@@ -359,56 +359,116 @@
     color 0.18s,
     background 0.18s;
 }
-.rw-app .nav-docs-entry {
-  grid-column: 1 / -1;
+.rw-app .guide-nav {
+  margin: 4px 0 var(--sp-s);
 }
-.rw-app .nav-docs-disclosure {
-  inline-size: 100%;
+/* The current guide's shelf SHOULD open when the reader changes pages. */
+.rw-app .guide-shelf + .guide-shelf {
+  margin-block-start: 2px;
 }
-.rw-app .nav-docs-summary {
+.rw-app .guide-shelf[open] + .guide-shelf {
+  margin-block-start: 6px;
+}
+.rw-app .guide-shelf > summary {
   display: flex;
   align-items: center;
-  border-radius: var(--r-s);
-}
-.rw-app .nav-docs-summary .nav-row {
-  flex: 1;
-  min-inline-size: 0;
-}
-.rw-app .nav-docs-toggle {
-  display: grid;
-  flex: none;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  color: var(--ink-3);
+  min-height: 24px;
+  padding-inline: 8px;
   cursor: pointer;
+  list-style: none;
   background: transparent;
-  border: 0;
   border-radius: var(--r-s);
 }
-.rw-app .nav-docs-toggle > svg {
-  flex: none;
-  width: 18px;
-  height: 18px;
-  transform: rotate(-90deg);
+.rw-app .guide-nav > .guide-shelf > summary {
+  background: var(--well);
 }
-.rw-app .nav-docs-disclosure[data-expanded="true"] .nav-docs-toggle > svg {
-  transform: none;
+.rw-app .guide-shelf > summary::-webkit-details-marker {
+  display: none;
+}
+.rw-app .guide-shelf > summary::after {
+  width: 1rem;
+  font: 700 0.78rem / 1 var(--mono);
+  color: var(--ink-4);
+  text-align: center;
+  content: "+";
+}
+.rw-app .guide-shelf[open] > summary::after {
+  content: "−";
 }
 @media (hover: hover) {
-  .rw-app .nav-docs-summary:hover {
+  .rw-app .guide-shelf > summary:hover {
     background: var(--well);
   }
-  .rw-app .nav-docs-toggle:hover {
-    background: var(--plate-2);
+}
+.rw-app .guide-shelf > summary:active {
+  background: var(--well);
+}
+.rw-app .guide-shelf-title {
+  flex: 1;
+  margin: 0;
+  font-size: 0.67rem;
+  font-weight: 700;
+  color: var(--ink-2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.rw-app .guide-nav-list {
+  display: grid;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.rw-app .guide-branch-topics {
+  padding-left: 8px;
+  margin-top: 2px;
+  margin-left: 8px;
+  border-left: 1px solid var(--seam);
+}
+.rw-app .guide-branch-topics .guide-shelf > summary::after {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-inline: 5px;
+  content: "";
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+}
+.rw-app .guide-branch-topics .guide-shelf[open] > summary::after {
+  transform: rotate(45deg);
+}
+.rw-app .guide-branch-topics .guide-shelf-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.rw-app .guide-nav-list li {
+  margin: 0;
+}
+.rw-app .guide-nav-list a {
+  display: block;
+  padding: 5px 8px 5px 16px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink-2);
+  text-decoration: none;
+  border-radius: var(--r-s);
+}
+@media (hover: hover) {
+  .rw-app .guide-nav-list a:hover {
+    color: var(--ink);
+    background: var(--well);
   }
 }
-.rw-app .nav-docs-summary:active {
-  background: var(--plate-2);
+.rw-app .guide-nav-list a:active {
+  color: var(--ink);
+  background: var(--well);
 }
-.rw-app .nav-docs-toggle:active {
-  background: var(--plate-2);
+.rw-app .guide-nav-list a[aria-current="page"] {
+  color: var(--thread-text);
+  background: color-mix(in oklab, var(--thread) 12%, var(--well));
 }
 
 .rw-app .nav-row svg {
@@ -517,6 +577,7 @@
   min-block-size: 0;
   padding-block-end: var(--sp-m);
   overflow-y: auto;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
 }
 
@@ -1038,6 +1099,7 @@
   min-block-size: 0;
   padding: var(--sp-s) var(--gutter) var(--sp-m);
   overflow-y: auto;
+  scrollbar-gutter: stable;
   overscroll-behavior: contain;
 }
 :root:has(.rw-app .menu-sheet:not([hidden])) {
@@ -1070,6 +1132,98 @@
 }
 /* ── the layout threshold ──
    ▼ The single number that decides which of the two shells is on screen. */
+.rw-app .docs-mobile-toolbar {
+  display: none;
+}
+.rw-app .docs-menu-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px var(--gutter);
+  font-size: 1rem;
+  border-bottom: 1px solid var(--seam);
+}
+.rw-app .docs-menu-header button,
+.rw-app .docs-mobile-toolbar button {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  text-decoration: none;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-s);
+}
+.rw-app .docs-menu-header svg,
+.rw-app .docs-mobile-toolbar svg {
+  width: 18px;
+  height: 18px;
+}
+@media (hover: hover) {
+  .rw-app .docs-menu-header button:hover,
+  .rw-app .docs-mobile-toolbar button:hover {
+    background: var(--well);
+  }
+}
+.rw-app .docs-menu-header button:active,
+.rw-app .docs-mobile-toolbar button:active {
+  background: var(--well);
+}
+.rw-app .menu-sheet-docs {
+  inset: auto var(--gutter) calc(var(--dock-h) + var(--sp-xs));
+  width: calc(100% - 2 * var(--gutter));
+  max-width: none;
+  max-block-size: min(60dvh, calc(100dvh - var(--dock-h) - var(--safe-t) - 2 * var(--sp-xs)));
+  height: auto;
+  padding: 0;
+  margin: 0;
+  color: var(--ink);
+  border: 1px solid var(--seam-strong);
+  border-radius: var(--r-l);
+  box-shadow: var(--overlay-shadow);
+}
+.rw-app .menu-sheet-docs .menu-sheet-body {
+  flex: 1;
+}
+.rw-app .menu-sheet-docs .guide-shelf > summary {
+  min-height: 44px;
+}
+@media (hover: hover) {
+  .rw-app .menu-sheet-docs .guide-shelf > summary:hover {
+    background: var(--well);
+  }
+}
+.rw-app .menu-sheet-docs .guide-shelf > summary:active {
+  background: var(--well);
+}
+.rw-app .menu-sheet-docs .guide-shelf-title {
+  font-size: 0.75rem;
+}
+.rw-app .menu-sheet-docs .guide-branch-topics {
+  padding-left: 12px;
+}
+.rw-app .menu-sheet-docs .guide-branch-topics .guide-shelf-title {
+  font-size: 0.88rem;
+}
+.rw-app .menu-sheet-docs .guide-nav-list a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px;
+  font-size: 0.9rem;
+}
+.rw-app .menu-sheet-docs .nav-group-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
 @media (min-width: 1000px) {
   .rw-app .brand {
     grid-template-columns: 44px minmax(0, 1fr);
@@ -1134,6 +1288,29 @@
 @media (max-width: 999px) {
   .rw-app {
     --dock-h: calc(53px + max(3px, var(--safe-b)));
+  }
+  .rw-app .docs-mobile-toolbar {
+    display: contents;
+  }
+  .rw-app .docs-mobile-toolbar .docs-browse-trigger {
+    position: fixed;
+    bottom: calc(var(--dock-h) + var(--sp-xs));
+    left: max(var(--gutter), var(--safe-l));
+    z-index: 998;
+    gap: 6px;
+    min-height: 36px;
+    padding: 4px 12px;
+    background: color-mix(in oklab, var(--plate) 88%, transparent);
+    border: 1px solid var(--seam);
+    border-radius: 999px;
+  }
+  @media (hover: hover) {
+    .rw-app .docs-mobile-toolbar .docs-browse-trigger:hover {
+      background: var(--well);
+    }
+  }
+  .rw-app .docs-mobile-toolbar .docs-browse-trigger:active {
+    background: var(--well);
   }
   .rw-app .side-rail,
   .rw-app .topbar {

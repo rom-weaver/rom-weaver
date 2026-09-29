@@ -166,8 +166,13 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     label: "Save Editor",
     railLabel: "Saves",
   },
-  // Reference rather than a workflow, so it sits with the project links.
-  { group: "project", href: "docs", icon: <BookOpen aria-hidden="true" />, id: "docs", label: "Docs" },
+  {
+    group: "project",
+    href: "/docs",
+    icon: <BookOpen aria-hidden="true" />,
+    id: "docs",
+    label: "Docs",
+  },
 ];
 
 // Keep the trace inspector out of the initial bundle, but share its loader so

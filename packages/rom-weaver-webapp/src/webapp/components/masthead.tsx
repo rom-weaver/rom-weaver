@@ -1,6 +1,17 @@
-import { Cloud, HardDrive, Heart, House, Newspaper, ScrollText, Search, Settings } from "lucide-react";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DocsNavigationRoute } from "../workflow-routes.tsx";
+import {
+  ArrowLeft,
+  ChevronUp,
+  Cloud,
+  HardDrive,
+  Heart,
+  House,
+  Newspaper,
+  ScrollText,
+  Search,
+  Settings,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DocsNavigation } from "../docs-navigation.tsx";
 import { BrandMark } from "./brand-mark.tsx";
 import { FIND_SHORTCUT_HINT, FindPalette } from "./find-palette.tsx";
 import type { FindAction } from "../find-index.ts";
@@ -107,12 +118,11 @@ const Masthead = ({
   };
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuMounted, setMenuMounted] = useState(false);
+  const [docsMenuOpen, setDocsMenuOpen] = useState(false);
+  const [docsMenuMounted, setDocsMenuMounted] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
-  const [docsExpanded, setDocsExpanded] = useState(currentTab === "docs");
-  useEffect(() => {
-    if (currentTab === "docs" && docsSlug) setDocsExpanded(true);
-  }, [currentTab, docsSlug]);
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const docsMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const findTriggerRef = useRef<HTMLButtonElement | null>(null);
   const dockFindRef = useRef<HTMLButtonElement | null>(null);
   /* Find opens from the top bar on desktop and from the dock on the phone.
@@ -151,6 +161,27 @@ const Masthead = ({
   );
   const closeFind = useCallback(() => setFindOpen(false), []);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const closeDocsMenu = useCallback(() => setDocsMenuOpen(false), []);
+  const menuRoute = useRef(`${currentTab}:${docsSlug}`);
+  useEffect(() => {
+    const route = `${currentTab}:${docsSlug}`;
+    if (menuRoute.current === route) return;
+    menuRoute.current = route;
+    setMenuOpen(false);
+    setDocsMenuOpen(false);
+  }, [currentTab, docsSlug]);
+  useEffect(() => {
+    if (currentTab !== "docs") return;
+    const desktop = window.matchMedia("(min-width: 1000px)");
+    const closeDesktopMenu = () => {
+      if (desktop.matches) {
+        setMenuOpen(false);
+        setDocsMenuOpen(false);
+      }
+    };
+    desktop.addEventListener("change", closeDesktopMenu);
+    return () => desktop.removeEventListener("change", closeDesktopMenu);
+  }, [currentTab]);
   const onFindAction = (action: FindAction) => {
     if (action.type === "view") onSelectTab(action.view);
     else if (action.type === "identify") onIdentifyQuery?.(action.selection);
@@ -254,15 +285,14 @@ const Masthead = ({
   const openStorage = onOpenStorage ?? onOpenLog;
 
   /* One description of the nav, rendered by the sidebar and by the phone menu.
-     Both layouts MUST carry every destination under the same headings.
-     Project comes first on desktop and last in the phone menu. */
+     Both layouts MUST carry every destination under the same headings. */
   const sections: NavSectionData[] = useMemo(() => {
     const workflowGroup = (group: NavGroup): NavSectionData => ({
       entries: tabs
         .filter((tab) => tab.group === group)
         .map((tab) => ({
           beta: tab.beta,
-          current: tab.id === currentTab,
+          current: tab.id === currentTab && (tab.id !== "docs" || docsSlug === "docs"),
           // The page you are on is always in the nav, even a beta one reached
           // by URL while the setting is off.
           hidden: tab.beta && !betaVisible && tab.id !== currentTab,
@@ -270,7 +300,7 @@ const Masthead = ({
           icon: tab.icon,
           id: tab.id,
           label: tab.railLabel ?? tab.label,
-          onSelect: () => onSelectTab(tab.id),
+          onSelect: tab.id === "docs" && currentTab === "docs" ? undefined : () => onSelectTab(tab.id),
           title: fullNameFor(tab),
         })),
       id: group,
@@ -353,6 +383,7 @@ const Masthead = ({
     confirmExternalNavigation,
     currentTab,
     donateHref,
+    docsSlug,
     githubHref,
     homeHref,
     hydrated,
@@ -366,23 +397,32 @@ const Masthead = ({
     tabs,
   ]);
 
-  const withDocsNavigation = (navSections: NavSectionData[], onNavigate?: () => void): NavSectionData[] =>
-    navSections.map((section) => ({
-      ...section,
-      entries: section.entries.map((entry) => ({
-        ...entry,
-        expanded: docsExpanded,
-        onToggle: setDocsExpanded,
-        children:
-          entry.id === "docs" ? (
-            <Suspense fallback={null}>
-              {docsExpanded ? (
-                <DocsNavigationRoute currentSlug={currentTab === "docs" ? docsSlug : ""} onNavigate={onNavigate} />
-              ) : null}
-            </Suspense>
-          ) : undefined,
-      })),
-    }));
+  const docsSections = (onNavigate?: () => void): NavSectionData[] => [
+    {
+      id: "project",
+      title: "",
+      entries: [
+        {
+          id: "back-to-tools",
+          label: localizer.message("ui.docs.backToTools"),
+          href: "/apply-patches",
+          icon: <ArrowLeft aria-hidden="true" />,
+        },
+      ],
+    },
+    {
+      id: "docs",
+      title: localizer.message("ui.docs.title"),
+      entries: [],
+      content: (
+        <DocsNavigation
+          currentSlug={docsSlug}
+          onNavigate={onNavigate}
+          overviewId={onNavigate ? undefined : "tab-docs"}
+        />
+      ),
+    },
+  ];
   // No beta workflow claims a dock slot, so the dock needs no reveal pass.
   const dockTabs = tabs.filter((tab) => tab.dock && !tab.beta);
   // Docs and the landing page bring their own h1, so the brand steps down to a
@@ -510,13 +550,34 @@ const Masthead = ({
               </div>
             </div>
           </div>
+          {currentTab === "docs" ? (
+            <div className="docs-mobile-toolbar">
+              <button
+                aria-controls="docs-menu-sheet"
+                aria-expanded={docsMenuOpen}
+                aria-haspopup="dialog"
+                className="docs-browse-trigger"
+                onClick={() => {
+                  setFindOpen(false);
+                  setMenuOpen(false);
+                  setDocsMenuMounted(true);
+                  setDocsMenuOpen((open) => !open);
+                }}
+                ref={docsMenuTriggerRef}
+                type="button"
+              >
+                {localizer.message("ui.docs.browse")}
+                <ChevronUp aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
           {/* Desktop: every destination the app has, named, in one column. */}
           <aside className="side-rail">
             <SideNav
               appearance={appearanceTiles("rail", true)}
               localizer={localizer}
               navLabel={navLabel}
-              sections={withDocsNavigation(sections)}
+              sections={currentTab === "docs" ? docsSections() : sections}
             />
           </aside>
         </div>
@@ -556,7 +617,7 @@ const Masthead = ({
         triggerRef={activeFindRef}
       />
       {previewPhoneOverlay ? (
-        <span className="phone-overlay-runtime" data-sw={runtimeState} hidden={menuOpen || findOpen}>
+        <span className="phone-overlay-runtime" data-sw={runtimeState} hidden={menuOpen || docsMenuOpen || findOpen}>
           <StatusChip
             label={runtimeLabel}
             onOpenStatus={() => {
@@ -580,10 +641,12 @@ const Masthead = ({
         onSelect={onSelectTab}
         onToggleFind={() => {
           setMenuOpen(false);
+          setDocsMenuOpen(false);
           setFindOpen((open) => !open);
         }}
         onToggleMenu={() => {
           setFindOpen(false);
+          setDocsMenuOpen(false);
           onPreloadLog?.();
           setMenuMounted(true);
           setMenuOpen((open) => !open);
@@ -593,19 +656,29 @@ const Masthead = ({
       />
       {/* The parser-time resolver runs here, after the identity slots exist. */}
       <span className="shell-identity" hidden />
+      {currentTab === "docs" ? (
+        <MenuSheet
+          documentation
+          appearance={null}
+          localizer={localizer}
+          onClose={closeDocsMenu}
+          open={docsMenuOpen}
+          opened={docsMenuMounted}
+          sections={docsSections(closeDocsMenu)}
+          toolOpen={false}
+          triggerRef={docsMenuTriggerRef}
+        />
+      ) : null}
       <MenuSheet
         appearance={appearanceTiles(MENU_TOOL_SCOPE, true)}
         localizer={localizer}
         onClose={closeMenu}
         open={menuOpen}
         opened={menuMounted}
-        sections={withDocsNavigation(
-          [
-            ...sections.filter((section) => section.id !== "project"),
-            ...sections.filter((section) => section.id === "project"),
-          ],
-          closeMenu,
-        )}
+        sections={[
+          ...sections.filter((section) => section.id !== "project"),
+          ...sections.filter((section) => section.id === "project"),
+        ]}
         toolOpen={openTool === `theme:${MENU_TOOL_SCOPE}` || openTool === `accent:${MENU_TOOL_SCOPE}`}
         triggerRef={menuTriggerRef}
       />

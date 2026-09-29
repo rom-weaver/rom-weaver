@@ -617,14 +617,14 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
   /** A nav row by name, from whichever layout the viewport shows. */
   const navRow = (name) =>
     page
-      .locator(".side-nav:visible .nav-row, .menu-sheet:visible .nav-row")
+      .locator(".side-nav:visible .nav-row, #menu-sheet:visible .nav-row")
       .filter({ has: page.locator(`.nav-row-label:text-is("${name}")`) })
       .first();
   /** Menu is the phone's index; the sidebar is always on screen on desktop. */
   const openNav = async () => {
     if (await page.locator(".side-nav:visible").count()) return;
-    if (!(await page.locator(".menu-sheet:visible").count())) await page.locator(".dock-menu").click();
-    await page.locator(".menu-sheet:visible").waitFor({ state: "visible" });
+    if (!(await page.locator("#menu-sheet:visible").count())) await page.locator(".dock-menu").click();
+    await page.locator("#menu-sheet:visible").waitFor({ state: "visible" });
   };
   const scanVariants = async (label) => {
     const originalTheme = await page.locator("html").getAttribute("data-theme");
@@ -764,6 +764,19 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       throw new Error(`Mobile Docs trail is not fixed to the viewport on reload: ${JSON.stringify(trailGeometry)}`);
     }
     await page.locator(".docs-article h1").waitFor({ state: "visible" });
+    await page.locator(".dock").waitFor({ state: "visible" });
+    await page.locator(".dock-find").waitFor({ state: "visible" });
+    await page.locator(".dock-menu").waitFor({ state: "visible" });
+    await page.getByRole("button", { name: "Browse docs" }).waitFor({ state: "visible" });
+    await page.getByRole("button", { name: "Browse docs" }).click();
+    await page.locator("#docs-menu-sheet:visible").waitFor({ state: "visible" });
+    await page
+      .locator("#docs-menu-sheet")
+      .getByRole("button", { name: "Close navigation" })
+      .waitFor({ state: "visible" });
+    await page.locator("#docs-menu-sheet").getByRole("link", { name: "Back to tools" }).waitFor({ state: "visible" });
+    if (await page.locator("#menu-sheet:visible").count()) throw new Error("Both mobile navigation dialogs are open");
+    await page.locator("#docs-menu-sheet").getByRole("button", { name: "Close navigation" }).click();
     page.off("request", recordGuideChunkRequest);
     if (guideChunkRequests.length > 0) {
       throw new Error(`Docs route refetched the article it was served: ${guideChunkRequests.join(", ")}`);
@@ -793,18 +806,17 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         await docsChunkReleased;
         await route.continue();
       });
-      // Docs is a named row in the nav on both layouts now.
-      await docsNavigationPage.locator('.side-nav .nav-row[href="docs"]:visible').click();
+      await docsNavigationPage.locator('.side-nav .nav-row[href="/docs"]:visible').click();
       await docsChunkStarted;
       await docsNavigationPage
         .locator('.side-nav .nav-row[aria-current="page"][id="tab-patcher"]')
         .waitFor({ state: "visible" });
       if ((await docsNavigationPage.locator(".side-nav .guide-nav").count()) !== 0) {
-        throw new Error("Docs navigation mounted before its lazy route was ready");
+        throw new Error("Docs navigation appeared before its lazy article route loaded");
       }
       releaseDocsChunk();
       await docsNavigationPage.locator(".side-nav .guide-nav").waitFor({ state: "visible" });
-      await docsNavigationPage.locator('.side-nav .nav-row[aria-current="page"][id="tab-docs"]').waitFor({
+      await docsNavigationPage.locator('.side-nav .guide-nav a[aria-current="page"][id="tab-docs"]').waitFor({
         state: "visible",
       });
     } finally {

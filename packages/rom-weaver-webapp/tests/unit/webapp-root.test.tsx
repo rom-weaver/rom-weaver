@@ -131,8 +131,8 @@ afterEach(() => {
 
 /** A nav row by its visible label, from whichever layout the test names. */
 const navRow = (container: HTMLElement, name: string, scope = ".side-nav") =>
-  Array.from(container.querySelectorAll<HTMLElement>(`${scope} .nav-row`)).find(
-    (row) => row.querySelector(".nav-row-label")?.firstChild?.textContent?.trim() === name,
+  Array.from(container.querySelectorAll<HTMLElement>(`${scope} .nav-row, ${scope} .guide-nav a`)).find(
+    (row) => (row.querySelector(".nav-row-label")?.firstChild?.textContent ?? row.textContent)?.trim() === name,
   ) as HTMLElement;
 
 describe("resolveThreads", () => {
@@ -217,10 +217,15 @@ describe("tab selection", () => {
   it("waits for the lazy Docs route before switching to it", async () => {
     const { called, container } = await renderRoot();
 
-    // Docs is a Project entry in the nav, never one of the dock's three slots.
+    // Docs MUST stay outside the dock's three workflow slots.
     expect(container.querySelector('.dock-tab[data-mode="docs"]')).toBeNull();
-    fireEvent.click(navRow(container, "Docs"));
+    expect(container.querySelector(".guide-nav")).toBeNull();
+    const docs = navRow(container, "Docs");
+    expect(docs.closest(".nav-group")?.querySelector(".nav-group-label")?.textContent).toBe("Project");
+    fireEvent.click(docs);
     expect(called("onSelectView")).not.toHaveBeenCalled();
+    expect(container.querySelector('.side-nav #tab-patcher[aria-current="page"]')).not.toBeNull();
+    expect(container.querySelector(".guide-nav")).toBeNull();
 
     await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("docs"));
   });

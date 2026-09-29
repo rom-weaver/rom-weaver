@@ -23,7 +23,7 @@ const TABS = [
   { dock: true, group: "patches", href: "apply", icon: <svg aria-hidden="true" />, id: "patcher", label: "Apply" },
   { dock: true, group: "patches", href: "create", icon: <svg aria-hidden="true" />, id: "creator", label: "Create" },
   { dock: true, group: "roms", href: "test", icon: <svg aria-hidden="true" />, id: "test", label: "Test" },
-  { group: "project", href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
+  { group: "project", href: "/docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
   { group: "patches", href: "bundle", icon: <svg aria-hidden="true" />, id: "bundle", label: "Bundles" },
   { beta: true, group: "roms", href: "trim", icon: <svg aria-hidden="true" />, id: "trim", label: "Trim" },
 ] satisfies WorkflowTab[];
@@ -41,7 +41,7 @@ const mastheadProps = {
   version: "1.2.3",
 };
 
-/* The desktop sidebar and the phone Menu sheet render the same description.
+/* The desktop sidebar and the phone Menu sheet render the same tool navigation.
    The sheet fills in on its first open, so reaching it means opening Menu. */
 const navs = (container: HTMLElement) => {
   fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
@@ -51,8 +51,8 @@ const navs = (container: HTMLElement) => {
   };
 };
 const rowNamed = (scope: HTMLElement, name: string) =>
-  Array.from(scope.querySelectorAll<HTMLElement>(".nav-row")).find(
-    (row) => row.querySelector(".nav-row-label")?.firstChild?.textContent?.trim() === name,
+  Array.from(scope.querySelectorAll<HTMLElement>(".nav-row, .guide-nav a")).find(
+    (row) => (row.querySelector(".nav-row-label")?.firstChild?.textContent ?? row.textContent)?.trim() === name,
   ) as HTMLElement;
 
 afterEach(() => {
@@ -63,13 +63,49 @@ afterEach(() => {
 });
 
 describe("the navigation both layouts share", () => {
-  it("keeps Docs out of the desktop and phone header tools", () => {
+  it("shows one Docs row in both tool navigation layouts", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
 
     expect(container.querySelector('a.tool[href="docs"]')).toBeNull();
-    for (const scope of Object.values(navs(container))) {
-      expect(rowNamed(scope, "Docs").getAttribute("href")).toBe("docs");
+    const navigation = navs(container);
+    for (const scope of Object.values(navigation)) {
+      const docs = rowNamed(scope, "Docs");
+      expect(docs.getAttribute("href")).toBe("/docs");
+      expect(scope.querySelector(".guide-nav")).toBeNull();
     }
+    expect(rowNamed(navigation.side, "Docs").id).toBe("tab-docs");
+  });
+
+  it("uses dedicated Docs navigation beside the global mobile controls", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="docs" />));
+
+    const side = container.querySelector(".side-nav") as HTMLElement;
+    expect(rowNamed(side, "Back to tools").getAttribute("href")).toBe("/apply-patches");
+    expect(rowNamed(side, "Overview").getAttribute("href")).toBe("/docs");
+    expect(side.querySelector(".guide-nav")).not.toBeNull();
+    expect(side.querySelectorAll(".nav-row")).toHaveLength(1);
+    expect(container.querySelector(".dock")).not.toBeNull();
+
+    const browse = within(container).getByRole("button", { name: "Browse docs" });
+    fireEvent.click(browse);
+    const sheet = container.querySelector("#docs-menu-sheet.menu-sheet-docs") as HTMLDialogElement;
+    expect(sheet.open).toBe(true);
+    expect(within(sheet).getByRole("button", { name: "Close navigation" })).toBeTruthy();
+    expect(rowNamed(sheet, "Back to tools").getAttribute("href")).toBe("/apply-patches");
+    expect(sheet.querySelector(".guide-nav")).not.toBeNull();
+    expect(container.querySelector(".docs-mobile-toolbar button[aria-label]")).toBeNull();
+    expect(container.querySelector(".dock-find")).not.toBeNull();
+    expect(container.querySelectorAll("#menu-sheet")).toHaveLength(1);
+    expect(container.querySelectorAll("#docs-menu-sheet")).toHaveLength(1);
+
+    fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
+    expect(sheet.open).toBe(false);
+    const globalMenu = container.querySelector("#menu-sheet") as HTMLElement;
+    expect(globalMenu.hidden).toBe(false);
+    expect(rowNamed(globalMenu, "Docs")).toBeTruthy();
+    expect(rowNamed(globalMenu, "Docs").closest(".nav-group")?.querySelector(".nav-group-label")?.textContent).toBe(
+      "Project",
+    );
   });
 
   it("routes every row to its handler, from either layout", () => {
@@ -104,6 +140,25 @@ describe("the navigation both layouts share", () => {
     }
     expect(onOpenStatus).toHaveBeenCalledTimes(2);
     expect(onOpenLog).toHaveBeenCalledTimes(2);
+  });
+
+  it("leaves Overview links to the URL router while reading a guide", () => {
+    const onSelectTab = vi.fn();
+    const { container } = render(
+      withSettings(<Masthead {...mastheadProps} currentTab="docs" docsSlug="docs/faq" onSelectTab={onSelectTab} />),
+    );
+
+    const side = container.querySelector(".side-nav") as HTMLElement;
+    fireEvent.click(within(container).getByRole("button", { name: "Browse docs" }));
+    const sheet = container.querySelector("#docs-menu-sheet.menu-sheet-docs") as HTMLElement;
+    for (const scope of [side, sheet]) {
+      const link = rowNamed(scope, "Overview");
+      const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+      link.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      expect(link.getAttribute("href")).toBe("/docs");
+    }
+    expect(onSelectTab).not.toHaveBeenCalled();
   });
 
   it("falls back to the Log dialog when no Storage handler is given", () => {

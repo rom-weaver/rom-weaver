@@ -3,22 +3,25 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { DOC_PAGE_LOADERS, DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDocRoute } from "../../src/webapp/docs-content.mjs";
-import { DocsNavigation, DocsPage, preloadDocsHtml } from "../../src/webapp/docs-page.tsx";
+import { DocsPage, preloadDocsHtml } from "../../src/webapp/docs-page.tsx";
 import { Masthead } from "../../src/webapp/components/shell.tsx";
 import { preloadWorkflowRoute } from "../../src/webapp/workflow-routes.tsx";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
-import { SITE_ORIGIN } from "../../src/webapp/docs-routing.mjs";
+import { DocsNavigation } from "../../src/webapp/docs-navigation.tsx";
+import { SITE_ORIGIN, DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
 import { navigatorWith } from "./navigator-test-utils.ts";
+import { preloadCatalog } from "../../src/presentation/localization/index.ts";
 
 // Guide HTML ships as one lazy chunk per page; rendering a guide synchronously
 // requires its HTML resolved first, exactly as the app preloads before mount.
 beforeAll(async () => {
+  await Promise.all([preloadCatalog("es"), preloadCatalog("de")]);
   await preloadWorkflowRoute("docs");
   await Promise.all(DOC_ROUTES.map((route) => preloadDocsHtml(route.slug)));
 });
 
-const docsShell = (slug: string, currentTab = "docs") => (
-  <RomWeaverSettingsProvider settings={{}}>
+const docsShell = (slug: string, currentTab = "docs", language = "en") => (
+  <RomWeaverSettingsProvider settings={{ language }}>
     <Masthead
       currentTab={currentTab}
       docsSlug={slug}
@@ -52,6 +55,7 @@ const routeFor = (slug: string) => {
 };
 
 const shelfTitles = [...new Set(DOC_ROUTES.map((route) => route.group))];
+const navShelfTitles = ["Browser guides", "CLI guides", "Reference", "Explanation", "Hosting", "Development", "Legal"];
 const defaultShelfTitle = DOC_ROUTES[0]?.group;
 const shelfFor = (shelves: HTMLDetailsElement[], title: string) =>
   shelves.find((shelf) => shelf.querySelector(".guide-shelf-title, .docs-index-title")?.textContent === title);
@@ -479,14 +483,84 @@ Fixture description.
     );
   });
 
+  it("expands each topic independently below always-visible Overview and FAQ links", () => {
+    render(<DocsNavigation currentSlug="docs" />);
+
+    const shelves = [...document.querySelectorAll<HTMLDetailsElement>(".guide-shelf")];
+    expect(document.querySelectorAll(".guide-nav > .guide-shelf")).toHaveLength(navShelfTitles.length);
+    expect(shelves.every((shelf) => !shelf.open)).toBe(true);
+    for (const shelf of shelves) {
+      const summary = shelf.querySelector("summary") as HTMLElement;
+      expect(summary.querySelector("h3, h4")?.textContent).toBeTruthy();
+      const wasOpen = shelf.open;
+      fireEvent.click(summary);
+      expect(shelf.open).toBe(!wasOpen);
+    }
+    expect(shelves.every((shelf) => shelf.open)).toBe(true);
+  });
+
+  it("puts each interface's guides in its own topic tree", async () => {
+    render(<DocsNavigation currentSlug="docs/cli-apply" />);
+    const branches = [...document.querySelectorAll<HTMLDetailsElement>(".guide-branch")];
+    expect(branches.map((branch) => branch.querySelector("h3")?.textContent)).toEqual(["Browser guides", "CLI guides"]);
+    for (const [index, audience] of ["browser", "cli"].entries()) {
+      expect(
+        [...(branches[index]?.querySelectorAll("a") ?? [])].map((link) => link.getAttribute("href") ?? "").sort(),
+      ).toEqual(
+        DOC_SOURCES.filter((source) => source.audience === audience)
+          .map((source) => `/${source.slug}`)
+          .sort(),
+      );
+    }
+    const cliLink = branches[1]?.querySelector('a[href="/docs/cli-apply"]');
+    expect(cliLink?.textContent).toBe("Apply patches");
+    expect(cliLink?.getAttribute("aria-label")).toBe("Apply patches (CLI)");
+    expect(cliLink?.getAttribute("aria-current")).toBe("page");
+    await vi.waitFor(() => expect(branches[1]?.open).toBe(true));
+    expect(cliLink?.closest<HTMLDetailsElement>("details")?.open).toBe(true);
+    expect(branches[0]?.open).toBe(false);
+    expect(branches[0]?.querySelector<HTMLDetailsElement>("details[open]")).toBeNull();
+  });
+
+  it("persists topic choices separately for Browser and CLI", async () => {
+    const { unmount } = render(<DocsNavigation currentSlug="docs/apply-rom-patches" />);
+    await vi.waitFor(() => expect(document.querySelector<HTMLDetailsElement>(".guide-branch")?.open).toBe(true));
+    unmount();
+    render(<DocsNavigation currentSlug="docs" />);
+    const browserLink = document.querySelector('a[href="/docs/apply-rom-patches"]');
+    const cliLink = document.querySelector('a[href="/docs/cli-apply"]');
+    expect(browserLink?.closest<HTMLDetailsElement>("details")?.open).toBe(true);
+    expect(browserLink?.closest<HTMLDetailsElement>(".guide-branch")?.open).toBe(true);
+    expect(cliLink?.closest<HTMLDetailsElement>("details")?.open).toBe(false);
+    expect(cliLink?.closest<HTMLDetailsElement>(".guide-branch")?.open).toBe(false);
+  });
+
+  it.each(["side-rail", "menu-sheet-body"])("reveals the active guide through the outer %s", async (className) => {
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(400);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.matches('a[aria-current="page"]')) return { top: 800, bottom: 830, height: 30 } as DOMRect;
+      return { top: 0, bottom: 400, height: 400 } as DOMRect;
+    });
+    const { container } = render(
+      <div className={className}>
+        <DocsNavigation currentSlug="docs/privacy" />
+      </div>,
+    );
+
+    await vi.waitFor(() => expect(container.firstElementChild?.scrollTop).toBe(615));
+    expect(container.querySelector(".guide-nav")?.scrollTop).toBe(0);
+  });
+
   it("shelves every route and keeps disclosure choices between pages", async () => {
     const { unmount } = render(<DocsNavigation currentSlug="docs/cli" />);
 
     const nav = document.querySelector(".guide-nav");
     expect(defaultShelfTitle).toBe("Start here");
-    expect([...(nav?.querySelectorAll(".guide-shelf-title") ?? [])].map((shelf) => shelf.textContent)).toEqual(
-      shelfTitles,
-    );
+    expect(
+      [...(nav?.querySelectorAll(":scope > .guide-shelf > summary > .guide-shelf-title") ?? [])].map(
+        (shelf) => shelf.textContent,
+      ),
+    ).toEqual(navShelfTitles);
     // Every published route reaches the nav, so a new guide can never be
     // stranded off the shelves.
     expect(nav?.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
@@ -507,12 +581,7 @@ Fixture description.
           .map((shelf) => shelf.querySelector(".guide-shelf-title")?.textContent),
       );
       expect(openTitles).toEqual(
-        new Set([
-          defaultShelfTitle,
-          routeFor("docs/cli").group,
-          routeFor("docs/privacy").group,
-          routeFor("docs/self-hosting").group,
-        ]),
+        new Set([routeFor("docs/cli").group, routeFor("docs/privacy").group, routeFor("docs/self-hosting").group]),
       );
     });
   });
@@ -607,71 +676,103 @@ Fixture description.
   });
 
   it.each(["home", "patcher", "identify", "whats-new"])(
-    "expands Docs from %s without marking a guide current",
+    "shows a single Docs link on %s without mounting guide navigation",
     async (currentTab) => {
       render(docsShell("docs", currentTab));
-      const disclosure = document.querySelector(".side-nav .nav-docs-disclosure") as HTMLElement;
-      const toggle = disclosure.querySelector(".nav-docs-toggle") as HTMLButtonElement;
-      expect(toggle.getAttribute("aria-expanded")).toBe("false");
-      expect(disclosure.querySelector(".guide-nav")).toBeNull();
-      fireEvent.click(toggle);
-      await vi.waitFor(() => expect(disclosure.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length));
-      expect(disclosure.querySelector('a[aria-current="page"]')).toBeNull();
+      expect(document.querySelector(".side-nav .guide-nav")).toBeNull();
+      expect(document.querySelector('.side-nav a[href="/docs"]')?.textContent).toBe("Docs");
       fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
-      const phoneDisclosure = document.querySelector(".menu-sheet .nav-docs-disclosure") as HTMLElement;
-      const phoneToggle = phoneDisclosure.querySelector(".nav-docs-toggle") as HTMLButtonElement;
-      expect(phoneToggle.getAttribute("aria-expanded")).toBe("true");
-      fireEvent.click(phoneToggle);
-      await vi.waitFor(() => expect(disclosure.dataset.expanded).toBe("false"));
-      expect(phoneToggle.getAttribute("aria-expanded")).toBe("false");
+      expect(document.querySelector("#menu-sheet .guide-nav")).toBeNull();
+      expect(document.querySelector('#menu-sheet a[href="/docs"]')?.textContent).toBe("Docs");
+      expect(document.querySelector('#menu-sheet a[href="/docs"]')?.closest(".nav-group")?.textContent).toContain(
+        "Home",
+      );
     },
   );
 
-  it("collapses the complete Docs group and shares the choice with the phone menu", async () => {
-    renderDocsShell("docs/cli");
-    const disclosure = document.querySelector(".side-nav .nav-docs-disclosure") as HTMLElement;
-    const toggle = disclosure.querySelector(".nav-docs-toggle") as HTMLButtonElement;
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    fireEvent.click(toggle);
-    await vi.waitFor(() => expect(disclosure.dataset.expanded).toBe("false"));
-    expect(document.querySelector(".side-nav #tab-docs")?.getAttribute("href")).toBe("/docs");
-    fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
-    const phoneDisclosure = document.querySelector(".menu-sheet .nav-docs-disclosure") as HTMLElement;
-    const phoneToggle = phoneDisclosure.querySelector(".nav-docs-toggle") as HTMLButtonElement;
-    expect(phoneToggle.getAttribute("aria-expanded")).toBe("false");
-    fireEvent.click(phoneToggle);
-    await vi.waitFor(() => expect(phoneDisclosure.dataset.expanded).toBe("true"));
-    expect(disclosure.dataset.expanded).toBe("true");
+  it("keeps Overview and FAQ as direct links in both layouts", () => {
+    renderDocsShell("docs");
+    fireEvent.click(document.querySelector(".docs-browse-trigger") as HTMLElement);
+    for (const selector of [".side-nav", "#docs-menu-sheet"]) {
+      const nav = document.querySelector(selector) as HTMLElement;
+      const links = nav.querySelectorAll('a[href="/docs"]');
+      expect(links).toHaveLength(1);
+      expect(links[0]?.closest("details")).toBeNull();
+      expect(nav.querySelector('a[href="/docs/faq"]')?.closest("details")).toBeNull();
+      expect(nav.querySelector(".guide-nav > .guide-nav-list")?.querySelectorAll("a")).toHaveLength(2);
+      expect(nav.querySelector(".nav-docs-summary")).toBeNull();
+    }
   });
 
-  it("opens Docs and the active shelf when the current guide changes", async () => {
+  it.each([
+    [
+      "es",
+      "Volver a herramientas",
+      "Documentación",
+      "Explorar documentos",
+      "Buscar",
+      "Cerrar navegación",
+      "Navegación de la documentación",
+    ],
+    [
+      "de",
+      "Zurück zu den Werkzeugen",
+      "Dokumentation",
+      "Doku durchsuchen",
+      "Suchen",
+      "Navigation schließen",
+      "Dokumentationsnavigation",
+    ],
+  ])("localizes the Docs navigation controls in %s", (language, back, title, browse, find, close, navigation) => {
+    render(docsShell("docs", "docs", language));
+    expect(document.querySelector('.side-nav a[href="/apply-patches"]')?.textContent).toBe(back);
+    expect(document.querySelector(".side-nav .nav-group-label")?.textContent).toBe(title);
+    expect(document.querySelector(".docs-mobile-toolbar a")).toBeNull();
+    const trigger = document.querySelector(".docs-browse-trigger") as HTMLElement;
+    expect(trigger.textContent).toBe(browse);
+    expect(document.querySelector(".dock-find")?.getAttribute("aria-label")).toBe(find);
+    fireEvent.click(trigger);
+    expect(document.querySelector("#docs-menu-sheet")?.getAttribute("aria-label")).toBe(navigation);
+    expect(document.querySelector("#docs-menu-sheet .docs-menu-header strong")?.textContent).toBe(browse);
+    expect(document.querySelector("#docs-menu-sheet .docs-menu-header button")?.getAttribute("aria-label")).toBe(close);
+  });
+
+  it("opens the active topic when the current guide changes", async () => {
     const { rerender } = renderDocsShell("docs/cli");
-    const disclosure = document.querySelector(".side-nav .nav-docs-disclosure") as HTMLElement;
-    fireEvent.click(disclosure.querySelector(".nav-docs-toggle") as HTMLElement);
-    await vi.waitFor(() => expect(disclosure.dataset.expanded).toBe("false"));
-    rerender(docsShell("docs/cli"));
-    expect(disclosure.dataset.expanded).toBe("false");
     rerender(docsShell("docs/apply-rom-patches"));
-    await vi.waitFor(() => expect(disclosure.dataset.expanded).toBe("true"));
     const currentLink = document.querySelector('.side-nav .guide-nav a[aria-current="page"]');
     expect(currentLink?.getAttribute("href")).toBe("/docs/apply-rom-patches");
-    expect(currentLink?.closest<HTMLDetailsElement>(".guide-shelf")?.open).toBe(true);
+    await vi.waitFor(() => expect(currentLink?.closest<HTMLDetailsElement>(".guide-shelf")?.open).toBe(true));
+    expect(currentLink?.closest<HTMLDetailsElement>(".guide-branch")?.open).toBe(true);
+    expect(currentLink?.closest("details")?.querySelector("summary")?.textContent).toBe("Patching & bundles");
   });
 
-  it("puts guides in the phone navigation and Find in the dock", async () => {
+  it("keeps global Find and Menu beside the separate Docs navigation", async () => {
     renderDocsShell("docs/cli");
-    fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
+    expect(document.querySelector(".dock")).not.toBeNull();
+    expect(document.querySelector('.side-nav a[href="/apply-patches"]')?.textContent).toBe("Back to tools");
+    expect(document.querySelector(".side-nav .nav-group")?.textContent).not.toContain("Settings");
+    fireEvent.click(document.querySelector(".docs-browse-trigger") as HTMLElement);
     await vi.waitFor(() =>
-      expect(document.querySelectorAll(".menu-sheet .guide-nav-list a")).toHaveLength(DOC_ROUTES.length),
+      expect(document.querySelectorAll("#docs-menu-sheet .guide-nav-list a")).toHaveLength(DOC_ROUTES.length),
     );
-    expect(document.querySelector('.menu-sheet .guide-nav a[aria-current="page"]')?.textContent).toBe("CLI reference");
-    fireEvent.click(document.querySelector(".menu-sheet .guide-nav-list a") as HTMLElement);
-    expect((document.querySelector(".menu-sheet") as HTMLElement).hidden).toBe(true);
+    expect(document.querySelector('#docs-menu-sheet .guide-nav a[aria-current="page"]')?.textContent).toBe(
+      "CLI reference",
+    );
+    fireEvent.click(document.querySelector("#docs-menu-sheet .guide-nav-list a") as HTMLElement);
+    expect((document.querySelector("#docs-menu-sheet") as HTMLDialogElement).open).toBe(false);
     fireEvent.click(document.querySelector(".dock-find") as HTMLElement);
-    expect((document.querySelector(".menu-sheet") as HTMLElement).hidden).toBe(true);
+    expect((document.querySelector("#docs-menu-sheet") as HTMLDialogElement).open).toBe(false);
     const input = document.querySelector(".find-input") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "OPFS" } });
     await vi.waitFor(() => expect(document.querySelector('.find-results a[href*="highlight=OPFS"]')).toBeTruthy());
+
+    fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
+    expect((document.querySelector("#menu-sheet") as HTMLElement).hidden).toBe(false);
+    expect((document.querySelector("#docs-menu-sheet") as HTMLDialogElement).open).toBe(false);
+    expect(document.querySelector("#menu-sheet .guide-nav")).toBeNull();
+    expect(document.querySelector('#menu-sheet a[href="/docs"]')?.closest(".nav-group")?.textContent).toContain("Home");
+    expect(document.querySelectorAll("#menu-sheet, #docs-menu-sheet")).toHaveLength(2);
   });
 
   it("highlights and centers a Find result in its section", async () => {
