@@ -356,8 +356,8 @@ assertIncludes(
 );
 // Docs is a named row in the nav the static shell renders in full, so the
 // crawlable path to the guides no longer depends on expanding a menu.
-assertIncludes(applyHtml, 'class="nav-row" href="docs" id="tab-docs"', "apply guides link");
-assertIncludes(createHtml, 'class="nav-row" href="docs" id="tab-docs"', "create guides link");
+assertIncludes(applyHtml, 'href="/docs" id="tab-docs"', "apply guides link");
+assertIncludes(createHtml, 'href="/docs" id="tab-docs"', "create guides link");
 
 for (const name of DOCS_SCREENSHOT_NAMES) {
   const screenshotPath = path.join(distDir, "docs", "screenshots", name);
@@ -401,16 +401,16 @@ for (const route of DOC_ROUTES) {
   assertIncludes(docsHtml, `>${route.title}</h1>`, `${route.slug} heading title`);
   if ((docsHtml.match(/<h1\b/g) || []).length !== 1) throw new Error(`${route.slug} must contain exactly one h1`);
   assertIncludes(docsHtml, `data-markdown-source="${route.source}"`, `${route.slug} Markdown source`);
-  assertIncludes(docsHtml, 'class="nav-row" href="docs" id="tab-docs"', `${route.slug} Docs overview link`);
+  assertIncludes(docsHtml, 'href="/docs" id="tab-docs"', `${route.slug} Docs overview link`);
   assertCount(
     docsHtml,
-    'aria-current="page" class="nav-row" href="docs" id="tab-docs"',
+    'aria-current="page" href="/docs" id="tab-docs"',
     route.slug === "docs" ? 1 : 0,
     `${route.slug} Overview is current only on the Docs index`,
   );
   assertCount(
     docsHtml,
-    `<a aria-current="page" href="/${route.slug}">`,
+    `<a aria-current="page" href="/${route.slug}"`,
     1,
     `${route.slug} current guide in the navigation tree`,
   );

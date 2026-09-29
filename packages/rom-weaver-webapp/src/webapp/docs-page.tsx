@@ -1,6 +1,6 @@
 import "./design-system/docs-route.css";
 import { ArrowUpToLine, ChevronLeft, ChevronRight, ListTree } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { DOC_PAGE_LOADERS, DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { copyToClipboard } from "../lib/clipboard.ts";
 import { createLogger } from "../lib/logging.ts";
@@ -13,65 +13,14 @@ import { AUTHORED_SAMPLE_BASE, retargetSampleUrls } from "./docs-sample-origin.t
 import { GITHUB_URL } from "./project-links.ts";
 import { useReadingProgress } from "./use-reading-progress.ts";
 
+import { useDocShelfState, type DocShelfState } from "./use-doc-shelf-state.ts";
+
 type DocRoute = (typeof DOC_ROUTES)[number];
 
 const logger = createLogger("docs-page");
 
 /** Shelves are fixed at build time; the route table never changes at runtime. */
 const DOC_SHELVES = groupDocRoutes(DOC_ROUTES);
-const DOC_SHELF_STATE_KEY = "rom-weaver-docs-shelves";
-type DocShelfState = Record<string, boolean>;
-/** The first shelf opens by default: the map and the quick answers. */
-const DEFAULT_DOC_SHELF = DOC_SHELVES[0]?.title ?? "";
-const DEFAULT_DOC_SHELF_STATE = Object.fromEntries(
-  DOC_SHELVES.map((shelf) => [shelf.title, shelf.title === DEFAULT_DOC_SHELF]),
-) as DocShelfState;
-
-// Read the persisted shelf state before the first client paint. The server
-// keeps its deterministic default for hydration; the browser applies the
-// reader's saved drawers without showing a closed-to-open reload transition.
-const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
-
-const readDocShelfState = (): DocShelfState => {
-  try {
-    const stored = JSON.parse(sessionStorage.getItem(DOC_SHELF_STATE_KEY) || "{}") as Record<string, unknown>;
-    return Object.fromEntries(
-      DOC_SHELVES.map((shelf) => [
-        shelf.title,
-        typeof stored[shelf.title] === "boolean" ? stored[shelf.title] : DEFAULT_DOC_SHELF_STATE[shelf.title],
-      ]),
-    ) as DocShelfState;
-  } catch {
-    return DEFAULT_DOC_SHELF_STATE;
-  }
-};
-
-const useDocShelfState = () => {
-  const [openShelves, setOpenShelves] = useState(readDocShelfState);
-  const [ready, setReady] = useState(false);
-  useIsomorphicLayoutEffect(() => {
-    setOpenShelves(readDocShelfState());
-    setReady(true);
-  }, []);
-  const onShelfToggle = useCallback(
-    (title: string, open: boolean) => {
-      if (!ready) return;
-      setOpenShelves((current) => {
-        if (current[title] === open) return current;
-        const next = { ...current, [title]: open };
-        try {
-          sessionStorage.setItem(DOC_SHELF_STATE_KEY, JSON.stringify(next));
-        } catch {
-          // The menu still works when storage is blocked.
-        }
-        return next;
-      });
-    },
-    [ready],
-  );
-  return { onShelfToggle, openShelves };
-};
-
 /** The landing route: an index of the guides rather than one of them. */
 const HUB_SLUG = "docs";
 const GITHUB_BASE_URL = GITHUB_URL.replace(/\/$/, "");
@@ -258,75 +207,6 @@ const SectionRail = ({
           </li>
         ))}
       </ol>
-    </nav>
-  );
-};
-
-/** Every page, on the shelf its folder puts it on. */
-const DocsNav = ({
-  currentSlug,
-  onNavigate,
-  onShelfToggle,
-  openShelves,
-}: {
-  currentSlug: string;
-  onNavigate?: () => void;
-  onShelfToggle: (title: string, open: boolean) => void;
-  openShelves: DocShelfState;
-}) => {
-  const navRef = useRef<HTMLElement | null>(null);
-  const positionedSlug = useRef<string | null>(null);
-  useIsomorphicLayoutEffect(() => {
-    const nav = navRef.current;
-    const scrollport = nav?.closest<HTMLElement>(".side-rail, .menu-sheet-body");
-    if (!(nav && scrollport) || positionedSlug.current === currentSlug) return;
-    const current = nav.querySelector<HTMLAnchorElement>('a[aria-current="page"]');
-    if (!current?.closest<HTMLDetailsElement>("details")?.open) return;
-    // The outer navigation MUST own scrolling, including revealing the active guide.
-    const observer = new ResizeObserver(() => positionCurrentGuide());
-    const positionCurrentGuide = () => {
-      if (!scrollport.clientHeight) return;
-      const linkBounds = current.getBoundingClientRect();
-      const portBounds = scrollport.getBoundingClientRect();
-      if (linkBounds.top < portBounds.top || linkBounds.bottom > portBounds.bottom) {
-        scrollport.scrollTop += linkBounds.top - portBounds.top - (scrollport.clientHeight - linkBounds.height) / 2;
-      }
-      positionedSlug.current = currentSlug;
-      observer.disconnect();
-    };
-    observer.observe(scrollport);
-    positionCurrentGuide();
-    return () => observer.disconnect();
-  }, [currentSlug, openShelves]);
-  return (
-    <nav aria-label="Docs" className="guide-nav" ref={navRef}>
-      {DOC_SHELVES.map((shelf) => (
-        <details
-          className="guide-shelf"
-          key={shelf.title}
-          onToggle={(event) => onShelfToggle(shelf.title, event.currentTarget.open)}
-          open={openShelves[shelf.title]}
-        >
-          <summary>
-            <h3 className="guide-shelf-title">{shelf.title}</h3>
-          </summary>
-          <ul className="guide-nav-list">
-            {shelf.routes.map((entry) => (
-              <li key={entry.slug}>
-                <a
-                  aria-current={entry.slug === currentSlug ? "page" : undefined}
-                  href={`/${entry.slug}`}
-                  onClick={onNavigate}
-                  onFocus={() => warmDocsHtml(entry.slug)}
-                  onPointerEnter={() => warmDocsHtml(entry.slug)}
-                >
-                  {entry.label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </details>
-      ))}
     </nav>
   );
 };
@@ -626,7 +506,7 @@ const DocsPage = ({
   // use the same active section.
   const { activeIndex, initializing } = useReadingProgress(route.sections, active);
   const pageTurned = useDocsPageTurned(route.slug);
-  const { onShelfToggle, openShelves } = useDocShelfState();
+  const { onShelfToggle, openShelves } = useDocShelfState(DOC_SHELVES);
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
   const initialHighlight = readDocsHighlight();
   const [highlightQuery, setHighlightQuery] = useState(initialHighlight.query);
@@ -754,20 +634,4 @@ const DocsPage = ({
   );
 };
 
-const DocsNavigation = ({ currentSlug, onNavigate }: { currentSlug: string; onNavigate?: () => void }) => {
-  const { onShelfToggle, openShelves } = useDocShelfState();
-  useEffect(() => {
-    const shelf = DOC_SHELVES.find((entry) => entry.routes.some((route) => route.slug === currentSlug));
-    if (shelf) onShelfToggle(shelf.title, true);
-  }, [currentSlug, onShelfToggle]);
-  return (
-    <DocsNav
-      currentSlug={currentSlug}
-      onNavigate={onNavigate}
-      onShelfToggle={onShelfToggle}
-      openShelves={openShelves}
-    />
-  );
-};
-
-export { DocsNavigation, DocsPage, preloadDocsHtml };
+export { DocsPage, preloadDocsHtml };

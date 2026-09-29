@@ -131,8 +131,8 @@ afterEach(() => {
 
 /** A nav row by its visible label, from whichever layout the test names. */
 const navRow = (container: HTMLElement, name: string, scope = ".side-nav") =>
-  Array.from(container.querySelectorAll<HTMLElement>(`${scope} .nav-row`)).find(
-    (row) => row.querySelector(".nav-row-label")?.firstChild?.textContent?.trim() === name,
+  Array.from(container.querySelectorAll<HTMLElement>(`${scope} .nav-row, ${scope} .guide-nav a`)).find(
+    (row) => (row.querySelector(".nav-row-label")?.firstChild?.textContent ?? row.textContent)?.trim() === name,
   ) as HTMLElement;
 
 describe("resolveThreads", () => {

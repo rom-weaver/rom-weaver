@@ -51,8 +51,8 @@ const navs = (container: HTMLElement) => {
   };
 };
 const rowNamed = (scope: HTMLElement, name: string) =>
-  Array.from(scope.querySelectorAll<HTMLElement>(".nav-row")).find(
-    (row) => row.querySelector(".nav-row-label")?.firstChild?.textContent?.trim() === name,
+  Array.from(scope.querySelectorAll<HTMLElement>(".nav-row, .guide-nav a")).find(
+    (row) => (row.querySelector(".nav-row-label")?.firstChild?.textContent ?? row.textContent)?.trim() === name,
   ) as HTMLElement;
 
 afterEach(() => {
@@ -68,7 +68,7 @@ describe("the navigation both layouts share", () => {
 
     expect(container.querySelector('a.tool[href="docs"]')).toBeNull();
     for (const scope of Object.values(navs(container))) {
-      expect(rowNamed(scope, "Overview").getAttribute("href")).toBe("docs");
+      expect(rowNamed(scope, "Overview").getAttribute("href")).toBe("/docs");
     }
   });
 
@@ -79,10 +79,11 @@ describe("the navigation both layouts share", () => {
       const groups = Array.from(scope.querySelectorAll(".nav-group"));
       const docs = groups.at(-1) as HTMLElement;
       expect(docs.querySelector(".nav-group-label")?.textContent).toBe("Docs");
-      expect(rowNamed(docs, "Overview").getAttribute("href")).toBe("docs");
-      expect(within(docs).getByRole("button", { name: "Docs navigation" }).getAttribute("aria-expanded")).toBe("true");
+      expect(rowNamed(docs, "Overview").getAttribute("href")).toBe("/docs");
+      expect(docs.querySelector(".nav-docs-summary")).toBeNull();
+      expect(rowNamed(docs, "Overview").closest("details")).toBeNull();
       const project = groups.find((group) => group.querySelector(".nav-group-label")?.textContent === "Project");
-      expect(project?.querySelector('a[href="docs"]')).toBeNull();
+      expect(project?.querySelector('a[href="/docs"]')).toBeNull();
     }
   });
 
@@ -131,7 +132,7 @@ describe("the navigation both layouts share", () => {
       const event = new MouseEvent("click", { bubbles: true, cancelable: true });
       link.dispatchEvent(event);
       expect(event.defaultPrevented).toBe(false);
-      expect(link.getAttribute("href")).toBe("docs");
+      expect(link.getAttribute("href")).toBe("/docs");
     }
     expect(onSelectTab).not.toHaveBeenCalled();
   });

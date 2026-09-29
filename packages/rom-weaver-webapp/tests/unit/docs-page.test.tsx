@@ -3,11 +3,12 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { DOC_PAGE_LOADERS, DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDocRoute } from "../../src/webapp/docs-content.mjs";
-import { DocsNavigation, DocsPage, preloadDocsHtml } from "../../src/webapp/docs-page.tsx";
+import { DocsPage, preloadDocsHtml } from "../../src/webapp/docs-page.tsx";
 import { Masthead } from "../../src/webapp/components/shell.tsx";
 import { preloadWorkflowRoute } from "../../src/webapp/workflow-routes.tsx";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
-import { SITE_ORIGIN } from "../../src/webapp/docs-routing.mjs";
+import { DocsNavigation } from "../../src/webapp/docs-navigation.tsx";
+import { SITE_ORIGIN, groupDocNavigationRoutes } from "../../src/webapp/docs-routing.mjs";
 import { navigatorWith } from "./navigator-test-utils.ts";
 
 // Guide HTML ships as one lazy chunk per page; rendering a guide synchronously
@@ -52,6 +53,9 @@ const routeFor = (slug: string) => {
 };
 
 const shelfTitles = [...new Set(DOC_ROUTES.map((route) => route.group))];
+const navShelfTitles = groupDocNavigationRoutes(DOC_ROUTES)
+  .filter((shelf) => shelf.title !== "Start here")
+  .map((shelf) => shelf.title);
 const defaultShelfTitle = DOC_ROUTES[0]?.group;
 const shelfFor = (shelves: HTMLDetailsElement[], title: string) =>
   shelves.find((shelf) => shelf.querySelector(".guide-shelf-title, .docs-index-title")?.textContent === title);
@@ -479,12 +483,12 @@ Fixture description.
     );
   });
 
-  it("expands each Docs subheading independently with Start here open by default", () => {
+  it("expands each topic independently below always-visible Overview and FAQ links", () => {
     render(<DocsNavigation currentSlug="docs" />);
 
     const shelves = [...document.querySelectorAll<HTMLDetailsElement>(".guide-shelf")];
-    expect(shelves).toHaveLength(shelfTitles.length);
-    expect(shelves.map((shelf) => shelf.open)).toEqual(shelfTitles.map((title) => title === defaultShelfTitle));
+    expect(shelves).toHaveLength(navShelfTitles.length);
+    expect(shelves.map((shelf) => shelf.open)).toEqual(navShelfTitles.map(() => false));
     for (const shelf of shelves) {
       const summary = shelf.querySelector("summary") as HTMLElement;
       expect(summary.querySelector("h3")?.textContent).toBeTruthy();
@@ -492,7 +496,22 @@ Fixture description.
       fireEvent.click(summary);
       expect(shelf.open).toBe(!wasOpen);
     }
-    expect(shelves.map((shelf) => shelf.open)).toEqual(shelfTitles.map((title) => title !== defaultShelfTitle));
+    expect(shelves.map((shelf) => shelf.open)).toEqual(navShelfTitles.map(() => true));
+  });
+
+  it("groups browser and CLI links without more disclosure levels", () => {
+    render(<DocsNavigation currentSlug="docs/cli-apply" />);
+    const shelf = [...document.querySelectorAll(".guide-shelf")].find(
+      (entry) => entry.querySelector("h3")?.textContent === "Patching & bundles",
+    ) as HTMLElement;
+    const groups = [...shelf.querySelectorAll(".guide-audience")];
+    expect(groups.map((group) => group.querySelector("h4")?.textContent)).toEqual(["Browser", "CLI"]);
+    expect(groups[0]?.querySelector('a[href="/docs/apply-rom-patches"]')?.textContent).toBe("Apply patches");
+    const cliLink = groups[1]?.querySelector('a[href="/docs/cli-apply"]');
+    expect(cliLink?.textContent).toBe("Apply patches");
+    expect(cliLink?.getAttribute("aria-label")).toBe("Apply patches (CLI)");
+    expect(cliLink?.getAttribute("aria-current")).toBe("page");
+    expect(shelf.querySelectorAll("details")).toHaveLength(0);
   });
 
   it.each(["side-rail", "menu-sheet-body"])("reveals the active guide through the outer %s", async (className) => {
@@ -517,7 +536,7 @@ Fixture description.
     const nav = document.querySelector(".guide-nav");
     expect(defaultShelfTitle).toBe("Start here");
     expect([...(nav?.querySelectorAll(".guide-shelf-title") ?? [])].map((shelf) => shelf.textContent)).toEqual(
-      shelfTitles,
+      navShelfTitles,
     );
     // Every published route reaches the nav, so a new guide can never be
     // stranded off the shelves.
@@ -539,12 +558,7 @@ Fixture description.
           .map((shelf) => shelf.querySelector(".guide-shelf-title")?.textContent),
       );
       expect(openTitles).toEqual(
-        new Set([
-          defaultShelfTitle,
-          routeFor("docs/cli").group,
-          routeFor("docs/privacy").group,
-          routeFor("docs/self-hosting").group,
-        ]),
+        new Set([routeFor("docs/cli").group, routeFor("docs/privacy").group, routeFor("docs/self-hosting").group]),
       );
     });
   });
@@ -639,56 +653,41 @@ Fixture description.
   });
 
   it.each(["home", "patcher", "identify", "whats-new"])(
-    "expands Docs from %s without marking a guide current",
+    "shows Docs subheadings on %s without marking a guide current",
     async (currentTab) => {
       render(docsShell("docs", currentTab));
-      const disclosure = document.querySelector(".side-nav .nav-docs-disclosure") as HTMLElement;
-      const toggle = disclosure.querySelector(".nav-docs-toggle") as HTMLButtonElement;
-      expect(toggle.getAttribute("aria-expanded")).toBe("false");
-      expect(disclosure.querySelector(".guide-nav")).toBeNull();
-      fireEvent.click(toggle);
-      await vi.waitFor(() => expect(disclosure.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length));
-      expect(disclosure.querySelector('a[aria-current="page"]')).toBeNull();
+      const nav = document.querySelector(".side-nav .guide-nav") as HTMLElement;
+      expect(nav.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
+      expect(nav.querySelector('a[aria-current="page"]')).toBeNull();
+      expect(document.querySelector(".nav-docs-toggle")).toBeNull();
       fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
-      const phoneDisclosure = document.querySelector(".menu-sheet .nav-docs-disclosure") as HTMLElement;
-      const phoneToggle = phoneDisclosure.querySelector(".nav-docs-toggle") as HTMLButtonElement;
-      expect(phoneToggle.getAttribute("aria-expanded")).toBe("true");
-      fireEvent.click(phoneToggle);
-      await vi.waitFor(() => expect(disclosure.dataset.expanded).toBe("false"));
-      expect(phoneToggle.getAttribute("aria-expanded")).toBe("false");
+      const phoneNav = document.querySelector(".menu-sheet .guide-nav") as HTMLElement;
+      expect(phoneNav.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
+      expect(phoneNav.querySelector('a[aria-current="page"]')).toBeNull();
     },
   );
 
-  it("collapses the complete Docs group and shares the choice with the phone menu", async () => {
-    renderDocsShell("docs/cli");
-    expect(document.querySelector(".side-nav #tab-docs")?.getAttribute("aria-current")).toBeNull();
-    const disclosure = document.querySelector(".side-nav .nav-docs-disclosure") as HTMLElement;
-    const toggle = disclosure.querySelector(".nav-docs-toggle") as HTMLButtonElement;
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    fireEvent.click(toggle);
-    await vi.waitFor(() => expect(disclosure.dataset.expanded).toBe("false"));
-    expect(document.querySelector(".side-nav #tab-docs")?.getAttribute("href")).toBe("/docs");
+  it("keeps Overview and FAQ as direct links in both layouts", () => {
+    renderDocsShell("docs");
     fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
-    const phoneDisclosure = document.querySelector(".menu-sheet .nav-docs-disclosure") as HTMLElement;
-    const phoneToggle = phoneDisclosure.querySelector(".nav-docs-toggle") as HTMLButtonElement;
-    expect(phoneToggle.getAttribute("aria-expanded")).toBe("false");
-    fireEvent.click(phoneToggle);
-    await vi.waitFor(() => expect(phoneDisclosure.dataset.expanded).toBe("true"));
-    expect(disclosure.dataset.expanded).toBe("true");
+    for (const selector of [".side-nav", ".menu-sheet"]) {
+      const nav = document.querySelector(selector) as HTMLElement;
+      const links = nav.querySelectorAll('a[href="/docs"]');
+      expect(links).toHaveLength(1);
+      expect(links[0]?.closest("details")).toBeNull();
+      expect(nav.querySelector('a[href="/docs/faq"]')?.closest("details")).toBeNull();
+      expect(nav.querySelector(".guide-nav > .guide-nav-list")?.querySelectorAll("a")).toHaveLength(2);
+      expect(nav.querySelector(".nav-docs-summary")).toBeNull();
+    }
   });
 
-  it("opens Docs and the active shelf when the current guide changes", async () => {
+  it("opens the active topic when the current guide changes", async () => {
     const { rerender } = renderDocsShell("docs/cli");
-    const disclosure = document.querySelector(".side-nav .nav-docs-disclosure") as HTMLElement;
-    fireEvent.click(disclosure.querySelector(".nav-docs-toggle") as HTMLElement);
-    await vi.waitFor(() => expect(disclosure.dataset.expanded).toBe("false"));
-    rerender(docsShell("docs/cli"));
-    expect(disclosure.dataset.expanded).toBe("false");
     rerender(docsShell("docs/apply-rom-patches"));
-    await vi.waitFor(() => expect(disclosure.dataset.expanded).toBe("true"));
     const currentLink = document.querySelector('.side-nav .guide-nav a[aria-current="page"]');
     expect(currentLink?.getAttribute("href")).toBe("/docs/apply-rom-patches");
-    expect(currentLink?.closest<HTMLDetailsElement>(".guide-shelf")?.open).toBe(true);
+    await vi.waitFor(() => expect(currentLink?.closest<HTMLDetailsElement>(".guide-shelf")?.open).toBe(true));
+    expect(currentLink?.closest("details")?.querySelector("summary")?.textContent).toBe("Patching & bundles");
   });
 
   it("puts guides in the phone navigation and Find in the dock", async () => {

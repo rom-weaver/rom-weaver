@@ -1,6 +1,6 @@
 import { Cloud, HardDrive, Heart, House, Newspaper, ScrollText, Search, Settings } from "lucide-react";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DocsNavigationRoute } from "../workflow-routes.tsx";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DocsNavigation } from "../docs-navigation.tsx";
 import { BrandMark } from "./brand-mark.tsx";
 import { FIND_SHORTCUT_HINT, FindPalette } from "./find-palette.tsx";
 import type { FindAction } from "../find-index.ts";
@@ -108,10 +108,6 @@ const Masthead = ({
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuMounted, setMenuMounted] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
-  const [docsExpanded, setDocsExpanded] = useState(currentTab === "docs");
-  useEffect(() => {
-    if (currentTab === "docs" && docsSlug) setDocsExpanded(true);
-  }, [currentTab, docsSlug]);
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const findTriggerRef = useRef<HTMLButtonElement | null>(null);
   const dockFindRef = useRef<HTMLButtonElement | null>(null);
@@ -375,22 +371,21 @@ const Masthead = ({
   ]);
 
   const withDocsNavigation = (navSections: NavSectionData[], onNavigate?: () => void): NavSectionData[] =>
-    navSections.map((section) => ({
-      ...section,
-      entries: section.entries.map((entry) => ({
-        ...entry,
-        expanded: docsExpanded,
-        onToggle: setDocsExpanded,
-        children:
-          entry.id === "docs" ? (
-            <Suspense fallback={null}>
-              {docsExpanded ? (
-                <DocsNavigationRoute currentSlug={currentTab === "docs" ? docsSlug : ""} onNavigate={onNavigate} />
-              ) : null}
-            </Suspense>
-          ) : undefined,
-      })),
-    }));
+    navSections.map((section) => {
+      if (section.id !== "docs") return section;
+      return {
+        ...section,
+        entries: [],
+        content: (
+          <DocsNavigation
+            currentSlug={currentTab === "docs" ? docsSlug : ""}
+            onNavigate={onNavigate}
+            onSelectOverview={currentTab === "docs" ? undefined : () => onSelectTab("docs")}
+            overviewId={onNavigate ? undefined : "tab-docs"}
+          />
+        ),
+      };
+    });
   // No beta workflow claims a dock slot, so the dock needs no reveal pass.
   const dockTabs = tabs.filter((tab) => tab.dock && !tab.beta);
   // Docs and the landing page bring their own h1, so the brand steps down to a

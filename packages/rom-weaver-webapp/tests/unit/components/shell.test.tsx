@@ -130,7 +130,6 @@ describe("Masthead", () => {
       "Settings",
       "Theme",
       "Accent",
-      "Overview",
     ]);
 
     // The brand and Home row both reach the app's base route.
@@ -305,7 +304,7 @@ describe("Masthead", () => {
     ] as const) {
       const { container, unmount } = render(withSettings(<Masthead {...mastheadProps} currentTab={view} />));
       const current = container.querySelector('.side-nav [aria-current="page"]') as HTMLElement;
-      expect(current.querySelector(".nav-row-label")?.textContent).toBe(label);
+      expect(current.querySelector(".nav-row-label")?.textContent ?? current.textContent).toBe(label);
       // No dock slot claims to be the current page when the view is not docked.
       expect(container.querySelector('.dock [aria-current="page"]')).toBeNull();
       unmount();

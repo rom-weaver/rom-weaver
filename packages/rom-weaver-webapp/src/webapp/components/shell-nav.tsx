@@ -1,4 +1,4 @@
-import { ChevronDown, Menu, Search } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
 import { useEffect } from "react";
 import type { Localizer } from "../../presentation/localization/index.ts";
@@ -41,9 +41,6 @@ type NavEntry = {
   /** Rendered but not shown: a beta row before the client setting is known. */
   hidden?: boolean;
   className?: string;
-  children?: ReactNode;
-  expanded?: boolean;
-  onToggle?: (open: boolean) => void;
   current?: boolean;
   /** Opens in a new tab: the row keeps its href and takes the external guard. */
   external?: boolean;
@@ -58,7 +55,7 @@ type NavEntry = {
   /** Extra accessible name where the visible label is deliberately short. */
   title?: string;
 };
-type NavSectionData = { entries: NavEntry[]; id: string; title: string };
+type NavSectionData = { entries: NavEntry[]; id: string; title: string; content?: ReactNode };
 
 /**
  * The full name, when it is safe to use as the accessible name of a row that
@@ -122,7 +119,7 @@ const NavRow = ({
   );
   const rowClass = join(className, entry.className);
   if (entry.href) {
-    const row = (
+    return (
       <a
         aria-current={entry.current ? "page" : undefined}
         aria-label={entry.title}
@@ -143,24 +140,6 @@ const NavRow = ({
       >
         {body}
       </a>
-    );
-    if (!entry.children) return row;
-    return (
-      <div className="nav-docs-disclosure" data-expanded={entry.expanded ? "true" : "false"}>
-        <div className="nav-docs-summary">
-          {row}
-          <button
-            aria-expanded={entry.expanded}
-            aria-label="Docs navigation"
-            className="nav-docs-toggle"
-            onClick={() => entry.onToggle?.(!entry.expanded)}
-            type="button"
-          >
-            <ChevronDown aria-hidden="true" />
-          </button>
-        </div>
-        {entry.expanded ? entry.children : null}
-      </div>
     );
   }
   return (
@@ -204,6 +183,7 @@ const SideNav = ({
             <NavRow className="nav-row" entry={entry} idPrefix="tab-" localizer={localizer} />
           </div>
         ))}
+        {section.content}
         {section.id === "device" ? appearance : null}
       </div>
     ))}
@@ -329,16 +309,16 @@ const MenuSheet = ({
           ? sections.map((section) => (
               <div className="nav-group" key={section.id}>
                 <h2 className="nav-group-label">{section.title}</h2>
-                {/* Two columns: the heading carries the noun, so every label is
-                short enough to pair up and the whole index fits one screen. */}
+                {/* Workflow rows SHOULD pair up on phones; Docs keeps its topic hierarchy below them. */}
                 <div className="nav-group-grid">
                   {section.entries.map((entry) => (
-                    <div className={entry.children ? "nav-docs-entry" : undefined} hidden={entry.hidden} key={entry.id}>
+                    <div hidden={entry.hidden} key={entry.id}>
                       <NavRow className="nav-row" entry={entry} localizer={localizer} onNavigate={onClose} />
                     </div>
                   ))}
                   {section.id === "device" ? appearance : null}
                 </div>
+                {section.content}
               </div>
             ))
           : null}

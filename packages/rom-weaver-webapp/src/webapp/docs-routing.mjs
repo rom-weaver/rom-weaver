@@ -5,6 +5,7 @@ const SITE_ORIGIN = "https://rom-weaver.com";
 /**
  * @typedef {{
  *   file: string,
+ *   audience?: "browser" | "cli",
  *   group?: string,
  *   label: string,
  *   slug: string,
@@ -16,126 +17,179 @@ const DOC_SOURCES = Object.freeze([
   Object.freeze({ file: "README.md", label: "Overview", slug: "docs" }),
   Object.freeze({ file: "faq.md", label: "FAQ", slug: "docs/faq" }),
   Object.freeze({
+    audience: "browser",
     file: "tutorials/first-patch.md",
     label: "Apply your first patch (browser)",
     slug: "docs/get-started",
   }),
   Object.freeze({
+    audience: "cli",
     file: "tutorials/cli-first-weave.md",
     label: "Apply your first patch (CLI)",
     slug: "docs/cli-get-started",
   }),
   Object.freeze({
+    audience: "browser",
     file: "how-to/apply-rom-patches.md",
     label: "Apply patches (browser)",
     slug: "docs/apply-rom-patches",
   }),
-  Object.freeze({ file: "how-to/use-browser-cheats.md", label: "Use cheats (browser)", slug: "docs/use-cheats" }),
   Object.freeze({
+    audience: "browser",
+    file: "how-to/use-browser-cheats.md",
+    label: "Use cheats (browser)",
+    slug: "docs/use-cheats",
+  }),
+  Object.freeze({
+    audience: "browser",
     file: "how-to/create-rom-patches.md",
     label: "Create patches (browser)",
     slug: "docs/create-rom-patches",
   }),
-  Object.freeze({ file: "how-to/create-bundles.md", label: "Create bundles (browser)", slug: "docs/create-bundles" }),
-  Object.freeze({ file: "how-to/test-roms-in-browser.md", label: "Test ROMs (browser)", slug: "docs/test-roms" }),
   Object.freeze({
+    audience: "browser",
+    file: "how-to/create-bundles.md",
+    label: "Create bundles (browser)",
+    slug: "docs/create-bundles",
+  }),
+  Object.freeze({
+    audience: "browser",
+    file: "how-to/test-roms-in-browser.md",
+    label: "Test ROMs (browser)",
+    slug: "docs/test-roms",
+  }),
+  Object.freeze({
+    audience: "browser",
     file: "how-to/identify-roms-browser.md",
     label: "Identify ROMs (browser)",
     slug: "docs/identify-roms-browser",
   }),
   Object.freeze({
+    audience: "browser",
     file: "how-to/extract-files-browser.md",
     label: "Extract files (browser)",
     slug: "docs/extract-files-browser",
   }),
   Object.freeze({
+    audience: "browser",
     file: "how-to/convert-roms-browser.md",
     label: "Convert ROMs (browser)",
     slug: "docs/convert-roms-browser",
   }),
   Object.freeze({
+    audience: "browser",
     file: "how-to/convert-rvz-to-iso-browser.md",
     label: "Convert RVZ to ISO (browser)",
     slug: "docs/convert-rvz-to-iso",
   }),
   Object.freeze({
+    audience: "browser",
     file: "how-to/convert-to-chd-browser.md",
     label: "Convert ISO or BIN/CUE to CHD (browser)",
     slug: "docs/convert-to-chd",
   }),
   Object.freeze({
+    audience: "browser",
     file: "how-to/convert-to-rvz-browser.md",
     label: "ISO to RVZ (browser)",
     slug: "docs/convert-to-rvz",
   }),
   Object.freeze({
+    audience: "browser",
     file: "how-to/convert-to-z3ds-browser.md",
     label: "Nintendo 3DS to Z3DS (browser)",
     slug: "docs/convert-to-z3ds",
   }),
   Object.freeze({
+    audience: "browser",
     file: "how-to/extract-z3ds-browser.md",
     label: "Extract Z3DS files (browser)",
     slug: "docs/extract-z3ds",
   }),
   Object.freeze({
+    audience: "browser",
     file: "how-to/trim-roms-browser.md",
     label: "Trim ROMs (browser)",
     slug: "docs/trim-roms-browser",
   }),
   Object.freeze({
+    audience: "browser",
     file: "how-to/undo-ppf-browser.md",
     label: "Undo PPF (browser)",
     slug: "docs/undo-ppf-browser",
   }),
   Object.freeze({
+    audience: "browser",
     file: "how-to/browser-settings.md",
     label: "Settings and offline use",
     slug: "docs/browser-settings",
   }),
   Object.freeze({
+    audience: "browser",
     file: "how-to/fix-checksum-errors.md",
     label: "Fix checksum errors",
     slug: "docs/fix-checksum-errors",
   }),
   Object.freeze({
+    audience: "browser",
     file: "how-to/edit-gen3-saves.md",
     label: "Edit a game save (browser)",
     slug: "docs/edit-gen3-saves",
   }),
   Object.freeze({
+    audience: "browser",
     file: "how-to/create-game-saves-browser.md",
     label: "Create game saves (browser)",
     slug: "docs/create-game-saves-browser",
   }),
   Object.freeze({
+    audience: "cli",
     file: "how-to/create-game-saves-cli.md",
     label: "Create game saves (CLI)",
     slug: "docs/create-game-saves-cli",
   }),
-  Object.freeze({ file: "how-to/install-cli.md", label: "Install the CLI", slug: "docs/install" }),
+  Object.freeze({ audience: "cli", file: "how-to/install-cli.md", label: "Install the CLI", slug: "docs/install" }),
   Object.freeze({
+    audience: "cli",
     file: "how-to/verify-downloads.md",
     label: "Verify a download",
     slug: "docs/verify-downloads",
   }),
-  Object.freeze({ file: "how-to/cli-apply.md", label: "Apply patches (CLI)", slug: "docs/cli-apply" }),
-  Object.freeze({ file: "how-to/cli-create.md", label: "Create patches (CLI)", slug: "docs/cli-create" }),
-  Object.freeze({ file: "how-to/cli-bundles.md", label: "Bundles (CLI)", slug: "docs/cli-bundles" }),
-  Object.freeze({ file: "how-to/cli-trim.md", label: "Trim a ROM (CLI)", slug: "docs/cli-trim" }),
-  Object.freeze({ file: "how-to/cli-save.md", label: "Edit a game save (CLI)", slug: "docs/cli-save" }),
+  Object.freeze({ audience: "cli", file: "how-to/cli-apply.md", label: "Apply patches (CLI)", slug: "docs/cli-apply" }),
   Object.freeze({
+    audience: "cli",
+    file: "how-to/cli-create.md",
+    label: "Create patches (CLI)",
+    slug: "docs/cli-create",
+  }),
+  Object.freeze({ audience: "cli", file: "how-to/cli-bundles.md", label: "Bundles (CLI)", slug: "docs/cli-bundles" }),
+  Object.freeze({ audience: "cli", file: "how-to/cli-trim.md", label: "Trim a ROM (CLI)", slug: "docs/cli-trim" }),
+  Object.freeze({
+    audience: "cli",
+    file: "how-to/cli-save.md",
+    label: "Edit a game save (CLI)",
+    slug: "docs/cli-save",
+  }),
+  Object.freeze({
+    audience: "cli",
     file: "how-to/identify-and-hash-files.md",
     label: "Identify and hash ROMs (CLI)",
     slug: "docs/identify-and-hash-files",
   }),
   Object.freeze({
+    audience: "cli",
     file: "how-to/bake-cheat-codes.md",
     label: "Bake cheat codes (CLI)",
     slug: "docs/bake-cheat-codes",
   }),
-  Object.freeze({ file: "how-to/work-with-archives.md", label: "Work with archives", slug: "docs/work-with-archives" }),
   Object.freeze({
+    audience: "cli",
+    file: "how-to/work-with-archives.md",
+    label: "Work with archives",
+    slug: "docs/work-with-archives",
+  }),
+  Object.freeze({
+    audience: "cli",
     file: "how-to/fix-permission-errors.md",
     label: "Fix permission errors",
     slug: "docs/fix-permission-errors",
@@ -257,6 +311,75 @@ const groupDocRoutes = (routes) => {
   );
 };
 
+/** @type {Readonly<Record<string, string>>} */
+const HOW_TO_NAVIGATION_GROUPS = Object.freeze({
+  "docs/apply-rom-patches": "Patching & bundles",
+  "docs/bake-cheat-codes": "Cheats",
+  "docs/browser-settings": "Setup & offline",
+  "docs/cli-apply": "Patching & bundles",
+  "docs/cli-bundles": "Patching & bundles",
+  "docs/cli-create": "Patching & bundles",
+  "docs/cli-save": "Saves",
+  "docs/cli-trim": "ROM checks",
+  "docs/convert-roms-browser": "Conversion & files",
+  "docs/convert-rvz-to-iso": "Conversion & files",
+  "docs/convert-to-chd": "Conversion & files",
+  "docs/convert-to-rvz": "Conversion & files",
+  "docs/convert-to-z3ds": "Conversion & files",
+  "docs/create-bundles": "Patching & bundles",
+  "docs/create-game-saves-browser": "Saves",
+  "docs/create-game-saves-cli": "Saves",
+  "docs/create-rom-patches": "Patching & bundles",
+  "docs/edit-gen3-saves": "Saves",
+  "docs/extract-files-browser": "Conversion & files",
+  "docs/extract-z3ds": "Conversion & files",
+  "docs/fix-checksum-errors": "Troubleshooting",
+  "docs/fix-permission-errors": "Troubleshooting",
+  "docs/identify-and-hash-files": "ROM checks",
+  "docs/identify-roms-browser": "ROM checks",
+  "docs/install": "Setup & offline",
+  "docs/test-roms": "ROM checks",
+  "docs/trim-roms-browser": "ROM checks",
+  "docs/undo-ppf-browser": "Patching & bundles",
+  "docs/use-cheats": "Cheats",
+  "docs/verify-downloads": "Setup & offline",
+  "docs/work-with-archives": "Conversion & files",
+});
+
+const DOC_NAVIGATION_GROUP_ORDER = Object.freeze([
+  "Start here",
+  "Walkthroughs",
+  "Patching & bundles",
+  "ROM checks",
+  "Conversion & files",
+  "Saves",
+  "Cheats",
+  "Setup & offline",
+  "Troubleshooting",
+]);
+
+/**
+ * Group routes for sidebar navigation without changing their source folders.
+ *
+ * @template {{ group: string, slug: string }} Route
+ * @param {readonly Route[]} routes
+ * @returns {readonly { title: string, routes: readonly Route[] }[]}
+ */
+const groupDocNavigationRoutes = (routes) => {
+  const navigationRoutes = routes.map((route) => {
+    const group = route.group === "Tutorials" ? "Walkthroughs" : (HOW_TO_NAVIGATION_GROUPS[route.slug] ?? route.group);
+    return { ...route, group };
+  });
+  const order = new Map(DOC_NAVIGATION_GROUP_ORDER.map((title, index) => [title, index]));
+  return Object.freeze(
+    [...groupDocRoutes(navigationRoutes)].sort(
+      (left, right) =>
+        (order.get(left.title) ?? DOC_NAVIGATION_GROUP_ORDER.length) -
+        (order.get(right.title) ?? DOC_NAVIGATION_GROUP_ORDER.length),
+    ),
+  );
+};
+
 /**
  * @param {{ description: string, slug: string, title: string }} route
  * @param {string} [channelLabel]
@@ -310,6 +433,7 @@ export {
   createDocsSeoMetadata,
   DOC_SOURCES,
   docGroupTitle,
+  groupDocNavigationRoutes,
   groupDocRoutes,
   isLegalDocRoute,
   readDocsSlugFromPathname,

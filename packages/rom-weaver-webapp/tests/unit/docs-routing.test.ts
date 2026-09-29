@@ -3,6 +3,7 @@ import {
   createDocsSeoMetadata,
   DOC_SOURCES,
   docGroupTitle,
+  groupDocNavigationRoutes,
   groupDocRoutes,
   isLegalDocRoute,
   readDocsSlugFromPathname,
@@ -73,6 +74,85 @@ describe("groupDocRoutes", () => {
     const shelves = groupDocRoutes(DOC_SOURCES.map((source) => ({ ...source, group: docGroupTitle(source.file) })));
     const total = shelves.reduce((sum, shelf) => sum + shelf.routes.length, 0);
     expect(total).toBe(DOC_SOURCES.length);
+  });
+});
+
+describe("groupDocNavigationRoutes", () => {
+  const sourceRoutes = DOC_SOURCES.map((source) => ({
+    ...source,
+    group: source.group ?? docGroupTitle(source.file),
+  }));
+  const shelves = groupDocNavigationRoutes(sourceRoutes);
+
+  it("uses a bounded, coherent set of sidebar shelves", () => {
+    expect(shelves.map((shelf) => shelf.title)).toEqual([
+      "Start here",
+      "Walkthroughs",
+      "Patching & bundles",
+      "ROM checks",
+      "Conversion & files",
+      "Saves",
+      "Cheats",
+      "Setup & offline",
+      "Troubleshooting",
+      "Reference",
+      "Explanation",
+      "Hosting",
+      "Development",
+      "Legal",
+    ]);
+    expect(shelves.slice(2, 9).every((shelf) => shelf.routes.length <= 9)).toBe(true);
+    expect(shelves.some((shelf) => shelf.title === "How-to guides")).toBe(false);
+  });
+
+  it("assigns every how-to route to one topic", () => {
+    const howToSlugs = sourceRoutes.filter((route) => route.group === "How-to guides").map((route) => route.slug);
+    const topicSlugs = shelves
+      .filter((shelf) =>
+        [
+          "Patching & bundles",
+          "ROM checks",
+          "Conversion & files",
+          "Saves",
+          "Cheats",
+          "Setup & offline",
+          "Troubleshooting",
+        ].includes(shelf.title),
+      )
+      .flatMap((shelf) => shelf.routes.map((route) => route.slug));
+    expect(topicSlugs).toHaveLength(howToSlugs.length);
+    expect(new Set(topicSlugs)).toEqual(new Set(howToSlugs));
+  });
+
+  it("keeps tutorials separate from the source-folder grouping", () => {
+    const practice = shelves.find((shelf) => shelf.title === "Walkthroughs");
+    expect(practice?.routes.map((route) => route.slug)).toEqual(["docs/get-started", "docs/cli-get-started"]);
+    expect(docGroupTitle("tutorials/first-patch.md")).toBe("Tutorials");
+  });
+
+  it("preserves every published slug exactly once", () => {
+    const sourceSlugs = DOC_SOURCES.map((source) => source.slug);
+    const navigationSlugs = shelves.flatMap((shelf) => shelf.routes.map((route) => route.slug));
+    expect(navigationSlugs).toHaveLength(sourceSlugs.length);
+    expect(new Set(navigationSlugs)).toEqual(new Set(sourceSlugs));
+  });
+
+  it("identifies the interface for each walkthrough and task guide", () => {
+    for (const source of DOC_SOURCES) {
+      if (!/^(how-to|tutorials)\//.test(source.file)) continue;
+      expect(["browser", "cli"]).toContain(source.audience);
+      if (source.label.endsWith("(browser)")) expect(source.audience).toBe("browser");
+      if (source.label.endsWith("(CLI)")) expect(source.audience).toBe("cli");
+    }
+    expect(DOC_SOURCES.find((source) => source.slug === "docs/fix-checksum-errors")?.audience).toBe("browser");
+    expect(DOC_SOURCES.find((source) => source.slug === "docs/fix-permission-errors")?.audience).toBe("cli");
+  });
+
+  it("keeps the generic route fields and shelf shape", () => {
+    const customRoutes = [{ group: "Reference", slug: "docs/custom", marker: 1 }];
+    expect(groupDocNavigationRoutes(customRoutes)).toEqual([
+      { title: "Reference", routes: [{ group: "Reference", slug: "docs/custom", marker: 1 }] },
+    ]);
   });
 });
 

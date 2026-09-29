@@ -793,18 +793,18 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         await docsChunkReleased;
         await route.continue();
       });
-      // Docs is a named row in the nav on both layouts now.
-      await docsNavigationPage.locator('.side-nav .nav-row[href="docs"]:visible').click();
+      // Navigation metadata MUST stay available while the article route loads.
+      await docsNavigationPage.locator('.side-nav .guide-nav a[href="/docs"]:visible').click();
       await docsChunkStarted;
       await docsNavigationPage
         .locator('.side-nav .nav-row[aria-current="page"][id="tab-patcher"]')
         .waitFor({ state: "visible" });
-      if ((await docsNavigationPage.locator(".side-nav .guide-nav").count()) !== 0) {
-        throw new Error("Docs navigation mounted before its lazy route was ready");
+      if ((await docsNavigationPage.locator(".side-nav .guide-nav").count()) !== 1) {
+        throw new Error("Docs navigation disappeared while its lazy article route loaded");
       }
       releaseDocsChunk();
       await docsNavigationPage.locator(".side-nav .guide-nav").waitFor({ state: "visible" });
-      await docsNavigationPage.locator('.side-nav .nav-row[aria-current="page"][id="tab-docs"]').waitFor({
+      await docsNavigationPage.locator('.side-nav .guide-nav a[aria-current="page"][id="tab-docs"]').waitFor({
         state: "visible",
       });
     } finally {

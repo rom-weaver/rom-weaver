@@ -154,8 +154,9 @@ beforeEach(() => {
 
 /** A nav row by its visible label, from whichever layout the test names. */
 const navRow = (name, scope = ".side-nav") =>
-  [...document.querySelectorAll(`${scope} .nav-row`)].find(
-    (row) => !row.hidden && row.querySelector(".nav-row-label")?.firstChild?.textContent?.trim() === name,
+  [...document.querySelectorAll(`${scope} .nav-row, ${scope} .guide-nav a`)].find(
+    (row) =>
+      !row.hidden && (row.querySelector(".nav-row-label")?.firstChild?.textContent ?? row.textContent)?.trim() === name,
   );
 const openMenuSheet = async () => {
   await expect.poll(() => document.querySelector(".dock-menu")).toBeTruthy();
@@ -213,12 +214,46 @@ test("WebappRoot keeps the beta workflows out of the nav while the setting is of
   expect(navRow("Identify")).toBeTruthy();
   navRow("Identify").click();
   await expect.poll(() => document.querySelector("#identify-input-picker") !== null).toBe(true);
-  // Docs is a named row rather than something behind a glyph.
+  // Overview MUST remain reachable inside the always-available Docs sections.
   const docsLink = navRow("Overview");
   expect(docsLink).toBeTruthy();
   expect(docsLink.closest("summary")).toBeNull();
-  expect(document.querySelector(".nav-docs-toggle")?.getAttribute("aria-expanded")).toBe("false");
+  expect(document.querySelector(".nav-docs-toggle")).toBeNull();
+  expect(docsLink.closest("details")).toBeNull();
+  expect(docsLink.closest(".guide-nav")).toBeTruthy();
   expect(navRow("Home")).toBeTruthy();
+});
+
+test("Docs topic headings keep their width and wrapping when expanded", async () => {
+  mountWebappRoot();
+  await expect.poll(() => document.querySelector(".side-nav .guide-nav")).toBeTruthy();
+  await document.fonts.ready;
+  for (const [width, height, scope] of [
+    [1280, 1200, ".side-rail"],
+    [390, 844, ".menu-sheet"],
+  ]) {
+    await page.viewport(width, height);
+    if (width < 1000) await openMenuSheet();
+    const nav = document.querySelector(`${scope} .guide-nav`);
+    expect(nav.querySelectorAll(":scope > .guide-nav-list a")).toHaveLength(2);
+    expect(nav.querySelector(".guide-shelf-title")?.textContent).toBe("Walkthroughs");
+    const headings = [...nav.querySelectorAll("summary")];
+    const sizes = () =>
+      headings.map((heading) => {
+        const bounds = heading.getBoundingClientRect();
+        return [bounds.width, bounds.height];
+      });
+    const before = sizes();
+    for (const heading of headings) {
+      const wasOpen = heading.parentElement.open;
+      heading.click();
+      await expect.poll(() => heading.parentElement.open).toBe(!wasOpen);
+      expect(sizes()).toEqual(before);
+      heading.click();
+      await expect.poll(() => heading.parentElement.open).toBe(wasOpen);
+    }
+  }
+  await page.viewport(1280, 900);
 });
 
 const dropOnPage = async (fileName) => {
@@ -715,7 +750,7 @@ test("Theme and Accent float above the navigation without moving its rows", asyn
 });
 
 test("the Menu sheet uses its content height and stays above the dock", async () => {
-  await page.viewport(390, 844);
+  await page.viewport(390, 1200);
   mountWebappRoot();
 
   const sheet = await openMenuSheet();
@@ -737,6 +772,10 @@ test("the Menu sheet uses its content height and stays above the dock", async ()
   await new Promise((resolve) => setTimeout(resolve, 2500));
   expect(sheet.getBoundingClientRect().height).toBeCloseTo(start.sheetHeight, 1);
   expect(project.getBoundingClientRect().top).toBeCloseTo(start.projectTop, 1);
+  await page.viewport(390, 844);
+  expect(sheet.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
+  expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+  expect(sheet.getBoundingClientRect().bottom).toBeCloseTo(dock.getBoundingClientRect().top, 1);
   await page.viewport(390, 520);
   expect(sheet.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
   expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
