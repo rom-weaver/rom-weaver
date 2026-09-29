@@ -12,7 +12,7 @@
         "maxBrotliBytes": 10900
       },
       {
-        "_comment": "Raised for the Extract workflow route and its browser archive selection UI. Raised again for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, whose rendered pages ship as docs route chunks.",
+        "_comment": "Raised for the Extract workflow route and its browser archive selection UI. Raised again for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, whose rendered pages ship as docs route chunks. Raised again for the Pro Action Rocky, Gold Finger, and GBA GameShark/Action Replay code types and the create form's code type picker.",
         "name": "JavaScript",
         "directory": "assets",
         "extension": ".js",
@@ -21,10 +21,10 @@
           "assets/(?:browser-save-api|edit-gen3-saves|save-editor)-[^/]+\\.js$"
         ],
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 2312000,
-        "maxRawBytes": 2382000,
-        "expectedBrotliBytes": 593000,
-        "maxBrotliBytes": 602000
+        "expectedRawBytes": 2322000,
+        "maxRawBytes": 2392000,
+        "expectedBrotliBytes": 596000,
+        "maxBrotliBytes": 605000
       },
       {
         "_comment": "Raised for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, which the search index includes.",
