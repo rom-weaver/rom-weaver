@@ -18,6 +18,7 @@ pub mod runtime;
 mod snes_tests;
 pub mod text;
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
@@ -94,8 +95,9 @@ impl SchemaSaveHandler {
                 reasons: vec![SaveRecognitionReason::UnsupportedLayout],
             };
         }
+        let input = self.game.unpadded_input(input);
         if self.game.runtime.recognition.is_some() {
-            return self.game.recognize_configured(input);
+            return self.game.recognize_configured(&input);
         }
         let unsupported = |reason: SaveRecognitionReason| SaveRecognition {
             outcome: SaveRecognitionOutcome::Unsupported {
@@ -166,7 +168,11 @@ impl SchemaSaveHandler {
         game: &SaveGameIdentity,
     ) -> Result<SaveDocument> {
         self.game.check_identity(game)?;
-        self.game.parse_document(input, game)
+        let mut document = self
+            .game
+            .parse_document(&self.game.unpadded_input(input), game)?;
+        document.save_size = input.bytes.len() as u32;
+        Ok(document)
     }
 
     pub fn apply(
@@ -176,7 +182,13 @@ impl SchemaSaveHandler {
         edits: &[SaveEdit],
         dry_run: bool,
     ) -> Result<SaveEditResult> {
-        self.game.apply_edits(input, game, edits, dry_run)
+        let normalized = self.game.unpadded_input(input);
+        let mut result = self.game.apply_edits(&normalized, game, edits, dry_run)?;
+        result.document.save_size = input.bytes.len() as u32;
+        if let Some(bytes) = &mut result.bytes {
+            bytes.extend_from_slice(&input.bytes[normalized.bytes.len()..]);
+        }
+        Ok(result)
     }
 }
 
@@ -187,6 +199,8 @@ pub struct GameDefinition {
     pub platform: String,
     pub description: String,
     pub save_size: usize,
+    /// Accepted physical sizes whose trailing bytes stay outside the game layout.
+    pub padded_sizes: Vec<usize>,
     pub fields: Vec<FieldDefinition>,
     pub signatures: Vec<SignatureDefinition>,
     pub checksums: Vec<ChecksumDefinition>,
@@ -318,6 +332,7 @@ struct GameSchema {
     name: String,
     platform: String,
     save_size: usize,
+    padded_sizes: Vec<usize>,
     fields: Vec<FieldSchema>,
     signatures: Vec<SpanBytes>,
     checksums: Vec<Checksum>,
@@ -390,6 +405,18 @@ impl GameSchema {
         {
             return Err(invalid(
                 "schema save_size must use 1 to 128 64 KiB sections",
+            ));
+        }
+        raw.padded_sizes.sort_unstable();
+        if raw.padded_sizes.len() > MAX_COMPONENTS
+            || raw
+                .padded_sizes
+                .iter()
+                .any(|size| *size <= raw.save_size || *size > MAX_SAVE_SIZE)
+            || raw.padded_sizes.windows(2).any(|pair| pair[0] == pair[1])
+        {
+            return Err(invalid(
+                "padded sizes must be unique, larger than save_size, and at most 8 MiB",
             ));
         }
         if raw.fields.len() > MAX_FIELDS {
@@ -467,6 +494,7 @@ impl GameSchema {
             name: raw.name,
             platform: raw.platform,
             save_size: raw.save_size,
+            padded_sizes: raw.padded_sizes,
             fields,
             signatures,
             checksums,
@@ -506,7 +534,10 @@ impl GameSchema {
                 .handler_id
                 .clone()
                 .unwrap_or_else(|| "schema-v1".into()),
-            supported_save_sizes: vec![self.save_size as u32],
+            supported_save_sizes: std::iter::once(self.save_size)
+                .chain(self.padded_sizes.iter().copied())
+                .map(|size| size as u32)
+                .collect(),
             known_rom_sha1: self.runtime.known_rom_sha1.clone(),
             checksum_sizes: self.runtime.checksum_sizes.clone(),
         }
@@ -530,6 +561,19 @@ impl GameSchema {
             selected_game: Some(self.id.clone()),
             rom_sha1: None,
         }
+    }
+
+    fn unpadded_input<'a>(&self, input: &'a SaveDetectionInput) -> Cow<'a, SaveDetectionInput> {
+        if !self.padded_sizes.contains(&input.bytes.len()) {
+            return Cow::Borrowed(input);
+        }
+        trace!(game = %self.id, size = input.bytes.len(), payload_size = self.save_size,
+            "preserving save padding outside the game layout");
+        Cow::Owned(SaveDetectionInput {
+            bytes: input.bytes[..self.save_size].to_vec(),
+            selected_game: input.selected_game.clone(),
+            rom_sha1: input.rom_sha1.clone(),
+        })
     }
 
     fn parse_flat_document(
@@ -1674,6 +1718,7 @@ impl GameDefinition {
             name,
             platform,
             save_size,
+            padded_sizes: Vec::new(),
             description: String::new(),
             fields: Vec::new(),
             signatures: Vec::new(),

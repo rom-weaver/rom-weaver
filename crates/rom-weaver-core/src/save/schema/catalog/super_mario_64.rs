@@ -1,5 +1,24 @@
 use super::*;
 
+fn backup_records(file_offset: usize) -> Vec<MirrorDefinition> {
+    // Edits MUST update backups because game-over reload restores both records.
+    // https://github.com/n64decomp/sm64/blob/master/src/game/save_file.c#L315
+    vec![
+        MirrorDefinition {
+            source: file_offset,
+            target: file_offset + 56,
+            length: 56,
+            validate: Some(false),
+        },
+        MirrorDefinition {
+            source: 448,
+            target: 480,
+            length: 32,
+            validate: Some(false),
+        },
+    ]
+}
+
 fn default() -> GameDefinition {
     {
         let fields = vec![
@@ -277,9 +296,9 @@ fn default() -> GameDefinition {
         GameDefinition {
             fields,
             description: concat!(
-                "Edits Mario A in a canonical 2 KiB big-endian EEPROM image and ",
-                "repairs its primary checksum plus the options checksum. Other ",
-                "slots and backup records stay unchanged. Byte-swapped files, ",
+                "Edits Mario A in a 512-byte big-endian EEPROM image, optionally ",
+                "padded to 2 KiB. Repairs both file and options copies. Other ",
+                "slots and padding stay unchanged. Byte-swapped files, ",
                 "bit-packed score rankings, derived total stars, and conditional ",
                 "cap coordinates are omitted."
             )
@@ -308,7 +327,9 @@ fn default() -> GameDefinition {
                     ..ChecksumDefinition::new(ChecksumAlgorithm::Add16Be, 478)
                 },
             ],
-            ..GameDefinition::new("".into(), "".into(), "n64".into(), 2048)
+            padded_sizes: vec![2048],
+            mirrors: backup_records(0),
+            ..GameDefinition::new("".into(), "".into(), "n64".into(), 512)
         }
     }
 }
@@ -337,10 +358,11 @@ fn game_super_mario_64_canonical_eeprom_mario_b() -> GameDefinition {
     let mut game = default();
     game.id = "super-mario-64-canonical-eeprom-mario-b".into();
     game.name = "Super Mario 64 (canonical EEPROM, Mario B)".into();
+    game.mirrors = backup_records(112);
     game.description = concat!(
-        "Edits Mario B in a canonical 2 KiB big-endian EEPROM image and ",
-        "repairs its primary checksum plus the options checksum. Other ",
-        "slots and backup records stay unchanged. Byte-swapped files, ",
+        "Edits Mario B in a 512-byte big-endian EEPROM image, optionally ",
+        "padded to 2 KiB. Repairs both file and options copies. Other ",
+        "slots and padding stay unchanged. Byte-swapped files, ",
         "bit-packed score rankings, derived total stars, and conditional ",
         "cap coordinates are omitted."
     )
@@ -649,10 +671,11 @@ fn game_super_mario_64_canonical_eeprom_mario_c() -> GameDefinition {
     let mut game = default();
     game.id = "super-mario-64-canonical-eeprom-mario-c".into();
     game.name = "Super Mario 64 (canonical EEPROM, Mario C)".into();
+    game.mirrors = backup_records(224);
     game.description = concat!(
-        "Edits Mario C in a canonical 2 KiB big-endian EEPROM image and ",
-        "repairs its primary checksum plus the options checksum. Other ",
-        "slots and backup records stay unchanged. Byte-swapped files, ",
+        "Edits Mario C in a 512-byte big-endian EEPROM image, optionally ",
+        "padded to 2 KiB. Repairs both file and options copies. Other ",
+        "slots and padding stay unchanged. Byte-swapped files, ",
         "bit-packed score rankings, derived total stars, and conditional ",
         "cap coordinates are omitted."
     )
@@ -961,10 +984,11 @@ fn game_super_mario_64_canonical_eeprom_mario_d() -> GameDefinition {
     let mut game = default();
     game.id = "super-mario-64-canonical-eeprom-mario-d".into();
     game.name = "Super Mario 64 (canonical EEPROM, Mario D)".into();
+    game.mirrors = backup_records(336);
     game.description = concat!(
-        "Edits Mario D in a canonical 2 KiB big-endian EEPROM image and ",
-        "repairs its primary checksum plus the options checksum. Other ",
-        "slots and backup records stay unchanged. Byte-swapped files, ",
+        "Edits Mario D in a 512-byte big-endian EEPROM image, optionally ",
+        "padded to 2 KiB. Repairs both file and options copies. Other ",
+        "slots and padding stay unchanged. Byte-swapped files, ",
         "bit-packed score rankings, derived total stars, and conditional ",
         "cap coordinates are omitted."
     )

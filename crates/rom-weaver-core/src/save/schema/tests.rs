@@ -40,6 +40,66 @@ fn checksum(
 }
 
 #[test]
+fn padded_sizes_cannot_expand_the_editable_payload() {
+    for sizes in [vec![8], vec![16], vec![MAX_SAVE_SIZE + 1], vec![32, 32]] {
+        let mut raw = game(vec![field("value", 0, Storage::U8)], 16);
+        raw.padded_sizes = sizes;
+        assert!(GameSchema::build(raw).is_err());
+    }
+    let mut raw = game(vec![field("padding", 16, Storage::U8)], 16);
+    raw.padded_sizes = vec![32];
+    assert!(GameSchema::build(raw).is_err());
+}
+
+#[test]
+fn configured_recognition_and_checks_use_the_unpadded_payload() {
+    let mut raw = game(vec![field("value", 1, Storage::U8)], 4);
+    raw.padded_sizes = vec![8];
+    raw.checksums = vec![checksum(ChecksumAlgorithm::Add8, 0, 3, 3)];
+    let check = rules::Check {
+        when: None,
+        assert: Condition::new(|bytes| Ok(bytes.len() == 4)),
+        code: "wrong_payload_length".into(),
+        message: "padding must stay outside the checked payload".into(),
+        section_id: None,
+        warning: None,
+    };
+    raw.runtime.checks = vec![check.clone()];
+    raw.runtime.recognition = Some(runtime::Recognition {
+        checks: vec![check],
+        reasons: vec![SaveRecognitionReason::ChecksumValid],
+        confidence: SaveRecognitionConfidence::High,
+        incomplete_confidence: None,
+        selected_reason: false,
+        empty_top_level_reasons: false,
+    });
+    let handler = handler(raw);
+    let game = identity(&handler);
+    let input = SaveDetectionInput {
+        bytes: vec![82, 1, 0, 83, 9, 10, 11, 12],
+        selected_game: None,
+        rom_sha1: None,
+    };
+    assert!(matches!(
+        handler.recognize(&input).outcome,
+        SaveRecognitionOutcome::Recognized { .. }
+    ));
+    let result = handler
+        .apply(
+            &input,
+            &game,
+            &[SaveEdit {
+                field: "value".into(),
+                value: SaveValue::U32(2),
+            }],
+            false,
+        )
+        .unwrap();
+    assert_eq!(result.document.save_size, 8);
+    assert_eq!(result.bytes.unwrap(), [82, 2, 0, 84, 9, 10, 11, 12]);
+}
+
+#[test]
 fn reads_and_writes_numeric_bit_bool_and_ascii_storage() {
     let mut bit = field("flag", 4, Storage::Bit);
     bit.bit = Some(3);
