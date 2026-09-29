@@ -39,6 +39,8 @@ Fresh creation uses a verified initializer. Template creation starts from an exi
 
 The A Link to the Past profiles require a valid primary file. They accept a stale backup and replace it from the repaired primary after an edit. They do not recover a damaged primary from its backup. The Super Mario World profiles require matching primary and backup files.
 
+The Super Mario 64 profiles accept 512-byte EEPROM saves and copies padded to 2 KiB. Edits repair both copies of the selected Mario file and both options records. Other Mario files and trailing padding remain unchanged. These profiles require valid primary file and options checksums; they do not recover a damaged primary from its backup.
+
 Integer and packed-decimal fields use the full stored range unless the source proves a narrower storage rule. A game can reject combinations that fit the storage. Raw numeric options can include states that normal play does not produce.
 
 The Generation I and II definitions use Rust loops and shared constructors for repeated Pokédex fields. Their field IDs and byte locations remain unchanged. Shared choices define `fast` (1), `medium` (3), and `slow` (5). Every Pokémon profile requires a template.
@@ -51,6 +53,8 @@ The Generation I and II definitions use Rust loops and shared constructors for r
 <!-- END doctoc -->
 
 ## Sources and attribution
+
+Super Mario 64 EEPROM sizes and backup behavior follow n64decomp/sm64 [`save_file.h`](https://github.com/n64decomp/sm64/blob/master/src/game/save_file.h) and [`save_file.c`](https://github.com/n64decomp/sm64/blob/master/src/game/save_file.c). Game-over reload restores the backup file and options records.
 
 The Super Mario World layouts and initializer follow [SMWDisX `rammap.asm`](https://github.com/IsoFrieze/SMWDisX/blob/30643c7595a7d097d731de69476f8059c7cf98c3/rammap.asm), [`bank_00.asm`](https://github.com/IsoFrieze/SMWDisX/blob/30643c7595a7d097d731de69476f8059c7cf98c3/bank_00.asm), and [`bank_04.asm`](https://github.com/IsoFrieze/SMWDisX/blob/30643c7595a7d097d731de69476f8059c7cf98c3/bank_04.asm). The last source defines the event bit order.
 

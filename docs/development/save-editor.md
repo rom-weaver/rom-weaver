@@ -66,6 +66,8 @@ Put related definitions in one catalog module. Use shared constructors and Rust 
 
 Keep the normalized raw payload size separate from a wrapper. The container layer removes the wrapper before the game definition sees the bytes. Preserve unknown bytes and unrelated records in every edit.
 
+`GameDefinition::save_size` bounds the game payload. `padded_sizes` lists accepted larger file sizes whose trailing bytes stay outside that payload. The handler preserves those bytes after editing and reports the original file size. Fresh generation uses the payload size.
+
 Use the shared text codec types for game character tables and termination rules. Use the shared checksum and layout types when they represent the format exactly. Do not approximate an integrity algorithm or omit one from an editable definition.
 
 Validate every assignment before copying the input. Apply linked writes and game-specific callbacks within the transaction. Repair integrity data, reparse the result, and require requested values to round-trip. A no-op must preserve every byte.
