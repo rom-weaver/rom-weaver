@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   getCheatPatchCodes,
+  getCheatPatchKind,
   getCheatPatchFileName,
   getCheatPatchFormat,
   getCheatPatchStatus,
@@ -49,6 +50,44 @@ describe("getRomCheats", () => {
 describe("getCheatPatchCodes", () => {
   it("returns only the ROM cheats' raw codes", () => {
     expect(getCheatPatchCodes(mixed)).toEqual(["C2B4-6D07", "DDEE-1234"]);
+  });
+});
+
+describe("getCheatPatchKind", () => {
+  it("keeps explicit decoders when exporting raw snapshots", () => {
+    for (const kind of ["pro-action-rocky", "action-replay-v3", "game-shark-v1"] as const) {
+      const entry = romCheat("explicit", "ROM patch", "15C93C0A");
+      entry.record.codeKind = kind;
+      expect(getCheatPatchKind([entry])).toBe(kind);
+    }
+  });
+
+  it("uses the detected kind and rejects incompatible selected decoders", () => {
+    expect(getCheatPatchKind(mixed)).toBe("game-genie");
+    const entry = romCheat("explicit", "ROM patch", "15C93C0A");
+    entry.record.codeKind = "pro-action-rocky";
+    expect(() => getCheatPatchKind([...mixed, entry])).toThrow("different code type");
+  });
+
+  it("lets auto-detection handle a mix of auto-detected kinds", () => {
+    const goldFinger = romCheat("d", "Walk through walls", "0000009XXXXA90");
+    goldFinger.detectedKind = "gold-finger";
+    expect(getCheatPatchKind([...mixed, goldFinger])).toBe("auto");
+  });
+
+  it("rejects SNES Action Replay mixed with Game Genie because auto-detection reads both as Game Genie", () => {
+    const actionReplay = romCheat("d", "Walk through walls", "C0FFEE00");
+    actionReplay.detectedKind = "pro-action-replay";
+    expect(() => getCheatPatchKind([...mixed, actionReplay])).toThrow("different code type");
+  });
+
+  it("lets auto-detection split NES Game Genie from NES Action Replay", () => {
+    const gameGenie = romCheat("a", "Infinite lives", "SXIOPO");
+    gameGenie.record.system = "nes";
+    const actionReplay = romCheat("b", "Walk through walls", "C01012");
+    actionReplay.record.system = "nes";
+    actionReplay.detectedKind = "pro-action-replay";
+    expect(getCheatPatchKind([gameGenie, actionReplay])).toBe("auto");
   });
 });
 

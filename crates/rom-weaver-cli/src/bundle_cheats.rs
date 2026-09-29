@@ -63,6 +63,7 @@ impl ResolvedCheats {
                 description: Some(entry.record.description.clone()),
                 // The snapshot lets the entry apply without the database.
                 code: entry.record.raw_code.clone(),
+                code_kind: entry.record.code_kind,
                 optional: false,
             })
             .collect()
@@ -179,7 +180,8 @@ impl CliApp {
         if !candidates.is_empty() {
             match cheat_database::resolve_selectors(candidates, std::slice::from_ref(&entry.id)) {
                 Ok(found) => {
-                    if let Some(record) = found.into_iter().next() {
+                    if let Some(mut record) = found.into_iter().next() {
+                        record.code_kind = record.code_kind.or(entry.code_kind);
                         return Ok(record);
                     }
                 }
@@ -208,6 +210,87 @@ impl CliApp {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cheats::CheatKind;
+
+    #[test]
+    fn snapshot_record_keeps_explicit_decoder_without_database() {
+        let entry = BundleCheatEntry {
+            id: "rocky-snapshot".to_string(),
+            source: None,
+            revision: None,
+            description: None,
+            code: Some("12345678".to_string()),
+            code_kind: Some(CheatKind::ProActionRocky),
+            optional: false,
+        };
+
+        let record = snapshot_record(&entry, "12345678", CheatSystem::Nes, 0);
+
+        assert_eq!(record.code_kind, Some(CheatKind::ProActionRocky));
+    }
+
+    #[test]
+    fn bundle_decoder_fills_missing_database_kind() {
+        let entry = BundleCheatEntry {
+            id: "gba-snapshot".to_string(),
+            source: None,
+            revision: None,
+            description: None,
+            code: None,
+            code_kind: Some(CheatKind::ActionReplayV3),
+            optional: false,
+        };
+        let candidate = CheatRecord {
+            id: entry.id.clone(),
+            system: CheatSystem::GameBoyAdvance,
+            game_id: "game".to_string(),
+            description: "Patch".to_string(),
+            raw_code: Some("code".to_string()),
+            code_kind: None,
+            raw_fields: Default::default(),
+            source_file: "database".to_string(),
+            source_index: 0,
+            source_revision: "revision".to_string(),
+        };
+
+        let record =
+            CliApp::bundle_cheat_record(&entry, &[candidate], None, CheatSystem::GameBoyAdvance, 0)
+                .unwrap();
+
+        assert_eq!(record.code_kind, Some(CheatKind::ActionReplayV3));
+    }
+
+    #[test]
+    fn legacy_snapshot_without_decoder_stays_backward_compatible() {
+        let entry: BundleCheatEntry =
+            serde_json::from_str(r#"{"id":"legacy","code":"AKE-LVS"}"#).unwrap();
+
+        assert_eq!(entry.code_kind, None);
+        let record = snapshot_record(&entry, "AKE-LVS", CheatSystem::Nes, 0);
+        assert_eq!(record.code_kind, None);
+    }
+
+    #[test]
+    fn serializes_decoder_as_camel_case_code_kind() {
+        let entry = BundleCheatEntry {
+            id: "gba-snapshot".to_string(),
+            source: None,
+            revision: None,
+            description: None,
+            code: Some("CDE69477 3E02C83D".to_string()),
+            code_kind: Some(CheatKind::GameSharkV1),
+            optional: false,
+        };
+
+        let json = serde_json::to_value(entry).unwrap();
+        assert_eq!(json["codeKind"], "game-shark-v1");
+        assert!(json.get("code_kind").is_none());
+    }
+}
+
 fn is_ambiguous_selector(error: &RomWeaverError) -> bool {
     matches!(error, RomWeaverError::ValidationCode(coded) if coded.code() == "cheat_selector_ambiguous")
 }
@@ -230,7 +313,7 @@ fn snapshot_record(
         game_id: "bundle".to_string(),
         description: description.clone(),
         raw_code: Some(code.to_string()),
-        code_kind: None,
+        code_kind: entry.code_kind,
         raw_fields: std::collections::BTreeMap::from([
             ("desc".to_string(), description),
             ("code".to_string(), code.to_string()),

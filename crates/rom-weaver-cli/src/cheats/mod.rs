@@ -12,7 +12,10 @@ use ts_rs::TS;
 
 mod action_replay;
 mod game_genie;
+mod gba_action_replay;
+mod gold_finger;
 mod layout;
+mod pro_action_rocky;
 mod xploder;
 
 use layout::Mapping;
@@ -66,7 +69,9 @@ impl CheatSystem {
             "genesis" | "megadrive" | "mega-drive" | "md" | "smd" => Some(Self::Genesis),
             "gameboy" | "gb" => Some(Self::GameBoy),
             "gameboy-color" | "gameboycolor" | "gbc" => Some(Self::GameBoyColor),
-            "gba" | "game-boy-advance" | "gameboy-advance" => Some(Self::GameBoyAdvance),
+            "gba" | "gameboyadvance" | "game-boy-advance" | "gameboy-advance" => {
+                Some(Self::GameBoyAdvance)
+            }
             "psx" | "ps1" | "playstation" | "playstation-1" => Some(Self::PlayStation),
             "sms" | "mastersystem" | "master-system" => Some(Self::MasterSystem),
             "gamegear" | "gg" | "game-gear" => Some(Self::GameGear),
@@ -77,8 +82,7 @@ impl CheatSystem {
     }
 }
 
-/// Which code scheme a textual code uses. GameShark codes share Pro Action
-/// Replay's raw address:value form, so they are decoded as the same kind.
+/// Code schemes remain distinct when the same text has different decodings.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 #[serde(rename_all = "kebab-case")]
@@ -87,20 +91,45 @@ pub enum CheatKind {
     GameGenie,
     ProActionReplay,
     Xploder,
+    ProActionRocky,
+    GoldFinger,
+    GameSharkV1,
+    GameSharkV1Raw,
+    ActionReplayV3,
+    ActionReplayV3Raw,
 }
 
 impl CheatKind {
     pub fn parse(value: &str) -> Option<Self> {
         match value.trim().to_ascii_lowercase().as_str() {
             "gg" | "game-genie" | "gamegenie" | "genie" => Some(Self::GameGenie),
-            "par" | "ar" | "action-replay" | "gameshark" | "gs" => Some(Self::ProActionReplay),
+            "par" | "ar" | "pro-action-replay" | "action-replay" | "gameshark" | "gs" => {
+                Some(Self::ProActionReplay)
+            }
             "xploder" | "xplorer" | "codebreaker" | "code-breaker" => Some(Self::Xploder),
+            "pro-action-rocky" | "rocky" => Some(Self::ProActionRocky),
+            "gold-finger" | "goldfinger" => Some(Self::GoldFinger),
+            "game-shark-v1" | "gameshark-v1" | "ar-v1" | "ar-v2" => Some(Self::GameSharkV1),
+            "game-shark-v1-raw" | "gameshark-v1-raw" => Some(Self::GameSharkV1Raw),
+            "action-replay-v3" | "ar-v3" => Some(Self::ActionReplayV3),
+            "action-replay-v3-raw" | "ar-v3-raw" => Some(Self::ActionReplayV3Raw),
             _ => None,
         }
     }
+
+    pub(crate) fn is_gba_action_replay(self) -> bool {
+        matches!(
+            self,
+            Self::GameSharkV1
+                | Self::GameSharkV1Raw
+                | Self::ActionReplayV3
+                | Self::ActionReplayV3Raw
+        )
+    }
 }
 
-/// A decoded cheat: a CPU/bus address, the replacement value (`width` bytes),
+/// A decoded cheat: a CPU/bus address (or headerless Gold Finger file offset),
+/// the replacement value (`width` bytes),
 /// and an optional compare byte used to disambiguate the correct ROM bank when
 /// baking the code into a file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -305,6 +334,19 @@ pub fn decode(code: &str, system: CheatSystem, kind: CheatKind) -> Result<Decode
         CheatKind::GameGenie => game_genie::decode(&normalized, system, code)?,
         CheatKind::ProActionReplay => action_replay::decode(&normalized, system, code)?,
         CheatKind::Xploder => xploder::decode(&normalized, system, code)?,
+        CheatKind::ProActionRocky => pro_action_rocky::decode(&normalized, system, code)?,
+        CheatKind::GoldFinger => gold_finger::decode(&normalized, system, code)?,
+        kind => {
+            let codes = decode_gba_codes(code, system, kind)?;
+            if codes.len() != 1 {
+                return Err(coded(
+                    "cheat_bad_code",
+                    "expected one ROM-patch operation",
+                    code,
+                ));
+            }
+            codes[0]
+        }
     };
     // Game Boy Color uses the compatible Game Boy decoder, which emits its
     // base family. Retain the caller's selected database system in the result.
@@ -319,6 +361,21 @@ pub fn decode(code: &str, system: CheatSystem, kind: CheatKind) -> Result<Decode
         "decoded cheat code"
     );
     Ok(decoded)
+}
+
+pub(crate) fn decode_gba_codes(
+    input: &str,
+    system: CheatSystem,
+    kind: CheatKind,
+) -> Result<Vec<DecodedCode>> {
+    if system != CheatSystem::GameBoyAdvance {
+        return Err(coded(
+            "cheat_bad_system",
+            "GBA Action Replay codes need GBA as the code system",
+            input,
+        ));
+    }
+    gba_action_replay::decode_codes(input, kind)
 }
 
 /// Decode a single code, inferring the scheme from its shape.
@@ -383,6 +440,7 @@ fn infer_kind(raw: &str, normalized: &str, system: CheatSystem) -> CheatKind {
                 CheatKind::GameGenie
             }
         }
+        CheatSystem::Snes if normalized.len() == 14 => CheatKind::GoldFinger,
         CheatSystem::Snes => CheatKind::GameGenie,
         CheatSystem::GameBoyAdvance | CheatSystem::PlayStation => CheatKind::Xploder,
     }
@@ -403,6 +461,9 @@ pub fn classify_decoded_code(layout: &RomLayout, decoded: &DecodedCode) -> Cheat
             }
         }
         CheatSystem::Snes => {
+            if decoded.kind == CheatKind::GoldFinger {
+                return CheatTarget::CartridgeRom;
+            }
             let bank = (address >> 16) & 0xff;
             let low = address & 0xffff;
             let system_bank = bank <= 0x3f || (0x80..=0xbf).contains(&bank);
@@ -472,7 +533,38 @@ fn record_kind_hint(record: &CheatRecord) -> Option<CheatKind> {
         .find(|(name, _)| matches!(name.as_str(), "kind" | "type" | "device" | "code_type"))
         .map(|(_, value)| value.as_str())
         .unwrap_or_default();
+    if let Some(kind) = CheatKind::parse(field_hint) {
+        return Some(kind);
+    }
     let hint = format!("{field_hint} {}", record.source_file).to_ascii_lowercase();
+    if hint.contains("pro action rocky") || hint.contains("pro-action-rocky") {
+        return Some(CheatKind::ProActionRocky);
+    }
+    if hint.contains("gold finger") || hint.contains("gold-finger") || hint.contains("goldfinger") {
+        return Some(CheatKind::GoldFinger);
+    }
+    if record.system == CheatSystem::GameBoyAdvance {
+        let words = hint.replace('-', " ");
+        let raw = words
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .any(|word| word == "raw");
+        for device in ["action replay", "gameshark", "game shark"] {
+            if words.contains(&format!("{device} v3")) {
+                return Some(if raw {
+                    CheatKind::ActionReplayV3Raw
+                } else {
+                    CheatKind::ActionReplayV3
+                });
+            }
+            if words.contains(&format!("{device} v1")) || words.contains(&format!("{device} v2")) {
+                return Some(if raw {
+                    CheatKind::GameSharkV1Raw
+                } else {
+                    CheatKind::GameSharkV1
+                });
+            }
+        }
+    }
     if matches!(
         record.system,
         CheatSystem::GameBoyAdvance | CheatSystem::PlayStation
@@ -527,6 +619,21 @@ fn has_structured_runtime_semantics(record: &CheatRecord) -> bool {
     })
 }
 
+fn code_has_parameter(record: &CheatRecord, value: &str) -> bool {
+    let kind = record.code_kind.or_else(|| record_kind_hint(record));
+    let gold_finger = record.system == CheatSystem::Snes
+        && (kind == Some(CheatKind::GoldFinger)
+            || (kind.is_none()
+                && split_codes(value)
+                    .iter()
+                    .all(|code| normalize(code).len() == 14)));
+    if gold_finger {
+        // XX denotes unused Gold Finger data slots; the decoder validates their positions.
+        return value.contains('?');
+    }
+    contains_parameter_placeholder(value)
+}
+
 fn has_parameterized_executable_field(record: &CheatRecord) -> bool {
     record.raw_fields.iter().any(|(name, value)| {
         matches!(
@@ -546,7 +653,11 @@ fn has_parameterized_executable_field(record: &CheatRecord) -> bool {
                 | "condition_address"
                 | "condition_value"
                 | "activation"
-        ) && contains_parameter_placeholder(value)
+        ) && if name == "code" {
+            code_has_parameter(record, value)
+        } else {
+            contains_parameter_placeholder(value)
+        }
     })
 }
 
@@ -565,7 +676,7 @@ pub fn classify_record(rom: &[u8], record: &CheatRecord) -> ClassifiedCheatRecor
         || record
             .raw_code
             .as_deref()
-            .is_some_and(contains_parameter_placeholder)
+            .is_some_and(|value| code_has_parameter(record, value))
     {
         return unsupported(REASON_PARAMETER, None);
     }
@@ -581,6 +692,24 @@ pub fn classify_record(rom: &[u8], record: &CheatRecord) -> ClassifiedCheatRecor
     };
 
     let record_kind = record.code_kind.or_else(|| record_kind_hint(record));
+    if let Some(kind) = record_kind.filter(|kind| kind.is_gba_action_replay()) {
+        let result = decode_gba_codes(raw_code, record.system, kind).and_then(|codes| {
+            let layout = RomLayout::detect(rom, record.system);
+            let mut writes = Vec::new();
+            for code in codes {
+                writes.extend(resolve_writes(rom, &layout, &code)?);
+            }
+            Ok(writes)
+        });
+        return match result {
+            Ok(writes) => ClassifiedCheatRecord {
+                record: record.clone(),
+                resolution: CheatResolution::RomBakeable { writes },
+                detected_kind: Some(kind),
+            },
+            Err(error) => unsupported(&error.to_string(), Some(kind)),
+        };
+    }
     let codes = if record_kind == Some(CheatKind::Xploder)
         || (record_kind.is_none()
             && matches!(
@@ -777,9 +906,10 @@ pub fn write_bytes(write: &CheatWrite, system: CheatSystem) -> Result<Vec<u8>> {
     };
     match write.width {
         1 => Ok(vec![write.value as u8]),
-        2 => {
-            let start = if big_endian { 2 } else { 0 };
-            Ok(bytes[start..start + 2].to_vec())
+        2 | 3 => {
+            let width = usize::from(write.width);
+            let start = if big_endian { 4 - width } else { 0 };
+            Ok(bytes[start..start + width].to_vec())
         }
         4 => Ok(bytes.to_vec()),
         other => Err(coded(

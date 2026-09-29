@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { fireEvent, render, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CheatDatabaseSection,
   DIALOG_PAGE_SIZE,
@@ -136,6 +136,8 @@ const openDialog = async (view: ReturnType<typeof render>) => {
 
 const addButton = (view: ReturnType<typeof render>, description: string) =>
   view.getByRole("button", { name: `Add ${description}` });
+
+afterEach(cleanup);
 
 describe("CheatDatabaseSection", () => {
   it("offers cheat patches without a second heading or switch", async () => {
@@ -388,6 +390,23 @@ describe("CheatDatabaseSection", () => {
       expect.objectContaining({ record: expect.objectContaining({ id: "manual-1" }) }),
     ]);
     expect(view.getByRole("checkbox", { name: "Include Manual cheat" })).toBeTruthy();
+  });
+
+  it("offers the extended manual code types", async () => {
+    const view = render(<CheatDatabaseSection {...props} />);
+    await openDialog(view);
+    fireEvent.click(view.getByRole("button", { name: "Add code manually" }));
+    const selector = view.getByLabelText("Code type") as HTMLSelectElement;
+    expect(Array.from(selector.options).map(({ value }) => value)).toEqual(
+      expect.arrayContaining([
+        "pro-action-rocky",
+        "gold-finger",
+        "game-shark-v1",
+        "game-shark-v1-raw",
+        "action-replay-v3",
+        "action-replay-v3-raw",
+      ]),
+    );
   });
 
   it("clears a manual classification after the user changes its inputs", async () => {

@@ -121,7 +121,17 @@ test("every cheat platform is an identify platform in the default group", () => 
     Object.values(CHEAT_PLATFORMS)
       .map((spec) => spec.cheatSystem)
       .sort(),
-    ["gameboy", "gameboy-color", "gameboyadvance", "gamegear", "genesis", "mastersystem", "nes", "sega32x", "snes"],
+    [
+      "gameboy",
+      "gameboy-color",
+      "gameboyadvance",
+      "gamegear",
+      "genesis",
+      "mastersystem",
+      "nes",
+      "sega32x",
+      "snes",
+    ],
   );
   assert.equal(cheatShardFileName("nintendo-game-boy"), "cheats-nintendo-game-boy.json");
 });
@@ -325,7 +335,10 @@ test("validateStoredShard rejects records the Rust loader would read differently
   assert.equal(validateStoredShard(game(good)).games[0].cheats[0].rawCode, "AKE-LVS");
   assert.throws(() => validateStoredShard(game({ ...good, description: null })), /description/u);
   assert.throws(() => validateStoredShard(game({ ...good, codeKind: "gameshark" })), /codeKind/u);
-  assert.throws(() => validateStoredShard(game({ ...good, rawFields: { enable: true } })), /enable/u);
+  assert.throws(
+    () => validateStoredShard(game({ ...good, rawFields: { enable: true } })),
+    /enable/u,
+  );
   assert.throws(() => validateStoredShard(game({ ...good, sourceIndex: -1 })), /index/u);
   assert.throws(() => validateStoredShard(game({ ...good, sourceIndex: 1.5 })), /index/u);
   assert.throws(() => validateStoredShard({ ...game(good), schemaVersion: 1 }), /schema/u);
@@ -360,12 +373,30 @@ test("stable cheat IDs ignore enable state but retain distinct record semantics"
 });
 
 test("release normalization groups device files without merging regions", () => {
-  assert.equal(normalizeReleaseName("Test Game (USA) (Game Genie).cht"), normalizeReleaseName("Test Game (USA).nes"));
-  assert.notEqual(normalizeReleaseName("Test Game (USA).cht"), normalizeReleaseName("Test Game (Europe).cht"));
+  assert.equal(
+    normalizeReleaseName("Test Game (USA) (Game Genie).cht"),
+    normalizeReleaseName("Test Game (USA).nes"),
+  );
+  assert.notEqual(
+    normalizeReleaseName("Test Game (USA).cht"),
+    normalizeReleaseName("Test Game (Europe).cht"),
+  );
   assert.equal(normalizeReleaseName("Dr. Mario (USA).cht"), "dr. mario (usa)");
   assert.equal(
     normalizeReleaseName("Test Game (USA) (Game Genie) (diff2).cht"),
     normalizeReleaseName("Test Game (USA).nes"),
+  );
+  assert.equal(
+    normalizeReleaseName("Test Game (USA) (Gold Finger).cht"),
+    normalizeReleaseName("Test Game (USA).sfc"),
+  );
+  assert.equal(
+    normalizeReleaseName("Test Game (USA) (Action Replay v3) (Raw).cht"),
+    normalizeReleaseName("Test Game (USA).cht"),
+  );
+  assert.equal(
+    normalizeReleaseName("Test Game (USA) (GameShark v1-v2 Raw).cht"),
+    normalizeReleaseName("Test Game (USA).cht"),
   );
 });
 
@@ -387,6 +418,43 @@ test("GBA device annotations use the Xploder decoder family", () => {
   assert.equal(shard.games[0].cheats[0].codeKind, "xploder");
 });
 
+test("versioned GBA device annotations select the matching decoder", () => {
+  const build = (annotation) =>
+    buildCheatShard({
+      cheatSystem: "gameboyadvance",
+      files: [
+        {
+          sourcePath: `cht/Nintendo - Game Boy Advance/Public Test (USA) ${annotation}.cht`,
+          text: 'cheat0_desc = "Lives"\ncheat0_code = "01234567 89ABCDEF\\n10203040 50607080"\n',
+        },
+      ],
+      releases: [],
+      sourceRevision: REVISION,
+    }).games[0].cheats[0];
+
+  assert.equal(build("(GameShark v1)").codeKind, "game-shark-v1");
+  assert.equal(build("(Action Replay v1) (Raw)").codeKind, "game-shark-v1-raw");
+  assert.equal(build("(GameShark v1-v2 Raw)").codeKind, "game-shark-v1-raw");
+  assert.equal(build("(Action Replay v3)").codeKind, "action-replay-v3");
+  assert.equal(build("(GameShark v3) (Raw)").codeKind, "action-replay-v3-raw");
+});
+
+test("NES Pro Action Rocky annotations retain encrypted codes", () => {
+  const shard = buildCheatShard({
+    cheatSystem: "nes",
+    files: [
+      {
+        sourcePath: `${NES_DIRECTORY}/Public Test (USA) (Pro Action Rocky).cht`,
+        text: 'cheat0_desc = "Lives"\ncheat0_code = "00000000"\n',
+      },
+    ],
+    releases: [],
+    sourceRevision: REVISION,
+  });
+
+  assert.equal(shard.games[0].cheats[0].codeKind, "pro-action-rocky");
+});
+
 test("Game Boy device file names give a kind hint that leaves the cheat ID alone", async () => {
   const build = (fileName) =>
     buildCheatShard({
@@ -403,10 +471,16 @@ test("Game Boy device file names give a kind hint that leaves the cheat ID alone
   const [cheat] = build("Public Test (USA) (Xploder).cht").games[0].cheats;
   assert.equal(cheat.codeKind, undefined);
   assert.equal(cheat.kindHint, "xploder");
-  assert.equal(build("Public Test (USA) (Code Breaker).cht").games[0].cheats[0].kindHint, "xploder");
+  assert.equal(
+    build("Public Test (USA) (Code Breaker).cht").games[0].cheats[0].kindHint,
+    "xploder",
+  );
   assert.equal(build("Public Test (USA).cht").games[0].cheats[0].kindHint, undefined);
   // An annotation the importer already read stays the ID-bearing codeKind.
-  assert.equal(build("Public Test (USA) (GameShark).cht").games[0].cheats[0].codeKind, "pro-action-replay");
+  assert.equal(
+    build("Public Test (USA) (GameShark).cht").games[0].cheats[0].codeKind,
+    "pro-action-replay",
+  );
 
   const shard = build("Public Test (USA) (Xploder).cht");
   const expanded = await expandCheatShard(JSON.parse(encodeCheatShard(shard)), nodeSha256Hex);
@@ -435,8 +509,28 @@ test("isBakeableCandidate drops empty codes, placeholders, and structured RetroA
   assert.equal(isBakeableCandidate("nes", record("  ")), false);
   assert.equal(isBakeableCandidate("nes", record("7E1234??")), false);
   assert.equal(isBakeableCandidate("nes", record("7E12XX00")), false);
-  assert.equal(isBakeableCandidate("nes", record("013F0DC6", { rawFields: { address: "4660", value: "63" } })), false);
+  assert.equal(
+    isBakeableCandidate("nes", record("013F0DC6", { rawFields: { address: "4660", value: "63" } })),
+    false,
+  );
   assert.equal(isBakeableCandidate("nes", record("AAAA-BBBB")), true);
+});
+
+test("isBakeableCandidate keeps valid Gold Finger unused-byte sentinels", () => {
+  assert.equal(isBakeableCandidate("snes", record("0000009XXXXA90")), true);
+  assert.equal(
+    isBakeableCandidate("snes", record("12345ABCDEF700", { codeKind: "gold-finger" })),
+    true,
+  );
+  assert.equal(
+    isBakeableCandidate("snes", record("0000009XXXXA80", { codeKind: "gold-finger" })),
+    false,
+  );
+  assert.equal(
+    isBakeableCandidate("snes", record("00000XXXXXXA00", { codeKind: "gold-finger" })),
+    false,
+  );
+  assert.equal(isBakeableCandidate("nes", record("0000009XXXXA90")), false);
 });
 
 test("isBakeableCandidate: nes keeps Game Genie letters and drops RAM Pro Action Replay", () => {
@@ -480,6 +574,21 @@ test("isBakeableCandidate: gameboyadvance keeps only the ROM-patch and in-range 
   );
   assert.equal(isBakeableCandidate("gameboyadvance", record("89000000 0001")), true); // addr 0x9000000
   assert.equal(isBakeableCandidate("gameboyadvance", record("32000000 0001")), false); // addr 0x2000000, RAM
+  for (const codeKind of [
+    "game-shark-v1",
+    "game-shark-v1-raw",
+    "action-replay-v3",
+    "action-replay-v3-raw",
+  ]) {
+    assert.equal(
+      isBakeableCandidate(
+        "gameboyadvance",
+        record("01234567 89ABCDEF\n10203040 50607080", { codeKind }),
+      ),
+      true,
+      codeKind,
+    );
+  }
 });
 
 test("isBakeableCandidate: mastersystem, gamegear, sg1000 drop RAM forms, keep Game Genie", () => {
@@ -512,7 +621,11 @@ test("buildCheatShard collapses a code repeated across device files, keeping its
   // Same code and description differ only by case and spacing: one record, the
   // one that names its code kind. The same code under a different description
   // is a different cheat and stays.
-  assert.deepEqual(Object.keys(byDescription).sort(), ["Start with 10 lives", "Start with 9 lives", "infinite lives"]);
+  assert.deepEqual(Object.keys(byDescription).sort(), [
+    "Start with 10 lives",
+    "Start with 9 lives",
+    "infinite lives",
+  ]);
   assert.equal(byDescription["infinite lives"].codeKind, "game-genie");
 });
 
@@ -522,24 +635,33 @@ test("buildCheatShard keeps one record per code kind when device files disagree"
     cheatSystem: "snes",
     files: [
       {
-        sourcePath: "cht/Nintendo - Super Nintendo Entertainment System/Kinds (USA) (Game Genie).cht",
+        sourcePath:
+          "cht/Nintendo - Super Nintendo Entertainment System/Kinds (USA) (Game Genie).cht",
         text: cheat("Lives"),
       },
       {
-        sourcePath: "cht/Nintendo - Super Nintendo Entertainment System/Kinds (USA) (Pro Action Replay).cht",
+        sourcePath:
+          "cht/Nintendo - Super Nintendo Entertainment System/Kinds (USA) (Pro Action Replay).cht",
         text: cheat("Lives"),
       },
       {
-        sourcePath: "cht/Nintendo - Super Nintendo Entertainment System/Kinds (USA) (Action Replay).cht",
+        sourcePath:
+          "cht/Nintendo - Super Nintendo Entertainment System/Kinds (USA) (Action Replay).cht",
         text: cheat("lives "),
       },
-      { sourcePath: "cht/Nintendo - Super Nintendo Entertainment System/Kinds (USA).cht", text: cheat("LIVES") },
+      {
+        sourcePath: "cht/Nintendo - Super Nintendo Entertainment System/Kinds (USA).cht",
+        text: cheat("LIVES"),
+      },
     ],
     releases: [],
     sourceRevision: REVISION,
   });
   const [game] = shard.games;
-  assert.deepEqual(game.cheats.map((entry) => entry.codeKind).sort(), ["game-genie", "pro-action-replay"]);
+  assert.deepEqual(game.cheats.map((entry) => entry.codeKind).sort(), [
+    "game-genie",
+    "pro-action-replay",
+  ]);
 });
 
 test("a game left with only dropped records disappears from the shard", () => {
@@ -561,7 +683,9 @@ test("Master System fixture keeps the Game Genie code and drops the RAM codes", 
   const directory = "cht/Sega - Master System - Mark III";
   const shard = buildCheatShard({
     cheatSystem: "mastersystem",
-    files: [{ sourcePath: `${directory}/Sample Game (World).cht`, text: MASTER_SYSTEM_SAMPLE_GAME }],
+    files: [
+      { sourcePath: `${directory}/Sample Game (World).cht`, text: MASTER_SYSTEM_SAMPLE_GAME },
+    ],
     releases: [],
     sourceRevision: REVISION,
   });

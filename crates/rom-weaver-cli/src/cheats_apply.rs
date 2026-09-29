@@ -199,6 +199,16 @@ impl CliApp {
     ) -> Result<Vec<CheatWrite>> {
         let layout = RomLayout::detect(rom, system);
         let mut all = Vec::new();
+        if let Some(kind) = CheatKind::parse(kind_id).filter(|kind| kind.is_gba_action_replay()) {
+            // Each `--code` value is one block that starts from the default
+            // seeds; a reseed in one block MUST NOT change the next block.
+            for code in codes_for_kind(codes, system, kind_id) {
+                for decoded in cheats::decode_gba_codes(&code, system, kind)? {
+                    all.extend(cheats::resolve_writes(rom, &layout, &decoded)?);
+                }
+            }
+            return Ok(all);
+        }
         // A single `--code` value may carry several `+`/comma/space-joined codes.
         for code in codes_for_kind(codes, system, kind_id) {
             let decoded = if kind_id.eq_ignore_ascii_case("auto") {
@@ -206,7 +216,7 @@ impl CliApp {
             } else {
                 let kind = CheatKind::parse(kind_id).ok_or_else(|| {
                     RomWeaverError::Validation(format!(
-                        "unknown --code-kind `{kind_id}`; expected auto, game-genie, gameshark, or xploder"
+                        "unknown --code-kind `{kind_id}`; expected auto, game-genie, gameshark, xploder, pro-action-rocky, gold-finger, game-shark-v1[-raw], or action-replay-v3[-raw]"
                     ))
                 })?;
                 cheats::decode(&code, system, kind)?
@@ -381,6 +391,13 @@ impl CliApp {
 
 /// Count individual codes after splitting `+`/comma/space-joined `--code` values.
 fn codes_for_kind(codes: &[String], system: CheatSystem, kind_id: &str) -> Vec<String> {
+    if CheatKind::parse(kind_id).is_some_and(CheatKind::is_gba_action_replay) {
+        return codes
+            .iter()
+            .filter(|code| !code.trim().is_empty())
+            .cloned()
+            .collect();
+    }
     let use_xploder = CheatKind::parse(kind_id) == Some(CheatKind::Xploder)
         || (kind_id.eq_ignore_ascii_case("auto")
             && matches!(
@@ -424,6 +441,31 @@ fn is_playstation_executable(path: &Path) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gba_code_values_decrypt_with_their_own_seeds() {
+        let rom = vec![0u8; 0x200];
+        let codes = [
+            "70BDB80D 69F37FCB\n25A8F94C B1A4BCF4".to_owned(),
+            "CDE69477 3E02C83D".to_owned(),
+        ];
+
+        let writes = CliApp::resolve_cheat_writes(
+            &rom,
+            CheatSystem::GameBoyAdvance,
+            &codes,
+            "game-shark-v1",
+        )
+        .unwrap();
+
+        assert_eq!(
+            writes
+                .iter()
+                .map(|write| (write.offset, write.value))
+                .collect::<Vec<_>>(),
+            vec![(0x44, 0xBEEF), (0x20, 0x1234)]
+        );
+    }
 
     fn validation_message(err: &RomWeaverError) -> String {
         match err {

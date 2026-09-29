@@ -71,6 +71,14 @@ describe("splitCheatCodes", () => {
     expect(splitCheatCodes("SXIOPO AEEPYZ", "nes")).toEqual(["SXIOPO", "AEEPYZ"]);
   });
 
+  it.each(["game-shark-v1", "game-shark-v1-raw", "action-replay-v3", "action-replay-v3-raw"])(
+    "keeps an entire multiline GBA %s block together",
+    (kind) => {
+      const block = "DEADFACE 00000001\nCAFEBABE 00000002\n00000000 00000000";
+      expect(splitCheatCodes(block, "gameboyadvance", kind)).toEqual([block]);
+    },
+  );
+
   it("splits on semicolons the way the engine does", () => {
     expect(splitCheatCodes("SXIOPO;AEEPYZ", "nes")).toEqual(["SXIOPO", "AEEPYZ"]);
   });

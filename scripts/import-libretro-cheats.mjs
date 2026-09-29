@@ -72,7 +72,7 @@ export const cheatShardFileName = (slug) => `cheats-${slug}.json`;
 // unless it is provably dead:
 //   - no native code (missing/empty rawCode), a structured RetroArch entry
 //     (the raw_fields the Rust `has_structured_runtime_semantics` list), or a
-//     `?`/`XX` parameter placeholder;
+//     `?`/`XX` parameter placeholder (except valid Gold Finger data sentinels);
 //   - EVERY subcode decodes to a literal address the target system's ROM
 //     range can never contain. Subcodes are split the way Rust does (`+`, `,`,
 //     `;`, whitespace; the Xploder four-word grouping for gameboyadvance).
@@ -114,7 +114,40 @@ const STRUCTURED_RUNTIME_FIELDS = new Set([
 const hasStructuredRuntimeSemantics = (record) =>
   Object.keys(record.rawFields ?? {}).some((name) => STRUCTURED_RUNTIME_FIELDS.has(name));
 
-const containsParameterPlaceholder = (value) => value.includes("?") || value.toUpperCase().includes("XX");
+const normalizeCode = (value) => value.replace(/[-:\s]/gu, "").toUpperCase();
+
+const isValidGoldFingerCode = (value) => {
+  const code = normalizeCode(value);
+  if (!/^[0-9A-F]{5}(?:[0-9A-F]{2}|XX){3}[0-9A-F]{2}[01]$/u.test(code)) return false;
+  const pairs = [code.slice(5, 7), code.slice(7, 9), code.slice(9, 11)];
+  const firstUnused = pairs.indexOf("XX");
+  if (
+    firstUnused === 0 ||
+    (firstUnused >= 0 && pairs.slice(firstUnused).some((pair) => pair !== "XX"))
+  )
+    return false;
+  const paddedAddress = `0${code.slice(0, 5)}`;
+  const checksumParts = [
+    paddedAddress.slice(0, 2),
+    paddedAddress.slice(2, 4),
+    paddedAddress.slice(4, 6),
+  ];
+  const sum = [...checksumParts, ...pairs].reduce(
+    (total, pair) => total + (pair === "XX" ? 0 : Number.parseInt(pair, 16)),
+    0,
+  );
+  return ((sum - 0x160) & 0xff) === Number.parseInt(code.slice(11, 13), 16);
+};
+
+const containsParameterPlaceholder = (value, cheatSystem, codeKind) => {
+  if (value.includes("?")) return true;
+  if (!value.toUpperCase().includes("XX")) return false;
+  return !(
+    cheatSystem === "snes" &&
+    (codeKind === "gold-finger" || normalizeCode(value).length === 14) &&
+    isValidGoldFingerCode(value)
+  );
+};
 
 const isHex = (value, length) => value.length === length && /^[0-9a-fA-F]+$/u.test(value);
 
@@ -255,8 +288,18 @@ export function isBakeableCandidate(cheatSystem, record) {
   const rawCode = record.rawCode;
   if (rawCode === null || rawCode === undefined || rawCode.trim() === "") return false;
   if (hasStructuredRuntimeSemantics(record)) return false;
-  if (containsParameterPlaceholder(rawCode)) return false;
-  const subcodes = cheatSystem === "gameboyadvance" ? splitXploderCodes(rawCode) : splitCodes(rawCode);
+  if (containsParameterPlaceholder(rawCode, cheatSystem, record.codeKind)) return false;
+  if (
+    (cheatSystem === "nes" && record.codeKind === "pro-action-rocky") ||
+    (cheatSystem === "gameboyadvance" &&
+      ["game-shark-v1", "game-shark-v1-raw", "action-replay-v3", "action-replay-v3-raw"].includes(
+        record.codeKind,
+      ))
+  ) {
+    return true;
+  }
+  const subcodes =
+    cheatSystem === "gameboyadvance" ? splitXploderCodes(rawCode) : splitCodes(rawCode);
   if (subcodes.length === 0) return false;
   const subcodeIsRam = SUBCODE_RAM_CHECKS[cheatSystem];
   if (!subcodeIsRam) return true;
@@ -267,14 +310,20 @@ const DEVICE_ANNOTATIONS = new Set([
   "action replay",
   "code breaker",
   "game genie",
+  "gold finger",
   "gameshark",
   "hacks",
   "pro action replay",
+  "pro action rocky",
   "rumbles",
 ]);
 
 const isSourceAnnotation = (value) =>
-  DEVICE_ANNOTATIONS.has(value.trim().toLowerCase()) || /^diff\d*$/iu.test(value.trim());
+  DEVICE_ANNOTATIONS.has(value.trim().toLowerCase()) ||
+  /^(?:(?:action replay|gameshark|game shark)(?:\s+v(?:1(?:\s*(?:\/|-|&)\s*v?2)?|2|3))?(?:\s+raw)?|raw)$/iu.test(
+    value.trim(),
+  ) ||
+  /^diff\d*$/iu.test(value.trim());
 
 const REGION_WORDS = new Set([
   "asia",
@@ -370,10 +419,13 @@ export function parseCht(source, options = {}) {
     const match = /^cheat(\d+)_(.+)$/u.exec(key);
     if (!match) continue;
     const sourceIndex = Number(match[1]);
-    if (!Number.isSafeInteger(sourceIndex)) fail(`${sourceFile}:${lineIndex + 1} has an invalid cheat index.`);
+    if (!Number.isSafeInteger(sourceIndex))
+      fail(`${sourceFile}:${lineIndex + 1} has an invalid cheat index.`);
     if (!records.has(sourceIndex)) {
       if (records.size >= (options.maxRecords ?? MAX_RECORDS_PER_FILE)) {
-        fail(`${sourceFile} has more than ${options.maxRecords ?? MAX_RECORDS_PER_FILE} cheat records.`);
+        fail(
+          `${sourceFile} has more than ${options.maxRecords ?? MAX_RECORDS_PER_FILE} cheat records.`,
+        );
       }
       records.set(sourceIndex, new Map());
     }
@@ -418,17 +470,46 @@ const stripDeviceAnnotation = (name) => {
 };
 
 const codeKindForTitle = (title, cheatSystem) => {
-  const annotations = [...title.matchAll(/\(([^()]*)\)/gu)].map((match) => match[1].trim().toLowerCase());
+  const annotations = [...title.matchAll(/\(([^()]*)\)/gu)].map((match) =>
+    match[1].trim().toLowerCase(),
+  );
+  const annotationText = annotations.join(" ");
   if (annotations.includes("game genie")) return "game-genie";
+  if (cheatSystem === "snes" && annotations.includes("gold finger")) return "gold-finger";
+  if (cheatSystem === "nes" && annotations.includes("pro action rocky")) return "pro-action-rocky";
+  if (cheatSystem === "gameboyadvance") {
+    const raw = annotations.includes("raw") || /\braw\b/u.test(annotationText);
+    if (
+      /\b(?:gameshark|game shark|action replay)\s+v(?:1(?:\s*(?:\/|-|&)\s*v?2)?|2)\b/u.test(
+        annotationText,
+      )
+    ) {
+      return raw ? "game-shark-v1-raw" : "game-shark-v1";
+    }
+    if (/\b(?:gameshark|game shark|action replay)\s+v3\b/u.test(annotationText)) {
+      return raw ? "action-replay-v3-raw" : "action-replay-v3";
+    }
+  }
   if (
     cheatSystem === "gameboyadvance" &&
     annotations.some((annotation) =>
-      ["action replay", "code breaker", "gameshark", "pro action replay", "xploder", "xplorer"].includes(annotation),
+      [
+        "action replay",
+        "code breaker",
+        "gameshark",
+        "pro action replay",
+        "xploder",
+        "xplorer",
+      ].includes(annotation),
     )
   ) {
     return "xploder";
   }
-  if (annotations.some((annotation) => ["action replay", "gameshark", "pro action replay"].includes(annotation))) {
+  if (
+    annotations.some((annotation) =>
+      ["action replay", "gameshark", "pro action replay"].includes(annotation),
+    )
+  ) {
     return "pro-action-replay";
   }
   return null;
@@ -445,6 +526,10 @@ const XPLODER_WORDS = ["xploder", "xplorer", "codebreaker", "code breaker"];
 const codeKindForFileName = (fileName, cheatSystem) => {
   const name = fileName.toLowerCase();
   const has = (words) => words.some((word) => name.includes(word));
+  if (cheatSystem === "snes" && has(["gold finger", "gold-finger"])) return "gold-finger";
+  if (cheatSystem === "nes" && has(["pro action rocky", "pro-action-rocky"])) {
+    return "pro-action-rocky";
+  }
   if (
     (cheatSystem === "gameboyadvance" || cheatSystem === "playstation") &&
     has([...ACTION_REPLAY_WORDS, ...XPLODER_WORDS])
@@ -632,9 +717,14 @@ export function buildCheatShard({ cheatSystem, files, releases, sourceRevision }
   const serializedGames = [...games.values()]
     .map((game) => {
       return {
-        checksums: [...game.checksums.values()].sort((left, right) => compare(checksumKey(left), checksumKey(right))),
+        checksums: [...game.checksums.values()].sort((left, right) =>
+          compare(checksumKey(left), checksumKey(right)),
+        ),
         cheats: [...game.cheats.values()]
-          .sort((left, right) => compare(left.sourceFile, right.sourceFile) || left.sourceIndex - right.sourceIndex)
+          .sort(
+            (left, right) =>
+              compare(left.sourceFile, right.sourceFile) || left.sourceIndex - right.sourceIndex,
+          )
           .map(storeCheat),
         id: game.id,
         normalizedTitle: game.normalizedTitle,
@@ -644,7 +734,10 @@ export function buildCheatShard({ cheatSystem, files, releases, sourceRevision }
       };
     })
     .filter((game) => game.cheats.length > 0)
-    .sort((left, right) => compare(left.normalizedTitle, right.normalizedTitle) || compare(left.id, right.id));
+    .sort(
+      (left, right) =>
+        compare(left.normalizedTitle, right.normalizedTitle) || compare(left.id, right.id),
+    );
 
   return {
     schemaVersion: CHEAT_SHARD_SCHEMA_VERSION,

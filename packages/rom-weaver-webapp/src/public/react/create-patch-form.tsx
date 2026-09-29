@@ -1,6 +1,6 @@
 import { Download, GitCompare } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CheatManualSystem } from "../../lib/cheats/index.ts";
+import type { CheatManualSystem, ManualCheatKindOverride } from "../../lib/cheats/index.ts";
 import { getPreferredCreatePatchFormat } from "../../lib/create/patch-format-limits.ts";
 import { resolveAutomaticSelection } from "../../lib/input/selection.ts";
 import type {
@@ -454,6 +454,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   // the original; the staged modified source (if any) is ignored while it is on.
   const [modifiedMode, setModifiedMode] = useState<"codes" | "rom">("rom");
   const [cheatCodesText, setCheatCodesText] = useState("");
+  const [cheatCodeKind, setCheatCodeKind] = useState<ManualCheatKindOverride>("auto");
   const [cheatCodeEntries, setCheatCodeEntries] = useState<CreateCheatCodeEntry[]>([]);
   const [cheatCodesClassifying, setCheatCodesClassifying] = useState(false);
   const [cheatSystem, setCheatSystem] = useState<CheatManualSystem | undefined>(undefined);
@@ -491,8 +492,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   // Cheat codes are a beta tool; turning beta tools off falls back to the ROM input.
   const codesMode = cheatsEnabled && modifiedMode === "codes";
   const cheatCodes = useMemo(
-    () => (codesMode ? splitCheatCodes(cheatCodesText, cheatSystem) : []),
-    [cheatCodesText, cheatSystem, codesMode],
+    () => (codesMode ? splitCheatCodes(cheatCodesText, cheatSystem, cheatCodeKind) : []),
+    [cheatCodeKind, cheatCodesText, cheatSystem, codesMode],
   );
   const cheatCodesValidationMessage = codesMode
     ? getCheatCodesValidationMessage(cheatCodeEntries, cheatCodesClassifying)
@@ -1091,7 +1092,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         await createWorkflow.setOriginal(stagedOriginal);
         if (!codesMode && stagedModified) await createWorkflow.setModified(stagedModified);
       }
-      await createWorkflow.setCheatCodes(cheatCodes, cheatSystem);
+      await createWorkflow.setCheatCodes(cheatCodes, cheatSystem, cheatCodeKind);
       await createWorkflow.setPatchType(patchType as NonNullable<CreateSettings["format"]>);
       await createWorkflow.setOutputName(executionOutputName);
 
@@ -1308,8 +1309,13 @@ function CreatePatchForm(props: CreatePatchFormProps) {
                   classifyDatabaseCheats={classifyDatabaseCheats}
                   classifyManualCode={classifyManualCode}
                   disabled={outputDisabled}
+                  kind={cheatCodeKind}
                   onClassifyingChange={setCheatCodesClassifying}
                   onEntriesChange={setCheatCodeEntries}
+                  onKindChange={(kind) => {
+                    resetWorkflowOutput();
+                    setCheatCodeKind(kind);
+                  }}
                   onSystemChange={setCheatSystem}
                   onValueChange={(value) => {
                     resetWorkflowOutput();

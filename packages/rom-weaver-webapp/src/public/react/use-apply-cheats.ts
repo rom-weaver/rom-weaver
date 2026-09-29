@@ -11,7 +11,12 @@ import {
 import { cheatDelivery, type CheatManualSystem, type ClassifiedCheatRecord } from "../../lib/cheats/index.ts";
 import type { ApplyWorkflow, BrowserApplyResult } from "../../platform/browser/browser-api.ts";
 import type { SourceRef } from "../../types/source.ts";
-import { getCheatPatchCodes, getCheatPatchFileName, getCheatPatchFormat } from "./cheat-patch-export-model.ts";
+import {
+  getCheatPatchCodes,
+  getCheatPatchKind,
+  getCheatPatchFileName,
+  getCheatPatchFormat,
+} from "./cheat-patch-export-model.ts";
 import { createCheatClassifiers } from "./cheat-classifier.ts";
 import type { useLocalApplyPatchFormSession } from "./patcher-form-session.ts";
 import { type createWorkflowHandle, loadBrowserApi } from "./workflow-loader.ts";
@@ -112,6 +117,7 @@ const useApplyCheats = ({
   const saveCheatsAsPatch = useCallback(
     async (records: ClassifiedCheatRecord[], system: CheatManualSystem | undefined) => {
       const codes = getCheatPatchCodes(records);
+      const kind = getCheatPatchKind(records);
       if (!codes.length) throw new Error("Turn on at least one ROM cheat to bake it into a patch");
       const format = getCheatPatchFormat(cheatRomRow?.size);
       const fileName = getCheatPatchFileName(cheatFileName, records, format);
@@ -124,7 +130,7 @@ const useApplyCheats = ({
       });
       try {
         await workflow.setOriginal(getCheatSource() as never);
-        await workflow.setCheatCodes(codes, system);
+        await workflow.setCheatCodes(codes, system, kind);
         await workflow.setPatchType(format);
         await workflow.setOutputName(fileName);
         const result = await workflow.run();

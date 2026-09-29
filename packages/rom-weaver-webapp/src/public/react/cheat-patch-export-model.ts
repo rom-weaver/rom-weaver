@@ -1,6 +1,6 @@
 import { getCreatePatchFormatsForSizes } from "../../lib/create/patch-format-limits.ts";
 import type { CreateSettings } from "../../platform/browser/browser-api.ts";
-import { cheatDelivery, type ClassifiedCheatRecord } from "../../lib/cheats/index.ts";
+import { cheatDelivery, type ClassifiedCheatRecord, type ManualCheatKindOverride } from "../../lib/cheats/index.ts";
 import { getFileNameWithoutExtension } from "../../lib/input/path-utils.ts";
 import { sanitizeCheatPatchNamePart, toCheatPatchNameSuffix } from "./cheat-patch-name.ts";
 
@@ -18,6 +18,25 @@ const getCheatPatchCodes = (records: readonly ClassifiedCheatRecord[]): string[]
   getRomCheats(records)
     .map((entry) => String(entry.record.rawCode || "").trim())
     .filter((code) => !!code);
+
+// Auto-detection reads these kinds per code, so a mixed selection of them can still share one patch.
+const AUTO_DETECTED_KINDS = new Set<ManualCheatKindOverride>([
+  "auto",
+  "game-genie",
+  "pro-action-replay",
+  "xploder",
+  "gold-finger",
+]);
+
+const getCheatPatchKind = (records: readonly ClassifiedCheatRecord[]): ManualCheatKindOverride => {
+  const romCheats = getRomCheats(records);
+  const kinds = new Set(romCheats.map((entry) => entry.record.codeKind ?? entry.detectedKind ?? "auto"));
+  if (kinds.size <= 1) return kinds.values().next().value ?? "auto";
+  // SNES Game Genie and Pro Action Replay codes share one shape, and auto-detection reads it as Game Genie.
+  const snesActionReplay = kinds.has("pro-action-replay") && romCheats.some((entry) => entry.record.system === "snes");
+  if (!snesActionReplay && [...kinds].every((kind) => AUTO_DETECTED_KINDS.has(kind))) return "auto";
+  throw new Error("Create a separate patch for codes with a different code type.");
+};
 
 /** The patch format the create workflow accepts. */
 type CreatePatchFormat = NonNullable<CreateSettings["format"]>;
@@ -53,4 +72,11 @@ const getCheatPatchFileName = (romTitle: string, records: readonly ClassifiedChe
 const getCheatPatchStatus = (fileName: string, romCount: number): string =>
   `Created ${fileName} from ${romCount} ROM cheat${romCount === 1 ? "" : "s"}.`;
 
-export { getCheatPatchCodes, getCheatPatchFileName, getCheatPatchFormat, getCheatPatchStatus, getRomCheats };
+export {
+  getCheatPatchCodes,
+  getCheatPatchKind,
+  getCheatPatchFileName,
+  getCheatPatchFormat,
+  getCheatPatchStatus,
+  getRomCheats,
+};

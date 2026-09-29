@@ -9,7 +9,7 @@
 
 use rom_weaver_core::Result;
 
-use super::{CheatSystem, CheatWrite, DecodedCode, SEGA8_RAM_START, coded};
+use super::{CheatKind, CheatSystem, CheatWrite, DecodedCode, SEGA8_RAM_START, coded};
 
 const NES_INES_MAGIC: [u8; 4] = *b"NES\x1A";
 const NES_HEADER_BYTES: usize = 16;
@@ -243,6 +243,19 @@ pub(crate) fn resolve_writes(
     layout: &RomLayout,
     decoded: &DecodedCode,
 ) -> Result<Vec<CheatWrite>> {
+    if layout.system == CheatSystem::Snes && decoded.kind == CheatKind::GoldFinger {
+        // Gold Finger addresses count file bytes, independent of the SNES bus map.
+        let offset = layout.header_bytes + decoded.address as usize;
+        if offset.saturating_add(usize::from(decoded.width)) > rom.len() {
+            return Err(range_error(offset, rom.len()));
+        }
+        return Ok(vec![CheatWrite {
+            offset,
+            value: decoded.value,
+            width: decoded.width,
+            compare: None,
+        }]);
+    }
     match layout.system {
         CheatSystem::Nes => resolve_nes(rom, layout, decoded),
         CheatSystem::Snes => resolve_snes(rom, layout, decoded),

@@ -874,6 +874,7 @@ fn cheat_system_serde_names_match_the_database_shards() {
             system
         );
         assert_eq!(CheatSystem::parse(system.id()), Some(system));
+        assert_eq!(CheatSystem::parse(name), Some(system));
     }
 }
 
@@ -964,4 +965,82 @@ fn apply_writes_and_conflict_detection_agree_on_the_bytes() {
         apply_writes(&mut rom, system, &[write]).unwrap();
         assert_eq!(&rom[4..6], write_bytes(&write, system).unwrap().as_slice());
     }
+}
+
+#[test]
+fn rocky_record_matches_compare_bytes_across_nes_banks() {
+    let mut rom = vec![0u8; 0x8000];
+    rom[0x1123] = 0xDE;
+    let mut entry = record(CheatSystem::Nes, "15C93C0A");
+    entry.code_kind = Some(CheatKind::ProActionRocky);
+    let classified = classify_record(&rom, &entry);
+    let CheatResolution::RomBakeable { writes } = classified.resolution else {
+        panic!("Rocky code must resolve");
+    };
+    assert_eq!(writes.len(), 1);
+    assert_eq!(writes[0].offset, 0x1123);
+    apply_writes(&mut rom, CheatSystem::Nes, &writes).unwrap();
+    assert_eq!(rom[0x1123], 0xBD);
+    assert_eq!(rom[0x5123], 0);
+}
+
+#[test]
+fn gold_finger_records_preserve_unused_slots_and_copier_headers() {
+    for header_bytes in [0, 512] {
+        let mut rom = vec![0u8; 0x8000 + header_bytes];
+        let mut entry = record(CheatSystem::Snes, "0000009XXXXA90");
+        entry.code_kind = None;
+        let classified = classify_record(&rom, &entry);
+        let CheatResolution::RomBakeable { writes } = classified.resolution else {
+            panic!(
+                "Gold Finger XX slots are not parameters: {:?}",
+                classified.resolution
+            );
+        };
+        assert_eq!(writes[0].offset, header_bytes);
+        apply_writes(&mut rom, CheatSystem::Snes, &writes).unwrap();
+        assert_eq!(rom[header_bytes], 9);
+        if header_bytes > 0 {
+            assert_eq!(rom[0], 0);
+        }
+    }
+}
+
+#[test]
+fn gold_finger_three_byte_writes_and_bounds_are_checked() {
+    let mut rom = vec![0u8; 0x8000];
+    let mut entry = record(CheatSystem::Snes, "00000ABCDEF070");
+    entry.code_kind = Some(CheatKind::GoldFinger);
+    let classified = classify_record(&rom, &entry);
+    let CheatResolution::RomBakeable { writes } = classified.resolution else {
+        panic!("Gold Finger code must resolve: {:?}", classified.resolution);
+    };
+    apply_writes(&mut rom, CheatSystem::Snes, &writes).unwrap();
+    assert_eq!(&rom[..3], &[0xAB, 0xCD, 0xEF]);
+    assert!(matches!(
+        classify_record(&[0; 2], &entry).resolution,
+        CheatResolution::Unsupported { .. }
+    ));
+}
+
+#[test]
+fn gba_records_keep_encrypted_lines_in_one_decoder_state() {
+    let mut entry = record(
+        CheatSystem::GameBoyAdvance,
+        "70BDB80D 69F37FCB\n25A8F94C B1A4BCF4",
+    );
+    entry.code_kind = Some(CheatKind::GameSharkV1);
+    let rom = vec![0u8; 0x200];
+    let classified = classify_record(&rom, &entry);
+    let CheatResolution::RomBakeable { writes } = classified.resolution else {
+        panic!("encrypted reseed must resolve");
+    };
+    assert_eq!(writes[0].offset, 0x44);
+    assert_eq!(writes[0].value, 0xBEEF);
+    entry.raw_code = Some("00000000 18000020\n0000ABCD 00000000\n02000000 00000001".to_owned());
+    entry.code_kind = Some(CheatKind::ActionReplayV3Raw);
+    assert!(matches!(
+        classify_record(&rom, &entry).resolution,
+        CheatResolution::Unsupported { .. }
+    ));
 }

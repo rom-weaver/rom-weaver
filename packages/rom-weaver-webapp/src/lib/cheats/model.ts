@@ -25,7 +25,16 @@ export type CheatManualSystem = CheatDatabaseSystem | (typeof CHEAT_MANUAL_ONLY_
 /** A system that reaches the step through manual entry alone. */
 export type CheatManualOnlySystem = (typeof CHEAT_MANUAL_ONLY_SYSTEMS)[number];
 
-type CheatCodeKind = "game-genie" | "pro-action-replay" | "xploder";
+export type CheatCodeKind =
+  | "game-genie"
+  | "pro-action-replay"
+  | "pro-action-rocky"
+  | "gold-finger"
+  | "game-shark-v1"
+  | "game-shark-v1-raw"
+  | "action-replay-v3"
+  | "action-replay-v3-raw"
+  | "xploder";
 type RustCheatSystem = CheatManualSystem;
 
 export type CheatRecord = {
