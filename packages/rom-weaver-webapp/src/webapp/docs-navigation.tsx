@@ -6,6 +6,25 @@ import { useDocShelfState, type DocShelfState } from "./use-doc-shelf-state.ts";
 const DOC_SHELVES = groupDocNavigationRoutes(
   DOC_SOURCES.map((source) => ({ ...source, group: source.group ?? docGroupTitle(source.file) })),
 );
+const GUIDE_BRANCHES = (["browser", "cli"] as const).map((audience) => ({
+  title: audience === "browser" ? "Browser guides" : "CLI guides",
+  shelves: DOC_SHELVES.map((shelf) => ({
+    ...shelf,
+    key: `${audience}:${shelf.title}`,
+    routes: shelf.routes.filter((route) => route.audience === audience),
+  })).filter((shelf) => shelf.routes.length),
+}));
+const SHARED_SHELVES = DOC_SHELVES.map((shelf) => ({
+  ...shelf,
+  routes: shelf.routes.filter((route) => !route.audience),
+})).filter((shelf) => shelf.routes.length);
+const NAV_STATE_SHELVES = [
+  ...SHARED_SHELVES,
+  ...GUIDE_BRANCHES.flatMap((branch) => [
+    { title: branch.title },
+    ...branch.shelves.map((shelf) => ({ title: shelf.key })),
+  ]),
+];
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 const warmDocsHtml = (slug: string) => {
   void preloadDocsRouteHtml(slug).catch(() => undefined);
@@ -38,8 +57,7 @@ const DocsNav = ({
       positionedSlug.current = null;
       return;
     }
-    const shelf = current.closest<HTMLDetailsElement>("details");
-    if (shelf && !shelf.open) return;
+    if (current.closest("details:not([open])")) return;
     // The outer navigation MUST own scrolling, including revealing the active guide.
     const observer = new ResizeObserver(() => positionCurrentGuide());
     const positionCurrentGuide = () => {
@@ -82,41 +100,47 @@ const DocsNav = ({
         ))}
       </ul>
     ) : null;
+  const renderShelf = (shelf: (typeof DOC_SHELVES)[number], key = shelf.title, nested = false) => {
+    const Heading = nested ? "h4" : "h3";
+    return (
+      <details
+        className="guide-shelf"
+        key={key}
+        onToggle={(event) => {
+          if (event.target === event.currentTarget) onShelfToggle(key, event.currentTarget.open);
+        }}
+        open={openShelves[key]}
+      >
+        <summary>
+          <Heading className="guide-shelf-title">{shelf.title}</Heading>
+        </summary>
+        {renderLinks(shelf.routes, undefined, nested)}
+      </details>
+    );
+  };
   return (
     <nav aria-label="Docs" className="guide-nav" ref={navRef}>
-      {DOC_SHELVES.map((shelf) =>
-        shelf.title === "Start here" ? (
-          renderLinks(shelf.routes, shelf.title)
-        ) : (
-          <details
-            className="guide-shelf"
-            key={shelf.title}
-            onToggle={(event) => onShelfToggle(shelf.title, event.currentTarget.open)}
-            open={openShelves[shelf.title]}
-          >
-            <summary>
-              <h3 className="guide-shelf-title">{shelf.title}</h3>
-            </summary>
-            {shelf.routes.some((entry) => entry.audience) ? (
-              <>
-                {(["browser", "cli"] as const).map((audience) => {
-                  const routes = shelf.routes.filter((entry) => entry.audience === audience);
-                  if (!routes.length) return null;
-                  return (
-                    <div key={audience} className="guide-audience">
-                      <h4 className="guide-audience-title">{audience === "browser" ? "Browser" : "CLI"}</h4>
-                      {renderLinks(routes, undefined, true)}
-                    </div>
-                  );
-                })}
-                {renderLinks(shelf.routes.filter((entry) => !entry.audience))}
-              </>
-            ) : (
-              renderLinks(shelf.routes)
-            )}
-          </details>
-        ),
+      {SHARED_SHELVES.filter((shelf) => shelf.title === "Start here").map((shelf) =>
+        renderLinks(shelf.routes, shelf.title),
       )}
+      {GUIDE_BRANCHES.map((branch) => (
+        <details
+          className="guide-shelf guide-branch"
+          key={branch.title}
+          onToggle={(event) => {
+            if (event.target === event.currentTarget) onShelfToggle(branch.title, event.currentTarget.open);
+          }}
+          open={openShelves[branch.title]}
+        >
+          <summary>
+            <h3 className="guide-shelf-title">{branch.title}</h3>
+          </summary>
+          <div className="guide-branch-topics">
+            {branch.shelves.map((shelf) => renderShelf(shelf, shelf.key, true))}
+          </div>
+        </details>
+      ))}
+      {SHARED_SHELVES.filter((shelf) => shelf.title !== "Start here").map((shelf) => renderShelf(shelf))}
     </nav>
   );
 };
@@ -132,9 +156,16 @@ const DocsNavigation = ({
   onSelectOverview?: () => void;
   overviewId?: string;
 }) => {
-  const { onShelfToggle, openShelves } = useDocShelfState(DOC_SHELVES);
+  const { onShelfToggle, openShelves } = useDocShelfState(NAV_STATE_SHELVES);
   useEffect(() => {
-    const shelf = DOC_SHELVES.find((entry) => entry.routes.some((route) => route.slug === currentSlug));
+    for (const branch of GUIDE_BRANCHES) {
+      const shelf = branch.shelves.find((entry) => entry.routes.some((route) => route.slug === currentSlug));
+      if (!shelf) continue;
+      onShelfToggle(branch.title, true);
+      onShelfToggle(shelf.key, true);
+      return;
+    }
+    const shelf = SHARED_SHELVES.find((entry) => entry.routes.some((route) => route.slug === currentSlug));
     if (shelf) onShelfToggle(shelf.title, true);
   }, [currentSlug, onShelfToggle]);
   return (

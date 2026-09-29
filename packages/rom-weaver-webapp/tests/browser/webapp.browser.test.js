@@ -236,21 +236,30 @@ test("Docs topic headings keep their width and wrapping when expanded", async ()
     if (width < 1000) await openMenuSheet();
     const nav = document.querySelector(`${scope} .guide-nav`);
     expect(nav.querySelectorAll(":scope > .guide-nav-list a")).toHaveLength(2);
-    expect(nav.querySelector(".guide-shelf-title")?.textContent).toBe("Walkthroughs");
-    const headings = [...nav.querySelectorAll("summary")];
-    const sizes = () =>
+    expect(nav.querySelector(".guide-shelf-title")?.textContent).toBe("Browser guides");
+    const sizes = (headings) =>
       headings.map((heading) => {
         const bounds = heading.getBoundingClientRect();
         return [bounds.width, bounds.height];
       });
-    const before = sizes();
-    for (const heading of headings) {
-      const wasOpen = heading.parentElement.open;
-      heading.click();
-      await expect.poll(() => heading.parentElement.open).toBe(!wasOpen);
-      expect(sizes()).toEqual(before);
-      heading.click();
-      await expect.poll(() => heading.parentElement.open).toBe(wasOpen);
+    const checkHeadings = async (headings) => {
+      const before = sizes(headings);
+      for (const heading of headings) {
+        const wasOpen = heading.parentElement.open;
+        heading.click();
+        await expect.poll(() => heading.parentElement.open).toBe(!wasOpen);
+        expect(sizes(headings)).toEqual(before);
+        heading.click();
+        await expect.poll(() => heading.parentElement.open).toBe(wasOpen);
+      }
+    };
+    await checkHeadings([...nav.querySelectorAll(":scope > details > summary")]);
+    for (const branch of nav.querySelectorAll(".guide-branch")) {
+      branch.querySelector("summary").click();
+      await expect.poll(() => branch.open).toBe(true);
+      await checkHeadings([...branch.querySelectorAll(".guide-branch-topics summary")]);
+      branch.querySelector("summary").click();
+      await expect.poll(() => branch.open).toBe(false);
     }
   }
   await page.viewport(1280, 900);
@@ -772,6 +781,10 @@ test("the Menu sheet uses its content height and stays above the dock", async ()
   await new Promise((resolve) => setTimeout(resolve, 2500));
   expect(sheet.getBoundingClientRect().height).toBeCloseTo(start.sheetHeight, 1);
   expect(project.getBoundingClientRect().top).toBeCloseTo(start.projectTop, 1);
+  for (const branch of sheet.querySelectorAll(".guide-branch")) {
+    branch.querySelector("summary").click();
+    await expect.poll(() => branch.open).toBe(true);
+  }
   await page.viewport(390, 844);
   expect(sheet.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
   expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);

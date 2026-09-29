@@ -415,12 +415,13 @@
   margin: 0;
   list-style: none;
 }
-.rw-app .guide-audience-title {
-  margin: 6px 8px 1px 16px;
+.rw-app .guide-branch-topics {
+  padding-left: 8px;
+  margin-top: 2px;
+}
+.rw-app .guide-branch-topics .guide-shelf-title {
   font-size: 0.65rem;
-  font-weight: 600;
-  line-height: 1.3;
-  color: var(--ink-3);
+  letter-spacing: 0.04em;
 }
 .rw-app .guide-nav-list li {
   margin: 0;

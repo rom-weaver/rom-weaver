@@ -8,7 +8,7 @@ import { Masthead } from "../../src/webapp/components/shell.tsx";
 import { preloadWorkflowRoute } from "../../src/webapp/workflow-routes.tsx";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { DocsNavigation } from "../../src/webapp/docs-navigation.tsx";
-import { SITE_ORIGIN, groupDocNavigationRoutes } from "../../src/webapp/docs-routing.mjs";
+import { SITE_ORIGIN, DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
 import { navigatorWith } from "./navigator-test-utils.ts";
 
 // Guide HTML ships as one lazy chunk per page; rendering a guide synchronously
@@ -53,9 +53,7 @@ const routeFor = (slug: string) => {
 };
 
 const shelfTitles = [...new Set(DOC_ROUTES.map((route) => route.group))];
-const navShelfTitles = groupDocNavigationRoutes(DOC_ROUTES)
-  .filter((shelf) => shelf.title !== "Start here")
-  .map((shelf) => shelf.title);
+const navShelfTitles = ["Browser guides", "CLI guides", "Reference", "Explanation", "Hosting", "Development", "Legal"];
 const defaultShelfTitle = DOC_ROUTES[0]?.group;
 const shelfFor = (shelves: HTMLDetailsElement[], title: string) =>
   shelves.find((shelf) => shelf.querySelector(".guide-shelf-title, .docs-index-title")?.textContent === title);
@@ -487,31 +485,52 @@ Fixture description.
     render(<DocsNavigation currentSlug="docs" />);
 
     const shelves = [...document.querySelectorAll<HTMLDetailsElement>(".guide-shelf")];
-    expect(shelves).toHaveLength(navShelfTitles.length);
-    expect(shelves.map((shelf) => shelf.open)).toEqual(navShelfTitles.map(() => false));
+    expect(document.querySelectorAll(".guide-nav > .guide-shelf")).toHaveLength(navShelfTitles.length);
+    expect(shelves.every((shelf) => !shelf.open)).toBe(true);
     for (const shelf of shelves) {
       const summary = shelf.querySelector("summary") as HTMLElement;
-      expect(summary.querySelector("h3")?.textContent).toBeTruthy();
+      expect(summary.querySelector("h3, h4")?.textContent).toBeTruthy();
       const wasOpen = shelf.open;
       fireEvent.click(summary);
       expect(shelf.open).toBe(!wasOpen);
     }
-    expect(shelves.map((shelf) => shelf.open)).toEqual(navShelfTitles.map(() => true));
+    expect(shelves.every((shelf) => shelf.open)).toBe(true);
   });
 
-  it("groups browser and CLI links without more disclosure levels", () => {
+  it("puts each interface's guides in its own topic tree", async () => {
     render(<DocsNavigation currentSlug="docs/cli-apply" />);
-    const shelf = [...document.querySelectorAll(".guide-shelf")].find(
-      (entry) => entry.querySelector("h3")?.textContent === "Patching & bundles",
-    ) as HTMLElement;
-    const groups = [...shelf.querySelectorAll(".guide-audience")];
-    expect(groups.map((group) => group.querySelector("h4")?.textContent)).toEqual(["Browser", "CLI"]);
-    expect(groups[0]?.querySelector('a[href="/docs/apply-rom-patches"]')?.textContent).toBe("Apply patches");
-    const cliLink = groups[1]?.querySelector('a[href="/docs/cli-apply"]');
+    const branches = [...document.querySelectorAll<HTMLDetailsElement>(".guide-branch")];
+    expect(branches.map((branch) => branch.querySelector("h3")?.textContent)).toEqual(["Browser guides", "CLI guides"]);
+    for (const [index, audience] of ["browser", "cli"].entries()) {
+      expect(
+        [...(branches[index]?.querySelectorAll("a") ?? [])].map((link) => link.getAttribute("href") ?? "").sort(),
+      ).toEqual(
+        DOC_SOURCES.filter((source) => source.audience === audience)
+          .map((source) => `/${source.slug}`)
+          .sort(),
+      );
+    }
+    const cliLink = branches[1]?.querySelector('a[href="/docs/cli-apply"]');
     expect(cliLink?.textContent).toBe("Apply patches");
     expect(cliLink?.getAttribute("aria-label")).toBe("Apply patches (CLI)");
     expect(cliLink?.getAttribute("aria-current")).toBe("page");
-    expect(shelf.querySelectorAll("details")).toHaveLength(0);
+    await vi.waitFor(() => expect(branches[1]?.open).toBe(true));
+    expect(cliLink?.closest<HTMLDetailsElement>("details")?.open).toBe(true);
+    expect(branches[0]?.open).toBe(false);
+    expect(branches[0]?.querySelector<HTMLDetailsElement>("details[open]")).toBeNull();
+  });
+
+  it("persists topic choices separately for Browser and CLI", async () => {
+    const { unmount } = render(<DocsNavigation currentSlug="docs/apply-rom-patches" />);
+    await vi.waitFor(() => expect(document.querySelector<HTMLDetailsElement>(".guide-branch")?.open).toBe(true));
+    unmount();
+    render(<DocsNavigation currentSlug="docs" />);
+    const browserLink = document.querySelector('a[href="/docs/apply-rom-patches"]');
+    const cliLink = document.querySelector('a[href="/docs/cli-apply"]');
+    expect(browserLink?.closest<HTMLDetailsElement>("details")?.open).toBe(true);
+    expect(browserLink?.closest<HTMLDetailsElement>(".guide-branch")?.open).toBe(true);
+    expect(cliLink?.closest<HTMLDetailsElement>("details")?.open).toBe(false);
+    expect(cliLink?.closest<HTMLDetailsElement>(".guide-branch")?.open).toBe(false);
   });
 
   it.each(["side-rail", "menu-sheet-body"])("reveals the active guide through the outer %s", async (className) => {
@@ -535,9 +554,11 @@ Fixture description.
 
     const nav = document.querySelector(".guide-nav");
     expect(defaultShelfTitle).toBe("Start here");
-    expect([...(nav?.querySelectorAll(".guide-shelf-title") ?? [])].map((shelf) => shelf.textContent)).toEqual(
-      navShelfTitles,
-    );
+    expect(
+      [...(nav?.querySelectorAll(":scope > .guide-shelf > summary > .guide-shelf-title") ?? [])].map(
+        (shelf) => shelf.textContent,
+      ),
+    ).toEqual(navShelfTitles);
     // Every published route reaches the nav, so a new guide can never be
     // stranded off the shelves.
     expect(nav?.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length);
@@ -687,6 +708,7 @@ Fixture description.
     const currentLink = document.querySelector('.side-nav .guide-nav a[aria-current="page"]');
     expect(currentLink?.getAttribute("href")).toBe("/docs/apply-rom-patches");
     await vi.waitFor(() => expect(currentLink?.closest<HTMLDetailsElement>(".guide-shelf")?.open).toBe(true));
+    expect(currentLink?.closest<HTMLDetailsElement>(".guide-branch")?.open).toBe(true);
     expect(currentLink?.closest("details")?.querySelector("summary")?.textContent).toBe("Patching & bundles");
   });
 
