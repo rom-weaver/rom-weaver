@@ -52,8 +52,6 @@ type WorkflowLogRecord = {
   namespace?: string;
 };
 
-const uiLocalizerLogger = createLogger("ui-localizer");
-
 const workflowLoggerByNamespace = new Map<string, ReturnType<typeof createLogger>>();
 
 const getWorkflowLogger = (namespace: string) => {
@@ -116,10 +114,10 @@ const useUiLocalizer = (): Localizer => {
   // A catalog that was still loading when this rendered lands later; the
   // version bump re-issues the localizer so memoized consumers see a new one.
   const catalogVersion = useSyncExternalStore(subscribeCatalogs, getCatalogVersion, getCatalogVersion);
-  return useMemo(() => {
-    uiLocalizerLogger.trace("Issuing UI localizer", { byteUnits, catalogVersion, language });
-    return createBrowserLocalizer(language, byteUnits);
-  }, [byteUnits, catalogVersion, language]);
+  return useMemo(
+    () => ({ catalogVersion, localizer: createBrowserLocalizer(language, byteUnits) }),
+    [byteUnits, catalogVersion, language],
+  ).localizer;
 };
 
 const normalizeDefaultCompression = (value: RuntimeValue, fallback: DefaultCompressionMode = "auto") => {
