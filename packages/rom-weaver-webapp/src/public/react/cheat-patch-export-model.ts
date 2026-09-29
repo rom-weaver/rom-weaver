@@ -29,9 +29,12 @@ const AUTO_DETECTED_KINDS = new Set<ManualCheatKindOverride>([
 ]);
 
 const getCheatPatchKind = (records: readonly ClassifiedCheatRecord[]): ManualCheatKindOverride => {
-  const kinds = new Set(getRomCheats(records).map((entry) => entry.record.codeKind ?? entry.detectedKind ?? "auto"));
+  const romCheats = getRomCheats(records);
+  const kinds = new Set(romCheats.map((entry) => entry.record.codeKind ?? entry.detectedKind ?? "auto"));
   if (kinds.size <= 1) return kinds.values().next().value ?? "auto";
-  if ([...kinds].every((kind) => AUTO_DETECTED_KINDS.has(kind))) return "auto";
+  // SNES Game Genie and Pro Action Replay codes share one shape, and auto-detection reads it as Game Genie.
+  const snesActionReplay = kinds.has("pro-action-replay") && romCheats.some((entry) => entry.record.system === "snes");
+  if (!snesActionReplay && [...kinds].every((kind) => AUTO_DETECTED_KINDS.has(kind))) return "auto";
   throw new Error("Create a separate patch for codes with a different code type.");
 };
 

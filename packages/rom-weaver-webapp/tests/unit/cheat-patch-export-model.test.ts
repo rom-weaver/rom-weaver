@@ -70,9 +70,24 @@ describe("getCheatPatchKind", () => {
   });
 
   it("lets auto-detection handle a mix of auto-detected kinds", () => {
-    const actionReplay = romCheat("d", "Walk through walls", "7E0DBE3F");
+    const goldFinger = romCheat("d", "Walk through walls", "0000009XXXXA90");
+    goldFinger.detectedKind = "gold-finger";
+    expect(getCheatPatchKind([...mixed, goldFinger])).toBe("auto");
+  });
+
+  it("rejects SNES Action Replay mixed with Game Genie because auto-detection reads both as Game Genie", () => {
+    const actionReplay = romCheat("d", "Walk through walls", "C0FFEE00");
     actionReplay.detectedKind = "pro-action-replay";
-    expect(getCheatPatchKind([...mixed, actionReplay])).toBe("auto");
+    expect(() => getCheatPatchKind([...mixed, actionReplay])).toThrow("different code type");
+  });
+
+  it("lets auto-detection split NES Game Genie from NES Action Replay", () => {
+    const gameGenie = romCheat("a", "Infinite lives", "SXIOPO");
+    gameGenie.record.system = "nes";
+    const actionReplay = romCheat("b", "Walk through walls", "C01012");
+    actionReplay.record.system = "nes";
+    actionReplay.detectedKind = "pro-action-replay";
+    expect(getCheatPatchKind([gameGenie, actionReplay])).toBe("auto");
   });
 });
 
