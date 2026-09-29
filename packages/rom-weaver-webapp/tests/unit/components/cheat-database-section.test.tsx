@@ -502,6 +502,34 @@ describe("CheatDatabaseSection", () => {
     expect(view.getByLabelText(`Browse games for ${SNES}`)).toBeTruthy();
   });
 
+  it("finds Emerald by unaccented words and selects cheats for an unmatched ROM", async () => {
+    const emerald = {
+      ...shard.games[0],
+      title: "Pokemon - Emerald Version (USA, Europe)",
+      normalizedTitle: "pokemon emerald version",
+    };
+    const view = render(
+      <CheatDatabaseSection
+        {...props}
+        rom={{ key: "hack", platform: SNES, title: "Emerald hack", checksums: { sha1: "no-match" } }}
+        shard={{ ...shard, games: [emerald] }}
+      />,
+    );
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
+    const search = view.getByRole("searchbox", { name: `Search games in ${SNES}` });
+    for (const query of ["pokemon emerald", "POKÉMON   emerald", "emerald pokemon", "pokemon USA Rev 1"]) {
+      fireEvent.change(search, { target: { value: query } });
+      expect(view.getByRole("option", { name: /Pokemon - Emerald Version/u })).toBeTruthy();
+    }
+    fireEvent.change(search, { target: { value: "pokemon ruby" } });
+    expect(view.queryByRole("option", { name: /Pokemon - Emerald Version/u })).toBeNull();
+    expect(view.getByText("No games match this search.")).toBeTruthy();
+    fireEvent.change(search, { target: { value: "pokemon emerald" } });
+    fireEvent.change(view.getByLabelText(`Browse games for ${SNES}`), { target: { value: emerald.id } });
+    await view.findByText("Infinite lives");
+    expect(view.getByText(/ROM revision is unverified/u)).toBeTruthy();
+  });
+
   it("warns when no game matches the ROM and offers the game search", () => {
     const view = render(
       <CheatDatabaseSection

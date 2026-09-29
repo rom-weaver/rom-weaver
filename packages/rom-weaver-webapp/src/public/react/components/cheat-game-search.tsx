@@ -1,6 +1,7 @@
 import { Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { isSelectableCheat, type CheatRomIdentity, type CheatSystemShard } from "../../../lib/cheats/index.ts";
+import { normalizeTitle } from "../../../lib/identify/title-index.mjs";
 import type { CheatDatabaseRecordsState } from "./use-cheat-database-records.ts";
 import { DropdownSelect } from "./ds/dropdown-select.tsx";
 import { Notice } from "./ds/feedback.tsx";
@@ -26,9 +27,12 @@ type CheatGamePickerProps = {
 const CheatGamePicker = ({ platform, games, value, onChange, unverified }: CheatGamePickerProps) => {
   const [query, setQuery] = useState("");
   const options = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase("en-US");
-    if (!needle) return games;
-    return games.filter((candidate) => gameLabel(candidate).toLocaleLowerCase("en-US").includes(needle));
+    const terms = normalizeTitle(query).split(" ").filter(Boolean);
+    if (!terms.length) return games;
+    return games.filter((candidate) => {
+      const label = normalizeTitle(gameLabel(candidate));
+      return terms.every((term) => label.includes(term));
+    });
   }, [games, query]);
   return (
     <div className="cheat-game-picker">
