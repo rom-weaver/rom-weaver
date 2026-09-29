@@ -88,12 +88,13 @@ const getChecksumSets = (file: ChecksumWorkflowFile, fileLabel: string): Checksu
 ];
 
 /* Compare one pasted digest against every computed set. Its length names the
-   candidate algorithms; `uncomputed` lists those still switched off or pending. */
+   candidate algorithms; only switched-on ones match, since only they show a row.
+   `uncomputed` lists the candidates still switched off or pending. */
 const compareChecksum = (expected: string, sets: ChecksumSet[], algorithms: string[]): CompareResult => {
   if (!expected) return null;
   const candidates = CHECKSUM_ALGORITHMS.filter((algorithm) => algorithm.hexLength === expected.length);
   for (const set of sets) {
-    const algorithm = candidates.find((entry) => set.checksums[entry.id] === expected);
+    const algorithm = candidates.find((entry) => algorithms.includes(entry.id) && set.checksums[entry.id] === expected);
     if (algorithm) return { match: { algorithm: algorithm.id, setId: set.id }, uncomputed: [] };
   }
   const uncomputed = candidates
@@ -134,7 +135,11 @@ const ChecksumSetRows = ({
           value={value}
         />
       ) : pending ? (
-        <PendingChecksumRow label={algorithm.label} length={algorithm.hexLength} />
+        <PendingChecksumRow
+          className={algorithm.hexLength > 40 ? "ck-long" : undefined}
+          label={algorithm.label}
+          length={algorithm.hexLength}
+        />
       ) : null;
       return (
         <Fragment key={algorithm.id}>
@@ -171,9 +176,13 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
 
+  // A language or byte-unit change makes a new localizer; reading it through a
+  // ref keeps showError stable so the staging effect does not restage the ROM.
+  const localizerRef = useRef(localizer);
+  localizerRef.current = localizer;
   const showError = useCallback(
-    (cause: unknown) => setError(formatCodedErrorForDisplay(cause, localizer)),
-    [localizer],
+    (cause: unknown) => setError(formatCodedErrorForDisplay(cause, localizerRef.current)),
+    [],
   );
 
   const updateSource = useCallback((file: File | null) => {
@@ -503,7 +512,7 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
             ) : null}
             {compare?.match && matchedSet ? (
               <p className="pdesc checksum-verdict" id="checksum-compare-verdict">
-                Match: the {matchedLabel} of {matchedSet.label || "this ROM"}.
+                Match: the {matchedLabel} of this ROM{matchedSet.label ? ` (${matchedSet.label})` : ""}.
               </p>
             ) : null}
             {compare && !compare.match && files.length ? (

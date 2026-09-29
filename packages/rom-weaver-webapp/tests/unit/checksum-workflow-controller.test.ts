@@ -171,6 +171,18 @@ describe("ChecksumWorkflowController.calculate", () => {
     release?.();
     await expect(retried).resolves.toMatchObject({ files: [{ checksums: { blake3: "c".repeat(64) } }] });
   });
+
+  it("ignores an abort that arrives while no pass runs", async () => {
+    const run = vi.fn(async () => ingestResult({ blake3: "c".repeat(64) }));
+    const controller = createController(run);
+    controller.inputStage = stage("ready", [asset("rom", "rom", { checksums: { crc32: "1", md5: "2", sha1: "3" } })]);
+
+    controller.abort();
+
+    await expect(controller.calculate(["blake3"])).resolves.toMatchObject({
+      files: [{ checksums: { blake3: "c".repeat(64) } }],
+    });
+  });
 });
 
 describe("ChecksumWorkflowController.dispose", () => {

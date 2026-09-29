@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { ChecksumForm } from "../../../src/webapp/components/checksum-form.tsx";
 
 const CRC32 = "a1b2c3d4";
@@ -95,6 +96,60 @@ describe("ChecksumForm", () => {
 
     fireEvent.change(compare, { target: { value: "xyz" } });
     expect(screen.getByText(/contains only the digits 0-9/)).toBeTruthy();
+  });
+
+  it("names the variant a pasted checksum matches", async () => {
+    workflow.setInput.mockResolvedValue({
+      ...readyInput({ crc32: CRC32, md5: "m".repeat(32), sha1: "s".repeat(40) }),
+      files: [
+        {
+          checksums: { crc32: CRC32, md5: "m".repeat(32), sha1: "s".repeat(40) },
+          fileName: "game.sfc",
+          id: "rom",
+          size: 16,
+          checksumVariants: [{ checksums: { crc32: "0badf00d" }, id: "headerless", label: "Headerless" }],
+        },
+      ],
+    });
+    render(<ChecksumForm />);
+    addRom();
+    await screen.findAllByText(CRC32);
+
+    fireEvent.change(screen.getByLabelText("Compare with an expected checksum"), { target: { value: "0badf00d" } });
+
+    expect(screen.getByText("Match: the CRC32 of this ROM (Headerless).")).toBeTruthy();
+  });
+
+  it("does not match a checksum whose algorithm is switched off", async () => {
+    render(<ChecksumForm />);
+    addRom();
+    await screen.findAllByText(CRC32);
+
+    fireEvent.click(screen.getByLabelText("CRC32"));
+    fireEvent.change(screen.getByLabelText("Compare with an expected checksum"), { target: { value: CRC32 } });
+
+    expect(screen.queryByText(/^Match:/)).toBeNull();
+    expect(screen.getByText(/Calculate CRC32 or CRC32C or Adler-32 to compare this value/)).toBeTruthy();
+  });
+
+  it("keeps the staged ROM when the display settings change", async () => {
+    const { rerender } = render(
+      <RomWeaverSettingsProvider settings={{ byteUnits: "binary", language: "en" }}>
+        <ChecksumForm />
+      </RomWeaverSettingsProvider>,
+    );
+    addRom();
+    await screen.findAllByText(CRC32);
+
+    rerender(
+      <RomWeaverSettingsProvider settings={{ byteUnits: "decimal", language: "en" }}>
+        <ChecksumForm />
+      </RomWeaverSettingsProvider>,
+    );
+
+    expect(screen.getAllByText(CRC32).length).toBeGreaterThan(0);
+    expect(workflow.instances).toHaveLength(1);
+    expect(workflow.setInput).toHaveBeenCalledTimes(1);
   });
 
   it("accepts a new ROM after the ROM is removed during a calculation", async () => {

@@ -158,6 +158,8 @@ class ChecksumWorkflowController<TSource> extends BaseWorkflowController<
    * {@link abort} cancels only this pass: the staged ROM stays ready for another one.
    */
   async calculate(algorithms: readonly string[]): Promise<ChecksumWorkflowSourceState> {
+    // An abort that arrived after the last pass settled cancelled nothing; drop it.
+    if (!(this.activeMutation || this.mutationQueue)) this.rearmAbortController(this.abortController.signal);
     return this.runQueuedMutation(
       "calculate",
       async () => {
