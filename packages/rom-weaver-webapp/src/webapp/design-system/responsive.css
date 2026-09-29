@@ -28,15 +28,14 @@
   }
   /* Preserve full status outlines while making room for hashes. */
   .rw-app .card {
-    gap: var(--sp-xs);
-    padding: 7px;
-    border-radius: var(--r-s) var(--r-s) var(--card-end-radius, var(--r-s)) var(--card-end-radius, var(--r-s));
+    --card-pad: 7px;
+    --card-r: var(--r-s);
+    --card-gap: var(--sp-xs);
   }
   .rw-app .card-name {
     gap: var(--sp-2xs);
   }
-  .rw-app .card-actions,
-  .rw-app .patch-body-inner {
+  .rw-app .card-actions {
     gap: var(--sp-xs);
   }
   /* Retain a 30px drawer-header tap floor; phone controls and padding are

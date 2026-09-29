@@ -49,7 +49,7 @@ const WorkflowRomInputStepRow = ({ item }: { item: WorkflowRomInputStepItem }) =
         />
       }
     >
-      {detailedViewEnabled ? <ExtractDrawer {...extract} /> : null}
+      {detailedViewEnabled ? <ExtractDrawer {...extract} integrated /> : null}
       {children}
       {panels ? <RomInputPanels {...panels} /> : null}
     </FileCard>

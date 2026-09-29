@@ -507,6 +507,7 @@ const SourceInfoList = ({
   defaultOpen = false,
   expected,
   extractTiming,
+  integrated,
   label,
   lead,
   onToggle,
@@ -529,6 +530,7 @@ const SourceInfoList = ({
    * per-row match marks against the computed values. */
   expected?: SourceInfoExpectedChecks;
   extractTiming?: ExtractTiming;
+  integrated?: boolean;
   /** Section heading; defaults to "Checks". Disc cards pass the track filename. */
   label?: string;
   lead?: ReactNode;
@@ -550,6 +552,7 @@ const SourceInfoList = ({
       <PendingChecks
         defaultOpen={defaultOpen}
         groups={buildStagingGroups(pending, expected, hasExpected, localizer)}
+        integrated={integrated}
         label={label ?? localizer.message("ui.checks.title")}
         onToggle={onToggle}
         open={open}
@@ -601,6 +604,7 @@ const SourceInfoList = ({
     <ChecksumList
       action={expectedMismatch ? <ExpectedMismatchInfo /> : undefined}
       defaultOpen={defaultOpen}
+      integrated={integrated}
       label={label ?? localizer.message("ui.checks.title")}
       lead={progress ? <FileProgress {...progress} /> : lead}
       onToggle={onToggle}
@@ -659,6 +663,7 @@ type DiscTrackPanelInfo = {
 /** A multi-track disc's per-bin checksums under the same Checks drawer used by
  * single-file checksum variants. Each track is one labeled checksum group. */
 const DiscTracksPanel = ({
+  integrated,
   tracks,
   lead,
   open,
@@ -666,6 +671,7 @@ const DiscTracksPanel = ({
   timing,
   summary,
 }: {
+  integrated?: boolean;
   tracks: DiscTrackPanelInfo[];
   lead?: ReactNode;
   open?: boolean;
@@ -678,6 +684,7 @@ const DiscTracksPanel = ({
   return (
     <ChecksumList
       defaultOpen={false}
+      integrated={integrated}
       label={localizer.message("ui.checks.title")}
       onToggle={onToggle}
       open={open}

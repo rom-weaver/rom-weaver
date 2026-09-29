@@ -747,7 +747,7 @@
     0.46rem,
     calc(
       (var(--ck-v-span, 100cqi) - var(--ck-fit-reserve, 96px) - var(--ck-mark-reserve, 0px)) /
-      var(--ck-v-divisor, 26)
+      var(--ck-v-divisor, 28)
     ),
     0.97rem
   );

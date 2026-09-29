@@ -288,6 +288,7 @@ const PatchCard = ({
             <ExtractDrawer
               fileName={item.fileName}
               fileSize={item.fileSize}
+              integrated
               parentCompressions={item.archivePathEntries}
               timing={TIMING_LABEL(item.decompressionTimeMs)}
               typeLabel={item.format?.toUpperCase()}
@@ -304,6 +305,7 @@ const PatchCard = ({
             chainChip={chainChip}
             disabled={isDisabled}
             index={index}
+            integrated
             isChainInput={isChainInput}
             isChainOutput={isChainOutput}
             item={item}

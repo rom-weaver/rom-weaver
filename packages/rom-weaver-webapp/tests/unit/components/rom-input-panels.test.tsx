@@ -44,6 +44,7 @@ describe("RomInputPanels view detail", () => {
     expect(container.querySelector(".cks-head")?.textContent).toContain("Checks");
     expect(container.querySelector(".cks-head")?.textContent).toContain("GBA");
     expect(container.querySelector(".cks-head")?.textContent).toContain("Identified");
+    expect(container.querySelector(".cks")?.classList.contains("is-integrated")).toBe(true);
   });
 
   it("restores the separate identification and disc drawers in detailed view", () => {
@@ -51,6 +52,8 @@ describe("RomInputPanels view detail", () => {
     expect(container.querySelector(".identify-drawer")).not.toBeNull();
     expect(container.querySelector(".rw-cue-section")).not.toBeNull();
     expect(container.querySelectorAll(".cks")).toHaveLength(3);
+    // Every drawer joins the card as a flush section, as in Simple view.
+    expect(container.querySelectorAll(".cks.is-integrated")).toHaveLength(3);
   });
 
   it("does not report an unavailable lookup as unidentified", () => {

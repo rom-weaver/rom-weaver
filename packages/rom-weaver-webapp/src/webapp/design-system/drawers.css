@@ -15,12 +15,15 @@
   /* A per-row match mark takes a fourth cell and one more gap out of the value. */
   --ck-mark-reserve: 0px;
   /* The em-width of a 40-character SHA-1, and so the divisor that turns the
-     value track's px width into a font size holding one line: 40 cells at the
-     --mono stack's .618em advance (measured, not the .6em a monospace is assumed
-     to have) plus the .03em tracking below, rounded up for margin. */
-  --ck-v-divisor: 26;
+     value track's px width into a font size holding one line. Copy rows are
+     buttons whose `font: inherit` puts values on the system UI face, not
+     --mono, so this MUST cover the widest common one: DejaVu Sans (Linux)
+     measures 27.6em with the .03em tracking below. */
+  --ck-v-divisor: 28;
   /* Share a theme-aware seam across full and paired rows. */
   --ck-seam: var(--seam-soft);
+  /* The body's inline inset, which check rows bleed back through. */
+  --cks-pad: 10px;
   position: relative;
   background: var(--well);
   border: 1px solid var(--seam-soft);
@@ -122,6 +125,55 @@
 :root[data-theme="light"] .cks.is-open > .cks-head {
   border-block-end-color: var(--seam-strong);
 }
+/* A file card's drawers are flush sections of the card, not wells nested
+   inside it. A seam across the full card width replaces the well's
+   border, the head shares the card's own padding, and check rows bleed to the
+   card edge. */
+.rw-app .cks.is-integrated {
+  --cks-pad: var(--card-pad, 10px);
+  margin-inline: calc(-1 * var(--card-pad, 0px));
+  background: transparent;
+  border: 0;
+  border-block-start: 1px solid var(--seam-soft);
+  border-radius: 0;
+}
+.rw-app .cks.is-integrated:last-child {
+  margin-block-end: calc(-1 * var(--card-pad, 0px));
+  border-end-start-radius: max(0px, var(--card-end-radius, var(--card-r, 0px)) - 1px);
+  border-end-end-radius: max(0px, var(--card-end-radius, var(--card-r, 0px)) - 1px);
+}
+/* A light tint marks where an open section ends, so a long body does not run
+   into the next head. */
+.rw-app .cks.is-integrated.is-open,
+:root[data-theme] .cks.is-integrated.is-open {
+  background: color-mix(in oklab, var(--well) 45%, transparent);
+  border-block-start-color: var(--seam-soft);
+}
+/* Content after the last section needs a seam to close it. */
+.rw-app .cks.is-integrated:not(:last-child, :has(+ .cks.is-integrated)) {
+  border-block-end: 1px solid var(--seam-soft);
+}
+.rw-app .cks.is-integrated > .cks-head {
+  padding-inline: var(--cks-pad);
+}
+.rw-app .cks.is-integrated:has(> .drawer-action) > .cks-head {
+  padding-inline-end: calc(var(--cks-pad) + 27px);
+}
+.rw-app .cks.is-integrated > .drawer-action {
+  inset-inline-end: var(--cks-pad);
+}
+.rw-app .cks.is-integrated.is-open > .cks-head {
+  background: transparent;
+  border-block-end-color: transparent;
+}
+/* Stacked sections share one seam: the card's gap would split them apart. */
+.rw-app .cks.is-integrated + .cks.is-integrated {
+  margin-block-start: calc(-1 * var(--card-gap, 0px));
+}
+/* The card border, unlike a well's, would meet the last row edge to edge. */
+.rw-app .cks.is-integrated > .cks-body > .cks-inner > :last-child {
+  margin-block-end: 8px;
+}
 .rw-app .cks > .cks-head {
   appearance: none;
   border: 0;
@@ -212,7 +264,7 @@
 }
 /* A margin, unlike padding, lets closed drawers fully collapse. */
 .rw-app .cks .cks-inner {
-  padding-inline: 10px;
+  padding-inline: var(--cks-pad);
   border-end-start-radius: calc(var(--r-s) - 1px);
   border-end-end-radius: calc(var(--r-s) - 1px);
 }
@@ -279,7 +331,7 @@
 .rw-app .cks > .cks-head .readouts > .rb:not(:last-child) {
   flex: none;
 }
-.rw-app .cks:not(.is-open) > .cks-head .rb {
+.rw-app .cks:not(.is-open, .is-integrated) > .cks-head .rb {
   background: var(--plate-2);
   border-color: transparent;
 }
@@ -523,10 +575,10 @@
   text-align: start;
   appearance: none;
 }
-/* Extend ordinary rows through the drawer's 10px inset. */
+/* Extend ordinary rows through the drawer's inset. */
 .rw-app .ck:not(.req) {
-  width: calc(100% + 20px);
-  margin-inline: -10px;
+  width: calc(100% + 2 * var(--cks-pad, 10px));
+  margin-inline: calc(-1 * var(--cks-pad, 10px));
 }
 /* Drop duplicate borders without overlapping adjacent touch targets. */
 .rw-app .ck:not(.req) + .ck:not(.req) {
@@ -594,7 +646,7 @@
   grid-template-columns: 1fr 1fr;
   column-gap: 0;
   align-items: start;
-  margin-inline: -10px;
+  margin-inline: calc(-1 * var(--cks-pad, 10px));
 }
 .rw-app .ckrows:not(.patch-check-columns):has(> .ck-group, > .ck.ck-half, > .ck.ck-hash) > * {
   grid-column: 1 / -1;
@@ -696,12 +748,12 @@
     border-inline-start: 1px solid var(--ck-seam);
   }
 }
-/* Stack long hashes when the minimum font size no longer fits: 11.96rem is the
+/* Stack long hashes when the minimum font size no longer fits: 12.88rem is the
    clamp floor times --ck-v-divisor, so the sum is the width where the value stops
    shrinking and would start overflowing. Container queries cannot read custom
    properties, so this uses the largest reserve (a desktop row with a mark) and
    stacks the lighter rows slightly early rather than one pixel too late. */
-@container (max-width: calc(11.96rem + 116px)) {
+@container (max-width: calc(12.88rem + 116px)) {
   .rw-app .ck:not(.req):has(.ck-v.ck-fit) {
     grid-template-columns: minmax(0, 1fr) auto auto;
   }

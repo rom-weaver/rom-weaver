@@ -139,3 +139,10 @@ describe("output options header chips", () => {
     rvzRendered.unmount();
   });
 });
+
+describe("output options drawer", () => {
+  it("joins the output card as a flush section", () => {
+    const { container } = renderOutput("zip", { compressionProfile: "max", zipCodec: "" });
+    expect(container.querySelector(".outcard > .outopts")?.classList.contains("is-integrated")).toBe(true);
+  });
+});

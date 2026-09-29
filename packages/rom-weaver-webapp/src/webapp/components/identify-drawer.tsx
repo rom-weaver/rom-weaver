@@ -58,10 +58,12 @@ const EvidenceRow = ({
 const IdentifyDrawer = ({
   defaultOpen,
   identification,
+  integrated,
   memberPath,
   platformTag,
 }: {
   defaultOpen?: boolean;
+  integrated?: boolean;
   identification?: ParsedIdentifyLookupResult;
   /** Archive-relative member path, when the identified ROM came out of a container. */
   memberPath?: string;
@@ -133,6 +135,7 @@ const IdentifyDrawer = ({
     <Drawer
       className="identify-drawer"
       defaultOpen={defaultOpen}
+      integrated={integrated}
       label={localizer.message("ui.identifyDrawer.identify")}
       labelIcon={<ScanSearch aria-hidden="true" />}
       readouts={
@@ -289,11 +292,12 @@ const IdentifyDrawer = ({
    card stages and then pushes the Checks drawer down when it arrives. The
    placeholder holds that slot, in the same position and with the same head
    height as the resolved drawer. */
-const PendingIdentifyDrawer = ({ platformTag }: { platformTag?: string }) => {
+const PendingIdentifyDrawer = ({ integrated, platformTag }: { integrated?: boolean; platformTag?: string }) => {
   const localizer = useUiLocalizer();
   return (
     <Drawer
       className="identify-drawer"
+      integrated={integrated}
       label={localizer.message("ui.identifyDrawer.identify")}
       labelIcon={<ScanSearch aria-hidden="true" />}
       readouts={

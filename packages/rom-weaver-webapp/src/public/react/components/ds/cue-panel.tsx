@@ -47,10 +47,12 @@ const DiscSheetsPanel = ({
   cueText,
   defaultOpen,
   gdiText,
+  integrated,
 }: {
   cueText?: string;
   defaultOpen?: boolean;
   gdiText?: string;
+  integrated?: boolean;
 }) => {
   const sheets: DiscSheet[] = [
     ...(cueText ? [{ label: "CUE", text: cueText }] : []),
@@ -64,6 +66,7 @@ const DiscSheetsPanel = ({
     <Drawer
       className="cue rw-cue-section"
       defaultOpen={defaultOpen}
+      integrated={integrated}
       label={label}
       labelIcon={<Disc3 aria-hidden="true" />}
     >

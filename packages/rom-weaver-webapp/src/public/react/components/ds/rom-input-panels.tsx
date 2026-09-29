@@ -114,19 +114,27 @@ const RomInputPanels = ({
     </>
   );
   const renderInfo = () => {
-    if (isDisc) return <DiscTracksPanel lead={checksLead} summary={summary} timing={info.timing} tracks={tracks} />;
-    if (showInfo) return <SourceInfoList {...info} lead={checksLead} summary={summary} />;
+    if (isDisc)
+      return <DiscTracksPanel integrated lead={checksLead} summary={summary} timing={info.timing} tracks={tracks} />;
+    if (showInfo) return <SourceInfoList {...info} integrated lead={checksLead} summary={summary} />;
     return null;
   };
   // Shared card drawer order: the disc index sheets, then the single Checks
   // panel. The Files drawer leads above these, rendered by the card row.
   return (
     <>
-      {detailedViewEnabled && showCue ? <DiscSheetsPanel cueText={cue?.cueText} gdiText={gdi?.gdiText} /> : null}
+      {detailedViewEnabled && showCue ? (
+        <DiscSheetsPanel integrated cueText={cue?.cueText} gdiText={gdi?.gdiText} />
+      ) : null}
       {detailedViewEnabled && identifyPending ? (
-        <PendingIdentifyDrawer platformTag={platformTag} />
+        <PendingIdentifyDrawer integrated platformTag={platformTag} />
       ) : detailedViewEnabled && (identification || platformTag) ? (
-        <IdentifyDrawer defaultOpen={identifyDefaultOpen} identification={identification} platformTag={platformTag} />
+        <IdentifyDrawer
+          defaultOpen={identifyDefaultOpen}
+          identification={identification}
+          integrated
+          platformTag={platformTag}
+        />
       ) : null}
       {renderInfo()}
     </>
