@@ -138,6 +138,25 @@ const getPatchFilePrecomputedChecksumMs = (file: PatchFileInstance | undefined):
   return typeof ms === "number" && Number.isFinite(ms) && ms >= 0 ? ms : undefined;
 };
 
+/** Checksum progress state for one prepared asset of a staged source, falling back to the stage's own metrics. */
+const getAssetChecksumState = (
+  asset: InputAsset,
+  stage: {
+    parentCompressions: StandardChecksumParentCompression[];
+    state: Pick<StandardChecksumState, "decompressionTimeMs" | "fileName" | "id" | "sourceSize" | "wasDecompressed">;
+  },
+  order: number,
+): StandardChecksumState => ({
+  decompressionTimeMs: getAssetDecompressionTimeMs(asset, stage.state.decompressionTimeMs),
+  fileName: asset.fileName || stage.state.fileName || stage.state.id,
+  id: stage.state.id,
+  order,
+  parentCompressions: getAssetParentCompressions(asset, stage.parentCompressions),
+  size: asset.size,
+  sourceSize: getAssetSourceSize(asset, stage.state.sourceSize),
+  wasDecompressed: asset.preparation?.wasDecompressed ?? stage.state.wasDecompressed,
+});
+
 const createChecksumProgressDetails = (state: StandardChecksumState) => ({
   decompressionTimeMs: state.decompressionTimeMs,
   fileName: state.fileName,
@@ -237,6 +256,7 @@ export {
   cloneChecksumVariants,
   cloneIdentification,
   cloneRomType,
+  getAssetChecksumState,
   getAssetDecompressionTimeMs,
   getAssetParentCompressions,
   getAssetSourceSize,

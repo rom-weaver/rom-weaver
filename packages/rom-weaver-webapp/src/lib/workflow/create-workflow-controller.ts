@@ -19,13 +19,11 @@ import { BaseWorkflowController, type BaseWorkflowSnapshot, type SourceValidator
 import { cloneCandidate, cloneValue, cloneWarning, getPreparationProgressStage, isRecord } from "./controller-utils.ts";
 import type { SharedRomSourceSession, SharedRomStagedSource, StagedRomSourceController } from "./staged-rom-source.ts";
 import {
+  getAssetChecksumState,
   calculateStandardInputChecksumsForFile,
   cloneChecksumVariants,
   cloneIdentification,
   cloneRomType,
-  getAssetDecompressionTimeMs,
-  getAssetParentCompressions,
-  getAssetSourceSize,
   getInputAssetChecksums,
   getPatchFilePrecomputedChecksums,
   getPatchFilePrecomputedChecksumVariants,
@@ -357,7 +355,6 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
           asset.checksumTimeMs = 0;
           continue;
         }
-        const checksumFileName = asset.fileName || stage.state.fileName || stage.state.id;
         const checksumStartedAt = Date.now();
         const checksumResult = await calculateStandardInputChecksumsForFile({
           emitProgress: (event) => this.emitProgress(event),
@@ -369,16 +366,7 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
             : `${this.id}:${stage.state.id}:${assetIndex}`,
           role: stage.state.role,
           runtime: this.runtime,
-          state: {
-            decompressionTimeMs: getAssetDecompressionTimeMs(asset, stage.state.decompressionTimeMs),
-            fileName: checksumFileName,
-            id: stage.state.id,
-            order: assetIndex,
-            parentCompressions: getAssetParentCompressions(asset, stage.parentCompressions),
-            size: asset.size,
-            sourceSize: getAssetSourceSize(asset, stage.state.sourceSize),
-            wasDecompressed: asset.preparation?.wasDecompressed ?? stage.state.wasDecompressed,
-          },
+          state: getAssetChecksumState(asset, stage, assetIndex),
           workflow: "create",
         });
         asset.checksums = checksumResult.checksums;
