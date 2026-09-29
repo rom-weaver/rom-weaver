@@ -668,11 +668,15 @@ impl Group {
                     let mut any_signature = false;
                     for physical in 0..candidate.section_count {
                         let base = candidate.offset + physical * section_size;
-                        let id = read_u16(save, base + id_offset) as u8;
-                        let Some(section) = sections.iter().find(|section| section.id == id) else {
+                        let raw_id = read_u16(save, base + id_offset);
+                        let Some(section) = sections
+                            .iter()
+                            .find(|section| u16::from(section.id) == raw_id)
+                        else {
                             valid = false;
                             continue;
                         };
+                        let id = section.id;
                         if !seen.insert(id) {
                             valid = false;
                             continue;

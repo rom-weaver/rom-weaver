@@ -660,6 +660,50 @@ fn corrupt_or_missing_sections_in_both_slots_are_unsupported() {
 }
 
 #[test]
+fn section_ids_with_high_bytes_cannot_alias_valid_sections() {
+    let identity = game(Family::Emerald, "pokemon-emerald");
+    for id in [0, 13] {
+        for high_byte in [1, 255] {
+            let mut bytes = fixture(Family::Emerald, 5, 4);
+            bytes[section_offset(0, id) + 0xFF5] = high_byte;
+            let source = input(bytes.clone(), Some(&identity.id));
+            let document = PokemonGen3Handler.parse(&source, &identity).unwrap();
+            assert_eq!(document.active_slot, 1);
+            assert_eq!(document.counter, 4);
+            assert_eq!(
+                document.integrity.state,
+                SaveIntegrityState::PartiallyRecoverable
+            );
+            let edit = [SaveEdit {
+                field: "trainer.money".into(),
+                value: SaveValue::U32(1),
+            }];
+            assert_eq!(
+                error_code(
+                    PokemonGen3Handler
+                        .apply(&source, &identity, &edit, false)
+                        .unwrap_err()
+                ),
+                "save_integrity_partial"
+            );
+
+            bytes[section_offset(1, id) + 0xFF5] = high_byte;
+            let source = input(bytes, Some(&identity.id));
+            assert!(matches!(
+                SaveGameRegistry::default().detect(&source).outcome,
+                SaveRecognitionOutcome::Unsupported { .. }
+            ));
+            assert!(PokemonGen3Handler.parse(&source, &identity).is_err());
+            assert!(
+                PokemonGen3Handler
+                    .apply(&source, &identity, &edit, false)
+                    .is_err()
+            );
+        }
+    }
+}
+
+#[test]
 fn field_schema_json_has_stable_generic_fields_without_offsets() {
     let input = input(fixture(Family::Emerald, 5, 4), Some("pokemon-emerald"));
     let document = PokemonGen3Handler
