@@ -48,7 +48,7 @@ const TABS = [
     label: "Test ROM",
     railLabel: "Test",
   },
-  { group: "project", href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
+  { group: "docs", href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs", railLabel: "Overview" },
   {
     beta: true,
     group: "roms",
@@ -111,10 +111,10 @@ describe("Masthead", () => {
       "ROMs",
       "Files",
       "This device",
+      "Docs",
     ]);
     expect(rowsOf(nav)).toEqual([
       "Home",
-      "Docs",
       "What\u2019s new",
       "GitHub",
       "Support",
@@ -130,6 +130,7 @@ describe("Masthead", () => {
       "Settings",
       "Theme",
       "Accent",
+      "Overview",
     ]);
 
     // The brand and Home row both reach the app's base route.
@@ -173,6 +174,7 @@ describe("Masthead", () => {
       "Files",
       "This device",
       "Project",
+      "Docs",
     ]);
     expect(sheet.querySelector(".sub-status")).toBeNull();
     expect(container.querySelector(".phone-runtime .sub-status-text")?.textContent).toBe(
@@ -297,7 +299,7 @@ describe("Masthead", () => {
 
   it("marks the current page in the nav, including a view with no dock slot", () => {
     for (const [view, label] of [
-      ["docs", "Docs"],
+      ["docs", "Overview"],
       ["trim", "Trim"],
       ["whats-new", "What\u2019s new"],
     ] as const) {

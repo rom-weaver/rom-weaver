@@ -214,7 +214,7 @@ test("WebappRoot keeps the beta workflows out of the nav while the setting is of
   navRow("Identify").click();
   await expect.poll(() => document.querySelector("#identify-input-picker") !== null).toBe(true);
   // Docs is a named row rather than something behind a glyph.
-  const docsLink = navRow("Docs");
+  const docsLink = navRow("Overview");
   expect(docsLink).toBeTruthy();
   expect(docsLink.closest("summary")).toBeNull();
   expect(document.querySelector(".nav-docs-toggle")?.getAttribute("aria-expanded")).toBe("false");
@@ -274,7 +274,7 @@ test("enabled PPF undo and Identify are named in the nav on desktop and phone", 
     expect(getComputedStyle(document.querySelector(".panel-view-toggle")).display).not.toBe("none");
     // Mobile Status stays in the dock; other destinations keep their groups.
     if (width < 1000) await openMenuSheet();
-    for (const name of ["Docs", "Settings", "Storage", "Logs", "Support"]) {
+    for (const name of ["Overview", "Settings", "Storage", "Logs", "Support"]) {
       expect(navRow(name, scope)).toBeTruthy();
     }
     if (width < 1000) expect(document.querySelector(".phone-runtime .sub-status")).toBeTruthy();
@@ -618,7 +618,7 @@ test("the phone header carries device controls and project links, and Menu carri
     "Theme",
     "Accent",
     "Home",
-    "Docs",
+    "Overview",
     "GitHub",
     "Support",
   ]) {
@@ -693,7 +693,7 @@ test("Theme and Accent float above the navigation without moving its rows", asyn
     if (width < 1000) await openMenuSheet();
     await expect.poll(() => document.querySelector(`${scope} .nav-group`)).toBeTruthy();
     const nav = document.querySelector(scope);
-    const project = nav.querySelectorAll(".nav-group")[3];
+    const project = navRow("Home", scope).closest(".nav-group");
     const projectTop = project.offsetTop;
     const navHeight = nav.scrollHeight;
 
@@ -719,7 +719,7 @@ test("the Menu sheet uses its content height and stays above the dock", async ()
   mountWebappRoot();
 
   const sheet = await openMenuSheet();
-  const project = sheet?.querySelectorAll(".nav-group")[3];
+  const project = navRow("Home", ".menu-sheet").closest(".nav-group");
   expect(project).not.toBeNull();
   const body = sheet.querySelector(".menu-sheet-body");
   const dock = document.querySelector(".dock");

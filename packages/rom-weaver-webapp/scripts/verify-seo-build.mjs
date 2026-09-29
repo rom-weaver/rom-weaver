@@ -401,10 +401,18 @@ for (const route of DOC_ROUTES) {
   assertIncludes(docsHtml, `>${route.title}</h1>`, `${route.slug} heading title`);
   if ((docsHtml.match(/<h1\b/g) || []).length !== 1) throw new Error(`${route.slug} must contain exactly one h1`);
   assertIncludes(docsHtml, `data-markdown-source="${route.source}"`, `${route.slug} Markdown source`);
-  assertIncludes(
+  assertIncludes(docsHtml, 'class="nav-row" href="docs" id="tab-docs"', `${route.slug} Docs overview link`);
+  assertCount(
     docsHtml,
     'aria-current="page" class="nav-row" href="docs" id="tab-docs"',
-    `${route.slug} Docs marked current in the nav`,
+    route.slug === "docs" ? 1 : 0,
+    `${route.slug} Overview is current only on the Docs index`,
+  );
+  assertCount(
+    docsHtml,
+    `<a aria-current="page" href="/${route.slug}">`,
+    1,
+    `${route.slug} current guide in the navigation tree`,
   );
   assertIncludes(
     docsHtml,

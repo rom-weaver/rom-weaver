@@ -217,9 +217,9 @@ describe("tab selection", () => {
   it("waits for the lazy Docs route before switching to it", async () => {
     const { called, container } = await renderRoot();
 
-    // Docs is a Project entry in the nav, never one of the dock's three slots.
+    // Docs MUST stay outside the dock's three workflow slots.
     expect(container.querySelector('.dock-tab[data-mode="docs"]')).toBeNull();
-    fireEvent.click(navRow(container, "Docs"));
+    fireEvent.click(navRow(container, "Overview"));
     expect(called("onSelectView")).not.toHaveBeenCalled();
 
     await waitFor(() => expect(called("onSelectView")).toHaveBeenCalledWith("docs"));
