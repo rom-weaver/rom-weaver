@@ -165,6 +165,8 @@ const useCheatDatabaseRecords = ({
 
   useEffect(() => {
     if (suppliedShard || !entry) {
+      setLoading(false);
+      setLoadError("");
       setLoadedShard(undefined);
       return;
     }

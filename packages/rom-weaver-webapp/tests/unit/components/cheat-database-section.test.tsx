@@ -602,6 +602,69 @@ describe("CheatDatabaseSection", () => {
     expect(view.getByText(/The cheat database has no game record for Other game/u)).toBeTruthy();
   });
 
+  it("stops a pending shard load when Identify selects an unsupported platform", async () => {
+    const release: ParsedIdentifyTitleMatch = {
+      algorithm: "sha1",
+      database: "test",
+      name: "N64 game",
+      platform: "Nintendo - Nintendo 64",
+      variant: "raw",
+      expectedComponents: [{ role: "rom", ordinal: 0, size: 1024, sha1: "b".repeat(40) }],
+    };
+    vi.mocked(lookupExpectedRom).mockResolvedValue({ status: "matched", matches: [release] });
+    let finish: ((value: CheatSystemShard) => void) | undefined;
+    const client = {
+      close: vi.fn(),
+      loadShard: () =>
+        new Promise<CheatSystemShard>((resolve) => {
+          finish = resolve;
+        }),
+    };
+    const view = render(
+      <CheatDatabaseSection {...props} client={client} shard={undefined} rom={{ key: "hack", platform: SNES }} />,
+    );
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
+    await view.findAllByText("Loading this system's cheat database…");
+    fireEvent.change(view.getByRole("combobox", { name: "Identify by checksum or game name" }), {
+      target: { value: "b".repeat(40) },
+    });
+    fireEvent.click(await view.findByRole("button", { name: /N64 game/u }));
+    await view.findByText(/No cheat database covers Nintendo - Nintendo 64/u);
+    await waitFor(() => expect(view.queryAllByText("Loading this system's cheat database…")).toHaveLength(0));
+    finish?.(shard);
+    await waitFor(() => expect(view.queryByText("Infinite lives")).toBeNull());
+    expect(view.getByRole("combobox", { name: "Identify by checksum or game name" })).toBeTruthy();
+  });
+
+  it("clears a previous shard error when Identify selects an unsupported platform", async () => {
+    const release: ParsedIdentifyTitleMatch = {
+      algorithm: "sha1",
+      database: "test",
+      name: "N64 game",
+      platform: "Nintendo - Nintendo 64",
+      variant: "raw",
+      expectedComponents: [{ role: "rom", ordinal: 0, size: 1024, sha1: "b".repeat(40) }],
+    };
+    vi.mocked(lookupExpectedRom).mockResolvedValue({ status: "matched", matches: [release] });
+    const client = {
+      close: vi.fn(),
+      loadShard: async () => {
+        throw new Error("offline");
+      },
+    };
+    const view = render(
+      <CheatDatabaseSection {...props} client={client} shard={undefined} rom={{ key: "hack", platform: SNES }} />,
+    );
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
+    await view.findAllByText(/The cheat database is unavailable/u);
+    fireEvent.change(view.getByRole("combobox", { name: "Identify by checksum or game name" }), {
+      target: { value: "b".repeat(40) },
+    });
+    fireEvent.click(await view.findByRole("button", { name: /N64 game/u }));
+    await view.findByText(/No cheat database covers Nintendo - Nintendo 64/u);
+    await waitFor(() => expect(view.queryAllByText(/The cheat database is unavailable/u)).toHaveLength(0));
+  });
+
   it("clears an unsupported Identify selection when the staged ROM changes", async () => {
     const release: ParsedIdentifyTitleMatch = {
       algorithm: "sha1",
