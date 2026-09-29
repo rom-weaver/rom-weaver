@@ -4,6 +4,7 @@ import {
   FileArchive,
   Gamepad2,
   GitCompare,
+  Hash,
   House,
   Package,
   RotateCcw,
@@ -65,6 +66,7 @@ import type { WebappRootProps } from "./webapp-root-types.ts";
 import {
   ApplyPatchRoute,
   BundleRoute,
+  ChecksumRouteForm,
   CreatePatchRoute,
   CompressRouteForm,
   DocsPageRoute,
@@ -122,6 +124,14 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     id: "identify",
     label: "Identify ROM",
     railLabel: "Identify",
+  },
+  {
+    group: "roms",
+    href: "checksum",
+    icon: <Hash aria-hidden="true" />,
+    id: "checksum",
+    label: "Checksum ROM",
+    railLabel: "Checksum",
   },
   {
     group: "files",
@@ -194,6 +204,7 @@ const syncWorkflowSeoMetadata = (view: WebappView) => {
   let route = null;
   if (view === "creator") route = WORKFLOW_SEO_ROUTES.creator;
   else if (view === "bundle") route = WORKFLOW_SEO_ROUTES.bundle;
+  else if (view === "checksum") route = WORKFLOW_SEO_ROUTES.checksum;
   else if (view === "compress") route = WORKFLOW_SEO_ROUTES.compress;
   else if (view === "extract") route = WORKFLOW_SEO_ROUTES.extract;
   else if (view === "home") route = WORKFLOW_SEO_ROUTES.home;
@@ -851,6 +862,7 @@ function WebappRoot({
                     pageDrop={pageDropFor("identify")}
                   />,
                 )}
+                {workflowPanel("checksum", <ChecksumRouteForm pageDrop={pageDropFor("checksum")} />)}
                 {workflowPanel("test", <EmulatorTestRoute active={state.currentView === "test"} />)}
                 {workflowPanel(
                   "trim",

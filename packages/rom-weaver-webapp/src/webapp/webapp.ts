@@ -387,6 +387,7 @@ import.meta.hot?.on("vite:beforeFullReload", (payload) => {
 // the view used for hydration or React discards the server-rendered content.
 const PRERENDERED_VIEWS = new Set<WebappView>([
   "bundle",
+  "checksum",
   "compress",
   "creator",
   "docs",

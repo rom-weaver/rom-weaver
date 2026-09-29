@@ -2,12 +2,13 @@ import { invokeRomWeaverPpfUndoWorker } from "../../lib/runtime/wasm-command-run
 import type { CheatDatabaseRecord, CheatRecord, ClassifiedCheatRecord } from "../../lib/cheats/model.ts";
 import { ApplyWorkflowController } from "../../lib/workflow/apply-workflow-controller.ts";
 import { CreateWorkflowController } from "../../lib/workflow/create-workflow-controller.ts";
+import { ChecksumWorkflowController } from "../../lib/workflow/checksum-workflow-controller.ts";
 import { TrimWorkflowController } from "../../lib/workflow/trim-workflow-controller.ts";
 import { aggregateIdentifyStatus } from "../../types/identify.ts";
 import type { ParsedIdentifyCandidate, ParsedIdentifyResult } from "../../types/identify.ts";
 import type { LogLevel } from "../../types/logging.ts";
 import type { BrowserSaveDestination } from "../../types/output.ts";
-import type { ApplySettings, CreateSettings, WorkerSettings } from "../../types/settings.ts";
+import type { ApplySettings, CommonSettings, CreateSettings, WorkerSettings } from "../../types/settings.ts";
 import type { BrowserSourceRef, SourceRef } from "../../types/source.ts";
 import type { WorkflowOptions } from "../../types/workflow-public.ts";
 import type { RuntimePatchCreateFormatCandidates } from "../../types/workflow-runtime-adapter.ts";
@@ -526,8 +527,16 @@ class TrimWorkflow extends TrimWorkflowController<BrowserSourceRef, BrowserSaveD
   }
 }
 
+class ChecksumWorkflow extends ChecksumWorkflowController<BrowserSourceRef> {
+  constructor(options: WorkflowOptions<CommonSettings> = {}) {
+    super(browserRuntime, options, assertPublicSources);
+    configureBrowserAssetBaseUrl(options.assetBaseUrl);
+  }
+}
+
 export {
   ApplyWorkflow,
+  ChecksumWorkflow,
   CreateWorkflow,
   getCreatePatchFormatCandidates,
   getIngestOutputBlob,

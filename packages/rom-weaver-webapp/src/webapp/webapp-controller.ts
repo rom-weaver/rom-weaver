@@ -39,6 +39,7 @@ const VALID_WORKFLOW_VIEWS: readonly WebappView[] = [
   "bundle",
   "patcher",
   "creator",
+  "checksum",
   "compress",
   "docs",
   "extract",
@@ -64,6 +65,7 @@ const normalizeWorkflowViewForSettings = (view: WebappView, settings: SettingsSt
 const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
   bundle: "bundle-patches",
   creator: "create-patch",
+  checksum: "checksum",
   compress: "compress",
   // The landing page is the app base itself, so its slug is empty and
   // writeWorkflowViewToPath resolves it back to readAppBaseUrl.
@@ -89,6 +91,8 @@ const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
   "bundle.html": "bundle",
   "create-patch": "creator",
   "create-patch.html": "creator",
+  checksum: "checksum",
+  "checksum.html": "checksum",
   compress: "compress",
   "compress.html": "compress",
   extract: "extract",

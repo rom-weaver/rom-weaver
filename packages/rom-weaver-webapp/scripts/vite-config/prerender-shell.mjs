@@ -171,6 +171,7 @@ export const prerenderWebappShell = (prerenderedShells) => ({
         prerenderedShells.set("patcher", await render("patcher"));
         prerenderedShells.set("bundle", await render("bundle"));
         prerenderedShells.set("creator", await render("creator"));
+        prerenderedShells.set("checksum", await render("checksum"));
         prerenderedShells.set("compress", await render("compress"));
         prerenderedShells.set("identify", await render("identify"));
         prerenderedShells.set("extract", await render("extract"));

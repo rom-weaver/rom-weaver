@@ -1,6 +1,7 @@
 type WorkflowView =
   | "patcher"
   | "creator"
+  | "checksum"
   | "compress"
   | "extract"
   | "identify"

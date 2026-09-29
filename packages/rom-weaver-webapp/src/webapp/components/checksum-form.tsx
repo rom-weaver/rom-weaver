@@ -1,0 +1,516 @@
+import { Hash } from "lucide-react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import type {
+  ChecksumWorkflowFile,
+  ChecksumWorkflowSourceState,
+} from "../../lib/workflow/checksum-workflow-controller.ts";
+import { createLogger } from "../../lib/logging.ts";
+import type { ChecksumWorkflow as BrowserChecksumWorkflow } from "../../platform/browser/browser-api.ts";
+import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
+import { formatByteSize } from "../../presentation/workflow-presentation.ts";
+import { useCandidateSelection } from "../../public/react/candidate-selection.tsx";
+import { ChecksumList, ChecksumRow, PendingChecksumRow } from "../../public/react/components/ds/checksum-list.tsx";
+import { FileProgress, Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
+import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
+import { InfoPopover, StepSection } from "../../public/react/components/ds/layout.tsx";
+import {
+  StageStatus,
+  stageBarValue,
+  stagePercent,
+  stageStatusLabel,
+} from "../../public/react/components/ds/staging-meta.tsx";
+import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
+import { WorkflowRomInputStep } from "../../public/react/components/ds/workflow-rom-input-step.tsx";
+import { ARCHIVE_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "../../public/react/file-classification.ts";
+import { getFileInputAcceptAttributes } from "../../public/react/file-input-accept";
+import { useInputSelectionHandler } from "../../public/react/input-selection-handler.ts";
+import type { CandidateSelectionPrompt, PageFileDrop } from "../../public/react/public-types.ts";
+import { useApplySettings, useRomWeaverAssetBaseUrl, useUiLocalizer } from "../../public/react/settings-context.tsx";
+import {
+  getRomDropNotice,
+  getRomDropNoticeLevel,
+  routeSingleRom,
+  selectRomDropCandidate,
+} from "../../public/react/unified-drop-routing.ts";
+import { usePageDropForwarder, useWorkbenchActivity } from "../../public/react/workflow-form-effects.ts";
+import {
+  createReactWorkflowId,
+  formatOptionalElapsedMs,
+  getSourceNoticeLevel,
+  getSourceNoticeMessage,
+  hasSourceQueueWarning,
+} from "../../public/react/workflow-form-utils.ts";
+import { loadBrowserApi } from "../../public/react/workflow-loader.ts";
+import {
+  toWorkflowChecksumProgressProps,
+  toWorkflowFileProgressProps,
+  useWorkflowProgressState,
+} from "../../public/react/workflow-run-hooks.ts";
+
+const logger = createLogger("checksum-form");
+
+const CHECKSUM_SUPPORTED_FILES = [
+  { extensions: ROM_FILE_EXTENSIONS, label: "ROMs" },
+  { extensions: ARCHIVE_FILE_EXTENSIONS, label: "Archives & containers" },
+] as const;
+
+/* Every algorithm the checksum engine supports (`rom-weaver formats`), with the
+   hex length its digest has. Staging always computes the first three. */
+const CHECKSUM_ALGORITHMS = [
+  { hexLength: 8, id: "crc32", label: "CRC32" },
+  { hexLength: 32, id: "md5", label: "MD5" },
+  { hexLength: 40, id: "sha1", label: "SHA-1" },
+  { hexLength: 64, id: "sha256", label: "SHA-256" },
+  { hexLength: 64, id: "blake3", label: "BLAKE3" },
+  { hexLength: 8, id: "crc32c", label: "CRC32C" },
+  { hexLength: 4, id: "crc16", label: "CRC16" },
+  { hexLength: 8, id: "adler32", label: "Adler-32" },
+] as const;
+const DEFAULT_ALGORITHMS = ["crc32", "md5", "sha1"];
+
+type ChecksumFormProps = { pageDrop?: PageFileDrop | null };
+type ChecksumSet = { checksums: Record<string, string>; id: string; label: string };
+type CompareResult = { match?: { algorithm: string; setId: string }; uncomputed: string[] } | null;
+
+const normalizeChecksumInput = (raw: string) => raw.trim().toLowerCase().replace(/^0x/, "");
+
+/* The raw file first, then its transform variants (headerless, byte-swapped…),
+   each named so a match says which bytes it describes. */
+const getChecksumSets = (file: ChecksumWorkflowFile, fileLabel: string): ChecksumSet[] => [
+  { checksums: file.checksums, id: `${file.id}:raw`, label: fileLabel },
+  ...(file.checksumVariants || [])
+    .filter((variant) => variant.id !== "raw" && variant.id !== "manual")
+    .map((variant) => ({
+      checksums: variant.checksums as Record<string, string>,
+      id: `${file.id}:${variant.id}`,
+      label: fileLabel ? `${fileLabel} · ${variant.label}` : variant.label,
+    })),
+];
+
+/* Compare one pasted digest against every computed set. Its length names the
+   candidate algorithms; `uncomputed` lists those still switched off or pending. */
+const compareChecksum = (expected: string, sets: ChecksumSet[], algorithms: string[]): CompareResult => {
+  if (!expected) return null;
+  const candidates = CHECKSUM_ALGORITHMS.filter((algorithm) => algorithm.hexLength === expected.length);
+  for (const set of sets) {
+    const algorithm = candidates.find((entry) => set.checksums[entry.id] === expected);
+    if (algorithm) return { match: { algorithm: algorithm.id, setId: set.id }, uncomputed: [] };
+  }
+  const uncomputed = candidates
+    .filter((entry) => !(algorithms.includes(entry.id) && sets[0]?.checksums[entry.id]))
+    .map((entry) => entry.label);
+  return { uncomputed };
+};
+
+const ChecksumSetRows = ({
+  algorithms,
+  compare,
+  expected,
+  pending,
+  set,
+}: {
+  algorithms: string[];
+  compare: CompareResult;
+  expected: string;
+  pending: boolean;
+  set: ChecksumSet;
+}) => (
+  <>
+    {CHECKSUM_ALGORITHMS.filter((algorithm) => algorithms.includes(algorithm.id)).map((algorithm) => {
+      const value = set.checksums[algorithm.id] || "";
+      if (!value) {
+        return pending ? (
+          <PendingChecksumRow key={algorithm.id} label={algorithm.label} length={algorithm.hexLength} />
+        ) : null;
+      }
+      const sameLength = expected.length === algorithm.hexLength;
+      const matched = compare?.match?.setId === set.id && compare.match.algorithm === algorithm.id;
+      const mark = matched ? "ok" : sameLength && !compare?.match ? "bad" : undefined;
+      return <ChecksumRow key={algorithm.id} label={algorithm.label} mark={mark} value={value} />;
+    })}
+  </>
+);
+
+const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
+  const localizer = useUiLocalizer();
+  const settings = useApplySettings();
+  const assetBaseUrl = useRomWeaverAssetBaseUrl();
+  const cancelSelectionRef = useRef<(request: CandidateSelectionPrompt) => void>(() => undefined);
+  const { candidateSelectionDialog, selectFile } = useCandidateSelection({
+    onCancelSelection: (request) => cancelSelectionRef.current(request),
+  });
+  // Matches webapp-root's `currentView` so root routing targets this tab's dialog.
+  useInputSelectionHandler("checksum", selectFile);
+  const [source, setSource] = useState<File | null>(null);
+  const [input, setInput] = useState<ChecksumWorkflowSourceState | null>(null);
+  const [staging, setStaging] = useState(false);
+  const [calculating, setCalculating] = useState(false);
+  const [algorithms, setAlgorithms] = useState<string[]>(DEFAULT_ALGORITHMS);
+  const [expectedText, setExpectedText] = useState("");
+  const [error, setError] = useState("");
+  const [dropRouting, setDropRouting] = useState<ReturnType<typeof routeSingleRom> | null>(null);
+  const { clearProgressForStage, createProgressHandler, progress, setProgress } = useWorkflowProgressState({});
+  const workflowRef = useRef<InstanceType<typeof BrowserChecksumWorkflow> | null>(null);
+  const workflowIdRef = useRef(createReactWorkflowId("react-checksum"));
+  const handledPageDropIdRef = useRef<number | null>(null);
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+
+  const showError = useCallback(
+    (cause: unknown) => setError(formatCodedErrorForDisplay(cause, localizer)),
+    [localizer],
+  );
+
+  const updateSource = useCallback((file: File | null) => {
+    setDropRouting(null);
+    setError("");
+    setSource(file);
+  }, []);
+
+  cancelSelectionRef.current = (request) => {
+    if (request.sourceIndex === -1) return;
+    updateSource(null);
+  };
+
+  const handleDrop = (files: File[]) => {
+    const routed = routeSingleRom(files);
+    if (routed.roms.length > 1) {
+      setDropRouting(null);
+      void selectRomDropCandidate(routed.roms, localizer.message("ui.step.rom"), selectFile).then((selected) => {
+        if (!selected) {
+          setDropRouting(routed.ignoredPatches.length ? { ...routed, unused: [] } : null);
+          return;
+        }
+        updateSource(selected);
+        setDropRouting({ ...routed, source: selected, unused: [] });
+      });
+      return;
+    }
+    if (routed.source) updateSource(routed.source);
+    setDropRouting(routed);
+  };
+  usePageDropForwarder(pageDrop, handleDrop, handledPageDropIdRef);
+
+  // One workflow per staged ROM: a new source disposes the old workflow, which
+  // releases its extracted files.
+  useEffect(() => {
+    setInput(null);
+    // A calculation on the previous ROM ends with its workflow, and its own
+    // settle is gated on that workflow still being current.
+    setCalculating(false);
+    if (!source) {
+      setStaging(false);
+      return;
+    }
+    let current = true;
+    let workflow: InstanceType<typeof BrowserChecksumWorkflow> | null = null;
+    const handleProgress = createProgressHandler("input");
+    void (async () => {
+      const { ChecksumWorkflow } = await loadBrowserApi();
+      if (!current) return;
+      const { input: inputSettings, logging, workers } = settingsRef.current;
+      workflow = new ChecksumWorkflow({
+        ...(assetBaseUrl ? { assetBaseUrl } : {}),
+        id: workflowIdRef.current,
+        selectFile,
+        settings: { input: inputSettings, logging, workers },
+      });
+      workflowRef.current = workflow;
+      workflow.on("progress", handleProgress);
+      setStaging(true);
+      logger.debug("staging ROM", { fileName: source.name, size: source.size });
+      try {
+        await workflow.setInput(source);
+        if (current) setInput(workflow.getInput());
+      } catch (cause) {
+        if (!current) return;
+        setInput(workflow.getInput());
+        const code = getErrorCode(cause);
+        logger.debug("staging failed", { code, fileName: source.name });
+        if (code !== "WORKFLOW_SELECTION_SKIPPED" && code !== "CANCELLED") showError(cause);
+      } finally {
+        workflow.off("progress", handleProgress);
+        if (current) {
+          setStaging(false);
+          clearProgressForStage("input");
+        }
+      }
+    })();
+    return () => {
+      current = false;
+      workflow?.off("progress", handleProgress);
+      if (workflowRef.current === workflow) workflowRef.current = null;
+      void workflow?.dispose().catch(() => undefined);
+    };
+  }, [assetBaseUrl, clearProgressForStage, createProgressHandler, selectFile, showError, source]);
+
+  const files = input?.status === "ready" ? input.files : [];
+  const missing = algorithms.filter((algorithm) => files.some((file) => !file.checksums[algorithm]));
+
+  const calculate = async () => {
+    const workflow = workflowRef.current;
+    if (!(workflow && missing.length) || calculating) return;
+    setCalculating(true);
+    setError("");
+    const handleProgress = createProgressHandler("checksum");
+    workflow.on("progress", handleProgress);
+    try {
+      const next = await workflow.calculate(algorithms);
+      if (workflowRef.current === workflow) setInput(next);
+    } catch (cause) {
+      if (workflowRef.current === workflow && getErrorCode(cause) !== "CANCELLED") showError(cause);
+    } finally {
+      workflow.off("progress", handleProgress);
+      if (workflowRef.current === workflow) {
+        setCalculating(false);
+        setProgress(null);
+      }
+    }
+  };
+
+  const toggleAlgorithm = (algorithm: string, on: boolean) =>
+    setAlgorithms((previous) => (on ? [...previous, algorithm] : previous.filter((entry) => entry !== algorithm)));
+
+  useWorkbenchActivity(workflowIdRef.current, {
+    busy: staging || calculating,
+    completed: files.length > 0,
+    queued: false,
+  });
+
+  const expected = normalizeChecksumInput(expectedText);
+  const expectedInvalid = !!expected && !/^[0-9a-f]+$/.test(expected);
+  const multiFile = files.length > 1;
+  const sets = files.flatMap((file) => getChecksumSets(file, multiFile ? file.fileName : ""));
+  const compare = expectedInvalid ? null : compareChecksum(expected, sets, algorithms);
+  const matchedSet = sets.find((set) => set.id === compare?.match?.setId);
+  const matchedLabel = CHECKSUM_ALGORITHMS.find((entry) => entry.id === compare?.match?.algorithm)?.label;
+  const stagingChecksum = staging && progress?.stage === "checksum";
+  const stagingProgress = stagingChecksum
+    ? toWorkflowChecksumProgressProps(progress)
+    : toWorkflowFileProgressProps(staging ? progress : null);
+  const stagePct = stagePercent(stagingProgress);
+  const primary = files[0];
+  const dropNotice = dropRouting ? getRomDropNotice(dropRouting, localizer) : "";
+  const sourceNotice = getSourceNoticeMessage(input);
+  const sourceEmpty = !source;
+
+  return (
+    <section className="panel checksum-tool" id="checksum-container">
+      <UnifiedDropZone
+        accept={getFileInputAcceptAttributes().unifiedRom}
+        addLabel="Replace the ROM"
+        afterDropZone={
+          dropNotice ? (
+            <Notice id="checksum-input-notice" level={dropRouting ? getRomDropNoticeLevel(dropRouting) : "warn"}>
+              {dropNotice}
+            </Notice>
+          ) : null
+        }
+        big={sourceEmpty}
+        disabled={calculating}
+        heroLabel="Drop a ROM to checksum it"
+        heroLabelCoarse="Tap to add a ROM"
+        info={<p>Checksums are calculated locally. Your ROM never leaves this browser.</p>}
+        inputId="checksum-input-picker"
+        lead={{
+          line1: "ui.hero.checksumThesis",
+          line2: "ui.hero.checksumThesis2",
+          description: "ui.hero.checksumDescription",
+        }}
+        multiple={false}
+        onFiles={handleDrop}
+        supported={CHECKSUM_SUPPORTED_FILES}
+      />
+      {sourceEmpty ? (
+        <GhostSteps
+          steps={[
+            { num: "0x02", title: localizer.message("ui.step.rom") },
+            { num: "0x03", title: "Checksums" },
+          ]}
+        />
+      ) : (
+        <>
+          <WorkflowRomInputStep
+            fault={hasSourceQueueWarning(input) || (!!error && !files.length)}
+            id="checksum-source"
+            info={
+              <InfoPopover title="ROM input">
+                <ul>
+                  <li>Archives and disc images are extracted; pick the ROM if several are found.</li>
+                  <li>The checksums describe the ROM itself, not the archive that held it.</li>
+                </ul>
+              </InfoPopover>
+            }
+            items={[
+              {
+                card: {
+                  extract: {
+                    fileName: input?.fileName || source.name,
+                    fileSize: input?.size,
+                    parentCompressions: input?.parentCompressions,
+                    timing: formatOptionalElapsedMs(input?.decompressionTimeMs),
+                  },
+                  meta: staging ? (
+                    <>
+                      <span className="fsize mono">{formatByteSize(input?.size ?? source.size)}</span>
+                      <StageStatus
+                        id="checksum-input-stage"
+                        label={stageStatusLabel("Checksumming", !stagingChecksum, localizer)}
+                        percent={stagePct}
+                      />
+                    </>
+                  ) : (
+                    <span className="fsize mono">{formatByteSize(input?.size ?? source.size)}</span>
+                  ),
+                  onRemove: () => updateSource(null),
+                  panels: {
+                    ...(input?.identification ? { identification: input.identification } : {}),
+                    identifyPending: staging,
+                    info: {
+                      bytes: primary?.size,
+                      checksums: primary?.checksums,
+                      checksumVariants: primary?.checksumVariants,
+                      defaultOpen: false,
+                    },
+                  },
+                  removeLabel: "Remove ROM",
+                  stageBar: stageBarValue(staging, stagePct),
+                  state: hasSourceQueueWarning(input) ? "bad" : input?.status === "ready" ? "ok" : undefined,
+                },
+                id: "checksum-input-card",
+              },
+            ]}
+            notice={
+              sourceNotice ? (
+                <Notice id="checksum-source-notice" level={getSourceNoticeLevel(input)}>
+                  {sourceNotice}
+                </Notice>
+              ) : null
+            }
+            num="0x02"
+            title={localizer.message("ui.step.rom")}
+            woven={files.length > 0}
+          />
+          <StepSection
+            className="checksum-results"
+            fault={!!compare && !compare.match && !compare.uncomputed.length}
+            id="checksum-results"
+            info={
+              <InfoPopover title="Checksums">
+                <ul>
+                  <li>Switch on an algorithm, then calculate it. Click a value to copy it.</li>
+                  <li>Paste an expected checksum to compare it with every computed value.</li>
+                  <li>Headerless and other variants appear when the ROM has a known header or byte order.</li>
+                </ul>
+              </InfoPopover>
+            }
+            num="0x03"
+            title="Checksums"
+            woven={!!compare?.match}
+          >
+            <fieldset className="checksum-algos" disabled={calculating}>
+              <legend className="sr-only">Algorithms</legend>
+              {CHECKSUM_ALGORITHMS.map((algorithm) => (
+                <label className="checkrow" key={algorithm.id}>
+                  <input
+                    checked={algorithms.includes(algorithm.id)}
+                    id={`checksum-algo-${algorithm.id}`}
+                    onChange={(event) => toggleAlgorithm(algorithm.id, event.currentTarget.checked)}
+                    type="checkbox"
+                  />
+                  <span>{algorithm.label}</span>
+                </label>
+              ))}
+            </fieldset>
+            {files.length && missing.length ? (
+              calculating ? (
+                <FileProgress
+                  {...(toWorkflowChecksumProgressProps(progress) || { indeterminate: true, label: "Checksum" })}
+                  cancelLabel="Cancel checksum"
+                  id="checksum-calculate-progress"
+                  onCancel={() => workflowRef.current?.abort()}
+                />
+              ) : (
+                <RunButton icon={<Hash aria-hidden="true" />} id="checksum-calculate" onClick={() => void calculate()}>
+                  {`Calculate ${missing
+                    .map((algorithm) => CHECKSUM_ALGORITHMS.find((entry) => entry.id === algorithm)?.label)
+                    .join(", ")}`}
+                </RunButton>
+              )
+            ) : null}
+            {primary ? (
+              <ChecksumList defaultOpen label={localizer.message("ui.checks.title")}>
+                {sets.map((set, index) => (
+                  <Fragment key={set.id}>
+                    {set.label || index > 0 ? (
+                      <div className="ck-group">
+                        <div className="ck-group-head">{set.label}</div>
+                        <ChecksumSetRows
+                          algorithms={algorithms}
+                          compare={compare}
+                          expected={expected}
+                          pending={calculating}
+                          set={set}
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        <ChecksumSetRows
+                          algorithms={algorithms}
+                          compare={compare}
+                          expected={expected}
+                          pending={calculating}
+                          set={set}
+                        />
+                        <ChecksumRow label="BYTES" value={String(primary.size)} />
+                      </>
+                    )}
+                  </Fragment>
+                ))}
+              </ChecksumList>
+            ) : null}
+            <label className="checksum-compare" htmlFor="checksum-compare-input">
+              <span>Compare with an expected checksum</span>
+              <input
+                aria-invalid={expectedInvalid || undefined}
+                autoComplete="off"
+                className="input mono"
+                id="checksum-compare-input"
+                onChange={(event) => setExpectedText(event.currentTarget.value)}
+                placeholder="Paste a CRC32, MD5, SHA-1, or other checksum"
+                spellCheck={false}
+                type="text"
+                value={expectedText}
+              />
+            </label>
+            {expectedInvalid ? (
+              <Notice level="error">A checksum contains only the digits 0-9 and the letters a-f.</Notice>
+            ) : null}
+            {compare?.match && matchedSet ? (
+              <p className="pdesc checksum-verdict" id="checksum-compare-verdict">
+                Match: the {matchedLabel} of {matchedSet.label || "this ROM"}.
+              </p>
+            ) : null}
+            {compare && !compare.match && files.length ? (
+              <Notice id="checksum-compare-verdict" level={compare.uncomputed.length ? "warn" : "error"}>
+                {compare.uncomputed.length
+                  ? `No computed checksum matches. Calculate ${compare.uncomputed.join(" or ")} to compare this value.`
+                  : expected.length && !CHECKSUM_ALGORITHMS.some((entry) => entry.hexLength === expected.length)
+                    ? `No supported algorithm makes a ${expected.length}-character checksum.`
+                    : "No computed checksum matches. This is not the expected ROM, or it needs a different header or byte order."}
+              </Notice>
+            ) : null}
+          </StepSection>
+        </>
+      )}
+      {error ? (
+        <Notice level="error" onDismiss={() => setError("")}>
+          {error}
+        </Notice>
+      ) : null}
+      {candidateSelectionDialog}
+    </section>
+  );
+};
+
+export { ChecksumForm, type ChecksumFormProps };

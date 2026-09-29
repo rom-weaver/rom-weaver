@@ -765,6 +765,11 @@ msgstr "Guardando la aplicación en caché para que funcione sin conexión…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.checksumDescription"
+msgstr "Calcula CRC32, MD5, SHA-1, SHA-256 y otros checksums de una ROM, incluso dentro de un archivo comprimido. Todo se ejecuta localmente en tu navegador."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.cancel"
 msgstr "Cancelar"
 
@@ -875,6 +880,11 @@ msgstr "La validación de la suma de comprobación falló."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.checksumThesis"
+msgstr "Calcula el checksum de tu ROM."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.checksumming"
 msgstr "Calculando sumas de verificación"
 
@@ -972,6 +982,11 @@ msgstr "Línea de comandos"
 #: src/presentation/localization/messages.ts
 msgid "ui.status.commit"
 msgstr "Commit"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.checksumThesis2"
+msgstr "Compáralo con el valor esperado."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

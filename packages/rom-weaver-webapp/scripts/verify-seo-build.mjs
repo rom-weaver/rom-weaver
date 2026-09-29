@@ -65,6 +65,7 @@ const applyHtml = read("apply-patches.html");
 const bundleHtml = read("bundle-patches.html");
 const notFoundHtml = read("404.html");
 const createHtml = read("create-patch.html");
+const checksumHtml = read("checksum.html");
 const compressHtml = read("compress.html");
 const extractHtml = read("extract.html");
 const identifyHtml = read("identify-rom.html");
@@ -86,6 +87,7 @@ for (const route of DOC_ROUTES) {
 for (const route of [
   "apply-patches",
   "bundle-patches",
+  "checksum",
   "create-patch",
   "extract",
   "identify-rom",
@@ -270,6 +272,17 @@ assertIncludes(bundleHtml, WORKFLOW_SEO_ROUTES.bundle.description, "bundle descr
 assertIncludes(read("bundle/index.html"), WORKFLOW_SEO_ROUTES.bundle.description, "static-host bundle description");
 assertIncludes(createHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.creator.slug}"`, "create canonical");
 assertIncludes(createHtml, WORKFLOW_SEO_ROUTES.creator.description, "create description");
+assertIncludes(
+  checksumHtml,
+  `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.checksum.slug}"`,
+  "checksum canonical",
+);
+assertIncludes(checksumHtml, WORKFLOW_SEO_ROUTES.checksum.description, "checksum description");
+assertIncludes(
+  read("checksum/index.html"),
+  WORKFLOW_SEO_ROUTES.checksum.description,
+  "static-host checksum description",
+);
 assertIncludes(
   compressHtml,
   `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.compress.slug}"`,
@@ -491,6 +504,7 @@ for (const beta of ["trim-rom", "ppf-undo", "whats-new", "save-editor"]) {
 }
 for (const [route, panel] of Object.entries({
   "apply-patches": "panel-patcher",
+  checksum: "panel-checksum",
   "create-patch": "panel-creator",
   extract: "panel-extract",
   "identify-rom": "panel-identify",
@@ -599,6 +613,7 @@ for (const system of identifyDataIndex.systems) {
 for (const slug of [
   ...DOC_ROUTES.map((route) => route.slug),
   "apply",
+  "checksum",
   "create",
   "compress",
   "identify",

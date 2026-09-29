@@ -8,10 +8,12 @@
 - [Create ROM patches](https://rom-weaver.com/create-patch): Create patches with format-aware settings and distributable bundles.
 - [Compress files](https://rom-weaver.com/compress): Convert ISO or BIN/CUE to CHD, GameCube and Wii ISO to RVZ, and Nintendo 3DS ROMs to Z3DS; create ZIP or 7z archives.
 - [Extract files](https://rom-weaver.com/extract): Decompress Z3DS, ZCCI, ZCXI, ZCIA, Z3DSX, CHD, RVZ, and supported archives locally in the browser.
+- [Checksum a ROM](https://rom-weaver.com/checksum): Calculate CRC32, MD5, SHA-1, SHA-256, and other checksums of a ROM, even inside an archive, and compare them with an expected value.
 - [Identify a ROM](https://rom-weaver.com/identify-rom): Match a ROM's game, region, revision, and known dump name by checksum, locally in the browser.
 - [Documentation](https://rom-weaver.com/docs): Tutorials, how-to guides, reference tables, and explanation, for the browser app and the CLI.
 - [What rom-weaver supports](https://rom-weaver.com/docs/features): Plain-language feature map, browser and CLI availability, and links to exact support limits.
 - [Identify ROMs in the browser](https://rom-weaver.com/docs/identify-roms-browser): Look up files, search names or checksums, and compare fingerprints.
+- [Checksum ROMs in the browser](https://rom-weaver.com/docs/checksum-roms-browser): Calculate and compare a ROM's checksums locally.
 - [Extract files in the browser](https://rom-weaver.com/docs/extract-files-browser): Take files out of an archive or disc image and download them singly or as one ZIP.
 - [Compress files in the browser](https://rom-weaver.com/docs/convert-roms-browser): Package files or compress compatible disc images without applying a patch.
 - [Convert RVZ to ISO in the browser](https://rom-weaver.com/docs/convert-rvz-to-iso): Extract a GameCube or Wii RVZ disc image to ISO on your device.

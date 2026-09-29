@@ -7,6 +7,7 @@ import type { IdentifyFormProps } from "./components/identify-form.tsx";
 import type { HomePageProps } from "./components/home-page.tsx";
 import type { WhatsNewPageProps } from "./whats-new-page.tsx";
 import type { WebappView } from "./webapp-state-types.ts";
+import type { ChecksumFormProps } from "./components/checksum-form.tsx";
 import type { CompressFormProps } from "./components/compress-form.tsx";
 
 /**
@@ -19,6 +20,7 @@ const logger = createLogger("workflow-routes");
 type WorkflowRouteProps = {
   bundle: ApplyPatchFormProps;
   creator: CreatePatchFormProps;
+  checksum: ChecksumFormProps;
   compress: CompressFormProps;
   docs: {
     active: boolean;
@@ -107,6 +109,9 @@ const HomeRoute = createWorkflowRoute("home", () =>
 const ExtractRoute = createWorkflowRoute("extract", () =>
   import("./components/extract-form.tsx").then((module) => ({ default: module.ExtractForm })),
 );
+const ChecksumRoute = createWorkflowRoute("checksum", () =>
+  import("./components/checksum-form.tsx").then((module) => ({ default: module.ChecksumForm })),
+);
 const CompressRoute = createWorkflowRoute("compress", () =>
   import("./components/compress-form.tsx").then((module) => ({ default: module.CompressForm })),
 );
@@ -132,6 +137,7 @@ const WhatsNewRoute = createWorkflowRoute("whats-new", () =>
 const WORKFLOW_ROUTES = {
   bundle: BundleWorkflowRoute,
   creator: CreatorRoute,
+  checksum: ChecksumRoute,
   compress: CompressRoute,
   docs: DocsRoute,
   extract: ExtractRoute,
@@ -146,6 +152,7 @@ const WORKFLOW_ROUTES = {
 } as const;
 
 const CreatePatchRoute = CreatorRoute.Component;
+const ChecksumRouteForm = ChecksumRoute.Component;
 const CompressRouteForm = CompressRoute.Component;
 const DocsPageRoute = DocsRoute.Component;
 const ApplyPatchRoute = PatcherRoute.Component;
@@ -173,6 +180,7 @@ const preloadDocsRouteHtml = (slug?: string): Promise<unknown> =>
 export {
   ApplyPatchRoute,
   BundleRoute,
+  ChecksumRouteForm,
   CreatePatchRoute,
   CompressRouteForm,
   DocsPageRoute,

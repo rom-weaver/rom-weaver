@@ -356,6 +356,31 @@
 .rw-app .compress-files {
   margin-block-start: var(--sp-m);
 }
+/* Checksum */
+.rw-app .checksum-results .step-body {
+  display: grid;
+  gap: var(--sp-m);
+}
+.rw-app .checksum-algos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  /* Each .checkrow brings its own block margin, so rows need no extra gap. */
+  gap: 0 var(--sp-m);
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.rw-app .checksum-compare {
+  display: grid;
+  gap: var(--sp-2xs);
+  font-size: 0.82rem;
+  color: var(--ink-2);
+}
+.rw-app .checksum-verdict {
+  margin: 0;
+  color: var(--ink-2);
+}
 /* Save Editor */
 .rw-app .save-editor-file {
   margin-block-start: var(--sp-m);

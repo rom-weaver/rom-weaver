@@ -765,6 +765,11 @@ msgstr "Die App wird für die Offline-Nutzung zwischengespeichert…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.checksumDescription"
+msgstr "Berechne CRC32, MD5, SHA-1, SHA-256 und weitere Prüfsummen einer ROM, auch in einem Archiv. Alles läuft lokal in deinem Browser."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.common.cancel"
 msgstr "Abbrechen"
 
@@ -875,6 +880,11 @@ msgstr "Die Prüfsummen-Validierung ist fehlgeschlagen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.checksumThesis"
+msgstr "Prüfe deine ROM."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.checksumming"
 msgstr "Prüfsummen werden berechnet"
 
@@ -972,6 +982,11 @@ msgstr "Befehlszeile"
 #: src/presentation/localization/messages.ts
 msgid "ui.status.commit"
 msgstr "Commit"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.checksumThesis2"
+msgstr "Vergleiche sie mit dem erwarteten Wert."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
