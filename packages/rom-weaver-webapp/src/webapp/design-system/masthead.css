@@ -1140,13 +1140,12 @@
   flex: none;
   align-items: center;
   justify-content: space-between;
-  padding: 8px var(--gutter);
+  padding: 4px var(--gutter);
   font-size: 1rem;
   border-bottom: 1px solid var(--seam);
 }
 .rw-app .docs-menu-header button,
-.rw-app .docs-mobile-toolbar button,
-.rw-app .docs-mobile-toolbar a {
+.rw-app .docs-mobile-toolbar button {
   display: inline-flex;
   gap: 6px;
   align-items: center;
@@ -1171,28 +1170,26 @@
 }
 @media (hover: hover) {
   .rw-app .docs-menu-header button:hover,
-  .rw-app .docs-mobile-toolbar button:hover,
-  .rw-app .docs-mobile-toolbar a:hover {
+  .rw-app .docs-mobile-toolbar button:hover {
     background: var(--well);
   }
 }
 .rw-app .docs-menu-header button:active,
-.rw-app .docs-mobile-toolbar button:active,
-.rw-app .docs-mobile-toolbar a:active {
+.rw-app .docs-mobile-toolbar button:active {
   background: var(--well);
 }
 .rw-app .menu-sheet-docs {
-  inset: 0;
-  width: 100%;
+  inset: auto var(--gutter) calc(var(--dock-h) + var(--sp-xs));
+  width: calc(100% - 2 * var(--gutter));
   max-width: none;
-  max-block-size: 100dvh;
-  height: 100dvh;
-  padding-inline: 0;
-  padding-top: var(--safe-t);
-  padding-bottom: var(--safe-b);
+  max-block-size: min(60dvh, calc(100dvh - var(--dock-h) - var(--safe-t) - 2 * var(--sp-xs)));
+  height: auto;
+  padding: 0;
   margin: 0;
   color: var(--ink);
-  border: 0;
+  border: 1px solid var(--seam-strong);
+  border-radius: var(--r-l);
+  box-shadow: var(--overlay-shadow);
 }
 .rw-app .menu-sheet-docs .menu-sheet-body {
   flex: 1;
@@ -1293,24 +1290,19 @@
     --dock-h: calc(53px + max(3px, var(--safe-b)));
   }
   .rw-app .docs-mobile-toolbar {
-    display: flex;
-    gap: 4px;
-    align-items: center;
-    justify-content: space-between;
-    padding-block: 4px;
-    border-bottom: 1px solid var(--seam);
+    display: contents;
   }
   .rw-app .docs-mobile-toolbar .docs-browse-trigger {
     position: fixed;
-    bottom: calc(var(--dock-h) + var(--sp-m));
+    bottom: calc(var(--dock-h) + var(--sp-xs));
     left: max(var(--gutter), var(--safe-l));
     z-index: 998;
-    gap: 10px;
-    padding-inline: 16px;
-    background: var(--plate);
-    border: 1px solid var(--seam-strong);
+    gap: 6px;
+    min-height: 36px;
+    padding: 4px 12px;
+    background: color-mix(in oklab, var(--plate) 88%, transparent);
+    border: 1px solid var(--seam);
     border-radius: 999px;
-    box-shadow: 0 8px 24px color-mix(in oklab, var(--ink) 18%, transparent);
   }
   @media (hover: hover) {
     .rw-app .docs-mobile-toolbar .docs-browse-trigger:hover {

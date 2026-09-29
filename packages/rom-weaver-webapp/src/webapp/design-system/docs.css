@@ -844,7 +844,7 @@ html:has(.docs-workbench) {
 }
 @media (max-width: 860px) {
   .rw-app {
-    --docs-chip-h: 44px;
+    --docs-chip-h: 36px;
   }
   .rw-app .docs-layout {
     grid-template-columns: minmax(0, 1fr);
@@ -868,7 +868,7 @@ html:has(.docs-workbench) {
      reserving a full-width strip above the app dock. */
   .rw-app .docs-trail {
     position: fixed;
-    inset: auto max(var(--gutter), var(--safe-r)) calc(var(--dock-h, 0px) + var(--sp-m)) auto;
+    inset: auto max(var(--gutter), var(--safe-r)) calc(var(--dock-h, 0px) + var(--sp-xs)) auto;
     /* under the dock (1000) and the update banner (999), over the article */
     z-index: 998;
     display: block;
@@ -893,16 +893,15 @@ html:has(.docs-workbench) {
     text-transform: uppercase;
     letter-spacing: 0.06em;
     cursor: pointer;
-    background: var(--plate);
-    border: 1px solid var(--seam-strong);
+    background: color-mix(in oklab, var(--plate) 88%, transparent);
+    border: 1px solid var(--seam);
     border-radius: 999px;
-    box-shadow: 0 8px 24px color-mix(in oklab, var(--ink) 18%, transparent);
   }
   .rw-app .docs-trail-menu svg {
     flex: none;
     width: 18px;
     height: 18px;
-    color: var(--weft);
+    color: currentColor;
   }
   .rw-app .docs-trail-menu[aria-expanded="true"] {
     color: var(--ink);
@@ -922,11 +921,11 @@ html:has(.docs-workbench) {
   }
   .rw-app .docs-contents-menu {
     position: fixed;
-    inset: auto var(--gutter) calc(var(--dock-h, 0px) + var(--docs-chip-h) + 2 * var(--sp-m));
+    inset: auto var(--gutter) calc(var(--dock-h, 0px) + var(--docs-chip-h) + 2 * var(--sp-xs));
     z-index: 999;
     display: grid;
-    gap: var(--sp-m);
-    max-height: min(70dvh, calc(100dvh - var(--dock-h, 0px) - var(--docs-chip-h) - 3 * var(--sp-m)));
+    gap: var(--sp-s);
+    max-height: min(50dvh, calc(100dvh - var(--dock-h, 0px) - var(--docs-chip-h) - var(--safe-t) - 3 * var(--sp-xs)));
     padding: var(--sp-s);
     overflow-y: auto;
     overscroll-behavior: contain;

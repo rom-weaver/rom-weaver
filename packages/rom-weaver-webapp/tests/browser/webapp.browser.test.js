@@ -292,7 +292,9 @@ test("mobile Docs keeps the workflow dock and owns a separate navigation dialog"
     "Menu",
   ]);
   const trigger = document.querySelector(".docs-browse-trigger");
+  expect(document.querySelector(".docs-mobile-toolbar a")).toBeNull();
   expect(getComputedStyle(trigger).position).toBe("fixed");
+  expect(trigger.getBoundingClientRect().height).toBe(36);
   expect(trigger.getBoundingClientRect().bottom).toBeLessThanOrEqual(844);
   expect(trigger.getBoundingClientRect().bottom).toBeLessThanOrEqual(dock.getBoundingClientRect().top);
   expect(trigger.getBoundingClientRect().left).toBeLessThan(30);
@@ -310,7 +312,10 @@ test("mobile Docs keeps the workflow dock and owns a separate navigation dialog"
   expect(panel.querySelectorAll(".nav-row")).toHaveLength(1);
   expect(panel.querySelector(".nav-row")?.textContent).toBe("Back to tools");
   expect(panel.querySelectorAll(".guide-nav a")).toHaveLength(61);
-  expect(panel.getBoundingClientRect().height).toBe(844);
+  expect(panel.getBoundingClientRect().height).toBeLessThanOrEqual(844 * 0.6 + 1);
+  expect(panel.getBoundingClientRect().bottom).toBeLessThan(dock.getBoundingClientRect().top);
+  const body = panel.querySelector(".menu-sheet-body");
+  expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
   expect(panel.querySelector(".guide-shelf > summary").getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   close.click();
   await expect.poll(() => panel.open).toBe(false);

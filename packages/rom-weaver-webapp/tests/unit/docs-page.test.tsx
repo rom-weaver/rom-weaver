@@ -727,7 +727,7 @@ Fixture description.
     render(docsShell("docs", "docs", language));
     expect(document.querySelector('.side-nav a[href="/apply-patches"]')?.textContent).toBe(back);
     expect(document.querySelector(".side-nav .nav-group-label")?.textContent).toBe(title);
-    expect(document.querySelector(".docs-mobile-toolbar a")?.textContent).toBe(back);
+    expect(document.querySelector(".docs-mobile-toolbar a")).toBeNull();
     const trigger = document.querySelector(".docs-browse-trigger") as HTMLElement;
     expect(trigger.textContent).toBe(browse);
     expect(document.querySelector(".dock-find")?.getAttribute("aria-label")).toBe(find);

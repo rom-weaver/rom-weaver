@@ -552,10 +552,6 @@ const Masthead = ({
           </div>
           {currentTab === "docs" ? (
             <div className="docs-mobile-toolbar">
-              <a href="/apply-patches">
-                <ArrowLeft aria-hidden="true" />
-                {localizer.message("ui.docs.backToTools")}
-              </a>
               <button
                 aria-controls="docs-menu-sheet"
                 aria-expanded={docsMenuOpen}
