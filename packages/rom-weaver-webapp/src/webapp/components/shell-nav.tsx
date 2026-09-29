@@ -136,7 +136,7 @@ const NavRow = ({
             entry.onExternalClick?.(event);
             return;
           }
-          activateOnClick(event, () => entry.onSelect?.());
+          if (entry.onSelect) activateOnClick(event, entry.onSelect);
         }}
         rel={entry.external ? "noreferrer" : undefined}
         target={entry.external ? "_blank" : undefined}

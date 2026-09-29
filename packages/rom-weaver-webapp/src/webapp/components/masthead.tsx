@@ -270,7 +270,7 @@ const Masthead = ({
           icon: tab.icon,
           id: tab.id,
           label: tab.railLabel ?? tab.label,
-          onSelect: () => onSelectTab(tab.id),
+          onSelect: tab.id === "docs" && currentTab === "docs" ? undefined : () => onSelectTab(tab.id),
           title: fullNameFor(tab),
         })),
       id: group,

@@ -120,6 +120,22 @@ describe("the navigation both layouts share", () => {
     expect(onOpenLog).toHaveBeenCalledTimes(2);
   });
 
+  it("leaves Overview links to the URL router while reading a guide", () => {
+    const onSelectTab = vi.fn();
+    const { container } = render(
+      withSettings(<Masthead {...mastheadProps} currentTab="docs" docsSlug="docs/faq" onSelectTab={onSelectTab} />),
+    );
+
+    for (const scope of Object.values(navs(container))) {
+      const link = rowNamed(scope, "Overview");
+      const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+      link.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      expect(link.getAttribute("href")).toBe("docs");
+    }
+    expect(onSelectTab).not.toHaveBeenCalled();
+  });
+
   it("falls back to the Log dialog when no Storage handler is given", () => {
     const onOpenLog = vi.fn();
     const { container } = render(withSettings(<Masthead {...mastheadProps} onOpenLog={onOpenLog} />));
