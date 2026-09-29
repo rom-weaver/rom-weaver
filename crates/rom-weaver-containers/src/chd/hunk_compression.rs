@@ -170,13 +170,17 @@ impl ChdContainerHandler {
                 if skip_flac && *codec == ChdCodec::CD_FLAC {
                     continue;
                 }
-                let compressed = self.compress_prepared_cd_hunk(
+                let Some(compressed) = self.compress_prepared_cd_hunk(
                     *codec,
                     compression_level,
                     hunk.len(),
                     &prepared,
                     Some(&mut shared_streams),
-                )?;
+                )?
+                else {
+                    trace!(codec = ?codec, raw = hunk.len(), "chd cd hunk codec skipped");
+                    continue;
+                };
                 if best
                     .as_ref()
                     .map(|(_, candidate)| compressed.len() < candidate.len())
@@ -240,7 +244,13 @@ impl ChdContainerHandler {
             hunk.len(),
             &prepared,
             None,
-        )
+        )?
+        .ok_or_else(|| {
+            RomWeaverError::Validation(format!(
+                "{} could not encode this hunk within its size limit",
+                self.codec_label(primary_codec)
+            ))
+        })
     }
 
     pub(super) fn prepare_cd_hunk_streams<'a>(
@@ -333,7 +343,7 @@ impl ChdContainerHandler {
         hunk_len: usize,
         prepared: &PreparedCdHunk<'_>,
         shared_streams: Option<&mut CdSharedCompressedStreams>,
-    ) -> Result<Vec<u8>> {
+    ) -> Result<Option<Vec<u8>>> {
         trace!(
             codec = ?primary_codec,
             frames = prepared.frame_count,
@@ -363,9 +373,9 @@ impl ChdContainerHandler {
                 hunk_len,
                 shared_streams,
             ),
-            ChdCodec::CD_FLAC => {
-                self.compress_prepared_cd_flac_payload(sectors, prepared, compression_level)
-            }
+            ChdCodec::CD_FLAC => self
+                .compress_prepared_cd_flac_payload(sectors, prepared, compression_level)
+                .map(Some),
             other => Err(RomWeaverError::Unsupported(
                 UnsupportedOp::ChdCodecForMedia {
                     codec: self.codec_label(other).to_string(),
@@ -518,12 +528,21 @@ impl ChdContainerHandler {
         prepared: &PreparedCdHunk<'_>,
         compression_level: i32,
         hunk_len: usize,
-    ) -> Result<Vec<u8>> {
+    ) -> Result<Option<Vec<u8>>> {
         let (mut output, ecc_bytes, comp_len_bytes) =
             Self::cd_payload_header(prepared, hunk_len, sectors.len() / 4);
         let sector_start = output.len();
         output = Self::zstd_append(output, sectors, compression_level, "cd zstd")?;
         let sector_stream_len = output.len().saturating_sub(sector_start);
+        // chdman's zstd compressor fails when the stream fills its sector-sized output buffer.
+        if sector_stream_len >= sectors.len() {
+            trace!(
+                sectors = sectors.len(),
+                stream = sector_stream_len,
+                "chd cd zstd sector stream does not fit the sector bytes"
+            );
+            return Ok(None);
+        }
         Self::write_cd_sector_stream_len(
             &mut output,
             ecc_bytes,
@@ -536,6 +555,7 @@ impl ChdContainerHandler {
             compression_level,
             "cd subcode zstd",
         )
+        .map(Some)
     }
 
     pub(super) fn compress_prepared_cd_zlib_payload(
@@ -545,7 +565,7 @@ impl ChdContainerHandler {
         compression_level: i32,
         hunk_len: usize,
         shared_streams: Option<&mut CdSharedCompressedStreams>,
-    ) -> Result<Vec<u8>> {
+    ) -> Result<Option<Vec<u8>>> {
         let (mut output, ecc_bytes, comp_len_bytes) =
             Self::cd_payload_header(prepared, hunk_len, sectors.len() / 4);
         let sector_start = output.len();
@@ -556,6 +576,15 @@ impl ChdContainerHandler {
             "cd zlib",
         )?;
         let sector_stream_len = output.len().saturating_sub(sector_start);
+        // chdman's zlib compressor fails when the stream reaches its sector-sized output buffer.
+        if sector_stream_len >= sectors.len() {
+            trace!(
+                sectors = sectors.len(),
+                stream = sector_stream_len,
+                "chd cd zlib sector stream does not fit the sector bytes"
+            );
+            return Ok(None);
+        }
         Self::write_cd_sector_stream_len(
             &mut output,
             ecc_bytes,
@@ -563,6 +592,7 @@ impl ChdContainerHandler {
             sector_stream_len,
         )?;
         Self::append_default_cd_subcode_deflate(output, prepared, compression_level, shared_streams)
+            .map(Some)
     }
 
     pub(super) fn compress_prepared_cd_lzma_payload(
@@ -572,14 +602,25 @@ impl ChdContainerHandler {
         compression_level: i32,
         hunk_len: usize,
         shared_streams: Option<&mut CdSharedCompressedStreams>,
-    ) -> Result<Vec<u8>> {
+    ) -> Result<Option<Vec<u8>>> {
         let lzma_level = Self::resolved_chd_lzma_level(compression_level);
+        // chdman gives the CD LZMA sector stream an output buffer the size of the sectors, and a
+        // stream that does not fit fails the codec for that hunk; another codec or the uncompressed
+        // map entry takes it. Incompressible sectors MUST be skipped the same way for byte parity.
+        let Some(sector_stream) =
+            Self::encode_lzma_raw_no_header_no_eopm(sectors, lzma_level, "cd lzma", sectors.len())?
+        else {
+            trace!(
+                sectors = sectors.len(),
+                "chd cd lzma sector stream exceeds the sector bytes"
+            );
+            return Ok(None);
+        };
 
         let (mut output, ecc_bytes, comp_len_bytes) =
-            Self::cd_payload_header(prepared, hunk_len, sectors.len() / 4);
-        let sector_start = output.len();
-        Self::append_lzma_raw_no_header_no_eopm(&mut output, sectors, lzma_level, "cd lzma")?;
-        let sector_stream_len = output.len().saturating_sub(sector_start);
+            Self::cd_payload_header(prepared, hunk_len, sector_stream.len());
+        output.extend_from_slice(&sector_stream);
+        let sector_stream_len = sector_stream.len();
         Self::write_cd_sector_stream_len(
             &mut output,
             ecc_bytes,
@@ -587,6 +628,7 @@ impl ChdContainerHandler {
             sector_stream_len,
         )?;
         Self::append_default_cd_subcode_deflate(output, prepared, compression_level, shared_streams)
+            .map(Some)
     }
 
     pub(super) fn compress_prepared_cd_flac_payload(
@@ -620,22 +662,34 @@ impl ChdContainerHandler {
         .min(9)
     }
 
-    pub(super) fn append_lzma_raw_no_header_no_eopm(
-        output: &mut Vec<u8>,
-        input: &[u8],
-        level: u32,
-        context: &str,
-    ) -> Result<()> {
-        let compressed = Self::compress_lzma_raw_no_header_no_eopm(input, level, context)?;
-        output.extend_from_slice(&compressed);
-        Ok(())
-    }
-
     pub(super) fn compress_lzma_raw_no_header_no_eopm(
         input: &[u8],
         level: u32,
         context: &str,
     ) -> Result<Vec<u8>> {
+        let output_bound = unsafe { liblzma_sys::lzma_stream_buffer_bound(input.len()) };
+        if output_bound == 0 {
+            return Err(RomWeaverError::Validation(format!(
+                "{context} compression failed: input too large for liblzma"
+            )));
+        }
+        Self::encode_lzma_raw_no_header_no_eopm(input, level, context, output_bound)?.ok_or_else(
+            || {
+                RomWeaverError::Validation(format!(
+                    "{context} compression failed: {}",
+                    Self::lzma_status_name(liblzma_sys::LZMA_BUF_ERROR)
+                ))
+            },
+        )
+    }
+
+    /// Encodes into at most `output_limit` bytes, returning `None` when the stream does not fit.
+    pub(super) fn encode_lzma_raw_no_header_no_eopm(
+        input: &[u8],
+        level: u32,
+        context: &str,
+        output_limit: usize,
+    ) -> Result<Option<Vec<u8>>> {
         const LZMA_FILTER_LZMA1EXT: liblzma_sys::lzma_vli = 0x4000000000000002;
 
         // Match MAME/chdman's CHD LZMA configuration: raw LZMA1 with no header and no
@@ -669,14 +723,7 @@ impl ChdContainerHandler {
             },
         ];
 
-        let output_bound = unsafe { liblzma_sys::lzma_stream_buffer_bound(input.len()) };
-        if output_bound == 0 {
-            return Err(RomWeaverError::Validation(format!(
-                "{context} compression failed: input too large for liblzma"
-            )));
-        }
-
-        let mut output = vec![0u8; output_bound];
+        let mut output = vec![0u8; output_limit];
         let mut output_pos = 0usize;
         let status = unsafe {
             liblzma_sys::lzma_raw_buffer_encode(
@@ -689,6 +736,9 @@ impl ChdContainerHandler {
                 output.len(),
             )
         };
+        if status == liblzma_sys::LZMA_BUF_ERROR {
+            return Ok(None);
+        }
         if status != liblzma_sys::LZMA_OK {
             return Err(RomWeaverError::Validation(format!(
                 "{context} compression failed: {}",
@@ -697,7 +747,7 @@ impl ChdContainerHandler {
         }
 
         output.truncate(output_pos);
-        Ok(output)
+        Ok(Some(output))
     }
 
     pub(super) fn chd_lzma_dict_size(level: u32, reduce_size: u32) -> u32 {
