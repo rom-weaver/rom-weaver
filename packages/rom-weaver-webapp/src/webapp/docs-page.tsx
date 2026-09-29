@@ -1,5 +1,5 @@
 import "./design-system/docs-route.css";
-import { ArrowUpToLine, ChevronLeft, ChevronRight, ListTree } from "lucide-react";
+import { ArrowUpDown, ArrowUpToLine, ChevronLeft, ChevronRight, ListTree } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { DOC_PAGE_LOADERS, DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { copyToClipboard } from "../lib/clipboard.ts";
@@ -302,35 +302,40 @@ const DocsNav = ({
     return () => observer.disconnect();
   }, [currentSlug, openShelves]);
   return (
-    <nav aria-label="Docs" className="guide-nav" ref={navRef}>
-      {DOC_SHELVES.map((shelf) => (
-        <details
-          className="guide-shelf"
-          key={shelf.title}
-          onToggle={(event) => onShelfToggle(shelf.title, event.currentTarget.open)}
-          open={openShelves[shelf.title]}
-        >
-          <summary>
-            <h3 className="guide-shelf-title">{shelf.title}</h3>
-          </summary>
-          <ul className="guide-nav-list">
-            {shelf.routes.map((entry) => (
-              <li key={entry.slug}>
-                <a
-                  aria-current={entry.slug === currentSlug ? "page" : undefined}
-                  href={`/${entry.slug}`}
-                  onClick={onNavigate}
-                  onFocus={() => warmDocsHtml(entry.slug)}
-                  onPointerEnter={() => warmDocsHtml(entry.slug)}
-                >
-                  {entry.label}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </details>
-      ))}
-    </nav>
+    <>
+      <nav aria-label="Docs" className="guide-nav" ref={navRef}>
+        {DOC_SHELVES.map((shelf) => (
+          <details
+            className="guide-shelf"
+            key={shelf.title}
+            onToggle={(event) => onShelfToggle(shelf.title, event.currentTarget.open)}
+            open={openShelves[shelf.title]}
+          >
+            <summary>
+              <h3 className="guide-shelf-title">{shelf.title}</h3>
+            </summary>
+            <ul className="guide-nav-list">
+              {shelf.routes.map((entry) => (
+                <li key={entry.slug}>
+                  <a
+                    aria-current={entry.slug === currentSlug ? "page" : undefined}
+                    href={`/${entry.slug}`}
+                    onClick={onNavigate}
+                    onFocus={() => warmDocsHtml(entry.slug)}
+                    onPointerEnter={() => warmDocsHtml(entry.slug)}
+                  >
+                    {entry.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ))}
+      </nav>
+      <p className="guide-nav-hint">
+        Scroll within guides <ArrowUpDown aria-hidden="true" />
+      </p>
+    </>
   );
 };
 

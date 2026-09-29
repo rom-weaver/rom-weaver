@@ -410,6 +410,12 @@
 .rw-app .nav-docs-toggle:active {
   background: var(--plate-2);
 }
+.rw-app .nav-docs-summary:has(.nav-row[aria-current="page"]) {
+  background: color-mix(in oklab, var(--thread) 12%, var(--well));
+}
+.rw-app .nav-docs-summary .nav-row[aria-current="page"] {
+  background: transparent;
+}
 
 .rw-app .nav-row svg {
   flex: none;
@@ -1118,8 +1124,16 @@
     padding-block: var(--sp-m);
   }
   .rw-app .side-rail .nav-row {
+    gap: 11px;
     min-block-size: 32px;
-    padding-block: 6px;
+    padding: 7px 9px;
+    font-size: 0.765rem;
+    font-weight: 400;
+    font-stretch: 100%;
+  }
+  .rw-app .side-rail .nav-row > svg {
+    width: 16px;
+    height: 16px;
   }
   .rw-app .app > :not(.side-col) {
     grid-column: 2;
