@@ -2,7 +2,7 @@
 
 The application defines its save layouts and editing rules as typed Rust under [`crates/rom-weaver-core/src/save/schema/catalog/`](../../crates/rom-weaver-core/src/save/schema/catalog). This directory keeps the source attribution and license for those definitions. It does not contain runtime schema packs.
 
-The default registry includes the original seven game-family definitions and all 48 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. A profile selects one fixed region, slot, player, or storage variant.
+The default registry includes the original seven game-family definitions and all 59 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. A profile selects one fixed region, slot, player, or storage variant.
 
 | Original catalog module | Games |
 | --- | --- |
@@ -33,7 +33,10 @@ The default registry includes the original seven game-family definitions and all
 | `super_metroid.rs` | 1 | 6 | 96 | Template only |
 | `wario_land_super_mario_land_3.rs` | 1 | 1 | 210 | Template only |
 | `zelda_a_link_to_the_past.rs` | 1 | 3 | 381 | File 1 fresh; all profiles template |
-| **Total** | **21** | **48** | **5,336** | **2 fresh profiles** |
+| `f_zero.rs` | 1 | 1 | 663 | Template only |
+| `game_and_watch_gallery_3.rs` | 1 | 1 | 10 | Template only |
+| `kirbys_adventure.rs` | 1 | 9 | 27 | Template only |
+| **Total** | **24** | **59** | **6,036** | **2 fresh profiles** |
 
 Fresh creation uses a verified initializer. Template creation starts from an existing valid save and preserves bytes outside the requested edits and integrity repairs. A profile without an initializer cannot create a fresh save.
 
@@ -80,3 +83,13 @@ The other definitions derive from Game Tools Collection commit [`fd8ca0beba05723
 Game Tools Collection is copyright 2024 RyudoSynbios and is used under the [MIT License](LICENSE-GAME-TOOLS-COLLECTION).
 
 The catalog uses the shared schema engine and native callbacks. Adding or changing a definition requires an application update.
+
+F-Zero, Game & Watch Gallery 3, and Kirby's Adventure derive from Game Tools Collection revision `75ce8f848b628f202c50daa75d95dda58eb1f3a5`:
+
+| Title | Layout and write rules | Supported edits |
+| --- | --- | --- |
+| F-Zero | [Source](https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/f-zero/saveEditor) | Master Class unlocks, best laps, ranked times, and cars; three league checksums repaired. |
+| Game & Watch Gallery 3 | [Source](https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/game-and-watch-gallery-3/saveEditor) | Game unlocks and Very Hard mode flags; additive checksum repaired. Scores and pending games omitted. |
+| Kirby's Adventure | [Source](https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/kirby-s-adventure/saveEditor) | Current level in three slots and three region layouts; animation bytes and slot checksums repaired. Door and progression edits omitted. |
+
+These profiles require explicit selection and a game-made template. F-Zero accepts 2 KiB raw SRAM; the other two games accept 8 KiB. Edits preserve unrelated bytes.
