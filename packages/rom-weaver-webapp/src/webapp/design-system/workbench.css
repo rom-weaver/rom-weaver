@@ -357,6 +357,9 @@
   margin-block-start: var(--sp-m);
 }
 /* Checksum */
+.rw-app .checksum-results .step-head > .rm {
+  margin-inline-start: auto;
+}
 .rw-app .checksum-results .step-body {
   display: grid;
   gap: var(--sp-m);

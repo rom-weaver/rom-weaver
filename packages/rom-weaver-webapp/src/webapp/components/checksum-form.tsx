@@ -12,7 +12,7 @@ import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { useCandidateSelection } from "../../public/react/candidate-selection.tsx";
 import { ChecksumList, ChecksumRow, PendingChecksumRow } from "../../public/react/components/ds/checksum-list.tsx";
 import { FileProgress, Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
-import { FileCard } from "../../public/react/components/ds/file-card.tsx";
+import { FileCard, RemoveButton } from "../../public/react/components/ds/file-card.tsx";
 import { DropZone, InfoPopover, StepSection } from "../../public/react/components/ds/layout.tsx";
 import {
   StageStatus,
@@ -291,7 +291,16 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
     ? toWorkflowChecksumProgressProps(progress)
     : toWorkflowFileProgressProps(staging ? progress : null);
   const stagePct = stagePercent(stagingProgress);
-  const primary = files[0];
+  const displayedFiles: ChecksumWorkflowFile[] = files.length
+    ? files
+    : [
+        {
+          checksums: {},
+          fileName: input?.fileName || source?.name || "",
+          id: "input",
+          size: input?.size ?? source?.size ?? 0,
+        },
+      ];
   const sourceNotice = getSourceNoticeMessage(input);
   const sourceEmpty = !source;
 
@@ -331,33 +340,6 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
           title="Input"
           woven={files.length > 0}
         >
-          <div className="cards workflow-file-list">
-            <FileCard
-              meta={
-                staging ? (
-                  <>
-                    <span className="fsize mono">{formatByteSize(input?.size ?? source.size)}</span>
-                    <StageStatus
-                      id="checksum-input-stage"
-                      label={stageStatusLabel("Checksumming", !stagingChecksum, localizer)}
-                      percent={stagePct}
-                    />
-                  </>
-                ) : (
-                  <span className="fsize mono">{formatByteSize(input?.size ?? source.size)}</span>
-                )
-              }
-              name={
-                <span className="nm" title={getBaseFileName(input?.fileName || source.name)}>
-                  {getBaseFileName(input?.fileName || source.name)}
-                </span>
-              }
-              onRemove={() => updateSource(null)}
-              removeLabel="Remove file"
-              stageBar={stageBarValue(staging, stagePct)}
-              state={hasSourceQueueWarning(input) ? "bad" : input?.status === "ready" ? "ok" : undefined}
-            />
-          </div>
           <DropZone
             disabled={calculating}
             inputId="checksum-input-picker"
@@ -365,11 +347,6 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
             multiple={false}
             onFiles={handleDrop}
           />
-          {sourceNotice ? (
-            <Notice id="checksum-source-notice" level={getSourceNoticeLevel(input)}>
-              {sourceNotice}
-            </Notice>
-          ) : null}
         </StepSection>
       )}
       <StepSection
@@ -415,6 +392,9 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
         <StepSection
           className="checksum-results"
           fault={!!compare && !compare.match && !compare.uncomputed.length}
+          headerExtra={
+            <RemoveButton label={multiFile ? "Remove files" : "Remove file"} onClick={() => updateSource(null)} />
+          }
           id="checksum-results"
           info={
             <InfoPopover title="Checksums">
@@ -445,36 +425,65 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
               </RunButton>
             )
           ) : null}
-          {primary ? (
-            <ChecksumList defaultOpen label={localizer.message("ui.checks.title")}>
-              {sets.map((set, index) => (
-                <Fragment key={set.id}>
-                  {set.label || index > 0 ? (
-                    <div className="ck-group">
-                      <div className="ck-group-head">{set.label}</div>
-                      <ChecksumSetRows
-                        algorithms={algorithms}
-                        compare={compare}
-                        expected={expected}
-                        pending={calculating}
-                        set={set}
+          <div className="cards workflow-file-list">
+            {displayedFiles.map((file) => (
+              <FileCard
+                key={file.id}
+                meta={
+                  <>
+                    <span className="fsize mono">{formatByteSize(file.size)}</span>
+                    {staging ? (
+                      <StageStatus
+                        id="checksum-input-stage"
+                        label={stageStatusLabel("Checksumming", !stagingChecksum, localizer)}
+                        percent={stagePct}
                       />
-                    </div>
-                  ) : (
-                    <>
-                      <ChecksumSetRows
-                        algorithms={algorithms}
-                        bytes={primary.size}
-                        compare={compare}
-                        expected={expected}
-                        pending={calculating}
-                        set={set}
-                      />
-                    </>
-                  )}
-                </Fragment>
-              ))}
-            </ChecksumList>
+                    ) : null}
+                  </>
+                }
+                name={
+                  <span className="nm" title={file.fileName}>
+                    {getBaseFileName(file.fileName)}
+                  </span>
+                }
+                stageBar={stageBarValue(staging, stagePct)}
+                state={hasSourceQueueWarning(input) ? "bad" : undefined}
+              >
+                {files.length ? (
+                  <ChecksumList defaultOpen label={localizer.message("ui.checks.title")}>
+                    {getChecksumSets(file, "").map((set) =>
+                      set.label ? (
+                        <div className="ck-group" key={set.id}>
+                          <div className="ck-group-head">{set.label}</div>
+                          <ChecksumSetRows
+                            algorithms={algorithms}
+                            compare={compare}
+                            expected={expected}
+                            pending={calculating}
+                            set={set}
+                          />
+                        </div>
+                      ) : (
+                        <ChecksumSetRows
+                          algorithms={algorithms}
+                          bytes={file.size}
+                          compare={compare}
+                          expected={expected}
+                          key={set.id}
+                          pending={calculating}
+                          set={set}
+                        />
+                      ),
+                    )}
+                  </ChecksumList>
+                ) : null}
+              </FileCard>
+            ))}
+          </div>
+          {sourceNotice ? (
+            <Notice id="checksum-source-notice" level={getSourceNoticeLevel(input)}>
+              {sourceNotice}
+            </Notice>
           ) : null}
           <label className="checksum-compare" htmlFor="checksum-compare-input">
             <span>Compare with an expected checksum</span>
