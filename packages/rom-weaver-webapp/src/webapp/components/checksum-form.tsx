@@ -102,31 +102,46 @@ const compareChecksum = (expected: string, sets: ChecksumSet[], algorithms: stri
   return { uncomputed };
 };
 
+/* `bytes` renders right after CRC32, as the ROM card orders them, so the two
+   short rows pair onto one grid row. Without CRC32 it leads the list. */
 const ChecksumSetRows = ({
   algorithms,
+  bytes,
   compare,
   expected,
   pending,
   set,
 }: {
   algorithms: string[];
+  bytes?: number;
   compare: CompareResult;
   expected: string;
   pending: boolean;
   set: ChecksumSet;
 }) => (
   <>
+    {bytes !== undefined && !algorithms.includes("crc32") ? <ChecksumRow label="BYTES" value={String(bytes)} /> : null}
     {CHECKSUM_ALGORITHMS.filter((algorithm) => algorithms.includes(algorithm.id)).map((algorithm) => {
       const value = set.checksums[algorithm.id] || "";
-      if (!value) {
-        return pending ? (
-          <PendingChecksumRow key={algorithm.id} label={algorithm.label} length={algorithm.hexLength} />
-        ) : null;
-      }
       const sameLength = expected.length === algorithm.hexLength;
       const matched = compare?.match?.setId === set.id && compare.match.algorithm === algorithm.id;
       const mark = matched ? "ok" : sameLength && !compare?.match ? "bad" : undefined;
-      return <ChecksumRow key={algorithm.id} label={algorithm.label} mark={mark} value={value} />;
+      const row = value ? (
+        <ChecksumRow
+          className={algorithm.hexLength > 40 ? "ck-long" : undefined}
+          label={algorithm.label}
+          mark={mark}
+          value={value}
+        />
+      ) : pending ? (
+        <PendingChecksumRow label={algorithm.label} length={algorithm.hexLength} />
+      ) : null;
+      return (
+        <Fragment key={algorithm.id}>
+          {row}
+          {algorithm.id === "crc32" && bytes !== undefined ? <ChecksumRow label="BYTES" value={String(bytes)} /> : null}
+        </Fragment>
+      );
     })}
   </>
 );
@@ -457,12 +472,12 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
                       <>
                         <ChecksumSetRows
                           algorithms={algorithms}
+                          bytes={primary.size}
                           compare={compare}
                           expected={expected}
                           pending={calculating}
                           set={set}
                         />
-                        <ChecksumRow label="BYTES" value={String(primary.size)} />
                       </>
                     )}
                   </Fragment>
