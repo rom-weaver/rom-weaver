@@ -132,6 +132,58 @@ describe("ChecksumForm", () => {
     expect(screen.getByText(/Calculate CRC32 or CRC32C or Adler-32 to compare this value/)).toBeTruthy();
   });
 
+  it("keeps completed track checksums after a calculation is cancelled", async () => {
+    const initial = readyInput({ crc32: CRC32, md5: "m".repeat(32), sha1: "s".repeat(40) });
+    initial.files.push({ ...initial.files[0], fileName: "track02.bin", id: "track02" });
+    workflow.setInput.mockResolvedValue(initial);
+    workflow.calculate.mockImplementation(async () => {
+      const [instance] = workflow.instances as Array<{ input: unknown }>;
+      instance.input = {
+        ...initial,
+        files: [
+          { ...initial.files[0], checksums: { ...initial.files[0].checksums, sha256: SHA256 } },
+          initial.files[1],
+        ],
+      };
+      throw Object.assign(new Error("cancelled"), { code: "CANCELLED" });
+    });
+    render(<ChecksumForm />);
+    addRom();
+    await screen.findAllByText(CRC32);
+    fireEvent.click(screen.getByLabelText("SHA-256"));
+    fireEvent.click(await screen.findByRole("button", { name: "Calculate SHA-256" }));
+
+    expect(await screen.findByText(SHA256)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Calculate SHA-256" })).toBeTruthy();
+  });
+
+  it("reports an uncomputed digest on later tracks instead of a mismatch", async () => {
+    const initial = readyInput({
+      crc32: CRC32,
+      md5: "a".repeat(32),
+      sha1: "b".repeat(40),
+      sha256: SHA256,
+      blake3: "d".repeat(64),
+    });
+    workflow.setInput.mockResolvedValue({
+      ...initial,
+      files: [
+        ...initial.files,
+        { checksums: { ...initial.files[0].checksums, sha256: "" }, fileName: "track02.bin", id: "track02", size: 16 },
+      ],
+    });
+    render(<ChecksumForm />);
+    addRom();
+    await screen.findAllByText(CRC32);
+    fireEvent.click(screen.getByLabelText("SHA-256"));
+    fireEvent.click(screen.getByLabelText("BLAKE3"));
+    fireEvent.change(screen.getByLabelText("Compare with an expected checksum"), {
+      target: { value: "c".repeat(64) },
+    });
+
+    expect(screen.getByText(/Calculate SHA-256 to compare this value/)).toBeTruthy();
+  });
+
   it("keeps the staged ROM when the display settings change", async () => {
     const { rerender } = render(
       <RomWeaverSettingsProvider settings={{ byteUnits: "binary", language: "en" }}>

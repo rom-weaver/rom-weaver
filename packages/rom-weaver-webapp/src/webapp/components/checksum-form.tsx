@@ -98,7 +98,7 @@ const compareChecksum = (expected: string, sets: ChecksumSet[], algorithms: stri
     if (algorithm) return { match: { algorithm: algorithm.id, setId: set.id }, uncomputed: [] };
   }
   const uncomputed = candidates
-    .filter((entry) => !(algorithms.includes(entry.id) && sets[0]?.checksums[entry.id]))
+    .filter((entry) => !algorithms.includes(entry.id) || sets.some((set) => !set.checksums[entry.id]))
     .map((entry) => entry.label);
   return { uncomputed };
 };
@@ -282,7 +282,10 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
       const next = await workflow.calculate(algorithms);
       if (workflowRef.current === workflow) setInput(next);
     } catch (cause) {
-      if (workflowRef.current === workflow && getErrorCode(cause) !== "CANCELLED") showError(cause);
+      if (workflowRef.current === workflow) {
+        setInput(workflow.getInput());
+        if (getErrorCode(cause) !== "CANCELLED") showError(cause);
+      }
     } finally {
       workflow.off("progress", handleProgress);
       if (workflowRef.current === workflow) {
