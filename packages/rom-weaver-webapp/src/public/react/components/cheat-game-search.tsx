@@ -1,7 +1,9 @@
 import { Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { isSelectableCheat, type CheatRomIdentity, type CheatSystemShard } from "../../../lib/cheats/index.ts";
-import { normalizeTitle } from "../../../lib/identify/title-index.mjs";
+import { useRomLookup } from "../use-rom-lookup.ts";
+import { useUiLocalizer } from "../settings-context.tsx";
+import { ROM_LOOKUP_MESSAGES, RomSearch } from "./ds/rom-expectation-card.tsx";
 import type { CheatDatabaseRecordsState } from "./use-cheat-database-records.ts";
 import { DropdownSelect } from "./ds/dropdown-select.tsx";
 import { Notice } from "./ds/feedback.tsx";
@@ -23,29 +25,10 @@ type CheatGamePickerProps = {
   unverified?: boolean;
 };
 
-/** Searchable game list for a ROM the cheat database did not match by checksum. */
+/** Browse cheat records that the identification data might not contain. */
 const CheatGamePicker = ({ platform, games, value, onChange, unverified }: CheatGamePickerProps) => {
-  const [query, setQuery] = useState("");
-  const options = useMemo(() => {
-    const terms = normalizeTitle(query).split(" ").filter(Boolean);
-    if (!terms.length) return games;
-    return games.filter((candidate) => {
-      const label = normalizeTitle(gameLabel(candidate));
-      return terms.every((term) => label.includes(term));
-    });
-  }, [games, query]);
   return (
     <div className="cheat-game-picker">
-      <label>
-        <span>Search games in {platform}</span>
-        <input
-          className="input"
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search by game title…"
-          type="search"
-          value={query}
-        />
-      </label>
       <DropdownSelect
         aria-label={`Browse games for ${platform}`}
         className="select"
@@ -53,17 +36,12 @@ const CheatGamePicker = ({ platform, games, value, onChange, unverified }: Cheat
         value={value}
       >
         <option value="">Use automatic match</option>
-        {options.map((candidate) => (
+        {games.map((candidate) => (
           <option key={candidate.id} value={candidate.id}>
             {gameLabel(candidate)}
           </option>
         ))}
       </DropdownSelect>
-      {options.length ? null : (
-        <p className="cheat-pick-empty" role="status">
-          No games match this search.
-        </p>
-      )}
       {unverified ? (
         <p className="cheat-pick-empty">
           This ROM revision is unverified. These cheats may target different addresses.
@@ -98,8 +76,9 @@ export const getCheatGameSearchStep = ({
   alwaysBrowseGames,
 }: CheatGameSearchInput): CheatGameSearchStep | undefined => {
   if (!(rom && database.activeIndex)) return undefined;
+  if (database.referenceRom) return database.entry ? "game" : "system";
   if (!(database.entry || database.manualOnlySystem)) return "system";
-  if (!(database.entry && database.shard)) return undefined;
+  if (!database.entry) return undefined;
   if (alwaysBrowseGames || database.match.kind !== "exact" || hasNoRomCheats(database)) return "game";
   return undefined;
 };
@@ -155,32 +134,73 @@ const SystemSearch = ({ database }: { database: CheatDatabaseRecordsState }) => 
 };
 
 const gameWarning = (database: CheatDatabaseRecordsState): string => {
-  const { entry, game, match, records } = database;
+  const { entry, game, match, records, referenceRom } = database;
+  if (referenceRom && entry && !game && database.shard) {
+    return `The cheat database has no game record for ${referenceRom.title}. Search for another release or browse this system's cheat records below.`;
+  }
   if (match.kind === "none" && entry) {
-    return `No game in the ${entry.platform} cheat database matches this ROM. Search for the game below. A game you choose by hand may not match this ROM's revision.`;
+    return `No game in the ${entry.platform} cheat database matches this ROM. Identify the game above. A game you choose by hand may not match this ROM's revision.`;
   }
   if (game && hasNoRomCheats(database)) {
     const found = records.length ? "no cheats that can be baked into the ROM" : "no cheats";
-    return `The cheat database has ${found} for ${game.title}. If this ROM was matched wrongly, search for a different game below.`;
+    return `The cheat database has ${found} for ${game.title}. If this ROM was matched wrongly, identify a different game above.`;
   }
   return "";
 };
 
-/**
- * The dialog's identify controls: a warning that says why no cheats show, then
- * a system search or a game search that lets the user identify the game by hand.
- */
+const IdentifyCheatGame = ({ database }: { database: CheatDatabaseRecordsState }) => {
+  const localizer = useUiLocalizer();
+  const id = useId();
+  const lookup = useRomLookup(ROM_LOOKUP_MESSAGES(localizer));
+  const { result } = lookup;
+  const { referenceRom, setReferenceRom } = database;
+  useEffect(() => {
+    if (!result) return;
+    const match = result.identification.matches[0];
+    if (!match) return;
+    setReferenceRom({
+      key: match.name,
+      title: match.name,
+      platform: match.platform,
+      checksums: result.checks.checksums,
+    });
+  }, [result, setReferenceRom]);
+  return (
+    <>
+      {referenceRom ? (
+        <p className="cheat-pick-empty">
+          Selected game: {referenceRom.title}.{" "}
+          <button
+            className="btn ghost slim"
+            onClick={() => {
+              lookup.clear();
+              setReferenceRom(null);
+            }}
+            type="button"
+          >
+            Use automatic match
+          </button>
+        </p>
+      ) : null}
+      <RomSearch idPrefix={`rom-weaver-cheat-identify-${id}`} localizer={localizer} lookup={lookup} variant="section" />
+    </>
+  );
+};
+
+/** Reference selections MUST remain separate from the staged ROM's identity. */
 export const CheatGameSearch = (input: CheatGameSearchInput) => {
   const { rom, database } = input;
   const step = getCheatGameSearchStep(input);
   if (!rom) return null;
+  const identify = step ? <IdentifyCheatGame key={rom.key} database={database} /> : null;
   if (step === "system") {
     return (
       <>
+        {identify}
         <Notice id="rom-weaver-cheat-system-warning" level="warn">
-          {rom.platform
-            ? `No cheat database covers ${rom.platform}. If this ROM was identified wrongly, choose its system to search for the game.`
-            : "The system of this ROM was not identified. Choose its system to search for the game."}
+          {(database.referenceRom ?? rom).platform
+            ? `No cheat database covers ${(database.referenceRom ?? rom).platform}. If this ROM was identified wrongly, identify its game or choose a system below.`
+            : "The system of this ROM was not identified. Identify its game or choose a system below."}
         </Notice>
         <SystemSearch database={database} />
       </>
@@ -197,10 +217,17 @@ export const CheatGameSearch = (input: CheatGameSearchInput) => {
         </button>
       </p>
     ) : null;
-  if (!(step === "game" && entry && shard)) return changeSystem;
+  if (!(step === "game" && entry && shard))
+    return (
+      <>
+        {identify}
+        {changeSystem}
+      </>
+    );
   const warning = gameWarning(database);
   return (
     <>
+      {identify}
       {warning ? (
         <Notice id="rom-weaver-cheat-game-warning" level="warn">
           {warning}
@@ -209,10 +236,13 @@ export const CheatGameSearch = (input: CheatGameSearchInput) => {
       {changeSystem}
       <CheatGamePicker
         games={shard.games}
-        onChange={setManualGameId}
+        onChange={(gameId) => {
+          if (!gameId) database.setReferenceRom(null);
+          setManualGameId(gameId);
+        }}
         platform={entry.platform}
         unverified={match.kind === "title" || match.kind === "manual"}
-        value={manualGameId}
+        value={manualGameId || (database.referenceRom && database.game ? database.game.id : "")}
       />
     </>
   );
