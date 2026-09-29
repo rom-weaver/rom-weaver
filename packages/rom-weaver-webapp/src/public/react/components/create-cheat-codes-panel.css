@@ -52,14 +52,6 @@
     margin-block-start: var(--sp-xs);
   }
 
-  /* Says why the cheat-codes mode is off for this ROM's system; the mode
-     button points here through aria-describedby. */
-  .rw-app .create-cheat-codes-unsupported {
-    margin: 0;
-    font-size: 0.82rem;
-    color: var(--ink-3);
-  }
-
   .rw-app .create-cheat-code-blocked {
     display: block;
     margin-block-start: var(--sp-2xs);

@@ -320,18 +320,16 @@ describe("CreatePatchForm", () => {
     },
   });
 
-  it("disables cheat codes mode when the original ROM's system has no cheat support", async () => {
+  it("keeps cheat codes mode available for a system with no matching database", async () => {
     identifyIndexOverride.current = async () => snesOnlyCheatData();
     const { container } = await stageOriginalOnly({ betaToolsEnabled: true });
 
-    await vi.waitFor(() => expect((findButton(container, "Cheat codes") as HTMLButtonElement).disabled).toBe(true));
-    const reason = container.querySelector("#patch-builder-cheat-codes-unsupported");
-    expect(reason?.textContent).toBe("Cheats are not supported for Nintendo Entertainment System yet.");
-    expect(findButton(container, "Cheat codes")?.getAttribute("aria-describedby")).toBe(reason?.id);
-    expect(findButton(container, "Modified ROM")?.getAttribute("aria-pressed")).toBe("true");
+    const codes = findButton(container, "Cheat codes") as HTMLButtonElement;
+    await vi.waitFor(() => expect(codes.disabled).toBe(false));
+    expect(codes.getAttribute("aria-describedby")).toBeNull();
   });
 
-  it("leaves cheat codes mode once the index shows the system has no cheat support", async () => {
+  it("keeps cheat codes mode when the index has no matching system", async () => {
     // The form and the cheat panel both load the index; they MUST share one pending load.
     let resolveIndex: (value: unknown) => void = () => undefined;
     const pendingIndex = new Promise((resolve) => (resolveIndex = resolve));
@@ -343,8 +341,8 @@ describe("CreatePatchForm", () => {
     expect(findButton(container, "Cheat codes")?.getAttribute("aria-pressed")).toBe("true");
 
     await act(async () => resolveIndex(snesOnlyCheatData()));
-    await vi.waitFor(() => expect(findButton(container, "Modified ROM")?.getAttribute("aria-pressed")).toBe("true"));
-    expect(container.textContent).toContain("Add your modified ROM");
+    await vi.waitFor(() => expect(findButton(container, "Cheat codes")?.getAttribute("aria-pressed")).toBe("true"));
+    expect(container.textContent).toContain("Pick from the cheat database");
   });
 
   it("returns to modified ROM mode when beta tools turn off", async () => {

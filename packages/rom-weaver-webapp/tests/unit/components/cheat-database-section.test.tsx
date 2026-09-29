@@ -552,7 +552,7 @@ describe("CheatDatabaseSection", () => {
 });
 
 describe("CheatDatabaseSection platform resolution", () => {
-  it("reports a platform the index does not cover as unsupported", async () => {
+  it("lets users correct a platform the index does not cover", async () => {
     const view = render(
       <CheatDatabaseSection
         {...props}
@@ -560,12 +560,11 @@ describe("CheatDatabaseSection platform resolution", () => {
         rom={{ key: "n64", platform: "Nintendo - Nintendo 64", title: "Game" }}
       />,
     );
-    expect(view.queryByPlaceholderText("Search cheat databases by system…")).toBeNull();
     const add = view.getByRole("button", { name: /Add cheats to the patch order/u }) as HTMLButtonElement;
-    expect(add.disabled).toBe(true);
-    expect(add.textContent).toContain("Cheats are not supported for Nintendo - Nintendo 64 yet.");
+    expect(add.disabled).toBe(false);
     fireEvent.click(add);
-    expect(view.queryByRole("button", { name: "Add code manually" })).toBeNull();
+    expect(view.getByText(/No cheat database covers Nintendo - Nintendo 64/u)).toBeTruthy();
+    expect(view.getByPlaceholderText("Search cheat databases by system…")).toBeTruthy();
   });
 
   it("warns about an uncovered platform and lets the user choose a system by hand", async () => {

@@ -30,9 +30,7 @@ import { WORKFLOW_GUIDES } from "./workflow-guides.ts";
 import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
 import { createCheatClassifiers } from "./cheat-classifier.ts";
-import { getUnsupportedCheatSystemMessage } from "./components/cheat-database-section.tsx";
 import { CreateCheatCodesPanel } from "./components/create-cheat-codes-panel.tsx";
-import { useUnsupportedCheatSystem } from "./components/use-cheat-database-records.ts";
 import {
   getCheatCodesPatchName,
   getCheatCodesValidationMessage,
@@ -584,7 +582,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         : null,
     [cheatPlatform, displayedOriginalFileName, original, originalSourceKey, originalState?.checksums],
   );
-  const cheatSystemUnsupported = useUnsupportedCheatSystem(cheatRom, cheatsEnabled);
   const displayedModifiedFileName = displayedModifiedInfo?.fileName || modifiedFileName;
   const settingsLanguage = (settings as { language?: string }).language;
   const clearWorkflowMessage = useCallback(() => {
@@ -600,13 +597,12 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     setProgress,
     setQueued: setCreateQueued,
   });
-  // A patch built from cheat codes MUST NOT stay on screen once beta tools turn
-  // off or the original ROM's system turns out to have no cheat support.
+  // A patch built from cheat codes MUST NOT stay on screen once beta tools turn off.
   useEffect(() => {
-    if ((cheatsEnabled && !cheatSystemUnsupported) || modifiedMode !== "codes") return;
+    if (cheatsEnabled || modifiedMode !== "codes") return;
     setModifiedMode("rom");
     resetWorkflowOutput();
-  }, [cheatSystemUnsupported, cheatsEnabled, modifiedMode, resetWorkflowOutput]);
+  }, [cheatsEnabled, modifiedMode, resetWorkflowOutput]);
   const setWorkflowMessage = useCallback(
     (placement: CreateMessagePlacement, error: Error) => {
       const code = getErrorCode(error);
@@ -1332,15 +1328,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
             ),
           }
         : {}),
-      ...(cheatsEnabled && cheatSystemUnsupported
-        ? {
-            afterItems: (
-              <p className="create-cheat-codes-unsupported" id="patch-builder-cheat-codes-unsupported">
-                {getUnsupportedCheatSystemMessage(cheatRom?.platform)}
-              </p>
-            ),
-          }
-        : {}),
       ...(codesMode
         ? {}
         : {
@@ -1357,11 +1344,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
             <button
               aria-pressed={modifiedMode === mode}
               className="seg-btn"
-              disabled={uploadDisabled || (mode === "codes" && cheatSystemUnsupported)}
+              disabled={uploadDisabled}
               key={mode}
-              {...(mode === "codes" && cheatSystemUnsupported
-                ? { "aria-describedby": "patch-builder-cheat-codes-unsupported" }
-                : {})}
               onClick={() => {
                 if (modifiedMode === mode) return;
                 resetWorkflowOutput();
