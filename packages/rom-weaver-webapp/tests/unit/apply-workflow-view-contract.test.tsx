@@ -1125,6 +1125,9 @@ describe("apply workflow view - staged bench", () => {
     expect(
       Array.from(patchCard?.querySelectorAll(".patch-checks .cks-head .rb") || []).map((el) => el.textContent),
     ).toContain("IPS");
+    // Each card's only drawer joins the card instead of nesting inside it.
+    expect(romCard?.querySelectorAll(".cks.is-integrated")).toHaveLength(1);
+    expect(patchCard?.querySelectorAll(".patch-checks.is-integrated")).toHaveLength(1);
   });
 
   it.each([false, undefined])("shows cheats when beta tools are %s", (betaToolsEnabled) => {
