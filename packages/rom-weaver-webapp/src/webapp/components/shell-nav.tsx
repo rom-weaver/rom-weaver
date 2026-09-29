@@ -25,9 +25,10 @@ type WorkflowTab = {
   /** Short name for the nav, where the group heading already carries the noun. */
   railLabel?: string;
 };
-type NavGroup = "files" | "patches" | "project" | "roms";
+type NavGroup = "docs" | "files" | "patches" | "project" | "roms";
 
 const NAV_GROUP_TITLES: Record<NavGroup, MessageId> = {
+  docs: "ui.nav.docs",
   files: "ui.nav.groupFiles",
   patches: "ui.nav.groupPatches",
   project: "ui.tools.project",
@@ -150,7 +151,7 @@ const NavRow = ({
           {row}
           <button
             aria-expanded={entry.expanded}
-            aria-label={`${entry.label} navigation`}
+            aria-label="Docs navigation"
             className="nav-docs-toggle"
             onClick={() => entry.onToggle?.(!entry.expanded)}
             type="button"

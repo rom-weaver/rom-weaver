@@ -28,7 +28,7 @@ const docsShell = (slug: string, currentTab = "docs") => (
       onOpenLog={() => undefined}
       onOpenSettings={() => undefined}
       onOpenStatus={() => undefined}
-      tabs={[{ id: "docs", group: "project", label: "Docs", href: "/docs", icon: <svg /> }]}
+      tabs={[{ id: "docs", group: "docs", label: "Docs", railLabel: "Overview", href: "/docs", icon: <svg /> }]}
     />
     <DocsPage active slug={slug} />
   </RomWeaverSettingsProvider>
@@ -607,14 +607,12 @@ Fixture description.
   });
 
   it.each(["home", "patcher", "identify", "whats-new"])(
-    "expands Docs from %s without marking a guide current",
+    "shows Docs expanded on %s without marking a guide current",
     async (currentTab) => {
       render(docsShell("docs", currentTab));
       const disclosure = document.querySelector(".side-nav .nav-docs-disclosure") as HTMLElement;
       const toggle = disclosure.querySelector(".nav-docs-toggle") as HTMLButtonElement;
-      expect(toggle.getAttribute("aria-expanded")).toBe("false");
-      expect(disclosure.querySelector(".guide-nav")).toBeNull();
-      fireEvent.click(toggle);
+      expect(toggle.getAttribute("aria-expanded")).toBe("true");
       await vi.waitFor(() => expect(disclosure.querySelectorAll(".guide-nav-list a")).toHaveLength(DOC_ROUTES.length));
       expect(disclosure.querySelector('a[aria-current="page"]')).toBeNull();
       fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
@@ -629,6 +627,7 @@ Fixture description.
 
   it("collapses the complete Docs group and shares the choice with the phone menu", async () => {
     renderDocsShell("docs/cli");
+    expect(document.querySelector(".side-nav #tab-docs")?.getAttribute("aria-current")).toBeNull();
     const disclosure = document.querySelector(".side-nav .nav-docs-disclosure") as HTMLElement;
     const toggle = disclosure.querySelector(".nav-docs-toggle") as HTMLButtonElement;
     expect(toggle.getAttribute("aria-expanded")).toBe("true");

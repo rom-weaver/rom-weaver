@@ -108,7 +108,7 @@ const Masthead = ({
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuMounted, setMenuMounted] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
-  const [docsExpanded, setDocsExpanded] = useState(currentTab === "docs");
+  const [docsExpanded, setDocsExpanded] = useState(true);
   useEffect(() => {
     if (currentTab === "docs" && docsSlug) setDocsExpanded(true);
   }, [currentTab, docsSlug]);
@@ -255,14 +255,14 @@ const Masthead = ({
 
   /* One description of the nav, rendered by the sidebar and by the phone menu.
      Both layouts MUST carry every destination under the same headings.
-     Project comes first on desktop and last in the phone menu. */
+     Docs stays last in both layouts. */
   const sections: NavSectionData[] = useMemo(() => {
     const workflowGroup = (group: NavGroup): NavSectionData => ({
       entries: tabs
         .filter((tab) => tab.group === group)
         .map((tab) => ({
           beta: tab.beta,
-          current: tab.id === currentTab,
+          current: tab.id === currentTab && (tab.id !== "docs" || docsSlug === "docs"),
           // The page you are on is always in the nav, even a beta one reached
           // by URL while the setting is off.
           hidden: tab.beta && !betaVisible && tab.id !== currentTab,
@@ -347,12 +347,20 @@ const Masthead = ({
         onExternalClick: (event) => guardExternalClick(event, donateHref, confirmExternalNavigation),
       });
     }
-    return [project, workflowGroup("patches"), workflowGroup("roms"), workflowGroup("files"), device];
+    return [
+      project,
+      workflowGroup("patches"),
+      workflowGroup("roms"),
+      workflowGroup("files"),
+      device,
+      workflowGroup("docs"),
+    ];
   }, [
     betaVisible,
     confirmExternalNavigation,
     currentTab,
     donateHref,
+    docsSlug,
     githubHref,
     homeHref,
     hydrated,
@@ -601,8 +609,9 @@ const Masthead = ({
         opened={menuMounted}
         sections={withDocsNavigation(
           [
-            ...sections.filter((section) => section.id !== "project"),
+            ...sections.filter((section) => section.id !== "project" && section.id !== "docs"),
             ...sections.filter((section) => section.id === "project"),
+            ...sections.filter((section) => section.id === "docs"),
           ],
           closeMenu,
         )}

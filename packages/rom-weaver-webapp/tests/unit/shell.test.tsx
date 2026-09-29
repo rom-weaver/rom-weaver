@@ -23,7 +23,7 @@ const TABS = [
   { dock: true, group: "patches", href: "apply", icon: <svg aria-hidden="true" />, id: "patcher", label: "Apply" },
   { dock: true, group: "patches", href: "create", icon: <svg aria-hidden="true" />, id: "creator", label: "Create" },
   { dock: true, group: "roms", href: "test", icon: <svg aria-hidden="true" />, id: "test", label: "Test" },
-  { group: "project", href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
+  { group: "docs", href: "docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs", railLabel: "Overview" },
   { group: "patches", href: "bundle", icon: <svg aria-hidden="true" />, id: "bundle", label: "Bundles" },
   { beta: true, group: "roms", href: "trim", icon: <svg aria-hidden="true" />, id: "trim", label: "Trim" },
 ] satisfies WorkflowTab[];
@@ -68,7 +68,21 @@ describe("the navigation both layouts share", () => {
 
     expect(container.querySelector('a.tool[href="docs"]')).toBeNull();
     for (const scope of Object.values(navs(container))) {
-      expect(rowNamed(scope, "Docs").getAttribute("href")).toBe("docs");
+      expect(rowNamed(scope, "Overview").getAttribute("href")).toBe("docs");
+    }
+  });
+
+  it("puts Docs in the last section with an expanded page tree in both layouts", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+
+    for (const scope of Object.values(navs(container))) {
+      const groups = Array.from(scope.querySelectorAll(".nav-group"));
+      const docs = groups.at(-1) as HTMLElement;
+      expect(docs.querySelector(".nav-group-label")?.textContent).toBe("Docs");
+      expect(rowNamed(docs, "Overview").getAttribute("href")).toBe("docs");
+      expect(within(docs).getByRole("button", { name: "Docs navigation" }).getAttribute("aria-expanded")).toBe("true");
+      const project = groups.find((group) => group.querySelector(".nav-group-label")?.textContent === "Project");
+      expect(project?.querySelector('a[href="docs"]')).toBeNull();
     }
   });
 
@@ -97,7 +111,7 @@ describe("the navigation both layouts share", () => {
       expect(onSelectTab).toHaveBeenCalledWith("whats-new");
       fireEvent.click(rowNamed(scope, "Trim"));
       expect(onSelectTab).toHaveBeenCalledWith("trim");
-      fireEvent.click(rowNamed(scope, "Docs"));
+      fireEvent.click(rowNamed(scope, "Overview"));
       expect(onSelectTab).toHaveBeenCalledWith("docs");
       fireEvent.click(rowNamed(scope, "Bundles"));
       expect(onSelectTab).toHaveBeenCalledWith("bundle");
