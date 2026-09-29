@@ -704,7 +704,10 @@ fn chd_compress_and_extract_incompressible_cd_round_trip_with_default_codecs() {
         ],
         0,
     );
-    assert_eq!(fs::read(out_dir.child("disc.bin").path()).expect("extract bytes"), source);
+    assert_eq!(
+        fs::read(out_dir.child("disc.bin").path()).expect("extract bytes"),
+        source
+    );
 }
 
 #[test]
