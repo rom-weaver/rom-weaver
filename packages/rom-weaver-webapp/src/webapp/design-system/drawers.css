@@ -15,10 +15,11 @@
   /* A per-row match mark takes a fourth cell and one more gap out of the value. */
   --ck-mark-reserve: 0px;
   /* The em-width of a 40-character SHA-1, and so the divisor that turns the
-     value track's px width into a font size holding one line: 40 cells at the
-     --mono stack's .618em advance (measured, not the .6em a monospace is assumed
-     to have) plus the .03em tracking below, rounded up for margin. */
-  --ck-v-divisor: 26;
+     value track's px width into a font size holding one line. Copy rows are
+     buttons whose `font: inherit` puts values on the system UI face, not
+     --mono, so this MUST cover the widest common one: DejaVu Sans (Linux)
+     measures 27.6em with the .03em tracking below. */
+  --ck-v-divisor: 28;
   /* Share a theme-aware seam across full and paired rows. */
   --ck-seam: var(--seam-soft);
   /* The body's inline inset, which check rows bleed back through. */
@@ -747,12 +748,12 @@
     border-inline-start: 1px solid var(--ck-seam);
   }
 }
-/* Stack long hashes when the minimum font size no longer fits: 11.96rem is the
+/* Stack long hashes when the minimum font size no longer fits: 12.88rem is the
    clamp floor times --ck-v-divisor, so the sum is the width where the value stops
    shrinking and would start overflowing. Container queries cannot read custom
    properties, so this uses the largest reserve (a desktop row with a mark) and
    stacks the lighter rows slightly early rather than one pixel too late. */
-@container (max-width: calc(11.96rem + 116px)) {
+@container (max-width: calc(12.88rem + 116px)) {
   .rw-app .ck:not(.req):has(.ck-v.ck-fit) {
     grid-template-columns: minmax(0, 1fr) auto auto;
   }
