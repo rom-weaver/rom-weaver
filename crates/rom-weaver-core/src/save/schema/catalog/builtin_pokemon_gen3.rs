@@ -48,8 +48,8 @@ fn rs_dex_owned(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
             .bit_field(
-                format!("owned_{index}", index = scope.index),
-                format!("Pokédex owned #{index}", index = scope.index),
+                &format!("owned_{index}", index = scope.index),
+                &format!("Pokédex owned #{index}", index = scope.index),
                 40,
                 0,
             )
@@ -91,10 +91,9 @@ fn rs_dex_owned(scope: &FieldScope) -> Vec<FieldDefinition> {
                         value: rules::ReadValue::new(move |_bytes| Ok(1i64)),
                     },
                 ],
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, (40 + scope.bits / 8) as u16)
-                }),
+                presentation: Some(
+                    field::Presentation::new(0, (40 + scope.bits / 8) as u16).step(None),
+                ),
                 ..Default::default()
             }),
     ];
@@ -106,8 +105,8 @@ fn rs_dex_seen(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
             .bit_field(
-                format!("seen_{index}", index = scope.index),
-                format!("Pokédex seen #{index}", index = scope.index),
+                &format!("seen_{index}", index = scope.index),
+                &format!("Pokédex seen #{index}", index = scope.index),
                 92,
                 0,
             )
@@ -147,10 +146,9 @@ fn rs_dex_seen(scope: &FieldScope) -> Vec<FieldDefinition> {
                         },
                     },
                 ],
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, (92 + scope.bits / 8) as u16)
-                }),
+                presentation: Some(
+                    field::Presentation::new(0, (92 + scope.bits / 8) as u16).step(None),
+                ),
                 ..Default::default()
             }),
     ];
@@ -159,29 +157,21 @@ fn rs_dex_seen(scope: &FieldScope) -> Vec<FieldDefinition> {
 }
 
 fn rs_pc(scope: &FieldScope) -> Vec<FieldDefinition> {
-    let fields = vec![scope.field(format!("pc_{index}.item_id",
- index = scope.index),
- format!("pc slot {index} item ID",
- index = scope.index),
- 5272,
- Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(348).behavior(field::FieldBehavior {
+    let fields = vec![scope.field(&format!("pc_{index}.item_id",
+ index = scope.index), &format!("pc slot {index} item ID",
+ index = scope.index), 5272, Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(348).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1176 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1176 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 ),
- scope.field(format!("pc_{index}.quantity",
- index = scope.index),
- format!("pc slot {index} quantity",
- index = scope.index),
- 5274,
- Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(999).behavior(field::FieldBehavior {
+ scope.field(&format!("pc_{index}.quantity",
+ index = scope.index), &format!("pc slot {index} quantity",
+ index = scope.index), 5274, Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(999).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1178 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1178 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 )];
@@ -190,29 +180,21 @@ fn rs_pc(scope: &FieldScope) -> Vec<FieldDefinition> {
 }
 
 fn rs_items(scope: &FieldScope) -> Vec<FieldDefinition> {
-    let fields = vec![scope.field(format!("items_{index}.item_id",
- index = scope.index),
- format!("items slot {index} item ID",
- index = scope.index),
- 5472,
- Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(348).behavior(field::FieldBehavior {
+    let fields = vec![scope.field(&format!("items_{index}.item_id",
+ index = scope.index), &format!("items slot {index} item ID",
+ index = scope.index), 5472, Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(348).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1376 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1376 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 ),
- scope.field(format!("items_{index}.quantity",
- index = scope.index),
- format!("items slot {index} quantity",
- index = scope.index),
- 5474,
- Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(99).behavior(field::FieldBehavior {
+ scope.field(&format!("items_{index}.quantity",
+ index = scope.index), &format!("items slot {index} quantity",
+ index = scope.index), 5474, Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(99).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1378 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1378 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 )];
@@ -221,29 +203,21 @@ fn rs_items(scope: &FieldScope) -> Vec<FieldDefinition> {
 }
 
 fn rs_key_items(scope: &FieldScope) -> Vec<FieldDefinition> {
-    let fields = vec![scope.field(format!("key_items_{index}.item_id",
- index = scope.index),
- format!("key items slot {index} item ID",
- index = scope.index),
- 5552,
- Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(348).behavior(field::FieldBehavior {
+    let fields = vec![scope.field(&format!("key_items_{index}.item_id",
+ index = scope.index), &format!("key items slot {index} item ID",
+ index = scope.index), 5552, Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(348).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1456 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1456 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 ),
- scope.field(format!("key_items_{index}.quantity",
- index = scope.index),
- format!("key items slot {index} quantity",
- index = scope.index),
- 5554,
- Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(1).behavior(field::FieldBehavior {
+ scope.field(&format!("key_items_{index}.quantity",
+ index = scope.index), &format!("key items slot {index} quantity",
+ index = scope.index), 5554, Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(1).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1458 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1458 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 )];
@@ -252,29 +226,21 @@ fn rs_key_items(scope: &FieldScope) -> Vec<FieldDefinition> {
 }
 
 fn rs_balls(scope: &FieldScope) -> Vec<FieldDefinition> {
-    let fields = vec![scope.field(format!("balls_{index}.item_id",
- index = scope.index),
- format!("balls slot {index} item ID",
- index = scope.index),
- 5632,
- Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(348).behavior(field::FieldBehavior {
+    let fields = vec![scope.field(&format!("balls_{index}.item_id",
+ index = scope.index), &format!("balls slot {index} item ID",
+ index = scope.index), 5632, Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(348).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1536 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1536 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 ),
- scope.field(format!("balls_{index}.quantity",
- index = scope.index),
- format!("balls slot {index} quantity",
- index = scope.index),
- 5634,
- Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(99).behavior(field::FieldBehavior {
+ scope.field(&format!("balls_{index}.quantity",
+ index = scope.index), &format!("balls slot {index} quantity",
+ index = scope.index), 5634, Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(99).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1538 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1538 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 )];
@@ -283,29 +249,21 @@ fn rs_balls(scope: &FieldScope) -> Vec<FieldDefinition> {
 }
 
 fn rs_tm_hm(scope: &FieldScope) -> Vec<FieldDefinition> {
-    let fields = vec![scope.field(format!("tm_hm_{index}.item_id",
- index = scope.index),
- format!("tm hm slot {index} item ID",
- index = scope.index),
- 5696,
- Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(348).behavior(field::FieldBehavior {
+    let fields = vec![scope.field(&format!("tm_hm_{index}.item_id",
+ index = scope.index), &format!("tm hm slot {index} item ID",
+ index = scope.index), 5696, Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(348).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1600 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1600 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 ),
- scope.field(format!("tm_hm_{index}.quantity",
- index = scope.index),
- format!("tm hm slot {index} quantity",
- index = scope.index),
- 5698,
- Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(99).behavior(field::FieldBehavior {
+ scope.field(&format!("tm_hm_{index}.quantity",
+ index = scope.index), &format!("tm hm slot {index} quantity",
+ index = scope.index), 5698, Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(99).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1602 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1602 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 )];
@@ -314,29 +272,21 @@ fn rs_tm_hm(scope: &FieldScope) -> Vec<FieldDefinition> {
 }
 
 fn rs_berries(scope: &FieldScope) -> Vec<FieldDefinition> {
-    let fields = vec![scope.field(format!("berries_{index}.item_id",
- index = scope.index),
- format!("berries slot {index} item ID",
- index = scope.index),
- 5952,
- Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(348).behavior(field::FieldBehavior {
+    let fields = vec![scope.field(&format!("berries_{index}.item_id",
+ index = scope.index), &format!("berries slot {index} item ID",
+ index = scope.index), 5952, Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(348).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1856 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1856 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 ),
- scope.field(format!("berries_{index}.quantity",
- index = scope.index),
- format!("berries slot {index} quantity",
- index = scope.index),
- 5954,
- Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(999).behavior(field::FieldBehavior {
+ scope.field(&format!("berries_{index}.quantity",
+ index = scope.index), &format!("berries slot {index} quantity",
+ index = scope.index), 5954, Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(999).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1858 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1858 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 )];
@@ -347,93 +297,37 @@ fn rs_berries(scope: &FieldScope) -> Vec<FieldDefinition> {
 fn rs_tail(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
-            .bit_field("progress.badge_1".into(), "Stone Badge".into(), 8992, 7)
+            .bit_field("progress.badge_1", "Stone Badge", 8992, 7)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 928)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 928).step(None)),
         scope
-            .bit_field("progress.badge_2".into(), "Knuckle Badge".into(), 8993, 0)
+            .bit_field("progress.badge_2", "Knuckle Badge", 8993, 0)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 929)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 929).step(None)),
         scope
-            .bit_field("progress.badge_3".into(), "Dynamo Badge".into(), 8993, 1)
+            .bit_field("progress.badge_3", "Dynamo Badge", 8993, 1)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 929)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 929).step(None)),
         scope
-            .bit_field("progress.badge_4".into(), "Heat Badge".into(), 8993, 2)
+            .bit_field("progress.badge_4", "Heat Badge", 8993, 2)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 929)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 929).step(None)),
         scope
-            .bit_field("progress.badge_5".into(), "Balance Badge".into(), 8993, 3)
+            .bit_field("progress.badge_5", "Balance Badge", 8993, 3)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 929)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 929).step(None)),
         scope
-            .bit_field("progress.badge_6".into(), "Feather Badge".into(), 8993, 4)
+            .bit_field("progress.badge_6", "Feather Badge", 8993, 4)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 929)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 929).step(None)),
         scope
-            .bit_field("progress.badge_7".into(), "Mind Badge".into(), 8993, 5)
+            .bit_field("progress.badge_7", "Mind Badge", 8993, 5)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 929)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 929).step(None)),
         scope
-            .bit_field("progress.badge_8".into(), "Rain Badge".into(), 8993, 6)
+            .bit_field("progress.badge_8", "Rain Badge", 8993, 6)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 929)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 929).step(None)),
     ];
 
     fields
@@ -443,8 +337,8 @@ fn emerald_dex_owned(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
             .bit_field(
-                format!("owned_{index}", index = scope.index),
-                format!("Pokédex owned #{index}", index = scope.index),
+                &format!("owned_{index}", index = scope.index),
+                &format!("Pokédex owned #{index}", index = scope.index),
                 40,
                 0,
             )
@@ -486,10 +380,9 @@ fn emerald_dex_owned(scope: &FieldScope) -> Vec<FieldDefinition> {
                         value: rules::ReadValue::new(move |_bytes| Ok(1i64)),
                     },
                 ],
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, (40 + scope.bits / 8) as u16)
-                }),
+                presentation: Some(
+                    field::Presentation::new(0, (40 + scope.bits / 8) as u16).step(None),
+                ),
                 ..Default::default()
             }),
     ];
@@ -501,8 +394,8 @@ fn emerald_dex_seen(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
             .bit_field(
-                format!("seen_{index}", index = scope.index),
-                format!("Pokédex seen #{index}", index = scope.index),
+                &format!("seen_{index}", index = scope.index),
+                &format!("Pokédex seen #{index}", index = scope.index),
                 92,
                 0,
             )
@@ -542,10 +435,9 @@ fn emerald_dex_seen(scope: &FieldScope) -> Vec<FieldDefinition> {
                         },
                     },
                 ],
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, (92 + scope.bits / 8) as u16)
-                }),
+                presentation: Some(
+                    field::Presentation::new(0, (92 + scope.bits / 8) as u16).step(None),
+                ),
                 ..Default::default()
             }),
     ];
@@ -554,29 +446,21 @@ fn emerald_dex_seen(scope: &FieldScope) -> Vec<FieldDefinition> {
 }
 
 fn emerald_pc(scope: &FieldScope) -> Vec<FieldDefinition> {
-    let fields = vec![scope.field(format!("pc_{index}.item_id",
- index = scope.index),
- format!("pc slot {index} item ID",
- index = scope.index),
- 5272,
- Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(376).behavior(field::FieldBehavior {
+    let fields = vec![scope.field(&format!("pc_{index}.item_id",
+ index = scope.index), &format!("pc slot {index} item ID",
+ index = scope.index), 5272, Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(376).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1176 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1176 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 ),
- scope.field(format!("pc_{index}.quantity",
- index = scope.index),
- format!("pc slot {index} quantity",
- index = scope.index),
- 5274,
- Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(999).behavior(field::FieldBehavior {
+ scope.field(&format!("pc_{index}.quantity",
+ index = scope.index), &format!("pc slot {index} quantity",
+ index = scope.index), 5274, Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(999).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1178 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1178 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 )];
@@ -585,25 +469,18 @@ fn emerald_pc(scope: &FieldScope) -> Vec<FieldDefinition> {
 }
 
 fn emerald_items(scope: &FieldScope) -> Vec<FieldDefinition> {
-    let fields = vec![scope.field(format!("items_{index}.item_id",
- index = scope.index),
- format!("items slot {index} item ID",
- index = scope.index),
- 5472,
- Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(376).behavior(field::FieldBehavior {
+    let fields = vec![scope.field(&format!("items_{index}.item_id",
+ index = scope.index), &format!("items slot {index} item ID",
+ index = scope.index), 5472, Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(376).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1376 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1376 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 ),
- scope.field(format!("items_{index}.quantity",
- index = scope.index),
- format!("items slot {index} quantity",
- index = scope.index),
- 5474,
- Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(99).behavior(field::FieldBehavior {
+ scope.field(&format!("items_{index}.quantity",
+ index = scope.index), &format!("items slot {index} quantity",
+ index = scope.index), 5474, Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(99).behavior(field::FieldBehavior {
  group: scope.group.clone(),
  read: Some({
  let address = scope.address(); rules::ReadValue::new(move |bytes| Ok(if (address.scalar(5472,
@@ -625,9 +502,8 @@ fn emerald_items(scope: &FieldScope) -> Vec<FieldDefinition> {
  storage: Storage::U16Le,
  mask: None }
 .read(bytes))),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1378 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1378 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 )];
@@ -636,25 +512,18 @@ fn emerald_items(scope: &FieldScope) -> Vec<FieldDefinition> {
 }
 
 fn emerald_key_items(scope: &FieldScope) -> Vec<FieldDefinition> {
-    let fields = vec![scope.field(format!("key_items_{index}.item_id",
- index = scope.index),
- format!("key items slot {index} item ID",
- index = scope.index),
- 5592,
- Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(376).behavior(field::FieldBehavior {
+    let fields = vec![scope.field(&format!("key_items_{index}.item_id",
+ index = scope.index), &format!("key items slot {index} item ID",
+ index = scope.index), 5592, Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(376).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1496 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1496 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 ),
- scope.field(format!("key_items_{index}.quantity",
- index = scope.index),
- format!("key items slot {index} quantity",
- index = scope.index),
- 5594,
- Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(1).behavior(field::FieldBehavior {
+ scope.field(&format!("key_items_{index}.quantity",
+ index = scope.index), &format!("key items slot {index} quantity",
+ index = scope.index), 5594, Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(1).behavior(field::FieldBehavior {
  group: scope.group.clone(),
  read: Some({
  let address = scope.address(); rules::ReadValue::new(move |bytes| Ok(if (address.scalar(5592,
@@ -676,9 +545,8 @@ fn emerald_key_items(scope: &FieldScope) -> Vec<FieldDefinition> {
  storage: Storage::U16Le,
  mask: None }
 .read(bytes))),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1498 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1498 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 )];
@@ -687,25 +555,18 @@ fn emerald_key_items(scope: &FieldScope) -> Vec<FieldDefinition> {
 }
 
 fn emerald_balls(scope: &FieldScope) -> Vec<FieldDefinition> {
-    let fields = vec![scope.field(format!("balls_{index}.item_id",
- index = scope.index),
- format!("balls slot {index} item ID",
- index = scope.index),
- 5712,
- Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(376).behavior(field::FieldBehavior {
+    let fields = vec![scope.field(&format!("balls_{index}.item_id",
+ index = scope.index), &format!("balls slot {index} item ID",
+ index = scope.index), 5712, Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(376).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1616 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1616 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 ),
- scope.field(format!("balls_{index}.quantity",
- index = scope.index),
- format!("balls slot {index} quantity",
- index = scope.index),
- 5714,
- Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(99).behavior(field::FieldBehavior {
+ scope.field(&format!("balls_{index}.quantity",
+ index = scope.index), &format!("balls slot {index} quantity",
+ index = scope.index), 5714, Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(99).behavior(field::FieldBehavior {
  group: scope.group.clone(),
  read: Some({
  let address = scope.address(); rules::ReadValue::new(move |bytes| Ok(if (address.scalar(5712,
@@ -727,9 +588,8 @@ fn emerald_balls(scope: &FieldScope) -> Vec<FieldDefinition> {
  storage: Storage::U16Le,
  mask: None }
 .read(bytes))),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1618 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1618 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 )];
@@ -738,25 +598,18 @@ fn emerald_balls(scope: &FieldScope) -> Vec<FieldDefinition> {
 }
 
 fn emerald_tm_hm(scope: &FieldScope) -> Vec<FieldDefinition> {
-    let fields = vec![scope.field(format!("tm_hm_{index}.item_id",
- index = scope.index),
- format!("tm hm slot {index} item ID",
- index = scope.index),
- 5776,
- Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(376).behavior(field::FieldBehavior {
+    let fields = vec![scope.field(&format!("tm_hm_{index}.item_id",
+ index = scope.index), &format!("tm hm slot {index} item ID",
+ index = scope.index), 5776, Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(376).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1680 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1680 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 ),
- scope.field(format!("tm_hm_{index}.quantity",
- index = scope.index),
- format!("tm hm slot {index} quantity",
- index = scope.index),
- 5778,
- Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(99).behavior(field::FieldBehavior {
+ scope.field(&format!("tm_hm_{index}.quantity",
+ index = scope.index), &format!("tm hm slot {index} quantity",
+ index = scope.index), 5778, Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(99).behavior(field::FieldBehavior {
  group: scope.group.clone(),
  read: Some({
  let address = scope.address(); rules::ReadValue::new(move |bytes| Ok(if (address.scalar(5776,
@@ -778,9 +631,8 @@ fn emerald_tm_hm(scope: &FieldScope) -> Vec<FieldDefinition> {
  storage: Storage::U16Le,
  mask: None }
 .read(bytes))),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1682 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1682 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 )];
@@ -789,25 +641,18 @@ fn emerald_tm_hm(scope: &FieldScope) -> Vec<FieldDefinition> {
 }
 
 fn emerald_berries(scope: &FieldScope) -> Vec<FieldDefinition> {
-    let fields = vec![scope.field(format!("berries_{index}.item_id",
- index = scope.index),
- format!("berries slot {index} item ID",
- index = scope.index),
- 6032,
- Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(376).behavior(field::FieldBehavior {
+    let fields = vec![scope.field(&format!("berries_{index}.item_id",
+ index = scope.index), &format!("berries slot {index} item ID",
+ index = scope.index), 6032, Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(376).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1936 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1936 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 ),
- scope.field(format!("berries_{index}.quantity",
- index = scope.index),
- format!("berries slot {index} quantity",
- index = scope.index),
- 6034,
- Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(999).behavior(field::FieldBehavior {
+ scope.field(&format!("berries_{index}.quantity",
+ index = scope.index), &format!("berries slot {index} quantity",
+ index = scope.index), 6034, Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(999).behavior(field::FieldBehavior {
  group: scope.group.clone(),
  read: Some({
  let address = scope.address(); rules::ReadValue::new(move |bytes| Ok(if (address.scalar(6032,
@@ -829,9 +674,8 @@ fn emerald_berries(scope: &FieldScope) -> Vec<FieldDefinition> {
  storage: Storage::U16Le,
  mask: None }
 .read(bytes))),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1938 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1938 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 )];
@@ -843,133 +687,57 @@ fn emerald_tail(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
             .field(
-                "progress.battle_points".into(),
-                "Battle Points".into(),
+                "progress.battle_points",
+                "Battle Points",
                 3768,
                 Storage::U16Le,
             )
             .description("Battle Frontier points".into())
             .min(0)
             .max(9999)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 3768)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 3768)),
         scope
-            .field(
-                "trainer.security_key".into(),
-                "Security key".into(),
-                172,
-                Storage::U32Le,
-            )
+            .field("trainer.security_key", "Security key", 172, Storage::U32Le)
             .description("Key used to mask money".into())
             .editable(false)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    step: Some(None),
-                    warnings: vec!["Read-only".into()],
-                    ..field::Presentation::new(0, 172)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 172)
+                    .constraints(SaveConstraint::default())
+                    .step(None)
+                    .warnings(vec!["Read-only".into()]),
+            ),
         scope
-            .bit_field("progress.badge_1".into(), "Stone Badge".into(), 9084, 7)
+            .bit_field("progress.badge_1", "Stone Badge", 9084, 7)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 1020)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 1020).step(None)),
         scope
-            .bit_field("progress.badge_2".into(), "Knuckle Badge".into(), 9085, 0)
+            .bit_field("progress.badge_2", "Knuckle Badge", 9085, 0)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 1021)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 1021).step(None)),
         scope
-            .bit_field("progress.badge_3".into(), "Dynamo Badge".into(), 9085, 1)
+            .bit_field("progress.badge_3", "Dynamo Badge", 9085, 1)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 1021)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 1021).step(None)),
         scope
-            .bit_field("progress.badge_4".into(), "Heat Badge".into(), 9085, 2)
+            .bit_field("progress.badge_4", "Heat Badge", 9085, 2)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 1021)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 1021).step(None)),
         scope
-            .bit_field("progress.badge_5".into(), "Balance Badge".into(), 9085, 3)
+            .bit_field("progress.badge_5", "Balance Badge", 9085, 3)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 1021)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 1021).step(None)),
         scope
-            .bit_field("progress.badge_6".into(), "Feather Badge".into(), 9085, 4)
+            .bit_field("progress.badge_6", "Feather Badge", 9085, 4)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 1021)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 1021).step(None)),
         scope
-            .bit_field("progress.badge_7".into(), "Mind Badge".into(), 9085, 5)
+            .bit_field("progress.badge_7", "Mind Badge", 9085, 5)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 1021)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 1021).step(None)),
         scope
-            .bit_field("progress.badge_8".into(), "Rain Badge".into(), 9085, 6)
+            .bit_field("progress.badge_8", "Rain Badge", 9085, 6)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 1021)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 1021).step(None)),
     ];
 
     fields
@@ -979,8 +747,8 @@ fn frlg_dex_owned(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
             .bit_field(
-                format!("owned_{index}", index = scope.index),
-                format!("Pokédex owned #{index}", index = scope.index),
+                &format!("owned_{index}", index = scope.index),
+                &format!("Pokédex owned #{index}", index = scope.index),
                 40,
                 0,
             )
@@ -1022,10 +790,9 @@ fn frlg_dex_owned(scope: &FieldScope) -> Vec<FieldDefinition> {
                         value: rules::ReadValue::new(move |_bytes| Ok(1i64)),
                     },
                 ],
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, (40 + scope.bits / 8) as u16)
-                }),
+                presentation: Some(
+                    field::Presentation::new(0, (40 + scope.bits / 8) as u16).step(None),
+                ),
                 ..Default::default()
             }),
     ];
@@ -1037,8 +804,8 @@ fn frlg_dex_seen(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
             .bit_field(
-                format!("seen_{index}", index = scope.index),
-                format!("Pokédex seen #{index}", index = scope.index),
+                &format!("seen_{index}", index = scope.index),
+                &format!("Pokédex seen #{index}", index = scope.index),
                 92,
                 0,
             )
@@ -1078,10 +845,9 @@ fn frlg_dex_seen(scope: &FieldScope) -> Vec<FieldDefinition> {
                         },
                     },
                 ],
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, (92 + scope.bits / 8) as u16)
-                }),
+                presentation: Some(
+                    field::Presentation::new(0, (92 + scope.bits / 8) as u16).step(None),
+                ),
                 ..Default::default()
             }),
     ];
@@ -1090,29 +856,21 @@ fn frlg_dex_seen(scope: &FieldScope) -> Vec<FieldDefinition> {
 }
 
 fn frlg_pc(scope: &FieldScope) -> Vec<FieldDefinition> {
-    let fields = vec![scope.field(format!("pc_{index}.item_id",
- index = scope.index),
- format!("pc slot {index} item ID",
- index = scope.index),
- 4760,
- Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(374).behavior(field::FieldBehavior {
+    let fields = vec![scope.field(&format!("pc_{index}.item_id",
+ index = scope.index), &format!("pc slot {index} item ID",
+ index = scope.index), 4760, Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(374).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (664 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (664 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 ),
- scope.field(format!("pc_{index}.quantity",
- index = scope.index),
- format!("pc slot {index} quantity",
- index = scope.index),
- 4762,
- Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(999).behavior(field::FieldBehavior {
+ scope.field(&format!("pc_{index}.quantity",
+ index = scope.index), &format!("pc slot {index} quantity",
+ index = scope.index), 4762, Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(999).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (666 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (666 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 )];
@@ -1121,25 +879,18 @@ fn frlg_pc(scope: &FieldScope) -> Vec<FieldDefinition> {
 }
 
 fn frlg_items(scope: &FieldScope) -> Vec<FieldDefinition> {
-    let fields = vec![scope.field(format!("items_{index}.item_id",
- index = scope.index),
- format!("items slot {index} item ID",
- index = scope.index),
- 4880,
- Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(374).behavior(field::FieldBehavior {
+    let fields = vec![scope.field(&format!("items_{index}.item_id",
+ index = scope.index), &format!("items slot {index} item ID",
+ index = scope.index), 4880, Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(374).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (784 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (784 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 ),
- scope.field(format!("items_{index}.quantity",
- index = scope.index),
- format!("items slot {index} quantity",
- index = scope.index),
- 4882,
- Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(999).behavior(field::FieldBehavior {
+ scope.field(&format!("items_{index}.quantity",
+ index = scope.index), &format!("items slot {index} quantity",
+ index = scope.index), 4882, Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(999).behavior(field::FieldBehavior {
  group: scope.group.clone(),
  read: Some({
  let address = scope.address(); rules::ReadValue::new(move |bytes| Ok(if (address.scalar(4880,
@@ -1161,9 +912,8 @@ fn frlg_items(scope: &FieldScope) -> Vec<FieldDefinition> {
  storage: Storage::U16Le,
  mask: None }
 .read(bytes))),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (786 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (786 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 )];
@@ -1172,25 +922,18 @@ fn frlg_items(scope: &FieldScope) -> Vec<FieldDefinition> {
 }
 
 fn frlg_key_items(scope: &FieldScope) -> Vec<FieldDefinition> {
-    let fields = vec![scope.field(format!("key_items_{index}.item_id",
- index = scope.index),
- format!("key items slot {index} item ID",
- index = scope.index),
- 5048,
- Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(374).behavior(field::FieldBehavior {
+    let fields = vec![scope.field(&format!("key_items_{index}.item_id",
+ index = scope.index), &format!("key items slot {index} item ID",
+ index = scope.index), 5048, Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(374).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (952 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (952 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 ),
- scope.field(format!("key_items_{index}.quantity",
- index = scope.index),
- format!("key items slot {index} quantity",
- index = scope.index),
- 5050,
- Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(1).behavior(field::FieldBehavior {
+ scope.field(&format!("key_items_{index}.quantity",
+ index = scope.index), &format!("key items slot {index} quantity",
+ index = scope.index), 5050, Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(1).behavior(field::FieldBehavior {
  group: scope.group.clone(),
  read: Some({
  let address = scope.address(); rules::ReadValue::new(move |bytes| Ok(if (address.scalar(5048,
@@ -1212,9 +955,8 @@ fn frlg_key_items(scope: &FieldScope) -> Vec<FieldDefinition> {
  storage: Storage::U16Le,
  mask: None }
 .read(bytes))),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (954 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (954 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 )];
@@ -1223,25 +965,18 @@ fn frlg_key_items(scope: &FieldScope) -> Vec<FieldDefinition> {
 }
 
 fn frlg_balls(scope: &FieldScope) -> Vec<FieldDefinition> {
-    let fields = vec![scope.field(format!("balls_{index}.item_id",
- index = scope.index),
- format!("balls slot {index} item ID",
- index = scope.index),
- 5168,
- Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(374).behavior(field::FieldBehavior {
+    let fields = vec![scope.field(&format!("balls_{index}.item_id",
+ index = scope.index), &format!("balls slot {index} item ID",
+ index = scope.index), 5168, Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(374).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1072 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1072 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 ),
- scope.field(format!("balls_{index}.quantity",
- index = scope.index),
- format!("balls slot {index} quantity",
- index = scope.index),
- 5170,
- Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(999).behavior(field::FieldBehavior {
+ scope.field(&format!("balls_{index}.quantity",
+ index = scope.index), &format!("balls slot {index} quantity",
+ index = scope.index), 5170, Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(999).behavior(field::FieldBehavior {
  group: scope.group.clone(),
  read: Some({
  let address = scope.address(); rules::ReadValue::new(move |bytes| Ok(if (address.scalar(5168,
@@ -1263,9 +998,8 @@ fn frlg_balls(scope: &FieldScope) -> Vec<FieldDefinition> {
  storage: Storage::U16Le,
  mask: None }
 .read(bytes))),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1074 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1074 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 )];
@@ -1274,25 +1008,18 @@ fn frlg_balls(scope: &FieldScope) -> Vec<FieldDefinition> {
 }
 
 fn frlg_tm_hm(scope: &FieldScope) -> Vec<FieldDefinition> {
-    let fields = vec![scope.field(format!("tm_hm_{index}.item_id",
- index = scope.index),
- format!("tm hm slot {index} item ID",
- index = scope.index),
- 5220,
- Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(374).behavior(field::FieldBehavior {
+    let fields = vec![scope.field(&format!("tm_hm_{index}.item_id",
+ index = scope.index), &format!("tm hm slot {index} item ID",
+ index = scope.index), 5220, Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(374).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1124 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1124 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 ),
- scope.field(format!("tm_hm_{index}.quantity",
- index = scope.index),
- format!("tm hm slot {index} quantity",
- index = scope.index),
- 5222,
- Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(999).behavior(field::FieldBehavior {
+ scope.field(&format!("tm_hm_{index}.quantity",
+ index = scope.index), &format!("tm hm slot {index} quantity",
+ index = scope.index), 5222, Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(999).behavior(field::FieldBehavior {
  group: scope.group.clone(),
  read: Some({
  let address = scope.address(); rules::ReadValue::new(move |bytes| Ok(if (address.scalar(5220,
@@ -1314,9 +1041,8 @@ fn frlg_tm_hm(scope: &FieldScope) -> Vec<FieldDefinition> {
  storage: Storage::U16Le,
  mask: None }
 .read(bytes))),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1126 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1126 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 )];
@@ -1325,25 +1051,18 @@ fn frlg_tm_hm(scope: &FieldScope) -> Vec<FieldDefinition> {
 }
 
 fn frlg_berries(scope: &FieldScope) -> Vec<FieldDefinition> {
-    let fields = vec![scope.field(format!("berries_{index}.item_id",
- index = scope.index),
- format!("berries slot {index} item ID",
- index = scope.index),
- 5452,
- Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(374).behavior(field::FieldBehavior {
+    let fields = vec![scope.field(&format!("berries_{index}.item_id",
+ index = scope.index), &format!("berries slot {index} item ID",
+ index = scope.index), 5452, Storage::U16Le).description("Game item ID. Use an item for this pocket. Set both ID and quantity to zero to clear a slot.".into()).min(0).max(374).behavior(field::FieldBehavior {
  group: scope.group.clone(),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1356 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1356 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 ),
- scope.field(format!("berries_{index}.quantity",
- index = scope.index),
- format!("berries slot {index} quantity",
- index = scope.index),
- 5454,
- Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(999).behavior(field::FieldBehavior {
+ scope.field(&format!("berries_{index}.quantity",
+ index = scope.index), &format!("berries slot {index} quantity",
+ index = scope.index), 5454, Storage::U16Le).description("Set a positive quantity with an item ID to fill a slot; empty slots have quantity zero.".into()).min(0).max(999).behavior(field::FieldBehavior {
  group: scope.group.clone(),
  read: Some({
  let address = scope.address(); rules::ReadValue::new(move |bytes| Ok(if (address.scalar(5452,
@@ -1365,9 +1084,8 @@ fn frlg_berries(scope: &FieldScope) -> Vec<FieldDefinition> {
  storage: Storage::U16Le,
  mask: None }
 .read(bytes))),
- presentation: Some(field::Presentation {
- ..field::Presentation::new(1,
- (1358 + scope.bits / 8) as u16) }
+ presentation: Some(field::Presentation::new(1,
+ (1358 + scope.bits / 8) as u16)
 ),
  ..Default::default() }
 )];
@@ -1378,117 +1096,47 @@ fn frlg_berries(scope: &FieldScope) -> Vec<FieldDefinition> {
 fn frlg_tail(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
-            .field(
-                "trainer.security_key".into(),
-                "Security key".into(),
-                3872,
-                Storage::U32Le,
-            )
+            .field("trainer.security_key", "Security key", 3872, Storage::U32Le)
             .description("Key used to mask money".into())
             .editable(false)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    step: Some(None),
-                    warnings: vec!["Read-only".into()],
-                    ..field::Presentation::new(0, 3872)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 3872)
+                    .constraints(SaveConstraint::default())
+                    .step(None)
+                    .warnings(vec!["Read-only".into()]),
+            ),
         scope
-            .bit_field("progress.badge_1".into(), "Boulder Badge".into(), 8164, 0)
+            .bit_field("progress.badge_1", "Boulder Badge", 8164, 0)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 100)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 100).step(None)),
         scope
-            .bit_field("progress.badge_2".into(), "Cascade Badge".into(), 8164, 1)
+            .bit_field("progress.badge_2", "Cascade Badge", 8164, 1)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 100)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 100).step(None)),
         scope
-            .bit_field("progress.badge_3".into(), "Thunder Badge".into(), 8164, 2)
+            .bit_field("progress.badge_3", "Thunder Badge", 8164, 2)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 100)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 100).step(None)),
         scope
-            .bit_field("progress.badge_4".into(), "Rainbow Badge".into(), 8164, 3)
+            .bit_field("progress.badge_4", "Rainbow Badge", 8164, 3)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 100)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 100).step(None)),
         scope
-            .bit_field("progress.badge_5".into(), "Soul Badge".into(), 8164, 4)
+            .bit_field("progress.badge_5", "Soul Badge", 8164, 4)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 100)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 100).step(None)),
         scope
-            .bit_field("progress.badge_6".into(), "Marsh Badge".into(), 8164, 5)
+            .bit_field("progress.badge_6", "Marsh Badge", 8164, 5)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 100)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 100).step(None)),
         scope
-            .bit_field("progress.badge_7".into(), "Volcano Badge".into(), 8164, 6)
+            .bit_field("progress.badge_7", "Volcano Badge", 8164, 6)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 100)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 100).step(None)),
         scope
-            .bit_field("progress.badge_8".into(), "Earth Badge".into(), 8164, 7)
+            .bit_field("progress.badge_8", "Earth Badge", 8164, 7)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(2, 100)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(2, 100).step(None)),
     ];
 
     fields
@@ -1505,42 +1153,25 @@ fn default() -> GameDefinition {
             )
             .description("English trainer text".into())
             .length(7)
-            .behavior(field::FieldBehavior {
-                text_codec: Some("pokemon_gen3_english".into()),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    encoding: Some(Some("pokemon_gen3_english".into())),
-                    ..field::Presentation::new(0, 0)
-                }),
-                ..Default::default()
-            }),
+            .text_codec("pokemon_gen3_english")
+            .presentation(
+                field::Presentation::new(0, 0)
+                    .step(None)
+                    .encoding(Some("pokemon_gen3_english")),
+            ),
             FieldDefinition::new("trainer.gender".into(), "Gender".into(), 8, Storage::U8)
                 .description("Player gender".into())
                 .choices(choices(&[("male", 0), ("female", 1)]))
-                .behavior(field::FieldBehavior {
-                    presentation: Some(field::Presentation {
-                        constraints: Some(SaveConstraint {
-                            min: None,
-                            max: None,
-                            max_length: None,
-                            choices: vec!["male".into(), "female".into()],
-                        }),
-                        step: Some(None),
-                        ..field::Presentation::new(0, 8)
-                    }),
-                    ..Default::default()
-                }),
+                .presentation(
+                    field::Presentation::new(0, 8)
+                        .choices(vec!["male".into(), "female".into()])
+                        .step(None),
+                ),
             FieldDefinition::new("trainer.id".into(), "Trainer ID".into(), 10, Storage::U16Le)
                 .description("Public trainer identifier".into())
                 .min(0)
                 .max(65535)
-                .behavior(field::FieldBehavior {
-                    presentation: Some(field::Presentation {
-                        step: Some(None),
-                        ..field::Presentation::new(0, 10)
-                    }),
-                    ..Default::default()
-                }),
+                .presentation(field::Presentation::new(0, 10).step(None)),
             FieldDefinition::new(
                 "trainer.secret_id".into(),
                 "Secret ID".into(),
@@ -1550,33 +1181,17 @@ fn default() -> GameDefinition {
             .description("Hidden trainer identifier".into())
             .min(0)
             .max(65535)
-            .behavior(field::FieldBehavior {
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 12)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 12).step(None)),
             FieldDefinition::new("trainer.money".into(), "Money".into(), 5264, Storage::U32Le)
                 .description("Money carried by the player".into())
                 .min(0)
                 .max(999999)
-                .behavior(field::FieldBehavior {
-                    presentation: Some(field::Presentation {
-                        ..field::Presentation::new(1, 1168)
-                    }),
-                    ..Default::default()
-                }),
+                .presentation(field::Presentation::new(1, 1168)),
             FieldDefinition::new("trainer.coins".into(), "Coins".into(), 5268, Storage::U16Le)
                 .description("Game Corner coins".into())
                 .min(0)
                 .max(9999)
-                .behavior(field::FieldBehavior {
-                    presentation: Some(field::Presentation {
-                        ..field::Presentation::new(1, 1172)
-                    }),
-                    ..Default::default()
-                }),
+                .presentation(field::Presentation::new(1, 1172)),
             FieldDefinition::new(
                 "trainer.play_time".into(),
                 "Play time".into(),
@@ -1636,17 +1251,12 @@ fn default() -> GameDefinition {
                         width: 2,
                     },
                 ]),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    step: Some(None),
-                    encoding: Some(None),
-                    ..field::Presentation::new(0, 14)
-                }),
+                presentation: Some(
+                    field::Presentation::new(0, 14)
+                        .constraints(SaveConstraint::default())
+                        .step(None)
+                        .encoding(None),
+                ),
                 ..Default::default()
             }),
             FieldDefinition::new(
@@ -1658,12 +1268,7 @@ fn default() -> GameDefinition {
             .description("Hours played".into())
             .min(0)
             .max(65535)
-            .behavior(field::FieldBehavior {
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 14)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 14)),
             FieldDefinition::new(
                 "trainer.play_time_minutes".into(),
                 "Play time minutes".into(),
@@ -1673,12 +1278,7 @@ fn default() -> GameDefinition {
             .description("Minutes in the current hour".into())
             .min(0)
             .max(59)
-            .behavior(field::FieldBehavior {
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 16)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 16)),
             FieldDefinition::new(
                 "trainer.play_time_seconds".into(),
                 "Play time seconds".into(),
@@ -1688,12 +1288,7 @@ fn default() -> GameDefinition {
             .description("Seconds in the current minute".into())
             .min(0)
             .max(59)
-            .behavior(field::FieldBehavior {
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 17)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 17)),
             FieldDefinition::new(
                 "trainer.play_time_frames".into(),
                 "Play time frames".into(),
@@ -1703,12 +1298,7 @@ fn default() -> GameDefinition {
             .description("Frames in the current second".into())
             .min(0)
             .max(59)
-            .behavior(field::FieldBehavior {
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 18)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 18)),
             FieldDefinition::new(
                 "options.button_mode".into(),
                 "Button mode".into(),
@@ -1717,19 +1307,11 @@ fn default() -> GameDefinition {
             )
             .description("A-button and shoulder-button behavior".into())
             .choices(choices(&[("help", 0), ("lr", 1), ("l_equals_a", 2)]))
-            .behavior(field::FieldBehavior {
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec!["help".into(), "lr".into(), "l_equals_a".into()],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 19)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 19)
+                    .choices(vec!["help".into(), "lr".into(), "l_equals_a".into()])
+                    .step(None),
+            ),
             FieldDefinition::new(
                 "options.text_speed".into(),
                 "Text speed".into(),
@@ -1740,12 +1322,7 @@ fn default() -> GameDefinition {
             .min(0)
             .max(2)
             .mask(7)
-            .behavior(field::FieldBehavior {
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 20)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 20)),
             FieldDefinition::new(
                 "options.window_frame".into(),
                 "Window frame".into(),
@@ -1756,29 +1333,16 @@ fn default() -> GameDefinition {
             .min(0)
             .max(19)
             .mask(248)
-            .behavior(field::FieldBehavior {
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 20)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 20)),
             FieldDefinition::new("options.sound".into(), "Sound".into(), 20, Storage::U16Le)
                 .description("Sound output mode".into())
                 .choices(choices(&[("mono", 0), ("stereo", 1)]))
                 .mask(256)
-                .behavior(field::FieldBehavior {
-                    presentation: Some(field::Presentation {
-                        constraints: Some(SaveConstraint {
-                            min: None,
-                            max: None,
-                            max_length: None,
-                            choices: vec!["mono".into(), "stereo".into()],
-                        }),
-                        step: Some(None),
-                        ..field::Presentation::new(0, 20)
-                    }),
-                    ..Default::default()
-                }),
+                .presentation(
+                    field::Presentation::new(0, 20)
+                        .choices(vec!["mono".into(), "stereo".into()])
+                        .step(None),
+                ),
             FieldDefinition::new(
                 "options.battle_style".into(),
                 "Battle style".into(),
@@ -1788,19 +1352,11 @@ fn default() -> GameDefinition {
             .description("Whether the game offers a switch after a foe faints".into())
             .choices(choices(&[("shift", 0), ("set", 1)]))
             .mask(512)
-            .behavior(field::FieldBehavior {
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec!["shift".into(), "set".into()],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 20)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 20)
+                    .choices(vec!["shift".into(), "set".into()])
+                    .step(None),
+            ),
             FieldDefinition::new(
                 "options.battle_scene".into(),
                 "Battle scene".into(),
@@ -1810,19 +1366,11 @@ fn default() -> GameDefinition {
             .description("Battle animation mode".into())
             .choices(choices(&[("on", 0), ("off", 1)]))
             .mask(1024)
-            .behavior(field::FieldBehavior {
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec!["on".into(), "off".into()],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 20)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 20)
+                    .choices(vec!["on".into(), "off".into()])
+                    .step(None),
+            ),
             FieldDefinition::new(
                 "options.region_map_zoom".into(),
                 "Region map zoom".into(),
@@ -1831,14 +1379,11 @@ fn default() -> GameDefinition {
             )
             .bit(3)
             .description("Region map zoom state".into())
-            .behavior(field::FieldBehavior {
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::Boolean),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 20)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 20)
+                    .kind(SaveFieldKind::Boolean)
+                    .step(None),
+            ),
         ];
         let scope = FieldScope::default();
         extend_fields(
@@ -2477,42 +2022,25 @@ fn game_pokemon_emerald() -> GameDefinition {
         )
         .description("English trainer text".into())
         .length(7)
-        .behavior(field::FieldBehavior {
-            text_codec: Some("pokemon_gen3_english".into()),
-            presentation: Some(field::Presentation {
-                step: Some(None),
-                encoding: Some(Some("pokemon_gen3_english".into())),
-                ..field::Presentation::new(0, 0)
-            }),
-            ..Default::default()
-        }),
+        .text_codec("pokemon_gen3_english")
+        .presentation(
+            field::Presentation::new(0, 0)
+                .step(None)
+                .encoding(Some("pokemon_gen3_english")),
+        ),
         FieldDefinition::new("trainer.gender".into(), "Gender".into(), 8, Storage::U8)
             .description("Player gender".into())
             .choices(gender())
-            .behavior(field::FieldBehavior {
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec!["male".into(), "female".into()],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 8)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 8)
+                    .choices(vec!["male".into(), "female".into()])
+                    .step(None),
+            ),
         FieldDefinition::new("trainer.id".into(), "Trainer ID".into(), 10, Storage::U16Le)
             .description("Public trainer identifier".into())
             .min(0)
             .max(65535)
-            .behavior(field::FieldBehavior {
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 10)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 10).step(None)),
         FieldDefinition::new(
             "trainer.secret_id".into(),
             "Secret ID".into(),
@@ -2522,13 +2050,7 @@ fn game_pokemon_emerald() -> GameDefinition {
         .description("Hidden trainer identifier".into())
         .min(0)
         .max(65535)
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                step: Some(None),
-                ..field::Presentation::new(0, 12)
-            }),
-            ..Default::default()
-        }),
+        .presentation(field::Presentation::new(0, 12).step(None)),
         FieldDefinition::new("trainer.money".into(), "Money".into(), 5264, Storage::U32Le)
             .description("Money carried by the player".into())
             .min(0)
@@ -2542,9 +2064,7 @@ fn game_pokemon_emerald() -> GameDefinition {
                     }
                     .read(bytes)
                 })),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(1, 1168)
-                }),
+                presentation: Some(field::Presentation::new(1, 1168)),
                 ..Default::default()
             }),
         FieldDefinition::new("trainer.coins".into(), "Coins".into(), 5268, Storage::U16Le)
@@ -2560,9 +2080,7 @@ fn game_pokemon_emerald() -> GameDefinition {
                     }
                     .read(bytes)
                 })),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(1, 1172)
-                }),
+                presentation: Some(field::Presentation::new(1, 1172)),
                 ..Default::default()
             }),
         FieldDefinition::new(
@@ -2624,17 +2142,12 @@ fn game_pokemon_emerald() -> GameDefinition {
                     width: 2,
                 },
             ]),
-            presentation: Some(field::Presentation {
-                constraints: Some(SaveConstraint {
-                    min: None,
-                    max: None,
-                    max_length: None,
-                    choices: vec![],
-                }),
-                step: Some(None),
-                encoding: Some(None),
-                ..field::Presentation::new(0, 14)
-            }),
+            presentation: Some(
+                field::Presentation::new(0, 14)
+                    .constraints(SaveConstraint::default())
+                    .step(None)
+                    .encoding(None),
+            ),
             ..Default::default()
         }),
         FieldDefinition::new(
@@ -2646,12 +2159,7 @@ fn game_pokemon_emerald() -> GameDefinition {
         .description("Hours played".into())
         .min(0)
         .max(65535)
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                ..field::Presentation::new(0, 14)
-            }),
-            ..Default::default()
-        }),
+        .presentation(field::Presentation::new(0, 14)),
         FieldDefinition::new(
             "trainer.play_time_minutes".into(),
             "Play time minutes".into(),
@@ -2661,12 +2169,7 @@ fn game_pokemon_emerald() -> GameDefinition {
         .description("Minutes in the current hour".into())
         .min(0)
         .max(59)
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                ..field::Presentation::new(0, 16)
-            }),
-            ..Default::default()
-        }),
+        .presentation(field::Presentation::new(0, 16)),
         FieldDefinition::new(
             "trainer.play_time_seconds".into(),
             "Play time seconds".into(),
@@ -2676,12 +2179,7 @@ fn game_pokemon_emerald() -> GameDefinition {
         .description("Seconds in the current minute".into())
         .min(0)
         .max(59)
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                ..field::Presentation::new(0, 17)
-            }),
-            ..Default::default()
-        }),
+        .presentation(field::Presentation::new(0, 17)),
         FieldDefinition::new(
             "trainer.play_time_frames".into(),
             "Play time frames".into(),
@@ -2691,12 +2189,7 @@ fn game_pokemon_emerald() -> GameDefinition {
         .description("Frames in the current second".into())
         .min(0)
         .max(59)
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                ..field::Presentation::new(0, 18)
-            }),
-            ..Default::default()
-        }),
+        .presentation(field::Presentation::new(0, 18)),
         FieldDefinition::new(
             "options.button_mode".into(),
             "Button mode".into(),
@@ -2705,19 +2198,11 @@ fn game_pokemon_emerald() -> GameDefinition {
         )
         .description("A-button and shoulder-button behavior".into())
         .choices(button_mode())
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                constraints: Some(SaveConstraint {
-                    min: None,
-                    max: None,
-                    max_length: None,
-                    choices: vec!["help".into(), "lr".into(), "l_equals_a".into()],
-                }),
-                step: Some(None),
-                ..field::Presentation::new(0, 19)
-            }),
-            ..Default::default()
-        }),
+        .presentation(
+            field::Presentation::new(0, 19)
+                .choices(vec!["help".into(), "lr".into(), "l_equals_a".into()])
+                .step(None),
+        ),
         FieldDefinition::new(
             "options.text_speed".into(),
             "Text speed".into(),
@@ -2728,12 +2213,7 @@ fn game_pokemon_emerald() -> GameDefinition {
         .min(0)
         .max(2)
         .mask(7)
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                ..field::Presentation::new(0, 20)
-            }),
-            ..Default::default()
-        }),
+        .presentation(field::Presentation::new(0, 20)),
         FieldDefinition::new(
             "options.window_frame".into(),
             "Window frame".into(),
@@ -2744,29 +2224,16 @@ fn game_pokemon_emerald() -> GameDefinition {
         .min(0)
         .max(19)
         .mask(248)
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                ..field::Presentation::new(0, 20)
-            }),
-            ..Default::default()
-        }),
+        .presentation(field::Presentation::new(0, 20)),
         FieldDefinition::new("options.sound".into(), "Sound".into(), 20, Storage::U16Le)
             .description("Sound output mode".into())
             .mask(256)
             .choices(sound())
-            .behavior(field::FieldBehavior {
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec!["mono".into(), "stereo".into()],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 20)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 20)
+                    .choices(vec!["mono".into(), "stereo".into()])
+                    .step(None),
+            ),
         FieldDefinition::new(
             "options.battle_style".into(),
             "Battle style".into(),
@@ -2776,19 +2243,11 @@ fn game_pokemon_emerald() -> GameDefinition {
         .description("Whether the game offers a switch after a foe faints".into())
         .mask(512)
         .choices(battle_style())
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                constraints: Some(SaveConstraint {
-                    min: None,
-                    max: None,
-                    max_length: None,
-                    choices: vec!["shift".into(), "set".into()],
-                }),
-                step: Some(None),
-                ..field::Presentation::new(0, 20)
-            }),
-            ..Default::default()
-        }),
+        .presentation(
+            field::Presentation::new(0, 20)
+                .choices(vec!["shift".into(), "set".into()])
+                .step(None),
+        ),
         FieldDefinition::new(
             "options.battle_scene".into(),
             "Battle scene".into(),
@@ -2798,19 +2257,11 @@ fn game_pokemon_emerald() -> GameDefinition {
         .description("Battle animation mode".into())
         .mask(1024)
         .choices(battle_scene())
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                constraints: Some(SaveConstraint {
-                    min: None,
-                    max: None,
-                    max_length: None,
-                    choices: vec!["on".into(), "off".into()],
-                }),
-                step: Some(None),
-                ..field::Presentation::new(0, 20)
-            }),
-            ..Default::default()
-        }),
+        .presentation(
+            field::Presentation::new(0, 20)
+                .choices(vec!["on".into(), "off".into()])
+                .step(None),
+        ),
         FieldDefinition::new(
             "options.region_map_zoom".into(),
             "Region map zoom".into(),
@@ -2819,14 +2270,11 @@ fn game_pokemon_emerald() -> GameDefinition {
         )
         .bit(3)
         .description("Region map zoom state".into())
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                kind: Some(SaveFieldKind::Boolean),
-                step: Some(None),
-                ..field::Presentation::new(0, 20)
-            }),
-            ..Default::default()
-        }),
+        .presentation(
+            field::Presentation::new(0, 20)
+                .kind(SaveFieldKind::Boolean)
+                .step(None),
+        ),
     ];
     let scope = FieldScope::default();
     extend_fields(
@@ -3404,42 +2852,25 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
         )
         .description("English trainer text".into())
         .length(7)
-        .behavior(field::FieldBehavior {
-            text_codec: Some("pokemon_gen3_english".into()),
-            presentation: Some(field::Presentation {
-                step: Some(None),
-                encoding: Some(Some("pokemon_gen3_english".into())),
-                ..field::Presentation::new(0, 0)
-            }),
-            ..Default::default()
-        }),
+        .text_codec("pokemon_gen3_english")
+        .presentation(
+            field::Presentation::new(0, 0)
+                .step(None)
+                .encoding(Some("pokemon_gen3_english")),
+        ),
         FieldDefinition::new("trainer.gender".into(), "Gender".into(), 8, Storage::U8)
             .description("Player gender".into())
             .choices(gender())
-            .behavior(field::FieldBehavior {
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec!["male".into(), "female".into()],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 8)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 8)
+                    .choices(vec!["male".into(), "female".into()])
+                    .step(None),
+            ),
         FieldDefinition::new("trainer.id".into(), "Trainer ID".into(), 10, Storage::U16Le)
             .description("Public trainer identifier".into())
             .min(0)
             .max(65535)
-            .behavior(field::FieldBehavior {
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 10)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 10).step(None)),
         FieldDefinition::new(
             "trainer.secret_id".into(),
             "Secret ID".into(),
@@ -3449,13 +2880,7 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
         .description("Hidden trainer identifier".into())
         .min(0)
         .max(65535)
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                step: Some(None),
-                ..field::Presentation::new(0, 12)
-            }),
-            ..Default::default()
-        }),
+        .presentation(field::Presentation::new(0, 12).step(None)),
         FieldDefinition::new("trainer.money".into(), "Money".into(), 4752, Storage::U32Le)
             .description("Money carried by the player".into())
             .min(0)
@@ -3469,9 +2894,7 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
                     }
                     .read(bytes)
                 })),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(1, 656)
-                }),
+                presentation: Some(field::Presentation::new(1, 656)),
                 ..Default::default()
             }),
         FieldDefinition::new("trainer.coins".into(), "Coins".into(), 4756, Storage::U16Le)
@@ -3487,9 +2910,7 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
                     }
                     .read(bytes)
                 })),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(1, 660)
-                }),
+                presentation: Some(field::Presentation::new(1, 660)),
                 ..Default::default()
             }),
         FieldDefinition::new(
@@ -3551,17 +2972,12 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
                     width: 2,
                 },
             ]),
-            presentation: Some(field::Presentation {
-                constraints: Some(SaveConstraint {
-                    min: None,
-                    max: None,
-                    max_length: None,
-                    choices: vec![],
-                }),
-                step: Some(None),
-                encoding: Some(None),
-                ..field::Presentation::new(0, 14)
-            }),
+            presentation: Some(
+                field::Presentation::new(0, 14)
+                    .constraints(SaveConstraint::default())
+                    .step(None)
+                    .encoding(None),
+            ),
             ..Default::default()
         }),
         FieldDefinition::new(
@@ -3573,12 +2989,7 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
         .description("Hours played".into())
         .min(0)
         .max(65535)
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                ..field::Presentation::new(0, 14)
-            }),
-            ..Default::default()
-        }),
+        .presentation(field::Presentation::new(0, 14)),
         FieldDefinition::new(
             "trainer.play_time_minutes".into(),
             "Play time minutes".into(),
@@ -3588,12 +2999,7 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
         .description("Minutes in the current hour".into())
         .min(0)
         .max(59)
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                ..field::Presentation::new(0, 16)
-            }),
-            ..Default::default()
-        }),
+        .presentation(field::Presentation::new(0, 16)),
         FieldDefinition::new(
             "trainer.play_time_seconds".into(),
             "Play time seconds".into(),
@@ -3603,12 +3009,7 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
         .description("Seconds in the current minute".into())
         .min(0)
         .max(59)
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                ..field::Presentation::new(0, 17)
-            }),
-            ..Default::default()
-        }),
+        .presentation(field::Presentation::new(0, 17)),
         FieldDefinition::new(
             "trainer.play_time_frames".into(),
             "Play time frames".into(),
@@ -3618,12 +3019,7 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
         .description("Frames in the current second".into())
         .min(0)
         .max(59)
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                ..field::Presentation::new(0, 18)
-            }),
-            ..Default::default()
-        }),
+        .presentation(field::Presentation::new(0, 18)),
         FieldDefinition::new(
             "options.button_mode".into(),
             "Button mode".into(),
@@ -3632,19 +3028,11 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
         )
         .description("A-button and shoulder-button behavior".into())
         .choices(button_mode())
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                constraints: Some(SaveConstraint {
-                    min: None,
-                    max: None,
-                    max_length: None,
-                    choices: vec!["help".into(), "lr".into(), "l_equals_a".into()],
-                }),
-                step: Some(None),
-                ..field::Presentation::new(0, 19)
-            }),
-            ..Default::default()
-        }),
+        .presentation(
+            field::Presentation::new(0, 19)
+                .choices(vec!["help".into(), "lr".into(), "l_equals_a".into()])
+                .step(None),
+        ),
         FieldDefinition::new(
             "options.text_speed".into(),
             "Text speed".into(),
@@ -3655,12 +3043,7 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
         .min(0)
         .max(2)
         .mask(7)
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                ..field::Presentation::new(0, 20)
-            }),
-            ..Default::default()
-        }),
+        .presentation(field::Presentation::new(0, 20)),
         FieldDefinition::new(
             "options.window_frame".into(),
             "Window frame".into(),
@@ -3671,29 +3054,16 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
         .min(0)
         .max(19)
         .mask(248)
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                ..field::Presentation::new(0, 20)
-            }),
-            ..Default::default()
-        }),
+        .presentation(field::Presentation::new(0, 20)),
         FieldDefinition::new("options.sound".into(), "Sound".into(), 20, Storage::U16Le)
             .description("Sound output mode".into())
             .mask(256)
             .choices(sound())
-            .behavior(field::FieldBehavior {
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec!["mono".into(), "stereo".into()],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 20)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 20)
+                    .choices(vec!["mono".into(), "stereo".into()])
+                    .step(None),
+            ),
         FieldDefinition::new(
             "options.battle_style".into(),
             "Battle style".into(),
@@ -3703,19 +3073,11 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
         .description("Whether the game offers a switch after a foe faints".into())
         .mask(512)
         .choices(battle_style())
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                constraints: Some(SaveConstraint {
-                    min: None,
-                    max: None,
-                    max_length: None,
-                    choices: vec!["shift".into(), "set".into()],
-                }),
-                step: Some(None),
-                ..field::Presentation::new(0, 20)
-            }),
-            ..Default::default()
-        }),
+        .presentation(
+            field::Presentation::new(0, 20)
+                .choices(vec!["shift".into(), "set".into()])
+                .step(None),
+        ),
         FieldDefinition::new(
             "options.battle_scene".into(),
             "Battle scene".into(),
@@ -3725,19 +3087,11 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
         .description("Battle animation mode".into())
         .mask(1024)
         .choices(battle_scene())
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                constraints: Some(SaveConstraint {
-                    min: None,
-                    max: None,
-                    max_length: None,
-                    choices: vec!["on".into(), "off".into()],
-                }),
-                step: Some(None),
-                ..field::Presentation::new(0, 20)
-            }),
-            ..Default::default()
-        }),
+        .presentation(
+            field::Presentation::new(0, 20)
+                .choices(vec!["on".into(), "off".into()])
+                .step(None),
+        ),
         FieldDefinition::new(
             "options.region_map_zoom".into(),
             "Region map zoom".into(),
@@ -3746,14 +3100,11 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
         )
         .bit(3)
         .description("Region map zoom state".into())
-        .behavior(field::FieldBehavior {
-            presentation: Some(field::Presentation {
-                kind: Some(SaveFieldKind::Boolean),
-                step: Some(None),
-                ..field::Presentation::new(0, 20)
-            }),
-            ..Default::default()
-        }),
+        .presentation(
+            field::Presentation::new(0, 20)
+                .kind(SaveFieldKind::Boolean)
+                .step(None),
+        ),
     ];
     let scope = FieldScope::default();
     extend_fields(

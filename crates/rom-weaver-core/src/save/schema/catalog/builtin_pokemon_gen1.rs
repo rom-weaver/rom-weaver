@@ -7,132 +7,59 @@ fn text_speed() -> Vec<FieldChoice> {
 fn red_blue_header(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
-            .field(
-                "trainer.name".into(),
-                "Trainer name".into(),
-                9624,
-                Storage::Ascii,
-            )
+            .field("trainer.name", "Trainer name", 9624, Storage::Ascii)
             .description(
                 "Use { for the PK glyph and } for the MN glyph. Each uses one game character."
                     .into(),
             )
             .length(11)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                text_codec: Some("pokemon_gen1_english".into()),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: Some(7),
-                        choices: vec![],
-                    }),
-                    step: Some(None),
-                    encoding: Some(Some("pokemon_gen1_english".into())),
-                    ..field::Presentation::new(0, 9624)
-                }),
-                ..Default::default()
-            }),
+            .text_codec("pokemon_gen1_english")
+            .presentation(
+                field::Presentation::new(0, 9624)
+                    .text_length(7)
+                    .step(None)
+                    .encoding(Some("pokemon_gen1_english")),
+            ),
         scope
-            .field(
-                "trainer.rival_name".into(),
-                "Rival name".into(),
-                9718,
-                Storage::Ascii,
-            )
+            .field("trainer.rival_name", "Rival name", 9718, Storage::Ascii)
             .description(
                 "Use { for the PK glyph and } for the MN glyph. Each uses one game character."
                     .into(),
             )
             .length(11)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                text_codec: Some("pokemon_gen1_english".into()),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: Some(7),
-                        choices: vec![],
-                    }),
-                    step: Some(None),
-                    encoding: Some(Some("pokemon_gen1_english".into())),
-                    ..field::Presentation::new(0, 9718)
-                }),
-                ..Default::default()
-            }),
+            .text_codec("pokemon_gen1_english")
+            .presentation(
+                field::Presentation::new(0, 9718)
+                    .text_length(7)
+                    .step(None)
+                    .encoding(Some("pokemon_gen1_english")),
+            ),
         scope
-            .field(
-                "trainer.id".into(),
-                "Trainer ID".into(),
-                9733,
-                Storage::U16Be,
-            )
+            .field("trainer.id", "Trainer ID", 9733, Storage::U16Be)
             .description("Public trainer identifier".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: Some(0),
-                        max: Some(65535),
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    ..field::Presentation::new(0, 9733)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 9733).range(0, 65535)),
         scope
-            .field("trainer.money".into(), "Money".into(), 9715, Storage::BcdBe)
+            .field("trainer.money", "Money", 9715, Storage::BcdBe)
             .description("Money carried by the player".into())
             .length(3)
             .max(999999)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: Some(0),
-                        max: Some(999999),
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    encoding: Some(Some("pokemon_gen1_bcd_be_u24".into())),
-                    ..field::Presentation::new(0, 9715)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 9715)
+                    .range(0, 999999)
+                    .encoding(Some("pokemon_gen1_bcd_be_u24")),
+            ),
         scope
-            .field(
-                "trainer.coins".into(),
-                "Coins".into(),
-                10320,
-                Storage::BcdBe,
-            )
+            .field("trainer.coins", "Coins", 10320, Storage::BcdBe)
             .description("Coins carried by the player".into())
             .length(2)
             .max(9999)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: Some(0),
-                        max: Some(9999),
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    encoding: Some(Some("pokemon_gen1_bcd_be_u16".into())),
-                    ..field::Presentation::new(0, 10320)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 10320)
+                    .range(0, 9999)
+                    .encoding(Some("pokemon_gen1_bcd_be_u16")),
+            ),
         scope
-            .field(
-                "trainer.play_time".into(),
-                "Play time".into(),
-                11501,
-                Storage::U8,
-            )
+            .field("trainer.play_time", "Play time", 11501, Storage::U8)
             .description("Time played".into())
             .editable(false)
             .behavior(field::FieldBehavior {
@@ -186,25 +113,20 @@ fn red_blue_header(scope: &FieldScope) -> Vec<FieldDefinition> {
                         width: 2,
                     },
                 ]),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::ReadOnlyText),
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    step: Some(None),
-                    encoding: Some(Some("pokemon_gen1_english".into())),
-                    warnings: vec!["Read-only".into()],
-                    ..field::Presentation::new(0, 11501)
-                }),
+                presentation: Some(
+                    field::Presentation::new(0, 11501)
+                        .constraints(SaveConstraint::default())
+                        .kind(SaveFieldKind::ReadOnlyText)
+                        .step(None)
+                        .encoding(Some("pokemon_gen1_english"))
+                        .warnings(vec!["Read-only".into()]),
+                ),
                 ..Default::default()
             }),
         scope
             .field(
-                "trainer.play_time.hours".into(),
-                "Play time hours".into(),
+                "trainer.play_time.hours",
+                "Play time hours",
                 11501,
                 Storage::U8,
             )
@@ -235,90 +157,41 @@ fn red_blue_header(scope: &FieldScope) -> Vec<FieldDefinition> {
                         )
                     }),
                 }],
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: Some(0),
-                        max: Some(255),
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    ..field::Presentation::new(0, 11501)
-                }),
+                presentation: Some(field::Presentation::new(0, 11501).range(0, 255)),
                 ..Default::default()
             }),
         scope
             .field(
-                "trainer.play_time.minutes".into(),
-                "Play time minutes".into(),
+                "trainer.play_time.minutes",
+                "Play time minutes",
                 11503,
                 Storage::U8,
             )
             .description("Minutes played".into())
             .max(59)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: Some(0),
-                        max: Some(59),
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    ..field::Presentation::new(0, 11503)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 11503).range(0, 59)),
         scope
             .field(
-                "trainer.play_time.seconds".into(),
-                "Play time seconds".into(),
+                "trainer.play_time.seconds",
+                "Play time seconds",
                 11504,
                 Storage::U8,
             )
             .description("Seconds played".into())
             .max(59)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: Some(0),
-                        max: Some(59),
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    ..field::Presentation::new(0, 11504)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 11504).range(0, 59)),
         scope
             .field(
-                "trainer.play_time.frames".into(),
-                "Play time frames".into(),
+                "trainer.play_time.frames",
+                "Play time frames",
                 11505,
                 Storage::U8,
             )
             .description("Frames played".into())
             .max(59)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: Some(0),
-                        max: Some(59),
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    ..field::Presentation::new(0, 11505)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 11505).range(0, 59)),
         scope
-            .field(
-                "options.text_speed".into(),
-                "Text speed".into(),
-                9729,
-                Storage::U8,
-            )
+            .field("options.text_speed", "Text speed", 9729, Storage::U8)
             .description("Text delay setting".into())
             .mask(7)
             .choices(text_speed())
@@ -347,16 +220,11 @@ fn red_blue_header(scope: &FieldScope) -> Vec<FieldDefinition> {
                         .read(bytes)?)
                             == (5i64)))
                 })),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec!["fast".into(), "medium".into(), "slow".into()],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 9729)
-                }),
+                presentation: Some(
+                    field::Presentation::new(0, 9729)
+                        .choices(vec!["fast".into(), "medium".into(), "slow".into()])
+                        .step(None),
+                ),
                 value_override: Some(field::ValueOverride {
                     when: rules::Condition::new(move |bytes| {
                         Ok(!(((rules::Scalar {
@@ -389,41 +257,23 @@ fn red_blue_header(scope: &FieldScope) -> Vec<FieldDefinition> {
                 ..Default::default()
             }),
         scope
-            .bit_field(
-                "options.battle_scene".into(),
-                "Battle scene".into(),
-                9729,
-                7,
-            )
+            .bit_field("options.battle_scene", "Battle scene", 9729, 7)
             .description("Show battle animations".into())
             .inverted(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::Boolean),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 9729)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 9729)
+                    .kind(SaveFieldKind::Boolean)
+                    .step(None),
+            ),
         scope
-            .bit_field(
-                "options.battle_style".into(),
-                "Battle style".into(),
-                9729,
-                6,
-            )
+            .bit_field("options.battle_style", "Battle style", 9729, 6)
             .description("Prompt before switching Pokémon".into())
             .inverted(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::Boolean),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 9729)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 9729)
+                    .kind(SaveFieldKind::Boolean)
+                    .step(None),
+            ),
     ];
 
     fields
@@ -432,93 +282,37 @@ fn red_blue_header(scope: &FieldScope) -> Vec<FieldDefinition> {
 fn gen1_badges(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
-            .bit_field("progress.badge_1".into(), "Boulder Badge".into(), 9730, 0)
+            .bit_field("progress.badge_1", "Boulder Badge", 9730, 0)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 9730)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 9730).step(None)),
         scope
-            .bit_field("progress.badge_2".into(), "Cascade Badge".into(), 9730, 1)
+            .bit_field("progress.badge_2", "Cascade Badge", 9730, 1)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 9730)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 9730).step(None)),
         scope
-            .bit_field("progress.badge_3".into(), "Thunder Badge".into(), 9730, 2)
+            .bit_field("progress.badge_3", "Thunder Badge", 9730, 2)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 9730)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 9730).step(None)),
         scope
-            .bit_field("progress.badge_4".into(), "Rainbow Badge".into(), 9730, 3)
+            .bit_field("progress.badge_4", "Rainbow Badge", 9730, 3)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 9730)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 9730).step(None)),
         scope
-            .bit_field("progress.badge_5".into(), "Soul Badge".into(), 9730, 4)
+            .bit_field("progress.badge_5", "Soul Badge", 9730, 4)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 9730)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 9730).step(None)),
         scope
-            .bit_field("progress.badge_6".into(), "Marsh Badge".into(), 9730, 5)
+            .bit_field("progress.badge_6", "Marsh Badge", 9730, 5)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 9730)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 9730).step(None)),
         scope
-            .bit_field("progress.badge_7".into(), "Volcano Badge".into(), 9730, 6)
+            .bit_field("progress.badge_7", "Volcano Badge", 9730, 6)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 9730)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 9730).step(None)),
         scope
-            .bit_field("progress.badge_8".into(), "Earth Badge".into(), 9730, 7)
+            .bit_field("progress.badge_8", "Earth Badge", 9730, 7)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 9730)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 9730).step(None)),
     ];
 
     fields
@@ -528,20 +322,13 @@ fn gen1_owned(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
             .bit_field(
-                format!("progress.pokedex_owned_{index}", index = scope.index),
-                format!("Pokédex owned #{index}", index = scope.index),
+                &format!("progress.pokedex_owned_{index}", index = scope.index),
+                &format!("Pokédex owned #{index}", index = scope.index),
                 0,
                 0,
             )
             .description("Pokédex owned flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, (9635 + scope.bits / 8) as u16)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, (9635 + scope.bits / 8) as u16).step(None)),
     ];
 
     fields
@@ -551,20 +338,13 @@ fn gen1_seen(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
             .bit_field(
-                format!("progress.pokedex_seen_{index}", index = scope.index),
-                format!("Pokédex seen #{index}", index = scope.index),
+                &format!("progress.pokedex_seen_{index}", index = scope.index),
+                &format!("Pokédex seen #{index}", index = scope.index),
                 0,
                 0,
             )
             .description("Pokédex seen flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, (9654 + scope.bits / 8) as u16)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, (9654 + scope.bits / 8) as u16).step(None)),
     ];
 
     fields
@@ -641,32 +421,18 @@ fn gen1_pc(scope: &FieldScope) -> Vec<FieldDefinition> {
 fn red_blue_footer(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
-            .field(
-                "storage.current_box".into(),
-                "Current PC box".into(),
-                10316,
-                Storage::U8,
-            )
+            .field("storage.current_box", "Current PC box", 10316, Storage::U8)
             .description(
                 "Current PC box number. Changing boxes requires moving their Pokémon data.".into(),
             )
             .max(11)
             .editable(false)
             .mask(127)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::UnsignedInteger),
-                    constraints: Some(SaveConstraint {
-                        min: Some(0),
-                        max: Some(11),
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    ..field::Presentation::new(0, 10316)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 10316)
+                    .kind(SaveFieldKind::UnsignedInteger)
+                    .range(0, 11),
+            ),
     ];
 
     fields
@@ -675,132 +441,59 @@ fn red_blue_footer(scope: &FieldScope) -> Vec<FieldDefinition> {
 fn yellow_header(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
-            .field(
-                "trainer.name".into(),
-                "Trainer name".into(),
-                9624,
-                Storage::Ascii,
-            )
+            .field("trainer.name", "Trainer name", 9624, Storage::Ascii)
             .description(
                 "Use { for the PK glyph and } for the MN glyph. Each uses one game character."
                     .into(),
             )
             .length(11)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                text_codec: Some("pokemon_gen1_english".into()),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: Some(7),
-                        choices: vec![],
-                    }),
-                    step: Some(None),
-                    encoding: Some(Some("pokemon_gen1_english".into())),
-                    ..field::Presentation::new(0, 9624)
-                }),
-                ..Default::default()
-            }),
+            .text_codec("pokemon_gen1_english")
+            .presentation(
+                field::Presentation::new(0, 9624)
+                    .text_length(7)
+                    .step(None)
+                    .encoding(Some("pokemon_gen1_english")),
+            ),
         scope
-            .field(
-                "trainer.rival_name".into(),
-                "Rival name".into(),
-                9718,
-                Storage::Ascii,
-            )
+            .field("trainer.rival_name", "Rival name", 9718, Storage::Ascii)
             .description(
                 "Use { for the PK glyph and } for the MN glyph. Each uses one game character."
                     .into(),
             )
             .length(11)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                text_codec: Some("pokemon_gen1_english".into()),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: Some(7),
-                        choices: vec![],
-                    }),
-                    step: Some(None),
-                    encoding: Some(Some("pokemon_gen1_english".into())),
-                    ..field::Presentation::new(0, 9718)
-                }),
-                ..Default::default()
-            }),
+            .text_codec("pokemon_gen1_english")
+            .presentation(
+                field::Presentation::new(0, 9718)
+                    .text_length(7)
+                    .step(None)
+                    .encoding(Some("pokemon_gen1_english")),
+            ),
         scope
-            .field(
-                "trainer.id".into(),
-                "Trainer ID".into(),
-                9733,
-                Storage::U16Be,
-            )
+            .field("trainer.id", "Trainer ID", 9733, Storage::U16Be)
             .description("Public trainer identifier".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: Some(0),
-                        max: Some(65535),
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    ..field::Presentation::new(0, 9733)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 9733).range(0, 65535)),
         scope
-            .field("trainer.money".into(), "Money".into(), 9715, Storage::BcdBe)
+            .field("trainer.money", "Money", 9715, Storage::BcdBe)
             .description("Money carried by the player".into())
             .length(3)
             .max(999999)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: Some(0),
-                        max: Some(999999),
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    encoding: Some(Some("pokemon_gen1_bcd_be_u24".into())),
-                    ..field::Presentation::new(0, 9715)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 9715)
+                    .range(0, 999999)
+                    .encoding(Some("pokemon_gen1_bcd_be_u24")),
+            ),
         scope
-            .field(
-                "trainer.coins".into(),
-                "Coins".into(),
-                10320,
-                Storage::BcdBe,
-            )
+            .field("trainer.coins", "Coins", 10320, Storage::BcdBe)
             .description("Coins carried by the player".into())
             .length(2)
             .max(9999)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: Some(0),
-                        max: Some(9999),
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    encoding: Some(Some("pokemon_gen1_bcd_be_u16".into())),
-                    ..field::Presentation::new(0, 10320)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 10320)
+                    .range(0, 9999)
+                    .encoding(Some("pokemon_gen1_bcd_be_u16")),
+            ),
         scope
-            .field(
-                "trainer.play_time".into(),
-                "Play time".into(),
-                11501,
-                Storage::U8,
-            )
+            .field("trainer.play_time", "Play time", 11501, Storage::U8)
             .description("Time played".into())
             .editable(false)
             .behavior(field::FieldBehavior {
@@ -854,25 +547,20 @@ fn yellow_header(scope: &FieldScope) -> Vec<FieldDefinition> {
                         width: 2,
                     },
                 ]),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::ReadOnlyText),
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    step: Some(None),
-                    encoding: Some(Some("pokemon_gen1_english".into())),
-                    warnings: vec!["Read-only".into()],
-                    ..field::Presentation::new(0, 11501)
-                }),
+                presentation: Some(
+                    field::Presentation::new(0, 11501)
+                        .constraints(SaveConstraint::default())
+                        .kind(SaveFieldKind::ReadOnlyText)
+                        .step(None)
+                        .encoding(Some("pokemon_gen1_english"))
+                        .warnings(vec!["Read-only".into()]),
+                ),
                 ..Default::default()
             }),
         scope
             .field(
-                "trainer.play_time.hours".into(),
-                "Play time hours".into(),
+                "trainer.play_time.hours",
+                "Play time hours",
                 11501,
                 Storage::U8,
             )
@@ -903,90 +591,41 @@ fn yellow_header(scope: &FieldScope) -> Vec<FieldDefinition> {
                         )
                     }),
                 }],
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: Some(0),
-                        max: Some(255),
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    ..field::Presentation::new(0, 11501)
-                }),
+                presentation: Some(field::Presentation::new(0, 11501).range(0, 255)),
                 ..Default::default()
             }),
         scope
             .field(
-                "trainer.play_time.minutes".into(),
-                "Play time minutes".into(),
+                "trainer.play_time.minutes",
+                "Play time minutes",
                 11503,
                 Storage::U8,
             )
             .description("Minutes played".into())
             .max(59)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: Some(0),
-                        max: Some(59),
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    ..field::Presentation::new(0, 11503)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 11503).range(0, 59)),
         scope
             .field(
-                "trainer.play_time.seconds".into(),
-                "Play time seconds".into(),
+                "trainer.play_time.seconds",
+                "Play time seconds",
                 11504,
                 Storage::U8,
             )
             .description("Seconds played".into())
             .max(59)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: Some(0),
-                        max: Some(59),
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    ..field::Presentation::new(0, 11504)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 11504).range(0, 59)),
         scope
             .field(
-                "trainer.play_time.frames".into(),
-                "Play time frames".into(),
+                "trainer.play_time.frames",
+                "Play time frames",
                 11505,
                 Storage::U8,
             )
             .description("Frames played".into())
             .max(59)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: Some(0),
-                        max: Some(59),
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    ..field::Presentation::new(0, 11505)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 11505).range(0, 59)),
         scope
-            .field(
-                "options.text_speed".into(),
-                "Text speed".into(),
-                9729,
-                Storage::U8,
-            )
+            .field("options.text_speed", "Text speed", 9729, Storage::U8)
             .description("Text delay setting".into())
             .mask(7)
             .choices(text_speed())
@@ -1015,16 +654,11 @@ fn yellow_header(scope: &FieldScope) -> Vec<FieldDefinition> {
                         .read(bytes)?)
                             == (5i64)))
                 })),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec!["fast".into(), "medium".into(), "slow".into()],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 9729)
-                }),
+                presentation: Some(
+                    field::Presentation::new(0, 9729)
+                        .choices(vec!["fast".into(), "medium".into(), "slow".into()])
+                        .step(None),
+                ),
                 value_override: Some(field::ValueOverride {
                     when: rules::Condition::new(move |bytes| {
                         Ok(!(((rules::Scalar {
@@ -1057,43 +691,25 @@ fn yellow_header(scope: &FieldScope) -> Vec<FieldDefinition> {
                 ..Default::default()
             }),
         scope
-            .bit_field(
-                "options.battle_scene".into(),
-                "Battle scene".into(),
-                9729,
-                7,
-            )
+            .bit_field("options.battle_scene", "Battle scene", 9729, 7)
             .description("Show battle animations".into())
             .inverted(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::Boolean),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 9729)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 9729)
+                    .kind(SaveFieldKind::Boolean)
+                    .step(None),
+            ),
         scope
-            .bit_field(
-                "options.battle_style".into(),
-                "Battle style".into(),
-                9729,
-                6,
-            )
+            .bit_field("options.battle_style", "Battle style", 9729, 6)
             .description("Prompt before switching Pokémon".into())
             .inverted(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::Boolean),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 9729)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 9729)
+                    .kind(SaveFieldKind::Boolean)
+                    .step(None),
+            ),
         scope
-            .field("options.sound".into(), "Sound".into(), 9729, Storage::U8)
+            .field("options.sound", "Sound", 9729, Storage::U8)
             .description("Sound output mode".into())
             .choices(choices(&[
                 ("mono", 0),
@@ -1102,25 +718,16 @@ fn yellow_header(scope: &FieldScope) -> Vec<FieldDefinition> {
                 ("earphone_3", 3),
             ]))
             .mask(48)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec![
-                            "mono".into(),
-                            "earphone_1".into(),
-                            "earphone_2".into(),
-                            "earphone_3".into(),
-                        ],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 9729)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 9729)
+                    .choices(vec![
+                        "mono".into(),
+                        "earphone_1".into(),
+                        "earphone_2".into(),
+                        "earphone_3".into(),
+                    ])
+                    .step(None),
+            ),
     ];
 
     fields
@@ -1129,98 +736,48 @@ fn yellow_header(scope: &FieldScope) -> Vec<FieldDefinition> {
 fn yellow_footer(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
-            .field(
-                "storage.current_box".into(),
-                "Current PC box".into(),
-                10316,
-                Storage::U8,
-            )
+            .field("storage.current_box", "Current PC box", 10316, Storage::U8)
             .description(
                 "Current PC box number. Changing boxes requires moving their Pokémon data.".into(),
             )
             .max(11)
             .editable(false)
             .mask(127)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::UnsignedInteger),
-                    constraints: Some(SaveConstraint {
-                        min: Some(0),
-                        max: Some(11),
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    ..field::Presentation::new(0, 10316)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 10316)
+                    .kind(SaveFieldKind::UnsignedInteger)
+                    .range(0, 11),
+            ),
         scope
             .field(
-                "yellow.pikachu_friendship".into(),
-                "Pikachu friendship".into(),
+                "yellow.pikachu_friendship",
+                "Pikachu friendship",
                 10012,
                 Storage::U8,
             )
             .description("Yellow's starter Pikachu friendship".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: Some(0),
-                        max: Some(255),
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    ..field::Presentation::new(0, 10012)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 10012).range(0, 255)),
         scope
             .field(
-                "yellow.pikachu_beach_score".into(),
-                "Pikachu Beach score".into(),
+                "yellow.pikachu_beach_score",
+                "Pikachu Beach score",
                 10049,
                 Storage::BcdLe,
             )
             .description("Pokémon Yellow Pikachu Beach high score".into())
             .length(2)
             .max(9999)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: Some(0),
-                        max: Some(9999),
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    ..field::Presentation::new(0, 10049)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 10049).range(0, 9999)),
         scope
             .field(
-                "yellow.printer_brightness".into(),
-                "Printer brightness".into(),
+                "yellow.printer_brightness",
+                "Printer brightness",
                 10052,
                 Storage::U8,
             )
             .description("Game Boy Printer brightness".into())
             .max(127)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: Some(0),
-                        max: Some(127),
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    ..field::Presentation::new(0, 10052)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 10052).range(0, 127)),
     ];
 
     fields
@@ -1230,43 +787,27 @@ fn gen1_bag_slot(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
             .field(
-                format!("inventory.bag.{index}.item_id", index = scope.index),
-                format!("Bag slot {index} Item ID", index = scope.index),
+                &format!("inventory.bag.{index}.item_id", index = scope.index),
+                &format!("Bag slot {index} Item ID", index = scope.index),
                 0,
                 Storage::U8,
             )
             .description("Inventory item slot value".into())
             .min(1)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: Some(1),
-                        max: Some(255),
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    ..field::Presentation::new(0, (9674 + scope.bits / 8) as u16)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, (9674 + scope.bits / 8) as u16).range(1, 255),
+            ),
         scope
             .field(
-                format!("inventory.bag.{index}.quantity", index = scope.index),
-                format!("Bag slot {index} Quantity", index = scope.index),
+                &format!("inventory.bag.{index}.quantity", index = scope.index),
+                &format!("Bag slot {index} Quantity", index = scope.index),
                 1,
                 Storage::U8,
             )
             .description("Inventory item slot value".into())
             .min(1)
             .max(99)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, (9675 + scope.bits / 8) as u16)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, (9675 + scope.bits / 8) as u16)),
     ];
 
     fields
@@ -1276,43 +817,27 @@ fn gen1_pc_slot(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
             .field(
-                format!("inventory.pc.{index}.item_id", index = scope.index),
-                format!("PC slot {index} Item ID", index = scope.index),
+                &format!("inventory.pc.{index}.item_id", index = scope.index),
+                &format!("PC slot {index} Item ID", index = scope.index),
                 0,
                 Storage::U8,
             )
             .description("Inventory item slot value".into())
             .min(1)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: Some(1),
-                        max: Some(255),
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    ..field::Presentation::new(0, (10215 + scope.bits / 8) as u16)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, (10215 + scope.bits / 8) as u16).range(1, 255),
+            ),
         scope
             .field(
-                format!("inventory.pc.{index}.quantity", index = scope.index),
-                format!("PC slot {index} Quantity", index = scope.index),
+                &format!("inventory.pc.{index}.quantity", index = scope.index),
+                &format!("PC slot {index} Quantity", index = scope.index),
                 1,
                 Storage::U8,
             )
             .description("Inventory item slot value".into())
             .min(1)
             .max(99)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, (10216 + scope.bits / 8) as u16)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, (10216 + scope.bits / 8) as u16)),
     ];
 
     fields

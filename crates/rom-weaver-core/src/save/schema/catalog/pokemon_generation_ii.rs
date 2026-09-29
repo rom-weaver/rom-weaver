@@ -60,8 +60,8 @@ fn dex_field(scope: &FieldScope, kind: &str, offset: usize) -> Vec<FieldDefiniti
     vec![
         scope
             .bit_field(
-                format!("pokedex_{kind}_{index}", index = scope.index),
-                format!("Pokédex {kind} #{index}", index = scope.index),
+                &format!("pokedex_{kind}_{index}", index = scope.index),
+                &format!("Pokédex {kind} #{index}", index = scope.index),
                 offset,
                 0,
             )
@@ -932,9 +932,9 @@ fn default() -> GameDefinition {
         GameDefinition {
             fields,
             description: concat!(
-                "English 32 KiB SRAM layout. Edits fixed fields in both primary ",
-                "and backup copies and repairs both checksums. Variable-length ",
-                "inventory remains with the native handler."
+                "English 32 KiB SRAM layout. This profile edits fixed fields in both ",
+                "save copies and repairs checksums. Use the full game profile ",
+                "for variable inventory."
             )
             .into(),
             signatures: vec![

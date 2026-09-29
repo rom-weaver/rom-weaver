@@ -50,7 +50,7 @@ The Generation III handler treats one valid slot plus one empty slot as valid wi
 - `SaveGameRegistry` maps a stable game ID to one definition and exposes the shared handler operations.
 - The schema engine owns common field storage, physical-to-logical layouts, copy recovery, checksums, text codecs, and edit transactions.
 - Native Rust callbacks implement game rules that need conditional fields, arithmetic, validation, or linked writes.
-- `SaveGameHandler::generate` has an unsupported default. A definition advertises fresh generation only with a checked initializer.
+- `SchemaSaveHandler` handles every game definition. It supports fresh generation only when the definition has a checked initializer.
 - `crates/rom-weaver-cli/src/save_command.rs` owns CLI paths, output files, dry runs, force checks, and reports.
 - The browser calls the same command path through the WASM worker. Keep file access in the existing OPFS worker boundary.
 
@@ -62,7 +62,7 @@ Define games with the typed Rust schema API. Use the shared engine for storage, 
 
 `schema::GameDefinition` and `schema::FieldDefinition` hold the typed definitions. `SchemaSaveHandler::new` checks their storage, text codecs, and generation defaults before registration.
 
-Put related definitions in one catalog module. Use shared constructors and Rust loops for repeated fields, choices, slots, and profiles. Keep every published game and field ID stable. Profiles for fixed slots, players, regions, or storage variants remain separate registry entries when users must select them independently.
+Put related definitions in one catalog module. Use shared constructors and Rust loops for repeated fields, choices, slots, and profiles. Use `FieldScope` to inherit groups and array guards. Use field and presentation constructors to set metadata without repeating default values. Keep every published game and field ID stable. Profiles for fixed slots, players, regions, or storage variants remain separate registry entries when users must select them independently.
 
 Keep the normalized raw payload size separate from a wrapper. The container layer removes the wrapper before the game definition sees the bytes. Preserve unknown bytes and unrelated records in every edit.
 

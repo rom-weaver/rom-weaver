@@ -17,8 +17,8 @@ fn course(scope: &FieldScope) -> Vec<FieldDefinition> {
                 .map(move |(part, (id, label))| {
                     scope
                         .field(
-                            format!("trial_{}.record_{record}.{id}", scope.index),
-                            format!("Course {} record {record}: {label}", scope.index),
+                            &format!("trial_{}.record_{record}.{id}", scope.index),
+                            &format!("Course {} record {record}: {label}", scope.index),
                             (record - 1) * 3 + part,
                             Storage::U8,
                         )

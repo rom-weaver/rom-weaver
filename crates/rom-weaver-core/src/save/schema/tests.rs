@@ -487,3 +487,136 @@ fn overlapping_read_only_views_protect_editable_storage() {
     assert!(GameSchema::build(game(vec![view.clone(), copy.clone()], 2)).is_err());
     assert!(GameSchema::build(game(vec![copy, view], 2)).is_err());
 }
+
+#[test]
+fn added_schema_fields_and_initializers_use_the_declared_storage() {
+    use std::sync::Arc;
+
+    use super::generation::{Generation, GenerationDefinition, InitialPatch};
+    use super::{FieldDefinition, FieldSchema, Storage};
+
+    let mut schema = catalog::builtin_pokemon_gen3::schemas()
+        .into_iter()
+        .find(|handler| handler.game.id == "pokemon-emerald")
+        .unwrap();
+    let identity = schema.definitions().remove(0).identity;
+    let source = SaveDetectionInput {
+        bytes: super::super::tests::fixture(super::super::pokemon_gen3::Family::Emerald, 3, 2),
+        selected_game: Some(identity.id.clone()),
+        rom_sha1: None,
+    };
+    let original = schema.parse(&source, &identity).unwrap();
+    let game = Arc::make_mut(&mut schema.game);
+    game.fields.push(
+        FieldSchema::build(
+            FieldDefinition::new(
+                "extra.value".into(),
+                "Extra value".into(),
+                0x400,
+                Storage::U8,
+            ),
+            game.runtime.logical_size.unwrap(),
+        )
+        .unwrap(),
+    );
+    let mut alias = game
+        .fields
+        .iter()
+        .find(|field| field.id == "trainer.money")
+        .unwrap()
+        .clone();
+    alias.id = "extra.money_alias".into();
+    alias.editable = false;
+    game.fields.push(alias);
+
+    let extended = schema.parse(&source, &identity).unwrap();
+    assert_eq!(extended.fields.len(), original.fields.len() + 2);
+    assert_eq!(
+        extended
+            .fields
+            .iter()
+            .find(|field| field.id == "extra.value")
+            .unwrap()
+            .value,
+        SaveValue::U32(0)
+    );
+    let edits = [SaveEdit {
+        field: "trainer.money".into(),
+        value: SaveValue::U32(2000),
+    }];
+    let actual = schema.apply(&source, &identity, &edits, false).unwrap();
+    assert!(
+        actual
+            .preview
+            .changes
+            .iter()
+            .any(|change| change.field == "extra.money_alias")
+    );
+    assert_eq!(
+        actual
+            .document
+            .fields
+            .iter()
+            .find(|field| field.id == "extra.money_alias")
+            .unwrap()
+            .value,
+        SaveValue::U32(2000)
+    );
+
+    let base = original
+        .sections
+        .iter()
+        .find(|section| section.id == 0)
+        .unwrap()
+        .physical_offset as usize;
+    let mut expected = source.bytes.clone();
+    expected[base + 0x400] = 37;
+    let sum = expected[base..base + 0xf2c]
+        .chunks_exact(4)
+        .fold(0u32, |sum, word| {
+            sum.wrapping_add(u32::from_le_bytes(word.try_into().unwrap()))
+        });
+    let checksum = (sum as u16).wrapping_add((sum >> 16) as u16);
+    expected[base + 0xff6..base + 0xff8].copy_from_slice(&checksum.to_le_bytes());
+    let result = schema
+        .apply(
+            &source,
+            &identity,
+            &[SaveEdit {
+                field: "extra.value".into(),
+                value: SaveValue::U32(37),
+            }],
+            false,
+        )
+        .unwrap();
+    assert_eq!(result.bytes.as_ref(), Some(&expected));
+    assert_eq!(
+        result
+            .document
+            .fields
+            .iter()
+            .find(|field| field.id == "extra.value")
+            .unwrap()
+            .value,
+        SaveValue::U32(37)
+    );
+
+    let game = Arc::make_mut(&mut schema.game);
+    game.generation = Some(
+        Generation::build(
+            GenerationDefinition {
+                fill: 0,
+                patches: vec![InitialPatch {
+                    offset: 0,
+                    bytes: source.bytes,
+                }],
+                values: [("extra.value".into(), SaveValue::U32(37))].into(),
+            },
+            game.save_size,
+        )
+        .unwrap(),
+    );
+    game.validate_generation().unwrap();
+    assert!(schema.supports_generation(&identity));
+    assert_eq!(schema.generate(&identity).unwrap(), expected);
+}

@@ -4,8 +4,8 @@ fn owned_1(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
             .bit_field(
-                format!("pokedex_owned_{index}", index = scope.index),
-                format!("Pokédex owned #{index}", index = scope.index),
+                &format!("pokedex_owned_{index}", index = scope.index),
+                &format!("Pokédex owned #{index}", index = scope.index),
                 0,
                 0,
             )
@@ -19,8 +19,8 @@ fn seen_2(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
             .bit_field(
-                format!("pokedex_seen_{index}", index = scope.index),
-                format!("Pokédex seen #{index}", index = scope.index),
+                &format!("pokedex_seen_{index}", index = scope.index),
+                &format!("Pokédex seen #{index}", index = scope.index),
                 0,
                 0,
             )
@@ -409,8 +409,8 @@ fn default() -> GameDefinition {
         GameDefinition {
             fields,
             description: concat!(
-                "English 32 KiB SRAM layout. Packed-decimal, text, option, and ",
-                "variable inventory fields remain with the native handler."
+                "English 32 KiB SRAM layout. This profile exposes fixed fields. ",
+                "Use the full game profile for variable inventory and text."
             )
             .into(),
             checksums: vec![ChecksumDefinition {

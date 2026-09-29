@@ -18,32 +18,23 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
             .field(
-                "player.name".into(),
-                format!("File {index} player name", index = scope.index),
+                "player.name",
+                &format!("File {index} player name", index = scope.index),
                 985,
                 Storage::Ascii,
             )
             .description("Player name from the original English naming screen".into())
             .length(12)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                text_codec: Some("zelda_alttp_english_name".into()),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: Some(6),
-                        choices: vec![],
-                    }),
-                    step: Some(None),
-                    encoding: Some(Some("zelda_alttp_english_name".into())),
-                    ..field::Presentation::new(0, 985)
-                }),
-                ..Default::default()
-            }),
+            .text_codec("zelda_alttp_english_name")
+            .presentation(
+                field::Presentation::new(0, 985)
+                    .text_length(6)
+                    .step(None)
+                    .encoding(Some("zelda_alttp_english_name")),
+            ),
         scope
-            .field("inventory.bow".into(), "Bow".into(), 832, Storage::U8)
+            .field("inventory.bow", "Bow", 832, Storage::U8)
             .description("Bow and silver-arrow upgrade state".into())
             .editable(true)
             .choices(choices(&[
@@ -55,22 +46,17 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             ]))
             .behavior(field::FieldBehavior {
                 group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec![
+                presentation: Some(
+                    field::Presentation::new(0, 832)
+                        .choices(vec![
                             "none".into(),
                             "bow".into(),
                             "bow_and_arrows".into(),
                             "silver_bow".into(),
                             "silver_bow_and_arrows".into(),
-                        ],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 832)
-                }),
+                        ])
+                        .step(None),
+                ),
                 unknown_choice: Some(field::UnknownChoice {
                     value: "unknown".into(),
                     warning: "The stored value is outside the original game range".into(),
@@ -78,27 +64,17 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
                 ..Default::default()
             }),
         scope
-            .field(
-                "inventory.boomerang".into(),
-                "Boomerang".into(),
-                833,
-                Storage::U8,
-            )
+            .field("inventory.boomerang", "Boomerang", 833, Storage::U8)
             .description("Boomerang upgrade state".into())
             .editable(true)
             .choices(choices(&[("none", 0), ("blue", 1), ("red", 2)]))
             .behavior(field::FieldBehavior {
                 group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec!["none".into(), "blue".into(), "red".into()],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 833)
-                }),
+                presentation: Some(
+                    field::Presentation::new(0, 833)
+                        .choices(vec!["none".into(), "blue".into(), "red".into()])
+                        .step(None),
+                ),
                 unknown_choice: Some(field::UnknownChoice {
                     value: "unknown".into(),
                     warning: "The stored value is outside the original game range".into(),
@@ -107,8 +83,8 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             }),
         scope
             .field(
-                "inventory.mushroom_powder".into(),
-                "Mushroom or magic powder".into(),
+                "inventory.mushroom_powder",
+                "Mushroom or magic powder",
                 836,
                 Storage::U8,
             )
@@ -117,16 +93,11 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             .choices(choices(&[("none", 0), ("mushroom", 1), ("powder", 2)]))
             .behavior(field::FieldBehavior {
                 group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec!["none".into(), "mushroom".into(), "powder".into()],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 836)
-                }),
+                presentation: Some(
+                    field::Presentation::new(0, 836)
+                        .choices(vec!["none".into(), "mushroom".into(), "powder".into()])
+                        .step(None),
+                ),
                 unknown_choice: Some(field::UnknownChoice {
                     value: "unknown".into(),
                     warning: "The stored value is outside the original game range".into(),
@@ -134,7 +105,7 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
                 ..Default::default()
             }),
         scope
-            .field("inventory.flute".into(), "Flute".into(), 844, Storage::U8)
+            .field("inventory.flute", "Flute", 844, Storage::U8)
             .description("Shovel and flute state".into())
             .editable(true)
             .choices(choices(&[
@@ -145,21 +116,16 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             ]))
             .behavior(field::FieldBehavior {
                 group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec![
+                presentation: Some(
+                    field::Presentation::new(0, 844)
+                        .choices(vec![
                             "none".into(),
                             "shovel".into(),
                             "inactive".into(),
                             "active".into(),
-                        ],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 844)
-                }),
+                        ])
+                        .step(None),
+                ),
                 unknown_choice: Some(field::UnknownChoice {
                     value: "unknown".into(),
                     warning: "The stored value is outside the original game range".into(),
@@ -167,12 +133,7 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
                 ..Default::default()
             }),
         scope
-            .field(
-                "inventory.mirror".into(),
-                "Magic mirror".into(),
-                851,
-                Storage::U8,
-            )
+            .field("inventory.mirror", "Magic mirror", 851, Storage::U8)
             .description("Magic mirror item state".into())
             .editable(true)
             .choices(choices(&[
@@ -183,21 +144,16 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             ]))
             .behavior(field::FieldBehavior {
                 group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec![
+                presentation: Some(
+                    field::Presentation::new(0, 851)
+                        .choices(vec![
                             "none".into(),
                             "letter".into(),
                             "mirror".into(),
                             "scrapped_triforce".into(),
-                        ],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 851)
-                }),
+                        ])
+                        .step(None),
+                ),
                 unknown_choice: Some(field::UnknownChoice {
                     value: "unknown".into(),
                     warning: "The stored value is outside the original game range".into(),
@@ -205,23 +161,15 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
                 ..Default::default()
             }),
         scope
-            .field(
-                "inventory.bottle_1".into(),
-                "Bottle 1".into(),
-                860,
-                Storage::U8,
-            )
+            .field("inventory.bottle_1", "Bottle 1", 860, Storage::U8)
             .description("Bottle contents".into())
             .editable(true)
             .choices(bottle_1())
             .behavior(field::FieldBehavior {
                 group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec![
+                presentation: Some(
+                    field::Presentation::new(0, 860)
+                        .choices(vec![
                             "none".into(),
                             "mushroom".into(),
                             "empty".into(),
@@ -231,11 +179,9 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
                             "fairy".into(),
                             "bee".into(),
                             "good_bee".into(),
-                        ],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 860)
-                }),
+                        ])
+                        .step(None),
+                ),
                 unknown_choice: Some(field::UnknownChoice {
                     value: "unknown".into(),
                     warning: "The stored value is outside the original game range".into(),
@@ -243,23 +189,15 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
                 ..Default::default()
             }),
         scope
-            .field(
-                "inventory.bottle_2".into(),
-                "Bottle 2".into(),
-                861,
-                Storage::U8,
-            )
+            .field("inventory.bottle_2", "Bottle 2", 861, Storage::U8)
             .description("Bottle contents".into())
             .editable(true)
             .choices(bottle_1())
             .behavior(field::FieldBehavior {
                 group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec![
+                presentation: Some(
+                    field::Presentation::new(0, 861)
+                        .choices(vec![
                             "none".into(),
                             "mushroom".into(),
                             "empty".into(),
@@ -269,11 +207,9 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
                             "fairy".into(),
                             "bee".into(),
                             "good_bee".into(),
-                        ],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 861)
-                }),
+                        ])
+                        .step(None),
+                ),
                 unknown_choice: Some(field::UnknownChoice {
                     value: "unknown".into(),
                     warning: "The stored value is outside the original game range".into(),
@@ -281,23 +217,15 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
                 ..Default::default()
             }),
         scope
-            .field(
-                "inventory.bottle_3".into(),
-                "Bottle 3".into(),
-                862,
-                Storage::U8,
-            )
+            .field("inventory.bottle_3", "Bottle 3", 862, Storage::U8)
             .description("Bottle contents".into())
             .editable(true)
             .choices(bottle_1())
             .behavior(field::FieldBehavior {
                 group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec![
+                presentation: Some(
+                    field::Presentation::new(0, 862)
+                        .choices(vec![
                             "none".into(),
                             "mushroom".into(),
                             "empty".into(),
@@ -307,11 +235,9 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
                             "fairy".into(),
                             "bee".into(),
                             "good_bee".into(),
-                        ],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 862)
-                }),
+                        ])
+                        .step(None),
+                ),
                 unknown_choice: Some(field::UnknownChoice {
                     value: "unknown".into(),
                     warning: "The stored value is outside the original game range".into(),
@@ -319,23 +245,15 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
                 ..Default::default()
             }),
         scope
-            .field(
-                "inventory.bottle_4".into(),
-                "Bottle 4".into(),
-                863,
-                Storage::U8,
-            )
+            .field("inventory.bottle_4", "Bottle 4", 863, Storage::U8)
             .description("Bottle contents".into())
             .editable(true)
             .choices(bottle_1())
             .behavior(field::FieldBehavior {
                 group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec![
+                presentation: Some(
+                    field::Presentation::new(0, 863)
+                        .choices(vec![
                             "none".into(),
                             "mushroom".into(),
                             "empty".into(),
@@ -345,11 +263,9 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
                             "fairy".into(),
                             "bee".into(),
                             "good_bee".into(),
-                        ],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 863)
-                }),
+                        ])
+                        .step(None),
+                ),
                 unknown_choice: Some(field::UnknownChoice {
                     value: "unknown".into(),
                     warning: "The stored value is outside the original game range".into(),
@@ -357,54 +273,31 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
                 ..Default::default()
             }),
         scope
-            .field(
-                "resources.rupees".into(),
-                "Rupees".into(),
-                866,
-                Storage::U16Le,
-            )
+            .field("resources.rupees", "Rupees", 866, Storage::U16Le)
             .description("Rupees shown by the HUD".into())
             .min(0)
             .max(999)
             .editable(true)
             .copies(vec![scope.offset(864, 0)])
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 864)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 864)),
         scope
-            .field("resources.bombs".into(), "Bombs".into(), 835, Storage::U8)
+            .field("resources.bombs", "Bombs", 835, Storage::U8)
             .description("Bombs carried by the player".into())
             .min(0)
             .max(50)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 835)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 835)),
         scope
-            .field("resources.arrows".into(), "Arrows".into(), 887, Storage::U8)
+            .field("resources.arrows", "Arrows", 887, Storage::U8)
             .description("Arrows carried by the player".into())
             .min(0)
             .max(70)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 887)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 887)),
         scope
             .field(
-                "hearts.capacity_eighths".into(),
-                "Heart capacity (eighths)".into(),
+                "hearts.capacity_eighths",
+                "Heart capacity (eighths)",
                 876,
                 Storage::U8,
             )
@@ -412,18 +305,11 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(24)
             .max(160)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(Some(8)),
-                    ..field::Presentation::new(0, 876)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 876).step(Some(8))),
         scope
             .field(
-                "hearts.current_eighths".into(),
-                "Current health (eighths)".into(),
+                "hearts.current_eighths",
+                "Current health (eighths)",
                 877,
                 Storage::U8,
             )
@@ -431,53 +317,26 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(160)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 877)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 877)),
         scope
-            .field(
-                "magic.current".into(),
-                "Current magic".into(),
-                878,
-                Storage::U8,
-            )
+            .field("magic.current", "Current magic", 878, Storage::U8)
             .description("Current magic power. The original game caps this at 128.".into())
             .min(0)
             .max(128)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 878)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 878)),
         scope
-            .field(
-                "magic.consumption".into(),
-                "Magic consumption".into(),
-                891,
-                Storage::U8,
-            )
+            .field("magic.consumption", "Magic consumption", 891, Storage::U8)
             .description("Magic consumption mode".into())
             .editable(true)
             .choices(choices(&[("normal", 0), ("half", 1), ("quarter", 2)]))
             .behavior(field::FieldBehavior {
                 group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec!["normal".into(), "half".into(), "quarter".into()],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 891)
-                }),
+                presentation: Some(
+                    field::Presentation::new(0, 891)
+                        .choices(vec!["normal".into(), "half".into(), "quarter".into()])
+                        .step(None),
+                ),
                 unknown_choice: Some(field::UnknownChoice {
                     value: "unknown".into(),
                     warning: "The stored value is outside the original game range".into(),
@@ -486,8 +345,8 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             }),
         scope
             .field(
-                "resources.bomb_capacity_upgrades".into(),
-                "Bomb capacity upgrades".into(),
+                "resources.bomb_capacity_upgrades",
+                "Bomb capacity upgrades",
                 880,
                 Storage::U8,
             )
@@ -495,17 +354,11 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(3)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 880)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 880)),
         scope
             .field(
-                "resources.arrow_capacity_upgrades".into(),
-                "Arrow capacity upgrades".into(),
+                "resources.arrow_capacity_upgrades",
+                "Arrow capacity upgrades",
                 881,
                 Storage::U8,
             )
@@ -513,17 +366,11 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(3)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 881)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 881)),
         scope
             .field(
-                "progress.heart_pieces".into(),
-                "Heart pieces toward next container".into(),
+                "progress.heart_pieces",
+                "Heart pieces toward next container",
                 875,
                 Storage::U8,
             )
@@ -531,15 +378,9 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(3)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 875)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 875)),
         scope
-            .field("equipment.sword".into(), "Sword".into(), 857, Storage::U8)
+            .field("equipment.sword", "Sword", 857, Storage::U8)
             .description("Sword level".into())
             .editable(true)
             .choices(choices(&[
@@ -551,22 +392,17 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             ]))
             .behavior(field::FieldBehavior {
                 group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec![
+                presentation: Some(
+                    field::Presentation::new(0, 857)
+                        .choices(vec![
                             "none".into(),
                             "fighter".into(),
                             "master".into(),
                             "tempered".into(),
                             "golden".into(),
-                        ],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 857)
-                }),
+                        ])
+                        .step(None),
+                ),
                 value_override: Some(field::ValueOverride {
                     when: {
                         let address = scope.address();
@@ -588,7 +424,7 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
                 ..Default::default()
             }),
         scope
-            .field("equipment.shield".into(), "Shield".into(), 858, Storage::U8)
+            .field("equipment.shield", "Shield", 858, Storage::U8)
             .description("Shield level".into())
             .editable(true)
             .choices(choices(&[
@@ -599,21 +435,16 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             ]))
             .behavior(field::FieldBehavior {
                 group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec![
+                presentation: Some(
+                    field::Presentation::new(0, 858)
+                        .choices(vec![
                             "none".into(),
                             "fighter".into(),
                             "red".into(),
                             "mirror".into(),
-                        ],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 858)
-                }),
+                        ])
+                        .step(None),
+                ),
                 unknown_choice: Some(field::UnknownChoice {
                     value: "unknown".into(),
                     warning: "The stored value is outside the original game range".into(),
@@ -621,22 +452,17 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
                 ..Default::default()
             }),
         scope
-            .field("equipment.armor".into(), "Armor".into(), 859, Storage::U8)
+            .field("equipment.armor", "Armor", 859, Storage::U8)
             .description("Tunic color and defense level".into())
             .editable(true)
             .choices(choices(&[("green", 0), ("blue", 1), ("red", 2)]))
             .behavior(field::FieldBehavior {
                 group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec!["green".into(), "blue".into(), "red".into()],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 859)
-                }),
+                presentation: Some(
+                    field::Presentation::new(0, 859)
+                        .choices(vec!["green".into(), "blue".into(), "red".into()])
+                        .step(None),
+                ),
                 unknown_choice: Some(field::UnknownChoice {
                     value: "unknown".into(),
                     warning: "The stored value is outside the original game range".into(),
@@ -644,22 +470,17 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
                 ..Default::default()
             }),
         scope
-            .field("equipment.gloves".into(), "Gloves".into(), 852, Storage::U8)
+            .field("equipment.gloves", "Gloves", 852, Storage::U8)
             .description("Strength glove level".into())
             .editable(true)
             .choices(choices(&[("none", 0), ("power", 1), ("titan", 2)]))
             .behavior(field::FieldBehavior {
                 group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec!["none".into(), "power".into(), "titan".into()],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 852)
-                }),
+                presentation: Some(
+                    field::Presentation::new(0, 852)
+                        .choices(vec!["none".into(), "power".into(), "titan".into()])
+                        .step(None),
+                ),
                 unknown_choice: Some(field::UnknownChoice {
                     value: "unknown".into(),
                     warning: "The stored value is outside the original game range".into(),
@@ -667,458 +488,238 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
                 ..Default::default()
             }),
         scope
-            .field(
-                "inventory.hookshot".into(),
-                "Hookshot".into(),
-                834,
-                Storage::Bool,
-            )
+            .field("inventory.hookshot", "Hookshot", 834, Storage::Bool)
             .description("Inventory item".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::BitfieldBoolean),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 834)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 834)
+                    .kind(SaveFieldKind::BitfieldBoolean)
+                    .step(None),
+            ),
+        scope
+            .field("inventory.fire_rod", "Fire Rod", 837, Storage::Bool)
+            .description("Inventory item".into())
+            .editable(true)
+            .presentation(
+                field::Presentation::new(0, 837)
+                    .kind(SaveFieldKind::BitfieldBoolean)
+                    .step(None),
+            ),
+        scope
+            .field("inventory.ice_rod", "Ice Rod", 838, Storage::Bool)
+            .description("Inventory item".into())
+            .editable(true)
+            .presentation(
+                field::Presentation::new(0, 838)
+                    .kind(SaveFieldKind::BitfieldBoolean)
+                    .step(None),
+            ),
+        scope
+            .field("inventory.bombos", "Bombos", 839, Storage::Bool)
+            .description("Inventory item".into())
+            .editable(true)
+            .presentation(
+                field::Presentation::new(0, 839)
+                    .kind(SaveFieldKind::BitfieldBoolean)
+                    .step(None),
+            ),
+        scope
+            .field("inventory.ether", "Ether", 840, Storage::Bool)
+            .description("Inventory item".into())
+            .editable(true)
+            .presentation(
+                field::Presentation::new(0, 840)
+                    .kind(SaveFieldKind::BitfieldBoolean)
+                    .step(None),
+            ),
+        scope
+            .field("inventory.quake", "Quake", 841, Storage::Bool)
+            .description("Inventory item".into())
+            .editable(true)
+            .presentation(
+                field::Presentation::new(0, 841)
+                    .kind(SaveFieldKind::BitfieldBoolean)
+                    .step(None),
+            ),
+        scope
+            .field("inventory.lantern", "Lantern", 842, Storage::Bool)
+            .description("Inventory item".into())
+            .editable(true)
+            .presentation(
+                field::Presentation::new(0, 842)
+                    .kind(SaveFieldKind::BitfieldBoolean)
+                    .step(None),
+            ),
+        scope
+            .field("inventory.hammer", "Hammer", 843, Storage::Bool)
+            .description("Inventory item".into())
+            .editable(true)
+            .presentation(
+                field::Presentation::new(0, 843)
+                    .kind(SaveFieldKind::BitfieldBoolean)
+                    .step(None),
+            ),
+        scope
+            .field("inventory.bug_net", "Bug-Catching Net", 845, Storage::Bool)
+            .description("Inventory item".into())
+            .editable(true)
+            .presentation(
+                field::Presentation::new(0, 845)
+                    .kind(SaveFieldKind::BitfieldBoolean)
+                    .step(None),
+            ),
         scope
             .field(
-                "inventory.fire_rod".into(),
-                "Fire Rod".into(),
-                837,
-                Storage::Bool,
-            )
-            .description("Inventory item".into())
-            .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::BitfieldBoolean),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 837)
-                }),
-                ..Default::default()
-            }),
-        scope
-            .field(
-                "inventory.ice_rod".into(),
-                "Ice Rod".into(),
-                838,
-                Storage::Bool,
-            )
-            .description("Inventory item".into())
-            .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::BitfieldBoolean),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 838)
-                }),
-                ..Default::default()
-            }),
-        scope
-            .field(
-                "inventory.bombos".into(),
-                "Bombos".into(),
-                839,
-                Storage::Bool,
-            )
-            .description("Inventory item".into())
-            .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::BitfieldBoolean),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 839)
-                }),
-                ..Default::default()
-            }),
-        scope
-            .field("inventory.ether".into(), "Ether".into(), 840, Storage::Bool)
-            .description("Inventory item".into())
-            .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::BitfieldBoolean),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 840)
-                }),
-                ..Default::default()
-            }),
-        scope
-            .field("inventory.quake".into(), "Quake".into(), 841, Storage::Bool)
-            .description("Inventory item".into())
-            .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::BitfieldBoolean),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 841)
-                }),
-                ..Default::default()
-            }),
-        scope
-            .field(
-                "inventory.lantern".into(),
-                "Lantern".into(),
-                842,
-                Storage::Bool,
-            )
-            .description("Inventory item".into())
-            .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::BitfieldBoolean),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 842)
-                }),
-                ..Default::default()
-            }),
-        scope
-            .field(
-                "inventory.hammer".into(),
-                "Hammer".into(),
-                843,
-                Storage::Bool,
-            )
-            .description("Inventory item".into())
-            .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::BitfieldBoolean),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 843)
-                }),
-                ..Default::default()
-            }),
-        scope
-            .field(
-                "inventory.bug_net".into(),
-                "Bug-Catching Net".into(),
-                845,
-                Storage::Bool,
-            )
-            .description("Inventory item".into())
-            .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::BitfieldBoolean),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 845)
-                }),
-                ..Default::default()
-            }),
-        scope
-            .field(
-                "inventory.book_of_mudora".into(),
-                "Book of Mudora".into(),
+                "inventory.book_of_mudora",
+                "Book of Mudora",
                 846,
                 Storage::Bool,
             )
             .description("Inventory item".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::BitfieldBoolean),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 846)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 846)
+                    .kind(SaveFieldKind::BitfieldBoolean)
+                    .step(None),
+            ),
         scope
             .field(
-                "inventory.cane_of_somaria".into(),
-                "Cane of Somaria".into(),
+                "inventory.cane_of_somaria",
+                "Cane of Somaria",
                 848,
                 Storage::Bool,
             )
             .description("Inventory item".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::BitfieldBoolean),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 848)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 848)
+                    .kind(SaveFieldKind::BitfieldBoolean)
+                    .step(None),
+            ),
         scope
             .field(
-                "inventory.cane_of_byrna".into(),
-                "Cane of Byrna".into(),
+                "inventory.cane_of_byrna",
+                "Cane of Byrna",
                 849,
                 Storage::Bool,
             )
             .description("Inventory item".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::BitfieldBoolean),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 849)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 849)
+                    .kind(SaveFieldKind::BitfieldBoolean)
+                    .step(None),
+            ),
         scope
-            .field(
-                "inventory.cape".into(),
-                "Magic Cape".into(),
-                850,
-                Storage::Bool,
-            )
+            .field("inventory.cape", "Magic Cape", 850, Storage::Bool)
             .description("Inventory item".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::BitfieldBoolean),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 850)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 850)
+                    .kind(SaveFieldKind::BitfieldBoolean)
+                    .step(None),
+            ),
         scope
             .field(
-                "inventory.pegasus_boots".into(),
-                "Pegasus Boots".into(),
+                "inventory.pegasus_boots",
+                "Pegasus Boots",
                 853,
                 Storage::Bool,
             )
             .description("Inventory item".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::BitfieldBoolean),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 853)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 853)
+                    .kind(SaveFieldKind::BitfieldBoolean)
+                    .step(None),
+            ),
         scope
-            .field(
-                "inventory.flippers".into(),
-                "Zora's Flippers".into(),
-                854,
-                Storage::Bool,
-            )
+            .field("inventory.flippers", "Zora's Flippers", 854, Storage::Bool)
             .description("Inventory item".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::BitfieldBoolean),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 854)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 854)
+                    .kind(SaveFieldKind::BitfieldBoolean)
+                    .step(None),
+            ),
         scope
-            .field(
-                "inventory.moon_pearl".into(),
-                "Moon Pearl".into(),
-                855,
-                Storage::Bool,
-            )
+            .field("inventory.moon_pearl", "Moon Pearl", 855, Storage::Bool)
             .description("Inventory item".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    kind: Some(SaveFieldKind::BitfieldBoolean),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 855)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 855)
+                    .kind(SaveFieldKind::BitfieldBoolean)
+                    .step(None),
+            ),
         scope
-            .bit_field("progress.pendant_1".into(), "Pendant 1".into(), 884, 0)
+            .bit_field("progress.pendant_1", "Pendant 1", 884, 0)
             .description("Progress bit from the pendant state byte".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 884)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 884).step(None)),
         scope
-            .bit_field("progress.pendant_2".into(), "Pendant 2".into(), 884, 1)
+            .bit_field("progress.pendant_2", "Pendant 2", 884, 1)
             .description("Progress bit from the pendant state byte".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 884)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 884).step(None)),
         scope
-            .bit_field("progress.pendant_3".into(), "Pendant 3".into(), 884, 2)
+            .bit_field("progress.pendant_3", "Pendant 3", 884, 2)
             .description("Progress bit from the pendant state byte".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 884)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 884).step(None)),
         scope
-            .bit_field("progress.crystal_1".into(), "Crystal 1".into(), 890, 0)
+            .bit_field("progress.crystal_1", "Crystal 1", 890, 0)
             .description("Progress bit from the crystal state byte".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 890)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 890).step(None)),
         scope
-            .bit_field("progress.crystal_2".into(), "Crystal 2".into(), 890, 1)
+            .bit_field("progress.crystal_2", "Crystal 2", 890, 1)
             .description("Progress bit from the crystal state byte".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 890)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 890).step(None)),
         scope
-            .bit_field("progress.crystal_3".into(), "Crystal 3".into(), 890, 2)
+            .bit_field("progress.crystal_3", "Crystal 3", 890, 2)
             .description("Progress bit from the crystal state byte".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 890)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 890).step(None)),
         scope
-            .bit_field("progress.crystal_4".into(), "Crystal 4".into(), 890, 3)
+            .bit_field("progress.crystal_4", "Crystal 4", 890, 3)
             .description("Progress bit from the crystal state byte".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 890)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 890).step(None)),
         scope
-            .bit_field("progress.crystal_5".into(), "Crystal 5".into(), 890, 4)
+            .bit_field("progress.crystal_5", "Crystal 5", 890, 4)
             .description("Progress bit from the crystal state byte".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 890)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 890).step(None)),
         scope
-            .bit_field("progress.crystal_6".into(), "Crystal 6".into(), 890, 5)
+            .bit_field("progress.crystal_6", "Crystal 6", 890, 5)
             .description("Progress bit from the crystal state byte".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 890)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 890).step(None)),
         scope
-            .bit_field("progress.crystal_7".into(), "Crystal 7".into(), 890, 6)
+            .bit_field("progress.crystal_7", "Crystal 7", 890, 6)
             .description("Progress bit from the crystal state byte".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 890)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 890).step(None)),
         scope
-            .bit_field(
-                "progress.dungeons.sewers.compass".into(),
-                "Sewers compass".into(),
-                868,
-                7,
-            )
+            .bit_field("progress.dungeons.sewers.compass", "Sewers compass", 868, 7)
             .description("Dungeon compass ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 868)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 868).step(None)),
         scope
-            .bit_field(
-                "progress.dungeons.sewers.big_key".into(),
-                "Sewers big key".into(),
-                870,
-                7,
-            )
+            .bit_field("progress.dungeons.sewers.big_key", "Sewers big key", 870, 7)
             .description("Dungeon big key ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 870)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 870).step(None)),
         scope
-            .bit_field(
-                "progress.dungeons.sewers.map".into(),
-                "Sewers map".into(),
-                872,
-                7,
-            )
+            .bit_field("progress.dungeons.sewers.map", "Sewers map", 872, 7)
             .description("Dungeon map ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 872)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 872).step(None)),
         scope
             .field(
-                "progress.dungeons.sewers.keys_earned".into(),
-                "Sewers keys earned".into(),
+                "progress.dungeons.sewers.keys_earned",
+                "Sewers keys earned",
                 892,
                 Storage::U8,
             )
@@ -1126,68 +727,41 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(255)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 892)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 892)),
         scope
             .bit_field(
-                "progress.dungeons.hyrule_castle.compass".into(),
-                "Hyrule Castle compass".into(),
+                "progress.dungeons.hyrule_castle.compass",
+                "Hyrule Castle compass",
                 868,
                 6,
             )
             .description("Dungeon compass ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 868)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 868).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.hyrule_castle.big_key".into(),
-                "Hyrule Castle big key".into(),
+                "progress.dungeons.hyrule_castle.big_key",
+                "Hyrule Castle big key",
                 870,
                 6,
             )
             .description("Dungeon big key ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 870)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 870).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.hyrule_castle.map".into(),
-                "Hyrule Castle map".into(),
+                "progress.dungeons.hyrule_castle.map",
+                "Hyrule Castle map",
                 872,
                 6,
             )
             .description("Dungeon map ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 872)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 872).step(None)),
         scope
             .field(
-                "progress.dungeons.hyrule_castle.keys_earned".into(),
-                "Hyrule Castle keys earned".into(),
+                "progress.dungeons.hyrule_castle.keys_earned",
+                "Hyrule Castle keys earned",
                 893,
                 Storage::U8,
             )
@@ -1195,68 +769,41 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(255)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 893)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 893)),
         scope
             .bit_field(
-                "progress.dungeons.eastern_palace.compass".into(),
-                "Eastern Palace compass".into(),
+                "progress.dungeons.eastern_palace.compass",
+                "Eastern Palace compass",
                 868,
                 5,
             )
             .description("Dungeon compass ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 868)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 868).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.eastern_palace.big_key".into(),
-                "Eastern Palace big key".into(),
+                "progress.dungeons.eastern_palace.big_key",
+                "Eastern Palace big key",
                 870,
                 5,
             )
             .description("Dungeon big key ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 870)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 870).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.eastern_palace.map".into(),
-                "Eastern Palace map".into(),
+                "progress.dungeons.eastern_palace.map",
+                "Eastern Palace map",
                 872,
                 5,
             )
             .description("Dungeon map ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 872)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 872).step(None)),
         scope
             .field(
-                "progress.dungeons.eastern_palace.keys_earned".into(),
-                "Eastern Palace keys earned".into(),
+                "progress.dungeons.eastern_palace.keys_earned",
+                "Eastern Palace keys earned",
                 894,
                 Storage::U8,
             )
@@ -1264,68 +811,41 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(255)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 894)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 894)),
         scope
             .bit_field(
-                "progress.dungeons.desert_palace.compass".into(),
-                "Desert Palace compass".into(),
+                "progress.dungeons.desert_palace.compass",
+                "Desert Palace compass",
                 868,
                 4,
             )
             .description("Dungeon compass ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 868)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 868).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.desert_palace.big_key".into(),
-                "Desert Palace big key".into(),
+                "progress.dungeons.desert_palace.big_key",
+                "Desert Palace big key",
                 870,
                 4,
             )
             .description("Dungeon big key ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 870)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 870).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.desert_palace.map".into(),
-                "Desert Palace map".into(),
+                "progress.dungeons.desert_palace.map",
+                "Desert Palace map",
                 872,
                 4,
             )
             .description("Dungeon map ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 872)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 872).step(None)),
         scope
             .field(
-                "progress.dungeons.desert_palace.keys_earned".into(),
-                "Desert Palace keys earned".into(),
+                "progress.dungeons.desert_palace.keys_earned",
+                "Desert Palace keys earned",
                 895,
                 Storage::U8,
             )
@@ -1333,68 +853,41 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(255)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 895)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 895)),
         scope
             .bit_field(
-                "progress.dungeons.agahnims_tower.compass".into(),
-                "Agahnim's Tower compass".into(),
+                "progress.dungeons.agahnims_tower.compass",
+                "Agahnim's Tower compass",
                 868,
                 3,
             )
             .description("Dungeon compass ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 868)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 868).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.agahnims_tower.big_key".into(),
-                "Agahnim's Tower big key".into(),
+                "progress.dungeons.agahnims_tower.big_key",
+                "Agahnim's Tower big key",
                 870,
                 3,
             )
             .description("Dungeon big key ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 870)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 870).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.agahnims_tower.map".into(),
-                "Agahnim's Tower map".into(),
+                "progress.dungeons.agahnims_tower.map",
+                "Agahnim's Tower map",
                 872,
                 3,
             )
             .description("Dungeon map ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 872)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 872).step(None)),
         scope
             .field(
-                "progress.dungeons.agahnims_tower.keys_earned".into(),
-                "Agahnim's Tower keys earned".into(),
+                "progress.dungeons.agahnims_tower.keys_earned",
+                "Agahnim's Tower keys earned",
                 896,
                 Storage::U8,
             )
@@ -1402,68 +895,41 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(255)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 896)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 896)),
         scope
             .bit_field(
-                "progress.dungeons.swamp_palace.compass".into(),
-                "Swamp Palace compass".into(),
+                "progress.dungeons.swamp_palace.compass",
+                "Swamp Palace compass",
                 868,
                 2,
             )
             .description("Dungeon compass ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 868)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 868).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.swamp_palace.big_key".into(),
-                "Swamp Palace big key".into(),
+                "progress.dungeons.swamp_palace.big_key",
+                "Swamp Palace big key",
                 870,
                 2,
             )
             .description("Dungeon big key ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 870)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 870).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.swamp_palace.map".into(),
-                "Swamp Palace map".into(),
+                "progress.dungeons.swamp_palace.map",
+                "Swamp Palace map",
                 872,
                 2,
             )
             .description("Dungeon map ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 872)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 872).step(None)),
         scope
             .field(
-                "progress.dungeons.swamp_palace.keys_earned".into(),
-                "Swamp Palace keys earned".into(),
+                "progress.dungeons.swamp_palace.keys_earned",
+                "Swamp Palace keys earned",
                 897,
                 Storage::U8,
             )
@@ -1471,68 +937,41 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(255)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 897)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 897)),
         scope
             .bit_field(
-                "progress.dungeons.palace_of_darkness.compass".into(),
-                "Palace of Darkness compass".into(),
+                "progress.dungeons.palace_of_darkness.compass",
+                "Palace of Darkness compass",
                 868,
                 1,
             )
             .description("Dungeon compass ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 868)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 868).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.palace_of_darkness.big_key".into(),
-                "Palace of Darkness big key".into(),
+                "progress.dungeons.palace_of_darkness.big_key",
+                "Palace of Darkness big key",
                 870,
                 1,
             )
             .description("Dungeon big key ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 870)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 870).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.palace_of_darkness.map".into(),
-                "Palace of Darkness map".into(),
+                "progress.dungeons.palace_of_darkness.map",
+                "Palace of Darkness map",
                 872,
                 1,
             )
             .description("Dungeon map ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 872)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 872).step(None)),
         scope
             .field(
-                "progress.dungeons.palace_of_darkness.keys_earned".into(),
-                "Palace of Darkness keys earned".into(),
+                "progress.dungeons.palace_of_darkness.keys_earned",
+                "Palace of Darkness keys earned",
                 898,
                 Storage::U8,
             )
@@ -1540,68 +979,41 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(255)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 898)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 898)),
         scope
             .bit_field(
-                "progress.dungeons.misery_mire.compass".into(),
-                "Misery Mire compass".into(),
+                "progress.dungeons.misery_mire.compass",
+                "Misery Mire compass",
                 868,
                 0,
             )
             .description("Dungeon compass ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 868)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 868).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.misery_mire.big_key".into(),
-                "Misery Mire big key".into(),
+                "progress.dungeons.misery_mire.big_key",
+                "Misery Mire big key",
                 870,
                 0,
             )
             .description("Dungeon big key ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 870)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 870).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.misery_mire.map".into(),
-                "Misery Mire map".into(),
+                "progress.dungeons.misery_mire.map",
+                "Misery Mire map",
                 872,
                 0,
             )
             .description("Dungeon map ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 872)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 872).step(None)),
         scope
             .field(
-                "progress.dungeons.misery_mire.keys_earned".into(),
-                "Misery Mire keys earned".into(),
+                "progress.dungeons.misery_mire.keys_earned",
+                "Misery Mire keys earned",
                 899,
                 Storage::U8,
             )
@@ -1609,68 +1021,41 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(255)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 899)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 899)),
         scope
             .bit_field(
-                "progress.dungeons.skull_woods.compass".into(),
-                "Skull Woods compass".into(),
+                "progress.dungeons.skull_woods.compass",
+                "Skull Woods compass",
                 869,
                 7,
             )
             .description("Dungeon compass ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 869)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 869).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.skull_woods.big_key".into(),
-                "Skull Woods big key".into(),
+                "progress.dungeons.skull_woods.big_key",
+                "Skull Woods big key",
                 871,
                 7,
             )
             .description("Dungeon big key ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 871)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 871).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.skull_woods.map".into(),
-                "Skull Woods map".into(),
+                "progress.dungeons.skull_woods.map",
+                "Skull Woods map",
                 873,
                 7,
             )
             .description("Dungeon map ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 873)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 873).step(None)),
         scope
             .field(
-                "progress.dungeons.skull_woods.keys_earned".into(),
-                "Skull Woods keys earned".into(),
+                "progress.dungeons.skull_woods.keys_earned",
+                "Skull Woods keys earned",
                 900,
                 Storage::U8,
             )
@@ -1678,68 +1063,36 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(255)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 900)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 900)),
         scope
             .bit_field(
-                "progress.dungeons.ice_palace.compass".into(),
-                "Ice Palace compass".into(),
+                "progress.dungeons.ice_palace.compass",
+                "Ice Palace compass",
                 869,
                 6,
             )
             .description("Dungeon compass ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 869)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 869).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.ice_palace.big_key".into(),
-                "Ice Palace big key".into(),
+                "progress.dungeons.ice_palace.big_key",
+                "Ice Palace big key",
                 871,
                 6,
             )
             .description("Dungeon big key ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 871)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 871).step(None)),
         scope
-            .bit_field(
-                "progress.dungeons.ice_palace.map".into(),
-                "Ice Palace map".into(),
-                873,
-                6,
-            )
+            .bit_field("progress.dungeons.ice_palace.map", "Ice Palace map", 873, 6)
             .description("Dungeon map ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 873)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 873).step(None)),
         scope
             .field(
-                "progress.dungeons.ice_palace.keys_earned".into(),
-                "Ice Palace keys earned".into(),
+                "progress.dungeons.ice_palace.keys_earned",
+                "Ice Palace keys earned",
                 901,
                 Storage::U8,
             )
@@ -1747,68 +1100,41 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(255)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 901)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 901)),
         scope
             .bit_field(
-                "progress.dungeons.tower_of_hera.compass".into(),
-                "Tower of Hera compass".into(),
+                "progress.dungeons.tower_of_hera.compass",
+                "Tower of Hera compass",
                 869,
                 5,
             )
             .description("Dungeon compass ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 869)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 869).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.tower_of_hera.big_key".into(),
-                "Tower of Hera big key".into(),
+                "progress.dungeons.tower_of_hera.big_key",
+                "Tower of Hera big key",
                 871,
                 5,
             )
             .description("Dungeon big key ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 871)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 871).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.tower_of_hera.map".into(),
-                "Tower of Hera map".into(),
+                "progress.dungeons.tower_of_hera.map",
+                "Tower of Hera map",
                 873,
                 5,
             )
             .description("Dungeon map ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 873)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 873).step(None)),
         scope
             .field(
-                "progress.dungeons.tower_of_hera.keys_earned".into(),
-                "Tower of Hera keys earned".into(),
+                "progress.dungeons.tower_of_hera.keys_earned",
+                "Tower of Hera keys earned",
                 902,
                 Storage::U8,
             )
@@ -1816,68 +1142,41 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(255)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 902)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 902)),
         scope
             .bit_field(
-                "progress.dungeons.thieves_town.compass".into(),
-                "Thieves' Town compass".into(),
+                "progress.dungeons.thieves_town.compass",
+                "Thieves' Town compass",
                 869,
                 4,
             )
             .description("Dungeon compass ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 869)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 869).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.thieves_town.big_key".into(),
-                "Thieves' Town big key".into(),
+                "progress.dungeons.thieves_town.big_key",
+                "Thieves' Town big key",
                 871,
                 4,
             )
             .description("Dungeon big key ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 871)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 871).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.thieves_town.map".into(),
-                "Thieves' Town map".into(),
+                "progress.dungeons.thieves_town.map",
+                "Thieves' Town map",
                 873,
                 4,
             )
             .description("Dungeon map ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 873)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 873).step(None)),
         scope
             .field(
-                "progress.dungeons.thieves_town.keys_earned".into(),
-                "Thieves' Town keys earned".into(),
+                "progress.dungeons.thieves_town.keys_earned",
+                "Thieves' Town keys earned",
                 903,
                 Storage::U8,
             )
@@ -1885,68 +1184,41 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(255)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 903)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 903)),
         scope
             .bit_field(
-                "progress.dungeons.turtle_rock.compass".into(),
-                "Turtle Rock compass".into(),
+                "progress.dungeons.turtle_rock.compass",
+                "Turtle Rock compass",
                 869,
                 3,
             )
             .description("Dungeon compass ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 869)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 869).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.turtle_rock.big_key".into(),
-                "Turtle Rock big key".into(),
+                "progress.dungeons.turtle_rock.big_key",
+                "Turtle Rock big key",
                 871,
                 3,
             )
             .description("Dungeon big key ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 871)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 871).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.turtle_rock.map".into(),
-                "Turtle Rock map".into(),
+                "progress.dungeons.turtle_rock.map",
+                "Turtle Rock map",
                 873,
                 3,
             )
             .description("Dungeon map ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 873)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 873).step(None)),
         scope
             .field(
-                "progress.dungeons.turtle_rock.keys_earned".into(),
-                "Turtle Rock keys earned".into(),
+                "progress.dungeons.turtle_rock.keys_earned",
+                "Turtle Rock keys earned",
                 904,
                 Storage::U8,
             )
@@ -1954,68 +1226,41 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(255)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 904)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 904)),
         scope
             .bit_field(
-                "progress.dungeons.ganons_tower.compass".into(),
-                "Ganon's Tower compass".into(),
+                "progress.dungeons.ganons_tower.compass",
+                "Ganon's Tower compass",
                 869,
                 2,
             )
             .description("Dungeon compass ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 869)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 869).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.ganons_tower.big_key".into(),
-                "Ganon's Tower big key".into(),
+                "progress.dungeons.ganons_tower.big_key",
+                "Ganon's Tower big key",
                 871,
                 2,
             )
             .description("Dungeon big key ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 871)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 871).step(None)),
         scope
             .bit_field(
-                "progress.dungeons.ganons_tower.map".into(),
-                "Ganon's Tower map".into(),
+                "progress.dungeons.ganons_tower.map",
+                "Ganon's Tower map",
                 873,
                 2,
             )
             .description("Dungeon map ownership".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 873)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 873).step(None)),
         scope
             .field(
-                "progress.dungeons.ganons_tower.keys_earned".into(),
-                "Ganon's Tower keys earned".into(),
+                "progress.dungeons.ganons_tower.keys_earned",
+                "Ganon's Tower keys earned",
                 905,
                 Storage::U8,
             )
@@ -2023,20 +1268,9 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(255)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 905)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 905)),
         scope
-            .field(
-                "progress.game_state".into(),
-                "Game state".into(),
-                965,
-                Storage::U8,
-            )
+            .field("progress.game_state", "Game state", 965, Storage::U8)
             .description("Main story state".into())
             .editable(true)
             .choices(choices(&[
@@ -2047,21 +1281,16 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             ]))
             .behavior(field::FieldBehavior {
                 group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec![
+                presentation: Some(
+                    field::Presentation::new(0, 965)
+                        .choices(vec![
                             "start".into(),
                             "uncle_reached".into(),
                             "zelda_rescued".into(),
                             "agahnim_defeated".into(),
-                        ],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 965)
-                }),
+                        ])
+                        .step(None),
+                ),
                 unknown_choice: Some(field::UnknownChoice {
                     value: "unknown".into(),
                     warning: "The stored value is outside the original game range".into(),
@@ -2069,12 +1298,7 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
                 ..Default::default()
             }),
         scope
-            .field(
-                "progress.map_icon".into(),
-                "Map guidance icon".into(),
-                967,
-                Storage::U8,
-            )
+            .field("progress.map_icon", "Map guidance icon", 967, Storage::U8)
             .description("Map icon guidance state".into())
             .editable(true)
             .choices(choices(&[
@@ -2090,12 +1314,9 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             ]))
             .behavior(field::FieldBehavior {
                 group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec![
+                presentation: Some(
+                    field::Presentation::new(0, 967)
+                        .choices(vec![
                             "castle".into(),
                             "kakariko".into(),
                             "eastern_palace".into(),
@@ -2105,11 +1326,9 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
                             "palace_of_darkness".into(),
                             "crystals".into(),
                             "ganons_tower".into(),
-                        ],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 967)
-                }),
+                        ])
+                        .step(None),
+                ),
                 unknown_choice: Some(field::UnknownChoice {
                     value: "unknown".into(),
                     warning: "The stored value is outside the original game range".into(),
@@ -2117,12 +1336,7 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
                 ..Default::default()
             }),
         scope
-            .field(
-                "progress.spawn_point".into(),
-                "Save spawn point".into(),
-                968,
-                Storage::U8,
-            )
+            .field("progress.spawn_point", "Save spawn point", 968, Storage::U8)
             .description("Save and continue spawn point".into())
             .editable(true)
             .choices(choices(&[
@@ -2136,12 +1350,9 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             ]))
             .behavior(field::FieldBehavior {
                 group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec![
+                presentation: Some(
+                    field::Presentation::new(0, 968)
+                        .choices(vec![
                             "links_house".into(),
                             "sanctuary".into(),
                             "prison".into(),
@@ -2149,11 +1360,9 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
                             "throne".into(),
                             "old_man_cave".into(),
                             "old_man_home".into(),
-                        ],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 968)
-                }),
+                        ])
+                        .step(None),
+                ),
                 unknown_choice: Some(field::UnknownChoice {
                     value: "unknown".into(),
                     warning: "The stored value is outside the original game range".into(),
@@ -2161,27 +1370,17 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
                 ..Default::default()
             }),
         scope
-            .field(
-                "progress.save_world".into(),
-                "Save world".into(),
-                970,
-                Storage::U8,
-            )
+            .field("progress.save_world", "Save world", 970, Storage::U8)
             .description("World selected after loading the save".into())
             .editable(true)
             .choices(choices(&[("light", 0), ("dark", 1)]))
             .behavior(field::FieldBehavior {
                 group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec!["light".into(), "dark".into()],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 970)
-                }),
+                presentation: Some(
+                    field::Presentation::new(0, 970)
+                        .choices(vec!["light".into(), "dark".into()])
+                        .step(None),
+                ),
                 unknown_choice: Some(field::UnknownChoice {
                     value: "unknown".into(),
                     warning: "The stored value is outside the original game range".into(),
@@ -2190,208 +1389,119 @@ fn file(scope: &FieldScope) -> Vec<FieldDefinition> {
             }),
         scope
             .bit_field(
-                "progress.early_story.uncle_secret_passage".into(),
-                "uncle_secret_passage".into(),
+                "progress.early_story.uncle_secret_passage",
+                "uncle_secret_passage",
                 966,
                 0,
             )
             .description("Uncle visited in the secret passage".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 966)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 966).step(None)),
         scope
             .bit_field(
-                "progress.early_story.sanctuary_priest".into(),
-                "sanctuary_priest".into(),
+                "progress.early_story.sanctuary_priest",
+                "sanctuary_priest",
                 966,
                 1,
             )
             .description("Priest visited in the sanctuary".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 966)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 966).step(None)),
         scope
             .bit_field(
-                "progress.early_story.zelda_sanctuary".into(),
-                "zelda_sanctuary".into(),
+                "progress.early_story.zelda_sanctuary",
+                "zelda_sanctuary",
                 966,
                 2,
             )
             .description("Zelda brought to the sanctuary".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 966)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 966).step(None)),
         scope
             .bit_field(
-                "progress.early_story.uncle_left_house".into(),
-                "uncle_left_house".into(),
+                "progress.early_story.uncle_left_house",
+                "uncle_left_house",
                 966,
                 4,
             )
             .description("Uncle left Link's house".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 966)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 966).step(None)),
         scope
             .bit_field(
-                "progress.early_story.book_progress".into(),
-                "book_progress".into(),
+                "progress.early_story.book_progress",
+                "book_progress",
                 966,
                 5,
             )
             .description("Book of Mudora progress".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 966)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 966).step(None)),
         scope
             .bit_field(
-                "progress.early_story.fortune_teller_variant".into(),
-                "fortune_teller_variant".into(),
+                "progress.early_story.fortune_teller_variant",
+                "fortune_teller_variant",
                 966,
                 6,
             )
             .description("Fortune teller dialog variant".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 966)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 966).step(None)),
         scope
             .bit_field(
-                "progress.side_quests.smith_tempering".into(),
-                "smith_tempering".into(),
+                "progress.side_quests.smith_tempering",
+                "smith_tempering",
                 969,
                 7,
             )
             .description("Smiths are currently tempering the sword".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 969)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 969).step(None)),
         scope
             .bit_field(
-                "progress.side_quests.swordsmith_rescued".into(),
-                "swordsmith_rescued".into(),
+                "progress.side_quests.swordsmith_rescued",
+                "swordsmith_rescued",
                 969,
                 5,
             )
             .description("Swordsmith has been rescued".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 969)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 969).step(None)),
         scope
             .bit_field(
-                "progress.side_quests.purple_chest_opened".into(),
-                "purple_chest_opened".into(),
+                "progress.side_quests.purple_chest_opened",
+                "purple_chest_opened",
                 969,
                 4,
             )
             .description("Purple chest has been opened".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 969)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 969).step(None)),
         scope
             .bit_field(
-                "progress.side_quests.stumpy_stumped".into(),
-                "stumpy_stumped".into(),
+                "progress.side_quests.stumpy_stumped",
+                "stumpy_stumped",
                 969,
                 3,
             )
             .description("Stumpy has been stumped".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 969)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 969).step(None)),
         scope
             .bit_field(
-                "progress.side_quests.bottle_purchased".into(),
-                "bottle_purchased".into(),
+                "progress.side_quests.bottle_purchased",
+                "bottle_purchased",
                 969,
                 1,
             )
             .description("Bottle was purchased from the vendor".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 969)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 969).step(None)),
         scope
-            .bit_field(
-                "progress.side_quests.hobo_bottle".into(),
-                "hobo_bottle".into(),
-                969,
-                0,
-            )
+            .bit_field("progress.side_quests.hobo_bottle", "hobo_bottle", 969, 0)
             .description("Bottle was received from the hobo".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: Some(format!("slot_{index}", index = scope.index)),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 969)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 969).step(None)),
     ];
 
     fields
@@ -2725,6 +1835,7 @@ fn game_zelda_a_link_to_the_past() -> GameDefinition {
             index: (slot + 1).to_string(),
             ordinal: 1,
             prefix: format!("slot_{}", slot + 1),
+            group: Some(format!("slot_{}", slot + 1)),
             ..Default::default()
         }));
     }

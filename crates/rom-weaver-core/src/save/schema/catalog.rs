@@ -62,17 +62,17 @@ struct FieldScope {
 impl FieldScope {
     // Repeated fields MUST share this construction code to bound WASM size.
     #[inline(never)]
-    fn field(&self, id: String, label: String, offset: usize, storage: Storage) -> FieldDefinition {
+    fn field(&self, id: &str, label: &str, offset: usize, storage: Storage) -> FieldDefinition {
         FieldDefinition {
             array_guards: self.guards.clone(),
             behavior: field::FieldBehavior {
                 group: self.group.clone(),
                 ..Default::default()
             },
-            ..FieldDefinition::new(self.id(&id), label, self.offset(offset, 0), storage)
+            ..FieldDefinition::new(self.id(id), label.into(), self.offset(offset, 0), storage)
         }
     }
-    fn bit_field(&self, id: String, label: String, offset: usize, bit: u8) -> FieldDefinition {
+    fn bit_field(&self, id: &str, label: &str, offset: usize, bit: u8) -> FieldDefinition {
         let mut field = self.field(id, label, offset, Storage::Bit);
         field.offset = self.offset(offset, bit);
         field.bit = Some(self.bit(bit));

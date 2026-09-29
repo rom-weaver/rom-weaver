@@ -32,8 +32,8 @@ fn level(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
             .field(
-                format!("levels.level_{index}.flags", index = scope.index),
-                format!(
+                &format!("levels.level_{index}.flags", index = scope.index),
+                &format!(
                     "Level {index_upper} movement and completion flags",
                     index_upper = scope.index.to_ascii_uppercase()
                 ),
@@ -44,13 +44,7 @@ fn level(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(255)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, (scope.bits / 8) as u16)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, (scope.bits / 8) as u16)),
     ];
 
     fields
@@ -62,21 +56,14 @@ fn event(scope: &FieldScope) -> Vec<FieldDefinition> {
             let offset = 96 + event / 8;
             scope
                 .bit_field(
-                    format!("events.event_{event:03}"),
-                    format!("Overworld event {event}"),
+                    &format!("events.event_{event:03}"),
+                    &format!("Overworld event {event}"),
                     offset,
                     7 - (event % 8) as u8,
                 )
                 .description("Overworld event activation bit".into())
                 .editable(true)
-                .behavior(field::FieldBehavior {
-                    group: scope.group.clone(),
-                    presentation: Some(field::Presentation {
-                        step: Some(None),
-                        ..field::Presentation::new(0, offset as u16)
-                    }),
-                    ..Default::default()
-                })
+                .presentation(field::Presentation::new(0, offset as u16).step(None))
         })
         .collect()
 }
@@ -84,8 +71,8 @@ fn player(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
             .field(
-                "players.player_1.submap".into(),
-                "Player 1 submap".into(),
+                "players.player_1.submap",
+                "Player 1 submap",
                 111,
                 Storage::U8,
             )
@@ -93,17 +80,11 @@ fn player(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(255)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 111)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 111)),
         scope
             .field(
-                "players.player_1.animation".into(),
-                "Player 1 overworld animation".into(),
+                "players.player_1.animation",
+                "Player 1 overworld animation",
                 113,
                 Storage::U16Le,
             )
@@ -111,17 +92,11 @@ fn player(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(65535)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 113)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 113)),
         scope
             .field(
-                "players.player_1.x".into(),
-                "Player 1 X position".into(),
+                "players.player_1.x",
+                "Player 1 X position",
                 117,
                 Storage::U16Le,
             )
@@ -129,17 +104,11 @@ fn player(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(65535)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 117)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 117)),
         scope
             .field(
-                "players.player_1.y".into(),
-                "Player 1 Y position".into(),
+                "players.player_1.y",
+                "Player 1 Y position",
                 119,
                 Storage::U16Le,
             )
@@ -147,17 +116,11 @@ fn player(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(65535)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 119)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 119)),
         scope
             .field(
-                "players.player_1.x_tile".into(),
-                "Player 1 X tile pointer".into(),
+                "players.player_1.x_tile",
+                "Player 1 X tile pointer",
                 125,
                 Storage::U16Le,
             )
@@ -165,17 +128,11 @@ fn player(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(65535)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 125)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 125)),
         scope
             .field(
-                "players.player_1.y_tile".into(),
-                "Player 1 Y tile pointer".into(),
+                "players.player_1.y_tile",
+                "Player 1 Y tile pointer",
                 127,
                 Storage::U16Le,
             )
@@ -183,17 +140,11 @@ fn player(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(65535)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 127)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 127)),
         scope
             .field(
-                "players.player_2.submap".into(),
-                "Player 2 submap".into(),
+                "players.player_2.submap",
+                "Player 2 submap",
                 112,
                 Storage::U8,
             )
@@ -201,17 +152,11 @@ fn player(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(255)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 112)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 112)),
         scope
             .field(
-                "players.player_2.animation".into(),
-                "Player 2 overworld animation".into(),
+                "players.player_2.animation",
+                "Player 2 overworld animation",
                 115,
                 Storage::U16Le,
             )
@@ -219,17 +164,11 @@ fn player(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(65535)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 115)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 115)),
         scope
             .field(
-                "players.player_2.x".into(),
-                "Player 2 X position".into(),
+                "players.player_2.x",
+                "Player 2 X position",
                 121,
                 Storage::U16Le,
             )
@@ -237,17 +176,11 @@ fn player(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(65535)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 121)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 121)),
         scope
             .field(
-                "players.player_2.y".into(),
-                "Player 2 Y position".into(),
+                "players.player_2.y",
+                "Player 2 Y position",
                 123,
                 Storage::U16Le,
             )
@@ -255,17 +188,11 @@ fn player(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(65535)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 123)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 123)),
         scope
             .field(
-                "players.player_2.x_tile".into(),
-                "Player 2 X tile pointer".into(),
+                "players.player_2.x_tile",
+                "Player 2 X tile pointer",
                 129,
                 Storage::U16Le,
             )
@@ -273,17 +200,11 @@ fn player(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(65535)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 129)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 129)),
         scope
             .field(
-                "players.player_2.y_tile".into(),
-                "Player 2 Y tile pointer".into(),
+                "players.player_2.y_tile",
+                "Player 2 Y tile pointer",
                 131,
                 Storage::U16Le,
             )
@@ -291,13 +212,7 @@ fn player(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(65535)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 131)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 131)),
     ];
 
     fields
@@ -307,76 +222,48 @@ fn progress(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
             .field(
-                "progress.switch_palaces.yellow".into(),
-                "Yellow Switch Palace".into(),
+                "progress.switch_palaces.yellow",
+                "Yellow Switch Palace",
                 133,
                 Storage::Bool,
             )
             .description("Switch Palace completion flag".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 133)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 133).step(None)),
         scope
             .field(
-                "progress.switch_palaces.green".into(),
-                "Green Switch Palace".into(),
+                "progress.switch_palaces.green",
+                "Green Switch Palace",
                 134,
                 Storage::Bool,
             )
             .description("Switch Palace completion flag".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 134)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 134).step(None)),
         scope
             .field(
-                "progress.switch_palaces.red".into(),
-                "Red Switch Palace".into(),
+                "progress.switch_palaces.red",
+                "Red Switch Palace",
                 135,
                 Storage::Bool,
             )
             .description("Switch Palace completion flag".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 135)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 135).step(None)),
         scope
             .field(
-                "progress.switch_palaces.blue".into(),
-                "Blue Switch Palace".into(),
+                "progress.switch_palaces.blue",
+                "Blue Switch Palace",
                 136,
                 Storage::Bool,
             )
             .description("Switch Palace completion flag".into())
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 136)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 136).step(None)),
         scope
             .field(
-                "progress.exits_completed".into(),
-                "Exits completed".into(),
+                "progress.exits_completed",
+                "Exits completed",
                 140,
                 Storage::U8,
             )
@@ -384,13 +271,7 @@ fn progress(scope: &FieldScope) -> Vec<FieldDefinition> {
             .min(0)
             .max(255)
             .editable(true)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 140)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 140)),
     ];
 
     fields

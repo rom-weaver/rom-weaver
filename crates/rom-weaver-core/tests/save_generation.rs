@@ -1,32 +1,27 @@
-use rom_weaver_core::RomWeaverError;
-use rom_weaver_core::save::{
-    PokemonGen1Handler, PokemonGen2Handler, PokemonGen3Handler, PokemonGen4Handler,
-    PokemonGen5Handler, SaveGameHandler, SuperMarioWorldHandler, ZeldaAlttpHandler,
-};
+use rom_weaver_core::{RomWeaverError, SaveGameRegistry};
 
 #[test]
-fn public_handlers_enforce_their_generation_capabilities() {
-    let handlers: [&dyn SaveGameHandler; 7] = [
-        &PokemonGen1Handler,
-        &PokemonGen2Handler,
-        &PokemonGen3Handler,
-        &PokemonGen4Handler,
-        &PokemonGen5Handler,
-        &SuperMarioWorldHandler,
-        &ZeldaAlttpHandler,
-    ];
-    for handler in handlers {
-        for definition in handler.definitions() {
-            let game = &definition.identity;
-            let generated = handler.generate(game);
-            if handler.supports_generation(game) {
-                assert!(generated.is_ok(), "{}: {generated:?}", game.id);
-            } else {
-                let RomWeaverError::ValidationCode(error) = generated.unwrap_err() else {
-                    panic!("{} must reject unsupported generation", game.id);
-                };
-                assert_eq!(error.code(), "save_generation_unsupported");
-            }
+fn registry_enforces_each_profiles_generation_capability() {
+    let registry = SaveGameRegistry::default();
+    let supported = registry.generation_definitions();
+    let definitions = registry.definitions();
+    assert_eq!(definitions.len(), 70);
+    assert_eq!(supported.len(), 4);
+    for definition in definitions {
+        let id = &definition.identity.id;
+        let generated = registry.generate(id);
+        if supported.iter().any(|game| game.identity.id == *id) {
+            let input = generated.unwrap();
+            assert_eq!(
+                input.bytes.len(),
+                definition.supported_save_sizes[0] as usize
+            );
+            assert!(registry.parse(&input, &definition.identity).is_ok());
+        } else {
+            let RomWeaverError::ValidationCode(error) = generated.unwrap_err() else {
+                panic!("{id} must reject unsupported generation");
+            };
+            assert_eq!(error.code(), "save_generation_unsupported");
         }
     }
 }

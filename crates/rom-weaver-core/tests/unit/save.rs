@@ -1,7 +1,7 @@
 use super::pokemon_gen3::{Family, SIGNATURE, checksum};
 use crate::save::{
-    PokemonGen3Handler, SaveDetectionInput, SaveEdit, SaveGameHandler, SaveGameRegistry,
-    SaveIntegrityState, SaveRecognitionOutcome, SaveValue,
+    SaveDetectionInput, SaveEdit, SaveGameRegistry, SaveIntegrityState, SaveRecognitionOutcome,
+    SaveValue,
 };
 
 const SECTION_SIZE: usize = 0x1000;
@@ -30,7 +30,7 @@ fn refresh_checksums(bytes: &mut [u8], family: Family) {
     }
 }
 
-fn fixture(family: Family, counter_a: u32, counter_b: u32) -> Vec<u8> {
+pub(super) fn fixture(family: Family, counter_a: u32, counter_b: u32) -> Vec<u8> {
     let mut bytes = vec![0u8; 0x20_000];
     for (slot, counter) in [(0u8, counter_a), (1, counter_b)] {
         for id in 0..14u8 {
@@ -236,7 +236,12 @@ fn registry_requires_a_game_made_template_for_pokemon_creation() {
 
 #[test]
 fn registry_accepts_new_handlers_without_generic_dispatch_changes() {
-    let registry = SaveGameRegistry::default().with_handler(PokemonGen3Handler);
+    let registry = SaveGameRegistry::default().with_handler(
+        super::schema::catalog::builtin_pokemon_gen3::schemas()
+            .into_iter()
+            .find(|handler| handler.definitions()[0].identity.id == "pokemon-emerald")
+            .unwrap(),
+    );
     let recognition = registry.detect(&input(fixture(Family::Emerald, 7, 6), None));
     assert!(matches!(
         recognition.outcome,
@@ -300,7 +305,7 @@ fn manual_selection_keeps_the_exact_title_identity() {
 #[test]
 fn parser_reconstructs_sections_and_decodes_trainer_fields() {
     let input = input(fixture(Family::Emerald, 7, 6), Some("pokemon-emerald"));
-    let document = PokemonGen3Handler
+    let document = SaveGameRegistry::default()
         .parse(&input, &game(Family::Emerald, "pokemon-emerald"))
         .unwrap();
     assert_eq!(document.active_slot, 0);
@@ -331,7 +336,7 @@ fn parser_reconstructs_sections_and_decodes_trainer_fields() {
 fn trainer_name_codec_accepts_every_english_keyboard_symbol() {
     let input = input(fixture(Family::Emerald, 7, 6), Some("pokemon-emerald"));
     let identity = game(Family::Emerald, "pokemon-emerald");
-    let result = PokemonGen3Handler
+    let result = SaveGameRegistry::default()
         .apply(
             &input,
             &identity,
@@ -356,7 +361,7 @@ fn active_slot_uses_wrapping_counters_and_rejects_ties() {
     );
     let identity = game(Family::Emerald, "pokemon-emerald");
     assert_eq!(
-        PokemonGen3Handler
+        SaveGameRegistry::default()
             .parse(&wrapped, &identity)
             .unwrap()
             .active_slot,
@@ -368,7 +373,7 @@ fn active_slot_uses_wrapping_counters_and_rejects_ties() {
         Some("pokemon-emerald"),
     );
     assert_eq!(
-        PokemonGen3Handler
+        SaveGameRegistry::default()
             .parse(&wide_gap, &identity)
             .unwrap()
             .active_slot,
@@ -377,7 +382,11 @@ fn active_slot_uses_wrapping_counters_and_rejects_ties() {
 
     let tied = input(fixture(Family::Emerald, 4, 4), Some("pokemon-emerald"));
     assert_eq!(
-        error_code(PokemonGen3Handler.parse(&tied, &identity).unwrap_err()),
+        error_code(
+            SaveGameRegistry::default()
+                .parse(&tied, &identity)
+                .unwrap_err()
+        ),
         "save_slot_counter"
     );
 }
@@ -387,7 +396,7 @@ fn multi_field_edit_reparses_and_preserves_the_backup_slot() {
     let bytes = fixture(Family::Emerald, 9, 8);
     let original = bytes.clone();
     let input = input(bytes, Some("pokemon-emerald"));
-    let result = PokemonGen3Handler
+    let result = SaveGameRegistry::default()
         .apply(
             &input,
             &game(Family::Emerald, "pokemon-emerald"),
@@ -438,7 +447,7 @@ fn encrypted_money_uses_each_family_key() {
         (Family::Frlg, "pokemon-firered", 0x8765_4321, 0x290),
     ] {
         let input = input(fixture(family, 3, 2), Some(id));
-        let result = PokemonGen3Handler
+        let result = SaveGameRegistry::default()
             .apply(
                 &input,
                 &game(family, id),
@@ -462,7 +471,7 @@ fn encrypted_money_uses_each_family_key() {
 fn dry_run_reparses_and_no_op_avoids_output() {
     let input = input(fixture(Family::Rs, 3, 2), Some("pokemon-ruby"));
     let identity = game(Family::Rs, "pokemon-ruby");
-    let dry_run = PokemonGen3Handler
+    let dry_run = SaveGameRegistry::default()
         .apply(
             &input,
             &identity,
@@ -480,7 +489,7 @@ fn dry_run_reparses_and_no_op_avoids_output() {
         SaveValue::Text("May".into())
     );
 
-    let no_op = PokemonGen3Handler
+    let no_op = SaveGameRegistry::default()
         .apply(
             &input,
             &identity,
@@ -552,13 +561,13 @@ fn edit_validation_rejects_each_invalid_request() {
         ),
     ];
     for (edit, code) in cases {
-        let error = PokemonGen3Handler
+        let error = SaveGameRegistry::default()
             .apply(&input, &identity, &[edit], true)
             .unwrap_err();
         assert_eq!(error_code(error), code);
     }
 
-    let duplicate = PokemonGen3Handler
+    let duplicate = SaveGameRegistry::default()
         .apply(
             &input,
             &identity,
@@ -584,12 +593,14 @@ fn corrupt_slot_is_readable_but_not_editable() {
     bytes[section_offset(1, 3) + 4] ^= 0xFF;
     let input = input(bytes, Some("pokemon-emerald"));
     let identity = game(Family::Emerald, "pokemon-emerald");
-    let document = PokemonGen3Handler.parse(&input, &identity).unwrap();
+    let document = SaveGameRegistry::default()
+        .parse(&input, &identity)
+        .unwrap();
     assert_eq!(
         document.integrity.state,
         SaveIntegrityState::PartiallyRecoverable
     );
-    let error = PokemonGen3Handler
+    let error = SaveGameRegistry::default()
         .apply(
             &input,
             &identity,
@@ -610,14 +621,16 @@ fn empty_backup_slot_is_editable_and_stays_empty() {
     let original_backup = bytes[SLOT_SIZE..2 * SLOT_SIZE].to_vec();
     let input = input(bytes, Some("pokemon-emerald"));
     let identity = game(Family::Emerald, "pokemon-emerald");
-    let document = PokemonGen3Handler.parse(&input, &identity).unwrap();
+    let document = SaveGameRegistry::default()
+        .parse(&input, &identity)
+        .unwrap();
     assert_eq!(
         document.integrity.state,
         SaveIntegrityState::ValidWithWarnings
     );
     assert!(document.fields.iter().any(|field| field.editable));
 
-    let result = PokemonGen3Handler
+    let result = SaveGameRegistry::default()
         .apply(
             &input,
             &identity,
@@ -667,7 +680,9 @@ fn section_ids_with_high_bytes_cannot_alias_valid_sections() {
             let mut bytes = fixture(Family::Emerald, 5, 4);
             bytes[section_offset(0, id) + 0xFF5] = high_byte;
             let source = input(bytes.clone(), Some(&identity.id));
-            let document = PokemonGen3Handler.parse(&source, &identity).unwrap();
+            let document = SaveGameRegistry::default()
+                .parse(&source, &identity)
+                .unwrap();
             assert_eq!(document.active_slot, 1);
             assert_eq!(document.counter, 4);
             assert_eq!(
@@ -680,7 +695,7 @@ fn section_ids_with_high_bytes_cannot_alias_valid_sections() {
             }];
             assert_eq!(
                 error_code(
-                    PokemonGen3Handler
+                    SaveGameRegistry::default()
                         .apply(&source, &identity, &edit, false)
                         .unwrap_err()
                 ),
@@ -693,9 +708,13 @@ fn section_ids_with_high_bytes_cannot_alias_valid_sections() {
                 SaveGameRegistry::default().detect(&source).outcome,
                 SaveRecognitionOutcome::Unsupported { .. }
             ));
-            assert!(PokemonGen3Handler.parse(&source, &identity).is_err());
             assert!(
-                PokemonGen3Handler
+                SaveGameRegistry::default()
+                    .parse(&source, &identity)
+                    .is_err()
+            );
+            assert!(
+                SaveGameRegistry::default()
                     .apply(&source, &identity, &edit, false)
                     .is_err()
             );
@@ -706,7 +725,7 @@ fn section_ids_with_high_bytes_cannot_alias_valid_sections() {
 #[test]
 fn field_schema_json_has_stable_generic_fields_without_offsets() {
     let input = input(fixture(Family::Emerald, 5, 4), Some("pokemon-emerald"));
-    let document = PokemonGen3Handler
+    let document = SaveGameRegistry::default()
         .parse(&input, &game(Family::Emerald, "pokemon-emerald"))
         .unwrap();
     let json = serde_json::to_value(&document).unwrap();
@@ -906,13 +925,10 @@ fn gen3_inventory_can_fill_clear_and_replace_every_pocket_slot() {
             Family::Emerald => "pokemon-emerald",
             Family::Frlg => "pokemon-firered",
         });
-        let source = input(
-            super::pokemon_gen3::PokemonGen3Handler
-                .generate(&identity)
-                .unwrap(),
-            Some(&identity.id),
-        );
-        let document = PokemonGen3Handler.parse(&source, &identity).unwrap();
+        let source = input(fixture(family, 2, 3), Some(&identity.id));
+        let document = SaveGameRegistry::default()
+            .parse(&source, &identity)
+            .unwrap();
         let item_fields = document
             .fields
             .iter()
@@ -958,7 +974,7 @@ fn gen3_inventory_can_fill_clear_and_replace_every_pocket_slot() {
             field: "trainer.play_time_frames".into(),
             value: SaveValue::U32(59),
         });
-        let result = PokemonGen3Handler
+        let result = SaveGameRegistry::default()
             .apply(&source, &identity, &edits, false)
             .unwrap();
         for edit in &edits {
@@ -990,7 +1006,7 @@ fn gen3_inventory_can_fill_clear_and_replace_every_pocket_slot() {
                 value: SaveValue::U32(0),
             })
             .collect::<Vec<_>>();
-        let cleared = PokemonGen3Handler
+        let cleared = SaveGameRegistry::default()
             .apply(&filled, &identity, &clear, false)
             .unwrap();
         assert!(
@@ -1008,7 +1024,7 @@ fn gen3_inventory_can_fill_clear_and_replace_every_pocket_slot() {
             ("inventory.items_1.item_id", 65535),
         ] {
             assert!(
-                PokemonGen3Handler
+                SaveGameRegistry::default()
                     .apply(
                         &source,
                         &identity,
@@ -1032,19 +1048,14 @@ fn gen3_pokedex_keeps_seen_mirrors_and_reports_implicit_changes() {
             Family::Emerald => "pokemon-emerald",
             Family::Frlg => "pokemon-firered",
         });
-        let source = input(
-            super::pokemon_gen3::PokemonGen3Handler
-                .generate(&identity)
-                .unwrap(),
-            Some(&identity.id),
-        );
+        let source = input(fixture(family, 2, 3), Some(&identity.id));
         let edits = (1..=386)
             .map(|number| SaveEdit {
                 field: format!("pokedex.owned_{number:03}"),
                 value: SaveValue::Bool(true),
             })
             .collect::<Vec<_>>();
-        let result = PokemonGen3Handler
+        let result = SaveGameRegistry::default()
             .apply(&source, &identity, &edits, false)
             .unwrap();
         assert_eq!(result.preview.changes.len(), 772);
@@ -1085,7 +1096,7 @@ fn gen3_pokedex_keeps_seen_mirrors_and_reports_implicit_changes() {
             field: "pokedex.seen_386".into(),
             value: SaveValue::Bool(false),
         };
-        let dry = PokemonGen3Handler
+        let dry = SaveGameRegistry::default()
             .apply(&filled, &identity, &[clear], true)
             .unwrap();
         assert!(dry.bytes.is_none());
@@ -1095,7 +1106,7 @@ fn gen3_pokedex_keeps_seen_mirrors_and_reports_implicit_changes() {
         );
         assert_eq!(filled.bytes, bytes);
         assert!(
-            PokemonGen3Handler
+            SaveGameRegistry::default()
                 .apply(
                     &source,
                     &identity,
@@ -1118,13 +1129,15 @@ fn gen3_pokedex_keeps_seen_mirrors_and_reports_implicit_changes() {
 
 #[test]
 fn gen4_trainer_ids_cover_full_u16_range_and_preserve_backup() {
-    let handler = crate::save::PokemonGen4Handler;
-    for definition in handler.definitions() {
+    let handler = SaveGameRegistry::default();
+    for definition in handler
+        .definitions()
+        .into_iter()
+        .filter(|definition| definition.identity.family.starts_with("pokemon-gen4"))
+    {
         let identity = definition.identity;
         let source = input(
-            super::pokemon_gen4::PokemonGen4Handler
-                .generate(&identity)
-                .unwrap(),
+            super::pokemon_gen4::fixture_for_id(&identity.id),
             Some(&identity.id),
         );
         for boundary in [0, 65535] {
@@ -1168,14 +1181,14 @@ fn gen4_trainer_ids_cover_full_u16_range_and_preserve_backup() {
 }
 
 #[test]
-fn database_schema_generation_and_all_field_edits_match_native_smw() {
+fn super_mario_world_profiles_share_generation_and_all_field_edit_bytes() {
     let registry = SaveGameRegistry::default();
     let schema = registry.generate("super-mario-world-schema").unwrap();
-    let mut native = registry.generate("super-mario-world").unwrap();
-    assert_eq!(schema.bytes, native.bytes);
-    native.bytes[0x700] = 0xa5;
+    let mut builtin = registry.generate("super-mario-world").unwrap();
+    assert_eq!(schema.bytes, builtin.bytes);
+    builtin.bytes[0x700] = 0xa5;
     let schema = SaveDetectionInput {
-        bytes: native.bytes.clone(),
+        bytes: builtin.bytes.clone(),
         selected_game: Some("super-mario-world-schema".into()),
         rom_sha1: None,
     };
@@ -1188,9 +1201,9 @@ fn database_schema_generation_and_all_field_edits_match_native_smw() {
             .identity
             .clone()
     };
-    let native_game = game("super-mario-world");
+    let builtin_game = game("super-mario-world");
     let schema_game = game("super-mario-world-schema");
-    let document = registry.parse(&native, &native_game).unwrap();
+    let document = registry.parse(&builtin, &builtin_game).unwrap();
     let schema_document = registry.parse(&schema, &schema_game).unwrap();
     assert_eq!(schema_document.fields.len(), 233);
     for field in &document.fields {
@@ -1209,7 +1222,7 @@ fn database_schema_generation_and_all_field_edits_match_native_smw() {
         })
         .collect::<Vec<_>>();
     let expected = registry
-        .apply(&native, &native_game, &edits, false)
+        .apply(&builtin, &builtin_game, &edits, false)
         .unwrap();
     let actual = registry
         .apply(&schema, &schema_game, &edits, false)

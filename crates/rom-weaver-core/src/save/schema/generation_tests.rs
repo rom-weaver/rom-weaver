@@ -3,7 +3,7 @@ use super::super::{
     GameSchema, MirrorDefinition, SchemaSaveHandler, SignatureDefinition, Storage, layout, rules,
 };
 use super::*;
-use crate::save::{SaveDetectionInput, SaveGameHandler};
+use crate::save::SaveDetectionInput;
 
 fn raw_game(
     size: usize,

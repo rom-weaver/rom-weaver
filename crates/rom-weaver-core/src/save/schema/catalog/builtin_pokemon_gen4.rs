@@ -31,78 +31,34 @@ fn gender() -> Vec<FieldChoice> {
 fn dp_fields(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
-            .field(
-                "trainer.id".into(),
-                "Trainer ID".into(),
-                116,
-                Storage::U16Le,
-            )
+            .field("trainer.id", "Trainer ID", 116, Storage::U16Le)
             .description("Public trainer identifier".into())
             .min(0)
             .max(65535)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 116)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 116).step(None)),
         scope
-            .field(
-                "trainer.secret_id".into(),
-                "Secret ID".into(),
-                118,
-                Storage::U16Le,
-            )
+            .field("trainer.secret_id", "Secret ID", 118, Storage::U16Le)
             .description("Hidden trainer identifier".into())
             .min(0)
             .max(65535)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 118)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 118).step(None)),
         scope
-            .field("trainer.gender".into(), "Gender".into(), 124, Storage::U8)
+            .field("trainer.gender", "Gender", 124, Storage::U8)
             .description("Player gender".into())
             .choices(gender())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec!["male".into(), "female".into()],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 124)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 124)
+                    .choices(vec!["male".into(), "female".into()])
+                    .step(None),
+            ),
         scope
-            .field("trainer.money".into(), "Money".into(), 120, Storage::U32Le)
+            .field("trainer.money", "Money", 120, Storage::U32Le)
             .description("Money carried by the player".into())
             .min(0)
             .max(999999)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 120)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 120)),
         scope
-            .field(
-                "trainer.play_time".into(),
-                "Play time".into(),
-                134,
-                Storage::Ascii,
-            )
+            .field("trainer.play_time", "Play time", 134, Storage::Ascii)
             .description("Time played".into())
             .length(1)
             .editable(false)
@@ -145,187 +101,96 @@ fn dp_fields(scope: &FieldScope) -> Vec<FieldDefinition> {
                         width: 2,
                     },
                 ]),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    step: Some(None),
-                    encoding: Some(None),
-                    ..field::Presentation::new(0, 134)
-                }),
+                presentation: Some(
+                    field::Presentation::new(0, 134)
+                        .constraints(SaveConstraint::default())
+                        .step(None)
+                        .encoding(None),
+                ),
                 ..Default::default()
             }),
         scope
-            .field("trainer.coins".into(), "Coins".into(), 132, Storage::U16Le)
+            .field("trainer.coins", "Coins", 132, Storage::U16Le)
             .description("Game Corner coins".into())
             .min(0)
             .max(50000)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 132)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 132)),
         scope
             .field(
-                "trainer.play_time_hours".into(),
-                "Play time hours".into(),
+                "trainer.play_time_hours",
+                "Play time hours",
                 134,
                 Storage::U16Le,
             )
             .description("Hours played".into())
             .min(0)
             .max(65535)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 134)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 134)),
         scope
             .field(
-                "trainer.play_time_minutes".into(),
-                "Play time minutes".into(),
+                "trainer.play_time_minutes",
+                "Play time minutes",
                 136,
                 Storage::U8,
             )
             .description("Minutes in the current hour".into())
             .min(0)
             .max(59)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 136)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 136)),
         scope
             .field(
-                "trainer.play_time_seconds".into(),
-                "Play time seconds".into(),
+                "trainer.play_time_seconds",
+                "Play time seconds",
                 137,
                 Storage::U8,
             )
             .description("Seconds in the current minute".into())
             .min(0)
             .max(59)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 137)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 137)),
         scope
             .field(
-                "progress.battle_points".into(),
-                "Battle Points".into(),
+                "progress.battle_points",
+                "Battle Points",
                 26104,
                 Storage::U16Le,
             )
             .description("Battle Frontier points".into())
             .min(0)
             .max(9999)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 26104)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 26104)),
         scope
-            .bit_field("progress.badge_1".into(), "Coal Badge".into(), 126, 0)
+            .bit_field("progress.badge_1", "Coal Badge", 126, 0)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 126)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 126).step(None)),
         scope
-            .bit_field("progress.badge_2".into(), "Forest Badge".into(), 126, 1)
+            .bit_field("progress.badge_2", "Forest Badge", 126, 1)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 126)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 126).step(None)),
         scope
-            .bit_field("progress.badge_3".into(), "Cobble Badge".into(), 126, 2)
+            .bit_field("progress.badge_3", "Cobble Badge", 126, 2)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 126)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 126).step(None)),
         scope
-            .bit_field("progress.badge_4".into(), "Fen Badge".into(), 126, 3)
+            .bit_field("progress.badge_4", "Fen Badge", 126, 3)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 126)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 126).step(None)),
         scope
-            .bit_field("progress.badge_5".into(), "Relic Badge".into(), 126, 4)
+            .bit_field("progress.badge_5", "Relic Badge", 126, 4)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 126)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 126).step(None)),
         scope
-            .bit_field("progress.badge_6".into(), "Mine Badge".into(), 126, 5)
+            .bit_field("progress.badge_6", "Mine Badge", 126, 5)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 126)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 126).step(None)),
         scope
-            .bit_field("progress.badge_7".into(), "Icicle Badge".into(), 126, 6)
+            .bit_field("progress.badge_7", "Icicle Badge", 126, 6)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 126)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 126).step(None)),
         scope
-            .bit_field("progress.badge_8".into(), "Beacon Badge".into(), 126, 7)
+            .bit_field("progress.badge_8", "Beacon Badge", 126, 7)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 126)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 126).step(None)),
     ];
 
     fields
@@ -334,78 +199,34 @@ fn dp_fields(scope: &FieldScope) -> Vec<FieldDefinition> {
 fn pt_fields(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
-            .field(
-                "trainer.id".into(),
-                "Trainer ID".into(),
-                120,
-                Storage::U16Le,
-            )
+            .field("trainer.id", "Trainer ID", 120, Storage::U16Le)
             .description("Public trainer identifier".into())
             .min(0)
             .max(65535)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 120)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 120).step(None)),
         scope
-            .field(
-                "trainer.secret_id".into(),
-                "Secret ID".into(),
-                122,
-                Storage::U16Le,
-            )
+            .field("trainer.secret_id", "Secret ID", 122, Storage::U16Le)
             .description("Hidden trainer identifier".into())
             .min(0)
             .max(65535)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 122)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 122).step(None)),
         scope
-            .field("trainer.gender".into(), "Gender".into(), 128, Storage::U8)
+            .field("trainer.gender", "Gender", 128, Storage::U8)
             .description("Player gender".into())
             .choices(gender())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec!["male".into(), "female".into()],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 128)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 128)
+                    .choices(vec!["male".into(), "female".into()])
+                    .step(None),
+            ),
         scope
-            .field("trainer.money".into(), "Money".into(), 124, Storage::U32Le)
+            .field("trainer.money", "Money", 124, Storage::U32Le)
             .description("Money carried by the player".into())
             .min(0)
             .max(999999)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 124)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 124)),
         scope
-            .field(
-                "trainer.play_time".into(),
-                "Play time".into(),
-                138,
-                Storage::Ascii,
-            )
+            .field("trainer.play_time", "Play time", 138, Storage::Ascii)
             .description("Time played".into())
             .length(1)
             .editable(false)
@@ -448,187 +269,96 @@ fn pt_fields(scope: &FieldScope) -> Vec<FieldDefinition> {
                         width: 2,
                     },
                 ]),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    step: Some(None),
-                    encoding: Some(None),
-                    ..field::Presentation::new(0, 138)
-                }),
+                presentation: Some(
+                    field::Presentation::new(0, 138)
+                        .constraints(SaveConstraint::default())
+                        .step(None)
+                        .encoding(None),
+                ),
                 ..Default::default()
             }),
         scope
-            .field("trainer.coins".into(), "Coins".into(), 136, Storage::U16Le)
+            .field("trainer.coins", "Coins", 136, Storage::U16Le)
             .description("Game Corner coins".into())
             .min(0)
             .max(50000)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 136)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 136)),
         scope
             .field(
-                "trainer.play_time_hours".into(),
-                "Play time hours".into(),
+                "trainer.play_time_hours",
+                "Play time hours",
                 138,
                 Storage::U16Le,
             )
             .description("Hours played".into())
             .min(0)
             .max(65535)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 138)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 138)),
         scope
             .field(
-                "trainer.play_time_minutes".into(),
-                "Play time minutes".into(),
+                "trainer.play_time_minutes",
+                "Play time minutes",
                 140,
                 Storage::U8,
             )
             .description("Minutes in the current hour".into())
             .min(0)
             .max(59)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 140)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 140)),
         scope
             .field(
-                "trainer.play_time_seconds".into(),
-                "Play time seconds".into(),
+                "trainer.play_time_seconds",
+                "Play time seconds",
                 141,
                 Storage::U8,
             )
             .description("Seconds in the current minute".into())
             .min(0)
             .max(59)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 141)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 141)),
         scope
             .field(
-                "progress.battle_points".into(),
-                "Battle Points".into(),
+                "progress.battle_points",
+                "Battle Points",
                 29236,
                 Storage::U16Le,
             )
             .description("Battle Frontier points".into())
             .min(0)
             .max(9999)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 29236)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 29236)),
         scope
-            .bit_field("progress.badge_1".into(), "Coal Badge".into(), 130, 0)
+            .bit_field("progress.badge_1", "Coal Badge", 130, 0)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 130)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 130).step(None)),
         scope
-            .bit_field("progress.badge_2".into(), "Forest Badge".into(), 130, 1)
+            .bit_field("progress.badge_2", "Forest Badge", 130, 1)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 130)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 130).step(None)),
         scope
-            .bit_field("progress.badge_3".into(), "Cobble Badge".into(), 130, 2)
+            .bit_field("progress.badge_3", "Cobble Badge", 130, 2)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 130)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 130).step(None)),
         scope
-            .bit_field("progress.badge_4".into(), "Fen Badge".into(), 130, 3)
+            .bit_field("progress.badge_4", "Fen Badge", 130, 3)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 130)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 130).step(None)),
         scope
-            .bit_field("progress.badge_5".into(), "Relic Badge".into(), 130, 4)
+            .bit_field("progress.badge_5", "Relic Badge", 130, 4)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 130)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 130).step(None)),
         scope
-            .bit_field("progress.badge_6".into(), "Mine Badge".into(), 130, 5)
+            .bit_field("progress.badge_6", "Mine Badge", 130, 5)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 130)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 130).step(None)),
         scope
-            .bit_field("progress.badge_7".into(), "Icicle Badge".into(), 130, 6)
+            .bit_field("progress.badge_7", "Icicle Badge", 130, 6)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 130)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 130).step(None)),
         scope
-            .bit_field("progress.badge_8".into(), "Beacon Badge".into(), 130, 7)
+            .bit_field("progress.badge_8", "Beacon Badge", 130, 7)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 130)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 130).step(None)),
     ];
 
     fields
@@ -637,78 +367,34 @@ fn pt_fields(scope: &FieldScope) -> Vec<FieldDefinition> {
 fn hgss_fields(scope: &FieldScope) -> Vec<FieldDefinition> {
     let fields = vec![
         scope
-            .field(
-                "trainer.id".into(),
-                "Trainer ID".into(),
-                116,
-                Storage::U16Le,
-            )
+            .field("trainer.id", "Trainer ID", 116, Storage::U16Le)
             .description("Public trainer identifier".into())
             .min(0)
             .max(65535)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 116)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 116).step(None)),
         scope
-            .field(
-                "trainer.secret_id".into(),
-                "Secret ID".into(),
-                118,
-                Storage::U16Le,
-            )
+            .field("trainer.secret_id", "Secret ID", 118, Storage::U16Le)
             .description("Hidden trainer identifier".into())
             .min(0)
             .max(65535)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 118)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 118).step(None)),
         scope
-            .field("trainer.gender".into(), "Gender".into(), 124, Storage::U8)
+            .field("trainer.gender", "Gender", 124, Storage::U8)
             .description("Player gender".into())
             .choices(gender())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec!["male".into(), "female".into()],
-                    }),
-                    step: Some(None),
-                    ..field::Presentation::new(0, 124)
-                }),
-                ..Default::default()
-            }),
+            .presentation(
+                field::Presentation::new(0, 124)
+                    .choices(vec!["male".into(), "female".into()])
+                    .step(None),
+            ),
         scope
-            .field("trainer.money".into(), "Money".into(), 120, Storage::U32Le)
+            .field("trainer.money", "Money", 120, Storage::U32Le)
             .description("Money carried by the player".into())
             .min(0)
             .max(999999)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 120)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 120)),
         scope
-            .field(
-                "trainer.play_time".into(),
-                "Play time".into(),
-                134,
-                Storage::Ascii,
-            )
+            .field("trainer.play_time", "Play time", 134, Storage::Ascii)
             .description("Time played".into())
             .length(1)
             .editable(false)
@@ -751,275 +437,128 @@ fn hgss_fields(scope: &FieldScope) -> Vec<FieldDefinition> {
                         width: 2,
                     },
                 ]),
-                presentation: Some(field::Presentation {
-                    constraints: Some(SaveConstraint {
-                        min: None,
-                        max: None,
-                        max_length: None,
-                        choices: vec![],
-                    }),
-                    step: Some(None),
-                    encoding: Some(None),
-                    ..field::Presentation::new(0, 134)
-                }),
+                presentation: Some(
+                    field::Presentation::new(0, 134)
+                        .constraints(SaveConstraint::default())
+                        .step(None)
+                        .encoding(None),
+                ),
                 ..Default::default()
             }),
         scope
-            .field("trainer.coins".into(), "Coins".into(), 132, Storage::U16Le)
+            .field("trainer.coins", "Coins", 132, Storage::U16Le)
             .description("Game Corner coins".into())
             .min(0)
             .max(50000)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 132)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 132)),
         scope
             .field(
-                "trainer.play_time_hours".into(),
-                "Play time hours".into(),
+                "trainer.play_time_hours",
+                "Play time hours",
                 134,
                 Storage::U16Le,
             )
             .description("Hours played".into())
             .min(0)
             .max(65535)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 134)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 134)),
         scope
             .field(
-                "trainer.play_time_minutes".into(),
-                "Play time minutes".into(),
+                "trainer.play_time_minutes",
+                "Play time minutes",
                 136,
                 Storage::U8,
             )
             .description("Minutes in the current hour".into())
             .min(0)
             .max(59)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 136)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 136)),
         scope
             .field(
-                "trainer.play_time_seconds".into(),
-                "Play time seconds".into(),
+                "trainer.play_time_seconds",
+                "Play time seconds",
                 137,
                 Storage::U8,
             )
             .description("Seconds in the current minute".into())
             .min(0)
             .max(59)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 137)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 137)),
         scope
             .field(
-                "progress.battle_points".into(),
-                "Battle Points".into(),
+                "progress.battle_points",
+                "Battle Points",
                 23480,
                 Storage::U16Le,
             )
             .description("Battle Frontier points".into())
             .min(0)
             .max(9999)
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    ..field::Presentation::new(0, 23480)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 23480)),
         scope
-            .bit_field("progress.badge_1".into(), "Zephyr Badge".into(), 126, 0)
+            .bit_field("progress.badge_1", "Zephyr Badge", 126, 0)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 126)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 126).step(None)),
         scope
-            .bit_field("progress.badge_2".into(), "Hive Badge".into(), 126, 1)
+            .bit_field("progress.badge_2", "Hive Badge", 126, 1)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 126)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 126).step(None)),
         scope
-            .bit_field("progress.badge_3".into(), "Plain Badge".into(), 126, 2)
+            .bit_field("progress.badge_3", "Plain Badge", 126, 2)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 126)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 126).step(None)),
         scope
-            .bit_field("progress.badge_4".into(), "Fog Badge".into(), 126, 3)
+            .bit_field("progress.badge_4", "Fog Badge", 126, 3)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 126)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 126).step(None)),
         scope
-            .bit_field("progress.badge_5".into(), "Storm Badge".into(), 126, 4)
+            .bit_field("progress.badge_5", "Storm Badge", 126, 4)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 126)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 126).step(None)),
         scope
-            .bit_field("progress.badge_6".into(), "Mineral Badge".into(), 126, 5)
+            .bit_field("progress.badge_6", "Mineral Badge", 126, 5)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 126)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 126).step(None)),
         scope
-            .bit_field("progress.badge_7".into(), "Glacier Badge".into(), 126, 6)
+            .bit_field("progress.badge_7", "Glacier Badge", 126, 6)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 126)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 126).step(None)),
         scope
-            .bit_field("progress.badge_8".into(), "Rising Badge".into(), 126, 7)
+            .bit_field("progress.badge_8", "Rising Badge", 126, 7)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 126)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 126).step(None)),
         scope
-            .bit_field("progress.badge_9".into(), "Boulder Badge".into(), 131, 0)
+            .bit_field("progress.badge_9", "Boulder Badge", 131, 0)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 131)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 131).step(None)),
         scope
-            .bit_field("progress.badge_10".into(), "Cascade Badge".into(), 131, 1)
+            .bit_field("progress.badge_10", "Cascade Badge", 131, 1)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 131)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 131).step(None)),
         scope
-            .bit_field("progress.badge_11".into(), "Thunder Badge".into(), 131, 2)
+            .bit_field("progress.badge_11", "Thunder Badge", 131, 2)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 131)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 131).step(None)),
         scope
-            .bit_field("progress.badge_12".into(), "Rainbow Badge".into(), 131, 3)
+            .bit_field("progress.badge_12", "Rainbow Badge", 131, 3)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 131)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 131).step(None)),
         scope
-            .bit_field("progress.badge_13".into(), "Soul Badge".into(), 131, 4)
+            .bit_field("progress.badge_13", "Soul Badge", 131, 4)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 131)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 131).step(None)),
         scope
-            .bit_field("progress.badge_14".into(), "Marsh Badge".into(), 131, 5)
+            .bit_field("progress.badge_14", "Marsh Badge", 131, 5)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 131)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 131).step(None)),
         scope
-            .bit_field("progress.badge_15".into(), "Volcano Badge".into(), 131, 6)
+            .bit_field("progress.badge_15", "Volcano Badge", 131, 6)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 131)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 131).step(None)),
         scope
-            .bit_field("progress.badge_16".into(), "Earth Badge".into(), 131, 7)
+            .bit_field("progress.badge_16", "Earth Badge", 131, 7)
             .description("Gym badge flag".into())
-            .behavior(field::FieldBehavior {
-                group: scope.group.clone(),
-                presentation: Some(field::Presentation {
-                    step: Some(None),
-                    ..field::Presentation::new(0, 131)
-                }),
-                ..Default::default()
-            }),
+            .presentation(field::Presentation::new(0, 131).step(None)),
     ];
 
     fields

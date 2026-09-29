@@ -9,7 +9,7 @@ fn every_catalog_pack_loads_and_builtins_match_the_default_registry() {
     let handlers = super::catalog::all();
     assert_eq!(handlers.len(), 70);
     for handler in handlers {
-        let definition = super::SaveGameHandler::definitions(&handler)
+        let definition = super::SchemaSaveHandler::definitions(&handler)
             .into_iter()
             .next()
             .unwrap();
@@ -17,15 +17,15 @@ fn every_catalog_pack_loads_and_builtins_match_the_default_registry() {
         assert!(ids.insert(id.clone()), "duplicate catalog game: {id}");
         assert!(!handler.game.fields.is_empty(), "empty catalog game: {id}");
         assert!(registry.definitions().contains(&definition));
-        if super::SaveGameHandler::supports_generation(&handler, &definition.identity) {
-            super::SaveGameHandler::generate(&handler, &definition.identity)
+        if super::SchemaSaveHandler::supports_generation(&handler, &definition.identity) {
+            super::SchemaSaveHandler::generate(&handler, &definition.identity)
                 .unwrap_or_else(|error| panic!("{id}: {error}"));
         }
     }
 }
 
 #[test]
-fn extra_zelda_slots_preserve_other_files_and_match_native_rupee_edits() {
+fn extra_zelda_slots_preserve_other_files_and_match_full_profile_rupee_edits() {
     let registry = SaveGameRegistry::default();
     let mut original = registry.generate("zelda-a-link-to-the-past").unwrap();
     for offset in [0x500, 0xa00, 0x1400, 0x1900] {
@@ -37,7 +37,7 @@ fn extra_zelda_slots_preserve_other_files_and_match_native_rupee_edits() {
         original.bytes[offset] ^= 1;
     }
     let definitions = registry.definitions();
-    let native = definitions
+    let full_profile = definitions
         .iter()
         .find(|game| game.identity.id == "zelda-a-link-to-the-past")
         .unwrap();
@@ -57,7 +57,7 @@ fn extra_zelda_slots_preserve_other_files_and_match_native_rupee_edits() {
             value: SaveValue::U32(321),
         }];
         let expected = registry
-            .apply(&original, &native.identity, &edits, false)
+            .apply(&original, &full_profile.identity, &edits, false)
             .unwrap();
         let actual = registry
             .apply(&input, &schema.identity, &edits, false)
@@ -67,14 +67,14 @@ fn extra_zelda_slots_preserve_other_files_and_match_native_rupee_edits() {
 }
 
 #[test]
-fn extra_mario_world_slots_preserve_other_files_and_match_native_edits() {
+fn extra_mario_world_slots_preserve_other_files_and_match_full_profile_edits() {
     let registry = SaveGameRegistry::default();
     let mut original = registry.generate("super-mario-world").unwrap();
     for offset in [143, 286, 572, 715] {
         original.bytes.copy_within(0..143, offset);
     }
     let definitions = registry.definitions();
-    let native = definitions
+    let full_profile = definitions
         .iter()
         .find(|game| game.identity.id == "super-mario-world")
         .unwrap();
@@ -94,7 +94,7 @@ fn extra_mario_world_slots_preserve_other_files_and_match_native_edits() {
             value: SaveValue::U32(255),
         }];
         let expected = registry
-            .apply(&original, &native.identity, &edits, false)
+            .apply(&original, &full_profile.identity, &edits, false)
             .unwrap();
         let actual = registry
             .apply(&input, &schema.identity, &edits, false)

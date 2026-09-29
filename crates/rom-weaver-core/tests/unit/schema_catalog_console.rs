@@ -1,4 +1,4 @@
-use super::{SaveGameHandler, schema::catalog};
+use super::{SchemaSaveHandler, schema::catalog};
 
 #[test]
 fn console_catalog_modules_build_expected_games() {
@@ -25,7 +25,7 @@ fn console_catalog_modules_build_expected_games() {
         assert!(
             schemas
                 .iter()
-                .flat_map(SaveGameHandler::definitions)
+                .flat_map(SchemaSaveHandler::definitions)
                 .any(|definition| definition.identity.id == expected),
             "catalog module omitted {expected}"
         );

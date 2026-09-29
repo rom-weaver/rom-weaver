@@ -1,20 +1,26 @@
-mod builtin;
 mod container;
 pub mod formats;
 #[cfg(test)]
+#[path = "../../tests/unit/pokemon_gen1.rs"]
 mod pokemon_gen1;
 #[cfg(test)]
+#[path = "../../tests/unit/pokemon_gen2.rs"]
 mod pokemon_gen2;
 #[cfg(test)]
+#[path = "../../tests/unit/pokemon_gen3.rs"]
 mod pokemon_gen3;
 #[cfg(test)]
+#[path = "../../tests/unit/pokemon_gen4.rs"]
 mod pokemon_gen4;
 #[cfg(test)]
+#[path = "../../tests/unit/pokemon_gen5.rs"]
 mod pokemon_gen5;
 pub mod schema;
 #[cfg(test)]
+#[path = "../../tests/unit/super_mario_world.rs"]
 mod super_mario_world;
 #[cfg(test)]
+#[path = "../../tests/unit/zelda_alttp.rs"]
 mod zelda_alttp;
 
 use std::borrow::Cow;
@@ -26,10 +32,6 @@ use ts_rs::TS;
 
 use crate::{Result, RomWeaverError, ValidationCodeError};
 
-pub use builtin::{
-    PokemonGen1Handler, PokemonGen2Handler, PokemonGen3Handler, PokemonGen4Handler,
-    PokemonGen5Handler, SuperMarioWorldHandler, ZeldaAlttpHandler,
-};
 pub use container::{SaveContainer, SaveContainerKind, unwrap_save_container};
 pub use formats::{
     SaveFormatCandidate, SaveFormatDefinition, all_save_formats, candidate_save_formats,
@@ -288,39 +290,14 @@ pub struct SaveDetectionInput {
     pub rom_sha1: Option<String>,
 }
 
-pub trait SaveGameHandler: Send + Sync {
-    fn definitions(&self) -> Vec<SaveGameDefinition>;
-    fn supports_generation(&self, _game: &SaveGameIdentity) -> bool {
-        false
-    }
-    fn generate(&self, _game: &SaveGameIdentity) -> Result<Vec<u8>> {
-        Err(validation(
-            "save_generation_unsupported",
-            "fresh save generation is unsupported for this game; use an existing save as a template",
-        ))
-    }
-    fn recognize(&self, input: &SaveDetectionInput) -> SaveRecognition;
-    fn parse(&self, input: &SaveDetectionInput, game: &SaveGameIdentity) -> Result<SaveDocument>;
-    fn apply(
-        &self,
-        input: &SaveDetectionInput,
-        game: &SaveGameIdentity,
-        edits: &[SaveEdit],
-        dry_run: bool,
-    ) -> Result<SaveEditResult>;
-}
-
 pub struct SaveGameRegistry {
-    handlers: Vec<Box<dyn SaveGameHandler>>,
+    handlers: Vec<SchemaSaveHandler>,
 }
 
 impl Default for SaveGameRegistry {
     fn default() -> Self {
         Self {
-            handlers: schema::catalog::all()
-                .into_iter()
-                .map(|handler| Box::new(handler) as Box<dyn SaveGameHandler>)
-                .collect(),
+            handlers: schema::catalog::all(),
         }
     }
 }
@@ -330,8 +307,8 @@ impl SaveGameRegistry {
         Self::default()
     }
 
-    pub fn with_handler(mut self, handler: impl SaveGameHandler + 'static) -> Self {
-        self.handlers.push(Box::new(handler));
+    pub fn with_handler(mut self, handler: SchemaSaveHandler) -> Self {
+        self.handlers.push(handler);
         self
     }
 

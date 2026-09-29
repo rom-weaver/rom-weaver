@@ -1,9 +1,5 @@
-#[cfg(test)]
-mod advanced_parity;
 pub(super) mod catalog;
 mod definition;
-#[cfg(test)]
-mod early_parity;
 pub mod field;
 pub mod generation;
 #[cfg(test)]
@@ -13,14 +9,13 @@ mod schema_catalog_tests;
 mod tests;
 use generation::{Generation, GenerationDefinition};
 pub mod layout;
-#[cfg(test)]
-mod legacy_contract;
-#[cfg(test)]
-mod parity;
 pub mod rules;
 #[cfg(test)]
 mod rules_tests;
 pub mod runtime;
+#[cfg(test)]
+#[path = "../../tests/unit/schema_snes.rs"]
+mod snes_tests;
 pub mod text;
 
 use std::collections::{BTreeMap, HashSet};
@@ -30,10 +25,9 @@ use tracing::trace;
 
 use super::{
     SaveConstraint, SaveDetectionInput, SaveDocument, SaveEdit, SaveEditResult, SaveField,
-    SaveFieldKind, SaveGameCandidate, SaveGameDefinition, SaveGameHandler, SaveGameIdentity,
-    SaveIntegrity, SaveIntegrityIssue, SaveIntegrityState, SaveRecognition,
-    SaveRecognitionConfidence, SaveRecognitionOutcome, SaveRecognitionReason, SaveSection,
-    SaveValue, validate_save_edits,
+    SaveFieldKind, SaveGameCandidate, SaveGameDefinition, SaveGameIdentity, SaveIntegrity,
+    SaveIntegrityIssue, SaveIntegrityState, SaveRecognition, SaveRecognitionConfidence,
+    SaveRecognitionOutcome, SaveRecognitionReason, SaveSection, SaveValue, validate_save_edits,
 };
 use crate::{Result, RomWeaverError, ValidationCodeError};
 
@@ -51,6 +45,11 @@ pub struct SchemaSaveHandler {
 }
 
 impl SchemaSaveHandler {
+    #[cfg(test)]
+    pub(crate) fn layout_for_test(&self) -> Option<&layout::Layout> {
+        self.game.runtime.layout.as_ref()
+    }
+
     pub fn new(
         definition: GameDefinition,
         codecs: BTreeMap<String, text::TextCodec>,
@@ -69,23 +68,21 @@ impl SchemaSaveHandler {
             game: Arc::new(game),
         })
     }
-}
 
-impl SaveGameHandler for SchemaSaveHandler {
-    fn definitions(&self) -> Vec<SaveGameDefinition> {
+    pub fn definitions(&self) -> Vec<SaveGameDefinition> {
         vec![self.game.definition()]
     }
 
-    fn supports_generation(&self, game: &SaveGameIdentity) -> bool {
+    pub fn supports_generation(&self, game: &SaveGameIdentity) -> bool {
         self.game.matches(game) && self.game.generation.is_some()
     }
 
-    fn generate(&self, game: &SaveGameIdentity) -> Result<Vec<u8>> {
+    pub fn generate(&self, game: &SaveGameIdentity) -> Result<Vec<u8>> {
         self.game.check_identity(game)?;
         self.game.generate_save()
     }
 
-    fn recognize(&self, input: &SaveDetectionInput) -> SaveRecognition {
+    pub fn recognize(&self, input: &SaveDetectionInput) -> SaveRecognition {
         if self.game.runtime.require_selection
             && input.selected_game.as_deref() != Some(&self.game.id)
         {
@@ -163,12 +160,16 @@ impl SaveGameHandler for SchemaSaveHandler {
         }
     }
 
-    fn parse(&self, input: &SaveDetectionInput, game: &SaveGameIdentity) -> Result<SaveDocument> {
+    pub fn parse(
+        &self,
+        input: &SaveDetectionInput,
+        game: &SaveGameIdentity,
+    ) -> Result<SaveDocument> {
         self.game.check_identity(game)?;
         self.game.parse_document(input, game)
     }
 
-    fn apply(
+    pub fn apply(
         &self,
         input: &SaveDetectionInput,
         game: &SaveGameIdentity,

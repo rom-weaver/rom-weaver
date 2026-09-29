@@ -1,6 +1,6 @@
 use super::{
-    PokemonGen1Handler, PokemonGen2Handler, SaveDetectionInput, SaveEdit, SaveGameHandler,
-    SaveGameRegistry, SaveValue, ZeldaAlttpHandler,
+    SaveDetectionInput, SaveEdit, SaveGameRegistry, SaveIntegrityState, SaveValue,
+    pokemon_gen2::Family,
 };
 
 fn input(bytes: Vec<u8>, game: &str) -> SaveDetectionInput {
@@ -11,195 +11,140 @@ fn input(bytes: Vec<u8>, game: &str) -> SaveDetectionInput {
     }
 }
 
-fn value_for_gen1_field(id: &str) -> SaveValue {
-    match id {
-        "trainer.id" => SaveValue::U32(0xabcd),
-        "trainer.money" => SaveValue::U32(123_456),
-        "trainer.coins" => SaveValue::U32(1234),
-        "trainer.play_time.hours" => SaveValue::U32(42),
-        "trainer.play_time.minutes" => SaveValue::U32(23),
-        "trainer.play_time.seconds" => SaveValue::U32(34),
-        "trainer.play_time.frames" => SaveValue::U32(45),
-        "options.text_speed" => SaveValue::Enum("slow".into()),
-        "yellow.pikachu_friendship" => SaveValue::U32(255),
-        "yellow.printer_brightness" => SaveValue::U32(127),
-        "yellow.pikachu_beach_score" => SaveValue::U32(1234),
-        _ if id.contains("name_glyph") => SaveValue::U32(0x80),
-        "options.battle_scene" | "options.battle_style" => SaveValue::Bool(false),
-        _ => SaveValue::Bool(true),
-    }
-}
-
-#[test]
-fn pokemon_gen1_schema_template_and_representable_edits_match_native() {
-    let registry = SaveGameRegistry::default();
-    for (native_id, schema_id) in [
-        ("pokemon-red", "pokemon-red-schema"),
-        ("pokemon-blue", "pokemon-blue-schema"),
-        ("pokemon-yellow", "pokemon-yellow-schema"),
-    ] {
-        let native_game = PokemonGen1Handler
-            .definitions()
-            .into_iter()
-            .find(|definition| definition.identity.id == native_id)
-            .unwrap()
-            .identity;
-        let schema_game = registry
-            .definitions()
-            .into_iter()
-            .find(|definition| definition.identity.id == schema_id)
-            .unwrap()
-            .identity;
-        let native_bytes = super::pokemon_gen1::PokemonGen1Handler
-            .generate(&native_game)
-            .unwrap();
-        assert!(registry.generate(schema_id).is_err());
-
-        let schema_input = input(native_bytes.clone(), schema_id);
-        let schema_document = registry.parse(&schema_input, &schema_game).unwrap();
-        let edits = schema_document
-            .fields
-            .iter()
-            .filter(|field| !field.id.contains("name_glyph") && !field.id.contains("_bit_"))
-            .map(|field| SaveEdit {
-                field: field.id.clone(),
-                value: value_for_gen1_field(&field.id),
-            })
-            .collect::<Vec<_>>();
-        let expected = PokemonGen1Handler
-            .apply(&input(native_bytes, native_id), &native_game, &edits, false)
-            .unwrap();
-        let actual = registry
-            .apply(&schema_input, &schema_game, &edits, false)
-            .unwrap();
-        assert_eq!(actual.bytes, expected.bytes);
-    }
-}
-
-fn value_for_zelda_field(id: &str) -> SaveValue {
-    if id.ends_with("resources.rupees") {
-        return SaveValue::U32(321);
-    }
-    if id.ends_with("smith_tempering") {
-        return SaveValue::Bool(false);
-    }
-    if id.contains("hearts.capacity_eighths") {
-        return SaveValue::U32(32);
-    }
-    if id.contains("hearts.current_eighths") {
-        return SaveValue::U32(24);
-    }
-    if id.contains("resources.bombs")
-        || id.contains("resources.arrows")
-        || id.contains("capacity_upgrades")
-        || id.contains("heart_pieces")
-        || id.contains("magic.current")
-        || id.ends_with("keys_earned")
-    {
-        return SaveValue::U32(1);
-    }
-    SaveValue::Bool(true)
-}
-
-#[test]
-fn zelda_alttp_schema_generation_and_representable_edits_match_native() {
-    let registry = SaveGameRegistry::default();
-    let native_game = ZeldaAlttpHandler.definitions()[0].identity.clone();
-    let schema_id = "zelda-a-link-to-the-past-file-1-schema";
-    let schema_game = registry
-        .definitions()
-        .into_iter()
-        .find(|definition| definition.identity.id == schema_id)
-        .unwrap()
-        .identity;
-    let native_bytes = ZeldaAlttpHandler.generate(&native_game).unwrap();
-    assert_eq!(registry.generate(schema_id).unwrap().bytes, native_bytes);
-
-    let schema_input = input(native_bytes.clone(), schema_id);
-    let schema_document = registry.parse(&schema_input, &schema_game).unwrap();
-    let edits = schema_document
+fn value(document: &super::SaveDocument, field: &str) -> SaveValue {
+    document
         .fields
         .iter()
-        .filter(|field| !field.id.contains(".raw_"))
-        .map(|field| SaveEdit {
-            field: field.id.clone(),
-            value: value_for_zelda_field(&field.id),
-        })
-        .collect::<Vec<_>>();
-    let expected = ZeldaAlttpHandler
-        .apply(
-            &input(native_bytes, &native_game.id),
-            &native_game,
-            &edits,
-            false,
-        )
-        .unwrap();
-    let actual = registry
-        .apply(&schema_input, &schema_game, &edits, false)
-        .unwrap();
-    assert_eq!(actual.bytes, expected.bytes);
+        .find(|candidate| candidate.id == field)
+        .unwrap()
+        .value
+        .clone()
 }
 
 #[test]
-fn pokemon_gen2_schema_template_and_semantic_fixed_edits_match_native() {
+fn imported_gen1_profiles_parse_and_edit_game_bytes() {
     let registry = SaveGameRegistry::default();
-    for native_game in PokemonGen2Handler.definitions() {
-        let native_game = native_game.identity;
-        let schema_id = format!("{}-schema", native_game.id);
-        let schema_game = registry
+    for (id, yellow) in [
+        ("pokemon-red-schema", false),
+        ("pokemon-blue-schema", false),
+        ("pokemon-yellow-schema", true),
+    ] {
+        assert!(registry.generate(id).is_err());
+        let source = input(super::pokemon_gen1::fixture(yellow), id);
+        let game = registry
             .definitions()
             .into_iter()
-            .find(|definition| definition.identity.id == schema_id)
+            .find(|definition| definition.identity.id == id)
             .unwrap()
             .identity;
-        let native_bytes = super::pokemon_gen2::PokemonGen2Handler
-            .generate(&native_game)
-            .unwrap();
-        assert!(registry.generate(&schema_id).is_err());
-
-        let schema_input = input(native_bytes.clone(), &schema_id);
-        let schema_document = registry.parse(&schema_input, &schema_game).unwrap();
-        let edits = schema_document
-            .fields
-            .iter()
-            .filter(|field| {
-                !field.id.contains("name_glyph")
-                    && (!field.id.starts_with("options.")
-                        || matches!(
-                            field.id.as_str(),
-                            "options.battle_scene" | "options.battle_style" | "options.text_speed"
-                        ))
-            })
-            .map(|field| SaveEdit {
-                field: field.id.clone(),
-                value: match field.value {
-                    SaveValue::Enum(_) if field.id == "options.text_speed" => {
-                        SaveValue::Enum("slow".into())
-                    }
-                    SaveValue::Bool(_) if field.id.starts_with("options.battle_") => {
-                        SaveValue::Bool(false)
-                    }
-                    SaveValue::Bool(_) => SaveValue::Bool(true),
-                    SaveValue::U32(_) if field.id == "trainer.id" => SaveValue::U32(0xabcd),
-                    SaveValue::U32(_) if field.id.contains("play_time.hours") => SaveValue::U32(42),
-                    SaveValue::U32(_) if field.id.contains("play_time.") => SaveValue::U32(23),
-                    SaveValue::U32(_) if field.id.starts_with("trainer.") => SaveValue::U32(1234),
-                    SaveValue::U32(_) => SaveValue::U32(1),
-                    _ => panic!("unexpected Generation II schema field kind"),
-                },
-            })
-            .collect::<Vec<_>>();
-        let expected = PokemonGen2Handler
+        let result = registry
             .apply(
-                &input(native_bytes, &native_game.id),
-                &native_game,
-                &edits,
+                &source,
+                &game,
+                &[
+                    SaveEdit {
+                        field: "trainer.money".into(),
+                        value: SaveValue::U32(654_321),
+                    },
+                    SaveEdit {
+                        field: "trainer.id".into(),
+                        value: SaveValue::U32(0x1234),
+                    },
+                ],
                 false,
             )
             .unwrap();
-        let actual = registry
-            .apply(&schema_input, &schema_game, &edits, false)
-            .unwrap();
-        assert_eq!(actual.bytes, expected.bytes);
+        let bytes = result.bytes.unwrap();
+        assert_eq!(&bytes[0x25f3..0x25f6], &[0x65, 0x43, 0x21]);
+        assert_eq!(&bytes[0x2605..0x2607], &[0x12, 0x34]);
+        assert_eq!(
+            value(&result.document, "trainer.money"),
+            SaveValue::U32(654_321)
+        );
     }
+}
+
+#[test]
+fn imported_gen2_profiles_edit_both_physical_copies() {
+    let registry = SaveGameRegistry::default();
+    for (id, family, offsets) in [
+        (
+            "pokemon-gold-schema",
+            Family::GoldSilver,
+            [(0x23db, 0x23de), (0x0c6d, 0x0c70)],
+        ),
+        (
+            "pokemon-silver-schema",
+            Family::GoldSilver,
+            [(0x23db, 0x23de), (0x0c6d, 0x0c70)],
+        ),
+        (
+            "pokemon-crystal-schema",
+            Family::Crystal,
+            [(0x23dc, 0x23df), (0x15dc, 0x15df)],
+        ),
+    ] {
+        assert!(registry.generate(id).is_err());
+        let source = input(super::pokemon_gen2::fixture(family), id);
+        let game = registry
+            .definitions()
+            .into_iter()
+            .find(|definition| definition.identity.id == id)
+            .unwrap()
+            .identity;
+        let result = registry
+            .apply(
+                &source,
+                &game,
+                &[SaveEdit {
+                    field: "trainer.money".into(),
+                    value: SaveValue::U32(654_321),
+                }],
+                false,
+            )
+            .unwrap();
+        let bytes = result.bytes.unwrap();
+        for (start, end) in offsets {
+            assert_eq!(&bytes[start..end], &[0x09, 0xfb, 0xf1]);
+        }
+        assert_eq!(result.document.integrity.state, SaveIntegrityState::Valid);
+        assert_eq!(
+            value(&result.document, "trainer.money"),
+            SaveValue::U32(654_321)
+        );
+    }
+}
+
+#[test]
+fn imported_zelda_profile_edits_generated_game_bytes() {
+    let registry = SaveGameRegistry::default();
+    let generated = registry.generate("zelda-a-link-to-the-past").unwrap();
+    let id = "zelda-a-link-to-the-past-file-1-schema";
+    let source = input(generated.bytes, id);
+    let game = registry
+        .definitions()
+        .into_iter()
+        .find(|definition| definition.identity.id == id)
+        .unwrap()
+        .identity;
+    let before_checksum = source.bytes[1278..1280].to_vec();
+    let result = registry
+        .apply(
+            &source,
+            &game,
+            &[SaveEdit {
+                field: "slot_1.resources.rupees".into(),
+                value: SaveValue::U32(321),
+            }],
+            false,
+        )
+        .unwrap();
+    let bytes = result.bytes.unwrap();
+    assert_eq!(&bytes[866..868], &[0x41, 0x01]);
+    assert_ne!(&bytes[1278..1280], before_checksum);
+    assert_eq!(result.document.integrity.state, SaveIntegrityState::Valid);
+    assert_eq!(
+        value(&result.document, "slot_1.resources.rupees"),
+        SaveValue::U32(321)
+    );
 }
