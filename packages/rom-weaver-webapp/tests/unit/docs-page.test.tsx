@@ -495,6 +495,22 @@ Fixture description.
     expect(shelves.map((shelf) => shelf.open)).toEqual(shelfTitles.map((title) => title !== defaultShelfTitle));
   });
 
+  it.each(["side-rail", "menu-sheet-body"])("reveals the active guide through the outer %s", async (className) => {
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(400);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.matches('a[aria-current="page"]')) return { top: 800, bottom: 830, height: 30 } as DOMRect;
+      return { top: 0, bottom: 400, height: 400 } as DOMRect;
+    });
+    const { container } = render(
+      <div className={className}>
+        <DocsNavigation currentSlug="docs/privacy" />
+      </div>,
+    );
+
+    await vi.waitFor(() => expect(container.firstElementChild?.scrollTop).toBe(615));
+    expect(container.querySelector(".guide-nav")?.scrollTop).toBe(0);
+  });
+
   it("shelves every route and keeps disclosure choices between pages", async () => {
     const { unmount } = render(<DocsNavigation currentSlug="docs/cli" />);
 
