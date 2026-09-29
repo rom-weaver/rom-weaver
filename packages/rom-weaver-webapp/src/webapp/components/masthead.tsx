@@ -1,6 +1,6 @@
 import {
   ArrowLeft,
-  ChevronDown,
+  ChevronUp,
   Cloud,
   HardDrive,
   Heart,
@@ -559,6 +559,7 @@ const Masthead = ({
               <button
                 aria-controls="menu-sheet"
                 aria-expanded={menuOpen}
+                aria-haspopup="dialog"
                 className="docs-browse-trigger"
                 onClick={() => {
                   setFindOpen(false);
@@ -569,7 +570,7 @@ const Masthead = ({
                 type="button"
               >
                 {localizer.message("ui.docs.browse")}
-                <ChevronDown aria-hidden="true" />
+                <ChevronUp aria-hidden="true" />
               </button>
               <button
                 aria-label={localizer.message("ui.find.label")}

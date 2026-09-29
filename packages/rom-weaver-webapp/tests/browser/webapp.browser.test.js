@@ -260,6 +260,16 @@ test("Docs topic headings keep their width and wrapping when expanded", async ()
     for (const branch of nav.querySelectorAll(".guide-branch")) {
       branch.querySelector("summary").click();
       await expect.poll(() => branch.open).toBe(true);
+      const branchHeading = branch.querySelector(".guide-shelf-title");
+      const topic = branch.querySelector(".guide-branch-topics summary");
+      const topicHeading = topic.querySelector(".guide-shelf-title");
+      expect(getComputedStyle(branchHeading).textTransform).toBe("uppercase");
+      expect(getComputedStyle(topicHeading).textTransform).toBe("none");
+      expect(getComputedStyle(branch.querySelector("summary")).backgroundColor).not.toBe(
+        getComputedStyle(topic).backgroundColor,
+      );
+      expect(getComputedStyle(topic, "::after").content).toBe('""');
+      expect(getComputedStyle(branch.querySelector("summary"), "::after").content).toBe('"−"');
       await checkHeadings([...branch.querySelectorAll(".guide-branch-topics summary")]);
       branch.querySelector("summary").click();
       await expect.poll(() => branch.open).toBe(false);
@@ -274,6 +284,11 @@ test("mobile Docs owns a modal navigation panel without the workflow dock", asyn
   await expect.poll(() => document.querySelector(".docs-browse-trigger")).toBeTruthy();
   expect(document.querySelector(".dock")).toBeNull();
   const trigger = document.querySelector(".docs-browse-trigger");
+  expect(getComputedStyle(trigger).position).toBe("fixed");
+  expect(trigger.getBoundingClientRect().bottom).toBeLessThanOrEqual(844);
+  expect(trigger.getBoundingClientRect().top).toBeGreaterThan(760);
+  expect(trigger.getBoundingClientRect().left).toBeLessThan(30);
+  expect(trigger.getAttribute("aria-haspopup")).toBe("dialog");
   trigger.focus();
   trigger.click();
   await expect.poll(() => document.querySelector(".menu-sheet-docs:modal")).toBeTruthy();

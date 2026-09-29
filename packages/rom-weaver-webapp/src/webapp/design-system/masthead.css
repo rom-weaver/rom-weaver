@@ -376,8 +376,11 @@
   padding-inline: 8px;
   cursor: pointer;
   list-style: none;
-  background: var(--well);
+  background: transparent;
   border-radius: var(--r-s);
+}
+.rw-app .guide-nav > .guide-shelf > summary {
+  background: var(--well);
 }
 .rw-app .guide-shelf > summary::-webkit-details-marker {
   display: none;
@@ -418,10 +421,27 @@
 .rw-app .guide-branch-topics {
   padding-left: 8px;
   margin-top: 2px;
+  margin-left: 8px;
+  border-left: 1px solid var(--seam);
+}
+.rw-app .guide-branch-topics .guide-shelf > summary::after {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-inline: 5px;
+  content: "";
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+}
+.rw-app .guide-branch-topics .guide-shelf[open] > summary::after {
+  transform: rotate(45deg);
 }
 .rw-app .guide-branch-topics .guide-shelf-title {
-  font-size: 0.65rem;
-  letter-spacing: 0.04em;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
 }
 .rw-app .guide-nav-list li {
   margin: 0;
@@ -1179,7 +1199,6 @@
 }
 .rw-app .menu-sheet-docs .guide-shelf > summary {
   min-height: 44px;
-  background: transparent;
 }
 @media (hover: hover) {
   .rw-app .menu-sheet-docs .guide-shelf > summary:hover {
@@ -1190,18 +1209,13 @@
   background: var(--well);
 }
 .rw-app .menu-sheet-docs .guide-shelf-title {
-  font-size: 0.95rem;
-  text-transform: none;
-  letter-spacing: normal;
+  font-size: 0.75rem;
 }
 .rw-app .menu-sheet-docs .guide-branch-topics {
   padding-left: 12px;
-  margin-left: 8px;
-  border-left: 1px solid var(--seam);
 }
 .rw-app .menu-sheet-docs .guide-branch-topics .guide-shelf-title {
   font-size: 0.88rem;
-  font-weight: 600;
 }
 .rw-app .menu-sheet-docs .guide-nav-list a {
   display: flex;
@@ -1288,6 +1302,26 @@
     justify-content: space-between;
     padding-block: 4px;
     border-bottom: 1px solid var(--seam);
+  }
+  .rw-app .docs-mobile-toolbar .docs-browse-trigger {
+    position: fixed;
+    bottom: calc(var(--safe-b) + var(--sp-m));
+    left: max(var(--gutter), var(--safe-l));
+    z-index: 998;
+    gap: 10px;
+    padding-inline: 16px;
+    background: var(--plate);
+    border: 1px solid var(--seam-strong);
+    border-radius: 999px;
+    box-shadow: 0 8px 24px color-mix(in oklab, var(--ink) 18%, transparent);
+  }
+  @media (hover: hover) {
+    .rw-app .docs-mobile-toolbar .docs-browse-trigger:hover {
+      background: var(--well);
+    }
+  }
+  .rw-app .docs-mobile-toolbar .docs-browse-trigger:active {
+    background: var(--well);
   }
   .rw-app .side-rail,
   .rw-app .topbar {
