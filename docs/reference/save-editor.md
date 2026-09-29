@@ -11,6 +11,7 @@ The Save Editor changes persistent game data. It does not change emulator save s
 - [Recognition](#recognition)
 - [Integrity rules](#integrity-rules)
 - [Save generation](#save-generation)
+- [Built-in schema catalog](#built-in-schema-catalog)
 - [Save containers](#save-containers)
 - [Physical save formats](#physical-save-formats)
 - [Unsupported data](#unsupported-data)
@@ -19,52 +20,71 @@ The Save Editor changes persistent game data. It does not change emulator save s
 
 ## Supported games
 
-| Game | Platform | Input | Recognition limit |
-| --- | --- | --- | --- |
-| Pokémon Red | Game Boy | Raw 32 KiB SRAM | Shares its layout with Blue |
-| Pokémon Blue | Game Boy | Raw 32 KiB SRAM | Shares its layout with Red |
-| Pokémon Yellow | Game Boy | Raw 32 KiB SRAM | Uses the stored starter marker |
-| Pokémon Gold | Game Boy Color | Raw 32 KiB SRAM | Shares its layout with Silver |
-| Pokémon Silver | Game Boy Color | Raw 32 KiB SRAM | Shares its layout with Gold |
-| Pokémon Crystal | Game Boy Color | Raw 32 KiB SRAM | English retail layout |
-| Pokémon Ruby | Game Boy Advance | Raw 128 KiB Flash | Shares its layout with Sapphire |
-| Pokémon Sapphire | Game Boy Advance | Raw 128 KiB Flash | Shares its layout with Ruby |
-| Pokémon Emerald | Game Boy Advance | Raw 128 KiB Flash | English retail layout |
-| Pokémon FireRed | Game Boy Advance | Raw 128 KiB Flash | Shares its layout with LeafGreen |
-| Pokémon LeafGreen | Game Boy Advance | Raw 128 KiB Flash | Shares its layout with FireRed |
-| Pokémon Diamond | Nintendo DS | Raw 512 KiB save | Uses the Diamond/Pearl block layout and profile version |
-| Pokémon Pearl | Nintendo DS | Raw 512 KiB save | Uses the Diamond/Pearl block layout and profile version |
-| Pokémon Platinum | Nintendo DS | Raw 512 KiB save | Uses the Platinum block layout and profile version |
-| Pokémon HeartGold | Nintendo DS | Raw 512 KiB save | The profile version selects the title |
-| Pokémon SoulSilver | Nintendo DS | Raw 512 KiB save | The profile version selects the title |
-| The Legend of Zelda: A Link to the Past | Super Nintendo | Raw 8 KiB SRAM | Needs a valid file marker and checksum |
+| Game                                    | Platform         | Input             | Recognition limit                                       |
+| --------------------------------------- | ---------------- | ----------------- | ------------------------------------------------------- |
+| Pokémon Red                             | Game Boy         | Raw 32 KiB SRAM   | Shares its layout with Blue                             |
+| Pokémon Blue                            | Game Boy         | Raw 32 KiB SRAM   | Shares its layout with Red                              |
+| Pokémon Yellow                          | Game Boy         | Raw 32 KiB SRAM   | Uses the stored starter marker                          |
+| Pokémon Gold                            | Game Boy Color   | Raw 32 KiB SRAM   | Shares its layout with Silver                           |
+| Pokémon Silver                          | Game Boy Color   | Raw 32 KiB SRAM   | Shares its layout with Gold                             |
+| Pokémon Crystal                         | Game Boy Color   | Raw 32 KiB SRAM   | English retail layout                                   |
+| Pokémon Ruby                            | Game Boy Advance | Raw 128 KiB Flash | Shares its layout with Sapphire                         |
+| Pokémon Sapphire                        | Game Boy Advance | Raw 128 KiB Flash | Shares its layout with Ruby                             |
+| Pokémon Emerald                         | Game Boy Advance | Raw 128 KiB Flash | English retail layout                                   |
+| Pokémon FireRed                         | Game Boy Advance | Raw 128 KiB Flash | Shares its layout with LeafGreen                        |
+| Pokémon LeafGreen                       | Game Boy Advance | Raw 128 KiB Flash | Shares its layout with FireRed                          |
+| Pokémon Diamond                         | Nintendo DS      | Raw 512 KiB save  | Uses the Diamond/Pearl block layout and profile version |
+| Pokémon Pearl                           | Nintendo DS      | Raw 512 KiB save  | Uses the Diamond/Pearl block layout and profile version |
+| Pokémon Platinum                        | Nintendo DS      | Raw 512 KiB save  | Uses the Platinum block layout and profile version      |
+| Pokémon HeartGold                       | Nintendo DS      | Raw 512 KiB save  | The profile version selects the title                   |
+| Pokémon SoulSilver                      | Nintendo DS      | Raw 512 KiB save  | The profile version selects the title                   |
+| Pokémon Black                           | Nintendo DS      | Raw 512 KiB save  | Stored version and Black/White block checksums          |
+| Pokémon White                           | Nintendo DS      | Raw 512 KiB save  | Stored version and Black/White block checksums          |
+| Pokémon Black 2                         | Nintendo DS      | Raw 512 KiB save  | Stored version and sequel block checksums               |
+| Pokémon White 2                         | Nintendo DS      | Raw 512 KiB save  | Stored version and sequel block checksums               |
+| Super Mario World                       | Super Nintendo   | Raw 2 KiB SRAM    | Needs a valid primary or backup file checksum           |
+| The Legend of Zelda: A Link to the Past | Super Nintendo   | Raw 8 KiB SRAM    | Needs a valid file marker and checksum                  |
 
 The Pokémon handlers cover the English layouts named above. A matching file size alone does not prove support.
 
+The default registry also includes 48 fixed profiles for 21 titles. The [catalog](../../data/save-schemas/README.md) lists their profile counts and creation support.
+
 ## Editable fields
 
-| Family | Fields |
-| --- | --- |
-| Pokémon Generation I | Trainer ID, money, coins, play time, text speed, battle options, eight badges, and all 151 Pokédex owned/seen flags; Yellow adds Pikachu friendship, Pikachu Beach score, sound, and printer brightness |
-| Pokémon Generation II | Money, stored money, coins, play time, options, and 16 badge flags |
-| Pokémon Generation III | Trainer name, gender, money, coins, play time, options, inventory quantities, and eight badges; Emerald adds Battle Points |
-| Pokémon Generation IV | Gender, money, coins, play time, Battle Points, and badges (eight in Diamond/Pearl/Platinum, 16 in HeartGold/SoulSilver) |
-| Zelda: A Link to the Past | Player name, resources, health, equipment, inventory, bottles, magic, capacity upgrades, dungeon maps/compasses/keys, and progression for each file |
+| Family                    | Fields                                                                                                                                                                                                                                                                     |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pokémon Generation I      | Trainer name, rival name, Trainer ID, occupied bag/PC item IDs and quantities, money, coins, play time, text speed, battle options, eight badges, and all 151 Pokédex owned/seen flags; Yellow adds Pikachu friendship, Pikachu Beach score, sound, and printer brightness |
+| Pokémon Generation II     | Trainer name, Trainer ID, money, stored money, coins, play time, options, inventory, 16 badges, and all 251 Pokédex owned/seen flags                                                                                                                                       |
+| Pokémon Generation III    | Trainer name, both Trainer IDs, gender, money, coins, play time including frames, options, bag and PC item IDs/quantities, eight badges, and all 386 Pokédex owned/seen flags; Emerald adds Battle Points                                                                  |
+| Pokémon Generation IV     | Both Trainer IDs, gender, money, coins, play time, Battle Points, and badges (eight in Diamond/Pearl/Platinum, 16 in HeartGold/SoulSilver)                                                                                                                                 |
+| Pokémon Generation V      | Trainer name, both Trainer IDs, gender, money, play time, Battle Points, eight badges, and inventory item IDs/quantities                                                                                                                                                   |
+| Super Mario World         | Each file's 96 level flag bytes, 120 event flags, both players' submaps, animations, coordinates and tile pointers, four Switch Palaces, and exit count                                                                                                                    |
+| Zelda: A Link to the Past | Player name, resources, health, equipment, inventory, bottles, magic, capacity upgrades, dungeon maps/compasses/keys, and progression for each file                                                                                                                        |
 
 The Zelda resource fields cover rupees, bombs, and arrows. Its equipment fields cover swords, shields, armor, and gloves.
 
-Generation III inventory fields change quantities in existing occupied slots. They do not add items or change item IDs. The supported slot capacities are 166 for Ruby/Sapphire, 196 for Emerald, and 186 for FireRed/LeafGreen.
+Generation I and II names accept up to seven supported game characters. The escapes `{` and `}` represent the PK and MN glyphs; each uses one game character.
+
+Generation I and II item-list edits cover occupied slots. Generation II also exposes quantities for all 50 TMs and seven HMs, including zero. Key items have no stored quantity. Adding, removing, or reordering their item-list slots remains unsupported.
+
+Generation III inventory fields include empty slots. Each slot has an item ID and quantity. Adding an item requires both values. Clearing a slot uses zero for both values. Item IDs use each game's numeric item table; a numeric ID does not prove that the item belongs in that pocket.
+
+The Generation III slot counts, including PC storage, are 216 for Ruby/Sapphire, 236 for Emerald, and 216 for FireRed/LeafGreen. PC quantities remain unencrypted. Bag quantities retain the game's encryption.
+
+Generation III owned flags also set all three seen copies. Clearing a seen flag also clears its owned flag. Previews include these related changes. Conflicting explicit assignments are rejected.
+
+Numeric fields expose the ranges in `save export-schema`. A representable value does not establish a playable combination of progression flags, inventory, or player coordinates.
 
 Zelda dungeon fields cover all 14 dungeon entries. Progression includes the game state, map icon, spawn point, saved world, and named story flags. A file name contains at most six supported ASCII characters.
 
 ## Read-only fields
 
-| Family | Fields |
-| --- | --- |
-| Pokémon Generation I | Trainer name, rival name, and current PC box |
-| Pokémon Generation II | Trainer name, Trainer ID, and the formatted play-time summary; Crystal also shows its Secret ID |
-| Pokémon Generation III | Trainer IDs, the formatted play-time summary, and the security key |
-| Pokémon Generation IV | Trainer IDs and the formatted play-time summary |
+| Family                 | Fields                                         |
+| ---------------------- | ---------------------------------------------- |
+| Pokémon Generation I   | Current PC box and formatted play-time summary |
+| Pokémon Generation II  | Formatted play-time summary                    |
+| Pokémon Generation III | Formatted play-time summary and security key   |
+| Pokémon Generation IV  | Formatted play-time summary                    |
 
 ## Recognition
 
@@ -72,7 +92,7 @@ Recognition returns `recognized`, `ambiguous`, or `unsupported`. An ambiguous re
 
 Red and Blue remain ambiguous without a selected game. The same rule applies to Gold/Silver, Ruby/Sapphire, and FireRed/LeafGreen.
 
-Generation IV uses the block layout and stored game version after both save-block checks pass. Zelda uses its file marker and checksum.
+Generation IV uses the block layout and stored game version after both save-block checks pass. Generation V checks the stored version and every primary block checksum, including the checksum table. Zelda uses its file marker and checksum. Super Mario World checks the file checksum and its backup.
 
 ## Integrity rules
 
@@ -80,6 +100,8 @@ Generation IV uses the block layout and stored game version after both save-bloc
 - Generation II checks primary and backup additive checksums. Edits need both copies to pass.
 - Generation III checks all 14 sections. It changes only the active slot and each affected section checksum.
 - Generation IV checks redundant copies, block footers, counters, signatures, sizes, and CRC-16 values.
+- Generation V repairs each changed block checksum, its table entry, and the checksum table itself. Other bytes, including backup storage, stay unchanged. Invalid primary checksums block editing.
+- Super Mario World rewrites both copies of each edited file and preserves unedited files. One valid copy can repair its damaged twin.
 - Zelda checks three primary files and their duplicate copies. It rewrites both copies only for an edited file.
 
 Every write starts from a copy. The handler reparses the result before it returns the edited bytes.
@@ -90,27 +112,47 @@ Procedure: [Edit a game save in the browser](../how-to/edit-gen3-saves.md).
 
 ## Save generation
 
-Fresh generation is available for The Legend of Zelda: A Link to the Past. Its image contains one file named `LINK`, three hearts, no acquired equipment, a valid backup, and two empty file slots. Its bytes follow the original game's file initialization. The browser shows only editable properties for a fresh save; the full document retains its read-only metadata.
+Fresh generation is available for Super Mario World and The Legend of Zelda: A Link to the Past.
 
-Fresh Pokémon generation is unavailable because structure and checksum checks do not prove a playable game state. Earlier generated Pokémon files may pass those checks while missing game initialization data. Pokémon templates require a save made by the matching game.
+The repository schema catalog also limits fresh generation to the File 1 profiles for those two titles. Every other catalog profile requires a template.
 
-Template generation supports every editable game above. It validates an existing save, applies optional field assignments, and writes a separate file. Without assignments, the output is byte-identical to the template. Container wrappers are retained. A template cannot be the output path.
+Super Mario World starts with one file at Yoshi's House, the original initial movement flags, a matching backup, and two empty slots.
+
+The Zelda save follows the original file initialization. Its image contains one file named `LINK`, three hearts, no acquired equipment, a valid backup, and two empty file slots. Its bytes follow the original game's file initialization. The browser shows only editable properties for a fresh save; the full document retains its read-only metadata.
+
+Fresh Pokémon generation is unavailable because structure and checksum checks do not prove a playable game state. Earlier generated Pokémon files may pass those checks while missing game initialization data. Pokémon templates require a save made by the matching game. Direct Rust handler calls enforce the same generation capability; synthetic Pokémon initializers remain test-only.
+
+Template generation supports every editable registry entry. It validates an existing save, applies optional field assignments, and writes a separate file. Without assignments, the output is byte-identical to the template. Container wrappers are retained. A template cannot be the output path.
 
 `save list-games` reports the game definitions and the IDs that support fresh generation. `save create` requires an output path unless it runs with `--dry-run`.
 
 Procedures: [Create saves in the browser](../how-to/create-game-saves-browser.md) and [Create saves with the CLI](../how-to/create-game-saves-cli.md).
 
+## Built-in schema catalog
+
+The application includes every supported game definition in its default registry. The catalog contains the original Pokémon, Super Mario World, and A Link to the Past definitions and 48 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. The catalog and its profile counts are in [`data/save-schemas/README.md`](../../data/save-schemas/README.md).
+
+The 48 additional profiles require explicit game selection. The original game families retain automatic recognition.
+
+A profile represents one fixed slot, player, region, or storage variant. Profile count is not title count. A compatible physical format or save size does not make an unrecognized game editable.
+
+The built-in definitions use the shared storage, layout, checksum, recovery, and text engines. Game-specific Rust callbacks implement rules that need conditional fields, checked arithmetic, or linked writes. The CLI and browser use the same registry and editing engine.
+
+Adding or changing a game definition requires an application update. The CLI does not load layout packs, and the browser does not import them. `save export-schema` exports the fields of an inspected save for user interfaces and automation. Its JSON output is not an importable game definition.
+
+Integer and packed-decimal fields use their stored range unless a definition sets a narrower constraint. A stored value or combination can still be invalid during play. Unknown numeric choice values appear as `raw:<decimal>` and survive unrelated edits.
+
 ## Save containers
 
 The editor removes these wrappers before recognition and puts them back on output. The wrapper metadata survives unchanged. If the container has a checksum, the editor updates it to match the changed save.
 
-| Container | Extensions | Layout | Checksum |
-| --- | --- | --- | --- |
+| Container                         | Extensions     | Layout                                                      | Checksum             |
+| --------------------------------- | -------------- | ----------------------------------------------------------- | -------------------- |
 | GameShark SP save (SharkPortSave) | `.sps`, `.xps` | Length-prefixed strings, a 28-byte game block, the raw save | Recomputed on output |
-| GameShark SP snapshot | `.gsv` | 1072-byte header, 128 KiB raw flash | None |
-| DeSmuME save | `.dsv` | Raw save, then a 122-byte footer | None |
-| DexDrive memory card | `.gme` | 3904-byte header, 128 KiB raw card | None |
-| Virtual Game Station memory card | `.mem`, `.vgs` | 64-byte header, 128 KiB raw card | None |
+| GameShark SP snapshot             | `.gsv`         | 1072-byte header, 128 KiB raw flash                         | None                 |
+| DeSmuME save                      | `.dsv`         | Raw save, then a 122-byte footer                            | None                 |
+| DexDrive memory card              | `.gme`         | 3904-byte header, 128 KiB raw card                          | None                 |
+| Virtual Game Station memory card  | `.mem`, `.vgs` | 64-byte header, 128 KiB raw card                            | None                 |
 
 A GameShark SP checksum that does not match produces a warning, not a rejection. A DeSmuME footer whose padded size disagrees with the file produces a warning.
 
@@ -120,23 +162,23 @@ A GameShark SP checksum that does not match produces a warning, not a rejection.
 
 An unsupported save still gets a physical format guess from its raw size. The report lists every format below that matches, under `potential_formats`. A size match alone does not prove the platform. A format with a signature check sorts first and sets `signature_checked`.
 
-| Platform | Formats | Signature |
-| --- | --- | --- |
-| Game Boy and Game Boy Color | Battery SRAM 512 B (MBC2), 2 KiB, 8 KiB, 32 KiB, 128 KiB | None |
-| Game Boy Advance | EEPROM 512 B, EEPROM 8 KiB, SRAM 32 KiB, Flash 64 KiB, Flash 128 KiB | None |
-| Nintendo Entertainment System | Battery WRAM 8 KiB | None |
-| Super Nintendo | Battery SRAM 2 KiB, 8 KiB, 32 KiB, 64 KiB, 128 KiB | None |
-| Nintendo 64 | EEPROM 512 B, EEPROM 2 KiB, SRAM 32 KiB, FlashRAM 128 KiB, Controller Pak 32 KiB, Mupen64Plus combined save 290 KiB | None |
-| Nintendo DS | 512 B, 8 KiB, 64 KiB, 128 KiB, 256 KiB, 512 KiB, 1 MiB, 8 MiB, 32 MiB | None |
-| Sega Genesis and Mega Drive | Cartridge SRAM 8 KiB, 32 KiB, 64 KiB | None |
-| Sega Master System and Game Gear | Cartridge SRAM 8 KiB, 32 KiB | None |
-| Sony PlayStation | Memory card 128 KiB | `MC` at offset 0 |
-| Sega Saturn | Internal backup RAM 32 KiB, 64 KiB (16-bit dump) | `BackUpRam Format` header, contiguous or on odd bytes |
+| Platform                         | Formats                                                                                                             | Signature                                             |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Game Boy and Game Boy Color      | Battery SRAM 512 B (MBC2), 2 KiB, 8 KiB, 32 KiB, 128 KiB                                                            | None                                                  |
+| Game Boy Advance                 | EEPROM 512 B, EEPROM 8 KiB, SRAM 32 KiB, Flash 64 KiB, Flash 128 KiB                                                | None                                                  |
+| Nintendo Entertainment System    | Battery WRAM 8 KiB                                                                                                  | None                                                  |
+| Super Nintendo                   | Battery SRAM 2 KiB, 8 KiB, 32 KiB, 64 KiB, 128 KiB                                                                  | None                                                  |
+| Nintendo 64                      | EEPROM 512 B, EEPROM 2 KiB, SRAM 32 KiB, FlashRAM 128 KiB, Controller Pak 32 KiB, Mupen64Plus combined save 290 KiB | None                                                  |
+| Nintendo DS                      | 512 B, 8 KiB, 64 KiB, 128 KiB, 256 KiB, 512 KiB, 1 MiB, 8 MiB, 32 MiB                                               | None                                                  |
+| Sega Genesis and Mega Drive      | Cartridge SRAM 8 KiB, 32 KiB, 64 KiB                                                                                | None                                                  |
+| Sega Master System and Game Gear | Cartridge SRAM 8 KiB, 32 KiB                                                                                        | None                                                  |
+| Sony PlayStation                 | Memory card 128 KiB                                                                                                 | `MC` at offset 0                                      |
+| Sega Saturn                      | Internal backup RAM 32 KiB, 64 KiB (16-bit dump)                                                                    | `BackUpRam Format` header, contiguous or on odd bytes |
 
 The Mupen64Plus combined save is the libretro core's `.srm`: EEPROM, four Controller Paks, SRAM, then FlashRAM, 296,960 bytes in total. PSP saves are per-game directories and have no entry.
 
 ## Unsupported data
 
-Pokémon generations after IV and other Zelda games remain unsupported. The editor does not change party Pokémon or box contents.
+Pokémon generations after V and other Zelda games remain unsupported. The editor does not change party Pokémon or box contents. Generation IV and V Pokédex data and Generation IV inventory remain unsupported. Fields absent from a game's schema have no editing path; this is not unrestricted byte editing.
 
-A physical format match or a removed container does not make a save editable. Only the games in [Supported games](#supported-games) have an editor. Emulator save states are rejected.
+A physical format match or a removed container does not make a save editable. Only games in the built-in registry have an editor. Emulator save states are rejected.

@@ -54,12 +54,22 @@ const runBrowserSaveRead = async (
 
 const identifySave = (input: BrowserSaveInput) =>
   runBrowserSaveRead(input, (inputPath) =>
-    invokeRomWeaverSaveIdentifyWorker({ inputPath, game: input.game, romSha1: input.romSha1, signal: input.signal }),
+    invokeRomWeaverSaveIdentifyWorker({
+      inputPath,
+      game: input.game,
+      romSha1: input.romSha1,
+      signal: input.signal,
+    }),
   );
 
 const inspectSave = (input: BrowserSaveInput) =>
   runBrowserSaveRead(input, (inputPath) =>
-    invokeRomWeaverSaveInspectWorker({ inputPath, game: input.game, romSha1: input.romSha1, signal: input.signal }),
+    invokeRomWeaverSaveInspectWorker({
+      inputPath,
+      game: input.game,
+      romSha1: input.romSha1,
+      signal: input.signal,
+    }),
   );
 
 const listSaveGames = async (signal?: AbortSignal) => (await invokeRomWeaverSaveListGamesWorker({ signal })).parsed;
@@ -67,9 +77,10 @@ const listSaveGames = async (signal?: AbortSignal) => (await invokeRomWeaverSave
 const createSave = async (input: { game: string; signal?: AbortSignal }) => {
   const outputName = `${input.game}.sav`;
   const result = await invokeRomWeaverSaveCreateWorker({
-    ...input,
     assignments: [],
+    game: input.game,
     outputName,
+    signal: input.signal,
   });
   const output = await browserRuntime.workerIo.createWorkerOutput(
     result as typeof result & { filePath: string },

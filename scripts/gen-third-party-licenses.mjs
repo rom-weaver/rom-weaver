@@ -192,7 +192,14 @@ const IN_SOURCE_DEPENDENCIES = [
     ],
   },
 ];
-const IDENTIFY_DATA_DIR = path.join(REPO_ROOT, "crates", "rom-weaver-cli", "data", "identify", "v1");
+const IDENTIFY_DATA_DIR = path.join(
+  REPO_ROOT,
+  "crates",
+  "rom-weaver-cli",
+  "data",
+  "identify",
+  "v1",
+);
 
 // The Libretro database supplies the identify DATs and the cheat shards, so
 // one attribution row covers the whole adapted data set.
@@ -486,9 +493,24 @@ function main() {
   const cargo = cargoRows(metadata);
   const source = inSourceRows();
   const npm = target === "cli" ? [] : loadWebappRows();
-  // The CLI ships the identify packs and cheat shards natively; the webapp
-  // serves the same data, so both scopes carry the Libretro row.
-  const identifyData = identifyDataRows();
+  // Both delivery targets MUST retain attribution for the shared game data.
+  const identifyData = [
+    ...identifyDataRows(),
+    {
+      kind: "data",
+      name: "RyudoSynbios/game-tools-collection",
+      version: "fd8ca0beba05723fcfdb5af83c453ba9bea1221a",
+      source:
+        "https://github.com/RyudoSynbios/game-tools-collection/tree/fd8ca0beba05723fcfdb5af83c453ba9bea1221a",
+      license: "MIT",
+      licenseFiles: [
+        path.join(
+          REPO_ROOT,
+          "crates/rom-weaver-core/src/save/schema/catalog/LICENSE-GAME-TOOLS-COLLECTION",
+        ),
+      ],
+    },
+  ];
   const cliRows = [...cargo, ...source, ...identifyData];
   const rowsByScope = {
     cli: cliRows,

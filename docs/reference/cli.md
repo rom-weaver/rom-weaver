@@ -272,6 +272,8 @@ Without `-o` or `--output`, `save set` writes a free sibling name such as `game-
 
 `save list-games` returns all supported game definitions and fresh-generation game IDs. `save create` accepts `--game`, `--template`, optional `FIELD=VALUE` assignments, `--output`, `--dry-run`, and `--force`. Without a template, `--game` selects a supported fresh initializer. Output is required unless `--dry-run` is set. [Create saves with the CLI](../how-to/create-game-saves-cli.md) gives the procedures.
 
+The application includes every supported save definition. `save list-games` reports the complete registry. Adding game support requires an application update.
+
 ## Cheats
 
 `cheat list --input ROM` detects the ROM's system, reads that system's shard from the cheat-database directory, matches the game, and prints one row per cheat: ID, delivery, raw code, description. `--json` puts the same data in `details.cheat_list`.

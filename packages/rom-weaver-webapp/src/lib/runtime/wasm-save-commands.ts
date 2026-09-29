@@ -45,7 +45,7 @@ const runSaveCommand = async (
   const result = await runRomWeaverJson(
     command,
     toRomWeaverOptions({
-      knownInputPaths: input.inputPath ? [input.inputPath] : undefined,
+      knownInputPaths: [input.inputPath].filter((path): path is string => Boolean(path)),
       logLevel: input.logLevel,
       signal: input.signal,
       invalidateMountCacheBeforeRun: true,

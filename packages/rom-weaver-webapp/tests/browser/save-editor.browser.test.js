@@ -8,6 +8,7 @@ import "../../src/webapp/design-system/index.css";
 const mocks = vi.hoisted(() => ({
   identifySave: vi.fn(),
   inspectSave: vi.fn(),
+  listSaveGames: vi.fn(),
   listEmulatorSaves: vi.fn(),
   previewSaveFields: vi.fn(),
   replaceEmulatorSaveSram: vi.fn(),
@@ -122,6 +123,7 @@ beforeEach(() => {
   mocks.listEmulatorSaves.mockResolvedValue([]);
   mocks.identifySave.mockResolvedValue(recognized());
   mocks.inspectSave.mockResolvedValue(documentResult());
+  mocks.listSaveGames.mockResolvedValue({ games: [], generationGames: [] });
   mocks.previewSaveFields.mockResolvedValue({
     preview: {
       changed: true,
@@ -153,6 +155,11 @@ test("loads a recognized local save with generic grouped fields", async () => {
   await expect.element(page.getByLabelText("Badge 1", { exact: true })).toHaveTextContent("1");
 });
 
+test("uses the compiled catalog without a schema-pack control", async () => {
+  await expect.element(page.getByRole("button", { name: "Load schema pack" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("button", { name: "Choose a game" })).toBeVisible();
+});
+
 test("finds properties while retaining pending changes", async () => {
   await uploadSave();
   await page.getByLabelText("Money", { exact: true }).fill("12345");
@@ -167,6 +174,32 @@ test("finds properties while retaining pending changes", async () => {
   await expect.element(page.getByText("No properties match this search.")).toBeInTheDocument();
   await search.fill("");
   await expect.element(page.getByLabelText("Money", { exact: true })).toHaveValue(12345);
+});
+
+test("previews named schema choices and preserves an unknown current code", async () => {
+  const result = documentResult();
+  result.document.fields.push({
+    constraints: { choices: ["fast", "medium", "slow", "raw:2"], max: null, max_length: null, min: null },
+    description: "Text delay",
+    editable: true,
+    encoding: null,
+    id: "options.text_speed",
+    kind: "enum",
+    label: "Text speed",
+    section_id: 0,
+    step: null,
+    value: { enum: "raw:2" },
+    warnings: [],
+  });
+  mocks.inspectSave.mockResolvedValueOnce(result);
+  await uploadSave();
+  const choices = page.getByRole("radiogroup", { name: "Text speed" });
+  await expect.element(choices.getByRole("radio", { name: "raw:2", exact: true })).toBeChecked();
+  await choices.getByRole("radio", { name: "slow", exact: true }).click();
+  await page.getByRole("button", { name: "Preview changes" }).click();
+  expect(mocks.previewSaveFields).toHaveBeenCalledWith(
+    expect.objectContaining({ assignments: ["options.text_speed=slow"] }),
+  );
 });
 
 test("tracks edits, resets one or all fields, previews, and downloads", async () => {
@@ -207,7 +240,7 @@ test("shows unsupported and ambiguous recognition states", async () => {
     recognition: { candidates: [], outcome: { unsupported: { reasons: [] } }, reasons: [] },
   });
   await page.getByLabelText("Drop a game save to edit it").upload(new File(["bad"], "bad.sav"));
-  await expect.element(page.getByText(/does not have an editor/)).toBeInTheDocument();
+  await expect.element(page.getByText(/game could not be identified/)).toBeInTheDocument();
 
   mocks.identifySave.mockResolvedValueOnce({
     recognition: {
@@ -223,6 +256,24 @@ test("shows unsupported and ambiguous recognition states", async () => {
   await expect.element(page.getByText("Choose the game format")).toBeInTheDocument();
   await page.getByRole("button", { name: /Ruby/ }).click();
   await expect.element(page.getByLabelText("Name", { exact: true })).toHaveValue("ASH");
+});
+
+test("opens a compiled profile selected by stable game ID", async () => {
+  mocks.listSaveGames.mockResolvedValueOnce({
+    games: [
+      {
+        identity: { family: "gen3", id: "pokemon-ruby", name: "Ruby" },
+        supported_save_sizes: [4],
+      },
+    ],
+    generationGames: [],
+  });
+  await uploadSave();
+  await page.getByRole("button", { name: "Choose game profile" }).click();
+  await page.getByRole("combobox", { name: "Game profile" }).selectOptions("pokemon-ruby");
+  await page.getByRole("button", { name: "Open profile" }).click();
+  await expect.poll(() => mocks.inspectSave.mock.calls.length).toBe(2);
+  expect(mocks.inspectSave).toHaveBeenLastCalledWith(expect.objectContaining({ game: "pokemon-ruby" }));
 });
 
 test("stays within the mobile page width", async () => {

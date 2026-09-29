@@ -28,6 +28,13 @@ const REPO_LINT_ONLY = {
   full: "false",
 };
 
+test("Rust save schemas rebuild both delivery targets", () => {
+  const result = classifyFor("pull_request", "crates/rom-weaver-core/src/save/schema/catalog/new_game.rs");
+  assert.equal(result.rust, "true");
+  assert.equal(result.webapp, "true");
+  assert.equal(result.wasm_runtime, "true");
+});
+
 test("documentation changes skip compiled stacks", () =>
   assert.deepEqual(classify("README.md", "docs/development/ci.md"), {
     rust: "false",

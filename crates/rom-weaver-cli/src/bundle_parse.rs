@@ -412,14 +412,14 @@ mod tests {
     use super::*;
     use crate::bundle_schema::BundleCheatEntry;
 
-    fn validation_code(error: RomWeaverError) -> &'static str {
+    fn validation_code(error: RomWeaverError) -> String {
         match error {
-            RomWeaverError::ValidationCode(coded) => coded.code(),
+            RomWeaverError::ValidationCode(coded) => coded.code().to_owned(),
             other => panic!("expected coded validation error, got: {other}"),
         }
     }
 
-    fn parse_err(json: &str) -> &'static str {
+    fn parse_err(json: &str) -> String {
         validation_code(parse_bundle_bytes(json.as_bytes()).expect_err("expected parse failure"))
     }
 

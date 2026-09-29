@@ -1,7 +1,7 @@
-use super::pokemon_gen3::{Family, PokemonGen3Handler, SIGNATURE, checksum};
+use super::pokemon_gen3::{Family, SIGNATURE, checksum};
 use crate::save::{
-    SaveDetectionInput, SaveEdit, SaveGameHandler, SaveGameRegistry, SaveIntegrityState,
-    SaveRecognitionOutcome, SaveValue,
+    SaveDetectionInput, SaveEdit, SaveGameRegistry, SaveIntegrityState, SaveRecognitionOutcome,
+    SaveValue,
 };
 
 const SECTION_SIZE: usize = 0x1000;
@@ -30,7 +30,7 @@ fn refresh_checksums(bytes: &mut [u8], family: Family) {
     }
 }
 
-fn fixture(family: Family, counter_a: u32, counter_b: u32) -> Vec<u8> {
+pub(super) fn fixture(family: Family, counter_a: u32, counter_b: u32) -> Vec<u8> {
     let mut bytes = vec![0u8; 0x20_000];
     for (slot, counter) in [(0u8, counter_a), (1, counter_b)] {
         for id in 0..14u8 {
@@ -96,9 +96,9 @@ fn value(document: &crate::save::SaveDocument, id: &str) -> SaveValue {
         .clone()
 }
 
-fn error_code(error: crate::RomWeaverError) -> &'static str {
+fn error_code(error: crate::RomWeaverError) -> String {
     match error {
-        crate::RomWeaverError::ValidationCode(error) => error.code(),
+        crate::RomWeaverError::ValidationCode(error) => error.code().to_owned(),
         other => panic!("expected a coded validation error, got {other:?}"),
     }
 }
@@ -130,6 +130,59 @@ fn registry_lists_every_game_with_format_metadata() {
             "pokemon-red",
             "pokemon-blue",
             "pokemon-yellow",
+            "pokemon-black",
+            "pokemon-white",
+            "pokemon-black-2",
+            "pokemon-white-2",
+            "super-mario-world",
+            "donkey-kong-country-2-diddy-s-kong-quest-slot-1",
+            "donkey-kong-country-2-diddy-s-kong-quest-slot-2",
+            "donkey-kong-country-2-diddy-s-kong-quest-slot-3",
+            "donkey-kong-country-3-dixie-kong-s-double-trouble-slot-1",
+            "donkey-kong-country-3-dixie-kong-s-double-trouble-slot-2",
+            "donkey-kong-country-3-dixie-kong-s-double-trouble-slot-3",
+            "donkey-kong-country-slot-1-player-1",
+            "donkey-kong-country-slot-1-player-2",
+            "donkey-kong-country-slot-2-player-1",
+            "donkey-kong-country-slot-2-player-2",
+            "donkey-kong-country-slot-3-player-1",
+            "donkey-kong-country-slot-3-player-2",
+            "final-fantasy-nes",
+            "mario-party-2-canonical-eeprom",
+            "mario-party-canonical-eeprom",
+            "pokemon-red-schema",
+            "pokemon-blue-schema",
+            "pokemon-yellow-schema",
+            "pokemon-gold-schema",
+            "pokemon-silver-schema",
+            "pokemon-crystal-schema",
+            "secret-of-mana-slot-1",
+            "secret-of-mana-slot-2",
+            "secret-of-mana-slot-3",
+            "secret-of-mana-slot-4",
+            "solatorobo-red-the-hunter-desmume",
+            "super-mario-64-canonical-eeprom-mario-a",
+            "super-mario-64-canonical-eeprom-mario-b",
+            "super-mario-64-canonical-eeprom-mario-c",
+            "super-mario-64-canonical-eeprom-mario-d",
+            "super-mario-kart-schema",
+            "super-mario-rpg-slot-1",
+            "super-mario-rpg-slot-2",
+            "super-mario-rpg-slot-3",
+            "super-mario-rpg-slot-4",
+            "super-mario-world-schema",
+            "super-mario-world-file-2-schema",
+            "super-mario-world-file-3-schema",
+            "super-metroid-samus-a",
+            "super-metroid-samus-b",
+            "super-metroid-samus-c",
+            "super-metroid-samus-a-supermetroid",
+            "super-metroid-samus-b-supermetroid",
+            "super-metroid-samus-c-supermetroid",
+            "wario-land-super-mario-land-3",
+            "zelda-a-link-to-the-past-file-1-schema",
+            "zelda-a-link-to-the-past-file-2-schema",
+            "zelda-a-link-to-the-past-file-3-schema",
         ]
     );
     assert!(definitions[3..8].iter().all(|definition| {
@@ -151,7 +204,7 @@ fn registry_lists_every_game_with_format_metadata() {
     assert_eq!(definitions[13].platform, "snes");
     assert_eq!(definitions[13].save_format, "snes_sram_8k");
     assert_eq!(definitions[13].supported_save_sizes, [8_192]);
-    assert!(definitions[14..].iter().all(|definition| {
+    assert!(definitions[14..17].iter().all(|definition| {
         definition.platform == "game-boy"
             && definition.save_format == "game_boy_sram_32k"
             && definition.supported_save_sizes == [32_768]
@@ -166,7 +219,15 @@ fn registry_requires_a_game_made_template_for_pokemon_creation() {
         .into_iter()
         .map(|definition| definition.identity.id)
         .collect::<Vec<_>>();
-    assert_eq!(fresh_ids, ["zelda-a-link-to-the-past"]);
+    assert_eq!(
+        fresh_ids,
+        [
+            "zelda-a-link-to-the-past",
+            "super-mario-world",
+            "super-mario-world-schema",
+            "zelda-a-link-to-the-past-file-1-schema"
+        ]
+    );
     assert_eq!(
         error_code(registry.generate("pokemon-emerald").unwrap_err()),
         "save_generation_unsupported"
@@ -175,7 +236,12 @@ fn registry_requires_a_game_made_template_for_pokemon_creation() {
 
 #[test]
 fn registry_accepts_new_handlers_without_generic_dispatch_changes() {
-    let registry = SaveGameRegistry::default().with_handler(PokemonGen3Handler);
+    let registry = SaveGameRegistry::default().with_handler(
+        super::schema::catalog::builtin_pokemon_gen3::schemas()
+            .into_iter()
+            .find(|handler| handler.definitions()[0].identity.id == "pokemon-emerald")
+            .unwrap(),
+    );
     let recognition = registry.detect(&input(fixture(Family::Emerald, 7, 6), None));
     assert!(matches!(
         recognition.outcome,
@@ -239,7 +305,7 @@ fn manual_selection_keeps_the_exact_title_identity() {
 #[test]
 fn parser_reconstructs_sections_and_decodes_trainer_fields() {
     let input = input(fixture(Family::Emerald, 7, 6), Some("pokemon-emerald"));
-    let document = PokemonGen3Handler
+    let document = SaveGameRegistry::default()
         .parse(&input, &game(Family::Emerald, "pokemon-emerald"))
         .unwrap();
     assert_eq!(document.active_slot, 0);
@@ -270,7 +336,7 @@ fn parser_reconstructs_sections_and_decodes_trainer_fields() {
 fn trainer_name_codec_accepts_every_english_keyboard_symbol() {
     let input = input(fixture(Family::Emerald, 7, 6), Some("pokemon-emerald"));
     let identity = game(Family::Emerald, "pokemon-emerald");
-    let result = PokemonGen3Handler
+    let result = SaveGameRegistry::default()
         .apply(
             &input,
             &identity,
@@ -295,7 +361,7 @@ fn active_slot_uses_wrapping_counters_and_rejects_ties() {
     );
     let identity = game(Family::Emerald, "pokemon-emerald");
     assert_eq!(
-        PokemonGen3Handler
+        SaveGameRegistry::default()
             .parse(&wrapped, &identity)
             .unwrap()
             .active_slot,
@@ -307,7 +373,7 @@ fn active_slot_uses_wrapping_counters_and_rejects_ties() {
         Some("pokemon-emerald"),
     );
     assert_eq!(
-        PokemonGen3Handler
+        SaveGameRegistry::default()
             .parse(&wide_gap, &identity)
             .unwrap()
             .active_slot,
@@ -316,7 +382,11 @@ fn active_slot_uses_wrapping_counters_and_rejects_ties() {
 
     let tied = input(fixture(Family::Emerald, 4, 4), Some("pokemon-emerald"));
     assert_eq!(
-        error_code(PokemonGen3Handler.parse(&tied, &identity).unwrap_err()),
+        error_code(
+            SaveGameRegistry::default()
+                .parse(&tied, &identity)
+                .unwrap_err()
+        ),
         "save_slot_counter"
     );
 }
@@ -326,7 +396,7 @@ fn multi_field_edit_reparses_and_preserves_the_backup_slot() {
     let bytes = fixture(Family::Emerald, 9, 8);
     let original = bytes.clone();
     let input = input(bytes, Some("pokemon-emerald"));
-    let result = PokemonGen3Handler
+    let result = SaveGameRegistry::default()
         .apply(
             &input,
             &game(Family::Emerald, "pokemon-emerald"),
@@ -377,7 +447,7 @@ fn encrypted_money_uses_each_family_key() {
         (Family::Frlg, "pokemon-firered", 0x8765_4321, 0x290),
     ] {
         let input = input(fixture(family, 3, 2), Some(id));
-        let result = PokemonGen3Handler
+        let result = SaveGameRegistry::default()
             .apply(
                 &input,
                 &game(family, id),
@@ -401,7 +471,7 @@ fn encrypted_money_uses_each_family_key() {
 fn dry_run_reparses_and_no_op_avoids_output() {
     let input = input(fixture(Family::Rs, 3, 2), Some("pokemon-ruby"));
     let identity = game(Family::Rs, "pokemon-ruby");
-    let dry_run = PokemonGen3Handler
+    let dry_run = SaveGameRegistry::default()
         .apply(
             &input,
             &identity,
@@ -419,7 +489,7 @@ fn dry_run_reparses_and_no_op_avoids_output() {
         SaveValue::Text("May".into())
     );
 
-    let no_op = PokemonGen3Handler
+    let no_op = SaveGameRegistry::default()
         .apply(
             &input,
             &identity,
@@ -449,7 +519,7 @@ fn edit_validation_rejects_each_invalid_request() {
         ),
         (
             SaveEdit {
-                field: "trainer.id".into(),
+                field: "trainer.security_key".into(),
                 value: SaveValue::U32(1),
             },
             "save_field_read_only",
@@ -491,13 +561,13 @@ fn edit_validation_rejects_each_invalid_request() {
         ),
     ];
     for (edit, code) in cases {
-        let error = PokemonGen3Handler
+        let error = SaveGameRegistry::default()
             .apply(&input, &identity, &[edit], true)
             .unwrap_err();
         assert_eq!(error_code(error), code);
     }
 
-    let duplicate = PokemonGen3Handler
+    let duplicate = SaveGameRegistry::default()
         .apply(
             &input,
             &identity,
@@ -523,12 +593,14 @@ fn corrupt_slot_is_readable_but_not_editable() {
     bytes[section_offset(1, 3) + 4] ^= 0xFF;
     let input = input(bytes, Some("pokemon-emerald"));
     let identity = game(Family::Emerald, "pokemon-emerald");
-    let document = PokemonGen3Handler.parse(&input, &identity).unwrap();
+    let document = SaveGameRegistry::default()
+        .parse(&input, &identity)
+        .unwrap();
     assert_eq!(
         document.integrity.state,
         SaveIntegrityState::PartiallyRecoverable
     );
-    let error = PokemonGen3Handler
+    let error = SaveGameRegistry::default()
         .apply(
             &input,
             &identity,
@@ -549,14 +621,16 @@ fn empty_backup_slot_is_editable_and_stays_empty() {
     let original_backup = bytes[SLOT_SIZE..2 * SLOT_SIZE].to_vec();
     let input = input(bytes, Some("pokemon-emerald"));
     let identity = game(Family::Emerald, "pokemon-emerald");
-    let document = PokemonGen3Handler.parse(&input, &identity).unwrap();
+    let document = SaveGameRegistry::default()
+        .parse(&input, &identity)
+        .unwrap();
     assert_eq!(
         document.integrity.state,
         SaveIntegrityState::ValidWithWarnings
     );
     assert!(document.fields.iter().any(|field| field.editable));
 
-    let result = PokemonGen3Handler
+    let result = SaveGameRegistry::default()
         .apply(
             &input,
             &identity,
@@ -599,9 +673,59 @@ fn corrupt_or_missing_sections_in_both_slots_are_unsupported() {
 }
 
 #[test]
+fn section_ids_with_high_bytes_cannot_alias_valid_sections() {
+    let identity = game(Family::Emerald, "pokemon-emerald");
+    for id in [0, 13] {
+        for high_byte in [1, 255] {
+            let mut bytes = fixture(Family::Emerald, 5, 4);
+            bytes[section_offset(0, id) + 0xFF5] = high_byte;
+            let source = input(bytes.clone(), Some(&identity.id));
+            let document = SaveGameRegistry::default()
+                .parse(&source, &identity)
+                .unwrap();
+            assert_eq!(document.active_slot, 1);
+            assert_eq!(document.counter, 4);
+            assert_eq!(
+                document.integrity.state,
+                SaveIntegrityState::PartiallyRecoverable
+            );
+            let edit = [SaveEdit {
+                field: "trainer.money".into(),
+                value: SaveValue::U32(1),
+            }];
+            assert_eq!(
+                error_code(
+                    SaveGameRegistry::default()
+                        .apply(&source, &identity, &edit, false)
+                        .unwrap_err()
+                ),
+                "save_integrity_partial"
+            );
+
+            bytes[section_offset(1, id) + 0xFF5] = high_byte;
+            let source = input(bytes, Some(&identity.id));
+            assert!(matches!(
+                SaveGameRegistry::default().detect(&source).outcome,
+                SaveRecognitionOutcome::Unsupported { .. }
+            ));
+            assert!(
+                SaveGameRegistry::default()
+                    .parse(&source, &identity)
+                    .is_err()
+            );
+            assert!(
+                SaveGameRegistry::default()
+                    .apply(&source, &identity, &edit, false)
+                    .is_err()
+            );
+        }
+    }
+}
+
+#[test]
 fn field_schema_json_has_stable_generic_fields_without_offsets() {
     let input = input(fixture(Family::Emerald, 5, 4), Some("pokemon-emerald"));
-    let document = PokemonGen3Handler
+    let document = SaveGameRegistry::default()
         .parse(&input, &game(Family::Emerald, "pokemon-emerald"))
         .unwrap();
     let json = serde_json::to_value(&document).unwrap();
@@ -791,4 +915,343 @@ fn gsv_snapshot_is_recognized_and_round_trips_its_header() {
             .iter()
             .any(|warning| warning.contains("GameShark SP snapshot"))
     );
+}
+
+#[test]
+fn gen3_inventory_can_fill_clear_and_replace_every_pocket_slot() {
+    for family in [Family::Rs, Family::Emerald, Family::Frlg] {
+        let identity = family.identity(match family {
+            Family::Rs => "pokemon-ruby",
+            Family::Emerald => "pokemon-emerald",
+            Family::Frlg => "pokemon-firered",
+        });
+        let source = input(fixture(family, 2, 3), Some(&identity.id));
+        let document = SaveGameRegistry::default()
+            .parse(&source, &identity)
+            .unwrap();
+        let item_fields = document
+            .fields
+            .iter()
+            .filter(|field| field.id.ends_with(".item_id"))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            item_fields.len(),
+            match family {
+                Family::Rs => 216,
+                Family::Emerald => 236,
+                Family::Frlg => 216,
+            }
+        );
+        let mut edits = Vec::new();
+        for field in item_fields {
+            let quantity = field.id.replace(".item_id", ".quantity");
+            let max = document
+                .fields
+                .iter()
+                .find(|field| field.id == quantity)
+                .unwrap()
+                .constraints
+                .max
+                .unwrap();
+            edits.push(SaveEdit {
+                field: field.id.clone(),
+                value: SaveValue::U32(1),
+            });
+            edits.push(SaveEdit {
+                field: quantity,
+                value: SaveValue::U32(max as u32),
+            });
+        }
+        edits.push(SaveEdit {
+            field: "trainer.id".into(),
+            value: SaveValue::U32(65535),
+        });
+        edits.push(SaveEdit {
+            field: "trainer.secret_id".into(),
+            value: SaveValue::U32(0),
+        });
+        edits.push(SaveEdit {
+            field: "trainer.play_time_frames".into(),
+            value: SaveValue::U32(59),
+        });
+        let result = SaveGameRegistry::default()
+            .apply(&source, &identity, &edits, false)
+            .unwrap();
+        for edit in &edits {
+            assert_eq!(value(&result.document, &edit.field), edit.value);
+        }
+        let output = result.bytes.unwrap();
+        assert_eq!(&output[..SLOT_SIZE], &source.bytes[..SLOT_SIZE]);
+        assert_eq!(&output[2 * SLOT_SIZE..], &source.bytes[2 * SLOT_SIZE..]);
+        let active = result.document.active_slot;
+        let section = result
+            .document
+            .sections
+            .iter()
+            .find(|section| section.id == 1)
+            .unwrap()
+            .physical_offset as usize;
+        let pc = if family == Family::Frlg { 0x298 } else { 0x498 };
+        assert_eq!(
+            &output[section + pc + 2..section + pc + 4],
+            &999u16.to_le_bytes()
+        );
+        assert_eq!(active, 1);
+        let filled = input(output, Some(&identity.id));
+        let clear = edits
+            .iter()
+            .filter(|edit| edit.field.starts_with("inventory."))
+            .map(|edit| SaveEdit {
+                field: edit.field.clone(),
+                value: SaveValue::U32(0),
+            })
+            .collect::<Vec<_>>();
+        let cleared = SaveGameRegistry::default()
+            .apply(&filled, &identity, &clear, false)
+            .unwrap();
+        assert!(
+            cleared
+                .document
+                .fields
+                .iter()
+                .filter(|field| field.id.starts_with("inventory."))
+                .all(|field| field.value == SaveValue::U32(0))
+        );
+        for (field, value) in [
+            ("trainer.id", 65536),
+            ("trainer.secret_id", 65536),
+            ("trainer.play_time_frames", 60),
+            ("inventory.items_1.item_id", 65535),
+        ] {
+            assert!(
+                SaveGameRegistry::default()
+                    .apply(
+                        &source,
+                        &identity,
+                        &[SaveEdit {
+                            field: field.into(),
+                            value: SaveValue::U32(value)
+                        }],
+                        false
+                    )
+                    .is_err()
+            );
+        }
+    }
+}
+
+#[test]
+fn gen3_pokedex_keeps_seen_mirrors_and_reports_implicit_changes() {
+    for family in [Family::Rs, Family::Emerald, Family::Frlg] {
+        let identity = family.identity(match family {
+            Family::Rs => "pokemon-ruby",
+            Family::Emerald => "pokemon-emerald",
+            Family::Frlg => "pokemon-firered",
+        });
+        let source = input(fixture(family, 2, 3), Some(&identity.id));
+        let edits = (1..=386)
+            .map(|number| SaveEdit {
+                field: format!("pokedex.owned_{number:03}"),
+                value: SaveValue::Bool(true),
+            })
+            .collect::<Vec<_>>();
+        let result = SaveGameRegistry::default()
+            .apply(&source, &identity, &edits, false)
+            .unwrap();
+        assert_eq!(result.preview.changes.len(), 772);
+        assert_eq!(result.preview.touched_sections, [0, 1, 4]);
+        let bytes = result.bytes.unwrap();
+        let small = result
+            .document
+            .sections
+            .iter()
+            .find(|section| section.id == 0)
+            .unwrap()
+            .physical_offset as usize;
+        let mirrors = match family {
+            Family::Rs => [0x938, 0x3a8c],
+            Family::Emerald => [0x988, 0x3b24],
+            Family::Frlg => [0x5f8, 0x3a18],
+        };
+        for mirror in mirrors {
+            let section_id = (1 + mirror / SECTION_DATA_SIZE) as u8;
+            let base = result
+                .document
+                .sections
+                .iter()
+                .find(|section| section.id == section_id)
+                .unwrap()
+                .physical_offset as usize
+                + mirror % SECTION_DATA_SIZE;
+            assert_eq!(
+                &bytes[base..base + 49],
+                &bytes[small + 0x5c..small + 0x5c + 49]
+            );
+            assert_eq!(bytes[base], 255);
+            assert_eq!(bytes[base + 48], 3);
+        }
+        assert_eq!(&bytes[..SLOT_SIZE], &source.bytes[..SLOT_SIZE]);
+        let filled = input(bytes.clone(), Some(&identity.id));
+        let clear = SaveEdit {
+            field: "pokedex.seen_386".into(),
+            value: SaveValue::Bool(false),
+        };
+        let dry = SaveGameRegistry::default()
+            .apply(&filled, &identity, &[clear], true)
+            .unwrap();
+        assert!(dry.bytes.is_none());
+        assert_eq!(
+            value(&dry.document, "pokedex.owned_386"),
+            SaveValue::Bool(false)
+        );
+        assert_eq!(filled.bytes, bytes);
+        assert!(
+            SaveGameRegistry::default()
+                .apply(
+                    &source,
+                    &identity,
+                    &[
+                        SaveEdit {
+                            field: "pokedex.owned_001".into(),
+                            value: SaveValue::Bool(true)
+                        },
+                        SaveEdit {
+                            field: "pokedex.seen_001".into(),
+                            value: SaveValue::Bool(false)
+                        },
+                    ],
+                    false
+                )
+                .is_err()
+        );
+    }
+}
+
+#[test]
+fn gen4_trainer_ids_cover_full_u16_range_and_preserve_backup() {
+    let handler = SaveGameRegistry::default();
+    for definition in handler
+        .definitions()
+        .into_iter()
+        .filter(|definition| definition.identity.family.starts_with("pokemon-gen4"))
+    {
+        let identity = definition.identity;
+        let source = input(
+            super::pokemon_gen4::fixture_for_id(&identity.id),
+            Some(&identity.id),
+        );
+        for boundary in [0, 65535] {
+            let edits = [
+                SaveEdit {
+                    field: "trainer.id".into(),
+                    value: SaveValue::U32(boundary),
+                },
+                SaveEdit {
+                    field: "trainer.secret_id".into(),
+                    value: SaveValue::U32(boundary),
+                },
+            ];
+            let result = handler.apply(&source, &identity, &edits, false).unwrap();
+            assert_eq!(
+                value(&result.document, "trainer.id"),
+                SaveValue::U32(boundary)
+            );
+            assert_eq!(
+                value(&result.document, "trainer.secret_id"),
+                SaveValue::U32(boundary)
+            );
+            if let Some(bytes) = result.bytes {
+                assert_eq!(&bytes[..0x40000], &source.bytes[..0x40000]);
+            }
+        }
+        assert!(
+            handler
+                .apply(
+                    &source,
+                    &identity,
+                    &[SaveEdit {
+                        field: "trainer.id".into(),
+                        value: SaveValue::U32(65536)
+                    }],
+                    false
+                )
+                .is_err()
+        );
+    }
+}
+
+#[test]
+fn super_mario_world_profiles_share_generation_and_all_field_edit_bytes() {
+    let registry = SaveGameRegistry::default();
+    let schema = registry.generate("super-mario-world-schema").unwrap();
+    let mut builtin = registry.generate("super-mario-world").unwrap();
+    assert_eq!(schema.bytes, builtin.bytes);
+    builtin.bytes[0x700] = 0xa5;
+    let schema = SaveDetectionInput {
+        bytes: builtin.bytes.clone(),
+        selected_game: Some("super-mario-world-schema".into()),
+        rom_sha1: None,
+    };
+    let definitions = registry.definitions();
+    let game = |id: &str| {
+        definitions
+            .iter()
+            .find(|entry| entry.identity.id == id)
+            .unwrap()
+            .identity
+            .clone()
+    };
+    let builtin_game = game("super-mario-world");
+    let schema_game = game("super-mario-world-schema");
+    let document = registry.parse(&builtin, &builtin_game).unwrap();
+    let schema_document = registry.parse(&schema, &schema_game).unwrap();
+    assert_eq!(schema_document.fields.len(), 233);
+    for field in &document.fields {
+        assert_eq!(value(&schema_document, &field.id), field.value);
+    }
+    let edits = document
+        .fields
+        .iter()
+        .map(|field| SaveEdit {
+            field: field.id.clone(),
+            value: match field.value {
+                SaveValue::U32(_) => SaveValue::U32(field.constraints.max.unwrap() as u32),
+                SaveValue::Bool(_) => SaveValue::Bool(true),
+                _ => panic!("unexpected Super Mario World field type"),
+            },
+        })
+        .collect::<Vec<_>>();
+    let expected = registry
+        .apply(&builtin, &builtin_game, &edits, false)
+        .unwrap();
+    let actual = registry
+        .apply(&schema, &schema_game, &edits, false)
+        .unwrap();
+    assert_eq!(actual.bytes, expected.bytes);
+    let bytes = actual.bytes.unwrap();
+    assert_eq!(bytes[0x700], 0xa5);
+    assert_eq!(&bytes[143..429], &schema.bytes[143..429]);
+    assert_eq!(&bytes[572..858], &schema.bytes[572..858]);
+    assert!(
+        registry
+            .apply(&schema, &schema_game, &edits, true)
+            .unwrap()
+            .bytes
+            .is_none()
+    );
+}
+
+#[test]
+fn compiled_and_custom_handlers_have_unique_registry_ids() {
+    let definitions = SaveGameRegistry::default().definitions();
+    let mut ids = std::collections::HashSet::new();
+    for definition in definitions {
+        assert!(
+            ids.insert(definition.identity.id.clone()),
+            "duplicate save handler ID: {}",
+            definition.identity.id
+        );
+    }
+    assert!(ids.contains("super-mario-world"));
+    assert!(ids.contains("super-mario-world-schema"));
 }

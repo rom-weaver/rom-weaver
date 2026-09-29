@@ -85,13 +85,13 @@ pub use report_details::{
     operation_report_details,
 };
 pub use save::{
-    PokemonGen3Handler, SaveChangePreview, SaveConfidence, SaveConstraint, SaveDetectionInput,
-    SaveDocument, SaveEdit, SaveEditResult, SaveField, SaveFieldChange, SaveFieldKind,
-    SaveFieldValue, SaveFormatCandidate, SaveGameCandidate, SaveGameDefinition, SaveGameHandler,
-    SaveGameIdentity, SaveGameRegistry, SaveIntegrity, SaveIntegrityIssue, SaveIntegrityState,
-    SaveRecognition, SaveRecognitionConfidence, SaveRecognitionOutcome, SaveRecognitionReason,
-    SaveSection, SaveValue, apply_save_edits, candidate_save_formats, detect_save, parse_save,
-    unwrap_save_container, validate_save_edits,
+    SaveChangePreview, SaveConfidence, SaveConstraint, SaveDetectionInput, SaveDocument, SaveEdit,
+    SaveEditResult, SaveField, SaveFieldChange, SaveFieldKind, SaveFieldValue, SaveFormatCandidate,
+    SaveGameCandidate, SaveGameDefinition, SaveGameIdentity, SaveGameRegistry, SaveIntegrity,
+    SaveIntegrityIssue, SaveIntegrityState, SaveRecognition, SaveRecognitionConfidence,
+    SaveRecognitionOutcome, SaveRecognitionReason, SaveSection, SaveValue, SchemaSaveHandler,
+    apply_save_edits, candidate_save_formats, detect_save, parse_save, unwrap_save_container,
+    validate_save_edits,
 };
 pub use selection::{SelectionMatcher, normalize_archive_name};
 pub use suggest::{closest_name, did_you_mean_suffix};

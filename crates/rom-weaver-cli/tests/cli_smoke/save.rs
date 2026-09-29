@@ -53,6 +53,81 @@ fn write_fixture(temp: &TempDir) -> PathBuf {
     path.path().to_path_buf()
 }
 
+#[test]
+fn save_catalog_lists_compiled_games_and_generation_support() {
+    let report = run_single_json_event(&["save", "list-games", "--json"], 0);
+    let catalog = &report["details"]["save_editor"];
+    let game_ids = catalog["games"]
+        .as_array()
+        .expect("save games")
+        .iter()
+        .filter_map(|game| game["identity"]["id"].as_str())
+        .collect::<Vec<_>>();
+    assert!(game_ids.contains(&"pokemon-red-schema"));
+    assert!(game_ids.contains(&"zelda-a-link-to-the-past-file-1-schema"));
+    assert!(game_ids.contains(&"zelda-a-link-to-the-past"));
+    assert!(
+        catalog["generation_games"]
+            .as_array()
+            .expect("generation games")
+            .iter()
+            .any(|game| game == "zelda-a-link-to-the-past")
+    );
+}
+
+#[test]
+fn save_commands_reject_the_removed_schema_option_before_writing() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.sav");
+    let output = temp.child("output.sav");
+    fs::write(input.path(), pokemon_gen1_fixture()).unwrap();
+    let input_path = input.to_str().unwrap();
+    let output_path = output.to_str().unwrap();
+
+    for args in [
+        vec!["save", "list-games", "--schema", "pack.json"],
+        vec![
+            "save",
+            "create",
+            "--game",
+            "zelda-a-link-to-the-past",
+            "--schema",
+            "pack.json",
+            "--output",
+            output_path,
+        ],
+        vec!["save", "identify", input_path, "--schema", "pack.json"],
+        vec!["save", "inspect", input_path, "--schema", "pack.json"],
+        vec![
+            "save",
+            "get",
+            input_path,
+            "trainer.name",
+            "--schema",
+            "pack.json",
+        ],
+        vec![
+            "save",
+            "set",
+            input_path,
+            "trainer.money=1",
+            "--schema",
+            "pack.json",
+            "--output",
+            output_path,
+        ],
+        vec!["save", "export-schema", input_path, "--schema", "pack.json"],
+    ] {
+        let mut command = Command::cargo_bin("rom-weaver").expect("binary");
+        let result = command.args(args).assert().code(2);
+        assert!(
+            String::from_utf8_lossy(&result.get_output().stderr)
+                .contains("unexpected argument '--schema'")
+        );
+        assert!(!output.path().exists());
+    }
+}
+
 fn alttp_fixture() -> Vec<u8> {
     const FILE_SIZE: usize = 0x500;
     let mut bytes = vec![0; 0x2000];
@@ -83,6 +158,7 @@ fn pokemon_gen1_fixture() -> Vec<u8> {
     bytes[0x2601] = 3;
     bytes[0x25c9] = 0;
     bytes[0x25ca] = 0xff;
+    bytes[0x27e7] = 0xff;
     bytes[0x7000] = 0xa5;
     let checksum = bytes[0x2598..0x3523]
         .iter()
@@ -918,4 +994,47 @@ fn save_set_round_trips_a_shark_port_wrapper() {
         0,
     );
     assert_eq!(get["label"], "777");
+}
+
+#[test]
+fn save_create_and_edit_super_mario_world() {
+    let temp = setup_temp_dir();
+    let source = temp.child("mario.srm");
+    let edited = temp.child("mario-edited.srm");
+    run_single_json_event(
+        &[
+            "save",
+            "create",
+            "--game",
+            "super-mario-world",
+            "--output",
+            source.path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    let original = fs::read(source.path()).unwrap();
+    assert_eq!(original.len(), 2048);
+    run_single_json_event(
+        &[
+            "save",
+            "set",
+            source.path().to_str().unwrap(),
+            "--output",
+            edited.path().to_str().unwrap(),
+            "slot_1.progress.exits_completed=96",
+            "slot_1.events.event_000=true",
+            "--json",
+        ],
+        0,
+    );
+    let output = fs::read(edited.path()).unwrap();
+    assert_eq!(output[140], 96);
+    assert_eq!(output[96], 0x80);
+    assert_eq!(&output[..143], &output[429..572]);
+    assert_eq!(fs::read(source.path()).unwrap(), original);
+    run_single_json_event(
+        &["save", "inspect", edited.path().to_str().unwrap(), "--json"],
+        0,
+    );
 }

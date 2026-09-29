@@ -50,6 +50,12 @@ test("WASM source fingerprints change with compiler inputs", () => {
     const initial = createWasmSourceFingerprint(root);
     fs.writeFileSync(path.join(root, "crates/example/lib.rs"), "two");
     assert.notEqual(createWasmSourceFingerprint(root), initial);
+    fs.mkdirSync(path.join(root, "crates/example/data"), { recursive: true });
+    const pack = path.join(root, "crates/example/data/builtin-save.json");
+    fs.writeFileSync(pack, '{"schema_version":1,"games":[]}');
+    const withPack = createWasmSourceFingerprint(root);
+    fs.writeFileSync(pack, '{"schema_version":1,"games":[{"id":"changed"}]}');
+    assert.notEqual(createWasmSourceFingerprint(root), withPack);
 
     const sourceFingerprint = createWasmSourceFingerprint(root);
     fs.mkdirSync(path.join(root, "crates/example/tests"), { recursive: true });

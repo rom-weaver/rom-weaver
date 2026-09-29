@@ -3,8 +3,7 @@ use std::{collections::HashSet, fs::OpenOptions};
 use super::*;
 use rom_weaver_core::{
     SaveDetectionInput, SaveDocument, SaveEdit, SaveField, SaveFormatCandidate, SaveGameIdentity,
-    SaveRecognition, SaveRecognitionOutcome, SaveValue, apply_save_edits, candidate_save_formats,
-    detect_save, parse_save,
+    SaveGameRegistry, SaveRecognition, SaveRecognitionOutcome, SaveValue, candidate_save_formats,
 };
 
 const SAVE_DETAILS_KEY: &str = "save_editor";
@@ -13,7 +12,7 @@ const MAX_SAVE_INPUT_SIZE: u64 = 128 * 1024 * 1024;
 impl CliApp {
     pub(super) fn run_save(&self, command: SaveCommands) -> AppRunOutcome {
         match command {
-            SaveCommands::ListGames(_) => self.run_save_list_games(),
+            SaveCommands::ListGames(args) => self.run_save_list_games(args),
             SaveCommands::Create(args) => self.run_save_create(args),
             SaveCommands::Identify(args) => self.run_save_identify(args),
             SaveCommands::Inspect(args) => self.run_save_inspect(args),
@@ -23,8 +22,9 @@ impl CliApp {
         }
     }
 
-    fn run_save_list_games(&self) -> AppRunOutcome {
-        let registry = rom_weaver_core::SaveGameRegistry::default();
+    fn run_save_list_games(&self, _args: SaveListGamesCommand) -> AppRunOutcome {
+        let command = "save-list-games";
+        let registry = SaveGameRegistry::default();
         let games = registry.definitions();
         let generation_games = registry
             .generation_definitions()
@@ -46,12 +46,13 @@ impl CliApp {
             })
             .collect::<Vec<_>>()
             .join("\n");
-        self.finish("save-list-games", save_report(OperationStatus::Succeeded, "list-games", label,
+        self.finish(command, save_report(OperationStatus::Succeeded, "list-games", label,
             Some(json!({ SAVE_DETAILS_KEY: { "games": games, "generation_games": generation_games } }))))
     }
 
     fn run_save_create(&self, args: SaveCreateCommand) -> AppRunOutcome {
         let command = "save-create";
+        let registry = SaveGameRegistry::default();
         if !args.dry_run && args.output.is_none() {
             return self.finish(
                 command,
@@ -73,7 +74,7 @@ impl CliApp {
                 return self.finish(command, save_error_report("validate", RomWeaverError::Validation(
                     "fresh save generation requires --game; use save list-games to list supported games".to_string())));
             };
-            match rom_weaver_core::SaveGameRegistry::default().generate(game) {
+            match registry.generate(game) {
                 Ok(input) => input,
                 Err(error) => return self.finish(command, save_error_report("generate", error)),
             }
@@ -90,19 +91,21 @@ impl CliApp {
                 dry_run: args.dry_run,
                 force: args.force,
             },
+            &registry,
             true,
         )
     }
 
     fn run_save_identify(&self, args: SaveIdentifyCommand) -> AppRunOutcome {
         let command = "save-identify";
+        let registry = SaveGameRegistry::default();
         let input = match self.load_save_input(command, &args.input, args.game, args.rom_sha1) {
             Ok(input) => input,
             Err(report) => return self.finish(command, *report),
         };
-        let recognition = detect_save(&input);
+        let recognition = registry.detect(&input);
         let document = recognized_identity(&recognition)
-            .and_then(|identity| parse_save(&input, identity).ok());
+            .and_then(|identity| registry.parse(&input, identity).ok());
         // Report the raw save, not the outer file, when the save is inside a
         // wrapper such as a GameShark SP export or a DeSmuME .dsv.
         let container = rom_weaver_core::unwrap_save_container(&input.bytes);
@@ -170,14 +173,16 @@ impl CliApp {
 
     fn run_save_inspect(&self, args: SaveInspectCommand) -> AppRunOutcome {
         let command = "save-inspect";
+        let registry = SaveGameRegistry::default();
         let input = match self.load_save_input(command, &args.input, args.game, args.rom_sha1) {
             Ok(input) => input,
             Err(report) => return self.finish(command, *report),
         };
-        let (recognition, identity, document) = match self.load_save_document(command, &input) {
-            Ok(loaded) => loaded,
-            Err(outcome) => return *outcome,
-        };
+        let (recognition, identity, document) =
+            match self.load_save_document(command, &input, &registry) {
+                Ok(loaded) => loaded,
+                Err(outcome) => return *outcome,
+            };
         self.finish(
             command,
             save_report(
@@ -200,9 +205,10 @@ impl CliApp {
         &self,
         command: &str,
         input: &SaveDetectionInput,
+        registry: &SaveGameRegistry,
     ) -> std::result::Result<(SaveRecognition, SaveGameIdentity, SaveDocument), Box<AppRunOutcome>>
     {
-        let (recognition, identity) = match detect_for_edit(input) {
+        let (recognition, identity) = match detect_for_edit(input, registry) {
             Ok(result) => result,
             Err(failure) => {
                 let (recognition, message) = *failure;
@@ -217,7 +223,7 @@ impl CliApp {
                 )));
             }
         };
-        match parse_save(input, &identity) {
+        match registry.parse(input, &identity) {
             Ok(document) => Ok((recognition, identity, document)),
             Err(error) => Err(Box::new(
                 self.finish(command, save_error_report("validate", error)),
@@ -227,14 +233,16 @@ impl CliApp {
 
     fn run_save_get(&self, args: SaveGetCommand) -> AppRunOutcome {
         let command = "save-get";
+        let registry = SaveGameRegistry::default();
         let input = match self.load_save_input(command, &args.input, args.game, args.rom_sha1) {
             Ok(input) => input,
             Err(report) => return self.finish(command, *report),
         };
-        let (recognition, _identity, document) = match self.load_save_document(command, &input) {
-            Ok(loaded) => loaded,
-            Err(outcome) => return *outcome,
-        };
+        let (recognition, _identity, document) =
+            match self.load_save_document(command, &input, &registry) {
+                Ok(loaded) => loaded,
+                Err(outcome) => return *outcome,
+            };
         let Some(field) = document.fields.iter().find(|field| field.id == args.field) else {
             return self.finish(
                 command,
@@ -264,6 +272,7 @@ impl CliApp {
 
     pub(super) fn run_save_set(&self, args: SaveSetCommand) -> AppRunOutcome {
         let command = "save-set";
+        let registry = SaveGameRegistry::default();
         let input = match self.load_save_input(
             command,
             &args.input,
@@ -273,7 +282,7 @@ impl CliApp {
             Ok(input) => input,
             Err(report) => return self.finish(command, *report),
         };
-        self.run_save_write(command, input, args, false)
+        self.run_save_write(command, input, args, &registry, false)
     }
 
     fn run_save_write(
@@ -281,17 +290,19 @@ impl CliApp {
         command: &str,
         input: SaveDetectionInput,
         args: SaveSetCommand,
+        registry: &SaveGameRegistry,
         create: bool,
     ) -> AppRunOutcome {
-        let (recognition, identity, document) = match self.load_save_document(command, &input) {
-            Ok(loaded) => loaded,
-            Err(outcome) => return *outcome,
-        };
+        let (recognition, identity, document) =
+            match self.load_save_document(command, &input, registry) {
+                Ok(loaded) => loaded,
+                Err(outcome) => return *outcome,
+            };
         let edits = match parse_save_assignments(&document, &args.assignments) {
             Ok(edits) => edits,
             Err(error) => return self.finish(command, save_error_report("validate", error)),
         };
-        let mut result = match apply_save_edits(&input, &identity, &edits, args.dry_run) {
+        let mut result = match registry.apply(&input, &identity, &edits, args.dry_run) {
             Ok(result) => result,
             Err(error) => return self.finish(command, save_error_report("edit", error)),
         };
@@ -370,6 +381,7 @@ impl CliApp {
 
     fn run_save_export_schema(&self, args: SaveExportSchemaCommand) -> AppRunOutcome {
         let command = "save-export-schema";
+        let registry = SaveGameRegistry::default();
         let Some(path) = args.input else {
             return self.finish(
                 command,
@@ -386,10 +398,11 @@ impl CliApp {
             Ok(input) => input,
             Err(report) => return self.finish(command, *report),
         };
-        let (recognition, identity, document) = match self.load_save_document(command, &input) {
-            Ok(loaded) => loaded,
-            Err(outcome) => return *outcome,
-        };
+        let (recognition, identity, document) =
+            match self.load_save_document(command, &input, &registry) {
+                Ok(loaded) => loaded,
+                Err(outcome) => return *outcome,
+            };
         self.finish(
             command,
             save_report(
@@ -476,8 +489,9 @@ impl CliApp {
 
 fn detect_for_edit(
     input: &SaveDetectionInput,
+    registry: &SaveGameRegistry,
 ) -> std::result::Result<(SaveRecognition, SaveGameIdentity), Box<(SaveRecognition, String)>> {
-    let recognition = detect_save(input);
+    let recognition = registry.detect(input);
     match &recognition.outcome {
         SaveRecognitionOutcome::Recognized { candidate } => {
             let identity = candidate.identity.clone();
