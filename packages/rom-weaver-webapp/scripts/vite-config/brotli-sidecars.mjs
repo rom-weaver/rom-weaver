@@ -76,7 +76,13 @@ export const writeBrotliSidecars = () => {
         // Every identify asset rides the one wildcard include staged above. An exact
         // entry per pack, shard, and manifest would be redundant and eat the budget
         // asserted below.
-        const route = name.startsWith("identify-") ? "/assets/identify-*" : `/assets/${name}`;
+        // Browser runtime chunks share a route as the workflow count grows.
+        // The asset function falls back to static serving for missing sidecars.
+        const route = name.startsWith("identify-")
+          ? "/assets/identify-*"
+          : name.startsWith("browser-")
+            ? "/assets/browser-*"
+            : `/assets/${name}`;
         if (!sidecarUrls.includes(route)) sidecarUrls.push(route);
       }
       if (sidecarUrls.length > PAGES_ROUTES_MAX_INCLUDES) {
