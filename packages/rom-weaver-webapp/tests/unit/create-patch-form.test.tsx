@@ -4,6 +4,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import type { BinarySource } from "../../src/public/react/patcher-form.ts";
 
+// A test MAY stand in a cheat index; left unset, the real loader runs against
+// the stubbed fetch.
+const identifyIndexOverride = vi.hoisted(() => ({ current: undefined as undefined | (() => Promise<unknown>) }));
+vi.mock("../../src/platform/browser/identify-packs.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/platform/browser/identify-packs.ts")>();
+  return {
+    ...actual,
+    loadIdentifyIndexAndCatalog: () =>
+      (identifyIndexOverride.current?.() as ReturnType<typeof actual.loadIdentifyIndexAndCatalog> | undefined) ??
+      actual.loadIdentifyIndexAndCatalog(),
+  };
+});
+
 type FakeEventListener = (payload: unknown) => void;
 
 type FakeSource = {
@@ -153,6 +166,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  identifyIndexOverride.current = undefined;
   latest = null;
   createPatchFormModule = null;
   nextOriginalError = null;
@@ -271,6 +285,66 @@ describe("CreatePatchForm", () => {
     });
     expect(codes.getAttribute("aria-pressed")).toBe("true");
     expect(container.textContent).not.toContain("Add your modified ROM");
+  });
+
+  // The staged original is an NES ROM; this index and catalog cover only the SNES.
+  const snesOnlyCheatData = () => ({
+    catalog: {
+      format: "rom-weaver-identify-catalog-v1",
+      platforms: [
+        {
+          aliases: ["snes"],
+          canonicalPlatform: "Nintendo - Super Nintendo Entertainment System",
+          mediaProfiles: [],
+          packFormat: "RWFP1",
+          packSha256: "",
+          packSlug: "nintendo-super-nintendo-entertainment-system",
+          source: "libretro",
+        },
+      ],
+    },
+    index: {
+      cheats: [
+        {
+          cheatSystem: "snes",
+          cheats: 1,
+          file: "cheats-snes.json",
+          games: 1,
+          platform: "Nintendo - Super Nintendo Entertainment System",
+          rawBytes: 1,
+          sha256: "a".repeat(64),
+          slug: "nintendo-super-nintendo-entertainment-system",
+        },
+      ],
+      sources: { libretro: { revision: "abc123", url: "https://github.com/libretro/libretro-database" } },
+    },
+  });
+
+  it("disables cheat codes mode when the original ROM's system has no cheat support", async () => {
+    identifyIndexOverride.current = async () => snesOnlyCheatData();
+    const { container } = await stageOriginalOnly({ betaToolsEnabled: true });
+
+    await vi.waitFor(() => expect((findButton(container, "Cheat codes") as HTMLButtonElement).disabled).toBe(true));
+    const reason = container.querySelector("#patch-builder-cheat-codes-unsupported");
+    expect(reason?.textContent).toBe("Cheats are not supported for Nintendo Entertainment System yet.");
+    expect(findButton(container, "Cheat codes")?.getAttribute("aria-describedby")).toBe(reason?.id);
+    expect(findButton(container, "Modified ROM")?.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("leaves cheat codes mode once the index shows the system has no cheat support", async () => {
+    // The form and the cheat panel both load the index; they MUST share one pending load.
+    let resolveIndex: (value: unknown) => void = () => undefined;
+    const pendingIndex = new Promise((resolve) => (resolveIndex = resolve));
+    identifyIndexOverride.current = () => pendingIndex;
+    const { container } = await stageOriginalOnly({ betaToolsEnabled: true });
+    await act(async () => {
+      fireEvent.click(findButton(container, "Cheat codes") as HTMLButtonElement);
+    });
+    expect(findButton(container, "Cheat codes")?.getAttribute("aria-pressed")).toBe("true");
+
+    await act(async () => resolveIndex(snesOnlyCheatData()));
+    await vi.waitFor(() => expect(findButton(container, "Modified ROM")?.getAttribute("aria-pressed")).toBe("true"));
+    expect(container.textContent).toContain("Add your modified ROM");
   });
 
   it("returns to modified ROM mode when beta tools turn off", async () => {

@@ -3,6 +3,7 @@ import {
   filterCheats,
   isCheatDatabaseSystem,
   isCheatManualSystem,
+  isUnsupportedCheatSystem,
   matchCheatGame,
   reconcileSelectedCheatIds,
   resolveCheatDatabaseEntry,
@@ -160,6 +161,16 @@ describe("cheat database catalog", () => {
     expect(resolveManualOnlyCheatSystem(undefined, { platform: "Sony - PlayStation 2" })).toBeUndefined();
     expect(resolveManualOnlyCheatSystem(catalog, { platform: "snes" })).toBeUndefined();
     expect(resolveManualOnlyCheatSystem(catalog, null)).toBeUndefined();
+  });
+
+  it("reports a system unsupported only when a known platform has no shard and no decoder", () => {
+    expect(isUnsupportedCheatSystem(index, catalog, { platform: "Nintendo - Nintendo 64" })).toBe(true);
+    expect(isUnsupportedCheatSystem(index, catalog, { platform: "super famicom" })).toBe(false);
+    expect(isUnsupportedCheatSystem(index, catalog, { platform: "Sony - PlayStation" })).toBe(false);
+    expect(isUnsupportedCheatSystem(index, catalog, { fileName: "game.z64" })).toBe(false);
+    expect(isUnsupportedCheatSystem(undefined, catalog, { platform: "Nintendo - Nintendo 64" })).toBe(false);
+    expect(isUnsupportedCheatSystem(index, undefined, { platform: "Nintendo - Nintendo 64" })).toBe(false);
+    expect(isUnsupportedCheatSystem(index, catalog, null)).toBe(false);
   });
 
   it("resolves a platform tag through the identify catalog aliases", () => {
