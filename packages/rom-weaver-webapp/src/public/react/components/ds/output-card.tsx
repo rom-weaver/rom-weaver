@@ -164,6 +164,7 @@ const OutputCard = ({
         <Drawer
           bodyClassName="optsbody"
           className="optsblock outopts"
+          integrated
           label={localizer.message("ui.output.options")}
           labelIcon={<SlidersHorizontal aria-hidden="true" className="tune" />}
           readouts={

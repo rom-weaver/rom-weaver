@@ -148,6 +148,10 @@
   background: color-mix(in oklab, var(--well) 45%, transparent);
   border-block-start-color: var(--seam-soft);
 }
+/* Content after the last section needs a seam to close it. */
+.rw-app .cks.is-integrated:not(:last-child, :has(+ .cks.is-integrated)) {
+  border-block-end: 1px solid var(--seam-soft);
+}
 .rw-app .cks.is-integrated > .cks-head {
   padding-inline: var(--cks-pad);
 }
