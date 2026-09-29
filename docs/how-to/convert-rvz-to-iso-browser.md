@@ -28,3 +28,5 @@ RVZ stores GameCube and Wii disc data efficiently. ISO has wider tool compatibil
 Make sure the browser and destination have enough free space for the extracted ISO. Keep the RVZ until you test the ISO.
 
 For other inputs, use [Extract files](extract-files-browser.md). [Choosing a compression format](../explanation/compression-formats.md) compares RVZ with other containers.
+
+To compress the ISO again, follow [Convert ISO to RVZ](convert-to-rvz-browser.md).

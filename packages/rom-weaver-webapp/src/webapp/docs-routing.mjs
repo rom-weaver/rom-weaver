@@ -64,6 +64,21 @@ const DOC_SOURCES = Object.freeze([
     slug: "docs/convert-to-chd",
   }),
   Object.freeze({
+    file: "how-to/convert-to-rvz-browser.md",
+    label: "ISO to RVZ (browser)",
+    slug: "docs/convert-to-rvz",
+  }),
+  Object.freeze({
+    file: "how-to/convert-to-z3ds-browser.md",
+    label: "Nintendo 3DS to Z3DS (browser)",
+    slug: "docs/convert-to-z3ds",
+  }),
+  Object.freeze({
+    file: "how-to/extract-z3ds-browser.md",
+    label: "Extract Z3DS files (browser)",
+    slug: "docs/extract-z3ds",
+  }),
+  Object.freeze({
     file: "how-to/trim-roms-browser.md",
     label: "Trim ROMs (browser)",
     slug: "docs/trim-roms-browser",

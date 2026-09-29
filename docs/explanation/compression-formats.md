@@ -29,7 +29,7 @@ A compressed disc image such as CHD or RVZ is a purpose-built container for one 
 
 **RVZ** is Dolphin's format for GameCube and Wii discs. It understands disc padding, and [Dolphin](https://dolphin-emu.org/docs/faq/) plays it directly.
 
-Use [Convert RVZ to ISO](../how-to/convert-rvz-to-iso-browser.md) when another tool needs an ISO.
+Browser procedures: [Convert ISO to RVZ](../how-to/convert-to-rvz-browser.md) and [convert RVZ to ISO](../how-to/convert-rvz-to-iso-browser.md).
 
 rom-weaver's parity suite checks that chdman and dolphin-tool can extract its CHD and RVZ outputs byte for byte, and that rom-weaver can extract the reference tools' outputs. The compressed container bytes and sizes may differ.
 
@@ -38,6 +38,8 @@ rom-weaver reads GCZ, WIA, WBFS, and CSO but does not create them. [Extract, con
 ## 3DS ROM compression: Z3DS
 
 **Z3DS** is a zstd-based, ROM-specific compression format for Nintendo 3DS payloads (`.3ds`, `.cci`, `.cxi`, `.cia`, and `.3dsx`). Its compressed forms (`.z3ds` and friends) are supported by [Azahar 2123 and later](https://github.com/azahar-emu/azahar/discussions/1302); it is not a disc image format.
+
+Browser procedures: [Compress Nintendo 3DS ROMs to Z3DS](../how-to/convert-to-z3ds-browser.md) and [extract Z3DS files](../how-to/extract-z3ds-browser.md).
 
 ## General archives: ZIP and 7z
 
