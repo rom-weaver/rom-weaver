@@ -1,5 +1,5 @@
 import "./design-system/docs-route.css";
-import { ArrowUpDown, ArrowUpToLine, ChevronLeft, ChevronRight, ListTree } from "lucide-react";
+import { ArrowUpToLine, ChevronLeft, ChevronRight, ListTree } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { DOC_PAGE_LOADERS, DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { copyToClipboard } from "../lib/clipboard.ts";
@@ -273,71 +273,37 @@ const DocsNav = ({
   onNavigate?: () => void;
   onShelfToggle: (title: string, open: boolean) => void;
   openShelves: DocShelfState;
-}) => {
-  const navRef = useRef<HTMLElement | null>(null);
-  const positionedSlug = useRef<string | null>(null);
-  useIsomorphicLayoutEffect(() => {
-    const nav = navRef.current;
-    if (!nav || positionedSlug.current === currentSlug) return;
-    const current = nav.querySelector<HTMLAnchorElement>('a[aria-current="page"]');
-    if (!current) {
-      positionedSlug.current = null;
-      return;
-    }
-    if (!current.closest<HTMLDetailsElement>("details")?.open) return;
-    // The hidden desktop copy MUST wait until it has a scrollport to measure.
-    const observer = new ResizeObserver(() => positionCurrentGuide());
-    const positionCurrentGuide = () => {
-      if (!nav.clientHeight) return;
-      const linkBounds = current.getBoundingClientRect();
-      const navBounds = nav.getBoundingClientRect();
-      if (linkBounds.top < navBounds.top || linkBounds.bottom > navBounds.bottom) {
-        nav.scrollTop += linkBounds.top - navBounds.top - (nav.clientHeight - linkBounds.height) / 2;
-      }
-      positionedSlug.current = currentSlug;
-      observer.disconnect();
-    };
-    observer.observe(nav);
-    positionCurrentGuide();
-    return () => observer.disconnect();
-  }, [currentSlug, openShelves]);
-  return (
-    <>
-      <nav aria-label="Docs" className="guide-nav" ref={navRef}>
-        {DOC_SHELVES.map((shelf) => (
-          <details
-            className="guide-shelf"
-            key={shelf.title}
-            onToggle={(event) => onShelfToggle(shelf.title, event.currentTarget.open)}
-            open={openShelves[shelf.title]}
-          >
-            <summary>
-              <h3 className="guide-shelf-title">{shelf.title}</h3>
-            </summary>
-            <ul className="guide-nav-list">
-              {shelf.routes.map((entry) => (
-                <li key={entry.slug}>
-                  <a
-                    aria-current={entry.slug === currentSlug ? "page" : undefined}
-                    href={`/${entry.slug}`}
-                    onClick={onNavigate}
-                    onFocus={() => warmDocsHtml(entry.slug)}
-                    onPointerEnter={() => warmDocsHtml(entry.slug)}
-                  >
-                    {entry.label}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </details>
-        ))}
-      </nav>
-      <p className="guide-nav-hint">
-        Scroll within guides <ArrowUpDown aria-hidden="true" />
-      </p>
-    </>
-  );
-};
+}) => (
+  <nav aria-label="Docs" className="guide-nav">
+    {DOC_SHELVES.map((shelf) => (
+      <details
+        className="guide-shelf"
+        key={shelf.title}
+        onToggle={(event) => onShelfToggle(shelf.title, event.currentTarget.open)}
+        open={openShelves[shelf.title]}
+      >
+        <summary>
+          <h3 className="guide-shelf-title">{shelf.title}</h3>
+        </summary>
+        <ul className="guide-nav-list">
+          {shelf.routes.map((entry) => (
+            <li key={entry.slug}>
+              <a
+                aria-current={entry.slug === currentSlug ? "page" : undefined}
+                href={`/${entry.slug}`}
+                onClick={onNavigate}
+                onFocus={() => warmDocsHtml(entry.slug)}
+                onPointerEnter={() => warmDocsHtml(entry.slug)}
+              >
+                {entry.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </details>
+    ))}
+  </nav>
+);
 
 /** Every page and its opening sentence, grouped by audience and kept in route order. */
 const DocsIndex = ({

@@ -479,6 +479,22 @@ Fixture description.
     );
   });
 
+  it("expands each Docs subheading independently with Start here open by default", () => {
+    render(<DocsNavigation currentSlug="docs" />);
+
+    const shelves = [...document.querySelectorAll<HTMLDetailsElement>(".guide-shelf")];
+    expect(shelves).toHaveLength(shelfTitles.length);
+    expect(shelves.map((shelf) => shelf.open)).toEqual(shelfTitles.map((title) => title === defaultShelfTitle));
+    for (const shelf of shelves) {
+      const summary = shelf.querySelector("summary") as HTMLElement;
+      expect(summary.querySelector("h3")?.textContent).toBeTruthy();
+      const wasOpen = shelf.open;
+      fireEvent.click(summary);
+      expect(shelf.open).toBe(!wasOpen);
+    }
+    expect(shelves.map((shelf) => shelf.open)).toEqual(shelfTitles.map((title) => title !== defaultShelfTitle));
+  });
+
   it("shelves every route and keeps disclosure choices between pages", async () => {
     const { unmount } = render(<DocsNavigation currentSlug="docs/cli" />);
 
