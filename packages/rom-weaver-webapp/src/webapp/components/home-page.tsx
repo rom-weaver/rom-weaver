@@ -6,6 +6,7 @@ import {
   Footprints,
   Gamepad2,
   GitCompare,
+  Hash,
   ListChecks,
   Package,
   Server,
@@ -74,6 +75,10 @@ const HomeCapabilities = ({ baseUrl, className, headingId }: HomeCapabilitiesPro
         <a className="btn ghost" href={route("test-rom")}>
           <Gamepad2 aria-hidden="true" />
           {localizer.message("ui.home.flowTest")}
+        </a>
+        <a className="btn ghost" href={route("checksum")}>
+          <Hash aria-hidden="true" />
+          {localizer.message("ui.home.checksums")}
         </a>
         <a className="btn ghost" href={resolveGuidedSampleHref(baseUrl, "apply")}>
           <Footprints aria-hidden="true" />

@@ -628,6 +628,12 @@
   letter-spacing: 0.03em;
   white-space: nowrap;
 }
+/* The value size is fitted to a 40-character SHA-1, so a longer digest
+   (SHA-256, BLAKE3) wraps inside its row instead of running under the copy glyph. */
+.rw-app .ck.ck-long .ck-v {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
 /* A value the identification database supplied because the run computed none.
    It is a claim about the ROM, not a measurement of the staged bytes, so the
    row is muted and its key carries a "db" tag. */

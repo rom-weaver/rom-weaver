@@ -375,6 +375,19 @@ impl CliApp {
             // the range/plain path needs this separate prefix read.
             Self::attach_rom_identity_details(&mut report, &request.source);
         }
+        if report.status == OperationStatus::Succeeded {
+            let mut details = operation_report_details(&mut report);
+            details.insert(
+                "file_name".to_string(),
+                json!(
+                    request
+                        .source
+                        .file_name()
+                        .map(|name| name.to_string_lossy())
+                ),
+            );
+            report.details = Some(Value::Object(details));
+        }
         Self::cleanup_temp_paths(&temp_paths);
         report
     }

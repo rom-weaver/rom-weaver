@@ -42,6 +42,7 @@ Guided app samples: [Apply](https://rom-weaver.com/apply-patches?guide=apply), [
 | Add a translation or other game change | [Apply a patch](how-to/apply-rom-patches.md) |
 | Share changes I made | [Create a patch](how-to/create-rom-patches.md) or [bundle a recipe](how-to/create-bundles.md) |
 | Find which game or revision a file contains | [Identify and compare checksums](how-to/identify-roms-browser.md) |
+| Check a file against an expected checksum | [Checksum a file](how-to/checksum-roms-browser.md) |
 | Take files out of an archive | [Extract files](how-to/extract-files-browser.md) |
 | Package files or compress a disc image | [Compress files](how-to/convert-roms-browser.md) |
 | Make a game's file smaller | [Compress files](how-to/convert-roms-browser.md), or [trim padding](how-to/trim-roms-browser.md) |
@@ -75,6 +76,7 @@ Procedures for specific tasks.
 - [Create a ROM patch](how-to/create-rom-patches.md)
 - [Create and share a patch bundle](how-to/create-bundles.md)
 - [Identify a ROM and compare checksums](how-to/identify-roms-browser.md)
+- [Checksum a file](how-to/checksum-roms-browser.md)
 - [Extract files from an archive or disc image](how-to/extract-files-browser.md)
 - [Compress files or disc images](how-to/convert-roms-browser.md)
 - [Convert RVZ to ISO](how-to/convert-rvz-to-iso-browser.md)

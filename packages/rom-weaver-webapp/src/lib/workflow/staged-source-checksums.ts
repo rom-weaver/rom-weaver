@@ -138,6 +138,25 @@ const getPatchFilePrecomputedChecksumMs = (file: PatchFileInstance | undefined):
   return typeof ms === "number" && Number.isFinite(ms) && ms >= 0 ? ms : undefined;
 };
 
+/** Checksum progress state for one prepared asset of a staged source, falling back to the stage's own metrics. */
+const getAssetChecksumState = (
+  asset: InputAsset,
+  stage: {
+    parentCompressions: StandardChecksumParentCompression[];
+    state: Pick<StandardChecksumState, "decompressionTimeMs" | "fileName" | "id" | "sourceSize" | "wasDecompressed">;
+  },
+  order: number,
+): StandardChecksumState => ({
+  decompressionTimeMs: getAssetDecompressionTimeMs(asset, stage.state.decompressionTimeMs),
+  fileName: asset.fileName || stage.state.fileName || stage.state.id,
+  id: stage.state.id,
+  order,
+  parentCompressions: getAssetParentCompressions(asset, stage.parentCompressions),
+  size: asset.size,
+  sourceSize: getAssetSourceSize(asset, stage.state.sourceSize),
+  wasDecompressed: asset.preparation?.wasDecompressed ?? stage.state.wasDecompressed,
+});
+
 const createChecksumProgressDetails = (state: StandardChecksumState) => ({
   decompressionTimeMs: state.decompressionTimeMs,
   fileName: state.fileName,
@@ -149,30 +168,36 @@ const createChecksumProgressDetails = (state: StandardChecksumState) => ({
   wasDecompressed: state.wasDecompressed,
 });
 
-const calculateStandardInputChecksumsForFile = async ({
+/**
+ * Hash one prepared input asset with `algorithms` via `ingest`, which classifies the
+ * (already-extracted) leaf as a bare ROM and hashes it in place with the shared variant engine.
+ * Algorithms the run did not produce map to an empty string.
+ */
+const calculateInputChecksumsForFile = async ({
+  algorithms,
   emitProgress,
   file,
+  identify,
   logLevel,
   onLog,
   progressId,
   role,
   runtime,
+  signal,
   state,
   workflow,
-}: StandardChecksumOptions): Promise<{
-  checksums: StandardWorkflowChecksums;
+}: StandardChecksumOptions & {
+  algorithms: readonly string[];
+  /** Look the ROM up in the local identify data. Defaults to true, as `ingest` does. */
+  identify?: boolean;
+  signal?: AbortSignal;
+}): Promise<{
+  checksums: Record<string, string>;
   identification?: ParsedIdentifyResolution;
-  romProbe?: ChecksumRomProbe;
   romType?: RomTypeTag;
   variants?: ChecksumVariant[];
 }> => {
-  // Checksum the prepared input asset via `ingest`, not the standalone `checksum` command: ingest
-  // classifies the (already-extracted) leaf as a bare ROM and hashes it in place with the SAME shared
-  // variant engine - fed the full thread budget - so multi-variant ROMs (e.g. GBA raw + fix-header)
-  // are not under-threaded the way the per-command checksum cap used to do. `romProbe` is absent
-  // because ingest never produces it (the standalone path only ever emitted a `{ trim: { detected:
-  // false } }` placeholder for these inputs).
-  if (!runtime.ingest?.run) return { checksums: {} as StandardWorkflowChecksums };
+  if (!runtime.ingest?.run) return { checksums: {} };
   const details = createChecksumProgressDetails(state);
   const id = `${progressId || state.id}:checksum`;
   emitProgress({
@@ -185,8 +210,9 @@ const calculateStandardInputChecksumsForFile = async ({
     workflow,
   });
   const { identifyUnavailable, result } = await runtime.ingest.run({
-    checksumAlgorithms: [...DEFAULT_CHECKSUMS],
+    checksumAlgorithms: [...algorithms],
     fileName: state.fileName,
+    ...(identify === undefined ? {} : { identify }),
     logLevel,
     onLog,
     onProgress: (progress) =>
@@ -199,12 +225,13 @@ const calculateStandardInputChecksumsForFile = async ({
         stage: "checksum",
         workflow,
       }),
+    ...(signal ? { signal } : {}),
     source: createChecksumSource(file, state.fileName),
   });
   const asset = result.isRom ? result.assets[0] : undefined;
   const assetChecksums = (asset?.checksums ?? {}) as Record<string, string | undefined>;
-  const checksums = {} as StandardWorkflowChecksums;
-  for (const algorithm of DEFAULT_CHECKSUMS) {
+  const checksums: Record<string, string> = {};
+  for (const algorithm of algorithms) {
     const value = assetChecksums[algorithm];
     checksums[algorithm] = typeof value === "string" ? value.trim().toLowerCase() : "";
   }
@@ -220,7 +247,6 @@ const calculateStandardInputChecksumsForFile = async ({
   return {
     checksums,
     identification,
-    romProbe: undefined,
     romType: romTypeFromEmittedFile({
       discFormat: asset?.discFormat,
       platform: asset?.platform,
@@ -230,6 +256,24 @@ const calculateStandardInputChecksumsForFile = async ({
   };
 };
 
+// Checksum the prepared input asset via `ingest`, not the standalone `checksum` command: ingest
+// feeds the shared variant engine the full thread budget, so multi-variant ROMs (e.g. GBA raw +
+// fix-header) are not under-threaded the way the per-command checksum cap used to do. `romProbe` is
+// absent because ingest never produces it (the standalone path only ever emitted a
+// `{ trim: { detected: false } }` placeholder for these inputs).
+const calculateStandardInputChecksumsForFile = async (
+  options: StandardChecksumOptions,
+): Promise<{
+  checksums: StandardWorkflowChecksums;
+  identification?: ParsedIdentifyResolution;
+  romProbe?: ChecksumRomProbe;
+  romType?: RomTypeTag;
+  variants?: ChecksumVariant[];
+}> => {
+  const result = await calculateInputChecksumsForFile({ ...options, algorithms: DEFAULT_CHECKSUMS });
+  return { ...result, checksums: result.checksums as StandardWorkflowChecksums, romProbe: undefined };
+};
+
 export type { StandardWorkflowChecksums };
 export {
   calculateStandardInputChecksumsForFile,
@@ -237,6 +281,7 @@ export {
   cloneChecksumVariants,
   cloneIdentification,
   cloneRomType,
+  getAssetChecksumState,
   getAssetDecompressionTimeMs,
   getAssetParentCompressions,
   getAssetSourceSize,

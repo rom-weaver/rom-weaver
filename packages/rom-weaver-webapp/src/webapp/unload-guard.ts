@@ -110,6 +110,7 @@ const getPendingChangeState = ({
   romFilePresent,
 }: PendingChangeInputState): PendingChangeState => ({
   creator: creatorHasPendingChanges(creatorState),
+  checksum: false,
   compress: !!compressActive,
   extract: false,
   identify: false,

@@ -100,8 +100,8 @@ const ChecksumRow = ({
  * row holds the exact height/width the resolved value will occupy (no layout
  * shift when the hash lands). Non-interactive.
  */
-const PendingChecksumRow = ({ label, length }: { label: ReactNode; length: number }) => (
-  <div className={join("ck mono pending", pairMarkerClass(label))}>
+const PendingChecksumRow = ({ className, label, length }: { className?: string; label: ReactNode; length: number }) => (
+  <div className={join("ck mono pending", className, pairMarkerClass(label))}>
     <span className="ck-k">{label}</span>
     <span className={join("ck-v", length >= FIT_VALUE_MIN_CHARS && "ck-fit")}>
       <span className="pend">{"0".repeat(Math.max(1, length))}</span>

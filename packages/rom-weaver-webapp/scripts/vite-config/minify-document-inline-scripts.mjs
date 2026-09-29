@@ -3,6 +3,17 @@ import path from "node:path";
 import { minifyInlineScripts } from "../minify-inline-scripts.mjs";
 import { rootDir } from "./paths.mjs";
 
+// Head spacing has no visual effect. Script and style contents MUST retain their whitespace.
+export const minifyDocumentHead = (html) =>
+  html.replace(
+    /<head>([\s\S]*?)<\/head>/,
+    (_, head) =>
+      `<head>${head
+        .split(/(<script\b[^>]*>[\s\S]*?<\/script>|<style\b[^>]*>[\s\S]*?<\/style>)/g)
+        .map((part, index) => (index % 2 ? part : part.replace(/>\s+</g, "><").trim()))
+        .join("")}</head>`,
+  );
+
 // Every route document is derived from dist/index.html after the bundle is
 // written, and PRERENDER_ROOT injects two more inline scripts on the way, so
 // the minifier runs over the finished files rather than through
@@ -19,7 +30,7 @@ export const minifyDocumentInlineScripts = () => {
         if (!relativePath.endsWith(".html")) continue;
         const filePath = path.join(distDir, relativePath);
         const html = fs.readFileSync(filePath, "utf8");
-        const minified = minifyInlineScripts(html, relativePath);
+        const minified = minifyDocumentHead(minifyInlineScripts(html, relativePath));
         if (minified !== html) fs.writeFileSync(filePath, minified);
       }
     },

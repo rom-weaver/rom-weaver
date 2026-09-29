@@ -57,4 +57,6 @@ For an archive, these checks describe the ROM inside it. A checksum for the ZIP 
 
 Some cards include variants, such as a ROM without its copier header. Compare the form the author specifies. If the values differ, follow [Fix a checksum error](fix-checksum-errors.md).
 
+For SHA-256 and other algorithms, or to compare a pasted value automatically, use [Checksum a ROM](checksum-roms-browser.md).
+
 For data sources and offline requirements, see [Where identify data comes from](../explanation/identify-sources.md). Terminal procedures are in [Identify and hash ROMs from the CLI](identify-and-hash-files.md).

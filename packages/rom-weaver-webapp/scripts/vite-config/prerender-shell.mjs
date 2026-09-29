@@ -75,14 +75,15 @@ const assertShellLoomCanvas = (shell) => {
 // Callers MUST await buildShellLoomScript() first: closeBundle rebuilds these
 // strings synchronously to find the home root in dist/index.html, so the loom
 // script is read from the cache filled by transformIndexHtml.
-export const PRERENDER_ROOT = (shell) =>
-  `<div id="webapp-root" aria-busy="true">${shell
+export const PRERENDER_ROOT = (shell) => {
+  const shelfRestorer = /class="[^"]*\b(?:guide-shelf|docs-index-shelf)\b/.test(shell)
+    ? PRERENDER_DOC_SHELF_RESTORER
+    : "";
+  return `<div id="webapp-root" aria-busy="true">${shell
     .replace(PRERENDER_RUNTIME_SLOT, `${PRERENDER_RUNTIME_SLOT}${PRERENDER_RUNTIME_RESOLVER}`)
     .replace(PRERENDER_THREADS_SLOT, `${PRERENDER_THREADS_SLOT}${PRERENDER_RUNTIME_RESOLVER}`)
-    .replace(
-      PRERENDER_LOOM_CANVAS,
-      (canvas) => `${canvas}${shellLoomScript.html}`,
-    )}</div>${PRERENDER_DOC_SHELF_RESTORER}`;
+    .replace(PRERENDER_LOOM_CANVAS, (canvas) => `${canvas}${shellLoomScript.html}`)}</div>${shelfRestorer}`;
+};
 
 // Ship the landing shell's real markup inside #webapp-root so the browser can
 // paint it as soon as the stylesheet arrives, instead of a blank page until the
@@ -171,6 +172,7 @@ export const prerenderWebappShell = (prerenderedShells) => ({
         prerenderedShells.set("patcher", await render("patcher"));
         prerenderedShells.set("bundle", await render("bundle"));
         prerenderedShells.set("creator", await render("creator"));
+        prerenderedShells.set("checksum", await render("checksum"));
         prerenderedShells.set("compress", await render("compress"));
         prerenderedShells.set("identify", await render("identify"));
         prerenderedShells.set("extract", await render("extract"));

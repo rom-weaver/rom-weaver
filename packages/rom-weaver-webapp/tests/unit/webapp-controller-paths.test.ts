@@ -163,6 +163,8 @@ describe("the landing route at the app base", () => {
       ["/bundle", "bundle"],
       ["/create", "creator"],
       ["/create-patch", "creator"],
+      ["/checksum", "checksum"],
+      ["/checksum.html", "checksum"],
       ["/compress", "compress"],
       ["/compress.html", "compress"],
       ["/identify", "identify"],

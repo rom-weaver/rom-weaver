@@ -10,6 +10,13 @@ import type { MessageId } from "./catalog.ts";
  * during Babel transforms. Plurals use ICU `{count, plural, ...}` messages.
  */
 const MESSAGES: Record<MessageId, MessageDescriptor> = {
+  "ui.hero.checksumThesis": msg({ id: "ui.hero.checksumThesis", message: "Checksum any file." }),
+  "ui.hero.checksumThesis2": msg({ id: "ui.hero.checksumThesis2", message: "Compare it with the expected value." }),
+  "ui.hero.checksumDescription": msg({
+    id: "ui.hero.checksumDescription",
+    message:
+      "Choose checksums for any file. Auto extract opens archives and containers. Everything runs locally in your browser.",
+  }),
   "ui.hero.compressThesis": msg({ id: "ui.hero.compressThesis", message: "Compress your files." }),
   "ui.hero.compressThesis2": msg({ id: "ui.hero.compressThesis2", message: "Choose the output format." }),
   "ui.hero.compressDescription": msg({

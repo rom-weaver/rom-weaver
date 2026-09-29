@@ -461,6 +461,20 @@ type WorkflowRuntimePatch = {
   }) => Promise<RuntimePatchCreateFormatCandidates>;
 };
 
+type WorkflowRuntimeChecksum = {
+  run: (input: {
+    source: unknown;
+    fileName: string;
+    algorithms: string[];
+    autoExtract: boolean;
+    threads?: RuntimeThreadBudgetInput;
+    logLevel?: LogLevel;
+    onLog?: (log: WorkflowRuntimeLog) => void;
+    onProgress?: (progress: WorkflowRuntimeProgress) => void;
+    signal?: AbortSignal;
+  }) => Promise<{ checksums: Record<string, string>; variants?: ChecksumVariant[]; size: number; fileName: string }>;
+};
+
 type WorkflowRuntimeIngest = {
   // Classify and prepare a drop in one call. Extracted leaves become path-backed outputs; bare ROMs
   // are checksummed in place and retain the caller's source reference.
@@ -642,6 +656,7 @@ type WorkflowRuntime = {
   compression: WorkflowRuntimeCompression;
   binary: WorkflowRuntimeBinary;
   ingest?: WorkflowRuntimeIngest;
+  checksum?: WorkflowRuntimeChecksum;
   bundle?: WorkflowRuntimeBundle;
   cheat?: WorkflowRuntimeCheat;
   /** Declare a simultaneous I/O drop (source sizes in bytes) so the scheduler plans the whole batch as

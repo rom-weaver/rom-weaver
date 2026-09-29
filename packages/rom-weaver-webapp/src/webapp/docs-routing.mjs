@@ -66,6 +66,12 @@ const DOC_SOURCES = Object.freeze([
   }),
   Object.freeze({
     audience: "browser",
+    file: "how-to/checksum-roms-browser.md",
+    label: "Checksum files (browser)",
+    slug: "docs/checksum-roms-browser",
+  }),
+  Object.freeze({
+    audience: "browser",
     file: "how-to/extract-files-browser.md",
     label: "Extract files (browser)",
     slug: "docs/extract-files-browser",
@@ -316,6 +322,7 @@ const HOW_TO_NAVIGATION_GROUPS = Object.freeze({
   "docs/apply-rom-patches": "Patching & bundles",
   "docs/bake-cheat-codes": "Cheats",
   "docs/browser-settings": "Setup & offline",
+  "docs/checksum-roms-browser": "ROM checks",
   "docs/cli-apply": "Patching & bundles",
   "docs/cli-bundles": "Patching & bundles",
   "docs/cli-create": "Patching & bundles",

@@ -22,11 +22,9 @@ import { BaseWorkflowController, type BaseWorkflowSnapshot, type SourceValidator
 import { cloneCandidate, cloneValue, cloneWarning, getPreparationProgressStage, isRecord } from "./controller-utils.ts";
 import type { SharedRomStagedSource, StagedRomSourceController } from "./staged-rom-source.ts";
 import {
+  getAssetChecksumState,
   calculateStandardInputChecksumsForFile,
   cloneIdentification,
-  getAssetDecompressionTimeMs,
-  getAssetParentCompressions,
-  getAssetSourceSize,
   getInputAssetChecksums,
   getPatchFilePrecomputedChecksumMs,
   getPatchFilePrecomputedChecksums,
@@ -301,16 +299,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
         progressId: `${this.id}:${stage.state.id}:${index}`,
         role: TRIM_INPUT_ROLE,
         runtime: this.runtime,
-        state: {
-          decompressionTimeMs: getAssetDecompressionTimeMs(asset, stage.state.decompressionTimeMs),
-          fileName: asset.fileName || stage.state.fileName || stage.state.id,
-          id: stage.state.id,
-          order: index,
-          parentCompressions: getAssetParentCompressions(asset, stage.parentCompressions),
-          size: asset.size,
-          sourceSize: getAssetSourceSize(asset, stage.state.sourceSize),
-          wasDecompressed: asset.preparation?.wasDecompressed ?? stage.state.wasDecompressed,
-        },
+        state: getAssetChecksumState(asset, stage, index),
         workflow: "trim",
       });
       asset.checksums = checksumResult.checksums;

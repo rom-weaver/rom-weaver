@@ -53,6 +53,18 @@ fn assert_streamed_multi_checksum(output: &[u8], source: &Path, source_label: &s
     let terminal = events.last().expect("terminal checksum event");
     assert_eq!(terminal["command"], "checksum");
     assert_eq!(terminal["status"], "succeeded");
+    assert_eq!(
+        terminal["details"]["size"],
+        fs::metadata(source).expect("payload size").len()
+    );
+    assert_eq!(
+        terminal["details"]["file_name"],
+        source
+            .file_name()
+            .expect("payload name")
+            .to_string_lossy()
+            .as_ref()
+    );
 
     let expected_sha1 = checksum_value(source, "sha1");
     let expected_crc32 = checksum_value(source, "crc32");
@@ -613,6 +625,27 @@ fn checksum_auto_extract_ambiguity_requires_select() {
     assert!(label.contains("alpha.bin"));
     assert!(label.contains("beta.bin"));
     assert!(label.contains("--select"));
+
+    let selected = command_stdout(
+        &[
+            "checksum",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--select",
+            "beta.bin",
+            "--algo",
+            "sha1",
+            "--json",
+        ],
+        0,
+    );
+    let selected_json = parse_single_json_line(&selected);
+    assert_eq!(selected_json["details"]["file_name"], "beta.bin");
+    assert_eq!(selected_json["details"]["size"], 4);
+    assert_eq!(
+        selected_json["details"]["checksums"]["sha1"],
+        checksum_value(temp.child("beta.bin").path(), "sha1")
+    );
 }
 
 #[test]
@@ -991,6 +1024,7 @@ fn checksum_json_includes_primary_checksums_and_raw_variant_by_default() {
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["status"], "succeeded");
+    assert_eq!(json["details"]["file_name"], "sample.bin");
     let label = json["label"].as_str().expect("label");
     assert!(label.contains("crc32="));
     assert!(label.contains("md5="));

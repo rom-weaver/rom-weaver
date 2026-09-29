@@ -22,6 +22,7 @@ type CandidateSelectionState = {
 
 type CandidateSelectionError = Error & { code: string };
 type UseCandidateSelectionOptions = {
+  fileInput?: boolean;
   onCancelSelection?: (request: CandidateSelectionPrompt) => void;
 };
 
@@ -33,12 +34,14 @@ const createSelectionSkippedError = (): CandidateSelectionError => {
 
 function CandidateSelectionDialog({
   state,
+  fileInput = false,
   onCancel,
   onKeepSource,
   onSelect,
   onSelectMany,
 }: {
   state: CandidateSelectionState | null;
+  fileInput?: boolean;
   onCancel: () => void;
   onKeepSource?: () => void;
   onSelect: (id: string) => void;
@@ -84,7 +87,7 @@ function CandidateSelectionDialog({
   const multiSelect = !!request.multiSelect && (selectableCount > 1 || !!keepSource);
   // A ROM prompt answers "which ROM do I patch?" rather than "which patch do I
   // add?", so its heading and hint name the ROM rather than the patch stack.
-  const isRomRole = request.role === "input";
+  const isRomRole = request.role === "input" && !fileInput;
   const isMultiRomPrompt = isRomRole && request.candidates.every((candidate) => candidate.type === "file");
   return (
     <Modal
@@ -120,7 +123,7 @@ function CandidateSelectionDialog({
   );
 }
 
-const useCandidateSelection = ({ onCancelSelection }: UseCandidateSelectionOptions = {}) => {
+const useCandidateSelection = ({ fileInput, onCancelSelection }: UseCandidateSelectionOptions = {}) => {
   const [selectionState, setSelectionState] = useState<CandidateSelectionState | null>(null);
   const selectionStateRef = useRef<CandidateSelectionState | null>(null);
   // Two independent serialization domains (the per-controller modal lock and the
@@ -217,6 +220,7 @@ const useCandidateSelection = ({ onCancelSelection }: UseCandidateSelectionOptio
     cancelSelection,
     candidateSelectionDialog: (
       <CandidateSelectionDialog
+        fileInput={fileInput}
         key={selectionState?.seq}
         onCancel={cancelSelection}
         onKeepSource={keepSource}

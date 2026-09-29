@@ -14,6 +14,12 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
     slug: "create-patch",
     title: `${SITE_NAME}: Create ROM patches online`,
   }),
+  checksum: Object.freeze({
+    description:
+      "Calculate CRC32, MD5, SHA-1, SHA-256, and other checksums of any file locally in your browser, with optional archive extraction. Compare them with an expected value. No uploads or account required.",
+    slug: "checksum",
+    title: `${SITE_NAME}: Checksum a file online`,
+  }),
   compress: Object.freeze({
     description:
       "Compress ISO or BIN/CUE to CHD, GameCube and Wii ISO to RVZ, and Nintendo 3DS ROMs to Z3DS in your browser. Create ZIP and 7z archives. No uploads.",

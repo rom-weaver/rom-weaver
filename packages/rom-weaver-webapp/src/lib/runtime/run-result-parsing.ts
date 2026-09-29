@@ -334,6 +334,7 @@ export {
   getRunResultTiming,
   getTerminalEvent,
   parseChecksumVariants,
+  normalizeEmittedFileChecksums,
   romTypeFromEmittedFile,
   toSimpleProgress,
 };

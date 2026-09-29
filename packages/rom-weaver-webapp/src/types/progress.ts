@@ -1,4 +1,4 @@
-type WorkflowKind = "apply" | "create" | "trim";
+type WorkflowKind = "apply" | "checksum" | "create" | "trim";
 
 type WorkflowProgressRole = "input" | "patch" | "original" | "modified" | "output" | "worker";
 

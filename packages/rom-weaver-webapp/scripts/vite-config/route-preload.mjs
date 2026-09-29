@@ -15,6 +15,7 @@ const ROUTE_PRELOAD_MARKER_END = "<!--/rw-route-preload-->";
 const WORKFLOW_ROUTE_MODULES = {
   bundle: "src/public/react/apply-patch-form.tsx",
   creator: "src/public/react/create-patch-form.tsx",
+  checksum: "src/webapp/components/checksum-form.tsx",
   compress: "src/webapp/components/compress-form.tsx",
   docs: "src/webapp/docs-page.tsx",
   extract: "src/webapp/components/extract-form.tsx",

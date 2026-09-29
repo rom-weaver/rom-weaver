@@ -30,6 +30,7 @@ const LINK_AUDIT_WORKFLOW_ROUTES = [
   "",
   "apply-patches",
   "create-patch",
+  "checksum",
   "compress",
   "identify-rom",
   "test-rom",

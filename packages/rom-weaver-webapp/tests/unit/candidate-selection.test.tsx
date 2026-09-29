@@ -34,6 +34,20 @@ const singleRequest = (overrides: Partial<CandidateSelectionPrompt> = {}): Candi
 });
 
 describe("CandidateSelectionDialog", () => {
+  it("uses file wording for a checksum input selection", () => {
+    render(
+      <CandidateSelectionDialog
+        fileInput
+        onCancel={vi.fn()}
+        onSelect={vi.fn()}
+        onSelectMany={vi.fn()}
+        state={{ request: singleRequest({ role: "input" }), resolve: vi.fn(), reject: vi.fn() }}
+      />,
+    );
+    expect(screen.getByText("Multiple candidates found, select one")).toBeTruthy();
+    expect(screen.queryByText("Select the ROM to use")).toBeNull();
+  });
+
   it("renders archive context and resolves a selectable candidate", () => {
     const onSelect = vi.fn();
     const onCancel = vi.fn();

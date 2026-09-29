@@ -3,7 +3,7 @@ import { emitTraceLog } from "../logging.ts";
 
 type WorkflowTraceOptions = ApplyWorkflowOptions | CreateWorkflowOptions | undefined;
 type WorkflowTraceMessage = "stage.fail" | "stage.finish" | "stage.skip" | "stage.start";
-type WorkflowTraceName = "apply" | "create" | "trim";
+type WorkflowTraceName = "apply" | "checksum" | "create" | "trim";
 type WorkflowTraceLog = NonNullable<Exclude<WorkflowTraceOptions, undefined>["onLog"]>;
 type WorkflowControllerTraceContext = {
   logLevel?: string;
