@@ -78,10 +78,10 @@ vi.mock("../../src/storage/browser/browser-output-storage-guard.ts", () => ({
 }));
 vi.mock("../../src/workers/protocol/browser-virtual-files.ts", () => ({
   getBrowserVirtualFileSource: (path: string) => state.virtualSources.get(path),
-  updateBrowserVirtualFileSource: (path: string, source: unknown) => state.updatedVirtual.push({ path, source }),
-}));
-vi.mock("../../src/workers/protocol/cue-file-utils.ts", () => ({
-  parseCueFile: () => ({ files: [{ name: "track.bin" }] }),
+  updateBrowserVirtualFileSource: (path: string, source: unknown) => {
+    state.updatedVirtual.push({ path, source });
+    state.virtualSources.set(path, source);
+  },
 }));
 vi.mock("../../src/platform/browser/workflow-runtime-helpers.ts", () => ({
   EXTRACT_CHECKSUM_ALGORITHMS: ["crc32", "md5"],
@@ -564,6 +564,38 @@ describe("browser CHD runtime", () => {
       outputFileName: "game.chd",
     });
     expect(state.updatedVirtual).toHaveLength(1);
+  });
+
+  it("resolves every CUE track to its staged path without changing the disc layout", async () => {
+    const runtime = createBrowserChdRuntime(io as never);
+    const cueText =
+      'REM keep this comment\r\nFILE "tracks/TRACK1.BIN" BINARY\r\n  TRACK 01 MODE1/2352\r\n    INDEX 01 00:00:00\r\n' +
+      "FILE tracks\\\\TRACK2.BIN BINARY\r\n  TRACK 02 AUDIO\r\n    INDEX 01 00:00:00\r\n";
+    state.virtualSources.set("/work/input.cue", new Blob([cueText]));
+    state.staged.push(
+      { filePath: "/work/input.cue", fileName: "input.cue", cleanup: vi.fn(async () => undefined) },
+      { filePath: "/work/track2-2.bin", fileName: "track2.bin", cleanup: vi.fn(async () => undefined) },
+      { filePath: "/work/track1-3.bin", fileName: "track1.bin", cleanup: vi.fn(async () => undefined) },
+    );
+    await runtime.createChd({
+      source: "input.cue",
+      fileName: "input.cue",
+      imageFiles: [
+        { fileName: "track2.bin", source: "track2.bin" },
+        { fileName: "track1.bin", source: "track1.bin" },
+      ],
+      mode: "cd",
+    } as never);
+    const updated = state.updatedVirtual[0]?.source as Blob;
+    expect(await updated.text()).toBe(
+      cueText
+        .replace('"tracks/TRACK1.BIN"', '"/work/track1-3.bin"')
+        .replace("tracks\\\\TRACK2.BIN", '"/work/track2-2.bin"'),
+    );
+    expect(state.compressionCreate.mock.calls[0]?.[0]).toMatchObject({
+      inputPaths: ["/work/input.cue"],
+      knownInputPaths: ["/work/input.cue", "/work/track2-2.bin", "/work/track1-3.bin"],
+    });
   });
 
   it("reads virtual and OPFS cue sources and hydrates their sidecars", async () => {

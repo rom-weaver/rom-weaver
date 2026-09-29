@@ -657,6 +657,59 @@ fn chd_compress_and_extract_cd_cue_round_trip() {
     assert!(cue.contains("INDEX 01 00:00:00"));
 }
 
+/// Deterministic incompressible bytes (xorshift64), standing in for encrypted or random sectors.
+fn incompressible_bytes(len: usize) -> Vec<u8> {
+    let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+    (0..len)
+        .map(|_| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state >> 24) as u8
+        })
+        .collect()
+}
+
+#[test]
+fn chd_compress_and_extract_incompressible_cd_round_trip_with_default_codecs() {
+    let temp = setup_temp_dir();
+    let source = incompressible_bytes(64 * 2352);
+    fs::write(temp.child("disc.bin").path(), &source).expect("fixture");
+    temp.child("disc.cue")
+        .write_str("FILE \"disc.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n")
+        .expect("cue fixture");
+
+    // The default CD codecs include cdlz; LZMA1 grows incompressible sectors past the LZMA2 buffer
+    // bound, which used to fail the whole create with "output buffer too small".
+    let chd_path = temp.child("disc.chd");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("disc.cue").path().to_str().expect("path"),
+            "--output",
+            chd_path.path().to_str().expect("path"),
+        ],
+        0,
+    );
+
+    let out_dir = temp.child("extract");
+    command_stdout(
+        &[
+            "extract",
+            "--input",
+            chd_path.path().to_str().expect("path"),
+            "--output",
+            out_dir.path().to_str().expect("path"),
+        ],
+        0,
+    );
+    assert_eq!(
+        fs::read(out_dir.child("disc.bin").path()).expect("extract bytes"),
+        source
+    );
+}
+
 #[test]
 fn chd_compress_and_extract_cd_with_index00_round_trip() {
     let temp = setup_temp_dir();

@@ -180,6 +180,17 @@ html:has(.rw-modal) {
   align-items: center;
   margin-top: var(--sp-s);
 }
+.rw-app .selkeep {
+  display: inline-flex;
+  gap: var(--sp-s);
+  align-items: center;
+  min-block-size: 24px;
+  margin-top: var(--sp-s);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  cursor: pointer;
+}
 .rw-app .selfoot .selcount {
   margin-inline-end: auto;
 }

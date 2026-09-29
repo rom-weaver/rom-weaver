@@ -1844,3 +1844,106 @@ fn chd_output_cleanup_never_deletes_refused_preexisting_output() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// Deterministic incompressible bytes (xorshift64), standing in for encrypted or random sectors.
+fn incompressible_bytes(len: usize) -> Vec<u8> {
+    let mut state = 0x2545_f491_4f6c_dd1d_u64;
+    (0..len)
+        .map(|_| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            (state >> 24) as u8
+        })
+        .collect()
+}
+
+/// A CD hunk of `frames` frames: incompressible sector bytes followed by zeroed subcode.
+fn incompressible_cd_hunk(frames: usize) -> Vec<u8> {
+    let sectors = incompressible_bytes(frames * 2352);
+    let mut hunk = Vec::with_capacity(frames * 2448);
+    for sector in sectors.chunks_exact(2352) {
+        hunk.extend_from_slice(sector);
+        hunk.extend_from_slice(&[0_u8; 96]);
+    }
+    hunk
+}
+
+#[test]
+fn chd_lzma_raw_encode_reports_a_stream_that_exceeds_its_limit() {
+    let sectors = incompressible_bytes(8 * 2352);
+    assert_eq!(
+        ChdContainerHandler::encode_lzma_raw_no_header_no_eopm(
+            &sectors,
+            9,
+            "cd lzma",
+            sectors.len()
+        )
+        .expect("encode runs"),
+        None
+    );
+
+    let compressible = (0..8 * 2352)
+        .map(|index| (index % 211) as u8)
+        .collect::<Vec<_>>();
+    let limited = ChdContainerHandler::encode_lzma_raw_no_header_no_eopm(
+        &compressible,
+        9,
+        "cd lzma",
+        compressible.len(),
+    )
+    .expect("encode runs")
+    .expect("compressible sectors fit");
+    let bounded =
+        ChdContainerHandler::compress_lzma_raw_no_header_no_eopm(&compressible, 9, "cd lzma")
+            .expect("compressible sectors encode");
+    assert_eq!(
+        limited, bounded,
+        "the limit MUST NOT change the stream bytes"
+    );
+}
+
+#[test]
+fn chd_cd_codec_trial_skips_cdlz_for_incompressible_sectors() {
+    let handler = ChdContainerHandler;
+    let disc = ChdCreateKind::Disc(DiscLayout {
+        kind: DiscKind::CdRom,
+        tracks: Vec::new(),
+    });
+    let hunk = incompressible_cd_hunk(8);
+    let mut scratch = ChdCompressionScratch::default();
+
+    // cdlz alone used to fail the whole create, then (with a bigger buffer) stored an expanded
+    // cdlz payload that chdman never writes. chdman drops the codec and stores the hunk raw.
+    let (slot, payload) = handler
+        .compress_best_rust_hunk(
+            &disc,
+            ChdCodec::CD_LZMA,
+            &[(0, ChdCodec::CD_LZMA)],
+            0,
+            hunk.clone(),
+            &mut scratch,
+        )
+        .expect("cdlz-only trial succeeds");
+    assert_eq!(slot, ChdContainerHandler::CHD_V5_MAP_TYPE_UNCOMPRESSED);
+    assert_eq!(payload, hunk);
+
+    // chdman's zlib and zstd compressors fail the same way on a sector stream that does not
+    // shrink, so no CD codec carries incompressible sectors.
+    let (slot, payload) = handler
+        .compress_best_rust_hunk(
+            &disc,
+            ChdCodec::CD_LZMA,
+            &[
+                (0, ChdCodec::CD_LZMA),
+                (1, ChdCodec::CD_ZLIB),
+                (2, ChdCodec::CD_ZSTD),
+            ],
+            0,
+            hunk.clone(),
+            &mut scratch,
+        )
+        .expect("cdlz+cdzl+cdzs trial succeeds");
+    assert_eq!(slot, ChdContainerHandler::CHD_V5_MAP_TYPE_UNCOMPRESSED);
+    assert_eq!(payload, hunk);
+}

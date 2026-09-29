@@ -40,6 +40,7 @@ type WebappRootProps = {
   assetBaseUrl?: string;
   state: {
     creatorSession: CreatorSessionState;
+    compressSession: { active: boolean };
     currentView: WebappView;
     patcherSession: PatcherSessionState;
     ppfUndoSession: { active: boolean };
@@ -97,6 +98,7 @@ type WebappRootProps = {
     onTrimOutputFormatChange: (format: string) => void;
     onTrimSettingsChange: (settings: unknown) => void;
     onPpfUndoSessionChange: (active: boolean) => void;
+    onCompressSessionChange: (active: boolean) => void;
     onSaveEditorSessionChange: (active: boolean) => void;
   };
 };

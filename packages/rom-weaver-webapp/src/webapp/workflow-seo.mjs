@@ -14,11 +14,17 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
     slug: "create-patch",
     title: `${SITE_NAME}: Create ROM patches online`,
   }),
+  compress: Object.freeze({
+    description:
+      "Compress ISO or BIN/CUE to CHD, GameCube and Wii ISO to RVZ, and Nintendo 3DS ROMs to Z3DS in your browser. Create ZIP and 7z archives. No uploads.",
+    slug: "compress",
+    title: `${SITE_NAME}: Compress ROMs to CHD, RVZ, and Z3DS online`,
+  }),
   extract: Object.freeze({
     description:
-      "Extract supported ROM archives and disc images locally in your browser. Download individual files or an uncompressed ZIP. No uploads or account required.",
+      "Extract Z3DS, ZCCI, ZCXI, ZCIA, Z3DSX, CHD, RVZ, and supported ROM archives locally in your browser. Download uncompressed files without uploads.",
     slug: "extract",
-    title: `${SITE_NAME}: Extract ROM archives online`,
+    title: `${SITE_NAME}: Extract Z3DS files and ROM archives online`,
   }),
   // The apex. An empty slug is deliberate: the canonical URL is the bare origin.
   home: Object.freeze({

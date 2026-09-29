@@ -224,6 +224,10 @@ type CompressionWorkflowOptions = {
   patchFilter?: boolean;
   /** Extract the selected archive entries without classifying them as ROMs or patches. */
   directExtract?: boolean;
+  /** Extract every entry named in `entries` in one pass, keep nested archives packed, and return each
+   * written file with its `relativePath`. The pass can also write companion files, such as a CD's bin
+   * for its cue. */
+  extractSelected?: boolean;
   /** When false, suppress the host selection prompt for ambiguous containers so a multi-branch
    * archive auto-extracts every branch instead of pausing for input. */
   interactiveSelectionEnabled?: boolean;

@@ -12,6 +12,14 @@ describe("discFormatToChdMode", () => {
 });
 
 describe("getChdAutoCreateMode", () => {
+  it("matches the engine CD size boundary for unprobed ISO files", () => {
+    expect(getChdAutoCreateMode({ fileName: "disc.iso", size: 2048 })).toBe("cd");
+    expect(getChdAutoCreateMode({ fileName: "disc.iso", fileSize: 450_000 * 2048 })).toBe("cd");
+    expect(getChdAutoCreateMode({ fileName: "disc.iso", size: 450_001 * 2048 })).toBe("dvd");
+    expect(getChdAutoCreateMode({ fileName: "disc.iso", size: 2352 })).toBe("cd");
+    expect(getChdAutoCreateMode({ fileName: "disc.iso", size: 0 })).toBe("dvd");
+    expect(getChdAutoCreateMode({ fileName: "disc.iso", size: 2048, metadata: { format: "DVD" } })).toBe("dvd");
+  });
   it("prefers the explicit metadata.mode verdict", () => {
     expect(getChdAutoCreateMode({ fileName: "disc.cue", metadata: { mode: "dvd" } })).toBe("dvd");
     expect(getChdAutoCreateMode({ fileName: "game.iso", metadata: { mode: "cd" } })).toBe("cd");

@@ -905,6 +905,11 @@ msgstr "Wählen Sie das benötigte Spiel"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.compressThesis2"
+msgstr "Wähle das Ausgabeformat."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.output.body"
 msgstr "Wähle Ausgabename, Format, Komprimierung und Header. Drücke dann Anwenden und herunterladen, um beide Patches anzuwenden."
 
@@ -985,8 +990,23 @@ msgstr "komprimieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.run"
+msgstr "Komprimieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.compress"
 msgstr "Komprimieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.compressThesis"
+msgstr "Komprimiere deine Dateien."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.compress.running"
+msgstr "Dateien werden komprimiert…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1092,6 +1112,11 @@ msgstr "Erstelle Patches, teile wiederverwendbare Bundles und teste ROMs in dein
 #: src/presentation/localization/messages.ts
 msgid "ui.related.createTool"
 msgstr "Erstellen-Tool"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.compressDescription"
+msgstr "Erstelle ZIP- oder 7z-Archive aus deinen Dateien. Komprimiere kompatible Disc-Abbilder und ROMs zu CHD, RVZ oder Z3DS. Alles läuft lokal in deinem Browser."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1295,6 +1320,11 @@ msgstr "Dateien ablegen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.drop"
+msgstr "Dateien zum Komprimieren hier ablegen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.drop.hero"
 msgstr "ROMs, Patches, Bundles oder Archive ablegen oder anklicken"
 
@@ -1457,6 +1487,11 @@ msgstr "Zeit zum Extrahieren"
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.extractTimingThreads"
 msgstr "Zeit zum Extrahieren ({workers} Threads)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.compress.opening"
+msgstr "Wird entpackt"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1817,6 +1852,11 @@ msgstr "Header behalten: Die gepatchte Ausgabe enthält den ROM-Header."
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.extractThesis2"
 msgstr "Nur die Dateien behalten, die du brauchst."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.compress.keepPacked"
+msgstr "Gepackt lassen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2735,6 +2775,11 @@ msgstr "Lies die Create-Anleitung"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.compress.reading"
+msgstr "Wird gelesen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.reading"
 msgstr "Lesen"
 
@@ -2822,6 +2867,11 @@ msgstr "Entfernen"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.removeCheck"
 msgstr "{check}-Prüfung entfernen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.compress.removeFile"
+msgstr "{name} entfernen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3047,6 +3097,11 @@ msgstr "Unterstützte Formate ansehen"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis2"
 msgstr "mit Spielständen, die auf diesem Gerät bleiben."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.select.filesHint"
+msgstr "Wähle die Dateien, die du hinzufügen willst, und drücke dann Dateien hinzufügen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3282,6 +3337,11 @@ msgstr "Wechselt den Tab"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.system"
 msgstr "System"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.compress.tap"
+msgstr "Tippen, um Dateien zum Komprimieren hinzuzufügen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3881,6 +3941,11 @@ msgstr "deiner Prüfsumme"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.localFirstTitle"
 msgstr "Deine Sammlung gehört dir. Das Werkzeug sollte sich so verhalten."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.compress.local"
+msgstr "Deine Dateien bleiben in diesem Browser. Archive und komprimierte Disc-Images werden geöffnet, damit du die enthaltenen Dateien auswählen kannst."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -105,6 +105,21 @@ const index: CheatDatabaseIndex = {
   ],
 };
 
+const catalog = {
+  format: "rom-weaver-identify-catalog-v1",
+  platforms: [
+    {
+      aliases: ["snes", "super famicom"],
+      canonicalPlatform: SNES,
+      mediaProfiles: [],
+      packFormat: "RWFP1",
+      packSha256: "",
+      packSlug: "nintendo-super-nintendo-entertainment-system",
+      source: "libretro" as const,
+    },
+  ],
+};
+
 const props = {
   rom: { key: "rom-a", platform: SNES, title: "Super Mario World", checksums: { sha1: "aa11" } },
   index,
@@ -491,10 +506,17 @@ describe("CheatDatabaseSection", () => {
 describe("CheatDatabaseSection platform resolution", () => {
   it("reports a platform the index does not cover as unsupported", async () => {
     const view = render(
-      <CheatDatabaseSection {...props} rom={{ key: "n64", platform: "Nintendo - Nintendo 64", title: "Game" }} />,
+      <CheatDatabaseSection
+        {...props}
+        catalog={catalog}
+        rom={{ key: "n64", platform: "Nintendo - Nintendo 64", title: "Game" }}
+      />,
     );
     expect(view.queryByPlaceholderText("Search cheat databases by system…")).toBeNull();
-    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
+    const add = view.getByRole("button", { name: /Add cheats to the patch order/u }) as HTMLButtonElement;
+    expect(add.disabled).toBe(true);
+    expect(add.textContent).toContain("Cheats are not supported for Nintendo - Nintendo 64 yet.");
+    fireEvent.click(add);
     expect(view.queryByRole("button", { name: "Add code manually" })).toBeNull();
   });
 
@@ -503,7 +525,9 @@ describe("CheatDatabaseSection platform resolution", () => {
       <CheatDatabaseSection {...props} rom={{ key: "psx", platform: "Sony - PlayStation", title: "Game" }} />,
     );
     expect(view.queryByPlaceholderText("Search cheat databases by system…")).toBeNull();
-    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
+    const add = view.getByRole("button", { name: /Add cheats to the patch order/u }) as HTMLButtonElement;
+    expect(add.disabled).toBe(false);
+    fireEvent.click(add);
     fireEvent.click(view.getByRole("button", { name: "Add code manually" }));
     expect((view.getByLabelText("System") as HTMLSelectElement).value).toBe("playstation");
   });

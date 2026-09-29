@@ -1,6 +1,6 @@
 # Convert ISO or BIN/CUE to CHD in the browser
 
-Use Apply without patches to create a CHD from an `.iso` or a complete `.cue` and `.bin` disc set. The conversion runs locally.
+Convert ISO or BIN/CUE to CHD with Compress, locally in your browser. No patch, upload, or account is needed.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -13,24 +13,25 @@ Use Apply without patches to create a CHD from an `.iso` or a complete `.cue` an
 
 ## Add the disc
 
-1. Open [Apply](https://rom-weaver.com/apply-patches).
+1. Open [Compress](https://rom-weaver.com/compress).
 2. Add the `.iso`, or add the `.cue` with every referenced `.bin` file.
-3. Wait for reading and checksumming to finish.
-4. Remove any discovered patches from **Patches & Cheats**.
+3. Keep only that disc's files in **Inputs**.
 
 The cue sheet names and orders its track files. Missing or renamed BIN files prevent complete disc conversion.
 
 ## Create the CHD
 
-1. In **Apply**, enter the output filename.
-2. Open **Options**.
-3. Under **Compression type**, select **.chd**.
-4. Select **APPLY & DOWNLOAD**.
-5. Save the `.chd` file.
+1. In **Output**, choose **CHD**.
+2. Enter the output filename without its extension.
+3. Keep the default codecs, or open **Options** to change compression settings.
+4. Select **Compress** and wait for the result.
+5. Select **Download** and save the `.chd` file.
 
 The output picker offers CHD only for compatible disc inputs. Changing an extension does not convert the disc.
 
-Small ISO images can be detected as CD media and fail with the default codecs. If you see `chd codec list is invalid for cd media`, use the disc's original CUE/BIN set instead.
+If CHD is unavailable, remove unrelated files and check that every CUE track is present. Compress accepts one disc at a time.
+
+For an image inside ZIP or 7z, add the archive to Compress. Select the ISO or the complete CUE/BIN set, then select the **Add** button.
 
 ## Check compatibility and storage
 
