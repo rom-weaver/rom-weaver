@@ -167,7 +167,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     railLabel: "Saves",
   },
   {
-    group: "docs",
+    group: "project",
     href: "/docs",
     icon: <BookOpen aria-hidden="true" />,
     id: "docs",

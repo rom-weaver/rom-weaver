@@ -48,7 +48,7 @@ const TABS = [
     label: "Test ROM",
     railLabel: "Test",
   },
-  { group: "docs", href: "/docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
+  { group: "project", href: "/docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
   {
     beta: true,
     group: "roms",
@@ -111,10 +111,10 @@ describe("Masthead", () => {
       "ROMs",
       "Files",
       "This device",
-      "Docs",
     ]);
     expect(rowsOf(nav)).toEqual([
       "Home",
+      "Docs",
       "What\u2019s new",
       "GitHub",
       "Support",
@@ -130,7 +130,14 @@ describe("Masthead", () => {
       "Settings",
       "Theme",
       "Accent",
+    ]);
+    const project = nav.querySelector("#tab-home")?.closest(".nav-group");
+    expect(Array.from(project?.querySelectorAll(".nav-row-label") ?? []).map((label) => label.textContent)).toEqual([
+      "Home",
       "Docs",
+      "What\u2019s new",
+      "GitHub",
+      "Support",
     ]);
 
     // The brand and Home row both reach the app's base route.
@@ -174,7 +181,6 @@ describe("Masthead", () => {
       "Files",
       "This device",
       "Project",
-      "Docs",
     ]);
     expect(sheet.querySelector(".sub-status")).toBeNull();
     expect(container.querySelector(".phone-runtime .sub-status-text")?.textContent).toBe(
@@ -316,7 +322,7 @@ describe("Masthead", () => {
     const side = container.querySelector(".side-nav") as HTMLElement;
     expect(side.querySelector('.guide-nav [aria-current="page"]')?.textContent).toBe("Overview");
     expect(side.querySelector('[href="/apply-patches"]')?.textContent).toContain("Back to tools");
-    expect(container.querySelector(".dock")).toBeNull();
+    expect(container.querySelector(".dock")).not.toBeNull();
     expect(container.querySelector(".guide-nav")).not.toBeNull();
   });
 

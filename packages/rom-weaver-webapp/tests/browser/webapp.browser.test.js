@@ -230,12 +230,12 @@ test("Docs topic headings keep their width and wrapping when expanded", async ()
   await document.fonts.ready;
   for (const [width, height, scope] of [
     [1280, 1200, ".side-rail"],
-    [390, 844, ".menu-sheet"],
+    [390, 844, "#docs-menu-sheet"],
   ]) {
     await page.viewport(width, height);
     if (width < 1000) {
       document.querySelector(".docs-browse-trigger").click();
-      await expect.poll(() => document.querySelector(".menu-sheet")?.hidden).toBe(false);
+      await expect.poll(() => document.querySelector("#docs-menu-sheet")?.open).toBe(true);
     }
     const nav = document.querySelector(`${scope} .guide-nav`);
     expect(nav.querySelectorAll(":scope > .guide-nav-list a")).toHaveLength(2);
@@ -278,21 +278,33 @@ test("Docs topic headings keep their width and wrapping when expanded", async ()
   await page.viewport(1280, 900);
 });
 
-test("mobile Docs owns a modal navigation panel without the workflow dock", async () => {
+test("mobile Docs keeps the workflow dock and owns a separate navigation dialog", async () => {
   await page.viewport(390, 844);
   mountWebappRoot({ initialView: "docs" });
   await expect.poll(() => document.querySelector(".docs-browse-trigger")).toBeTruthy();
-  expect(document.querySelector(".dock")).toBeNull();
+  const dock = document.querySelector(".dock");
+  expect(dock).not.toBeNull();
+  expect([...dock.querySelectorAll(".dock-tab")].map((tab) => tab.textContent)).toEqual([
+    "Apply",
+    "Create",
+    "Find",
+    "Test",
+    "Menu",
+  ]);
   const trigger = document.querySelector(".docs-browse-trigger");
   expect(getComputedStyle(trigger).position).toBe("fixed");
   expect(trigger.getBoundingClientRect().bottom).toBeLessThanOrEqual(844);
-  expect(trigger.getBoundingClientRect().top).toBeGreaterThan(760);
+  expect(trigger.getBoundingClientRect().bottom).toBeLessThanOrEqual(dock.getBoundingClientRect().top);
   expect(trigger.getBoundingClientRect().left).toBeLessThan(30);
   expect(trigger.getAttribute("aria-haspopup")).toBe("dialog");
   trigger.focus();
   trigger.click();
-  await expect.poll(() => document.querySelector(".menu-sheet-docs:modal")).toBeTruthy();
-  const panel = document.querySelector(".menu-sheet-docs");
+  await expect.poll(() => document.querySelector("#docs-menu-sheet:modal")).toBeTruthy();
+  const panel = document.querySelector("#docs-menu-sheet");
+  const globalMenu = document.querySelector("#menu-sheet");
+  expect(globalMenu.hidden).toBe(true);
+  expect(document.querySelectorAll("#menu-sheet")).toHaveLength(1);
+  expect(document.querySelectorAll("#docs-menu-sheet")).toHaveLength(1);
   const close = panel.querySelector('[aria-label="Close navigation"]');
   expect(document.activeElement).toBe(close);
   expect(panel.querySelectorAll(".nav-row")).toHaveLength(1);
@@ -301,6 +313,22 @@ test("mobile Docs owns a modal navigation panel without the workflow dock", asyn
   expect(panel.getBoundingClientRect().height).toBe(844);
   expect(panel.querySelector(".guide-shelf > summary").getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   close.click();
+  await expect.poll(() => panel.open).toBe(false);
+  await expect.poll(() => document.activeElement).toBe(trigger);
+  document.querySelector(".dock-menu").focus();
+  document.querySelector(".dock-menu").click();
+  await expect.poll(() => globalMenu.hidden).toBe(false);
+  expect(panel.open).toBe(false);
+  expect(navRow("Docs", "#menu-sheet").closest(".nav-group")).toBe(navRow("Home", "#menu-sheet").closest(".nav-group"));
+  expect(globalMenu.querySelector(".guide-nav")).toBeNull();
+  document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+  await expect.poll(() => globalMenu.hidden).toBe(true);
+  await expect.poll(() => document.activeElement).toBe(document.querySelector(".dock-menu"));
+  document.querySelector(".dock-find").click();
+  await expect.poll(() => document.querySelector(".find-palette")).toBeTruthy();
+  trigger.click();
+  await expect.poll(() => panel.open).toBe(true);
+  panel.dispatchEvent(new Event("cancel", { cancelable: true }));
   await expect.poll(() => panel.open).toBe(false);
   await expect.poll(() => document.activeElement).toBe(trigger);
   trigger.click();

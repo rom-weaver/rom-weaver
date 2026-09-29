@@ -220,7 +220,9 @@ describe("tab selection", () => {
     // Docs MUST stay outside the dock's three workflow slots.
     expect(container.querySelector('.dock-tab[data-mode="docs"]')).toBeNull();
     expect(container.querySelector(".guide-nav")).toBeNull();
-    fireEvent.click(navRow(container, "Docs"));
+    const docs = navRow(container, "Docs");
+    expect(docs.closest(".nav-group")?.querySelector(".nav-group-label")?.textContent).toBe("Project");
+    fireEvent.click(docs);
     expect(called("onSelectView")).not.toHaveBeenCalled();
     expect(container.querySelector('.side-nav #tab-patcher[aria-current="page"]')).not.toBeNull();
     expect(container.querySelector(".guide-nav")).toBeNull();

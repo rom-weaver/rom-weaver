@@ -31,7 +31,7 @@ const docsShell = (slug: string, currentTab = "docs", language = "en") => (
       onOpenLog={() => undefined}
       onOpenSettings={() => undefined}
       onOpenStatus={() => undefined}
-      tabs={[{ id: "docs", group: "docs", label: "Docs", href: "/docs", icon: <svg /> }]}
+      tabs={[{ id: "docs", group: "project", label: "Docs", href: "/docs", icon: <svg /> }]}
     />
     <DocsPage active slug={slug} />
   </RomWeaverSettingsProvider>
@@ -682,15 +682,18 @@ Fixture description.
       expect(document.querySelector(".side-nav .guide-nav")).toBeNull();
       expect(document.querySelector('.side-nav a[href="/docs"]')?.textContent).toBe("Docs");
       fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
-      expect(document.querySelector(".menu-sheet .guide-nav")).toBeNull();
-      expect(document.querySelector('.menu-sheet a[href="/docs"]')?.textContent).toBe("Docs");
+      expect(document.querySelector("#menu-sheet .guide-nav")).toBeNull();
+      expect(document.querySelector('#menu-sheet a[href="/docs"]')?.textContent).toBe("Docs");
+      expect(document.querySelector('#menu-sheet a[href="/docs"]')?.closest(".nav-group")?.textContent).toContain(
+        "Home",
+      );
     },
   );
 
   it("keeps Overview and FAQ as direct links in both layouts", () => {
     renderDocsShell("docs");
     fireEvent.click(document.querySelector(".docs-browse-trigger") as HTMLElement);
-    for (const selector of [".side-nav", ".menu-sheet"]) {
+    for (const selector of [".side-nav", "#docs-menu-sheet"]) {
       const nav = document.querySelector(selector) as HTMLElement;
       const links = nav.querySelectorAll('a[href="/docs"]');
       expect(links).toHaveLength(1);
@@ -727,11 +730,11 @@ Fixture description.
     expect(document.querySelector(".docs-mobile-toolbar a")?.textContent).toBe(back);
     const trigger = document.querySelector(".docs-browse-trigger") as HTMLElement;
     expect(trigger.textContent).toBe(browse);
-    expect(document.querySelector(".docs-mobile-toolbar button[aria-label]")?.getAttribute("aria-label")).toBe(find);
+    expect(document.querySelector(".dock-find")?.getAttribute("aria-label")).toBe(find);
     fireEvent.click(trigger);
-    expect(document.querySelector(".menu-sheet-docs")?.getAttribute("aria-label")).toBe(navigation);
-    expect(document.querySelector(".docs-menu-header strong")?.textContent).toBe(browse);
-    expect(document.querySelector(".docs-menu-header button")?.getAttribute("aria-label")).toBe(close);
+    expect(document.querySelector("#docs-menu-sheet")?.getAttribute("aria-label")).toBe(navigation);
+    expect(document.querySelector("#docs-menu-sheet .docs-menu-header strong")?.textContent).toBe(browse);
+    expect(document.querySelector("#docs-menu-sheet .docs-menu-header button")?.getAttribute("aria-label")).toBe(close);
   });
 
   it("opens the active topic when the current guide changes", async () => {
@@ -744,23 +747,32 @@ Fixture description.
     expect(currentLink?.closest("details")?.querySelector("summary")?.textContent).toBe("Patching & bundles");
   });
 
-  it("gives Docs its own navigation and Find control without the workflow dock", async () => {
+  it("keeps global Find and Menu beside the separate Docs navigation", async () => {
     renderDocsShell("docs/cli");
-    expect(document.querySelector(".dock")).toBeNull();
+    expect(document.querySelector(".dock")).not.toBeNull();
     expect(document.querySelector('.side-nav a[href="/apply-patches"]')?.textContent).toBe("Back to tools");
     expect(document.querySelector(".side-nav .nav-group")?.textContent).not.toContain("Settings");
     fireEvent.click(document.querySelector(".docs-browse-trigger") as HTMLElement);
     await vi.waitFor(() =>
-      expect(document.querySelectorAll(".menu-sheet .guide-nav-list a")).toHaveLength(DOC_ROUTES.length),
+      expect(document.querySelectorAll("#docs-menu-sheet .guide-nav-list a")).toHaveLength(DOC_ROUTES.length),
     );
-    expect(document.querySelector('.menu-sheet .guide-nav a[aria-current="page"]')?.textContent).toBe("CLI reference");
-    fireEvent.click(document.querySelector(".menu-sheet .guide-nav-list a") as HTMLElement);
-    expect((document.querySelector(".menu-sheet") as HTMLElement).hidden).toBe(true);
-    fireEvent.click(document.querySelector('.docs-mobile-toolbar button[aria-label="Find"]') as HTMLElement);
-    expect((document.querySelector(".menu-sheet") as HTMLElement).hidden).toBe(true);
+    expect(document.querySelector('#docs-menu-sheet .guide-nav a[aria-current="page"]')?.textContent).toBe(
+      "CLI reference",
+    );
+    fireEvent.click(document.querySelector("#docs-menu-sheet .guide-nav-list a") as HTMLElement);
+    expect((document.querySelector("#docs-menu-sheet") as HTMLDialogElement).open).toBe(false);
+    fireEvent.click(document.querySelector(".dock-find") as HTMLElement);
+    expect((document.querySelector("#docs-menu-sheet") as HTMLDialogElement).open).toBe(false);
     const input = document.querySelector(".find-input") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "OPFS" } });
     await vi.waitFor(() => expect(document.querySelector('.find-results a[href*="highlight=OPFS"]')).toBeTruthy());
+
+    fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
+    expect((document.querySelector("#menu-sheet") as HTMLElement).hidden).toBe(false);
+    expect((document.querySelector("#docs-menu-sheet") as HTMLDialogElement).open).toBe(false);
+    expect(document.querySelector("#menu-sheet .guide-nav")).toBeNull();
+    expect(document.querySelector('#menu-sheet a[href="/docs"]')?.closest(".nav-group")?.textContent).toContain("Home");
+    expect(document.querySelectorAll("#menu-sheet, #docs-menu-sheet")).toHaveLength(2);
   });
 
   it("highlights and centers a Find result in its section", async () => {

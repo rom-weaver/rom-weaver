@@ -118,8 +118,11 @@ const Masthead = ({
   };
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuMounted, setMenuMounted] = useState(false);
+  const [docsMenuOpen, setDocsMenuOpen] = useState(false);
+  const [docsMenuMounted, setDocsMenuMounted] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const docsMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const findTriggerRef = useRef<HTMLButtonElement | null>(null);
   const dockFindRef = useRef<HTMLButtonElement | null>(null);
   /* Find opens from the top bar on desktop and from the dock on the phone.
@@ -158,18 +161,23 @@ const Masthead = ({
   );
   const closeFind = useCallback(() => setFindOpen(false), []);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const closeDocsMenu = useCallback(() => setDocsMenuOpen(false), []);
   const menuRoute = useRef(`${currentTab}:${docsSlug}`);
   useEffect(() => {
     const route = `${currentTab}:${docsSlug}`;
     if (menuRoute.current === route) return;
     menuRoute.current = route;
     setMenuOpen(false);
+    setDocsMenuOpen(false);
   }, [currentTab, docsSlug]);
   useEffect(() => {
     if (currentTab !== "docs") return;
     const desktop = window.matchMedia("(min-width: 1000px)");
     const closeDesktopMenu = () => {
-      if (desktop.matches) setMenuOpen(false);
+      if (desktop.matches) {
+        setMenuOpen(false);
+        setDocsMenuOpen(false);
+      }
     };
     desktop.addEventListener("change", closeDesktopMenu);
     return () => desktop.removeEventListener("change", closeDesktopMenu);
@@ -212,7 +220,7 @@ const Masthead = ({
      close control in its own right. Only attributes set here are cleared, so a
      dialog that inerted the same node keeps its own. */
   useEffect(() => {
-    if (!menuOpen || currentTab === "docs") return undefined;
+    if (!menuOpen) return undefined;
     const sheet = document.getElementById("menu-sheet");
     const covered = Array.from(sheet?.parentElement?.children ?? []).filter(
       (node) => node !== sheet && !node.matches(".dock, .scrim") && !node.hasAttribute("inert"),
@@ -221,7 +229,7 @@ const Masthead = ({
     return () => {
       for (const node of covered) node.removeAttribute("inert");
     };
-  }, [currentTab, menuOpen]);
+  }, [menuOpen]);
 
   // Pointer-down rather than click so a press that starts outside dismisses
   // before the target's own handler runs.
@@ -277,8 +285,7 @@ const Masthead = ({
   const openStorage = onOpenStorage ?? onOpenLog;
 
   /* One description of the nav, rendered by the sidebar and by the phone menu.
-     Both layouts MUST carry every destination under the same headings.
-     Docs stays last in both layouts. */
+     Both layouts MUST carry every destination under the same headings. */
   const sections: NavSectionData[] = useMemo(() => {
     const workflowGroup = (group: NavGroup): NavSectionData => ({
       entries: tabs
@@ -370,14 +377,7 @@ const Masthead = ({
         onExternalClick: (event) => guardExternalClick(event, donateHref, confirmExternalNavigation),
       });
     }
-    return [
-      project,
-      workflowGroup("patches"),
-      workflowGroup("roms"),
-      workflowGroup("files"),
-      device,
-      workflowGroup("docs"),
-    ];
+    return [project, workflowGroup("patches"), workflowGroup("roms"), workflowGroup("files"), device];
   }, [
     betaVisible,
     confirmExternalNavigation,
@@ -521,7 +521,7 @@ const Masthead = ({
           so the identity block and the top bar each land in their own grid cell
           while staying inside a single landmark - two `header` elements at this
           level would leave the page with two banners. */}
-      <header className="shell-banner" data-docs={currentTab === "docs" ? "true" : undefined}>
+      <header className="shell-banner">
         {/* One column on desktop, one page header on the phone. */}
         <div className="side-col">
           <div className="shell-head">
@@ -557,34 +557,21 @@ const Masthead = ({
                 {localizer.message("ui.docs.backToTools")}
               </a>
               <button
-                aria-controls="menu-sheet"
-                aria-expanded={menuOpen}
+                aria-controls="docs-menu-sheet"
+                aria-expanded={docsMenuOpen}
                 aria-haspopup="dialog"
                 className="docs-browse-trigger"
                 onClick={() => {
                   setFindOpen(false);
-                  setMenuMounted(true);
-                  setMenuOpen((open) => !open);
+                  setMenuOpen(false);
+                  setDocsMenuMounted(true);
+                  setDocsMenuOpen((open) => !open);
                 }}
-                ref={menuTriggerRef}
+                ref={docsMenuTriggerRef}
                 type="button"
               >
                 {localizer.message("ui.docs.browse")}
                 <ChevronUp aria-hidden="true" />
-              </button>
-              <button
-                aria-label={localizer.message("ui.find.label")}
-                aria-controls="find-palette"
-                aria-expanded={findOpen}
-                aria-haspopup="dialog"
-                onClick={() => {
-                  setMenuOpen(false);
-                  setFindOpen((open) => !open);
-                }}
-                ref={dockFindRef}
-                type="button"
-              >
-                <Search aria-hidden="true" />
               </button>
             </div>
           ) : null}
@@ -634,7 +621,7 @@ const Masthead = ({
         triggerRef={activeFindRef}
       />
       {previewPhoneOverlay ? (
-        <span className="phone-overlay-runtime" data-sw={runtimeState} hidden={menuOpen || findOpen}>
+        <span className="phone-overlay-runtime" data-sw={runtimeState} hidden={menuOpen || docsMenuOpen || findOpen}>
           <StatusChip
             label={runtimeLabel}
             onOpenStatus={() => {
@@ -647,48 +634,55 @@ const Masthead = ({
           />
         </span>
       ) : null}
-      {currentTab === "docs" ? null : (
-        <PhoneDock
-          current={currentTab}
-          findLabel={localizer.message("ui.find.label")}
-          findOpen={findOpen}
-          findTriggerRef={dockFindRef}
-          menuLabel={localizer.message("ui.tools.menu")}
-          menuOpen={menuOpen}
-          navLabel={navLabel}
-          onSelect={onSelectTab}
-          onToggleFind={() => {
-            setMenuOpen(false);
-            setFindOpen((open) => !open);
-          }}
-          onToggleMenu={() => {
-            setFindOpen(false);
-            onPreloadLog?.();
-            setMenuMounted(true);
-            setMenuOpen((open) => !open);
-          }}
-          tabs={dockTabs}
-          triggerRef={menuTriggerRef}
-        />
-      )}
+      <PhoneDock
+        current={currentTab}
+        findLabel={localizer.message("ui.find.label")}
+        findOpen={findOpen}
+        findTriggerRef={dockFindRef}
+        menuLabel={localizer.message("ui.tools.menu")}
+        menuOpen={menuOpen}
+        navLabel={navLabel}
+        onSelect={onSelectTab}
+        onToggleFind={() => {
+          setMenuOpen(false);
+          setDocsMenuOpen(false);
+          setFindOpen((open) => !open);
+        }}
+        onToggleMenu={() => {
+          setFindOpen(false);
+          setDocsMenuOpen(false);
+          onPreloadLog?.();
+          setMenuMounted(true);
+          setMenuOpen((open) => !open);
+        }}
+        tabs={dockTabs}
+        triggerRef={menuTriggerRef}
+      />
       {/* The parser-time resolver runs here, after the identity slots exist. */}
       <span className="shell-identity" hidden />
+      {currentTab === "docs" ? (
+        <MenuSheet
+          documentation
+          appearance={null}
+          localizer={localizer}
+          onClose={closeDocsMenu}
+          open={docsMenuOpen}
+          opened={docsMenuMounted}
+          sections={docsSections(closeDocsMenu)}
+          toolOpen={false}
+          triggerRef={docsMenuTriggerRef}
+        />
+      ) : null}
       <MenuSheet
-        documentation={currentTab === "docs"}
         appearance={appearanceTiles(MENU_TOOL_SCOPE, true)}
         localizer={localizer}
         onClose={closeMenu}
         open={menuOpen}
         opened={menuMounted}
-        sections={
-          currentTab === "docs"
-            ? docsSections(closeMenu)
-            : [
-                ...sections.filter((section) => section.id !== "project" && section.id !== "docs"),
-                ...sections.filter((section) => section.id === "project"),
-                ...sections.filter((section) => section.id === "docs"),
-              ]
-        }
+        sections={[
+          ...sections.filter((section) => section.id !== "project"),
+          ...sections.filter((section) => section.id === "project"),
+        ]}
         toolOpen={openTool === `theme:${MENU_TOOL_SCOPE}` || openTool === `accent:${MENU_TOOL_SCOPE}`}
         triggerRef={menuTriggerRef}
       />
@@ -697,7 +691,7 @@ const Masthead = ({
       <button
         aria-label={localizer.message("ui.common.close")}
         className="scrim"
-        hidden={!menuOpen || currentTab === "docs"}
+        hidden={!menuOpen}
         onClick={closeMenu}
         type="button"
       />

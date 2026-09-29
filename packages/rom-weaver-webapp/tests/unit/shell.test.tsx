@@ -23,7 +23,7 @@ const TABS = [
   { dock: true, group: "patches", href: "apply", icon: <svg aria-hidden="true" />, id: "patcher", label: "Apply" },
   { dock: true, group: "patches", href: "create", icon: <svg aria-hidden="true" />, id: "creator", label: "Create" },
   { dock: true, group: "roms", href: "test", icon: <svg aria-hidden="true" />, id: "test", label: "Test" },
-  { group: "docs", href: "/docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
+  { group: "project", href: "/docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
   { group: "patches", href: "bundle", icon: <svg aria-hidden="true" />, id: "bundle", label: "Bundles" },
   { beta: true, group: "roms", href: "trim", icon: <svg aria-hidden="true" />, id: "trim", label: "Trim" },
 ] satisfies WorkflowTab[];
@@ -76,7 +76,7 @@ describe("the navigation both layouts share", () => {
     expect(rowNamed(navigation.side, "Docs").id).toBe("tab-docs");
   });
 
-  it("uses dedicated Docs navigation on desktop and mobile", () => {
+  it("uses dedicated Docs navigation beside the global mobile controls", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="docs" />));
 
     const side = container.querySelector(".side-nav") as HTMLElement;
@@ -84,16 +84,28 @@ describe("the navigation both layouts share", () => {
     expect(rowNamed(side, "Overview").getAttribute("href")).toBe("/docs");
     expect(side.querySelector(".guide-nav")).not.toBeNull();
     expect(side.querySelectorAll(".nav-row")).toHaveLength(1);
-    expect(container.querySelector(".dock")).toBeNull();
+    expect(container.querySelector(".dock")).not.toBeNull();
 
     const browse = within(container).getByRole("button", { name: "Browse docs" });
     fireEvent.click(browse);
-    const sheet = container.querySelector(".menu-sheet.menu-sheet-docs") as HTMLElement;
-    expect(sheet.hidden).toBe(false);
+    const sheet = container.querySelector("#docs-menu-sheet.menu-sheet-docs") as HTMLDialogElement;
+    expect(sheet.open).toBe(true);
     expect(within(sheet).getByRole("button", { name: "Close navigation" })).toBeTruthy();
     expect(rowNamed(sheet, "Back to tools").getAttribute("href")).toBe("/apply-patches");
     expect(sheet.querySelector(".guide-nav")).not.toBeNull();
-    expect(container.querySelector('.docs-mobile-toolbar button[aria-label="Find"]')).not.toBeNull();
+    expect(container.querySelector(".docs-mobile-toolbar button[aria-label]")).toBeNull();
+    expect(container.querySelector(".dock-find")).not.toBeNull();
+    expect(container.querySelectorAll("#menu-sheet")).toHaveLength(1);
+    expect(container.querySelectorAll("#docs-menu-sheet")).toHaveLength(1);
+
+    fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
+    expect(sheet.open).toBe(false);
+    const globalMenu = container.querySelector("#menu-sheet") as HTMLElement;
+    expect(globalMenu.hidden).toBe(false);
+    expect(rowNamed(globalMenu, "Docs")).toBeTruthy();
+    expect(rowNamed(globalMenu, "Docs").closest(".nav-group")?.querySelector(".nav-group-label")?.textContent).toBe(
+      "Project",
+    );
   });
 
   it("routes every row to its handler, from either layout", () => {
@@ -138,7 +150,7 @@ describe("the navigation both layouts share", () => {
 
     const side = container.querySelector(".side-nav") as HTMLElement;
     fireEvent.click(within(container).getByRole("button", { name: "Browse docs" }));
-    const sheet = container.querySelector(".menu-sheet.menu-sheet-docs") as HTMLElement;
+    const sheet = container.querySelector("#docs-menu-sheet.menu-sheet-docs") as HTMLElement;
     for (const scope of [side, sheet]) {
       const link = rowNamed(scope, "Overview");
       const event = new MouseEvent("click", { bubbles: true, cancelable: true });

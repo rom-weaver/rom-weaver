@@ -25,10 +25,9 @@ type WorkflowTab = {
   /** Short name for the nav, where the group heading already carries the noun. */
   railLabel?: string;
 };
-type NavGroup = "docs" | "files" | "patches" | "project" | "roms";
+type NavGroup = "files" | "patches" | "project" | "roms";
 
 const NAV_GROUP_TITLES: Record<NavGroup, MessageId> = {
-  docs: "ui.nav.docs",
   files: "ui.nav.groupFiles",
   patches: "ui.nav.groupPatches",
   project: "ui.tools.project",
@@ -360,7 +359,7 @@ const MenuSheet = ({
         aria-label={localizer.message("ui.docs.navigation")}
         className="menu-sheet menu-sheet-docs"
         hidden={!open}
-        id="menu-sheet"
+        id="docs-menu-sheet"
         onCancel={(event) => {
           event.preventDefault();
           onClose();

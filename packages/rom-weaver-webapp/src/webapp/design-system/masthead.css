@@ -1292,9 +1292,6 @@
   .rw-app {
     --dock-h: calc(53px + max(3px, var(--safe-b)));
   }
-  .rw-app:has(.shell-banner[data-docs="true"]) {
-    --dock-h: 0px;
-  }
   .rw-app .docs-mobile-toolbar {
     display: flex;
     gap: 4px;
@@ -1305,7 +1302,7 @@
   }
   .rw-app .docs-mobile-toolbar .docs-browse-trigger {
     position: fixed;
-    bottom: calc(var(--safe-b) + var(--sp-m));
+    bottom: calc(var(--dock-h) + var(--sp-m));
     left: max(var(--gutter), var(--safe-l));
     z-index: 998;
     gap: 10px;
