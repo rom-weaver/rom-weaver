@@ -126,7 +126,8 @@
 }
 /* Simple view: a card's only drawer is a flush section of the card, not a
    well nested inside it. A seam across the full card width replaces the well's
-   border, and the head and rows share the card's own padding. */
+   border, the head shares the card's own padding, and check rows bleed to the
+   card edge. */
 .rw-app .cks.is-integrated {
   --cks-pad: var(--card-pad, 10px);
   margin-inline: calc(-1 * var(--card-pad, 0px));
