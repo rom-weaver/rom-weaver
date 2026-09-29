@@ -353,18 +353,19 @@ impl ChdContainerHandler {
         );
         let sectors = prepared.sectors_for_codec(primary_codec);
         match primary_codec {
-            ChdCodec::CD_ZSTD => self
-                .compress_prepared_cd_zstd_payload(sectors, prepared, compression_level, hunk_len)
-                .map(Some),
-            ChdCodec::CD_ZLIB => self
-                .compress_prepared_cd_zlib_payload(
-                    sectors,
-                    prepared,
-                    compression_level,
-                    hunk_len,
-                    shared_streams,
-                )
-                .map(Some),
+            ChdCodec::CD_ZSTD => self.compress_prepared_cd_zstd_payload(
+                sectors,
+                prepared,
+                compression_level,
+                hunk_len,
+            ),
+            ChdCodec::CD_ZLIB => self.compress_prepared_cd_zlib_payload(
+                sectors,
+                prepared,
+                compression_level,
+                hunk_len,
+                shared_streams,
+            ),
             ChdCodec::CD_LZMA => self.compress_prepared_cd_lzma_payload(
                 sectors,
                 prepared,
@@ -527,12 +528,21 @@ impl ChdContainerHandler {
         prepared: &PreparedCdHunk<'_>,
         compression_level: i32,
         hunk_len: usize,
-    ) -> Result<Vec<u8>> {
+    ) -> Result<Option<Vec<u8>>> {
         let (mut output, ecc_bytes, comp_len_bytes) =
             Self::cd_payload_header(prepared, hunk_len, sectors.len() / 4);
         let sector_start = output.len();
         output = Self::zstd_append(output, sectors, compression_level, "cd zstd")?;
         let sector_stream_len = output.len().saturating_sub(sector_start);
+        // chdman's zstd compressor fails when the stream fills its sector-sized output buffer.
+        if sector_stream_len >= sectors.len() {
+            trace!(
+                sectors = sectors.len(),
+                stream = sector_stream_len,
+                "chd cd zstd sector stream does not fit the sector bytes"
+            );
+            return Ok(None);
+        }
         Self::write_cd_sector_stream_len(
             &mut output,
             ecc_bytes,
@@ -545,6 +555,7 @@ impl ChdContainerHandler {
             compression_level,
             "cd subcode zstd",
         )
+        .map(Some)
     }
 
     pub(super) fn compress_prepared_cd_zlib_payload(
@@ -554,7 +565,7 @@ impl ChdContainerHandler {
         compression_level: i32,
         hunk_len: usize,
         shared_streams: Option<&mut CdSharedCompressedStreams>,
-    ) -> Result<Vec<u8>> {
+    ) -> Result<Option<Vec<u8>>> {
         let (mut output, ecc_bytes, comp_len_bytes) =
             Self::cd_payload_header(prepared, hunk_len, sectors.len() / 4);
         let sector_start = output.len();
@@ -565,6 +576,15 @@ impl ChdContainerHandler {
             "cd zlib",
         )?;
         let sector_stream_len = output.len().saturating_sub(sector_start);
+        // chdman's zlib compressor fails when the stream reaches its sector-sized output buffer.
+        if sector_stream_len >= sectors.len() {
+            trace!(
+                sectors = sectors.len(),
+                stream = sector_stream_len,
+                "chd cd zlib sector stream does not fit the sector bytes"
+            );
+            return Ok(None);
+        }
         Self::write_cd_sector_stream_len(
             &mut output,
             ecc_bytes,
@@ -572,6 +592,7 @@ impl ChdContainerHandler {
             sector_stream_len,
         )?;
         Self::append_default_cd_subcode_deflate(output, prepared, compression_level, shared_streams)
+            .map(Some)
     }
 
     pub(super) fn compress_prepared_cd_lzma_payload(

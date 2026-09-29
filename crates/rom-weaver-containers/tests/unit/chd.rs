@@ -1928,15 +1928,22 @@ fn chd_cd_codec_trial_skips_cdlz_for_incompressible_sectors() {
     assert_eq!(slot, ChdContainerHandler::CHD_V5_MAP_TYPE_UNCOMPRESSED);
     assert_eq!(payload, hunk);
 
-    let (slot, _) = handler
+    // chdman's zlib and zstd compressors fail the same way on a sector stream that does not
+    // shrink, so no CD codec carries incompressible sectors.
+    let (slot, payload) = handler
         .compress_best_rust_hunk(
             &disc,
             ChdCodec::CD_LZMA,
-            &[(0, ChdCodec::CD_LZMA), (1, ChdCodec::CD_ZLIB)],
+            &[
+                (0, ChdCodec::CD_LZMA),
+                (1, ChdCodec::CD_ZLIB),
+                (2, ChdCodec::CD_ZSTD),
+            ],
             0,
-            hunk,
+            hunk.clone(),
             &mut scratch,
         )
-        .expect("cdlz+cdzl trial succeeds");
-    assert_eq!(slot, 1, "cdzl carries the hunk once cdlz is skipped");
+        .expect("cdlz+cdzl+cdzs trial succeeds");
+    assert_eq!(slot, ChdContainerHandler::CHD_V5_MAP_TYPE_UNCOMPRESSED);
+    assert_eq!(payload, hunk);
 }
