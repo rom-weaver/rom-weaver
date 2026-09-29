@@ -29,7 +29,9 @@ import { resolveGuidedSampleHref } from "./guided-sample-start.ts";
 import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
 import { createCheatClassifiers } from "./cheat-classifier.ts";
+import { getUnsupportedCheatSystemMessage } from "./components/cheat-database-section.tsx";
 import { CreateCheatCodesPanel } from "./components/create-cheat-codes-panel.tsx";
+import { useUnsupportedCheatSystem } from "./components/use-cheat-database-records.ts";
 import {
   getCheatCodesPatchName,
   getCheatCodesValidationMessage,
@@ -559,6 +561,28 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     [activePatchFormatCandidates?.formats, modifiedState?.size, originalState?.size],
   );
   const displayedOriginalFileName = displayedOriginalInfo?.fileName || originalFileName;
+  // Cheat classification runs against the original ROM: it supplies the platform
+  // the database lookup routes on and the ROM bytes the decoder resolves against.
+  // The header platform comes first, as in Apply: identify leaves both of its
+  // fields empty for a ROM it cannot match.
+  const cheatPlatform =
+    originalState?.romType?.platform ||
+    originalState?.identification?.matches?.[0]?.platform ||
+    originalState?.identification?.platformCandidates?.[0]?.platform;
+  const cheatRom = useMemo(
+    () =>
+      original
+        ? {
+            ...(originalState?.checksums ? { checksums: originalState.checksums } : {}),
+            fileName: displayedOriginalFileName,
+            key: `${originalSourceKey}:${originalState?.checksums?.sha1 || originalState?.checksums?.crc32 || ""}`,
+            ...(cheatPlatform ? { platform: cheatPlatform } : {}),
+            title: displayedOriginalFileName,
+          }
+        : null,
+    [cheatPlatform, displayedOriginalFileName, original, originalSourceKey, originalState?.checksums],
+  );
+  const cheatSystemUnsupported = useUnsupportedCheatSystem(cheatRom, cheatsEnabled);
   const displayedModifiedFileName = displayedModifiedInfo?.fileName || modifiedFileName;
   const settingsLanguage = (settings as { language?: string }).language;
   const clearWorkflowMessage = useCallback(() => {
@@ -574,12 +598,13 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     setProgress,
     setQueued: setCreateQueued,
   });
-  // A patch built from cheat codes MUST NOT stay on screen once beta tools turn off.
+  // A patch built from cheat codes MUST NOT stay on screen once beta tools turn
+  // off or the original ROM's system turns out to have no cheat support.
   useEffect(() => {
-    if (cheatsEnabled || modifiedMode !== "codes") return;
+    if ((cheatsEnabled && !cheatSystemUnsupported) || modifiedMode !== "codes") return;
     setModifiedMode("rom");
     resetWorkflowOutput();
-  }, [cheatsEnabled, modifiedMode, resetWorkflowOutput]);
+  }, [cheatSystemUnsupported, cheatsEnabled, modifiedMode, resetWorkflowOutput]);
   const setWorkflowMessage = useCallback(
     (placement: CreateMessagePlacement, error: Error) => {
       const code = getErrorCode(error);
@@ -1162,27 +1187,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     messageDismissible,
     messagePlacement,
   };
-  // Cheat classification runs against the original ROM: it supplies the platform
-  // the database lookup routes on and the ROM bytes the decoder resolves against.
-  // The header platform comes first, as in Apply: identify leaves both of its
-  // fields empty for a ROM it cannot match.
-  const cheatPlatform =
-    originalState?.romType?.platform ||
-    originalState?.identification?.matches?.[0]?.platform ||
-    originalState?.identification?.platformCandidates?.[0]?.platform;
-  const cheatRom = useMemo(
-    () =>
-      original
-        ? {
-            ...(originalState?.checksums ? { checksums: originalState.checksums } : {}),
-            fileName: displayedOriginalFileName,
-            key: `${originalSourceKey}:${originalState?.checksums?.sha1 || originalState?.checksums?.crc32 || ""}`,
-            ...(cheatPlatform ? { platform: cheatPlatform } : {}),
-            title: displayedOriginalFileName,
-          }
-        : null,
-    [cheatPlatform, displayedOriginalFileName, original, originalSourceKey, originalState?.checksums],
-  );
   const getCheatSource = useCallback(() => {
     if (!original) throw new Error("Add the original ROM before checking cheat codes");
     return original as never;
@@ -1339,8 +1343,13 @@ function CreatePatchForm(props: CreatePatchFormProps) {
             <button
               aria-pressed={modifiedMode === mode}
               className="seg-btn"
-              disabled={uploadDisabled}
+              disabled={uploadDisabled || (mode === "codes" && cheatSystemUnsupported)}
               key={mode}
+              title={
+                mode === "codes" && cheatSystemUnsupported
+                  ? getUnsupportedCheatSystemMessage(cheatRom?.platform)
+                  : undefined
+              }
               onClick={() => {
                 if (modifiedMode === mode) return;
                 resetWorkflowOutput();

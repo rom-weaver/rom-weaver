@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   createCheatDatabaseClient,
+  isUnsupportedCheatSystem,
   matchCheatGame,
   parseCheatDatabaseIndex,
   resolveCheatDatabaseEntry,
@@ -53,6 +54,8 @@ type CheatDatabaseRecordsState = {
   setManualGameId: (id: string) => void;
   shard?: CheatSystemShard;
   system?: CheatDatabaseSystem;
+  /** The ROM names a platform no shard and no decoder covers. */
+  unsupportedSystem: boolean;
 };
 
 const loadCheatDatabase = async (): Promise<{ index: CheatDatabaseIndex; catalog: IdentifyCatalog | undefined }> => {
@@ -63,6 +66,29 @@ const loadCheatDatabase = async (): Promise<{ index: CheatDatabaseIndex; catalog
 };
 
 const matchGame = (match: CheatGameMatch) => ("game" in match ? match.game : undefined);
+
+/**
+ * Whether the ROM's platform is one cheats cannot cover. It stays false until
+ * the database index loads, and when it fails to load, so a slow or offline
+ * index never locks cheats out. Nothing loads while `enabled` is false.
+ */
+const useUnsupportedCheatSystem = (rom: CheatRomIdentity | null, enabled = true): boolean => {
+  const [loaded, setLoaded] = useState<{ index: CheatDatabaseIndex; catalog: IdentifyCatalog | undefined }>();
+  const needsIndex = enabled && !!rom?.platform;
+  useEffect(() => {
+    if (!needsIndex) return;
+    let active = true;
+    void loadCheatDatabase()
+      .then((next) => {
+        if (active) setLoaded(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [needsIndex]);
+  return needsIndex && isUnsupportedCheatSystem(loaded?.index, loaded?.catalog, rom);
+};
 
 /**
  * Loads the cheat database for one ROM, matches its game, and classifies that
@@ -229,7 +255,8 @@ const useCheatDatabaseRecords = ({
     setManualGameId,
     ...(shard ? { shard } : {}),
     ...(system ? { system } : {}),
+    unsupportedSystem: isUnsupportedCheatSystem(activeIndex, activeCatalog, rom),
   };
 };
 
-export { matchGame, useCheatDatabaseRecords };
+export { matchGame, useCheatDatabaseRecords, useUnsupportedCheatSystem };

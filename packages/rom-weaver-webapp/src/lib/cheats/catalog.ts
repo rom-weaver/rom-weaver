@@ -95,6 +95,20 @@ export const resolveManualOnlyCheatSystem = (
   return found ? (found[0] as CheatManualOnlySystem) : undefined;
 };
 
+/**
+ * True when the ROM names a platform that neither a cheat shard nor the code
+ * decoder covers. A ROM without a platform tag is never unsupported: the user
+ * can still pick its system by hand.
+ */
+export const isUnsupportedCheatSystem = (
+  index: CheatDatabaseIndex | undefined,
+  catalog: IdentifyCatalog | undefined,
+  identity: Pick<CheatRomIdentity, "platform" | "fileName"> | null,
+): boolean =>
+  !!(index && identity?.platform) &&
+  !resolveCheatDatabaseEntry(index, catalog, identity) &&
+  !resolveManualOnlyCheatSystem(catalog, identity);
+
 const normalizeText = (value: string): string =>
   value
     .normalize("NFKD")
