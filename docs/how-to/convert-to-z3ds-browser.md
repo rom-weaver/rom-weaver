@@ -17,7 +17,7 @@ Compress Nintendo 3DS ROMs to Z3DS, ZCCI, ZCXI, ZCIA, or Z3DSX locally in your b
 2. Add one `.3ds`, `.cci`, `.cxi`, `.cia`, `.3dsx`, or `.app` file to **Inputs**.
 3. Remove other files before choosing the output format.
 
-For a ROM inside ZIP or 7z, [extract the file](extract-files-browser.md) first. For an existing compressed 3DS file, use [Extract Z3DS files](extract-z3ds-browser.md) before recompressing it.
+For a ROM inside ZIP, 7z, or an existing compressed 3DS file, add that file to Compress. Select the ROM, then select the **Add** button.
 
 ## Create the compressed file
 

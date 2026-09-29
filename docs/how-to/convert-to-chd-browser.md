@@ -31,7 +31,7 @@ The output picker offers CHD only for compatible disc inputs. Changing an extens
 
 If CHD is unavailable, remove unrelated files and check that every CUE track is present. Compress accepts one disc at a time.
 
-For an image inside ZIP or 7z, [extract its files](extract-files-browser.md) first. Add the extracted ISO or complete CUE/BIN set to Compress.
+For an image inside ZIP or 7z, add the archive to Compress. Select the ISO or the complete CUE/BIN set, then select the **Add** button.
 
 ## Check compatibility and storage
 

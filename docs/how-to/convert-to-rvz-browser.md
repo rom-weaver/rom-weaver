@@ -19,7 +19,7 @@ Compress a GameCube or Wii ISO to RVZ locally in your browser. No patch, upload,
 
 Use a valid GameCube or Wii disc image. Renaming another console's image to `.iso` does not make it compatible with RVZ.
 
-For a disc inside ZIP, 7z, or another supported container, [extract the ISO](extract-files-browser.md) first. Add that ISO to Compress.
+For a disc inside ZIP, 7z, or another supported container, add the container to Compress. Select the ISO, then select the **Add** button.
 
 ## Create the RVZ
 
