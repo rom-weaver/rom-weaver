@@ -1675,11 +1675,6 @@ msgstr "Startseite"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.applyGuide"
-msgstr "Lies die Apply-Anleitung"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.output.identified"
 msgstr "Erkannt"
 
@@ -2765,13 +2760,53 @@ msgstr "In Einstellungen wieder aktivieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.applyGuide"
+msgstr "Lies die Apply-Anleitung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.bundleGuide"
-msgstr "Bundle-Anleitung lesen"
+msgstr "Lies die Bundle-Anleitung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.compressGuide"
+msgstr "Lies die Compress-Anleitung"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.createGuide"
 msgstr "Lies die Create-Anleitung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.extractGuide"
+msgstr "Lies die Extract-Anleitung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyGuide"
+msgstr "Lies die Identify-Anleitung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.ppfUndoGuide"
+msgstr "Lies die PPF-Undo-Anleitung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.saveGuide"
+msgstr "Lies die Save-Editor-Anleitung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.testGuide"
+msgstr "Lies die Test-Anleitung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.trimGuide"
+msgstr "Lies die Trim-Anleitung"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -3,6 +3,7 @@ import { RelatedStrip } from "../../webapp/components/related-strip.tsx";
 import { GhostSteps } from "./components/ds/ghost-steps.tsx";
 import { ConfirmDialog } from "./components/ds/modal.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
+import { WORKFLOW_GUIDES } from "./workflow-guides.ts";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.tsx";
 import { useUiLocalizer } from "./settings-context.tsx";
@@ -49,6 +50,7 @@ const TrimPatchFormView = ({
     <section className="panel" id="trim-builder-container">
       <UnifiedDropZone
         {...dropZone}
+        guide={WORKFLOW_GUIDES.trim}
         lead={{ line1: "ui.hero.trimThesis", line2: "ui.hero.trimThesis2", description: "ui.hero.trimDescription" }}
       />
       {sourceEmpty ? (

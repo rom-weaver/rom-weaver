@@ -1,8 +1,10 @@
-import { type ReactNode, useRef } from "react";
+import { BookOpen } from "lucide-react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { createLogger } from "../../../../lib/logging.ts";
 import { markDropReceived } from "../../../../lib/perf/op-perf-marks.ts";
 import type { MessageId } from "../../../../presentation/localization/catalog.ts";
-import { useUiLocalizer } from "../../settings-context.tsx";
+import { resolveAssetUrl } from "../../asset-url.ts";
+import { useRomWeaverAssetBaseUrl, useUiLocalizer } from "../../settings-context.tsx";
 import { DropZone, InfoPopover, StepSection } from "./layout.tsx";
 
 /**
@@ -19,6 +21,8 @@ type SupportedFileGroup = {
   label: string;
   extensions: readonly string[];
 };
+
+type WorkflowGuide = { path: string; label: MessageId };
 
 type UnifiedDropZoneProps = {
   /** Compact add-row label once files are staged. */
@@ -39,6 +43,10 @@ type UnifiedDropZoneProps = {
   supported?: readonly SupportedFileGroup[];
   /** Per-workflow thesis lines for the empty-state lead (defaults to the apply copy). */
   lead?: { line1: MessageId; line2: MessageId; description: MessageId };
+  /** The workflow's how-to page, linked from the empty-state help row. `path` is relative to the app base. */
+  guide?: WorkflowGuide;
+  /** Onboarding control (the "New here?" beacon) that leads the empty-state help row. */
+  onboarding?: ReactNode;
   /** Step number/title; the inputs step is 0x01 in every workflow. */
   num?: string;
   title?: ReactNode;
@@ -56,10 +64,27 @@ type UnifiedDropZoneProps = {
   beforeDropZone?: ReactNode;
 };
 
+const HeroGuideLink = ({ guide }: { guide: WorkflowGuide }) => {
+  const localizer = useUiLocalizer();
+  const assetBaseUrl = useRomWeaverAssetBaseUrl();
+  // The prerender cannot know where the app is served. Emit the root-relative
+  // form it can, then resolve against the app base after hydration so a
+  // sub-path deployment still links correctly.
+  const [href, setHref] = useState(`/${guide.path}`);
+  useEffect(() => setHref(resolveAssetUrl(assetBaseUrl, guide.path)), [assetBaseUrl, guide.path]);
+  return (
+    <a className="hero-guide" href={href}>
+      <BookOpen aria-hidden="true" />
+      {localizer.message(guide.label)}
+    </a>
+  );
+};
+
 const UnifiedDropZone = ({
   addLabel,
   afterDropZone,
   beforeDropZone,
+  guide,
   headerExtra,
   heroLabel,
   heroLabelCoarse,
@@ -70,6 +95,7 @@ const UnifiedDropZone = ({
   onBrowseStart,
   onDropStart,
   onFiles,
+  onboarding,
   supported,
   title,
   ...dropZoneProps
@@ -140,8 +166,14 @@ const UnifiedDropZone = ({
         onFiles={emit}
       />
       {afterDropZone}
-      {big ? (
+      {big && (onboarding || guide || supportedFormats) ? (
         <div className="hero-help">
+          {onboarding || guide ? (
+            <div className="hero-help-links">
+              {onboarding}
+              {guide ? <HeroGuideLink guide={guide} /> : null}
+            </div>
+          ) : null}
           {supportedFormats ? (
             <details className="hero-formats-help">
               <summary>{localizer.message("ui.hero.supportedFormats")}</summary>
@@ -154,4 +186,4 @@ const UnifiedDropZone = ({
   );
 };
 
-export { UnifiedDropZone };
+export { UnifiedDropZone, type WorkflowGuide };

@@ -1112,6 +1112,13 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
       "Compare original and modified ROMs, raw or in archives, to create BPS, IPS, UPS, xdelta, or other patches.",
   }),
   "ui.hero.createGuide": msg({ id: "ui.hero.createGuide", message: "Read the Create guide" }),
+  "ui.hero.compressGuide": msg({ id: "ui.hero.compressGuide", message: "Read the Compress guide" }),
+  "ui.hero.extractGuide": msg({ id: "ui.hero.extractGuide", message: "Read the Extract guide" }),
+  "ui.hero.identifyGuide": msg({ id: "ui.hero.identifyGuide", message: "Read the Identify guide" }),
+  "ui.hero.ppfUndoGuide": msg({ id: "ui.hero.ppfUndoGuide", message: "Read the PPF undo guide" }),
+  "ui.hero.saveGuide": msg({ id: "ui.hero.saveGuide", message: "Read the Save Editor guide" }),
+  "ui.hero.testGuide": msg({ id: "ui.hero.testGuide", message: "Read the Test guide" }),
+  "ui.hero.trimGuide": msg({ id: "ui.hero.trimGuide", message: "Read the Trim guide" }),
   "ui.hero.extractDescription": msg({
     id: "ui.hero.extractDescription",
     message:

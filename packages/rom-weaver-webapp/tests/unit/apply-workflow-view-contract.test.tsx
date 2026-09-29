@@ -259,6 +259,8 @@ describe("apply workflow view - empty bench", () => {
     expect(actions[0].textContent).toContain(label);
     expect(container.querySelector(".sample-tutorial-start-guide")?.getAttribute("href")).toBe(docsHref);
     expect(container.querySelector(".sample-tutorial-start-guide")?.textContent).toContain(docsLabel);
+    expect(container.querySelector(".hero-guide")?.getAttribute("href")).toBe(docsHref);
+    expect(container.querySelector(".hero-guide")?.textContent).toBe(docsLabel);
     expect(container.querySelector(".sample-tutorial-start-download")?.getAttribute("href")).toContain(
       "first-weave.zip",
     );

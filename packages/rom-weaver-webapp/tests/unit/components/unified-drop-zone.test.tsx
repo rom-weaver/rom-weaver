@@ -65,6 +65,38 @@ describe("UnifiedDropZone", () => {
     expect(disclosure?.closest("label")).toBeNull();
   });
 
+  it("puts onboarding and the workflow guide on one help line above the formats", () => {
+    const { container } = render(
+      <UnifiedDropZone
+        big
+        guide={{ path: "docs/apply-rom-patches", label: "ui.hero.applyGuide" }}
+        onFiles={() => undefined}
+        onboarding={<button className="onboarding-probe" type="button" />}
+        supported={[{ label: "ROMs", extensions: ["sfc"] }]}
+      />,
+    );
+    const help = container.querySelector(".hero-help");
+    const links = help?.querySelector(":scope > .hero-help-links");
+    expect(links?.firstElementChild?.className).toBe("onboarding-probe");
+    const guide = links?.querySelector("a.hero-guide");
+    expect(guide?.getAttribute("href")).toBe("/docs/apply-rom-patches");
+    expect(guide?.textContent).toBe("Read the Apply guide");
+    expect(guide?.closest("label")).toBeNull();
+    expect(links?.nextElementSibling?.matches("details.hero-formats-help")).toBe(true);
+  });
+
+  it("drops the help line once content is staged", () => {
+    const { container } = render(
+      <UnifiedDropZone
+        guide={{ path: "docs/apply-rom-patches", label: "ui.hero.applyGuide" }}
+        onFiles={() => undefined}
+        onboarding={<button className="onboarding-probe" type="button" />}
+      />,
+    );
+    expect(container.querySelector(".hero-help")).toBeNull();
+    expect(container.querySelector(".onboarding-probe")).toBeNull();
+  });
+
   it("opens the existing file input from the Inputs heading action", () => {
     const { container } = render(
       <UnifiedDropZone inputId="rom-weaver-input-file-unified" label="Add more" onFiles={() => undefined} />,

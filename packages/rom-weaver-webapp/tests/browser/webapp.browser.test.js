@@ -490,6 +490,7 @@ test.each([
   expect(document.querySelector(".sample-tutorial-start-primary")?.getAttribute("href")).toBe(guideHref);
   expect(document.querySelector(".sample-tutorial-start-secondary")).toBeNull();
   expect(document.querySelector(".sample-tutorial-start-guide")?.pathname).toBe(docsPath);
+  expect(document.querySelector(".hero-guide")?.pathname).toBe(docsPath);
   expect(document.querySelector(".sample-tutorial-start-download").hasAttribute("download")).toBe(true);
   expect(document.querySelector(".sample-tutorial-start-dismiss")).toBeTruthy();
   const pop = document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect();

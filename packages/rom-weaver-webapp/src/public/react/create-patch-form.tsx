@@ -26,6 +26,7 @@ import {
   useGuidedSampleStart,
 } from "./components/ds/sample-tutorial.tsx";
 import { resolveGuidedSampleHref } from "./guided-sample-start.ts";
+import { WORKFLOW_GUIDES } from "./workflow-guides.ts";
 import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
 import { createCheatClassifiers } from "./cheat-classifier.ts";
@@ -1246,41 +1247,39 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     dropZone: {
       accept: createFileInputAccept.unifiedRom,
       addLabel: localizer.message("ui.drop.addRom"),
-      afterDropZone: createSourcesActuallyEmpty ? (
-        <>
-          {dropNotice ? (
-            <Notice id="patch-builder-input-notice" level={dropNoticeLevel}>
-              {dropNotice}
-            </Notice>
-          ) : null}
-          <SampleTutorialStart
-            documentation={{ href: "/docs/create-rom-patches", label: localizer.message("ui.hero.createGuide") }}
-            downloadHref={resolveAssetUrl(resolvedAssetBaseUrl, CREATE_SAMPLE_ARCHIVE)}
-            downloadName={CREATE_SAMPLE_ARCHIVE}
-            downloadLabel="Download samples"
-            error={sampleError}
-            guideHref={resolveGuidedSampleHref(resolvedAssetBaseUrl, "create")}
-            label="Start guided Create"
-            startAction="create"
-            loading={sampleLoading}
-            onStart={() => {
-              setSampleTutorialActive(true);
-              void loadCreateSample();
-            }}
-          />
-        </>
-      ) : dropNotice ? (
+      afterDropZone: dropNotice ? (
         <Notice id="patch-builder-input-notice" level={dropNoticeLevel}>
           {dropNotice}
         </Notice>
       ) : null,
       big: createSourcesEmpty,
+      guide: WORKFLOW_GUIDES.create,
       disabled: uploadDisabled,
       heroLabel: "Drop or click to add original and modified ROMs or archives",
       heroLabelCoarse: "Tap to add original and modified ROMs or archives",
       id: "patch-builder-row-unified-drop",
       inputId: "patch-builder-input-file-unified",
       onFiles: handleUnifiedDrop,
+      onboarding: createSourcesActuallyEmpty ? (
+        <SampleTutorialStart
+          documentation={{
+            href: resolveAssetUrl(resolvedAssetBaseUrl, WORKFLOW_GUIDES.create.path),
+            label: localizer.message(WORKFLOW_GUIDES.create.label),
+          }}
+          downloadHref={resolveAssetUrl(resolvedAssetBaseUrl, CREATE_SAMPLE_ARCHIVE)}
+          downloadName={CREATE_SAMPLE_ARCHIVE}
+          downloadLabel="Download samples"
+          error={sampleError}
+          guideHref={resolveGuidedSampleHref(resolvedAssetBaseUrl, "create")}
+          label="Start guided Create"
+          startAction="create"
+          loading={sampleLoading}
+          onStart={() => {
+            setSampleTutorialActive(true);
+            void loadCreateSample();
+          }}
+        />
+      ) : null,
       supported: CREATE_SUPPORTED_FILES,
     },
     modifiedStep: {
