@@ -450,9 +450,17 @@
   opacity: 1;
 }
 @media (forced-colors: active) {
-  .rw-app .nav-row[aria-current="page"] {
+  .rw-app .nav-row[aria-current="page"],
+  .rw-app .nav-docs-summary .nav-row[aria-current="page"] {
     color: SelectedItemText;
     background: SelectedItem;
+  }
+  .rw-app .nav-docs-summary .nav-row[aria-current="page"] {
+    /* Keep the system palette without a text backplate over the selected row. */
+    forced-color-adjust: none;
+  }
+  .rw-app .nav-docs-summary .nav-row[aria-current="page"] svg {
+    color: SelectedItemText;
   }
 }
 /* The chip sits with the name it qualifies rather than at the far edge of the
