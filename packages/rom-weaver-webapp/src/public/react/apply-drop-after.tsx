@@ -5,10 +5,12 @@ import { Drawer, DrawerReadout } from "./components/ds/drawer.tsx";
 import { ExtractName } from "./components/ds/extraction-tree.tsx";
 import { FileCard } from "./components/ds/file-card.tsx";
 import { SampleTutorialStart } from "./components/ds/sample-tutorial.tsx";
+import { resolveAssetUrl } from "./asset-url.ts";
 import { resolveGuidedSampleHref } from "./guided-sample-start.ts";
 import { StageStatus } from "./components/ds/staging-meta.tsx";
 import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
 import type { PendingDrop } from "./use-unified-apply-drop.ts";
+import { WORKFLOW_GUIDES } from "./workflow-guides.ts";
 
 // Bare name, resolved against the app's base at fetch time: a root-absolute
 // path breaks any deployment that is not served from the domain root.
@@ -119,44 +121,40 @@ const PendingDropCard = ({ drop }: { drop: PendingDrop }) => {
   );
 };
 
-export const ApplyDropAfter = ({
+export const ApplyDropAfter = ({ pendingDrops }: { pendingDrops: PendingDrop[] }) => {
+  if (!pendingDrops.length) return null;
+  return (
+    <div className="cards workflow-file-list" id="rom-weaver-pending-drops">
+      {pendingDrops.map((drop) => (
+        <div className="rw-pending" key={drop.id}>
+          <PendingDropCard drop={drop} />
+        </div>
+      ))}
+    </div>
+  );
+};
+
+export const ApplySampleStart = ({
   bundlePage,
   downloadHref,
   onLoadApplySample,
   onLoadBundleSample,
-  pendingDrops,
   sampleError,
   sampleLoading,
-  workflowEmpty,
 }: {
   bundlePage: boolean;
   onLoadApplySample: () => void;
   onLoadBundleSample: () => void;
   downloadHref: string;
-  pendingDrops: PendingDrop[];
   sampleError: string;
   sampleLoading: boolean;
-  workflowEmpty: boolean;
 }) => {
   const localizer = useUiLocalizer();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
-  if (pendingDrops.length) {
-    return (
-      <div className="cards workflow-file-list" id="rom-weaver-pending-drops">
-        {pendingDrops.map((drop) => (
-          <div className="rw-pending" key={drop.id}>
-            <PendingDropCard drop={drop} />
-          </div>
-        ))}
-      </div>
-    );
-  }
-  if (!workflowEmpty) return null;
+  const guide = bundlePage ? WORKFLOW_GUIDES.bundle : WORKFLOW_GUIDES.apply;
   return (
     <SampleTutorialStart
-      documentation={
-        bundlePage ? { href: "/docs/create-bundles", label: localizer.message("ui.hero.bundleGuide") } : undefined
-      }
+      documentation={{ href: resolveAssetUrl(assetBaseUrl, guide.path), label: localizer.message(guide.label) }}
       downloadHref={downloadHref}
       downloadLabel={localizer.message("ui.apply.tutorial.downloadTestBundle")}
       downloadName={FIRST_WEAVE_ASSET}

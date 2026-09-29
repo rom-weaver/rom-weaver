@@ -1675,11 +1675,6 @@ msgstr "Home"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.applyGuide"
-msgstr "How to apply ROM patches"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.output.identified"
 msgstr "Ident"
 
@@ -2765,13 +2760,53 @@ msgstr "Re-enable in Settings"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.applyGuide"
+msgstr "Read the Apply guide"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.bundleGuide"
 msgstr "Read the Bundle guide"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.compressGuide"
+msgstr "Read the Compress guide"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.createGuide"
 msgstr "Read the Create guide"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.extractGuide"
+msgstr "Read the Extract guide"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyGuide"
+msgstr "Read the Identify guide"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.ppfUndoGuide"
+msgstr "Read the PPF undo guide"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.saveGuide"
+msgstr "Read the Save Editor guide"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.testGuide"
+msgstr "Read the Test guide"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.trimGuide"
+msgstr "Read the Trim guide"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

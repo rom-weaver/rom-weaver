@@ -248,30 +248,23 @@ describe("apply workflow view - empty bench", () => {
   });
 
   it.each([
-    ["apply", "/apply-patches?guide=apply", "Start guided Apply"],
-    ["bundle", "/bundle-patches?guide=bundle", "Start guided bundle"],
-  ] as const)("offers the %s guide and the test bundle download", (mode, href, label) => {
+    ["apply", "/apply-patches?guide=apply", "Start guided Apply", "/docs/apply-rom-patches", "Read the Apply guide"],
+    ["bundle", "/bundle-patches?guide=bundle", "Start guided bundle", "/docs/create-bundles", "Read the Bundle guide"],
+  ] as const)("offers the %s guide and the test bundle download", (mode, href, label, docsHref, docsLabel) => {
     const { container } = renderView({ mode, ui: createEmptyPatcherUiState() });
     fireEvent.click(container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement);
     const actions = container.querySelectorAll(".sample-tutorial-start-action");
-    expect(actions).toHaveLength(mode === "bundle" ? 4 : 3);
+    expect(actions).toHaveLength(4);
     expect(actions[0].getAttribute("href")).toBe(href);
     expect(actions[0].textContent).toContain(label);
-    if (mode === "bundle") {
-      expect(container.querySelector(".sample-tutorial-start-guide")?.getAttribute("href")).toBe(
-        "/docs/create-bundles",
-      );
-      expect(container.querySelector(".sample-tutorial-start-guide")?.textContent).toContain("Read the Bundle guide");
-    } else {
-      expect(container.querySelector(".sample-tutorial-start-guide")).toBeNull();
-    }
+    expect(container.querySelector(".sample-tutorial-start-guide")?.getAttribute("href")).toBe(docsHref);
+    expect(container.querySelector(".sample-tutorial-start-guide")?.textContent).toContain(docsLabel);
+    expect(container.querySelector(".hero-guide")?.getAttribute("href")).toBe(docsHref);
+    expect(container.querySelector(".hero-guide")?.textContent).toBe(docsLabel);
     expect(container.querySelector(".sample-tutorial-start-download")?.getAttribute("href")).toContain(
       "first-weave.zip",
     );
     expect(container.querySelector(".sample-tutorial-start-dismiss")).toBeTruthy();
-    expect(container.querySelector(".hero-guide")?.getAttribute("href")).toBe(
-      mode === "apply" ? "/docs/apply-rom-patches" : undefined,
-    );
   });
 
   it("keeps file input hooks unique when Apply and Bundle stay mounted", () => {

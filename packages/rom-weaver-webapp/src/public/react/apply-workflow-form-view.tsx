@@ -68,7 +68,8 @@ import {
 } from "./apply-output-fields.tsx";
 import { type RomRowDeps, groupRomInputs, renderRomInputRow, renderDiscGroup } from "./apply-rom-input-rows.tsx";
 import { SectionNotice } from "./apply-section-notice.tsx";
-import { FIRST_WEAVE_ASSET, usePendingCardMorph, ApplyDropAfter } from "./apply-drop-after.tsx";
+import { FIRST_WEAVE_ASSET, usePendingCardMorph, ApplyDropAfter, ApplySampleStart } from "./apply-drop-after.tsx";
+import { WORKFLOW_GUIDES } from "./workflow-guides.ts";
 
 const getApplySampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer>): readonly SampleTutorialStep[] => [
   {
@@ -755,22 +756,14 @@ function ApplyWorkflowFormView({
         addLabel={localizer.message(romInputs.length ? "ui.apply.add.replaceOrPatches" : "ui.apply.add.romOrPatches")}
         afterDropZone={
           <>
-            <ApplyDropAfter
-              bundlePage={bundlePage}
-              downloadHref={resolveAssetUrl(assetBaseUrl, FIRST_WEAVE_ASSET)}
-              onLoadApplySample={startApplySample}
-              onLoadBundleSample={startBundleSample}
-              pendingDrops={pendingDrops}
-              sampleError={sampleError}
-              sampleLoading={sampleLoading}
-              workflowEmpty={workflowEmpty}
-            />
+            <ApplyDropAfter pendingDrops={pendingDrops} />
             {/* Apply keeps the search available without competing with the
                 primary file-drop action. The form moves to 0x02 after a match. */}
             {canSearchRom && workflowEmpty ? <RomSearch localizer={localizer} lookup={romLookup} /> : null}
           </>
         }
         big={workflowEmpty}
+        guide={bundlePage ? WORKFLOW_GUIDES.bundle : WORKFLOW_GUIDES.apply}
         heroLabel={localizer.message("ui.apply.drop.hero")}
         heroLabelCoarse={localizer.message("ui.apply.drop.heroCoarse")}
         id="rom-weaver-row-unified-drop"
@@ -794,14 +787,22 @@ function ApplyWorkflowFormView({
                 line1: "ui.hero.thesis",
                 line2: "ui.hero.thesis2",
                 description: "ui.hero.applyDescription",
-                guide: {
-                  href: resolveAssetUrl(assetBaseUrl, "docs/apply-rom-patches"),
-                  label: "ui.hero.applyGuide",
-                },
               }
         }
         onDropStart={() => setDropStarted(true)}
         onFiles={handleUnifiedDropFiles}
+        onboarding={
+          pendingDrops.length ? null : (
+            <ApplySampleStart
+              bundlePage={bundlePage}
+              downloadHref={resolveAssetUrl(assetBaseUrl, FIRST_WEAVE_ASSET)}
+              onLoadApplySample={startApplySample}
+              onLoadBundleSample={startBundleSample}
+              sampleError={sampleError}
+              sampleLoading={sampleLoading}
+            />
+          )
+        }
         supported={getApplySupportedFiles(localizer)}
       />
       {workflowEmpty ? (

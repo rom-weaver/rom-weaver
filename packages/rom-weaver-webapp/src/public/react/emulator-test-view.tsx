@@ -47,7 +47,8 @@ import {
   registerEmulatorStartRequestHandler,
 } from "./emulator-audio-context.ts";
 import { resolveGuidedSampleHref } from "./guided-sample-start.ts";
-import { useRomWeaverAssetBaseUrl, useRomWeaverSettings } from "./settings-context.tsx";
+import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
+import { WORKFLOW_GUIDES } from "./workflow-guides.ts";
 
 const WEBGL2_ERROR = "EmulatorJS testing requires a browser with WebGL 2.";
 const TEST_SAMPLE_ASSET = "hello-world.nes";
@@ -112,6 +113,7 @@ type EmulatorTestViewProps = {
 const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   const { currentGameId, entries } = useEmulatorSession();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
+  const localizer = useUiLocalizer();
   const settings = useRomWeaverSettings();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const loadAbortControllerRef = useRef<AbortController | null>(null);
@@ -620,18 +622,6 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                   value={progressValue(loadProgress)}
                 />
               </div>
-            ) : workflowEmpty ? (
-              <SampleTutorialStart
-                downloadHref={resolveAssetUrl(assetBaseUrl, TEST_SAMPLE_ASSET)}
-                downloadLabel="Download the sample ROM"
-                downloadName={TEST_SAMPLE_ASSET}
-                error={sampleError}
-                guideHref={resolveGuidedSampleHref(assetBaseUrl, "test")}
-                label="Start guided Test"
-                loading={sampleLoading}
-                onStart={startTestSample}
-                startAction="play"
-              />
             ) : null}
           </>
         }
@@ -648,6 +638,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
         }
         big={workflowEmpty}
         disabled={busy || sampleLoading}
+        guide={WORKFLOW_GUIDES.test}
         heroLabel="Drop or click to add a ROM or archive"
         heroLabelCoarse="Tap to add a ROM or archive"
         id="emulator-test-input"
@@ -658,6 +649,25 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
         onBrowseStart={() => prepareEmulatorAudioContext()}
         onDropStart={() => prepareEmulatorAudioContext()}
         onFiles={(files) => void handleFiles(files)}
+        onboarding={
+          loadProgress ? null : (
+            <SampleTutorialStart
+              documentation={{
+                href: resolveAssetUrl(assetBaseUrl, WORKFLOW_GUIDES.test.path),
+                label: localizer.message(WORKFLOW_GUIDES.test.label),
+              }}
+              downloadHref={resolveAssetUrl(assetBaseUrl, TEST_SAMPLE_ASSET)}
+              downloadLabel="Download the sample ROM"
+              downloadName={TEST_SAMPLE_ASSET}
+              error={sampleError}
+              guideHref={resolveGuidedSampleHref(assetBaseUrl, "test")}
+              label="Start guided Test"
+              loading={sampleLoading}
+              onStart={startTestSample}
+              startAction="play"
+            />
+          )
+        }
         supported={[
           { extensions: ROM_FILE_EXTENSIONS, label: "ROMs" },
           { extensions: ["zip", "7z"], label: "Archives" },

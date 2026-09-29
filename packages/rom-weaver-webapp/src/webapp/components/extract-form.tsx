@@ -7,6 +7,7 @@ import { StepSection } from "../../public/react/components/ds/layout.tsx";
 import { Modal } from "../../public/react/components/ds/modal.tsx";
 import { SelectionCheckList, type SelectionItem, SelectionTree } from "../../public/react/components/ds/selection.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
+import { WORKFLOW_GUIDES } from "../../public/react/workflow-guides.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import type { ProgressEvent, PublicOutput } from "../../types/workflow-runtime-types.ts";
 
@@ -271,6 +272,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
         addLabel="Replace the file"
         big={!source}
         disabled={busy || downloadBusy}
+        guide={WORKFLOW_GUIDES.extract}
         heroLabel="Drop an archive or disc image to extract it"
         heroLabelCoarse="Tap to add an archive or disc image"
         info={<p>Extraction runs locally. Your files never leave this browser.</p>}

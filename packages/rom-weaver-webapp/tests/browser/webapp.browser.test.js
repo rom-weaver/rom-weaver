@@ -469,9 +469,9 @@ test("the mobile scroll reserve returns once the bench holds a card", async () =
 });
 
 test.each([
-  ["patcher", "/apply-patches?guide=apply"],
-  ["bundle", "/bundle-patches?guide=bundle"],
-])("the %s New here? beacon carries its own guide and the download", async (initialView, guideHref) => {
+  ["patcher", "/apply-patches?guide=apply", "/docs/apply-rom-patches"],
+  ["bundle", "/bundle-patches?guide=bundle", "/docs/create-bundles"],
+])("the %s New here? beacon carries its own guide and the download", async (initialView, guideHref, docsPath) => {
   await page.viewport(1024, 900);
   mountWebappRoot({ initialView });
 
@@ -486,14 +486,11 @@ test.each([
   expect(document.querySelector(".sample-tutorial-start-pop")).toBeNull();
 
   chip.click();
-  await expect
-    .poll(() => document.querySelectorAll(".sample-tutorial-start-action").length)
-    .toBe(initialView === "bundle" ? 4 : 3);
+  await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(4);
   expect(document.querySelector(".sample-tutorial-start-primary")?.getAttribute("href")).toBe(guideHref);
   expect(document.querySelector(".sample-tutorial-start-secondary")).toBeNull();
-  expect(document.querySelector(".sample-tutorial-start-guide")?.getAttribute("href") ?? null).toBe(
-    initialView === "bundle" ? "/docs/create-bundles" : null,
-  );
+  expect(document.querySelector(".sample-tutorial-start-guide")?.pathname).toBe(docsPath);
+  expect(document.querySelector(".hero-guide")?.pathname).toBe(docsPath);
   expect(document.querySelector(".sample-tutorial-start-download").hasAttribute("download")).toBe(true);
   expect(document.querySelector(".sample-tutorial-start-dismiss")).toBeTruthy();
   const pop = document.querySelector(".sample-tutorial-start-pop").getBoundingClientRect();

@@ -27,6 +27,7 @@ import { FileCard } from "../../public/react/components/ds/file-card.tsx";
 import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
 import { StepSection } from "../../public/react/components/ds/layout.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
+import { WORKFLOW_GUIDES } from "../../public/react/workflow-guides.ts";
 import { getEmulatorJsCore } from "../../public/react/components/emulatorjs.ts";
 import { restartCurrentGameWithSave, useEmulatorSession } from "../../public/react/emulator-session-store.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
@@ -848,6 +849,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
         }
         big={!source}
         disabled={busy}
+        guide={WORKFLOW_GUIDES.save}
         heroLabel="Drop a game save to edit it"
         heroLabelCoarse="Tap to add a game save"
         info={

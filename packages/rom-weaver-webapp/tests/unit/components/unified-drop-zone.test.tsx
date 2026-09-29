@@ -1,7 +1,10 @@
 // @vitest-environment happy-dom
 import { fireEvent, render } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { UnifiedDropZone } from "../../../src/public/react/components/ds/unified-drop-zone.tsx";
+import { WORKFLOW_GUIDES } from "../../../src/public/react/workflow-guides.ts";
+import { DOC_SOURCES } from "../../../src/webapp/docs-routing.mjs";
 
 /**
  * The 0x01 INPUTS step contract: hero vs add-row state classes, the composed
@@ -63,6 +66,51 @@ describe("UnifiedDropZone", () => {
     expect(disclosure?.querySelector("summary")?.textContent).toBe("Supported formats");
     expect(disclosure?.textContent).toContain("sfc, nes, iso, bin, gba, nds");
     expect(disclosure?.closest("label")).toBeNull();
+  });
+
+  it("puts onboarding and the workflow guide on one help line above the formats", () => {
+    const { container } = render(
+      <UnifiedDropZone
+        big
+        guide={{ path: "docs/apply-rom-patches", label: "ui.hero.applyGuide" }}
+        onFiles={() => undefined}
+        onboarding={<button className="onboarding-probe" type="button" />}
+        supported={[{ label: "ROMs", extensions: ["sfc"] }]}
+      />,
+    );
+    const help = container.querySelector(".hero-help");
+    const links = help?.querySelector(":scope > .hero-help-links");
+    expect(links?.firstElementChild?.className).toBe("onboarding-probe");
+    const guide = links?.querySelector("a.hero-guide");
+    expect(guide?.getAttribute("href")).toBe("/docs/apply-rom-patches");
+    expect(guide?.textContent).toBe("Read the Apply guide");
+    expect(guide?.closest("label")).toBeNull();
+    expect(links?.nextElementSibling?.matches("details.hero-formats-help")).toBe(true);
+  });
+
+  it("prerenders the guide link relative to the page, like the nav links", () => {
+    // Before hydration the app base is unknown; a root-absolute href would
+    // leave a sub-path deployment on a missing page.
+    const html = renderToString(<UnifiedDropZone big guide={WORKFLOW_GUIDES.apply} onFiles={() => undefined} />);
+    expect(html).toContain('href="docs/apply-rom-patches"');
+  });
+
+  it.each(Object.entries(WORKFLOW_GUIDES))("links the %s guide to a published doc", (_workflow, guide) => {
+    expect(DOC_SOURCES.some((source) => source.slug === guide.path)).toBe(true);
+    const { container } = render(<UnifiedDropZone big guide={guide} onFiles={() => undefined} />);
+    expect(container.querySelector(".hero-guide")?.textContent).toMatch(/^Read the .+ guide$/u);
+  });
+
+  it("drops the help line once content is staged", () => {
+    const { container } = render(
+      <UnifiedDropZone
+        guide={{ path: "docs/apply-rom-patches", label: "ui.hero.applyGuide" }}
+        onFiles={() => undefined}
+        onboarding={<button className="onboarding-probe" type="button" />}
+      />,
+    );
+    expect(container.querySelector(".hero-help")).toBeNull();
+    expect(container.querySelector(".onboarding-probe")).toBeNull();
   });
 
   it("opens the existing file input from the Inputs heading action", () => {

@@ -8,6 +8,7 @@ import { useFlatTransitionFlag } from "../../public/react/components/ds/flat-tra
 import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
 import { NeedsInput, StepSection } from "../../public/react/components/ds/layout.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
+import { WORKFLOW_GUIDES } from "../../public/react/workflow-guides.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
 
@@ -175,6 +176,7 @@ const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
         addLabel="Replace the patched ROM or PPF patch"
         big={workflowEmpty}
         disabled={busy}
+        guide={WORKFLOW_GUIDES.ppfUndo}
         heroLabel="Drop a patched ROM and PPF patch"
         heroLabelCoarse="Tap to add a patched ROM and PPF patch"
         info={<p>A PPF3 patch must include undo data to restore the original ROM.</p>}

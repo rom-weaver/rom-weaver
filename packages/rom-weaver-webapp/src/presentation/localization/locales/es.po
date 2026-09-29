@@ -1675,11 +1675,6 @@ msgstr "Inicio"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.applyGuide"
-msgstr "Cómo aplicar parches a ROMs"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.output.identified"
 msgstr "Identificado"
 
@@ -2765,13 +2760,53 @@ msgstr "Reactivar en Ajustes"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.applyGuide"
+msgstr "Lee la guía de Apply"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.bundleGuide"
 msgstr "Lee la guía de Bundle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.hero.compressGuide"
+msgstr "Lee la guía de Compress"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.createGuide"
 msgstr "Lee la guía de Create"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.extractGuide"
+msgstr "Lee la guía de Extract"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.identifyGuide"
+msgstr "Lee la guía de Identify"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.ppfUndoGuide"
+msgstr "Lee la guía de PPF undo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.saveGuide"
+msgstr "Lee la guía de Save Editor"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.testGuide"
+msgstr "Lee la guía de Test"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.trimGuide"
+msgstr "Lee la guía de Trim"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
