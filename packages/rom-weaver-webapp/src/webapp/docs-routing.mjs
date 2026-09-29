@@ -66,6 +66,12 @@ const DOC_SOURCES = Object.freeze([
   }),
   Object.freeze({
     audience: "browser",
+    file: "how-to/checksum-roms-browser.md",
+    label: "Checksum ROMs (browser)",
+    slug: "docs/checksum-roms-browser",
+  }),
+  Object.freeze({
+    audience: "browser",
     file: "how-to/extract-files-browser.md",
     label: "Extract files (browser)",
     slug: "docs/extract-files-browser",

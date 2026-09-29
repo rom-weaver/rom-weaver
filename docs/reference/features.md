@@ -33,7 +33,7 @@ Cheat support covers writes to the ROM. Codes that need live game memory cannot 
 | Feature | In plain words | Browser guide | CLI guide |
 | --- | --- | --- | --- |
 | Identify | Match a file's fingerprint to a known game, region, and revision. Search by name or checksum without a file, too. | [Identify](../how-to/identify-roms-browser.md) | [Identify](../how-to/identify-and-hash-files.md) |
-| Checksums | Calculate a fingerprint to compare two files, even if their names differ. | [Read Checks](../how-to/identify-roms-browser.md#compare-a-checksum) | [Hash files](../how-to/identify-and-hash-files.md#hash-a-file) |
+| Checksums | Calculate a fingerprint to compare two files, even if their names differ. | [Checksum a ROM](../how-to/checksum-roms-browser.md) | [Hash files](../how-to/identify-and-hash-files.md#hash-a-file) |
 | Extract | Take files out of an archive or disc image. Nested archives are supported. | [Extract files](../how-to/extract-files-browser.md) | [Extract files](../how-to/work-with-archives.md#extract-an-archive) |
 | Compress and convert | Put a ROM into a smaller container, or change its container. This does not port a game to another console. | [Convert a ROM](../how-to/convert-roms-browser.md) | [Archives and disc images](../how-to/work-with-archives.md) |
 | Trim | Remove padding from supported files. Padding is space around the useful data. | [Trim](../how-to/trim-roms-browser.md) | [Trim and restore padding](../how-to/cli-trim.md) |
