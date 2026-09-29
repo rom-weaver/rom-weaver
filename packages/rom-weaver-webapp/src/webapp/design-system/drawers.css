@@ -141,9 +141,11 @@
   border-end-start-radius: max(0px, var(--card-end-radius, var(--card-r, 0px)) - 1px);
   border-end-end-radius: max(0px, var(--card-end-radius, var(--card-r, 0px)) - 1px);
 }
+/* A light tint marks where an open section ends, so a long body does not run
+   into the next head. */
 .rw-app .cks.is-integrated.is-open,
 :root[data-theme] .cks.is-integrated.is-open {
-  background: transparent;
+  background: color-mix(in oklab, var(--well) 45%, transparent);
   border-block-start-color: var(--seam-soft);
 }
 .rw-app .cks.is-integrated > .cks-head {
@@ -324,7 +326,7 @@
 .rw-app .cks > .cks-head .readouts > .rb:not(:last-child) {
   flex: none;
 }
-.rw-app .cks:not(.is-open) > .cks-head .rb {
+.rw-app .cks:not(.is-open, .is-integrated) > .cks-head .rb {
   background: var(--plate-2);
   border-color: transparent;
 }
