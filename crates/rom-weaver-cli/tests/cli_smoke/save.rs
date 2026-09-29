@@ -64,6 +64,9 @@ fn save_catalog_lists_compiled_games_and_generation_support() {
         .filter_map(|game| game["identity"]["id"].as_str())
         .collect::<Vec<_>>();
     assert!(game_ids.contains(&"pokemon-red-schema"));
+    assert!(game_ids.contains(&"f-zero"));
+    assert!(game_ids.contains(&"game-and-watch-gallery-3"));
+    assert!(game_ids.contains(&"kirbys-adventure-canada-slot-3"));
     assert!(game_ids.contains(&"zelda-a-link-to-the-past-file-1-schema"));
     assert!(game_ids.contains(&"zelda-a-link-to-the-past"));
     assert!(

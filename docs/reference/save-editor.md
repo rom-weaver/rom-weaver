@@ -47,7 +47,7 @@ The Save Editor changes persistent game data. It does not change emulator save s
 
 The Pokémon handlers cover the English layouts named above. A matching file size alone does not prove support.
 
-The default registry also includes 48 fixed profiles for 21 titles. The [catalog](../../data/save-schemas/README.md) lists their profile counts and creation support.
+The default registry also includes 59 fixed profiles for 24 titles. The [catalog](../../data/save-schemas/README.md) lists their profile counts and creation support.
 
 ## Editable fields
 
@@ -130,9 +130,9 @@ Procedures: [Create saves in the browser](../how-to/create-game-saves-browser.md
 
 ## Built-in schema catalog
 
-The application includes every supported game definition in its default registry. The catalog contains the original Pokémon, Super Mario World, and A Link to the Past definitions and 48 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. The catalog and its profile counts are in [`data/save-schemas/README.md`](../../data/save-schemas/README.md).
+The application includes every supported game definition in its default registry. The catalog contains the original Pokémon, Super Mario World, and A Link to the Past definitions and 59 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. The catalog and its profile counts are in [`data/save-schemas/README.md`](../../data/save-schemas/README.md).
 
-The 48 additional profiles require explicit game selection. The original game families retain automatic recognition.
+The 59 additional profiles require explicit game selection. The original game families retain automatic recognition.
 
 A profile represents one fixed slot, player, region, or storage variant. Profile count is not title count. A compatible physical format or save size does not make an unrecognized game editable.
 

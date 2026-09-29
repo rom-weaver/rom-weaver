@@ -160,7 +160,10 @@ pub(in crate::save) mod builtin_zelda_alttp;
 pub(in crate::save) mod donkey_kong_country;
 pub(in crate::save) mod donkey_kong_country_2_diddy_s_kong_quest;
 pub(in crate::save) mod donkey_kong_country_3_dixie_kong_s_double_trouble;
+pub(in crate::save) mod f_zero;
 pub(in crate::save) mod final_fantasy_nes;
+pub(in crate::save) mod game_and_watch_gallery_3;
+pub(in crate::save) mod kirbys_adventure;
 pub(in crate::save) mod mario_party;
 pub(in crate::save) mod mario_party_2;
 pub(in crate::save) mod pokemon_generation_i;
@@ -203,6 +206,9 @@ pub(in crate::save) fn all() -> Vec<SchemaSaveHandler> {
             games.extend(super_metroid::schemas());
             games.extend(wario_land_super_mario_land_3::schemas());
             games.extend(zelda_a_link_to_the_past::schemas());
+            games.extend(kirbys_adventure::schemas());
+            games.extend(f_zero::schemas());
+            games.extend(game_and_watch_gallery_3::schemas());
             games
         })
         .clone()

@@ -183,6 +183,17 @@ fn registry_lists_every_game_with_format_metadata() {
             "zelda-a-link-to-the-past-file-1-schema",
             "zelda-a-link-to-the-past-file-2-schema",
             "zelda-a-link-to-the-past-file-3-schema",
+            "kirbys-adventure-europe-usa-rev1-france-germany-slot-1",
+            "kirbys-adventure-europe-usa-rev1-france-germany-slot-2",
+            "kirbys-adventure-europe-usa-rev1-france-germany-slot-3",
+            "kirbys-adventure-usa-japan-slot-1",
+            "kirbys-adventure-usa-japan-slot-2",
+            "kirbys-adventure-usa-japan-slot-3",
+            "kirbys-adventure-canada-slot-1",
+            "kirbys-adventure-canada-slot-2",
+            "kirbys-adventure-canada-slot-3",
+            "f-zero",
+            "game-and-watch-gallery-3",
         ]
     );
     assert!(definitions[3..8].iter().all(|definition| {
