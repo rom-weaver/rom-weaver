@@ -230,6 +230,17 @@
     border-radius: 999px;
     translate: -50% 0;
   }
+  /* The desktop rail's press tint sits in an earlier cascade layer than the
+     phone bar's transparent reset, so the bar restates it here. */
+  @media (hover: hover) {
+    .rw-app .log-dlg .dialog-subrail .subtab:not([aria-selected="true"]):hover {
+      color: var(--ink);
+    }
+  }
+  .rw-app .log-dlg .dialog-subrail .subtab:not([aria-selected="true"]):active {
+    color: var(--ink);
+    background: color-mix(in oklab, var(--ink) 6%, transparent);
+  }
   /* The close column is a column like any other, so it needs no halo of its
      own - it is already past 48px in both directions. */
   .rw-app .log-dlg .dlg-head > .dlg-x::after {
@@ -263,13 +274,26 @@
   .rw-app .log-dlg .dlg-subhead .log-actions {
     display: contents;
   }
+  /* Three labelled buttons beside the level select leave about 80px apiece on
+     a 320px phone, too narrow for "Download" or "Herunterladen" beside an
+     icon. Stacking the icon over the label, as the tab bar below does, gives
+     the label the button's whole width. */
   .rw-app .log-dlg .dlg-subhead .log-refresh,
   .rw-app .log-dlg .log-actions .log-icon-btn {
     flex: 1 1 0;
+    flex-direction: column;
+    gap: 2px;
     min-inline-size: 0;
+    padding-inline: 2px;
+    font-size: 0.66rem;
+    letter-spacing: 0;
+  }
+  .rw-app .log-dlg .dlg-subhead .btn svg,
+  .rw-app .log-dlg .emulator-saves-actions .btn svg {
+    flex: none;
   }
   .rw-app .log-dlg .dlg-subhead .btn span {
-    min-inline-size: 0;
+    max-inline-size: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

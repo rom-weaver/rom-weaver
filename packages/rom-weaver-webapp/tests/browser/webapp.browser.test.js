@@ -584,6 +584,34 @@ test("mobile diagnostics keep the Storage tab on one tab row", async () => {
   await page.viewport(1280, 900);
 });
 
+test("the smallest phone shows every diagnostics toolbar label whole", async () => {
+  await page.viewport(360, 740);
+  mountWebappRoot();
+
+  await openMenuSheet();
+  navRow("Status", ".menu-sheet").click();
+  await expect.poll(() => document.querySelector(".log-dlg .dialog-subrail")).toBeTruthy();
+
+  const readToolbar = () =>
+    [...document.querySelectorAll(".log-dlg .dlg-subhead .btn")].map((button) => {
+      const label = button.querySelector("span");
+      return {
+        clipped: label ? label.scrollWidth > label.clientWidth : false,
+        iconWidth: Math.round(button.querySelector("svg")?.getBoundingClientRect().width ?? 0),
+        text: label?.textContent,
+      };
+    });
+  for (const { labels, tab } of [
+    { labels: ["Copy", "Download"], tab: "logs" },
+    { labels: ["Refresh", "Copy", "Download"], tab: "storage" },
+  ]) {
+    document.querySelector(`[data-logtab="${tab}"]`)?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await expect.poll(() => readToolbar().map((button) => button.text)).toEqual(labels);
+    expect(readToolbar()).toEqual(labels.map((text) => ({ clipped: false, iconWidth: 15, text })));
+  }
+  await page.viewport(1280, 900);
+});
+
 test("the phone header carries device controls and project links, and Menu carries the rest", async () => {
   await page.viewport(390, 844);
   mountWebappRoot();
