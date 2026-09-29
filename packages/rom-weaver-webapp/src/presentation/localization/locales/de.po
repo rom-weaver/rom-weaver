@@ -1225,6 +1225,31 @@ msgstr "Doku"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.backToTools"
+msgstr "Zurück zu den Werkzeugen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.title"
+msgstr "Dokumentation"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.browse"
+msgstr "Doku durchsuchen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.closeNavigation"
+msgstr "Navigation schließen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.navigation"
+msgstr "Dokumentationsnavigation"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.doesNotMatchRom"
 msgstr "Passt nicht zur ROM"
 

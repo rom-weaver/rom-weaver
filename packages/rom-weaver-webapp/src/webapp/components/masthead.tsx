@@ -404,7 +404,7 @@ const Masthead = ({
       entries: [
         {
           id: "back-to-tools",
-          label: "Back to tools",
+          label: localizer.message("ui.docs.backToTools"),
           href: "/apply-patches",
           icon: <ArrowLeft aria-hidden="true" />,
         },
@@ -412,7 +412,7 @@ const Masthead = ({
     },
     {
       id: "docs",
-      title: "Documentation",
+      title: localizer.message("ui.docs.title"),
       entries: [],
       content: (
         <DocsNavigation
@@ -554,7 +554,7 @@ const Masthead = ({
             <div className="docs-mobile-toolbar">
               <a href="/apply-patches">
                 <ArrowLeft aria-hidden="true" />
-                Back to tools
+                {localizer.message("ui.docs.backToTools")}
               </a>
               <button
                 aria-controls="menu-sheet"
@@ -568,11 +568,11 @@ const Masthead = ({
                 ref={menuTriggerRef}
                 type="button"
               >
-                Browse docs
+                {localizer.message("ui.docs.browse")}
                 <ChevronDown aria-hidden="true" />
               </button>
               <button
-                aria-label="Find"
+                aria-label={localizer.message("ui.find.label")}
                 aria-controls="find-palette"
                 aria-expanded={findOpen}
                 aria-haspopup="dialog"

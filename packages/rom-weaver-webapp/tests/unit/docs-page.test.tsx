@@ -10,16 +10,18 @@ import { RomWeaverSettingsProvider } from "../../src/public/react/settings-conte
 import { DocsNavigation } from "../../src/webapp/docs-navigation.tsx";
 import { SITE_ORIGIN, DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
 import { navigatorWith } from "./navigator-test-utils.ts";
+import { preloadCatalog } from "../../src/presentation/localization/index.ts";
 
 // Guide HTML ships as one lazy chunk per page; rendering a guide synchronously
 // requires its HTML resolved first, exactly as the app preloads before mount.
 beforeAll(async () => {
+  await Promise.all([preloadCatalog("es"), preloadCatalog("de")]);
   await preloadWorkflowRoute("docs");
   await Promise.all(DOC_ROUTES.map((route) => preloadDocsHtml(route.slug)));
 });
 
-const docsShell = (slug: string, currentTab = "docs") => (
-  <RomWeaverSettingsProvider settings={{}}>
+const docsShell = (slug: string, currentTab = "docs", language = "en") => (
+  <RomWeaverSettingsProvider settings={{ language }}>
     <Masthead
       currentTab={currentTab}
       docsSlug={slug}
@@ -697,6 +699,39 @@ Fixture description.
       expect(nav.querySelector(".guide-nav > .guide-nav-list")?.querySelectorAll("a")).toHaveLength(2);
       expect(nav.querySelector(".nav-docs-summary")).toBeNull();
     }
+  });
+
+  it.each([
+    [
+      "es",
+      "Volver a herramientas",
+      "Documentación",
+      "Explorar documentos",
+      "Buscar",
+      "Cerrar navegación",
+      "Navegación de la documentación",
+    ],
+    [
+      "de",
+      "Zurück zu den Werkzeugen",
+      "Dokumentation",
+      "Doku durchsuchen",
+      "Suchen",
+      "Navigation schließen",
+      "Dokumentationsnavigation",
+    ],
+  ])("localizes the Docs navigation controls in %s", (language, back, title, browse, find, close, navigation) => {
+    render(docsShell("docs", "docs", language));
+    expect(document.querySelector('.side-nav a[href="/apply-patches"]')?.textContent).toBe(back);
+    expect(document.querySelector(".side-nav .nav-group-label")?.textContent).toBe(title);
+    expect(document.querySelector(".docs-mobile-toolbar a")?.textContent).toBe(back);
+    const trigger = document.querySelector(".docs-browse-trigger") as HTMLElement;
+    expect(trigger.textContent).toBe(browse);
+    expect(document.querySelector(".docs-mobile-toolbar button[aria-label]")?.getAttribute("aria-label")).toBe(find);
+    fireEvent.click(trigger);
+    expect(document.querySelector(".menu-sheet-docs")?.getAttribute("aria-label")).toBe(navigation);
+    expect(document.querySelector(".docs-menu-header strong")?.textContent).toBe(browse);
+    expect(document.querySelector(".docs-menu-header button")?.getAttribute("aria-label")).toBe(close);
   });
 
   it("opens the active topic when the current guide changes", async () => {

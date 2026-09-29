@@ -319,9 +319,9 @@ const MenuSheet = ({
     <>
       {documentation ? (
         <div className="docs-menu-header">
-          <strong>Browse docs</strong>
+          <strong>{localizer.message("ui.docs.browse")}</strong>
           <button
-            aria-label="Close navigation"
+            aria-label={localizer.message("ui.docs.closeNavigation")}
             onClick={() => {
               onClose();
               window.requestAnimationFrame(() => triggerRef.current?.focus());
@@ -357,7 +357,7 @@ const MenuSheet = ({
   if (documentation)
     return (
       <dialog
-        aria-label="Documentation navigation"
+        aria-label={localizer.message("ui.docs.navigation")}
         className="menu-sheet menu-sheet-docs"
         hidden={!open}
         id="menu-sheet"

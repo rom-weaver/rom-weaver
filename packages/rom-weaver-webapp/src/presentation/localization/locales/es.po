@@ -1225,6 +1225,31 @@ msgstr "Documentación"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.backToTools"
+msgstr "Volver a herramientas"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.title"
+msgstr "Documentación"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.browse"
+msgstr "Explorar documentos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.closeNavigation"
+msgstr "Cerrar navegación"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.navigation"
+msgstr "Navegación de la documentación"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.doesNotMatchRom"
 msgstr "No coincide con la ROM"
 
