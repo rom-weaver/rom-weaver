@@ -67,10 +67,10 @@ type UnifiedDropZoneProps = {
 const HeroGuideLink = ({ guide }: { guide: WorkflowGuide }) => {
   const localizer = useUiLocalizer();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
-  // The prerender cannot know where the app is served. Emit the root-relative
-  // form it can, then resolve against the app base after hydration so a
-  // sub-path deployment still links correctly.
-  const [href, setHref] = useState(`/${guide.path}`);
+  // The prerender cannot know where the app is served. Emit the
+  // document-relative form the nav links use, which resolves from any route
+  // before hydration, then resolve against the app base once it is known.
+  const [href, setHref] = useState(guide.path);
   useEffect(() => setHref(resolveAssetUrl(assetBaseUrl, guide.path)), [assetBaseUrl, guide.path]);
   return (
     <a className="hero-guide" href={href}>
