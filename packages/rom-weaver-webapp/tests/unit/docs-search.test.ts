@@ -46,6 +46,17 @@ Report bugs through the security policy.
 const [indexedFaqRoute] = createDocsSearchIndex([faqRoute]);
 
 describe("docs search", () => {
+  it("indexes the page title once and keeps it searchable", () => {
+    const titled = createDocRoute(
+      { file: "how-to/fixture.md", label: "Needle", slug: "docs/fixture" },
+      "# Unique needle\n\nUse the tool for this task.",
+    );
+    const [indexed] = createDocsSearchIndex([titled]);
+    expect(indexed.searchEntries[0].text.match(/Unique needle/g)).toHaveLength(1);
+    expect(indexed.searchEntries[0].text).toContain("Use the tool for this task.");
+    expect(searchDocs([indexed], "unique needle")[0]?.route.slug).toBe("docs/fixture");
+  });
+
   it("does not index copy control labels", () => {
     const commands = createDocRoute(
       { file: "how-to/fixture.md", label: "Commands", slug: "docs/fixture" },

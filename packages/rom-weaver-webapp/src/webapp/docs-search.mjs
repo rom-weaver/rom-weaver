@@ -128,7 +128,7 @@ const indexRoute = ({ description, html, label, sections, slug, title }) => {
       return id ? [[id, part]] : [];
     }),
   );
-  const intro = parts[0] ?? "";
+  const intro = (parts[0] ?? "").replace(/<h1\b[^>]*>[\s\S]*?<\/h1>/, "");
   /** @type {SearchEntry[]} */
   const entries = [
     {
