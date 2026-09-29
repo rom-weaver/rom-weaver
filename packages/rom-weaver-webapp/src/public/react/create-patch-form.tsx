@@ -1327,6 +1327,15 @@ function CreatePatchForm(props: CreatePatchFormProps) {
             ),
           }
         : {}),
+      ...(cheatsEnabled && cheatSystemUnsupported
+        ? {
+            afterItems: (
+              <p className="create-cheat-codes-unsupported" id="patch-builder-cheat-codes-unsupported">
+                {getUnsupportedCheatSystemMessage(cheatRom?.platform)}
+              </p>
+            ),
+          }
+        : {}),
       ...(codesMode
         ? {}
         : {
@@ -1345,11 +1354,9 @@ function CreatePatchForm(props: CreatePatchFormProps) {
               className="seg-btn"
               disabled={uploadDisabled || (mode === "codes" && cheatSystemUnsupported)}
               key={mode}
-              title={
-                mode === "codes" && cheatSystemUnsupported
-                  ? getUnsupportedCheatSystemMessage(cheatRom?.platform)
-                  : undefined
-              }
+              {...(mode === "codes" && cheatSystemUnsupported
+                ? { "aria-describedby": "patch-builder-cheat-codes-unsupported" }
+                : {})}
               onClick={() => {
                 if (modifiedMode === mode) return;
                 resetWorkflowOutput();

@@ -169,6 +169,7 @@ describe("cheat database catalog", () => {
     expect(isUnsupportedCheatSystem(index, catalog, { platform: "Sony - PlayStation" })).toBe(false);
     expect(isUnsupportedCheatSystem(index, catalog, { fileName: "game.z64" })).toBe(false);
     expect(isUnsupportedCheatSystem(undefined, catalog, { platform: "Nintendo - Nintendo 64" })).toBe(false);
+    expect(isUnsupportedCheatSystem(index, undefined, { platform: "Nintendo - Nintendo 64" })).toBe(false);
     expect(isUnsupportedCheatSystem(index, catalog, null)).toBe(false);
   });
 

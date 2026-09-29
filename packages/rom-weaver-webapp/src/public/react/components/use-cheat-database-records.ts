@@ -69,8 +69,9 @@ const matchGame = (match: CheatGameMatch) => ("game" in match ? match.game : und
 
 /**
  * Whether the ROM's platform is one cheats cannot cover. It stays false until
- * the database index loads, and when it fails to load, so a slow or offline
- * index never locks cheats out. Nothing loads while `enabled` is false.
+ * the database index and catalog load, and when either fails to load, so a
+ * slow or offline index never locks cheats out. Nothing loads while `enabled`
+ * is false.
  */
 const useUnsupportedCheatSystem = (rom: CheatRomIdentity | null, enabled = true): boolean => {
   const [loaded, setLoaded] = useState<{ index: CheatDatabaseIndex; catalog: IdentifyCatalog | undefined }>();
