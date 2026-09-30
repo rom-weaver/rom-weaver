@@ -738,7 +738,7 @@ describe("CheatDatabaseSection", () => {
 });
 
 describe("CheatDatabaseSection platform resolution", () => {
-  it("lets users correct a platform the index does not cover", async () => {
+  it("reports a platform the index does not cover as unsupported", async () => {
     const view = render(
       <CheatDatabaseSection
         {...props}
@@ -746,19 +746,18 @@ describe("CheatDatabaseSection platform resolution", () => {
         rom={{ key: "n64", platform: "Nintendo - Nintendo 64", title: "Game" }}
       />,
     );
+    expect(view.queryByPlaceholderText("Search cheat databases by system…")).toBeNull();
     const add = view.getByRole("button", { name: /Add cheats to the patch order/u }) as HTMLButtonElement;
-    expect(add.disabled).toBe(false);
+    expect(add.disabled).toBe(true);
+    expect(add.textContent).toContain("Cheats are not supported for Nintendo - Nintendo 64 yet.");
     fireEvent.click(add);
-    expect(view.getByText(/No cheat database covers Nintendo - Nintendo 64/u)).toBeTruthy();
-    expect(view.getByPlaceholderText("Search cheat databases by system…")).toBeTruthy();
+    expect(view.queryByRole("button", { name: "Add code manually" })).toBeNull();
   });
 
-  it("warns about an uncovered platform and lets the user choose a system by hand", async () => {
-    const view = render(
-      <CheatDatabaseSection {...props} rom={{ key: "n64", platform: "Nintendo - Nintendo 64", title: "Game" }} />,
-    );
+  it("warns about an unidentified system and lets the user choose one by hand", async () => {
+    const view = render(<CheatDatabaseSection {...props} rom={{ key: "n64", title: "Game" }} />);
     fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
-    expect(view.getByText(/No cheat database covers Nintendo - Nintendo 64/u)).toBeTruthy();
+    expect(view.getByText(/The system of this ROM was not identified/u)).toBeTruthy();
     expect(view.getByText(/Choose a system above/u)).toBeTruthy();
     fireEvent.click(view.getByRole("button", { name: /Nintendo - Super Nintendo Entertainment System/u }));
     await view.findByLabelText(`Browse games for ${SNES}`);
@@ -771,12 +770,7 @@ describe("CheatDatabaseSection platform resolution", () => {
   it("keeps the way back to the system search when a hand-picked shard fails to load", async () => {
     const client = { close: vi.fn(), loadShard: () => Promise.reject(new Error("offline")) };
     const view = render(
-      <CheatDatabaseSection
-        {...props}
-        client={client}
-        rom={{ key: "n64", platform: "Nintendo - Nintendo 64", title: "Game" }}
-        shard={undefined}
-      />,
+      <CheatDatabaseSection {...props} client={client} rom={{ key: "n64", title: "Game" }} shard={undefined} />,
     );
     fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
     fireEvent.click(view.getByRole("button", { name: /Nintendo - Super Nintendo Entertainment System/u }));

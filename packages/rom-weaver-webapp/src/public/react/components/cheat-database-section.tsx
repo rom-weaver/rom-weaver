@@ -49,6 +49,10 @@ const CHEAT_KIND_LABELS = Object.fromEntries(CHEAT_KIND_OPTIONS.map(({ value, la
   string
 >;
 
+/** Why cheats are off for a ROM whose platform no shard and no decoder covers. */
+export const getUnsupportedCheatSystemMessage = (platform: string | undefined): string =>
+  `Cheats are not supported for ${platform || "this ROM's system"} yet.`;
+
 type CheatCardProps = {
   record: ClassifiedCheatRecord;
   position: number;
@@ -603,6 +607,7 @@ export const CheatDatabaseSection = ({
     records: classifiedRecords,
     setManualGameId,
     setManualEntrySlug,
+    unsupportedSystem,
   } = database;
   const identityKey = rom?.key;
   useEffect(() => {
@@ -793,13 +798,22 @@ export const CheatDatabaseSection = ({
 
       {patchStatus ? <p role="status">{patchStatus}</p> : null}
 
-      <button className="needs-input cheat-add" onClick={() => setDialogOpen(true)} type="button">
+      <button
+        className="needs-input cheat-add"
+        disabled={unsupportedSystem}
+        onClick={() => setDialogOpen(true)}
+        type="button"
+      >
         <span className="cheat-add-copy">
           <span className="cheat-add-label">
             <WandSparkles aria-hidden="true" />
             Add cheats to the patch order
           </span>
-          <small>Choose codes to bake into the ROM at their place in the list.</small>
+          <small>
+            {unsupportedSystem
+              ? getUnsupportedCheatSystemMessage(rom.platform)
+              : "Choose codes to bake into the ROM at their place in the list."}
+          </small>
         </span>
       </button>
 
