@@ -314,6 +314,38 @@ describe("serializeSettingsForStorage", () => {
     expect(loaded.postApplyDownloadBehavior).toBe("show");
     expect(loaded.postApplyTestBehavior).toBe("hide");
   });
+
+  it("keeps Verify boot after Apply off by default and out of storage", () => {
+    const settings = getDefaultSettings();
+    expect(settings.verifyBootAfterApply).toBe(false);
+    expect(SETTINGS_FIELD_METADATA.verifyBootAfterApply.kind).toBe("checkbox");
+    expect(SETTINGS_FIELD_ORDER.indexOf("verifyBootAfterApply")).toBe(
+      SETTINGS_FIELD_ORDER.indexOf("postApplyTestBehavior") + 1,
+    );
+    expect(serializeSettingsForStorage(settings)).toBeNull();
+  });
+
+  it("serializes and loads Verify boot after Apply under apply.output", () => {
+    const json = serializeSettingsForStorage({ ...getDefaultSettings(), verifyBootAfterApply: true });
+    const parsed = JSON.parse(json as string);
+    expect(parsed.apply.output.verifyBootAfterApply).toBe(true);
+    expect(loadSettings(makeStorage(json)).verifyBootAfterApply).toBe(true);
+  });
+
+  it("ignores a stored Verify boot after Apply value that is not a boolean", () => {
+    const stored = JSON.stringify({
+      apply: { output: { verifyBootAfterApply: "yes" } },
+      version: SETTINGS_STORAGE_VERSION,
+    });
+    expect(loadSettings(makeStorage(stored)).verifyBootAfterApply).toBe(false);
+  });
+
+  it("validates the Verify boot after Apply checkbox as a boolean", () => {
+    expect(validateSettingsDraft(validDraft({ verifyBootAfterApply: true })).settings.verifyBootAfterApply).toBe(true);
+    expect(validateSettingsDraft(validDraft({ verifyBootAfterApply: "true" })).settings.verifyBootAfterApply).toBe(
+      false,
+    );
+  });
 });
 
 describe("loadSettings", () => {

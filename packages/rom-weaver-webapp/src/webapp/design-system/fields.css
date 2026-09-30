@@ -284,6 +284,20 @@
   margin-block: 0;
   border-block-start: 1px solid var(--seam);
 }
+/* The boot check toggle and its hint share the full row, like the test toggle. */
+.rw-app .opts-extra-fields > .verify-boot-field {
+  grid-column: 1 / -1;
+  padding-block-start: var(--sp-s);
+  border-block-start: 1px solid var(--seam);
+}
+.rw-app .verify-boot-field .checkrow {
+  margin-block: 0 var(--sp-2xs);
+}
+.rw-app .verify-boot-hint {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--ink-3);
+}
 .rw-app .patch-description-field {
   grid-column: 1 / -1;
 }
