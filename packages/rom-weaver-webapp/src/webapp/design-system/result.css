@@ -332,7 +332,8 @@
   color: var(--verified);
 }
 .rw-app .boot-check[data-state="blank"],
-.rw-app .boot-check[data-state="error"] {
+.rw-app .boot-check[data-state="error"],
+.rw-app .boot-check[data-state="timeout"] {
   color: var(--care-text);
 }
 .rw-app .emulatorjs-test .emulatorjs-error {

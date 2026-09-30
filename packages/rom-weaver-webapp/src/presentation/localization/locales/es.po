@@ -4080,7 +4080,7 @@ msgstr "Comprobar arranque tras aplicar"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.verifyBoot.timeout"
-msgstr "Sin imagen tras {seconds} s. Ábrelo en la pestaña Prueba para comprobarlo."
+msgstr "La comprobación se detuvo tras {seconds} s sin resultado. Ábrelo en la pestaña Prueba para comprobarlo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4091,3 +4091,8 @@ msgstr "Comprobar arranque tras aplicar"
 #: src/presentation/localization/messages.ts
 msgid "settings.verifyBootAfterApplyHelp"
 msgstr "Arranca el resultado en un emulador oculto después de aplicar. Solo se comprueban los sistemas que la pestaña Prueba puede ejecutar."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.verifyBoot.timedOut"
+msgstr "Tiempo agotado"
