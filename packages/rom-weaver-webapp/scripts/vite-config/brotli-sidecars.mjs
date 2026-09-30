@@ -85,12 +85,19 @@ export const writeBrotliSidecars = () => {
             : `/assets/${name}`;
         if (!sidecarUrls.includes(route)) sidecarUrls.push(route);
       }
-      if (sidecarUrls.length > PAGES_ROUTES_MAX_INCLUDES) {
-        throw new Error(`${sidecarUrls.length} sidecar routes exceed the ${PAGES_ROUTES_MAX_INCLUDES} budget`);
+      const include = [
+        ...sidecarUrls,
+        "/mcp",
+        "/mcp/*",
+        "/.well-known/mcp/server-card.json",
+        "/.well-known/ai-catalog.json",
+      ].sort();
+      if (include.length > PAGES_ROUTES_MAX_INCLUDES) {
+        throw new Error(`${include.length} function routes exceed the ${PAGES_ROUTES_MAX_INCLUDES} budget`);
       }
       fs.writeFileSync(
         path.join(distDir, "_routes.json"),
-        `${JSON.stringify({ version: 1, include: sidecarUrls.sort(), exclude: [] }, null, 2)}\n`,
+        `${JSON.stringify({ version: 1, include, exclude: [] }, null, 2)}\n`,
       );
     },
     configResolved(config) {
