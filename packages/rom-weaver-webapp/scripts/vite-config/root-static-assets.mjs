@@ -14,6 +14,7 @@ const docsScreenshotSources = Object.fromEntries(
 );
 
 export const rootStaticAssetSourcesForChannel = (channel) => ({
+  "/auth.md": path.join(rootAssetDir, "auth.md"),
   "/_redirects": path.join(rootAssetDir, "_redirects"),
   "/apple-touch-icon.png": generatedChannelAssetPath(channel, "apple-touch-icon.png"),
   "/favicon.ico": generatedChannelAssetPath(channel, "favicon.ico"),
