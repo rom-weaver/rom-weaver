@@ -4041,3 +4041,58 @@ msgstr "ZIP"
 #: src/presentation/localization/messages.ts
 msgid "settings.zipCodec"
 msgstr "ZIP-Codec"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.verifyBoot.blank"
+msgstr "Leer oder abgestürzt"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.verifyBoot.boots"
+msgstr "Startet"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.verifyBoot.checking"
+msgstr "Start wird geprüft…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.verifyBoot.error"
+msgstr "Die Startprüfung konnte nicht laufen: {message}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.verifyBoot.failedToStart"
+msgstr "Der Emulator konnte dieses ROM nicht starten."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.verifyBoot.hint"
+msgstr "Startet das Ergebnis nach dem Anwenden in einem verborgenen Emulator. Geprüft werden nur Systeme, die der Test-Tab abspielen kann."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.verifyBoot.label"
+msgstr "Start nach Anwenden prüfen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.verifyBoot.timeout"
+msgstr "Die Prüfung endete nach {seconds} s ohne Ergebnis. Öffne es zur Kontrolle im Test-Tab."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.verifyBootAfterApply"
+msgstr "Start nach Anwenden prüfen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.verifyBootAfterApplyHelp"
+msgstr "Startet das Ergebnis nach dem Anwenden in einem verborgenen Emulator. Geprüft werden nur Systeme, die der Test-Tab abspielen kann."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.verifyBoot.timedOut"
+msgstr "Zeit abgelaufen"

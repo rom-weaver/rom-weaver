@@ -9,6 +9,7 @@ If you need a practice file, open [guided Test](https://rom-weaver.com/test-rom?
 
 - [Load a ROM](#load-a-rom)
 - [Test an Apply result](#test-an-apply-result)
+- [Check that an Apply result boots](#check-that-an-apply-result-boots)
 - [Switch games or stop](#switch-games-or-stop)
 - [Use saves and fullscreen](#use-saves-and-fullscreen)
 - [Export and restore a save](#export-and-restore-a-save)
@@ -59,6 +60,24 @@ The **Post Apply Test** option can open Test automatically or hide the Test butt
 Use **Post Apply Download** to choose whether Apply downloads the result automatically.
 
 An emulator test does not prove that every part of a patch works. Keep the clean original and test important paths on the target hardware when possible.
+
+## Check that an Apply result boots
+
+1. On the [Apply Patches page](https://rom-weaver.com/apply-patches), open **Options** and select **Verify boot after Apply**.
+2. Apply the patches.
+3. Read the result under the Test button.
+
+| Result | Meaning |
+| --- | --- |
+| **Boots** | The game drew a picture. |
+| **Blank or crashed** | The game drew only a flat screen until the time ran out, or the emulator could not start it. |
+| **Timed out** | The check did not get a frame to judge within 15 seconds. |
+
+The check starts the result in a hidden emulator and looks at its frames. It does not play sound or change your saves. For **Blank or crashed** or **Timed out**, open the result in Test to look at it yourself.
+
+If you select the option under an Apply result that is already finished, the check runs on that result.
+
+The option is off by default. To keep it on for later sessions, select **Verify boot after Apply** in **Settings**. A change in Settings applies from the next Apply. Platforms without a bundled core show no result. [Browser emulator support](../reference/formats.md#browser-emulator-support) lists those platforms.
 
 ## Switch games or stop
 

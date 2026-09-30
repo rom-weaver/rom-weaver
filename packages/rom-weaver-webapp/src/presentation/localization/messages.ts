@@ -542,6 +542,27 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.outputOptions.title": msg({ id: "ui.apply.outputOptions.title", message: "Output options" }),
   "ui.apply.postDownload": msg({ id: "ui.apply.postDownload", message: "Post Apply Download" }),
   "ui.apply.postTest": msg({ id: "ui.apply.postTest", message: "Post Apply Test" }),
+  "ui.apply.verifyBoot.blank": msg({ id: "ui.apply.verifyBoot.blank", message: "Blank or crashed" }),
+  "ui.apply.verifyBoot.boots": msg({ id: "ui.apply.verifyBoot.boots", message: "Boots" }),
+  "ui.apply.verifyBoot.checking": msg({ id: "ui.apply.verifyBoot.checking", message: "Checking boot…" }),
+  "ui.apply.verifyBoot.error": msg({
+    id: "ui.apply.verifyBoot.error",
+    message: "The boot check could not run: {message}",
+  }),
+  "ui.apply.verifyBoot.failedToStart": msg({
+    id: "ui.apply.verifyBoot.failedToStart",
+    message: "The emulator could not start this ROM.",
+  }),
+  "ui.apply.verifyBoot.hint": msg({
+    id: "ui.apply.verifyBoot.hint",
+    message: "Boots the result in a hidden emulator after Apply. Only systems that the Test tab can play are checked.",
+  }),
+  "ui.apply.verifyBoot.label": msg({ id: "ui.apply.verifyBoot.label", message: "Verify boot after Apply" }),
+  "ui.apply.verifyBoot.timedOut": msg({ id: "ui.apply.verifyBoot.timedOut", message: "Timed out" }),
+  "ui.apply.verifyBoot.timeout": msg({
+    id: "ui.apply.verifyBoot.timeout",
+    message: "The check stopped after {seconds} s without a result. Open it in the Test tab to check.",
+  }),
   "ui.apply.tutorial.addFiles.body": msg({
     id: "ui.apply.tutorial.addFiles.body",
     message: "The compact add-files row stays available after setup for more ROMs, patches, bundles, or archives.",
@@ -936,6 +957,14 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "settings.postApplyTestBehavior": msg({
     id: "settings.postApplyTestBehavior",
     message: "Post Apply Test",
+  }),
+  "settings.verifyBootAfterApply": msg({
+    id: "settings.verifyBootAfterApply",
+    message: "Verify boot after Apply",
+  }),
+  "settings.verifyBootAfterApplyHelp": msg({
+    id: "settings.verifyBootAfterApplyHelp",
+    message: "Boots the result in a hidden emulator after Apply. Only systems that the Test tab can play are checked.",
   }),
   "settings.requireInputChecksumMatch": msg({
     id: "settings.requireInputChecksumMatch",
