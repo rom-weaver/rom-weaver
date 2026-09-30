@@ -75,6 +75,23 @@ describe("createEmulatorDocument", () => {
     expect(document).toContain("EJS_ready");
   });
 
+  it("builds a silent headless player without the save and audio bridges", () => {
+    const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.nes", "nes", { headless: true });
+
+    expect(document).toContain("EJS_disableLocalStorage = true");
+    expect(document).toContain("EJS_disableDatabases = true");
+    expect(document).toContain("EJS_noAutoFocus = true");
+    expect(document).toContain("EJS_volume = 0");
+    expect(document).toContain("EJS_startOnLoaded = true");
+    expect(document).toContain("host.romWeaverAudioContext");
+    expect(document).toContain("checkForUpdates = () => {}");
+    expect(document).not.toContain("EJS_onSaveSave");
+    expect(document).not.toContain("EJS_onLoadSave");
+    expect(document).not.toContain("__romWeaverEmulatorAudio");
+    expect(document).not.toContain("const hidden = [");
+    expect(document.indexOf("host.romWeaverAudioContext")).toBeLessThan(document.indexOf("loader.js"));
+  });
+
   it("clears both hidden settings before the loader runs", () => {
     const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.nes", "nes");
 
