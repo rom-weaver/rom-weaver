@@ -74,11 +74,19 @@ An emulator test does not prove that every part of a patch works. Keep the clean
 
 1. On the [Apply Patches page](https://rom-weaver.com/apply-patches), open **Options** and select **Verify boot after Apply**.
 2. Apply the patches.
-3. Read the result under the Test button: **Boots** or **Blank or crashed**.
+3. Read the result under the Test button.
 
-The check starts the result in a hidden emulator and looks at one frame. It does not play sound or change your saves. It stops after 15 seconds. If the result is **Blank or crashed**, open the result in Test to look at it yourself.
+| Result | Meaning |
+| --- | --- |
+| **Boots** | The game drew a picture. |
+| **Blank or crashed** | The game drew only a flat screen until the time ran out, or the emulator could not start it. |
+| **Timed out** | The check did not get a frame to judge within 15 seconds. |
 
-The option is off by default. To keep it on for later sessions, select **Verify boot after Apply** in **Settings**. Platforms without a bundled core show no result. [Browser emulator support](../reference/formats.md#browser-emulator-support) lists those platforms.
+The check starts the result in a hidden emulator and looks at its frames. It does not play sound or change your saves. For **Blank or crashed** or **Timed out**, open the result in Test to look at it yourself.
+
+If you select the option under an Apply result that is already finished, the check runs on that result.
+
+The option is off by default. To keep it on for later sessions, select **Verify boot after Apply** in **Settings**. A change in Settings applies from the next Apply. Platforms without a bundled core show no result. [Browser emulator support](../reference/formats.md#browser-emulator-support) lists those platforms.
 
 ## Switch games or stop
 
