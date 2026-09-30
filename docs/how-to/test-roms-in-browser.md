@@ -16,6 +16,7 @@ If you need a practice file, open [guided Test](https://rom-weaver.com/play-rom?
 - [Check platform support](#check-platform-support)
 - [Load a ROM](#load-a-rom)
 - [Test an Apply result](#test-an-apply-result)
+- [Check that an Apply result boots](#check-that-an-apply-result-boots)
 - [Switch games or stop](#switch-games-or-stop)
 - [Use saves and fullscreen](#use-saves-and-fullscreen)
 - [Export and restore a save](#export-and-restore-a-save)
@@ -79,6 +80,16 @@ The **Open Test after patching** option can open Test automatically or hide the 
 Use **Download after patching** to choose whether Apply downloads the result automatically.
 
 An emulator test does not prove that every part of a patch works. Keep the clean original and test important paths on the target hardware when possible.
+
+## Check that an Apply result boots
+
+1. On the [Apply Patches page](https://rom-weaver.com/apply-patches), open **Options** and select **Verify boot after Apply**.
+2. Apply the patches.
+3. Read the result under the Test button: **Boots** or **Blank or crashed**.
+
+The check starts the result in a hidden emulator and looks at one frame. It does not play sound or change your saves. It stops after 15 seconds. If the result is **Blank or crashed**, open the result in Test to look at it yourself.
+
+The option is off by default. To keep it on for later sessions, select **Verify boot after Apply** in **Settings**. Platforms without a bundled core show no result. [Browser emulator support](../reference/formats.md#browser-emulator-support) lists those platforms.
 
 ## Switch games or stop
 
