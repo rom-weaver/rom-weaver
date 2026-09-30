@@ -398,18 +398,7 @@
     border-radius: var(--r-m);
   }
 
-  .rw-app .cheat-game-picker > label > span {
-    font-weight: 650;
-  }
-
-  .rw-app .cheat-game-picker > label {
-    display: grid;
-    gap: 0.35rem;
-    min-width: 0;
-  }
-
   .rw-app .cheat-game-picker select,
-  .rw-app .cheat-game-picker input,
   .rw-app .manual-cheat input,
   .rw-app .manual-cheat textarea,
   .rw-app .manual-cheat select {
@@ -512,10 +501,6 @@
 
     .rw-app .cheat-game-picker {
       padding: var(--sp-s);
-    }
-
-    .rw-app .cheat-game-picker > label > span {
-      font-size: 0.85rem;
     }
 
     .rw-app .manual-cheat-options {
