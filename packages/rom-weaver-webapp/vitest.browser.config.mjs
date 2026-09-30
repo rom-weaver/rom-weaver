@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { playwright } from "@vitest/browser-playwright";
 import { mergeConfig } from "vitest/config";
 import { createFirstSampleAssetFiles } from "./scripts/first-sample-assets.mjs";
+import { serveEmulatorJsAssets } from "./scripts/vite-config/emulatorjs.mjs";
 import { generatedChannelAssetPath } from "./scripts/generated-icon-assets.mjs";
 import baseConfig, { coverageBase } from "./vitest.config.base.mjs";
 
@@ -153,7 +154,7 @@ export default mergeConfig(baseConfig, {
   optimizeDeps: {
     include: ["@bjorn3/browser_wasi_shim"],
   },
-  plugins: [serveGeneratedRootIconAssets, serveFirstSampleAssets, serveTestIdentifyAssets],
+  plugins: [serveGeneratedRootIconAssets, serveFirstSampleAssets, serveTestIdentifyAssets, serveEmulatorJsAssets()],
   publicDir: fileURLToPath(new URL("./src/assets/app/root", import.meta.url)),
   resolve: {
     alias: {
