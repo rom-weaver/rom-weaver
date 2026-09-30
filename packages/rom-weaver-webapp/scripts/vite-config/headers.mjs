@@ -51,13 +51,14 @@ export const writeCloudflareHeadersAsset = (channel) => {
       // The catalog file has no extension, so Cloudflare would serve it as a
       // binary download. The Link header satisfies the RFC 9727 HEAD response.
       const apiCatalogHeaders = `${API_CATALOG_PATH}\n  Content-Type: ${API_CATALOG_CONTENT_TYPE}\n  Link: <${API_CATALOG_PATH}>; rel="api-catalog"\n\n`;
+      const authMarkdownHeaders = "/auth.md\n  Content-Type: text/markdown; charset=utf-8\n\n";
       const markdownHeaders = DOC_SOURCES.map(
         ({ slug }) =>
           `/${slug}.md\n  Content-Type: text/markdown; charset=utf-8\n  Link: <https://rom-weaver.com/${slug}>; rel="canonical"\n`,
       ).join("\n");
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${installerContentType}\n${apiCatalogHeaders}${markdownHeaders}`,
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${installerContentType}\n${apiCatalogHeaders}${authMarkdownHeaders}${markdownHeaders}`,
       );
     },
     configResolved(config) {
