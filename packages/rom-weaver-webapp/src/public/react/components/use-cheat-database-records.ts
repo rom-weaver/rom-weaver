@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createCheatDatabaseClient,
   isUnsupportedCheatSystem,
@@ -32,7 +32,7 @@ type CheatDatabaseRecordsInput = {
   classifyDatabaseCheats: DatabaseCheatClassifier;
 };
 
-type CheatDatabaseRecordsState = {
+export type CheatDatabaseRecordsState = {
   activeCatalog?: IdentifyCatalog;
   activeIndex?: CheatDatabaseIndex;
   classificationError: string;
@@ -50,11 +50,13 @@ type CheatDatabaseRecordsState = {
   manualSystem?: CheatManualSystem;
   match: CheatGameMatch;
   records: ClassifiedCheatRecord[];
+  referenceRom: CheatRomIdentity | null;
+  setReferenceRom: (identity: CheatRomIdentity | null) => void;
   setManualEntrySlug: (slug: string) => void;
   setManualGameId: (id: string) => void;
   shard?: CheatSystemShard;
   system?: CheatDatabaseSystem;
-  /** The ROM names a platform no shard and no decoder covers. */
+  /** The staged ROM names a platform no shard and no decoder covers. */
   unsupportedSystem: boolean;
 };
 
@@ -110,7 +112,17 @@ const useCheatDatabaseRecords = ({
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [manualGameId, setManualGameId] = useState("");
-  const [manualEntrySlug, setManualEntrySlug] = useState("");
+  const [manualEntrySlug, updateManualEntrySlug] = useState("");
+  const [referenceRom, updateReferenceRom] = useState<CheatRomIdentity | null>(null);
+  const setReferenceRom = useCallback((identity: CheatRomIdentity | null) => {
+    setManualGameId("");
+    updateManualEntrySlug("");
+    updateReferenceRom(identity);
+  }, []);
+  const setManualEntrySlug = useCallback((slug: string) => {
+    updateReferenceRom(null);
+    updateManualEntrySlug(slug);
+  }, []);
   const [records, setRecords] = useState<ClassifiedCheatRecord[]>([]);
   const [classificationError, setClassificationError] = useState("");
   const [classifying, setClassifying] = useState(false);
@@ -118,8 +130,8 @@ const useCheatDatabaseRecords = ({
   const activeIndex = index ?? loadedIndex;
   const activeCatalog = catalog ?? loadedCatalog;
   const automaticEntry = useMemo(
-    () => resolveCheatDatabaseEntry(activeIndex, activeCatalog, rom),
-    [activeCatalog, activeIndex, rom],
+    () => resolveCheatDatabaseEntry(activeIndex, activeCatalog, referenceRom ?? rom),
+    [activeCatalog, activeIndex, referenceRom, rom],
   );
   const entry = useMemo(
     () =>
@@ -130,7 +142,7 @@ const useCheatDatabaseRecords = ({
   const system = entry?.cheatSystem;
   // The decoder covers systems no shard does (PlayStation). Those keep manual
   // entry, without a game list to browse.
-  const manualOnlySystem = system ? undefined : resolveManualOnlyCheatSystem(activeCatalog, rom);
+  const manualOnlySystem = system ? undefined : resolveManualOnlyCheatSystem(activeCatalog, referenceRom ?? rom);
   const manualSystem: CheatManualSystem | undefined = system ?? manualOnlySystem;
 
   // Nothing loads until a ROM is staged: the step is idle without one.
@@ -162,13 +174,13 @@ const useCheatDatabaseRecords = ({
     }
     setManualEntrySlug("");
     setManualGameId("");
-  }, [romKey]);
+  }, [romKey, setManualEntrySlug]);
 
   useEffect(() => {
     if (manualEntrySlug && !activeIndex?.entries.some((candidate) => candidate.slug === manualEntrySlug)) {
       setManualEntrySlug("");
     }
-  }, [activeIndex, manualEntrySlug]);
+  }, [activeIndex, manualEntrySlug, setManualEntrySlug]);
 
   useEffect(() => {
     if (!entrySlug) {
@@ -180,11 +192,15 @@ const useCheatDatabaseRecords = ({
 
   useEffect(() => {
     if (suppliedShard || !entry) {
+      setLoading(false);
+      setLoadError("");
       setLoadedShard(undefined);
       return;
     }
     const client = suppliedClient ?? createCheatDatabaseClient();
     let active = true;
+    // The previous system's shard MUST NOT stay on show under the new system's label.
+    setLoadedShard(undefined);
     setLoading(true);
     setLoadError("");
     void client
@@ -204,17 +220,26 @@ const useCheatDatabaseRecords = ({
     };
   }, [entry, suppliedClient, suppliedShard]);
 
-  const shard = suppliedShard ?? loadedShard;
-  const automaticMatch = useMemo(() => matchCheatGame(rom, entry, shard), [entry, rom, shard]);
+  const availableShard = suppliedShard ?? loadedShard;
+  const shard = availableShard?.system === system ? availableShard : undefined;
+  const automaticMatch = useMemo(() => {
+    const found = matchCheatGame(referenceRom ?? rom, entry, shard);
+    // Reference checksums MUST NOT verify the staged ROM.
+    if (referenceRom && "game" in found) return { kind: "manual" as const, game: found.game };
+    return found;
+  }, [entry, referenceRom, rom, shard]);
   const match = manualGameId ? selectManualGame(shard, manualGameId) : automaticMatch;
   const game = matchGame(match);
 
   useEffect(() => {
     if (!(game && system)) {
+      setClassifying(false);
+      setClassificationError("");
       setRecords([]);
       return;
     }
     let active = true;
+    setRecords([]);
     setClassifying(true);
     setClassificationError("");
     void classifyDatabaseCheats(game.cheats, system)
@@ -252,6 +277,8 @@ const useCheatDatabaseRecords = ({
     ...(manualSystem ? { manualSystem } : {}),
     match,
     records,
+    referenceRom,
+    setReferenceRom,
     setManualEntrySlug,
     setManualGameId,
     ...(shard ? { shard } : {}),
@@ -260,4 +287,4 @@ const useCheatDatabaseRecords = ({
   };
 };
 
-export { matchGame, useCheatDatabaseRecords, useUnsupportedCheatSystem };
+export { useCheatDatabaseRecords, useUnsupportedCheatSystem };

@@ -14,6 +14,19 @@ import type {
   ManualCheatClassifier,
 } from "../../../src/lib/cheats/index.ts";
 
+import {
+  lookupExpectedRom,
+  searchExpectedRomByName,
+  searchExpectedRomTitles,
+} from "../../../src/lib/apply/expected-rom-lookup.ts";
+import type { ParsedIdentifyTitleMatch } from "../../../src/types/identify.ts";
+
+vi.mock("../../../src/lib/apply/expected-rom-lookup.ts", () => ({
+  lookupExpectedRom: vi.fn(),
+  searchExpectedRomByName: vi.fn(),
+  searchExpectedRomTitles: vi.fn(),
+}));
+
 const cheatRecord = (id: string, description: string, rawCode: string): CheatRecord => ({
   id,
   system: "snes",
@@ -137,7 +150,10 @@ const openDialog = async (view: ReturnType<typeof render>) => {
 const addButton = (view: ReturnType<typeof render>, description: string) =>
   view.getByRole("button", { name: `Add ${description}` });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 describe("CheatDatabaseSection", () => {
   it("offers cheat patches without a second heading or switch", async () => {
@@ -501,6 +517,224 @@ describe("CheatDatabaseSection", () => {
 
     expect(view.getByLabelText(`Browse games for ${SNES}`)).toBeTruthy();
   });
+
+  it("uses Identify name search and maps its selected release to cheats", async () => {
+    const title = { name: "Pokemon - Emerald Version", platform: SNES, slug: index.entries[0].slug };
+    const emerald = { ...shard.games[0], title: `${title.name} (USA, Europe)` };
+    const release: ParsedIdentifyTitleMatch = {
+      algorithm: "name",
+      database: "test",
+      name: emerald.title,
+      platform: SNES,
+      variant: "raw",
+      expectedComponents: [{ role: "rom", ordinal: 0, size: 1024, sha1: "aa11" }],
+    };
+    vi.mocked(searchExpectedRomTitles).mockResolvedValue({ status: "ok", titles: [title] });
+    vi.mocked(searchExpectedRomByName).mockResolvedValue({ status: "matched", matches: [release] });
+    const view = render(
+      <CheatDatabaseSection
+        {...props}
+        rom={{ key: "hack", title: "Emerald hack", checksums: { sha1: "no-match" } }}
+        shard={{ ...shard, games: [emerald] }}
+      />,
+    );
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
+    fireEvent.change(view.getByRole("combobox", { name: "Identify by checksum or game name" }), {
+      target: { value: "pokemon emerald" },
+    });
+    fireEvent.click(await view.findByRole("button", { name: /Pokemon - Emerald Version/u }));
+    fireEvent.click(await view.findByRole("button", { name: /Pokemon - Emerald Version/u }));
+    await view.findByText("Infinite lives");
+    expect(searchExpectedRomTitles).toHaveBeenCalledWith("pokemon emerald", expect.any(Object));
+    expect(view.getByText(/ROM revision is unverified/u)).toBeTruthy();
+    expect(view.getByText(/Selected game: Pokemon - Emerald Version/u)).toBeTruthy();
+  });
+
+  it.each([
+    ["crc32", "0123abcd"],
+    ["md5", "a".repeat(32)],
+    ["sha1", "b".repeat(40)],
+  ])("uses Identify %s lookup without treating the staged hack as verified", async (algorithm, hash) => {
+    const release: ParsedIdentifyTitleMatch = {
+      algorithm,
+      database: "test",
+      name: "Super Mario World (USA)",
+      platform: SNES,
+      variant: "raw",
+      expectedComponents: [{ role: "rom", ordinal: 0, size: 1024, sha1: "aa11" }],
+    };
+    vi.mocked(lookupExpectedRom).mockResolvedValue({ status: "matched", matches: [release] });
+    const view = render(
+      <CheatDatabaseSection {...props} rom={{ key: "hack", title: "Hack", checksums: { sha1: "no-match" } }} />,
+    );
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
+    fireEvent.change(view.getByRole("combobox", { name: "Identify by checksum or game name" }), {
+      target: { value: hash.toUpperCase() },
+    });
+    fireEvent.click(await view.findByRole("button", { name: /Super Mario World/u }));
+    await view.findByText("Infinite lives");
+    expect(lookupExpectedRom).toHaveBeenCalledWith({ checksums: { [algorithm]: hash } }, expect.any(Object));
+    expect(view.getByText(/ROM revision is unverified/u)).toBeTruthy();
+    fireEvent.click(view.getByRole("button", { name: "Use automatic match" }));
+    await waitFor(() => expect(view.queryByText("Infinite lives")).toBeNull());
+    expect(view.queryByText(/Selected game:/u)).toBeNull();
+  });
+
+  it("keeps Identify available for a selected release with no cheat record", async () => {
+    const release: ParsedIdentifyTitleMatch = {
+      algorithm: "sha1",
+      database: "test",
+      name: "Other game",
+      platform: SNES,
+      variant: "raw",
+      expectedComponents: [{ role: "rom", ordinal: 0, size: 1024, sha1: "b".repeat(40) }],
+    };
+    vi.mocked(lookupExpectedRom).mockResolvedValue({ status: "matched", matches: [release] });
+    const view = render(<CheatDatabaseSection {...props} rom={{ key: "hack", platform: SNES, title: "Hack" }} />);
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
+    fireEvent.change(view.getByRole("combobox", { name: "Identify by checksum or game name" }), {
+      target: { value: "b".repeat(40) },
+    });
+    fireEvent.click(await view.findByRole("button", { name: /Other game/u }));
+    await view.findByText(/Selected game: Other game/u);
+    expect(view.queryByText("Infinite lives")).toBeNull();
+    expect(view.getByRole("combobox", { name: "Identify by checksum or game name" })).toBeTruthy();
+    expect(view.getByText(/The cheat database has no game record for Other game/u)).toBeTruthy();
+  });
+
+  it("stops a pending shard load when Identify selects an unsupported platform", async () => {
+    const release: ParsedIdentifyTitleMatch = {
+      algorithm: "sha1",
+      database: "test",
+      name: "N64 game",
+      platform: "Nintendo - Nintendo 64",
+      variant: "raw",
+      expectedComponents: [{ role: "rom", ordinal: 0, size: 1024, sha1: "b".repeat(40) }],
+    };
+    vi.mocked(lookupExpectedRom).mockResolvedValue({ status: "matched", matches: [release] });
+    let finish: ((value: CheatSystemShard) => void) | undefined;
+    const client = {
+      close: vi.fn(),
+      loadShard: () =>
+        new Promise<CheatSystemShard>((resolve) => {
+          finish = resolve;
+        }),
+    };
+    const view = render(
+      <CheatDatabaseSection {...props} client={client} shard={undefined} rom={{ key: "hack", platform: SNES }} />,
+    );
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
+    await view.findAllByText("Loading this system's cheat database…");
+    fireEvent.change(view.getByRole("combobox", { name: "Identify by checksum or game name" }), {
+      target: { value: "b".repeat(40) },
+    });
+    fireEvent.click(await view.findByRole("button", { name: /N64 game/u }));
+    await view.findByText(/No cheat database covers Nintendo - Nintendo 64/u);
+    await waitFor(() => expect(view.queryAllByText("Loading this system's cheat database…")).toHaveLength(0));
+    finish?.(shard);
+    await waitFor(() => expect(view.queryByText("Infinite lives")).toBeNull());
+    expect(view.getByRole("combobox", { name: "Identify by checksum or game name" })).toBeTruthy();
+  });
+
+  it("clears a previous shard error when Identify selects an unsupported platform", async () => {
+    const release: ParsedIdentifyTitleMatch = {
+      algorithm: "sha1",
+      database: "test",
+      name: "N64 game",
+      platform: "Nintendo - Nintendo 64",
+      variant: "raw",
+      expectedComponents: [{ role: "rom", ordinal: 0, size: 1024, sha1: "b".repeat(40) }],
+    };
+    vi.mocked(lookupExpectedRom).mockResolvedValue({ status: "matched", matches: [release] });
+    const client = {
+      close: vi.fn(),
+      loadShard: async () => {
+        throw new Error("offline");
+      },
+    };
+    const view = render(
+      <CheatDatabaseSection {...props} client={client} shard={undefined} rom={{ key: "hack", platform: SNES }} />,
+    );
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
+    await view.findAllByText(/The cheat database is unavailable/u);
+    fireEvent.change(view.getByRole("combobox", { name: "Identify by checksum or game name" }), {
+      target: { value: "b".repeat(40) },
+    });
+    fireEvent.click(await view.findByRole("button", { name: /N64 game/u }));
+    await view.findByText(/No cheat database covers Nintendo - Nintendo 64/u);
+    await waitFor(() => expect(view.queryAllByText(/The cheat database is unavailable/u)).toHaveLength(0));
+  });
+
+  it("clears an unsupported Identify selection when the staged ROM changes", async () => {
+    const release: ParsedIdentifyTitleMatch = {
+      algorithm: "sha1",
+      database: "test",
+      name: "N64 game",
+      platform: "Nintendo - Nintendo 64",
+      variant: "raw",
+      expectedComponents: [{ role: "rom", ordinal: 0, size: 1024, sha1: "b".repeat(40) }],
+    };
+    vi.mocked(lookupExpectedRom).mockResolvedValue({ status: "matched", matches: [release] });
+    const view = render(<CheatDatabaseSection {...props} rom={{ key: "hack", platform: SNES, title: "Hack" }} />);
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
+    fireEvent.change(view.getByRole("combobox", { name: "Identify by checksum or game name" }), {
+      target: { value: "b".repeat(40) },
+    });
+    fireEvent.click(await view.findByRole("button", { name: /N64 game/u }));
+    await view.findByText(/No cheat database covers Nintendo - Nintendo 64/u);
+    expect(view.queryByText("Infinite lives")).toBeNull();
+    view.rerender(<CheatDatabaseSection {...props} rom={{ ...props.rom, key: "new-rom" }} />);
+    await waitFor(() => expect(view.queryByText(/Selected game:/u)).toBeNull());
+    expect(await view.findByText("Infinite lives")).toBeTruthy();
+  });
+
+  it("warns when no game matches the ROM and offers the game search", () => {
+    const view = render(
+      <CheatDatabaseSection
+        {...props}
+        rom={{ key: "unknown", platform: SNES, title: "Unknown game", checksums: { sha1: "no-match" } }}
+      />,
+    );
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
+    expect(view.getByText(/No game in the .* cheat database matches this ROM/u)).toBeTruthy();
+    expect(view.getByLabelText(`Browse games for ${SNES}`)).toBeTruthy();
+  });
+
+  it("warns and offers the game search when the exact match has no ROM cheats", async () => {
+    const unsupported = records.filter(({ resolution }) => resolution.type === "unsupported");
+    const view = render(
+      <CheatDatabaseSection
+        {...props}
+        classifyDatabaseCheats={makeClassifier(unsupported)}
+        shard={makeShard(unsupported)}
+      />,
+    );
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
+    await view.findByText(/no cheats that can be baked into the ROM for Super Mario World/u);
+    expect(view.getByLabelText(`Browse games for ${SNES}`)).toBeTruthy();
+  });
+
+  it("warns when the title match has no ROM cheats", async () => {
+    const unsupported = records.filter(({ resolution }) => resolution.type === "unsupported");
+    const view = render(
+      <CheatDatabaseSection
+        {...props}
+        classifyDatabaseCheats={makeClassifier(unsupported)}
+        rom={{ key: "title-only", platform: SNES, title: "Super Mario World", checksums: { sha1: "no-match" } }}
+        shard={makeShard(unsupported)}
+      />,
+    );
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
+    await view.findByText(/no cheats that can be baked into the ROM for Super Mario World/u);
+    expect(view.getByText(/ROM revision is unverified/u)).toBeTruthy();
+  });
+
+  it("keeps the game search hidden when the exact match has ROM cheats", async () => {
+    const view = render(<CheatDatabaseSection {...props} />);
+    await openDialog(view);
+    expect(view.queryByLabelText(`Browse games for ${SNES}`)).toBeNull();
+    expect(view.container.querySelector("#rom-weaver-cheat-game-warning")).toBeNull();
+  });
 });
 
 describe("CheatDatabaseSection platform resolution", () => {
@@ -518,6 +752,32 @@ describe("CheatDatabaseSection platform resolution", () => {
     expect(add.textContent).toContain("Cheats are not supported for Nintendo - Nintendo 64 yet.");
     fireEvent.click(add);
     expect(view.queryByRole("button", { name: "Add code manually" })).toBeNull();
+  });
+
+  it("warns about an unidentified system and lets the user choose one by hand", async () => {
+    const view = render(<CheatDatabaseSection {...props} rom={{ key: "n64", title: "Game" }} />);
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
+    expect(view.getByText(/The system of this ROM was not identified/u)).toBeTruthy();
+    expect(view.getByText(/Choose a system above/u)).toBeTruthy();
+    fireEvent.click(view.getByRole("button", { name: /Nintendo - Super Nintendo Entertainment System/u }));
+    await view.findByLabelText(`Browse games for ${SNES}`);
+    expect(view.getByText(/No game in the .* cheat database matches this ROM/u)).toBeTruthy();
+
+    fireEvent.click(view.getByRole("button", { name: "Change system" }));
+    expect(await view.findByPlaceholderText("Search cheat databases by system…")).toBeTruthy();
+  });
+
+  it("keeps the way back to the system search when a hand-picked shard fails to load", async () => {
+    const client = { close: vi.fn(), loadShard: () => Promise.reject(new Error("offline")) };
+    const view = render(
+      <CheatDatabaseSection {...props} client={client} rom={{ key: "n64", title: "Game" }} shard={undefined} />,
+    );
+    fireEvent.click(view.getByRole("button", { name: /Add cheats to the patch order/u }));
+    fireEvent.click(view.getByRole("button", { name: /Nintendo - Super Nintendo Entertainment System/u }));
+    await view.findAllByText(/The cheat database is unavailable/u);
+    expect(view.getByRole("combobox", { name: "Identify by checksum or game name" })).toBeTruthy();
+    fireEvent.click(view.getByRole("button", { name: "Change system" }));
+    expect(await view.findByPlaceholderText("Search cheat databases by system…")).toBeTruthy();
   });
 
   it("keeps manual entry for a system the decoder covers without a database", async () => {
