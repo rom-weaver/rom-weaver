@@ -42,6 +42,7 @@ import {
   createEmptyConfirmationDialogState,
   type WebappRootProps,
 } from "./webapp-root-types.ts";
+import { installWebMcp } from "./webmcp.ts";
 import type { WebappView } from "./webapp-state-types.ts";
 
 // localStorage.setItem(LOCAL_STORAGE_SETTINGS_ID, JSON.stringify(settings))
@@ -577,6 +578,23 @@ renderWebappRootIfReady = renderWebappRoot;
 
 webappController.subscribe(renderWebappRoot);
 installViteReloadGuard();
+const disposeWebMcp = installWebMcp({
+  getState: () => {
+    const { currentView, patcherSession } = webappController.getState();
+    return { currentView, patcherSession };
+  },
+  getRevision: () => JSON.stringify(webappController.getState().settings),
+  confirmApply: () =>
+    requestConfirmation({
+      title: "Apply patches requested by an agent?",
+      level: "warning",
+      message:
+        "Apply the staged patches with the current settings and download the result? Your files stay on this device.",
+      confirmLabel: "Apply & download",
+      cancelLabel: "Cancel",
+    }),
+});
+if (import.meta.hot) import.meta.hot.dispose(disposeWebMcp);
 
 // Dialogs, drawers, modals, and run readouts cannot appear before the visitor interacts,
 // so their stylesheet is a dynamic import: it starts fetching at boot but never blocks
