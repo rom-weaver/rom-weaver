@@ -100,6 +100,7 @@ import {
   useWorkflowProgressState,
 } from "./workflow-run-hooks.ts";
 import { deriveWorkflowRunTiming, useWorkflowRunLifecycle } from "./workflow-run-lifecycle.ts";
+import { describeAgentSource, useAgentWorkflow } from "../../webapp/agent/workflow-registry.ts";
 
 /**
  * What the staging effect has to redo this pass. Settings changes rebuild the
@@ -1487,6 +1488,96 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         : null,
   });
   const model = createModel();
+
+  const createActionEnabled = !(actionDisabled || completedOutput);
+  const downloadActionEnabled = !actionDisabled && !!completedOutput;
+  useAgentWorkflow("creator", {
+    getState: () => ({
+      sources: {
+        original: describeAgentSource(original),
+        modified: describeAgentSource(modified),
+      },
+      sourceState: {
+        original: originalState,
+        modified: modifiedState,
+      },
+      settings,
+      options: {
+        cheatCodeKind,
+        cheatCodes: cheatCodesText,
+        cheatSystem,
+        compression: createCompression,
+        modifiedMode,
+        outputName: resolvedOutputName,
+        patchType,
+      },
+      ready: canStartCreate,
+      staging: createPreparationPending,
+      queued: createQueued,
+      busy,
+      error: message || null,
+      errorCode: errorCode || null,
+      progress,
+      output: completedOutput
+        ? {
+            compression: completedOutput.compression,
+            fileName: completedOutput.fileName,
+            patchType: completedOutput.patchType,
+            rawSize: completedOutput.rawSize,
+            size: completedOutput.size,
+          }
+        : { fileName: executionOutputName, ready: canStartCreate },
+      cheats: {
+        classifying: cheatCodesClassifying,
+        entries: cheatCodeEntries.map((entry) => ({
+          code: entry.code,
+          description: entry.description,
+          error: entry.error || null,
+        })),
+        validationMessage: cheatCodesValidationMessage || null,
+      },
+      confirmationOpen: !!pendingDuplicateDrop,
+    }),
+    actions: {
+      create: {
+        description: "Create and download a patch from the staged sources.",
+        enabled: createActionEnabled,
+        execute: () => {
+          if (createActionEnabled) return runCreate();
+          return undefined;
+        },
+      },
+      download: {
+        description: "Download the completed patch again.",
+        enabled: downloadActionEnabled,
+        execute: () => {
+          if (downloadActionEnabled) return runCreate();
+          return undefined;
+        },
+      },
+      cancel: {
+        description: "Cancel the active or queued patch creation.",
+        enabled: busy || createQueued,
+        execute: () => {
+          if (busy || createQueued) cancelCreateOutputProgress();
+        },
+      },
+      cancelOriginalStaging: {
+        description: "Cancel original ROM staging and clear that source.",
+        enabled: stagingRole === "original",
+        execute: () => {
+          if (stagingRole === "original") cancelSourceStaging("original");
+        },
+      },
+      cancelModifiedStaging: {
+        description: "Cancel modified ROM staging and clear that source.",
+        enabled: stagingRole === "modified",
+        execute: () => {
+          if (stagingRole === "modified") cancelSourceStaging("modified");
+        },
+      },
+    },
+  });
 
   return <CreatePatchFormView {...model} />;
 }

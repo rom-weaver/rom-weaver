@@ -79,6 +79,7 @@ import {
   useWorkflowProgressState,
 } from "./workflow-run-hooks.ts";
 import { deriveWorkflowRunTiming, useWorkflowRunLifecycle } from "./workflow-run-lifecycle.ts";
+import { describeAgentSource, useAgentWorkflow } from "../../webapp/agent/workflow-registry.ts";
 
 /** Trim-eligible formats only (Rust `TrimInputKind::from_path` + rvz-scrub
  * candidates), listed in the 0x01 info popover - not the full ROM registry. */
@@ -1058,6 +1059,68 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   // progress, rather than swapping the whole card for a bordered progress panel.
   const checksumProps = toWorkflowChecksumProgressProps(checksumProgress);
   const staging = !!inputProgressProps || !!checksumProgress;
+
+  useAgentWorkflow("trim", {
+    getState: () => ({
+      source: describeAgentSource(source),
+      sourceState: sourceState
+        ? {
+            checksums: sourceState.checksums,
+            fileName: sourceState.fileName,
+            identification: sourceState.identification,
+            parentCompressions: sourceState.parentCompressions,
+            romProbe: sourceState.romProbe,
+            size: sourceState.size,
+            status: sourceState.status,
+          }
+        : null,
+      busy,
+      staging: sourceStaging,
+      queued: trimQueued,
+      confirmationOpen: confirmOpen,
+      error: message || null,
+      errorCode: errorCode || null,
+      progress: progress
+        ? {
+            label: progress.label,
+            percent: progress.percent,
+            role: progress.role,
+            stage: progress.stage,
+            timingText: progress.timingText,
+            throughputText: progress.throughputText,
+          }
+        : null,
+      options: {
+        outputFormat: resolvedOutputFormat,
+        outputName: executionOutputName,
+      },
+      output: completedOutput
+        ? {
+            fileName: completedOutput.fileName,
+            inputSize: completedOutput.inputSize,
+            rawSize: completedOutput.rawSize,
+            size: completedOutput.size,
+          }
+        : null,
+    }),
+    actions: {
+      run: {
+        description: "Open the trim confirmation or cancel the active trim.",
+        enabled: !(completedOutput || actionDisabled),
+        execute: onRunClick,
+      },
+      download: {
+        description: "Download the completed trimmed ROM.",
+        enabled: !!completedOutput && !busy,
+        execute: () => void runTrim(),
+      },
+      cancel: {
+        description: "Cancel ROM staging, a queued trim, or the active trim.",
+        enabled: sourceStaging || trimQueued || busy,
+        execute: sourceStaging ? cancelSourceStaging : cancelTrimOutputProgress,
+      },
+    },
+  });
   const stagingProgress = checksumProgress ? checksumProps : inputProgressProps;
   const stagePct = stagePercent(stagingProgress);
   const stageLabel = stageStatusLabel("Checksumming", !checksumProgress && !!inputProgressProps);

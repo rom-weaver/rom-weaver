@@ -584,6 +584,17 @@ const disposeWebMcp = installWebMcp({
     return { currentView, patcherSession };
   },
   getRevision: () => JSON.stringify(webappController.getState().settings),
+  openBetaWorkflow: (view) => {
+    webappController.selectView(view, { allowDisabledBeta: true });
+  },
+  confirmAction: (description) =>
+    requestConfirmation({
+      title: "Run a browser action requested by an agent?",
+      level: "warning",
+      message: `${description}. Your files stay on this device. Existing validation and safety dialogs still apply.`,
+      confirmLabel: "Approve action",
+      cancelLabel: "Cancel",
+    }),
   confirmApply: () =>
     requestConfirmation({
       title: "Apply patches requested by an agent?",

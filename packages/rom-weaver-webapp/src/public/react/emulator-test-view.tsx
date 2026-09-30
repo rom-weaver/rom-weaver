@@ -1,3 +1,4 @@
+import { describeAgentSource, useAgentWorkflow } from "../../webapp/agent/workflow-registry.ts";
 import { ArrowLeft, Maximize, Minimize, Save, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
@@ -574,6 +575,52 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
       });
     }
   };
+
+  const getAgentStartButton = () => {
+    const button = iframeRef.current?.contentDocument?.querySelector<HTMLElement>(".ejs_start_button");
+    return button?.getClientRects().length ? button : null;
+  };
+  const getAgentPlayerState = () => {
+    const frame = iframeRef.current?.contentWindow as (Window & { __romWeaverGameStarted?: boolean }) | null;
+    return { started: frame?.__romWeaverGameStarted === true, startReady: Boolean(getAgentStartButton()) };
+  };
+  useAgentWorkflow("test", {
+    getState: () => ({
+      source: describeAgentSource(currentGame?.blob),
+      game: currentGame
+        ? { id: currentGame.id, name: currentGame.fileName, size: currentGame.sizeBytes, core: currentCore }
+        : null,
+      busy,
+      preparing,
+      error,
+      progress: loadProgress,
+      canPlay,
+      player: getAgentPlayerState(),
+      pendingSave: pendingSave ? { present: true } : null,
+      saveLoadStatus,
+    }),
+    actions: {
+      run: {
+        description: "Start the loaded ROM in EmulatorJS",
+        get enabled() {
+          return canPlay && Boolean(getAgentStartButton());
+        },
+        execute: () => {
+          const button = getAgentStartButton();
+          if (!button) throw new Error("The emulator is not ready to start");
+          button.click();
+        },
+      },
+      stop: { description: "Stop and unload the game", enabled: Boolean(currentGame || busy), execute: stopGame },
+      cancel: { description: "Cancel sample loading", enabled: sampleLoading, execute: cancelSampleLoad },
+      discardSave: {
+        description: "Remove the pending saved upload",
+        enabled: Boolean(pendingSave),
+        execute: discardPendingSave,
+      },
+      fullscreen: { description: "Toggle emulator fullscreen", enabled: canPlay, execute: toggleFullscreen },
+    },
+  });
 
   return (
     <div className="emulator-test-view">

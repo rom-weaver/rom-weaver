@@ -98,6 +98,24 @@ describe("createEmulatorDocument", () => {
     );
   });
 
+  it("reports playback only after the emulator starts", () => {
+    const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.nes", "nes");
+    const script = document.slice(
+      document.indexOf("window.__romWeaverGameStarted = false"),
+      document.indexOf("window.__romWeaverVisibilityPaused"),
+    );
+    const window: { __romWeaverGameStarted?: boolean } = {};
+    const requests: string[] = [];
+    const start = runInNewContext(`${script}; EJS_onGameStart;`, {
+      window,
+      request: (kind: string) => requests.push(kind),
+    }) as () => void;
+    expect(window.__romWeaverGameStarted).toBe(false);
+    start();
+    expect(window.__romWeaverGameStarted).toBe(true);
+    expect(requests).toEqual(["request-load-sram"]);
+  });
+
   it("restarts the game after importing SRAM before reporting success", () => {
     const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.gba", "gba");
     const source = document.indexOf('const source = "rom-weaver-emulator"');
