@@ -82,6 +82,7 @@ const BOOLEAN_SETTINGS_FIELDS = [
   "keepTestedRomsEnabled",
   "fixChecksum",
   "identifiedOutputName",
+  "verifyBootAfterApply",
 ] as const satisfies readonly SettingsFieldKey[];
 const ALWAYS_VALIDATE_CHOICE_FIELDS = [
   "defaultCompression",
@@ -405,6 +406,7 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
       ? applySettings.output.postApplyDownloadBehavior
       : undefined,
     postApplyTestBehavior: isRecord(applySettings.output) ? applySettings.output.postApplyTestBehavior : undefined,
+    verifyBootAfterApply: isRecord(applySettings.output) ? applySettings.output.verifyBootAfterApply : undefined,
     chdCreateCdCodecs: compression.chdCreateCdCodecs,
     chdCreateDvdCodecs: compression.chdCreateDvdCodecs,
     compressionProfile: compression.profile,
@@ -524,6 +526,9 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
 
     const detailedViewEnabled = readStoredField(storedBooleanSchema, loadedSettings.detailedViewEnabled);
     if (detailedViewEnabled !== undefined) settings.detailedViewEnabled = detailedViewEnabled;
+
+    const verifyBootAfterApply = readStoredField(storedBooleanSchema, loadedSettings.verifyBootAfterApply);
+    if (verifyBootAfterApply !== undefined) settings.verifyBootAfterApply = verifyBootAfterApply;
 
     const identifiedOutputName = readStoredField(storedBooleanSchema, loadedSettings.identifiedOutputName);
     if (identifiedOutputName !== undefined) settings.identifiedOutputName = identifiedOutputName;
@@ -676,7 +681,8 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
     if (
       fieldKey === "weavePackage" ||
       fieldKey === "postApplyDownloadBehavior" ||
-      fieldKey === "postApplyTestBehavior"
+      fieldKey === "postApplyTestBehavior" ||
+      fieldKey === "verifyBootAfterApply"
     ) {
       storedSettings.apply = {
         ...storedSettings.apply,

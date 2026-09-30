@@ -29,9 +29,11 @@ import {
   setPostApplyTestBehaviorOverride,
   usePostApplyDownloadBehaviorValue,
   usePostApplyTestBehaviorValue,
+  useVerifyBootAfterApplyValue,
 } from "./use-apply-download-orchestration.ts";
 import type { PostApplyActionBehavior } from "../../types/settings.ts";
 import { EmulatorJsAction } from "./apply-emulatorjs-action.tsx";
+import { BootCheckStatus, VerifyBootField } from "./apply-boot-check.tsx";
 
 /** Weave-related notices and export reveal state, threaded from the form. */
 export type WeaveToolsState = {
@@ -159,10 +161,12 @@ export const PostApplyBehaviorFields = ({
   disabled,
   downloadSetting,
   testSetting,
+  verifyBootSetting,
 }: {
   disabled: boolean;
   downloadSetting: unknown;
   testSetting: unknown;
+  verifyBootSetting: unknown;
 }) => {
   const localizer = useUiLocalizer();
   const downloadValue = usePostApplyDownloadBehaviorValue(downloadSetting);
@@ -185,6 +189,7 @@ export const PostApplyBehaviorFields = ({
         options={POST_APPLY_TEST_BEHAVIOR_OPTIONS}
         value={testValue}
       />
+      <VerifyBootField disabled={disabled} setting={verifyBootSetting} />
     </div>
   );
 };
@@ -342,6 +347,8 @@ export const ApplyOutputAction = ({
   const postApplyDownloadOption = postApplyDownloadBehaviorOption(postApplyDownloadBehavior);
   const postApplyTestOption = postApplyTestBehaviorOption(postApplyTestBehavior);
   const showDownloadFallback = !emulatorCore && (postApplyTestOption.visible || postApplyTestOption.automatic);
+  const verifyBoot = useVerifyBootAfterApplyValue(settings.verifyBootAfterApply);
+  const completedOutput = outputState.pendingDownloadFileName ? emulatorOutput : null;
   return (
     <>
       <ApplyErrorNotice
@@ -367,10 +374,11 @@ export const ApplyOutputAction = ({
         core={emulatorCore}
         fileName={emulatorFileName}
         onSelectView={onSelectView}
-        output={outputState.pendingDownloadFileName ? emulatorOutput : null}
+        output={completedOutput}
         platform={emulatorPlatform}
         shown={postApplyTestOption.visible}
       />
+      <BootCheckStatus core={emulatorCore} enabled={verifyBoot} output={completedOutput} />
       {weaveVerificationError ? <Notice level="error">{weaveVerificationError}</Notice> : null}
       {weaveTools?.memberChecksSkipped ? (
         <p aria-live="polite" className="patch-off-note" id="rom-weaver-weave-track-checks-skipped">

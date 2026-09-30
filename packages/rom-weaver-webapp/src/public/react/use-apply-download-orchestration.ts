@@ -37,6 +37,7 @@ import type { ApplyPatchFormSettings, BinarySource } from "./patcher-form.ts";
 import { getPublicOutputSize, toError, waitForNextUiPaint } from "./patcher-form-session-utils.ts";
 import { createOutputSizeSummary } from "./patcher-presentation.ts";
 import type { RomInputRowState } from "./patcher-ui-state.ts";
+import { prepareBootCheckAudioContext } from "./boot-check-audio.ts";
 import {
   addEntry,
   getApplyEntry,
@@ -303,6 +304,22 @@ const setPostApplyTestBehaviorOverride = postApplyTestBehaviorStore.set;
 const subscribePostApplyTestBehaviorOverride = postApplyTestBehaviorStore.subscribe;
 const syncPostApplyTestBehaviorSetting = postApplyTestBehaviorStore.syncSetting;
 
+const verifyBootAfterApplyStore = createSettingSessionOverride((value: unknown): boolean => value === true);
+const setVerifyBootAfterApplyOverride = verifyBootAfterApplyStore.set;
+
+/** The Verify boot checkbox's controlled value: the override once set, else the live setting. */
+const useVerifyBootAfterApplyValue = (settingValue: unknown): boolean => {
+  const override = useSyncExternalStore(
+    verifyBootAfterApplyStore.subscribe,
+    verifyBootAfterApplyStore.get,
+    verifyBootAfterApplyStore.get,
+  );
+  useEffect(() => {
+    verifyBootAfterApplyStore.syncSetting(settingValue);
+  }, [settingValue]);
+  return override ?? settingValue === true;
+};
+
 /** The Post Apply Download select's controlled value: the override once set, else the live setting. */
 const usePostApplyDownloadBehaviorValue = (settingValue: unknown): PostApplyActionBehavior => {
   const override = useSyncExternalStore(
@@ -533,6 +550,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
     usePostApplyDownloadBehaviorValue(settings.postApplyDownloadBehavior),
   );
   const postApplyTestBehaviorRef = useLatestRef(usePostApplyTestBehaviorValue(settings.postApplyTestBehavior));
+  const verifyBootAfterApplyRef = useLatestRef(useVerifyBootAfterApplyValue(settings.verifyBootAfterApply));
   const postApplyResultRef = useRef<ApplyWorkflowResult | null>(null);
   return useMemo(
     () => ({
@@ -610,6 +628,11 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
           !(busy || (pendingDownloadResult && hasPendingDownload) || applyQueueBlocked) &&
           (canQueueApply || canStartApply);
         if (requestsApply) releaseLargeEntries({ announce: true });
+        // This MUST stay before the first await: WebKit resumes only an
+        // AudioContext created while the Apply click is still a user action.
+        if (verifyBootAfterApplyRef.current && !busy && !(pendingDownloadResult && hasPendingDownload)) {
+          prepareBootCheckAudioContext();
+        }
         if (patchChangePendingRef.current && !busy) {
           traceApplyPrimaryAction("queued: patch change pending");
           setApplyQueued(true);
@@ -790,7 +813,7 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
         }
       },
     }),
-    [contextRef, postApplyDownloadBehaviorRef, postApplyTestBehaviorRef],
+    [contextRef, postApplyDownloadBehaviorRef, postApplyTestBehaviorRef, verifyBootAfterApplyRef],
   );
 };
 
@@ -802,6 +825,7 @@ export {
   runPostApplyActions,
   setPostApplyDownloadBehaviorOverride,
   setPostApplyTestBehaviorOverride,
+  setVerifyBootAfterApplyOverride,
   subscribePostApplyDownloadBehaviorOverride,
   subscribePostApplyTestBehaviorOverride,
   syncPostApplyDownloadBehaviorSetting,
@@ -809,4 +833,5 @@ export {
   useApplyDownloadOrchestration,
   usePostApplyDownloadBehaviorValue,
   usePostApplyTestBehaviorValue,
+  useVerifyBootAfterApplyValue,
 };

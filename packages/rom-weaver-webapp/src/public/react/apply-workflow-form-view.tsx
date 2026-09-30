@@ -789,6 +789,7 @@ function ApplyWorkflowFormView({
         disabled={outputDisabled}
         downloadSetting={settings.postApplyDownloadBehavior}
         testSetting={settings.postApplyTestBehavior}
+        verifyBootSetting={settings.verifyBootAfterApply}
       />
     </>
   );
