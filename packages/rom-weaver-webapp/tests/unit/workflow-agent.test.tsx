@@ -11,7 +11,11 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-function setup(confirmAction = vi.fn().mockResolvedValue(true)) {
+function setup(
+  confirmAction = vi.fn().mockResolvedValue(true),
+  view = "compress",
+  confirmApply: () => Promise<boolean> = async () => false,
+) {
   const tools = new Map<string, { execute: (input: unknown) => unknown }>();
   Object.defineProperty(navigator, "modelContext", {
     configurable: true,
@@ -21,8 +25,8 @@ function setup(confirmAction = vi.fn().mockResolvedValue(true)) {
   });
   cleanups.push(
     installWebMcp({
-      getState: () => ({ currentView: "compress", patcherSession: { pendingDownloadFileName: null } }),
-      confirmApply: async () => false,
+      getState: () => ({ currentView: view, patcherSession: { pendingDownloadFileName: null } }),
+      confirmApply,
       confirmAction,
     }),
   );
@@ -149,4 +153,24 @@ test("progress updates do not invalidate approval to cancel the same operation",
     workflow: "compress",
   });
   expect(execute).toHaveBeenCalledOnce();
+});
+
+test("legacy Apply rejects same-name source replacement during approval", async () => {
+  let source = new File(["first"], "game.bin");
+  const { unmount } = renderHook(() =>
+    useAgentWorkflow("patcher", {
+      getState: () => ({ source: describeAgentSource(source) }),
+      actions: {},
+    }),
+  );
+  cleanups.push(unmount);
+  document.body.innerHTML = '<section class="workflow"><button id="rom-weaver-button-apply">Apply</button></section>';
+  const clicked = vi.fn();
+  document.querySelector("button")?.addEventListener("click", clicked);
+  const tools = setup(vi.fn(), "patcher", async () => {
+    source = new File(["other"], "game.bin");
+    return true;
+  });
+  await expect(tools.call("request_apply_patches")).rejects.toThrow("workflow changed");
+  expect(clicked).not.toHaveBeenCalled();
 });

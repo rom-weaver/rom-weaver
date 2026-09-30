@@ -16,6 +16,8 @@ type ModelContext = {
   unregisterTool?: (name: string) => void;
 };
 const logger = createLogger("webmcp");
+const progressKeys = new Set(["progress", "percent", "timingText", "throughputText"]);
+const approvalSnapshotReplacer = (key: string, value: unknown) => (progressKeys.has(key) ? undefined : value);
 const workflowPages = {
   patcher: "apply-patches",
   creator: "create-patch",
@@ -133,17 +135,21 @@ export function installWebMcp(actions?: WorkflowActions) {
           if (!(button instanceof HTMLButtonElement) || button.disabled) throw new Error("Apply is not ready");
           const panel = button.closest(".workflow");
           const readSnapshot = () =>
-            JSON.stringify({
-              state: actions.getState(),
-              revision: actions.getRevision?.(),
+            JSON.stringify(
+              {
+                state: actions.getState(),
+                workflow: getAgentWorkflow("patcher")?.getState(),
+                revision: actions.getRevision?.(),
 
-              controls: Array.from(panel?.querySelectorAll("input, select, textarea") ?? []).map((control) => {
-                if (control instanceof HTMLInputElement) return [control.id, control.value, control.checked];
-                if (control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement)
-                  return [control.id, control.value];
-                return [];
-              }),
-            });
+                controls: Array.from(panel?.querySelectorAll("input, select, textarea") ?? []).map((control) => {
+                  if (control instanceof HTMLInputElement) return [control.id, control.value, control.checked];
+                  if (control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement)
+                    return [control.id, control.value];
+                  return [];
+                }),
+              },
+              approvalSnapshotReplacer,
+            );
           const snapshot = readSnapshot();
           if (!(await actions.confirmApply())) return { status: "declined" };
           if (controller.signal.aborted) throw new Error("Tool registration was cancelled");
@@ -186,8 +192,7 @@ export function installWebMcp(actions?: WorkflowActions) {
           actions: availableActions.map(({ key, enabled }) => ({ key, enabled })),
           settings: actions.getRevision?.(),
         },
-        (key, value: unknown) =>
-          ["progress", "percent", "timingText", "throughputText"].includes(key) ? undefined : value,
+        approvalSnapshotReplacer,
       );
       if (snapshot !== previousSnapshot) {
         previousSnapshot = snapshot;
