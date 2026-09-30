@@ -49,7 +49,6 @@ const stringArgument = (input: unknown, key: string): string => {
 
 type WorkflowActions = {
   getState: () => { currentView: string; patcherSession: { pendingDownloadFileName: string | null } };
-  confirmApply: () => Promise<boolean>;
   confirmAction?: (description: string) => Promise<boolean>;
   openBetaWorkflow?: (view: string) => void;
   getRevision?: () => string;
@@ -115,52 +114,12 @@ export function installWebMcp(actions?: WorkflowActions) {
     },
   ];
   if (actions)
-    tools.push(
-      {
-        name: "get_workflow_state",
-        description: "Read the active workflow and staged Apply summary. Does not return file bytes.",
-        inputSchema: { type: "object", properties: {}, additionalProperties: false },
-        execute: () => actions.getState(),
-      },
-      {
-        name: "request_apply_patches",
-        description:
-          "Ask the user to approve applying the staged patches and downloading the result locally. Uses existing checksum validation. Returns whether the action started; inspect workflow state for completion.",
-        inputSchema: { type: "object", properties: {}, additionalProperties: false },
-        execute: async () => {
-          const state = actions.getState();
-          if (!["home", "patcher"].includes(state.currentView)) throw new Error("Open the Apply workflow first");
-          if (state.patcherSession.pendingDownloadFileName) throw new Error("An output is already ready for download");
-          const button = document.getElementById("rom-weaver-button-apply");
-          if (!(button instanceof HTMLButtonElement) || button.disabled) throw new Error("Apply is not ready");
-          const panel = button.closest(".workflow");
-          const readSnapshot = () =>
-            JSON.stringify(
-              {
-                state: actions.getState(),
-                workflow: getAgentWorkflow("patcher")?.getState(),
-                revision: actions.getRevision?.(),
-
-                controls: Array.from(panel?.querySelectorAll("input, select, textarea") ?? []).map((control) => {
-                  if (control instanceof HTMLInputElement) return [control.id, control.value, control.checked];
-                  if (control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement)
-                    return [control.id, control.value];
-                  return [];
-                }),
-              },
-              approvalSnapshotReplacer,
-            );
-          const snapshot = readSnapshot();
-          if (!(await actions.confirmApply())) return { status: "declined" };
-          if (controller.signal.aborted) throw new Error("Tool registration was cancelled");
-          if (readSnapshot() !== snapshot || !button.isConnected || button.disabled) {
-            throw new Error("The workflow changed; review it and request approval again");
-          }
-          button.click();
-          return { status: "started" };
-        },
-      },
-    );
+    tools.push({
+      name: "get_workflow_state",
+      description: "Read the active workflow and staged Apply summary. Does not return file bytes.",
+      inputSchema: { type: "object", properties: {}, additionalProperties: false },
+      execute: () => actions.getState(),
+    });
   if (actions?.confirmAction) {
     let revision = 0;
     let previousSnapshot = "";

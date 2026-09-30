@@ -595,15 +595,6 @@ const disposeWebMcp = installWebMcp({
       confirmLabel: "Approve action",
       cancelLabel: "Cancel",
     }),
-  confirmApply: () =>
-    requestConfirmation({
-      title: "Apply patches requested by an agent?",
-      level: "warning",
-      message:
-        "Apply the staged patches with the current settings and download the result? Your files stay on this device.",
-      confirmLabel: "Apply & download",
-      cancelLabel: "Cancel",
-    }),
 });
 if (import.meta.hot) import.meta.hot.dispose(disposeWebMcp);
 
