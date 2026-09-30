@@ -1,9 +1,10 @@
-import { Monitor, MonitorCheck, MonitorX } from "lucide-react";
+import { Monitor, MonitorCheck, MonitorX, TimerOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createLogger } from "../../lib/logging.ts";
 import type { BrowserApplyResult } from "../../platform/browser/browser-api.ts";
 import {
   closeBootCheckAudioContext,
+  prepareBootCheckAudioContext,
   releaseBootCheckAudioContext,
   restoreBootCheckAudioContext,
   takeBootCheckAudioContext,
@@ -18,7 +19,7 @@ const logger = createLogger("apply-boot-check");
 const BOOT_CHECK_TIMEOUT_MS = 15_000;
 
 type ApplyOutput = BrowserApplyResult["output"];
-type BootCheckState = BootCheckOutcome | { message: string; status: "error" } | { status: "checking" };
+type BootCheckState = BootCheckOutcome | { status: "checking" };
 type BootCheckResult = Exclude<BootCheckState, { status: "checking" }>;
 
 /**
@@ -39,12 +40,17 @@ const useBootCheck = (core: string | undefined, enabled: boolean, output: ApplyO
   const localizerRef = useLatestRef(useUiLocalizer());
   const [state, setState] = useState<BootCheckState | null>(null);
   useEffect(() => {
+    if (!enabled) {
+      // A click may have armed a check that will now never run.
+      releaseBootCheckAudioContext();
+      setState(null);
+      return undefined;
+    }
     if (!output) {
       setState(null);
       return undefined;
     }
-    if (!(enabled && core)) {
-      // Apply made a context for a check that will not run.
+    if (!core) {
       releaseBootCheckAudioContext();
       setState(null);
       return undefined;
@@ -54,9 +60,16 @@ const useBootCheck = (core: string | undefined, enabled: boolean, output: ApplyO
       setState(finished);
       return undefined;
     }
+    const armed = takeBootCheckAudioContext();
+    if (!armed) {
+      // No click asked for this check, for example after the option was
+      // turned on in Settings. The next Apply runs it.
+      setState(null);
+      return undefined;
+    }
+    const audioContext = armed.context;
     const controller = new AbortController();
     const { signal } = controller;
-    const audioContext = takeBootCheckAudioContext();
     let handedToPlayer = false;
     setState({ status: "checking" });
     const run = async (): Promise<BootCheckResult> => {
@@ -86,16 +99,18 @@ const useBootCheck = (core: string | undefined, enabled: boolean, output: ApplyO
           logger.trace("Boot check cancelled", { core, fileName: output.fileName });
           return;
         }
-        const message = error instanceof Error ? error.message : String(error || "");
-        logger.warn("Boot check could not run", { core, fileName: output.fileName, message });
-        const result = { message, status: "error" as const };
+        const detail = error instanceof Error ? error.message : String(error || "");
+        logger.warn("Boot check could not run", { core, detail, fileName: output.fileName });
+        const result = { detail, frames: 0, status: "error" as const };
         finishedChecks.set(output, result);
         setState(result);
       })
       .finally(() => {
-        if (!audioContext) return;
-        if (signal.aborted && !handedToPlayer) restoreBootCheckAudioContext(audioContext);
-        else closeBootCheckAudioContext(audioContext);
+        if (signal.aborted && !finishedChecks.has(output)) {
+          restoreBootCheckAudioContext(audioContext, !handedToPlayer);
+          return;
+        }
+        if (audioContext) closeBootCheckAudioContext(audioContext);
       });
     return () => controller.abort();
   }, [core, enabled, localizerRef, output]);
@@ -114,7 +129,13 @@ export const VerifyBootField = ({ disabled, setting }: { disabled: boolean; sett
           checked={checked}
           disabled={disabled}
           id="rom-weaver-checkbox-verify-boot"
-          onChange={(event) => setVerifyBootAfterApplyOverride(event.currentTarget.checked)}
+          onChange={(event) => {
+            const next = event.currentTarget.checked;
+            // This MUST run inside the click: see prepareBootCheckAudioContext.
+            if (next) prepareBootCheckAudioContext();
+            else releaseBootCheckAudioContext();
+            setVerifyBootAfterApplyOverride(next);
+          }}
           type="checkbox"
         />
         <span>{localizer.message("ui.apply.verifyBoot.label")}</span>
@@ -133,13 +154,16 @@ const describeResult = (
   if (state.status === "checking") return { label: localizer.message("ui.apply.verifyBoot.checking") };
   if (state.status === "boots") return { label: localizer.message("ui.apply.verifyBoot.boots") };
   if (state.status === "error") {
-    return { label: localizer.message("ui.apply.verifyBoot.error", { message: state.message }) };
+    return { label: localizer.message("ui.apply.verifyBoot.error", { message: state.detail }) };
+  }
+  if (state.status === "timeout") {
+    const seconds = Math.round(BOOT_CHECK_TIMEOUT_MS / 1000);
+    return {
+      label: localizer.message("ui.apply.verifyBoot.timedOut"),
+      note: localizer.message("ui.apply.verifyBoot.timeout", { seconds }),
+    };
   }
   const label = localizer.message("ui.apply.verifyBoot.blank");
-  if (state.reason === "timeout") {
-    const seconds = Math.round(BOOT_CHECK_TIMEOUT_MS / 1000);
-    return { label, note: localizer.message("ui.apply.verifyBoot.timeout", { seconds }) };
-  }
   if (state.reason === "failed-to-start") {
     return { label, note: localizer.message("ui.apply.verifyBoot.failedToStart") };
   }
@@ -151,6 +175,7 @@ const STATUS_ICONS = {
   boots: MonitorCheck,
   checking: Monitor,
   error: MonitorX,
+  timeout: TimerOff,
 } as const;
 
 /** The boot check outcome, shown under the Post Apply Test control. */

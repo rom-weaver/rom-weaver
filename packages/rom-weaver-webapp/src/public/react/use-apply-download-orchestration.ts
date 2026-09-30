@@ -37,7 +37,7 @@ import type { ApplyPatchFormSettings, BinarySource } from "./patcher-form.ts";
 import { getPublicOutputSize, toError, waitForNextUiPaint } from "./patcher-form-session-utils.ts";
 import { createOutputSizeSummary } from "./patcher-presentation.ts";
 import type { RomInputRowState } from "./patcher-ui-state.ts";
-import { prepareBootCheckAudioContext } from "./boot-check-audio.ts";
+import { prepareBootCheckAudioContext, releaseBootCheckAudioContext } from "./boot-check-audio.ts";
 import {
   addEntry,
   getApplyEntry,
@@ -454,6 +454,19 @@ const runPostApplyActions = async ({
   return { downloaded, tested: true };
 };
 
+/**
+ * Whether the boot check can have a core for this ROM, judged at the Apply
+ * click. The ROM's name and identified platform decide the core the same way
+ * after Apply. A ROM without either is still loading, so its core is unknown
+ * and the click prepares for a check anyway.
+ */
+const mayHaveEmulatorCore = (romInput: RomInputRowState | undefined): boolean => {
+  const fileName = romInput?.info.fileName || romInput?.info.archiveName;
+  const platform = romInput?.info.romType?.platform;
+  if (!(fileName || platform)) return true;
+  return !!getEmulatorJsCore(platform, fileName);
+};
+
 const focusPendingDownload = () => {
   const focus = () => {
     if (typeof document === "undefined") return;
@@ -630,7 +643,14 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
         if (requestsApply) releaseLargeEntries({ announce: true });
         // This MUST stay before the first await: WebKit resumes only an
         // AudioContext created while the Apply click is still a user action.
-        if (verifyBootAfterApplyRef.current && !busy && !(pendingDownloadResult && hasPendingDownload)) {
+        if (
+          verifyBootAfterApplyRef.current &&
+          !busy &&
+          !(pendingDownloadResult && hasPendingDownload) &&
+          !applyQueueBlocked &&
+          (canStartApply || canQueueApply) &&
+          mayHaveEmulatorCore(session.localState.romInputs[0])
+        ) {
           prepareBootCheckAudioContext();
         }
         if (patchChangePendingRef.current && !busy) {
@@ -788,6 +808,8 @@ const useApplyDownloadOrchestration = (context: ApplyDownloadOrchestrationContex
           onApplyComplete?.(result);
         } catch (error) {
           const normalizedError = toError(error);
+          // No output will come from this run, so no boot check will use the context.
+          releaseBootCheckAudioContext();
           if (abortController.signal.aborted && getErrorCode(normalizedError) === "CANCELLED") {
             resetCompletedOutputState();
             clearActiveApplyProgress();
