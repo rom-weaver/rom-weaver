@@ -107,7 +107,7 @@ beforeAll(async () => {
 });
 
 test(
-  "Apply with Verify boot off shows no result and loads no emulator core",
+  "Apply with Verify boot off loads no emulator, and ticking it later checks the result",
   async () => {
     await applySample();
     await openOutputOptions();
@@ -121,6 +121,12 @@ test(
     }
     expect(document.getElementById("rom-weaver-boot-check")).toBeNull();
     expect(watcher.frames).toEqual([]);
+
+    // Ticking the option under the finished result checks that result.
+    await userEvent.click(document.getElementById("rom-weaver-checkbox-verify-boot"));
+    await expect
+      .poll(() => document.getElementById("rom-weaver-boot-check")?.getAttribute("data-state"), { timeout: 60_000 })
+      .toBe("boots");
   },
   CASE_TIMEOUT_MS,
 );
@@ -130,8 +136,10 @@ test(
   async () => {
     await applySample();
     await openOutputOptions();
-    await userEvent.click(document.getElementById("rom-weaver-checkbox-verify-boot"));
-    expect(document.getElementById("rom-weaver-checkbox-verify-boot").checked).toBe(true);
+    // The Apply option is a session override, so the previous case can leave it on.
+    const option = document.getElementById("rom-weaver-checkbox-verify-boot");
+    if (!option.checked) await userEvent.click(option);
+    expect(option.checked).toBe(true);
     const watcher = watchBootCheckFrames();
     try {
       await clickApply();

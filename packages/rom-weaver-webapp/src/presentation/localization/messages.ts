@@ -558,9 +558,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Boots the result in a hidden emulator after Apply. Only systems that the Test tab can play are checked.",
   }),
   "ui.apply.verifyBoot.label": msg({ id: "ui.apply.verifyBoot.label", message: "Verify boot after Apply" }),
+  "ui.apply.verifyBoot.timedOut": msg({ id: "ui.apply.verifyBoot.timedOut", message: "Timed out" }),
   "ui.apply.verifyBoot.timeout": msg({
     id: "ui.apply.verifyBoot.timeout",
-    message: "No picture after {seconds} s. Open it in the Test tab to check.",
+    message: "The check stopped after {seconds} s without a result. Open it in the Test tab to check.",
   }),
   "ui.apply.tutorial.addFiles.body": msg({
     id: "ui.apply.tutorial.addFiles.body",

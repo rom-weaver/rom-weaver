@@ -8,6 +8,12 @@ const MIN_MINORITY_RATIO = 0.001;
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_MIN_FRAMES = 60;
 const POLL_INTERVAL_MS = 100;
+const SAMPLE_INTERVAL_MS = 250;
+/**
+ * The least time a capture gets once the core has drawn enough frames, so a
+ * check that reaches its frames just before the deadline still takes a sample.
+ */
+const MIN_CAPTURE_MS = 1_000;
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
 type FramePixels = {
@@ -25,11 +31,16 @@ type BootFrameSummary = {
   minorityRatio: number;
 };
 
-type BootCheckFailure = "blank-frame" | "error" | "failed-to-start" | "timeout";
-
+/**
+ * `blank` means the game ran and drew nothing, or the emulator refused it.
+ * `timeout` means the check ran out of time before it could judge a frame.
+ * `error` means the check itself failed, for example on an unreadable frame.
+ */
 type BootCheckOutcome =
-  | { frames: number; status: "boots"; summary: BootFrameSummary }
-  | { detail?: string; frames: number; reason: BootCheckFailure; status: "blank" };
+  | { frames: number; samples: number; status: "boots"; summary: BootFrameSummary }
+  | { frames: number; reason: "blank-frame" | "failed-to-start"; samples: number; status: "blank" }
+  | { frames: number; loaded: boolean; status: "timeout" }
+  | { detail: string; frames: number; status: "error" };
 
 type EmulatorGameManager = {
   getFrameNum?: () => number;
@@ -110,15 +121,50 @@ const sleep = (ms: number, signal?: AbortSignal) =>
       reject(abortError());
       return;
     }
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
     const onAbort = () => {
       clearTimeout(timer);
       reject(abortError());
     };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
     signal?.addEventListener("abort", onAbort, { once: true });
+  });
+
+/**
+ * Settle with `work`, or with `null` after `ms`. The timer and the abort
+ * listener are removed as soon as either side settles.
+ */
+const withDeadline = <T>(work: Promise<T>, ms: number, signal?: AbortSignal): Promise<T | null> =>
+  new Promise<T | null>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError());
+      return;
+    }
+    const cleanup = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    };
+    const onAbort = () => {
+      cleanup();
+      reject(abortError());
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve(null);
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    work.then(
+      (value) => {
+        cleanup();
+        resolve(value);
+      },
+      (error: unknown) => {
+        cleanup();
+        reject(error);
+      },
+    );
   });
 
 const readFrameCount = (emulator: EmulatorInstance | undefined): number => {
@@ -127,6 +173,65 @@ const readFrameCount = (emulator: EmulatorInstance | undefined): number => {
   } catch {
     return 0;
   }
+};
+
+type SampleOptions = {
+  /** `Date.now()` value after which no new sample starts. */
+  deadline: number;
+  decode: (png: Uint8Array) => Promise<FramePixels>;
+  emulatorOf: () => EmulatorInstance | undefined;
+  minCaptureMs?: number;
+  minFrames: number;
+  pollIntervalMs?: number;
+  sampleIntervalMs?: number;
+  signal?: AbortSignal;
+};
+
+/**
+ * Wait for the core to draw `minFrames` frames, then capture and classify
+ * frames until one shows a picture. A game can show a flat screen for a
+ * moment while it starts, so one flat frame is not a verdict: `blank-frame`
+ * needs every frame sampled before the deadline to be flat.
+ */
+const sampleBootFrames = async ({
+  deadline,
+  decode,
+  emulatorOf,
+  minCaptureMs = MIN_CAPTURE_MS,
+  minFrames,
+  pollIntervalMs = POLL_INTERVAL_MS,
+  sampleIntervalMs = SAMPLE_INTERVAL_MS,
+  signal,
+}: SampleOptions): Promise<BootCheckOutcome> => {
+  let frames = 0;
+  let samples = 0;
+  let loaded = false;
+  while (Date.now() < deadline) {
+    const emulator = emulatorOf();
+    if (emulator) loaded = true;
+    if (emulator?.failedToStart) return { frames, reason: "failed-to-start", samples, status: "blank" };
+    frames = readFrameCount(emulator);
+    const screenshot = emulator?.gameManager?.screenshot;
+    if (!(emulator && frames >= minFrames && screenshot)) {
+      await sleep(pollIntervalMs, signal);
+      continue;
+    }
+    // EmulatorJS polls its filesystem forever for the screenshot file, so
+    // every capture is bounded.
+    const captureMs = Math.max(minCaptureMs, deadline - Date.now());
+    const captured = await withDeadline(Promise.resolve(screenshot.call(emulator.gameManager)), captureMs, signal);
+    if (!captured) break;
+    const png = captured instanceof Uint8Array ? captured : new Uint8Array(captured);
+    if (!isPng(png)) return { detail: "The captured frame is not a PNG.", frames, status: "error" };
+    const summary = summarizeFrameColors(await decode(png));
+    samples += 1;
+    logger.trace("Boot check sampled a frame", { frames, samples, ...summary });
+    if (isBootFrame(summary)) return { frames, samples, status: "boots", summary };
+    if (Date.now() >= deadline) break;
+    await sleep(Math.min(sampleIntervalMs, Math.max(0, deadline - Date.now())), signal);
+  }
+  if (samples > 0) return { frames, reason: "blank-frame", samples, status: "blank" };
+  return { frames, loaded, status: "timeout" };
 };
 
 /**
@@ -147,8 +252,8 @@ const createHiddenFrame = (): BootCheckFrame => {
 };
 
 /**
- * Boot a ROM in a hidden EmulatorJS player, wait until the core has drawn
- * `minFrames` frames, and classify one captured frame. The player is always
+ * Boot a ROM in a hidden EmulatorJS player and classify its frames with
+ * `sampleBootFrames`. The player is always
  * removed before this returns or throws. An abort rejects with `AbortError`.
  */
 const runEmulatorBootCheck = async ({
@@ -175,38 +280,10 @@ const runEmulatorBootCheck = async ({
     iframe.srcdoc = createEmulatorDocument(dataUrl, gameUrl, gameName, core, { gameId, headless: true });
     (host || document.body).append(iframe);
     const emulatorOf = () => (iframe.contentWindow as EmulatorWindow | null)?.EJS_emulator;
-
-    while (Date.now() < deadline) {
-      const emulator = emulatorOf();
-      if (emulator?.failedToStart) {
-        logger.debug("Boot check: EmulatorJS failed to start", { core, fileName });
-        return { frames, reason: "failed-to-start", status: "blank" };
-      }
-      frames = readFrameCount(emulator);
-      if (frames >= minFrames) break;
-      await sleep(POLL_INTERVAL_MS, signal);
-    }
-    const emulator = emulatorOf();
-    const screenshot = emulator?.gameManager?.screenshot;
-    if (!(emulator && frames >= minFrames && screenshot)) {
-      logger.debug("Boot check timed out", { core, fileName, frames, loaded: !!emulator });
-      return { frames, reason: "timeout", status: "blank" };
-    }
-
-    // EmulatorJS polls its filesystem forever for the screenshot file, so the
-    // capture shares the same deadline.
-    const remainingMs = Math.max(0, deadline - Date.now());
-    const captured = await Promise.race([
-      screenshot.call(emulator.gameManager),
-      sleep(remainingMs, signal).then(() => null),
-    ]);
-    if (!captured) return { frames, reason: "timeout", status: "blank" };
-    const png = captured instanceof Uint8Array ? captured : new Uint8Array(captured);
-    if (!isPng(png)) return { detail: "The captured frame is not a PNG.", frames, reason: "error", status: "blank" };
-    const summary = summarizeFrameColors(await decodePng(png));
-    logger.trace("Boot check captured a frame", { core, fileName, frames, ...summary });
-    if (isBootFrame(summary)) return { frames, status: "boots", summary };
-    return { frames, reason: "blank-frame", status: "blank" };
+    const outcome = await sampleBootFrames({ deadline, decode: decodePng, emulatorOf, minFrames, signal });
+    frames = outcome.frames;
+    logger.debug("Boot check finished", { core, fileName, ...outcome });
+    return outcome;
   } finally {
     iframe.romWeaverAudioContext = null;
     iframe.remove();
@@ -216,4 +293,4 @@ const runEmulatorBootCheck = async ({
 };
 
 export type { BootCheckOutcome };
-export { isBootFrame, runEmulatorBootCheck, summarizeFrameColors };
+export { isBootFrame, runEmulatorBootCheck, sampleBootFrames, summarizeFrameColors };

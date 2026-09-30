@@ -4445,7 +4445,7 @@ msgstr "Verify boot after Apply"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.verifyBoot.timeout"
-msgstr "No picture after {seconds} s. Open it in the Test tab to check."
+msgstr "The check stopped after {seconds} s without a result. Open it in the Test tab to check."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4456,3 +4456,8 @@ msgstr "Verify boot after Apply"
 #: src/presentation/localization/messages.ts
 msgid "settings.verifyBootAfterApplyHelp"
 msgstr "Boots the result in a hidden emulator after Apply. Only systems that the Test tab can play are checked."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.verifyBoot.timedOut"
+msgstr "Timed out"

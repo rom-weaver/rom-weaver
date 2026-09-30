@@ -4445,7 +4445,7 @@ msgstr "Start nach Anwenden prüfen"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.verifyBoot.timeout"
-msgstr "Nach {seconds} s kein Bild. Öffne es zur Kontrolle im Test-Tab."
+msgstr "Die Prüfung endete nach {seconds} s ohne Ergebnis. Öffne es zur Kontrolle im Test-Tab."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4456,3 +4456,8 @@ msgstr "Start nach Anwenden prüfen"
 #: src/presentation/localization/messages.ts
 msgid "settings.verifyBootAfterApplyHelp"
 msgstr "Startet das Ergebnis nach dem Anwenden in einem verborgenen Emulator. Geprüft werden nur Systeme, die der Test-Tab abspielen kann."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.verifyBoot.timedOut"
+msgstr "Zeit abgelaufen"
