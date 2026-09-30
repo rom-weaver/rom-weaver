@@ -149,16 +149,19 @@ export function installWebMcp(actions?: WorkflowActions) {
     },
     { once: true },
   );
+  let restoredCleanup: (() => void) | undefined;
   const suspend = () => controller.abort();
   const cleanup = () => {
     controller.abort();
     window.removeEventListener("pagehide", suspend);
     window.removeEventListener("pageshow", restore);
+    restoredCleanup?.();
+    restoredCleanup = undefined;
   };
   const restore = (event: PageTransitionEvent) => {
     if (!event.persisted) return;
     cleanup();
-    installWebMcp(actions);
+    restoredCleanup = installWebMcp(actions);
   };
   window.addEventListener("pagehide", suspend, { once: true });
   window.addEventListener("pageshow", restore);

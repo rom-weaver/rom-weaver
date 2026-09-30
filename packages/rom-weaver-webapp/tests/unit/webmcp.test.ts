@@ -86,7 +86,9 @@ test("restores registrations after the initial pageshow and a cached navigation"
   window.dispatchEvent(restored);
   expect(registerTool).toHaveBeenCalledTimes(6);
   expect(registerTool.mock.calls[3][1].signal.aborted).toBe(false);
-  window.dispatchEvent(new PageTransitionEvent("pagehide"));
   cleanup();
+  expect(registerTool.mock.calls[3][1].signal.aborted).toBe(true);
+  window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+  expect(registerTool).toHaveBeenCalledTimes(6);
   Reflect.deleteProperty(navigator, "modelContext");
 });
