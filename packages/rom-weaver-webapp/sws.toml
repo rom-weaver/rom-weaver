@@ -202,6 +202,12 @@ Cross-Origin-Opener-Policy = "same-origin"
 Cross-Origin-Embedder-Policy = "require-corp"
 Cross-Origin-Resource-Policy = "same-origin"
 
+[[advanced.headers]]
+source = "/"
+
+[advanced.headers.headers]
+Link = '</.well-known/api-catalog>; rel="api-catalog", </openapi.json>; rel="service-desc"; type="application/json", </docs/webapp-integration#url-sessions>; rel="service-doc"; type="text/html", </llms.txt>; rel="describedby"; type="text/plain"'
+
 # The RFC 9727 API catalog has no file extension, so sws would send it as a
 # binary download. The Link header serves the RFC 9727 HEAD response.
 [[advanced.headers]]

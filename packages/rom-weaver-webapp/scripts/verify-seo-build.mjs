@@ -9,6 +9,7 @@ import {
   WEBAPP_URL_SESSION_DOC_PATH,
 } from "../src/webapp/api-catalog.mjs";
 import { isLegalDocRoute, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
+import { matchPagesHeaders, parsePagesHeaders } from "./pages-headers.mjs";
 import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
 import {
   DOCS_SCREENSHOT_CASES,
@@ -121,6 +122,20 @@ assertIncludes(installScript, "#!/bin/sh", "curl installer");
 assertIncludes(headers, "/install.sh\n  Content-Type: text/plain; charset=utf-8", "curl installer content type");
 assertIncludes(headers, `${API_CATALOG_PATH}\n  Content-Type: ${API_CATALOG_CONTENT_TYPE}`, "API catalog content type");
 assertIncludes(headers, `Link: <${API_CATALOG_PATH}>; rel="api-catalog"`, "API catalog HEAD link relation");
+const homepageLinks = matchPagesHeaders(parsePagesHeaders(headers), "/").Link?.join(", ") ?? "";
+assertIncludes(
+  swsConfig,
+  `source = "/"\n\n[advanced.headers.headers]\nLink = '${homepageLinks}'`,
+  "Docker homepage discovery links",
+);
+for (const [target, relation] of [
+  [API_CATALOG_PATH, "api-catalog"],
+  [OPENAPI_PATH, "service-desc"],
+  [WEBAPP_URL_SESSION_DOC_PATH, "service-doc"],
+  ["/llms.txt", "describedby"],
+]) {
+  assertIncludes(homepageLinks, `<${target}>; rel="${relation}"`, "homepage discovery link");
+}
 assertIncludes(swsConfig, `Content-Type = '${API_CATALOG_CONTENT_TYPE}'`, "Docker API catalog content type");
 assertIncludes(swsConfig, `Link = '<${API_CATALOG_PATH}>; rel="api-catalog"'`, "Docker API catalog HEAD link relation");
 const catalog = JSON.parse(read(API_CATALOG_PATH));
