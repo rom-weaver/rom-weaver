@@ -233,6 +233,10 @@ struct Cli {
 enum CliCommand {
     #[command(flatten)]
     App(Commands),
+    #[command(about = "Run a ROM headlessly with the optional native emulator runtime")]
+    Test(crate::rom_test::TestCommand),
+    #[command(about = "Install or inspect the optional native emulator runtime")]
+    Emulator(crate::emulator_runtime::EmulatorCommand),
     /// Top-level spelling of `patch apply`. Normalized away in [`main_entry`]
     /// before dispatch, so it never reaches the shared `Commands` enum.
     #[command(
@@ -431,6 +435,55 @@ fn run_native_command(cli: &Cli, mode: OutputMode, command: &str) -> ExitCode {
         "running command"
     );
     tracing::debug!(options = ?cli, "native command options");
+    if matches!(cli.command, CliCommand::Test(_) | CliCommand::Emulator(_)) {
+        install_cancel_handler(mode);
+        let result = match &cli.command {
+            CliCommand::Test(args) => crate::rom_test::run(args, cli.dry_run),
+            CliCommand::Emulator(args) => crate::emulator_runtime::run(args, cli.dry_run),
+            _ => unreachable!(),
+        };
+        return match result {
+            Ok(details) => {
+                let label = details["message"].as_str().unwrap_or("command completed");
+                if mode.is_json() {
+                    let event = native_output::result_event(
+                        command,
+                        if cli.dry_run { "plan" } else { "complete" },
+                        label,
+                        Some(details.clone()),
+                    );
+                    native_output::print_event(mode, event, 0)
+                } else {
+                    crate::stdout_output::write(format_args!(
+                        "{}\n",
+                        crate::render::display_text(label)
+                    ));
+                    if let Some(path) = details["screenshot"].as_str() {
+                        crate::stdout_output::write(format_args!(
+                            "Screenshot: {}\n",
+                            crate::render::display_text(path)
+                        ));
+                    }
+                    ExitCode::SUCCESS
+                }
+            }
+            Err(error) => {
+                let cancelled = matches!(error, rom_weaver_core::RomWeaverError::Cancelled);
+                native_output::print_error(
+                    mode,
+                    command,
+                    "execute",
+                    if cancelled {
+                        "operation.cancelled"
+                    } else {
+                        "cli.emulator"
+                    },
+                    &error.to_string(),
+                    if cancelled { 130 } else { 1 },
+                )
+            }
+        };
+    }
     // `completions` is a native-only concern: emit the script and exit before
     // any command runs. `cli_command()` rebuilds the same clap tree the parse
     // used, so the generated script covers every real subcommand.
@@ -561,6 +614,8 @@ fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
         );
     }
     let native_command = match &cli.command {
+        CliCommand::Test(_) => Some("test"),
+        CliCommand::Emulator(_) => Some("emulator"),
         CliCommand::Completions { .. } => Some("completions"),
         CliCommand::Man { .. } => Some("man"),
         CliCommand::Formats => Some("formats"),

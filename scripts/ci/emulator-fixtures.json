@@ -1,0 +1,55 @@
+[
+  {
+    "core": "stella",
+    "filename": "testbr.a26",
+    "url": "https://github.com/giacomeli/AtariTestCartridgeBR/releases/download/v1.0/testbr.bin",
+    "sha256": "6d9954234464806c8c7a4091bbf92420f2e7676c6b9a9dfeaad06394b98a0951"
+  },
+  {
+    "core": "beetle_pce_fast",
+    "filename": "pce-240p-1.10.zip",
+    "url": "https://sourceforge.net/projects/testsuite240p/files/OldFiles/PCE-TG16-SCD/240pSuite_1.10_HuCard.zip/download",
+    "sha256": "3edcb149858fbe344582775659edeedd21c5f62a8cce0b452923201476629ff1",
+    "select": "240pSuite.pce"
+  },
+  {
+    "core": "beetle_supergrafx",
+    "filename": "supergrafx-240p-1.10.zip",
+    "url": "https://sourceforge.net/projects/testsuite240p/files/OldFiles/PCE-TG16-SCD/240pSuite_1.10_HuCard.zip/download",
+    "sha256": "3edcb149858fbe344582775659edeedd21c5f62a8cce0b452923201476629ff1",
+    "select": "240pSuite.pce",
+    "extension": "sgx"
+  },
+  {
+    "core": "beetle_vb",
+    "filename": "cycle-test.zip",
+    "url": "https://www.virtual-boy.com/downloads/977224/get/977225",
+    "sha256": "43d9b11e01f00c2165cd17088537f6db0bf14704d59084a77ccd5c9e5074eb66",
+    "select": "cycletest.vb"
+  },
+  {
+    "core": "beetle_ngp",
+    "filename": "asteroids.ngp",
+    "url": "https://raw.githubusercontent.com/underscore42/ngpc-asteroids-neo/6a585bb7250d8b91ee7999f83176100049294bda/bin/asteroids.ngp",
+    "sha256": "4b8c4c14f61ef2ee45d2e3151ca744c4bac3edecb0eb0966d38f9f09d1bdbf89"
+  },
+  {
+    "core": "beetle_wswan",
+    "filename": "CartFriend-0.2.8.zip",
+    "url": "https://github.com/asiekierka/ws-cartfriend/releases/download/v0.2.8/CartFriend-0.2.8.zip",
+    "sha256": "a27d75dfaae312cb4ea2846f34b4f51a1c4ff75b1ee5ea480c99aeaee6e58c69",
+    "select": "CartFriend_generic.wsc"
+  },
+  {
+    "core": "pokemini",
+    "filename": "bouncing.min",
+    "url": "https://raw.githubusercontent.com/pokemon-mini/pokemini/e1b0c603019b862062eeca33dc6e2b7cf6b286db/dev-misc/examples/bouncing/bouncing.min",
+    "sha256": "75ce0e1d76d1d757656c49c038221549557d07ffd7f17517187044891abc4fb4"
+  },
+  {
+    "core": "picodrive",
+    "filename": "240pSuite_32X_1.0.32x",
+    "url": "https://github.com/Dasutin/32X240pTestSuite/releases/download/v1.0/240pSuite_32X_1.0.32x",
+    "sha256": "a66868652ac0b72b0e32b2811d101501345b74b1eb036f46290ce147d8293be1"
+  }
+]

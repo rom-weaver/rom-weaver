@@ -96,6 +96,7 @@ Procedures for specific tasks.
 
 - [Install the CLI](how-to/install-cli.md)
 - [Verify a download](how-to/verify-downloads.md)
+- [Test a ROM from the CLI](how-to/test-roms-cli.md)
 - [Apply patches from the CLI](how-to/cli-apply.md)
 - [Create patches from the CLI](how-to/cli-create.md)
 - [Bundles from the CLI](how-to/cli-bundles.md)
@@ -155,6 +156,7 @@ Background on the engine, formats, and design decisions.
 - [Architecture](development/ARCHITECTURE.md): workspace layout, crate graph, command core, browser boundary, OPFS, workers, and test organization.
 - [ROM identify data](development/identify-data.md): rebuild the Libretro and OpenGood packs.
 - [Save Editor development](development/save-editor.md): shared handler architecture, integrity boundary, and the eight-step contributor flow.
+- [Native emulator runtime](development/emulator-runtime.md): build, verify, smoke-test, and release the optional Linux NES runtime.
 - [References](development/references.md): format specifications and upstream reference implementations.
 
 - [CI workflows](development/ci.md) and [local CI checks](development/reproduce-ci-locally.md).

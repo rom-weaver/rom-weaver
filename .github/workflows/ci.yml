@@ -1056,6 +1056,14 @@ jobs:
       - name: Rust wasm-app example tests
         run: cargo test -p rom-weaver-cli --locked --features wasm-app --example rom-weaver-app
 
+  emulator-runtime:
+    name: Emulator runtime
+    needs: changes
+    if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/emulator-runtime.yml
+
   # Presents one stable check name while the independent host and threaded-target
   # work runs in parallel, so branch protection has a single thing to require.
   # The `main protection` ruleset requires this context by name. It must fail
@@ -1069,7 +1077,17 @@ jobs:
     name: Rust
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs: [changes, rust-host, rust-lint, cli-platforms, cli-linux-arm64, rust-macos, rust-windows]
+    needs:
+      [
+        changes,
+        rust-host,
+        rust-lint,
+        cli-platforms,
+        cli-linux-arm64,
+        rust-macos,
+        rust-windows,
+        emulator-runtime,
+      ]
     if: ${{ !cancelled() && github.ref_type != 'tag' }}
     steps:
       - name: Checkout
@@ -1083,6 +1101,7 @@ jobs:
           'rust-host=${{ needs.rust-host.result }}'
           'rust-lint=${{ needs.rust-lint.result }}'
           'cli-platforms=${{ needs.cli-platforms.result }}'
+          'emulator-runtime=${{ needs.emulator-runtime.result }}'
           'rust-windows=${{ needs.rust-windows.result }}'
 
       # Same `!cancelled()` as the job above, for the same reason: this has to
@@ -1382,7 +1401,16 @@ jobs:
     name: Webapp
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs: [changes, wasm, webapp-static, webapp-browser, webapp-wasm-browser, webapp-e2e, webapp-webkit-e2e]
+    needs:
+      [
+        changes,
+        wasm,
+        webapp-static,
+        webapp-browser,
+        webapp-wasm-browser,
+        webapp-e2e,
+        webapp-webkit-e2e,
+      ]
     if: ${{ !cancelled() && github.ref_type != 'tag' }}
     steps:
       - name: Checkout

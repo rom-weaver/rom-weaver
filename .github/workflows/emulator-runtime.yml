@@ -1,0 +1,160 @@
+name: Build emulator runtime
+
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: Commit to build. Defaults to the caller's commit.
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x64-gnu
+            runner: ubuntu-24.04
+            binary: rom-weaver
+          - platform: darwin-x64
+            runner: macos-15-intel
+            binary: rom-weaver
+          - platform: darwin-arm64
+            runner: macos-15
+            binary: rom-weaver
+          - platform: win32-x64
+            runner: windows-2025
+            binary: rom-weaver.exe
+    defaults:
+      run:
+        shell: bash
+    env:
+      CARGO_TERM_COLOR: always
+      TMPDIR: ${{ github.workspace }}/target/emulator-tmp
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+
+      - name: Prepare build directories
+        run: mkdir -p target/emulator-artifacts target/emulator-build target/emulator-tmp
+
+      - uses: ./.github/actions/setup-build-env
+        if: runner.os != 'Windows'
+        with:
+          tools: node rust
+          apt-packages: ${{ runner.os == 'Linux' && 'cmake ninja-build pkg-config clang libclang-dev nasm libgl-dev zlib1g-dev' || '' }}
+          cache-save: "false"
+
+      - name: Install macOS runtime build tools
+        if: runner.os == 'macOS'
+        run: |
+          brew install cmake make gnu-tar coreutils nasm
+          for package in make gnu-tar coreutils; do
+            echo "$(brew --prefix "$package")/libexec/gnubin" >> "$GITHUB_PATH"
+          done
+
+      - name: Read pinned Windows Rust version
+        if: runner.os == 'Windows'
+        id: rust
+        run: |
+          version=$(sed -n \
+            -e 's/^rust = "\(.*\)"$/\1/p' \
+            -e 's/^rust = { version = "\([^"]*\)".*}$/\1/p' \
+            .config/mise.toml)
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: runner.os == 'Windows'
+        with:
+          toolchain: ${{ steps.rust.outputs.version }}
+
+      - uses: actions/setup-node@v7
+        if: runner.os == 'Windows'
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Set up Windows runtime build tools
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            make diffutils patch tar gzip curl
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-nasm
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-nodejs
+            mingw-w64-ucrt-x86_64-zlib
+
+      - name: Build emulator runtime
+        if: runner.os != 'Windows'
+        run: >-
+          scripts/emulator-runtime/build.sh
+          --output-dir target/emulator-artifacts
+          --build-dir target/emulator-build
+
+      - name: Build Windows emulator runtime
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: >-
+          scripts/emulator-runtime/build.sh
+          --output-dir target/emulator-artifacts
+          --build-dir target/emulator-build
+
+      - name: Build integration CLI
+        if: runner.os != 'Windows'
+        run: cargo build --locked -p rom-weaver-cli --no-default-features
+
+      - name: Build Windows integration CLI
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath`) do set "VSINSTALL=%%i"
+          call "%VSINSTALL%\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
+          cargo build --locked -p rom-weaver-cli --no-default-features
+
+      - name: Check emulator integration
+        run: >-
+          node scripts/ci/check-emulator-runtime.mjs
+          --cli target/debug/${{ matrix.binary }}
+          --archive target/emulator-artifacts/rom-weaver-emulator-${{ matrix.platform }}.tar.gz
+          --scratch target/emulator-check
+          --source-dir target/emulator-build/src
+
+      - name: Test emulator installation
+        run: >-
+          cargo test --locked -p rom-weaver-cli --no-default-features
+          --lib emulator_runtime
+
+      - name: Test Windows process cleanup
+        if: runner.os == 'Windows'
+        run: >-
+          cargo test --locked -p rom-weaver-cli --no-default-features
+          --lib rom_test
+
+      - name: Upload emulator runtime
+        uses: actions/upload-artifact@v7
+        with:
+          name: emulator-runtime-${{ matrix.platform }}
+          path: |
+            target/emulator-artifacts/*.tar.gz
+            target/emulator-artifacts/*.sha256
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 7
