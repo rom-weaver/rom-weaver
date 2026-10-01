@@ -67,6 +67,8 @@ installLogStore();
 
 const logger = createLogger("webapp");
 let confirmationDialogState = createEmptyConfirmationDialogState();
+let agentApprovalDialogState = createEmptyConfirmationDialogState();
+let resolvePendingAgentApproval: ((accepted: boolean) => void) | null = null;
 let renderWebappRootIfReady = () => undefined;
 let resolvePendingConfirmation: ((accepted: boolean) => void) | null = null;
 let vitePageUpdateState = createEmptyVitePageUpdateState();
@@ -117,6 +119,29 @@ function requestConfirmation(
   renderWebappRootIfReady();
   return new Promise<boolean>((resolve) => {
     resolvePendingConfirmation = resolve;
+  });
+}
+
+function closeAgentApprovalDialog(accepted: boolean) {
+  const resolver = resolvePendingAgentApproval;
+  resolvePendingAgentApproval = null;
+  agentApprovalDialogState = createEmptyConfirmationDialogState();
+  renderWebappRootIfReady();
+  resolver?.(accepted);
+}
+
+function requestAgentApproval(description: string) {
+  if (resolvePendingAgentApproval) closeAgentApprovalDialog(false);
+  agentApprovalDialogState = {
+    ...createEmptyConfirmationDialogState(),
+    open: true,
+    title: "Run a browser action requested by an agent?",
+    message: `${description}. Your files stay on this device. Existing validation and safety dialogs still apply.`,
+    confirmLabel: "Approve action",
+  };
+  return new Promise<boolean>((resolve) => {
+    resolvePendingAgentApproval = resolve;
+    renderWebappRootIfReady();
   });
 }
 
@@ -546,6 +571,11 @@ const renderWebappRoot = (): undefined => {
       onTrimSourceChange: (file) => webappController.setTrimSourceState(file),
     },
     confirmationDialog: confirmationDialogState,
+    agentApprovalDialog: {
+      state: agentApprovalDialogState,
+      onCancel: () => closeAgentApprovalDialog(false),
+      onConfirm: () => closeAgentApprovalDialog(true),
+    },
     docsSlug: readDocsSlugFromPathname(window.location.pathname),
     notFound: isNotFoundPage,
     pageUpdate: shouldHydrate
@@ -587,14 +617,7 @@ const disposeWebMcp = installWebMcp({
   openBetaWorkflow: (view) => {
     webappController.selectView(view, { allowDisabledBeta: true });
   },
-  confirmAction: (description) =>
-    requestConfirmation({
-      title: "Run a browser action requested by an agent?",
-      level: "warning",
-      message: `${description}. Your files stay on this device. Existing validation and safety dialogs still apply.`,
-      confirmLabel: "Approve action",
-      cancelLabel: "Cancel",
-    }),
+  confirmAction: requestAgentApproval,
 });
 if (import.meta.hot) import.meta.hot.dispose(disposeWebMcp);
 

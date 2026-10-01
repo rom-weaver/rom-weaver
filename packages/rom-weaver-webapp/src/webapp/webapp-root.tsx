@@ -390,6 +390,7 @@ function WebappRoot({
   state,
   pageUpdate,
   confirmationDialog,
+  agentApprovalDialog,
   actions,
   serviceWorkerCache,
   urlSession,
@@ -617,7 +618,7 @@ function WebappRoot({
       if (isInsideLocalDropZone(event.target) || !isFileDragTransfer(event.dataTransfer)) return;
       event.preventDefault();
       event.stopPropagation();
-      if (logOpen || state.settingsDialogOpen || confirmationDialog.open) return;
+      if (logOpen || state.settingsDialogOpen || confirmationDialog.open || agentApprovalDialog?.state.open) return;
       const droppedAtMs = perfNow();
       // Read synchronously so dropped folders are captured before the transfer
       // clears; routing/classification is owned by the active tab's unified drop
@@ -648,7 +649,14 @@ function WebappRoot({
       document.removeEventListener("dragover", handlePageDragOver);
       document.removeEventListener("drop", handlePageDrop);
     };
-  }, [confirmationDialog.open, logOpen, notFound, state.currentView, state.settingsDialogOpen]);
+  }, [
+    agentApprovalDialog?.state.open,
+    confirmationDialog.open,
+    logOpen,
+    notFound,
+    state.currentView,
+    state.settingsDialogOpen,
+  ]);
 
   const workflowPanel = (view: WebappView, form: React.ReactNode) =>
     isViewMounted(view) ? (
@@ -944,6 +952,17 @@ function WebappRoot({
           open={confirmationDialog.open}
           title={confirmationDialog.title}
         />
+        {agentApprovalDialog ? (
+          <ConfirmDialog
+            body={agentApprovalDialog.state.message}
+            cancelLabel={agentApprovalDialog.state.cancelLabel}
+            confirmLabel={agentApprovalDialog.state.confirmLabel}
+            onCancel={agentApprovalDialog.onCancel}
+            onConfirm={agentApprovalDialog.onConfirm}
+            open={agentApprovalDialog.state.open}
+            title={agentApprovalDialog.state.title}
+          />
+        ) : null}
       </div>
     </RomWeaverSettingsProvider>
   );

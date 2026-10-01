@@ -64,6 +64,11 @@ type WebappRootProps = {
   };
   pageUpdate: PageUpdateState;
   confirmationDialog: ConfirmationDialogState;
+  agentApprovalDialog?: {
+    state: ConfirmationDialogState;
+    onCancel: () => void;
+    onConfirm: () => void;
+  };
   /** Boot-time `?bundle=` / `?rom=&patch=` session request, when present. */
   urlSession?: UrlSessionParseResult | null;
   actions: {
