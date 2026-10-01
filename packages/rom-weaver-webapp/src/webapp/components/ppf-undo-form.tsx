@@ -11,6 +11,7 @@ import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-z
 import { WORKFLOW_GUIDES } from "../../public/react/workflow-guides.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
+import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registry.ts";
 
 const PPF_UNDO_ACTIVITY_KEY = "ppf-undo";
 
@@ -169,6 +170,34 @@ const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
   };
+
+  useAgentWorkflow("ppf-undo", {
+    getState: () => ({
+      rom: describeAgentSource(rom),
+      patch: describeAgentSource(patch),
+      busy,
+      error: error || null,
+      options: { outputName },
+      output: output ? { fileName: output.fileName, size: output.size } : null,
+    }),
+    actions: {
+      run: {
+        description: "Restore the original ROM from the PPF undo data.",
+        enabled: !!(rom && patch && outputName.trim()) && !busy && !output,
+        execute: () => void run(),
+      },
+      download: {
+        description: "Download the restored ROM again.",
+        enabled: !!output && !busy,
+        execute: () => void download(),
+      },
+      cancel: {
+        description: "Cancel the active PPF undo operation.",
+        enabled: busy,
+        execute: () => abortRef.current?.abort(),
+      },
+    },
+  });
 
   return (
     <section className="panel" id="ppf-undo-container">

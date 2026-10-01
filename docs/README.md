@@ -55,6 +55,7 @@ Guided app samples: [Apply](https://rom-weaver.com/apply-patches?guide=apply), [
 | Play a game or back up progress | [Test a ROM](how-to/test-roms-in-browser.md) |
 | Change saved progress | [Edit a save](how-to/edit-gen3-saves.md) or [create a fresh save](how-to/create-game-saves-browser.md) |
 | Work without an internet connection | [Set up offline use](how-to/browser-settings.md#prepare-for-offline-use) |
+| Connect an AI agent | [Use MCP and browser agents](how-to/use-mcp.md) |
 
 For terminal equivalents and availability limits, use the [feature map](reference/features.md).
 
@@ -91,6 +92,7 @@ Procedures for specific tasks.
 - [Edit a game save](how-to/edit-gen3-saves.md)
 - [Create game saves in the browser](how-to/create-game-saves-browser.md)
 - [Settings, beta tools, and offline use](how-to/browser-settings.md)
+- [Use MCP and browser agents](how-to/use-mcp.md)
 
 ### From the terminal
 

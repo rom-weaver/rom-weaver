@@ -10,6 +10,7 @@ import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-z
 import { WORKFLOW_GUIDES } from "../../public/react/workflow-guides.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import type { ProgressEvent, PublicOutput } from "../../types/workflow-runtime-types.ts";
+import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registry.ts";
 
 type ExtractFormProps = { pageDrop?: PageFileDrop | null };
 type ProgressState = { label: string; percent: number | null };
@@ -266,6 +267,44 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
 
   const canRetry = !(busy || outputs.length || splitPrompt) && error !== ONE_FILE_ERROR;
   const totalBytes = outputs.reduce((sum, output) => sum + output.size, 0);
+  useAgentWorkflow("extract", {
+    getState: () => ({
+      source: describeAgentSource(source),
+      busy,
+      downloadBusy,
+      progress,
+      downloadProgress: zipProgress,
+      error: error || null,
+      splitChoiceRequired: !!splitPrompt,
+      outputs: outputs.map((output) => ({
+        id: output.path,
+        fileName: output.fileName,
+        relativePath: output.relativePath,
+        size: output.size,
+      })),
+      totalBytes,
+    }),
+    actions: {
+      retry: {
+        description: "Extract the source again with the current track-layout flow.",
+        enabled: !!source && !busy && !downloadBusy && !splitPrompt,
+        execute: () => (source ? startExtract(source) : undefined),
+      },
+      downloadAll: {
+        description: "Download every extracted output, using a ZIP when needed.",
+        enabled: outputs.length > 0 && !downloadBusy,
+        execute: () => download(outputs.map((output) => output.path)),
+      },
+      cancel: {
+        description: "Cancel extraction or ZIP creation.",
+        enabled: busy || downloadBusy,
+        execute: () => {
+          abortRef.current?.abort();
+          zipAbortRef.current?.abort();
+        },
+      },
+    },
+  });
   return (
     <section className="panel extract-tool" id="extract-container">
       <UnifiedDropZone

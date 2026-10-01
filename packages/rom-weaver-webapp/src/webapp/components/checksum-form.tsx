@@ -32,6 +32,7 @@ import {
   hasSourceQueueWarning,
 } from "../../public/react/workflow-form-utils.ts";
 import { loadBrowserApi } from "../../public/react/workflow-loader.ts";
+import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registry.ts";
 import {
   toWorkflowChecksumProgressProps,
   toWorkflowFileProgressProps,
@@ -303,6 +304,44 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
       ];
   const sourceNotice = getSourceNoticeMessage(input);
   const sourceEmpty = !source;
+
+  useAgentWorkflow("checksum", {
+    getState: () => ({
+      source: describeAgentSource(source),
+      staging,
+      calculating,
+      progress,
+      error: error || null,
+      options: { algorithms, autoExtract, expectedChecksum: expectedText },
+      missingAlgorithms: missing,
+      results: files.map((file) => ({
+        id: file.id,
+        fileName: file.fileName,
+        size: file.size,
+        checksums: file.checksums,
+        checksumVariants: file.checksumVariants?.map((variant) => ({
+          id: variant.id,
+          label: variant.label,
+          checksums: variant.checksums,
+        })),
+      })),
+      comparison: compare,
+      sourceStatus: input?.status || null,
+      sourceNotice: sourceNotice || null,
+    }),
+    actions: {
+      run: {
+        description: "Calculate the selected missing checksums.",
+        enabled: !!workflowRef.current && missing.length > 0 && !calculating && !staging,
+        execute: calculate,
+      },
+      cancel: {
+        description: "Cancel staging or checksum calculation.",
+        enabled: staging || calculating,
+        execute: () => workflowRef.current?.abort(),
+      },
+    },
+  });
 
   return (
     <section className="panel checksum-tool" id="checksum-container">

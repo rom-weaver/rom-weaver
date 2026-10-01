@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import { getFileNameWithoutExtension } from "../../lib/input/path-utils.ts";
 import { createLogger } from "../../lib/logging.ts";
+import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registry.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { buildOutputCompressionPanel } from "../../public/react/components/ds/compress-panel.tsx";
 import { Notice } from "../../public/react/components/ds/feedback.tsx";
@@ -213,6 +214,46 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
       if (runId === runIdRef.current) setDownloadBusy(false);
     }
   };
+
+  useAgentWorkflow("compress", {
+    getState: () => ({
+      sources: files.map(describeAgentSource),
+      pendingArchives: pendingArchives.map(({ id, name: archiveName, percent, phase, size }) => ({
+        id,
+        name: archiveName,
+        percent,
+        phase,
+        size,
+      })),
+      busy,
+      downloadBusy,
+      staging,
+      progress,
+      error: error || null,
+      options: { format, outputName: name, overrides },
+      output: output ? { id: output.path, fileName: output.fileName, size: output.size } : null,
+    }),
+    actions: {
+      run: {
+        description: "Compress the staged files with the current options.",
+        enabled: !(disabled || staging) && files.length > 0,
+        execute: run,
+      },
+      download: {
+        description: "Download the compressed output.",
+        enabled: !!output && !disabled,
+        execute: download,
+      },
+      cancel: {
+        description: "Cancel the active compression or archive opening.",
+        enabled: busy || opening,
+        execute: () => {
+          if (busy) abortRef.current?.abort();
+          for (const archive of pendingArchives) cancelOpening(archive.id);
+        },
+      },
+    },
+  });
 
   return (
     <section className="panel compress-tool" id="compress-container">

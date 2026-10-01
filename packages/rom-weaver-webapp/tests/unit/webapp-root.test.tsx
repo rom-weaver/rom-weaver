@@ -640,3 +640,47 @@ describe("development offline status", () => {
     expect(container.querySelector(".header-runtime .sub-status")?.getAttribute("data-sw")).toBe("update");
   });
 });
+
+it("keeps a safety confirmation open when agent approval finishes", () => {
+  const { actions, called } = createActions();
+  const onCancel = vi.fn();
+  const onConfirm = vi.fn();
+  const confirmationDialog = {
+    ...createEmptyConfirmationDialogState(),
+    open: true,
+    title: "Reset page?",
+    message: "Discard staged work?",
+    confirmLabel: "Reset page",
+  };
+  const props = {
+    actions,
+    confirmationDialog,
+    notFound: true,
+    pageUpdate: getPageUpdateState({
+      serviceWorkerCache: { updateReady: false },
+      vite: createEmptyVitePageUpdateState(),
+    }),
+    serviceWorkerCache: createServiceWorkerCacheState(),
+    state: baseState(),
+  };
+  const approval = {
+    ...createEmptyConfirmationDialogState(),
+    open: true,
+    title: "Approve agent action?",
+    confirmLabel: "Approve action",
+  };
+  const view = render(<WebappRoot {...props} />);
+  view.rerender(<WebappRoot {...props} agentApprovalDialog={{ state: approval, onCancel, onConfirm }} />);
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(onCancel).toHaveBeenCalledOnce();
+  expect(called("onCancelConfirmation")).not.toHaveBeenCalled();
+  fireEvent.click(view.getByText("Approve action"));
+  expect(onConfirm).toHaveBeenCalledOnce();
+  expect(called("onCancelConfirmation")).not.toHaveBeenCalled();
+  expect(called("onConfirmConfirmation")).not.toHaveBeenCalled();
+  view.rerender(
+    <WebappRoot {...props} agentApprovalDialog={{ state: { ...approval, open: false }, onCancel, onConfirm }} />,
+  );
+  fireEvent.click(view.getByText("Reset page"));
+  expect(called("onConfirmConfirmation")).toHaveBeenCalledOnce();
+});

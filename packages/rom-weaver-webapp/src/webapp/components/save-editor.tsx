@@ -33,6 +33,7 @@ import { getEmulatorJsCore } from "../../public/react/components/emulatorjs.ts";
 import { restartCurrentGameWithSave, useEmulatorSession } from "../../public/react/emulator-session-store.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import { SaveGenerator } from "./save-generator.tsx";
+import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registry.ts";
 
 type SaveEditorProps = {
   onSessionChange: (active: boolean) => void;
@@ -682,6 +683,146 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     const text = name ? saveValueToText(name.value).trim() : "";
     return text ? `${slot.title} · ${text}` : slot.title;
   };
+
+  useAgentWorkflow("save-editor", {
+    getState: () => ({
+      source: describeAgentSource(source),
+      busy,
+      error: error || null,
+      generated,
+      recognition: {
+        outcome: kind,
+        candidates: (recognition?.candidates ?? []).map((candidate) => ({
+          family: candidate.identity.family,
+          id: candidate.identity.id,
+          name: candidate.identity.name,
+        })),
+        containerName,
+        potentialFormat,
+        saveSize,
+      },
+      document: document
+        ? {
+            activeSlot: document.active_slot,
+            identity: document.identity,
+            integrity: document.integrity,
+            platform: document.platform,
+            saveFormatName: document.save_format_name,
+            saveSize: document.save_size,
+            warnings: document.warnings,
+          }
+        : null,
+      fields:
+        document?.fields.map((field) => ({
+          constraints: field.constraints,
+          currentValue: saveValueToText(values[field.id] ?? field.value),
+          description: field.description,
+          editable: field.editable,
+          id: field.id,
+          kind: field.kind,
+          label: field.label,
+          originalValue: saveValueToText(originalValues[field.id] ?? field.value),
+          step: field.step,
+          validationError: errors[field.id] || null,
+          warnings: field.warnings,
+        })) ?? [],
+      slots: slots.map((slot) => ({
+        groups: slot.groups.map((group) => ({
+          fieldIds: group.fields.map((field) => field.id),
+          id: group.id,
+          title: group.title,
+        })),
+        id: slot.id,
+        selected: slot.id === activeSlot?.id,
+        title: slotName(slot),
+      })),
+      selection: {
+        fieldQuery,
+        profileId: selectedProfile || null,
+        saveId: selectedSaveId || null,
+        slotId: activeSlot?.id ?? null,
+      },
+      profiles:
+        profiles?.map((profile) => ({
+          id: profile.identity.id,
+          name: profile.identity.name,
+          platform: profile.platform,
+          supportedSaveSizes: profile.supported_save_sizes,
+        })) ?? null,
+      emulatorSaves: sramSaves.map((record) => ({
+        id: record.gameId,
+        label: record.label,
+        size: record.sram?.byteLength,
+      })),
+      pendingChangeCount: pendingChanges.length,
+      preview,
+      output: output ? { fileName: output.fileName, size: output.size } : null,
+      replacement: { pending: pendingReplacement, undoAvailable },
+      test: { available: !!onSelectTab, compatible: canTest, status: testStatus },
+    }),
+    actions: {
+      preview: {
+        description: "Preview the current field changes.",
+        enabled: pendingChanges.length > 0 && !busy && !hasErrors,
+        execute: () => void previewChanges(),
+      },
+      write: {
+        description: "Write and download an edited save.",
+        enabled: !!document && (pendingChanges.length > 0 || generated) && !busy && !hasErrors && !output,
+        execute: () => void writeEditedSave(),
+      },
+      download: {
+        description: "Download the edited save again.",
+        enabled: !!output && !busy,
+        execute: () => void downloadEditedSave(),
+      },
+      test: {
+        description: "Test the current save with the emulator workflow.",
+        enabled: !!onSelectTab && !!document && !busy && !hasErrors,
+        execute: () => void testSave(),
+      },
+      reset: {
+        description: "Reset all edited fields.",
+        enabled: pendingChanges.length > 0 && !busy,
+        execute: resetAll,
+      },
+      loadProfiles: {
+        description: "Load compatible game profiles for the selected save.",
+        enabled: !!source && profiles === null && !busy,
+        execute: () => void loadProfiles(),
+      },
+      openProfile: {
+        description: "Open the selected game profile.",
+        enabled: !!source && !!selectedProfile && !busy,
+        execute: openProfile,
+      },
+      requestSramReplacement: {
+        description: "Show the confirmation for replacing the selected emulator SRAM.",
+        enabled: !!selectedSaveId && !!output && !pendingReplacement && !busy,
+        execute: () => setPendingReplacement(true),
+      },
+      replaceSram: {
+        description: "Confirm replacement of the selected emulator SRAM.",
+        enabled: !!selectedSaveId && !!output && !!originalSram && pendingReplacement && !busy,
+        execute: () => void replaceSelectedSram(),
+      },
+      cancelSramReplacement: {
+        description: "Cancel the pending emulator SRAM replacement.",
+        enabled: pendingReplacement && !busy,
+        execute: () => setPendingReplacement(false),
+      },
+      undoSramReplacement: {
+        description: "Undo the last emulator SRAM replacement.",
+        enabled: !!selectedSaveId && !!originalSram && !!replacementSram && undoAvailable && !busy,
+        execute: () => void undoReplacement(),
+      },
+      resetEditor: {
+        description: "Remove the save and reset the editor.",
+        enabled: !!source && !busy,
+        execute: resetEditor,
+      },
+    },
+  });
 
   const renderField = (field: SaveField) => {
     const errorText = errors[field.id];

@@ -80,6 +80,7 @@ import { usePageDropForwarder } from "./workflow-form-effects.ts";
 import { createReactWorkflowId } from "./workflow-form-utils.ts";
 import { createWorkflowHandle, loadBrowserApi } from "./workflow-loader.ts";
 import { createApplyWorkflowSnapshotStore } from "./apply-workflow-snapshot-store.ts";
+import { describeAgentSource, useAgentWorkflow } from "../../webapp/agent/workflow-registry.ts";
 
 // A patch parses eagerly (its extraction overlaps the ROM's), but its addPatch mutation is queued
 // behind the ROM's setInput, so the staged info would otherwise only reach the card once the ROM
@@ -1654,6 +1655,112 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     const removeId = matchingInput?.id || fallbackInput?.id;
     if (removeId) resolvedUiController.removeRomInput?.(removeId);
   };
+
+  const applyActionEnabled = !(
+    outputState.applyButton.disabled ||
+    outputState.applyButton.loading ||
+    outputState.pendingDownloadFileName
+  );
+  const downloadActionEnabled =
+    !(outputState.applyButton.disabled || outputState.applyButton.loading) && !!outputState.pendingDownloadFileName;
+  const cancelActionEnabled = outputState.applyButton.loading || bundleExport.busy;
+  useAgentWorkflow(mode === "bundle" ? "bundle" : "patcher", {
+    getState: () => {
+      const uiState = resolvedUiController.getState();
+      const stackState = resolvedStackController.getState();
+      return {
+        mode,
+        sources: lastInputsRef.current.map(describeAgentSource),
+        patches: currentPatchesRef.current.map((source, index) => ({
+          ...describeAgentSource(source),
+          enabled: !disabledPatchIds.has(getPatchIds()[index] || ""),
+          item: stackState.items[index] || null,
+        })),
+        settings: traceSettings,
+        options: { patchInputBasis },
+        ready: applyReady,
+        staging:
+          uiState.patchInput.loading ||
+          uiState.romInputs.some((input) => input.loading) ||
+          stackState.items.some((item) => !!item.progress),
+        busy: outputState.applyButton.loading || bundleExport.busy,
+        error:
+          [uiState.inputNotice, uiState.patchNotice, uiState.outputNotice].find((notice) => notice.visible)?.message ||
+          bundleExport.error ||
+          null,
+        progress: outputState.applyButton.progress || bundleExport.progress,
+        output: {
+          downloadable: !!outputState.pendingDownloadFileName,
+          name: outputState.resolvedOutputName,
+          requestedName: outputState.displayFileName,
+          compression: outputState.compressionFormat,
+          ready: !outputState.applyButton.disabled,
+        },
+        cheats: {
+          enabled: cheatsOn,
+          names: cheatNames,
+          conflict: cheatConflictMessage || null,
+          outputReady: !!completedCheats,
+        },
+        bundle: {
+          session: activeBundleSession
+            ? {
+                key: activeBundleSession.key,
+                name: activeBundleSession.name,
+                patchCount: activeBundleSession.entries.length,
+              }
+            : null,
+          metadata: getPatchIds().map((id) => ({ id, ...bundleMetaById.get(id) })),
+          chainStatus: bundleChainStatus,
+          sessionMatches: bundleSessionMatches,
+          export: {
+            bundleRom: bundleExport.bundleRom,
+            busy: bundleExport.busy,
+            downloadable: bundleExport.downloadable,
+            error: bundleExport.error || null,
+            format: bundleExport.format,
+            progress: bundleExport.progress,
+            ready: bundleExport.ready,
+          },
+        },
+      };
+    },
+    actions: {
+      apply: {
+        description: "Apply the staged patch stack and download the output.",
+        enabled: applyActionEnabled,
+        execute: () => {
+          if (applyActionEnabled) return resolvedOutputController.runPrimaryAction();
+          return undefined;
+        },
+      },
+      download: {
+        description: "Download the completed patched output.",
+        enabled: downloadActionEnabled,
+        execute: () => {
+          if (downloadActionEnabled) return resolvedOutputController.runPrimaryAction();
+          return undefined;
+        },
+      },
+      cancel: {
+        description: "Cancel the active apply or bundle export operation.",
+        enabled: cancelActionEnabled,
+        execute: () => {
+          if (bundleExport.busy) return bundleExport.cancelExport();
+          if (outputState.applyButton.loading) return resolvedOutputController.cancelPrimaryAction?.();
+          return undefined;
+        },
+      },
+      exportBundle: {
+        description: "Create or download a bundle from the staged ROM and patches.",
+        enabled: bundleExport.ready && !bundleExport.busy,
+        execute: () => {
+          if (bundleExport.ready && !bundleExport.busy) return bundleExport.runExport();
+          return undefined;
+        },
+      },
+    },
+  });
 
   return (
     <>

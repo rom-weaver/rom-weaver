@@ -12,7 +12,7 @@
         "maxBrotliBytes": 10900
       },
       {
-        "_comment": "Raised for the Extract workflow route and its browser archive selection UI. Raised again for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, whose rendered pages ship as docs route chunks. Raised again for the ISO to RVZ, Nintendo 3DS to Z3DS, and Extract Z3DS guides, whose route chunks add about 11 KiB raw and 3 KiB Brotli. Raised again for the Pro Action Rocky, Gold Finger, and GBA GameShark/Action Replay code types and the create form's code type picker.",
+        "_comment": "Raised for the Extract workflow route and its browser archive selection UI. Raised again for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, whose rendered pages ship as docs route chunks. Raised again for the ISO to RVZ, Nintendo 3DS to Z3DS, and Extract Z3DS guides, whose route chunks add about 11 KiB raw and 3 KiB Brotli. Raised again for the Pro Action Rocky, Gold Finger, and GBA GameShark/Action Replay code types and the create form's code type picker. Raised for the WebMCP tools and eleven browser workflow adapters. The CI bundle measures 2,426,340 raw bytes and 622,840 Brotli bytes.",
         "name": "JavaScript",
         "directory": "assets",
         "extension": ".js",
@@ -21,22 +21,22 @@
           "assets/(?:browser-save-api|edit-gen3-saves|save-editor)-[^/]+\\.js$"
         ],
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 2372000,
-        "maxRawBytes": 2442000,
-        "expectedBrotliBytes": 609000,
-        "maxBrotliBytes": 618000
+        "expectedRawBytes": 2430000,
+        "maxRawBytes": 2500000,
+        "expectedBrotliBytes": 624000,
+        "maxBrotliBytes": 633000
       },
       {
-        "_comment": "Raised for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, which the search index includes. Raised again for the ISO to RVZ, Nintendo 3DS to Z3DS, and Extract Z3DS guides.",
+        "_comment": "Raised for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, which the search index includes. Raised again for the ISO to RVZ, Nintendo 3DS to Z3DS, and Extract Z3DS guides. Raised for the MCP client and browser agent setup guide, with the existing 11,000-byte raw and 3,000-byte Brotli margins.",
         "name": "Documentation search JavaScript",
         "directory": "assets",
         "extension": ".js",
         "includePatterns": ["assets/_virtual_rom-weaver-docs-search-[^/]+\\.js$"],
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 346000,
-        "maxRawBytes": 357000,
-        "expectedBrotliBytes": 90500,
-        "maxBrotliBytes": 93500
+        "expectedRawBytes": 358000,
+        "maxRawBytes": 369000,
+        "expectedBrotliBytes": 93600,
+        "maxBrotliBytes": 96600
       },
       {
         "name": "Save Editor JavaScript",

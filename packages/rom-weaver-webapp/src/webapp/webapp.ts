@@ -42,6 +42,7 @@ import {
   createEmptyConfirmationDialogState,
   type WebappRootProps,
 } from "./webapp-root-types.ts";
+import { installWebMcp } from "./webmcp.ts";
 import type { WebappView } from "./webapp-state-types.ts";
 
 // localStorage.setItem(LOCAL_STORAGE_SETTINGS_ID, JSON.stringify(settings))
@@ -66,6 +67,8 @@ installLogStore();
 
 const logger = createLogger("webapp");
 let confirmationDialogState = createEmptyConfirmationDialogState();
+let agentApprovalDialogState = createEmptyConfirmationDialogState();
+let resolvePendingAgentApproval: ((accepted: boolean) => void) | null = null;
 let renderWebappRootIfReady = () => undefined;
 let resolvePendingConfirmation: ((accepted: boolean) => void) | null = null;
 let vitePageUpdateState = createEmptyVitePageUpdateState();
@@ -116,6 +119,29 @@ function requestConfirmation(
   renderWebappRootIfReady();
   return new Promise<boolean>((resolve) => {
     resolvePendingConfirmation = resolve;
+  });
+}
+
+function closeAgentApprovalDialog(accepted: boolean) {
+  const resolver = resolvePendingAgentApproval;
+  resolvePendingAgentApproval = null;
+  agentApprovalDialogState = createEmptyConfirmationDialogState();
+  renderWebappRootIfReady();
+  resolver?.(accepted);
+}
+
+function requestAgentApproval(description: string) {
+  if (resolvePendingAgentApproval) closeAgentApprovalDialog(false);
+  agentApprovalDialogState = {
+    ...createEmptyConfirmationDialogState(),
+    open: true,
+    title: "Run a browser action requested by an agent?",
+    message: `${description}. Your files stay on this device. Existing validation and safety dialogs still apply.`,
+    confirmLabel: "Approve action",
+  };
+  return new Promise<boolean>((resolve) => {
+    resolvePendingAgentApproval = resolve;
+    renderWebappRootIfReady();
   });
 }
 
@@ -545,6 +571,11 @@ const renderWebappRoot = (): undefined => {
       onTrimSourceChange: (file) => webappController.setTrimSourceState(file),
     },
     confirmationDialog: confirmationDialogState,
+    agentApprovalDialog: {
+      state: agentApprovalDialogState,
+      onCancel: () => closeAgentApprovalDialog(false),
+      onConfirm: () => closeAgentApprovalDialog(true),
+    },
     docsSlug: readDocsSlugFromPathname(window.location.pathname),
     notFound: isNotFoundPage,
     pageUpdate: shouldHydrate
@@ -577,6 +608,18 @@ renderWebappRootIfReady = renderWebappRoot;
 
 webappController.subscribe(renderWebappRoot);
 installViteReloadGuard();
+const disposeWebMcp = installWebMcp({
+  getState: () => {
+    const { currentView, patcherSession } = webappController.getState();
+    return { currentView, patcherSession };
+  },
+  getRevision: () => JSON.stringify(webappController.getState().settings),
+  openBetaWorkflow: (view) => {
+    webappController.selectView(view, { allowDisabledBeta: true });
+  },
+  confirmAction: requestAgentApproval,
+});
+if (import.meta.hot) import.meta.hot.dispose(disposeWebMcp);
 
 // Dialogs, drawers, modals, and run readouts cannot appear before the visitor interacts,
 // so their stylesheet is a dynamic import: it starts fetching at boot but never blocks

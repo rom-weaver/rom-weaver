@@ -63,7 +63,9 @@ const ModalShell = ({
   children: ReactNode;
 }) => {
   const dialogRef = useRef<HTMLDivElement | null>(null);
-  useEscapeKey(open && !!onBackdrop, () => onBackdrop?.());
+  useEscapeKey(open && !!onBackdrop, () => {
+    if (!dialogRef.current?.inert) onBackdrop?.();
+  });
   useEffect(() => {
     if (!open) return undefined;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -76,11 +78,12 @@ const ModalShell = ({
       sibling.inert = true;
     }
     const keepFocusInside = (event: FocusEvent) => {
+      if (dialog.inert) return;
       if (event.target instanceof Node && dialog.contains(event.target)) return;
       dialog.focus();
     };
     const wrapTabFocus = (event: KeyboardEvent) => {
-      if (event.key !== "Tab") return;
+      if (dialog.inert || event.key !== "Tab") return;
       const focusable = getFocusableElements(dialog);
       if (!focusable.length) {
         event.preventDefault();

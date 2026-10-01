@@ -311,7 +311,7 @@ test("mobile Docs keeps the workflow dock and owns a separate navigation dialog"
   expect(document.activeElement).toBe(close);
   expect(panel.querySelectorAll(".nav-row")).toHaveLength(1);
   expect(panel.querySelector(".nav-row")?.textContent).toBe("Back to tools");
-  expect(panel.querySelectorAll(".guide-nav a")).toHaveLength(62);
+  expect(panel.querySelectorAll(".guide-nav a")).toHaveLength(63);
   expect(panel.querySelector('a[href="/docs/checksum-roms-browser"]')?.getAttribute("aria-label")).toBe(
     "Checksum files (browser)",
   );

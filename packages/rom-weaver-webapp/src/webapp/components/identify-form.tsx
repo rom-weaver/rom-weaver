@@ -29,6 +29,7 @@ import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { useRomLookup, type RomLookupResult, type RomLookupSelection } from "../../public/react/use-rom-lookup.ts";
 import { identifyRecordChecks } from "../../lib/identify/identify-record-checks.ts";
 import type { ParsedIdentifyCandidate, ParsedIdentifyResult } from "../../types/identify.ts";
+import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registry.ts";
 
 const IDENTIFY_ACTIVITY_KEY = "identify";
 
@@ -309,6 +310,46 @@ const IdentifyForm = ({
   const romStepWoven = expectationVerdict
     ? expectationVerdict === "ok"
     : !!result && !unavailable && result.status !== "unknown";
+
+  useAgentWorkflow("identify", {
+    getState: () => ({
+      source: describeAgentSource(file),
+      busy,
+      progress: busy ? { label: stage || (file ? `Identifying ${file.name}…` : "Identify ROM"), percent } : null,
+      error: error || null,
+      result: result
+        ? {
+            status: result.status,
+            archiveName: result.archiveName,
+            condition: result.condition,
+            hint: result.hint,
+            unavailableReason: result.unavailableReason,
+            candidates: result.candidates.map((candidate) => ({
+              path: candidate.path,
+              size: candidate.sizeBytes,
+              status: candidate.status,
+              condition: candidate.condition,
+              hint: candidate.hint,
+              checksums: candidate.checksums,
+              matches: candidate.matches,
+            })),
+          }
+        : null,
+      lookup: romLookup.result ? { checks: romLookup.result.checks, foundBy: romLookup.result.foundBy } : null,
+    }),
+    actions: {
+      retry: {
+        description: "Identify the staged file again.",
+        enabled: !!file && !busy,
+        execute: retry,
+      },
+      cancel: {
+        description: "Cancel identification.",
+        enabled: busy,
+        execute: cancelRun,
+      },
+    },
+  });
 
   /* A database that never loaded is not a ROM verdict: say so, keep the
      technical cause in the log, and offer the retry. */

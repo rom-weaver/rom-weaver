@@ -2,6 +2,8 @@
 
 Hosts can preload the rom-weaver webapp with remote URLs or files already stored in same-origin Origin Private File System (OPFS) storage. Both routes feed the normal input pipeline; they do not create a separate apply mode.
 
+For public MCP connections and browser agent workflows, see [Use MCP and browser agents](../how-to/use-mcp.md).
+
 <!-- START doctoc -->
 ## Table of contents
 
