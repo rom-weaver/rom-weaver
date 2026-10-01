@@ -149,6 +149,12 @@ const DOC_SOURCES = Object.freeze([
     slug: "docs/create-game-saves-browser",
   }),
   Object.freeze({
+    audience: "browser",
+    file: "how-to/use-mcp.md",
+    label: "Use MCP and browser agents",
+    slug: "docs/use-mcp",
+  }),
+  Object.freeze({
     audience: "cli",
     file: "how-to/create-game-saves-cli.md",
     label: "Create game saves (CLI)",
@@ -322,6 +328,7 @@ const HOW_TO_NAVIGATION_GROUPS = Object.freeze({
   "docs/apply-rom-patches": "Patching & bundles",
   "docs/bake-cheat-codes": "Cheats",
   "docs/browser-settings": "Setup & offline",
+  "docs/use-mcp": "Setup & offline",
   "docs/checksum-roms-browser": "ROM checks",
   "docs/cli-apply": "Patching & bundles",
   "docs/cli-bundles": "Patching & bundles",
