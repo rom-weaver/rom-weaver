@@ -63,13 +63,14 @@ export const writeCloudflareHeadersAsset = (channel) => {
         '</llms.txt>; rel="describedby"; type="text/plain"',
       ].join(", ");
       const homepageHeaders = `/\n  Link: ${discoveryLinks}\n\n`;
+      const authMarkdownHeaders = "/auth.md\n  Content-Type: text/markdown; charset=utf-8\n\n";
       const markdownHeaders = DOC_SOURCES.map(
         ({ slug }) =>
           `/${slug}.md\n  Content-Type: text/markdown; charset=utf-8\n  Link: <https://rom-weaver.com/${slug}>; rel="canonical"\n`,
       ).join("\n");
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${installerContentType}\n${homepageHeaders}${apiCatalogHeaders}${markdownHeaders}`,
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${installerContentType}\n${homepageHeaders}${apiCatalogHeaders}${authMarkdownHeaders}${markdownHeaders}`,
       );
     },
     configResolved(config) {
