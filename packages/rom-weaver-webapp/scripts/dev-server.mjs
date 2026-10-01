@@ -740,12 +740,14 @@ const readPreviewAsset = (cache, filePath, fallbackPath, allowFallback, callback
 };
 
 // Keep this helper for compatibility with older generated build directories. New builds
-// disable deploy-sensitive Link headers because Cloudflare caches their 103 Early Hints
+// disable deploy-sensitive preload headers because Cloudflare caches their 103 Early Hints
 // separately from the document; stale hints can preload deleted hashed assets.
 const sendEarlyHints = (res, pagesHeaders, isDocument) => {
   if (!(isDocument && pagesHeaders.Link)) return;
   if (typeof res.writeEarlyHints !== "function") return;
-  res.writeEarlyHints({ link: pagesHeaders.Link });
+  const preloadLinks = pagesHeaders.Link.filter((link) => /;\s*rel=(?:"preload"|preload)(?:;|$)/u.test(link));
+  if (preloadLinks.length === 0) return;
+  res.writeEarlyHints({ link: preloadLinks });
 };
 
 const handlePreviewRequest = (distDir, cache, req, res, securityOptions, pagesRules = []) => {

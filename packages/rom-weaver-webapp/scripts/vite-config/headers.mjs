@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
-import { API_CATALOG_CONTENT_TYPE, API_CATALOG_PATH } from "../../src/webapp/api-catalog.mjs";
+import {
+  API_CATALOG_CONTENT_TYPE,
+  API_CATALOG_PATH,
+  OPENAPI_PATH,
+  WEBAPP_URL_SESSION_DOC_PATH,
+} from "../../src/webapp/api-catalog.mjs";
 import { DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
 import { rootDir } from "./paths.mjs";
 
@@ -51,6 +56,13 @@ export const writeCloudflareHeadersAsset = (channel) => {
       // The catalog file has no extension, so Cloudflare would serve it as a
       // binary download. The Link header satisfies the RFC 9727 HEAD response.
       const apiCatalogHeaders = `${API_CATALOG_PATH}\n  Content-Type: ${API_CATALOG_CONTENT_TYPE}\n  Link: <${API_CATALOG_PATH}>; rel="api-catalog"\n\n`;
+      const discoveryLinks = [
+        `<${API_CATALOG_PATH}>; rel="api-catalog"`,
+        `<${OPENAPI_PATH}>; rel="service-desc"; type="application/json"`,
+        `<${WEBAPP_URL_SESSION_DOC_PATH}>; rel="service-doc"; type="text/html"`,
+        '</llms.txt>; rel="describedby"; type="text/plain"',
+      ].join(", ");
+      const homepageHeaders = `/\n  Link: ${discoveryLinks}\n\n`;
       const authMarkdownHeaders = "/auth.md\n  Content-Type: text/markdown; charset=utf-8\n\n";
       const markdownHeaders = DOC_SOURCES.map(
         ({ slug }) =>
@@ -58,7 +70,7 @@ export const writeCloudflareHeadersAsset = (channel) => {
       ).join("\n");
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${installerContentType}\n${apiCatalogHeaders}${authMarkdownHeaders}${markdownHeaders}`,
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${installerContentType}\n${homepageHeaders}${apiCatalogHeaders}${authMarkdownHeaders}${markdownHeaders}`,
       );
     },
     configResolved(config) {
