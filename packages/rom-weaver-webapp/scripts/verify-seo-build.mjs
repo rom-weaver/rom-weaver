@@ -125,7 +125,7 @@ assertIncludes(headers, `Link: <${API_CATALOG_PATH}>; rel="api-catalog"`, "API c
 const homepageLinks = matchPagesHeaders(parsePagesHeaders(headers), "/").Link?.join(", ") ?? "";
 assertIncludes(
   swsConfig,
-  `source = "/"\n\n[advanced.headers.headers]\nLink = '${homepageLinks}'`,
+  `source = "/index.html"\n\n[advanced.headers.headers]\nLink = '${homepageLinks}'`,
   "Docker homepage discovery links",
 );
 for (const [target, relation] of [

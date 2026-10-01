@@ -203,7 +203,8 @@ Cross-Origin-Embedder-Policy = "require-corp"
 Cross-Origin-Resource-Policy = "same-origin"
 
 [[advanced.headers]]
-source = "/"
+# Directory requests MUST match the resolved index path in sws header rules.
+source = "/index.html"
 
 [advanced.headers.headers]
 Link = '</.well-known/api-catalog>; rel="api-catalog", </openapi.json>; rel="service-desc"; type="application/json", </docs/webapp-integration#url-sessions>; rel="service-doc"; type="text/html", </llms.txt>; rel="describedby"; type="text/plain"'
