@@ -511,10 +511,10 @@ describe("offline status glyphs", () => {
   it.each([
     ["active", "monitor-check"],
     ["ready", "monitor-check"],
-    ["update", "refresh-cw"],
-    ["online", "cloud-off"],
+    ["update", "monitor-up"],
+    ["online", "globe"],
     ["disabled", "monitor-off"],
-    ["installing", "loader-circle"],
+    ["installing", "monitor-down"],
   ] as const)("shows the %s state with its standalone symbol", (state, name) => {
     expect(renderToStaticMarkup(<RuntimeGlyph state={state} />)).toContain("lucide-" + name);
   });

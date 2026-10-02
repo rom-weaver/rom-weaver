@@ -1,7 +1,6 @@
 import {
   ArrowLeft,
   ChevronUp,
-  Cloud,
   HardDrive,
   Heart,
   House,
@@ -345,9 +344,13 @@ const Masthead = ({
           onSelect: onOpenSettings,
         },
         {
-          /* The first client render MUST match the prerendered glyph. The
-             parser-time resolver only updates the identity status chips. */
-          icon: hydrated && runtimeState === "update" ? <RuntimeGlyph state="update" /> : <Cloud aria-hidden="true" />,
+          /* The parser-time resolver in `index.html` MUST rewrite this
+             glyph along with the status chips, or hydration mismatches. */
+          icon: (
+            <span className="nav-runtime" data-sw={runtimeState}>
+              <RuntimeGlyph percent={runtimePercent} state={runtimeState} />
+            </span>
+          ),
           id: "status",
           label: localizer.message("ui.console.offline"),
           onSelect: onOpenStatus,
@@ -426,7 +429,6 @@ const Masthead = ({
     docsSlug,
     githubHref,
     homeHref,
-    hydrated,
     localizer,
     onOpenAbout,
     onOpenLog,
@@ -434,6 +436,7 @@ const Masthead = ({
     onOpenStatus,
     onSelectTab,
     openStorage,
+    runtimePercent,
     runtimeState,
     tabs,
   ]);

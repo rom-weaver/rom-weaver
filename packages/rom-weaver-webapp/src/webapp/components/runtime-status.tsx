@@ -1,4 +1,4 @@
-import { Cloud, CloudOff, LoaderCircle, MonitorCheck, MonitorOff, RefreshCw } from "lucide-react";
+import { Globe, MonitorCheck, MonitorDown, MonitorOff, MonitorUp } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import type { Localizer } from "../../presentation/localization/index.ts";
@@ -177,14 +177,16 @@ const installingRuntimeLabel = (
   );
 };
 
+/* One device family, so every state reads as the same control. The parser-time
+   resolver in `index.html` MUST carry the same glyphs. */
 const RUNTIME_ICONS = {
   active: MonitorCheck,
   disabled: MonitorOff,
-  installing: LoaderCircle,
-  online: CloudOff,
+  installing: MonitorDown,
+  online: Globe,
   ready: MonitorCheck,
-  update: RefreshCw,
-} satisfies Record<RuntimeState, typeof Cloud>;
+  update: MonitorUp,
+} satisfies Record<RuntimeState, typeof MonitorCheck>;
 
 const PROGRESS_RING_RADIUS = 10;
 const PROGRESS_RING_CIRCUMFERENCE = 2 * Math.PI * PROGRESS_RING_RADIUS;
@@ -198,7 +200,7 @@ const ProgressRingGlyph = ({ percent }: { percent: number }) => {
       className="sw-progress-ring"
       fill="none"
       stroke="currentColor"
-      strokeWidth={2.4}
+      strokeWidth={2}
       viewBox="0 0 24 24"
     >
       <circle cx="12" cy="12" opacity="0.5" r={PROGRESS_RING_RADIUS} />
@@ -231,7 +233,7 @@ const RuntimeGlyph = ({ state, percent = null }: { state: RuntimeState; percent?
     return <ProgressRingGlyph percent={percent} />;
   }
   const Icon = RUNTIME_ICONS[state];
-  return <Icon aria-hidden="true" strokeWidth={2.4} />;
+  return <Icon aria-hidden="true" />;
 };
 
 /** The parser-time resolver MUST keep the status and text hooks in sync before hydration. */

@@ -3,12 +3,12 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  Cloud,
   Copy,
   Download,
   ExternalLink,
   HardDrive,
   Info,
+  MonitorCheck,
   RefreshCw,
   RotateCcw,
   Save,
@@ -266,7 +266,7 @@ const TAB_DESCRIPTIONS = {
 const TAB_ICONS = {
   about: Info,
   logs: ScrollText,
-  offline: Cloud,
+  offline: MonitorCheck,
   settings: Settings,
   storage: HardDrive,
 } as const;
@@ -794,16 +794,20 @@ const HiddenNote = ({ children, localizer }: { children: ReactNode; localizer: L
 const ConsoleNav = ({
   advanced,
   localizer,
+  offlinePercent,
   onClose,
   onJump,
   onSelect,
+  runtimeState,
   tab,
 }: {
   advanced: boolean;
   localizer: Localizer;
+  offlinePercent: number | null;
   onClose: () => void;
   onJump: (title: string) => void;
   onSelect: (tab: LogDialogTab) => void;
+  runtimeState: RuntimeState;
   tab: LogDialogTab;
 }) => {
   const tabsRef = useRef<HTMLDivElement | null>(null);
@@ -844,7 +848,13 @@ const ConsoleNav = ({
               tabIndex={entry === tab ? 0 : -1}
               type="button"
             >
-              <TabIcon aria-hidden="true" />
+              {entry === "offline" ? (
+                <span className="nav-runtime" data-sw={runtimeState}>
+                  <RuntimeGlyph percent={offlinePercent} state={runtimeState} />
+                </span>
+              ) : (
+                <TabIcon aria-hidden="true" />
+              )}
               <span className="console-tab-label">{localizer.message(TAB_MESSAGES[entry])}</span>
               <span aria-hidden="true" className="console-tab-short">
                 {localizer.message(TAB_SHORT_MESSAGES[entry])}
@@ -1627,8 +1637,10 @@ const LogDialog = ({
           advanced={advanced}
           localizer={localizer}
           onClose={close}
+          offlinePercent={runtimeState === "installing" ? offlineWarmupPercent(offlineProgress) : null}
           onJump={jumpToGroup}
           onSelect={selectTab}
+          runtimeState={runtimeState}
           tab={tab}
         />
         <section aria-labelledby="console-pane-title" className="console-pane">
