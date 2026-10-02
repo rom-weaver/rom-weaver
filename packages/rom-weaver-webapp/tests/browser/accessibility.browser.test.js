@@ -981,6 +981,21 @@ describe("webapp keyboard navigation", () => {
     expect(document.activeElement.closest(".dock-menu")).toBeTruthy();
   });
 
+  test("the Find shortcut opens Tools below the threshold, so Escape has a visible trigger", async () => {
+    await setViewport(VIEWPORTS[0]);
+    await renderMasthead(noop);
+    document.body.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "/" }));
+    await settleUntil(() => !host.querySelector(".menu-sheet").hidden);
+    expect(host.querySelector("#find-palette")).toBeNull();
+    expect(document.activeElement).toBe(host.querySelector("#menu-sheet .find-input"));
+
+    document.activeElement.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Escape" }),
+    );
+    await settleUntil(() => host.querySelector(".menu-sheet").hidden);
+    expect(document.activeElement.closest(".dock-menu")).toBeTruthy();
+  });
+
   test("the Tools sheet makes what it covers inert, so the keyboard agrees with the scrim", async () => {
     await setViewport(VIEWPORTS[0]);
     await renderMasthead(noop);

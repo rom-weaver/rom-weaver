@@ -1157,7 +1157,7 @@
   inset-inline-end: 2px;
 }
 /* A query swaps the nav for Find's results, which stack upward from the box. */
-.rw-app #menu-sheet:has(.find-input:not(:placeholder-shown)) .menu-sheet-body {
+.rw-app #menu-sheet:has(.find-palette[data-has-query]) .menu-sheet-body {
   display: none;
 }
 /* ── the layout threshold ──

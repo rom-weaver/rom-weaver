@@ -766,8 +766,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     }
     await page.locator(".docs-article h1").waitFor({ state: "visible" });
     await page.locator(".dock").waitFor({ state: "visible" });
-    await page.locator(".dock-find").waitFor({ state: "visible" });
     await page.locator(".dock-menu").waitFor({ state: "visible" });
+    await page.locator(".dock-app").waitFor({ state: "visible" });
     await page.getByRole("button", { name: "Browse docs" }).waitFor({ state: "visible" });
     await page.getByRole("button", { name: "Browse docs" }).click();
     await page.locator("#docs-menu-sheet:visible").waitFor({ state: "visible" });

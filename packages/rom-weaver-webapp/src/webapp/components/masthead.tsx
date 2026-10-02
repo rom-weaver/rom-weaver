@@ -150,6 +150,17 @@ const Masthead = ({
     [betaToolsEnabled, donateHref, githubHref, homeHref, tabs],
   );
   const closeFind = useCallback(() => setFindOpen(false), []);
+  /* iOS raises the keyboard only for a focus made inside the tap, on a field
+     that is already rendered, so the sheet MUST commit before this returns. */
+  const openTools = useCallback(() => {
+    flushSync(() => {
+      setFindOpen(false);
+      setDocsMenuOpen(false);
+      setMenuMounted(true);
+      setMenuOpen(true);
+    });
+    document.querySelector<HTMLInputElement>("#menu-sheet .find-input")?.focus();
+  }, []);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const closeDocsMenu = useCallback(() => setDocsMenuOpen(false), []);
   const menuRoute = useRef(`${currentTab}:${docsSlug}`);
@@ -196,12 +207,19 @@ const Masthead = ({
       // palette nobody can reach behind its backdrop.
       if (document.querySelector("dialog[open]")) return;
       event.preventDefault();
+      // Below the threshold the top bar is hidden and Find lives in Tools, so
+      // the shortcut opens Tools; Escape then has a visible trigger to return to.
+      if (window.matchMedia("(max-width: 999px)").matches) {
+        if (document.getElementById("menu-sheet")?.hidden === false) setMenuOpen(false);
+        else openTools();
+        return;
+      }
       setMenuOpen(false);
       setFindOpen((open) => !open);
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [openTools]);
 
   /* The sheet covers the page and its scrim blocks pointer input, so the
      keyboard has to agree: what the sheet covers goes inert while it is open,
@@ -668,18 +686,8 @@ const Masthead = ({
           setFindOpen(false);
           setDocsMenuOpen(false);
           onPreloadLog?.();
-          if (menuOpen) {
-            setMenuOpen(false);
-            return;
-          }
-          /* iOS raises the keyboard only for a focus made inside the tap, on a
-             field that is already rendered, so the sheet MUST commit before the
-             handler returns. */
-          flushSync(() => {
-            setMenuMounted(true);
-            setMenuOpen(true);
-          });
-          document.querySelector<HTMLInputElement>("#menu-sheet .find-input")?.focus();
+          if (menuOpen) setMenuOpen(false);
+          else openTools();
         }}
         tabs={dockTabs}
         triggerRef={menuTriggerRef}

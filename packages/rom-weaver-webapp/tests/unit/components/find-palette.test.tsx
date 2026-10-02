@@ -258,6 +258,19 @@ describe("Find", () => {
     expect(document.activeElement).toBe(embedded.querySelector(".find-input"));
     expect(container.querySelector(".dock-find")).toBeNull();
 
+    // Empty, the box shows the sheet's nav and points at no options.
+    const input = embedded.querySelector(".find-input") as HTMLInputElement;
+    expect(input.getAttribute("aria-expanded")).toBe("false");
+    expect(input.hasAttribute("aria-activedescendant")).toBe(false);
+    expect(input.hasAttribute("aria-controls")).toBe(false);
+    expect(embedded.querySelector('[role="status"]')?.textContent).toBe("");
+    // Whitespace is not a query, so the nav stays.
+    fireEvent.change(input, { target: { value: "  " } });
+    expect(embedded.hasAttribute("data-has-query")).toBe(false);
+    fireEvent.change(input, { target: { value: "apply" } });
+    expect(embedded.hasAttribute("data-has-query")).toBe(true);
+    expect(input.getAttribute("aria-expanded")).toBe("true");
+
     // Closing the sheet takes its Find box with it.
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
     expect(container.querySelector("#menu-sheet .find-palette")).toBeNull();
