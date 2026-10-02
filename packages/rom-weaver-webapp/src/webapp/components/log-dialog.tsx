@@ -247,7 +247,7 @@ const TAB_MESSAGES = {
   settings: "ui.settings.title",
   storage: "ui.console.storage",
 } as const;
-// Phone section bar: five columns beside the back link, so every label is one short word.
+// Phone section bar: five columns beside Close, so every label is one short word.
 const TAB_SHORT_MESSAGES = {
   about: "ui.console.about",
   logs: "ui.log.tabLogs",
@@ -788,7 +788,7 @@ const HiddenNote = ({ children, localizer }: { children: ReactNode; localizer: L
 /**
  * The console's section list. Desktop draws it as a sidebar with jump links
  * under Settings and the Advanced switch at its foot; a phone draws it as the
- * bar at the foot of the page, led by the back link (see dialogs.css).
+ * bar at the foot of the page, ended by Close (see dialogs.css).
  */
 const ConsoleNav = ({
   advanced,
@@ -890,6 +890,7 @@ const ConsoleNav = ({
 const PHONE_QUERY = "(max-width: 720px), (max-width: 860px) and (max-height: 520px)";
 // Matches the frame's slide transition in dialogs.css.
 const SLIDE_MS = 260;
+const SWIPE_HOLD_MS = 80;
 
 /**
  * The root unmounts the dialog the moment it closes, so on a phone the page
@@ -981,8 +982,10 @@ const useSwipeToClose = (frameRef: RefObject<HTMLDivElement | null>, onClose: ()
       if (!current?.on) return;
       suppressClick = true;
       const dx = event.clientX - current.x;
-      const closing = current.velocity > 0.25 || (current.velocity > -0.25 && dx > frame.clientWidth / 4);
-      logger.trace("console swipe released", { closing, dx, velocity: current.velocity });
+      // A finger that stops sends no more moves, so a hold before release MUST count as no flick.
+      const velocity = event.timeStamp - current.lastTime > SWIPE_HOLD_MS ? 0 : current.velocity;
+      const closing = dx > 0 && (velocity > 0.25 || (velocity > -0.25 && dx > frame.clientWidth / 4));
+      logger.trace("console swipe released", { closing, dx, velocity });
       frame.classList.remove("is-dragging");
       if (closing) onClose();
       else frame.style.removeProperty("transform");

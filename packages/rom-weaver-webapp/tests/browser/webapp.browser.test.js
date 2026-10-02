@@ -728,6 +728,54 @@ test("the phone console keeps its five sections and Close on one bar at the foot
   await page.viewport(1280, 900);
 });
 
+test("a phone console swipe closes past a quarter of the width and springs back after a hold", async () => {
+  await page.viewport(393, 844);
+  mountWebappRoot();
+  const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const openConsole = async () => {
+    document.querySelector(".dock-app").click();
+    await expect.poll(() => document.querySelector(".log-dlg[open] .console-nav")).toBeTruthy();
+    // The page MUST finish sliding in, or the swipe starts from a moving frame.
+    await pause(400);
+  };
+  const swipe = async (points, holdMs) => {
+    const tab = document.querySelector('.log-dlg [data-logtab="storage"]');
+    const { top, height } = tab.getBoundingClientRect();
+    const send = (type, clientX) =>
+      tab.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          button: 0,
+          cancelable: true,
+          clientX,
+          clientY: top + height / 2,
+          isPrimary: true,
+          pointerId: 1,
+          pointerType: "mouse",
+        }),
+      );
+    send("pointerdown", points[0]);
+    for (const x of points.slice(1)) {
+      await pause(30);
+      send("pointermove", x);
+    }
+    await pause(holdMs);
+    send("pointerup", points.at(-1));
+  };
+
+  await expect.poll(() => document.querySelector(".dock-app")).toBeTruthy();
+  await openConsole();
+  // A quick 80px (about 20%) drag that stops before release is no flick.
+  await swipe([40, 80, 120], 200);
+  await pause(400);
+  expect(document.querySelector(".log-dlg[open]")).toBeTruthy();
+
+  // A slow drag past a quarter of the width (about 28%) closes.
+  await swipe([40, 60, 80, 100, 120, 140, 150], 200);
+  await expect.poll(() => document.querySelector(".log-dlg")).toBeNull();
+  await page.viewport(1280, 900);
+});
+
 test("the phone header carries the desktop tools, and Tools carries every destination", async () => {
   await page.viewport(390, 844);
   mountWebappRoot();
