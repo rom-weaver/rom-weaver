@@ -966,16 +966,18 @@
 }
 
 /* ── the phone dock ──
-   One row: the three workflows, Find, and Menu. */
+   One row: the three workflows, Find, Menu, then › Settings, the forward link
+   to the settings console that slides in from that edge. */
 .rw-app .dock {
   position: fixed;
   inset-block-end: 0;
   inset-inline: 0;
   z-index: 1000;
   display: none;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr)) 62px;
   row-gap: 0;
   padding: 3px max(var(--sp-s), var(--safe-r)) max(3px, var(--safe-b)) max(var(--sp-s), var(--safe-l));
+  touch-action: pan-y;
   background: color-mix(in oklab, var(--plate) 88%, transparent);
   border-block-start: 1px solid var(--seam-soft);
   -webkit-backdrop-filter: blur(10px);
@@ -1037,6 +1039,16 @@
 }
 .rw-app .dock-menu[aria-expanded="true"] {
   color: var(--thread-text);
+}
+/* Mirrors the console bar's ‹ Tools: same divider and grey, sentence case. */
+.rw-app .dock-settings {
+  margin-inline-start: 4px;
+  font-size: 0.66rem;
+  color: var(--ink-2);
+  text-transform: none;
+  letter-spacing: 0;
+  border-inline-start: 1px solid var(--seam);
+  border-radius: 0;
 }
 @media (hover: hover) {
   .rw-app .dock-tab:not([aria-current="page"]):hover {

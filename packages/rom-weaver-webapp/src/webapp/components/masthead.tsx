@@ -21,7 +21,7 @@ import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 import { Github } from "./shell-common.tsx";
 import type { NavGroup, NavSectionData, WorkflowTab } from "./shell-nav.tsx";
 import { MenuSheet, NAV_GROUP_TITLES, PhoneDock, SideNav, fullNameFor, visibleFirst } from "./shell-nav.tsx";
-import { AccentTile, MENU_TOOL_SCOPE, ProjectTiles, SettingsTile, ThemeTile } from "./menu-tools.tsx";
+import { AccentTile, ProjectTiles, SettingsTile, ThemeTile } from "./menu-tools.tsx";
 import type { OfflineWarmupDisplayProgress, RuntimeState } from "./runtime-status.tsx";
 import {
   BuildTag,
@@ -313,13 +313,13 @@ const Masthead = ({
              parser-time resolver only updates the identity status chips. */
           icon: hydrated && runtimeState === "update" ? <RuntimeGlyph state="update" /> : <Cloud aria-hidden="true" />,
           id: "status",
-          label: localizer.message("ui.log.tabStatus"),
+          label: localizer.message("ui.console.offline"),
           onSelect: onOpenStatus,
         },
         {
           icon: <HardDrive aria-hidden="true" />,
           id: "storage",
-          label: localizer.message("ui.log.tabStorage"),
+          label: localizer.message("ui.console.storage"),
           onSelect: openStorage,
         },
         {
@@ -638,6 +638,12 @@ const Masthead = ({
         menuLabel={localizer.message("ui.tools.menu")}
         menuOpen={menuOpen}
         navLabel={navLabel}
+        onOpenSettings={() => {
+          setFindOpen(false);
+          setMenuOpen(false);
+          setDocsMenuOpen(false);
+          onOpenSettings();
+        }}
         onSelect={onSelectTab}
         onToggleFind={() => {
           setMenuOpen(false);
@@ -651,6 +657,7 @@ const Masthead = ({
           setMenuMounted(true);
           setMenuOpen((open) => !open);
         }}
+        settingsLabel={localizer.message("ui.settings.title")}
         tabs={dockTabs}
         triggerRef={menuTriggerRef}
       />
@@ -670,16 +677,18 @@ const Masthead = ({
         />
       ) : null}
       <MenuSheet
-        appearance={appearanceTiles(MENU_TOOL_SCOPE, true)}
+        appearance={null}
         localizer={localizer}
         onClose={closeMenu}
         open={menuOpen}
         opened={menuMounted}
+        /* This device lives behind the dock's › Settings button, so the sheet
+           lists only destinations. */
         sections={[
-          ...sections.filter((section) => section.id !== "project"),
+          ...sections.filter((section) => section.id !== "project" && section.id !== "device"),
           ...sections.filter((section) => section.id === "project"),
         ]}
-        toolOpen={openTool === `theme:${MENU_TOOL_SCOPE}` || openTool === `accent:${MENU_TOOL_SCOPE}`}
+        toolOpen={false}
         triggerRef={menuTriggerRef}
       />
       {/* A real button, so the backdrop is dismissable by keyboard too and

@@ -132,14 +132,14 @@ test("hydrates the beta navigation in place when the persisted flag is enabled",
   });
 
   // The nav names every workflow, beta ones included; the dock keeps its three
-  // workflow slots, Find, and Menu. Everything else reaches the phone through
+  // workflow slots, Find, Menu, and the Settings link. Everything else reaches the phone through
   // that sheet.
   // The sheet itself is empty until it is first opened, so the shell ships one
   // copy of the rows rather than two.
   expect(host.querySelectorAll(".side-nav .nav-row").length).toBeGreaterThan(4);
   expect(host.querySelectorAll(".menu-sheet .nav-row").length).toBe(0);
   expect(host.querySelectorAll('.side-nav .nav-row[href="trim"]').length).toBe(1);
-  expect(host.querySelectorAll(".dock .dock-tab").length).toBe(5);
+  expect(host.querySelectorAll(".dock .dock-tab").length).toBe(6);
   expect(recoverableErrors).toEqual([]);
   expect(consoleError).not.toHaveBeenCalled();
 });

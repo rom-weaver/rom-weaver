@@ -1,4 +1,4 @@
-import { Menu, Search, X } from "lucide-react";
+import { ChevronRight, Menu, Search, X } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
 import { useEffect, useRef } from "react";
 import type { Localizer } from "../../presentation/localization/index.ts";
@@ -198,8 +198,10 @@ const PhoneDock = ({
   menuOpen,
   navLabel,
   onSelect,
+  onOpenSettings,
   onToggleFind,
   onToggleMenu,
+  settingsLabel,
   tabs,
   triggerRef,
 }: {
@@ -211,12 +213,18 @@ const PhoneDock = ({
   menuOpen: boolean;
   navLabel: string;
   onSelect: (id: string) => void;
+  /** Opens the settings console; the dock's last slot and a leftward swipe both call it. */
+  onOpenSettings: () => void;
   onToggleFind: () => void;
   onToggleMenu: () => void;
+  settingsLabel: string;
   tabs: WorkflowTab[];
   triggerRef: RefObject<HTMLButtonElement | null>;
 }) => {
   const findIndex = Math.ceil(tabs.length / 2);
+  // A leftward swipe across the dock pulls the console in from the right edge,
+  // where its › Settings button points. Mostly-vertical drags are page scrolls.
+  const swipeRef = useRef<{ x: number; y: number } | null>(null);
   const renderWorkflowTab = (tab: WorkflowTab) => (
     <a
       aria-current={tab.id === current ? "page" : undefined}
@@ -232,7 +240,23 @@ const PhoneDock = ({
   );
 
   return (
-    <nav aria-label={navLabel} className="dock">
+    <nav
+      aria-label={navLabel}
+      className="dock"
+      onPointerCancel={() => {
+        swipeRef.current = null;
+      }}
+      onPointerDown={(event) => {
+        swipeRef.current = event.isPrimary ? { x: event.clientX, y: event.clientY } : null;
+      }}
+      onPointerUp={(event) => {
+        const start = swipeRef.current;
+        swipeRef.current = null;
+        if (!start) return;
+        const dx = event.clientX - start.x;
+        if (dx < -60 && Math.abs(dx) > 2 * Math.abs(event.clientY - start.y)) onOpenSettings();
+      }}
+    >
       {tabs.slice(0, findIndex).map(renderWorkflowTab)}
       <button
         aria-controls="find-palette"
@@ -260,6 +284,10 @@ const PhoneDock = ({
       >
         <Menu aria-hidden="true" />
         <span>{menuLabel}</span>
+      </button>
+      <button className="dock-tab dock-settings" onClick={onOpenSettings} type="button">
+        <ChevronRight aria-hidden="true" />
+        <span>{settingsLabel}</span>
       </button>
     </nav>
   );

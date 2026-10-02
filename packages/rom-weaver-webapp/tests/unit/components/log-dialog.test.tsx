@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { listBrowserOpfs } from "../../../src/storage/browser/browser-opfs-cleanup.ts";
 import { getActiveBrowserVirtualFiles } from "../../../src/workers/protocol/browser-virtual-files.ts";
+import { setAdvancedSettings } from "../../../src/webapp/advanced-settings.ts";
 import { LogDialog } from "../../../src/webapp/components/log-dialog.tsx";
 import { queryOfflineCachedFiles } from "../../../src/webapp/pwa/offline-warmup-client.ts";
 
@@ -60,13 +61,15 @@ vi.mock("../../../src/webapp/pwa/offline-warmup-client.ts", () => ({
 // The suite runs without vitest globals, so RTL cannot auto-clean between tests.
 afterEach(() => {
   cleanup();
+  setAdvancedSettings(false);
   offlineCopyStore.reset();
   vi.mocked(getActiveBrowserVirtualFiles).mockReturnValue([]);
   vi.mocked(queryOfflineCachedFiles).mockResolvedValue([]);
 });
 
 describe("LogDialog", () => {
-  it("lists every cached offline file with its sizes on Status", async () => {
+  it("lists every cached offline file with its sizes on Offline app", async () => {
+    setAdvancedSettings(true);
     vi.mocked(queryOfflineCachedFiles).mockResolvedValue([
       {
         cache: "emulatorjs-4.2.3",
@@ -100,7 +103,7 @@ describe("LogDialog", () => {
     ]);
   });
 
-  it("wears the weft sub-rail as its header, opening on the tab it was asked for", () => {
+  it("lists the five sections and opens on the one it was asked for", () => {
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
         <LogDialog onClose={() => undefined} onLevelChange={() => undefined} open={false} />
@@ -109,21 +112,46 @@ describe("LogDialog", () => {
 
     const dialog = container.querySelector<HTMLDialogElement>("dialog.log-dlg");
     expect(dialog).not.toBeNull();
-    // the tabs are the header - there is no title competing with them
-    expect(container.querySelector(".dlg-title")).toBeNull();
-    const tabs = Array.from(container.querySelectorAll('.dialog-subrail [role="tab"]'));
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["Settings", "Status", "Logs", "Storage"]);
+    const tabs = Array.from(container.querySelectorAll('.console-tabs [role="tab"]'));
+    expect(tabs.map((tab) => tab.querySelector(".console-tab-label")?.textContent)).toEqual([
+      "Settings",
+      "Offline app",
+      "Saves & storage",
+      "Logs",
+      "About",
+    ]);
     expect(tabs.filter((tab) => tab.getAttribute("tabindex") === "0").length).toBe(1);
-    expect(container.querySelector("#logpanel-status")).not.toBeNull();
-    expect(container.querySelector(".status-rows")).not.toBeNull();
-    // the trace log belongs to the Logs tab, so it is not mounted on Status
+    expect(container.querySelector("#logpanel-offline")).not.toBeNull();
+    expect(container.querySelector("#console-pane-title")?.textContent).toBe("Offline app");
+    // build facts live on About now, and the trace log on Logs
+    expect(container.querySelector(".status-rows")).toBeNull();
     expect(container.querySelector(".tracelog")).toBeNull();
-    expect(container.querySelectorAll(".status-about a")).toHaveLength(0);
+    // the settings panel belongs to its own section, so it is not mounted here
+    expect(container.querySelector(".settings-panel-stub")).toBeNull();
+  });
+
+  it("keeps the build facts and the ways to the changelog and licenses on About", () => {
+    const onOpenWhatsNew = vi.fn();
+    const { container, getByRole } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <LogDialog
+          initialTab="about"
+          licensesHref="/docs/notices"
+          onClose={() => undefined}
+          onLevelChange={() => undefined}
+          onOpenWhatsNew={onOpenWhatsNew}
+          open
+        />
+      </RomWeaverSettingsProvider>,
+    );
+
+    expect(container.querySelector("#logpanel-about .status-rows")).not.toBeNull();
     const branchLink = container.querySelector<HTMLAnchorElement>('.status-row a[href$="/tree/dev"]');
     expect(branchLink?.textContent).toBe("dev");
     expect(branchLink?.target).toBe("_blank");
-    // the settings panel belongs to its own tab, so it is not mounted on Status
-    expect(container.querySelector(".settings-panel-stub")).toBeNull();
+    expect(getByRole("link", { name: "Licenses" }).getAttribute("href")).toBe("/docs/notices");
+    fireEvent.click(getByRole("button", { name: "What’s new" }));
+    expect(onOpenWhatsNew).toHaveBeenCalledTimes(1);
   });
 
   it("opens on Settings, mounts the panel there, and offers Defaults and Save", () => {
@@ -182,11 +210,28 @@ describe("LogDialog", () => {
     fireEvent.click(container.querySelector('[data-logtab="settings"]') as HTMLButtonElement);
     expect(onTabChange).toHaveBeenCalledWith("settings");
     // arrow keys walk the rail and report the same way
-    fireEvent.keyDown(container.querySelector(".dialog-subrail") as HTMLElement, { key: "ArrowRight" });
-    expect(onTabChange).toHaveBeenCalledWith("status");
+    fireEvent.keyDown(container.querySelector(".console-tabs") as HTMLElement, { key: "ArrowRight" });
+    expect(onTabChange).toHaveBeenCalledWith("offline");
+  });
+
+  it("offers debug and trace only with Advanced on", () => {
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <LogDialog initialTab="logs" onClose={() => undefined} onLevelChange={() => undefined} open={false} />
+      </RomWeaverSettingsProvider>,
+    );
+    const levels = () =>
+      Array.from(container.querySelectorAll(".loglevel option"), (option) => option.getAttribute("value"));
+
+    expect(levels()).toEqual(["off", "error", "warn", "info"]);
+    expect(container.querySelector(".tracelog")?.classList.contains("no-caller")).toBe(true);
+    fireEvent.click(container.querySelector("#console-advanced-desktop") as HTMLButtonElement);
+    expect(levels()).toEqual(["off", "error", "warn", "info", "debug", "trace"]);
+    expect(container.querySelector(".tracelog")?.classList.contains("no-caller")).toBe(false);
   });
 
   it("defaults the capture level to warn and reports level changes", () => {
+    setAdvancedSettings(true);
     const onLevelChange = vi.fn();
     const { container } = render(
       <RomWeaverSettingsProvider settings={{}}>
@@ -205,6 +250,7 @@ describe("LogDialog", () => {
   });
 
   it("shows bottom-most OPFS entries with their full parent paths", async () => {
+    setAdvancedSettings(true);
     vi.mocked(listBrowserOpfs).mockResolvedValue([
       { kind: "directory", path: "/operations" },
       { kind: "directory", path: "/operations/run" },
@@ -231,6 +277,7 @@ describe("LogDialog", () => {
   });
 
   it("hides empty internal OPFS containers", async () => {
+    setAdvancedSettings(true);
     vi.mocked(listBrowserOpfs).mockResolvedValue([
       { kind: "directory", path: "/operations" },
       { kind: "directory", path: "/rom-weaver-out" },
@@ -246,7 +293,21 @@ describe("LogDialog", () => {
     expect(container.querySelector(".opfs-row")?.textContent).toContain("/user-files");
   });
 
+  it("shows emulator saves alone in Storage until Advanced shows the OPFS listing", () => {
+    vi.mocked(listBrowserOpfs).mockResolvedValue([]);
+    const { container, getByRole } = render(
+      <RomWeaverSettingsProvider settings={{}}>
+        <LogDialog initialTab="storage" onClose={() => undefined} onLevelChange={() => undefined} open />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(container.querySelector(".emulator-saves-panel")).not.toBeNull();
+    expect(container.querySelector("#storage-opfs-title")).toBeNull();
+    fireEvent.click(getByRole("button", { name: "Show advanced" }));
+    expect(container.querySelector("#storage-opfs-title")?.textContent).toBe("OPFS");
+  });
+
   it("shows emulator save controls in Storage", () => {
+    setAdvancedSettings(true);
     vi.mocked(listBrowserOpfs).mockResolvedValue([]);
     const { container: storageContainer } = render(
       <RomWeaverSettingsProvider settings={{}}>
@@ -258,6 +319,7 @@ describe("LogDialog", () => {
   });
 
   it("shows active virtual input files with their size", async () => {
+    setAdvancedSettings(true);
     vi.mocked(listBrowserOpfs).mockResolvedValue([]);
     vi.mocked(getActiveBrowserVirtualFiles).mockReturnValue([
       { path: "/work/input/game.iso", source: new Uint8Array(123) },

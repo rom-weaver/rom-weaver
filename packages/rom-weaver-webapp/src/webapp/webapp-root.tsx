@@ -487,17 +487,17 @@ function WebappRoot({
   }, [notFound, state.currentView, threads]);
   const {
     closeDialog,
+    closeDialogForNavigation,
     handleDialogTabChange,
     logOpen,
     logTab,
+    openLogsTab,
     openSettingsTab,
     openStatusTab,
     openStorageTab,
     preloadLogDialog,
     preloadSettingsPanel,
     saveSettings,
-    setLogOpen,
-    setLogTab,
     settingsFocusHint,
   } = useUnifiedDialog(actions, state);
   /* Every workflow the user has visited stays mounted, so a single page drop
@@ -725,10 +725,7 @@ function WebappRoot({
             commitsSinceVersion={COMMITS_SINCE_VERSION}
             dirty={Boolean(DIRTY_HASH)}
             onOpenWhatsNew={openWhatsNew}
-            onOpenLog={() => {
-              setLogTab("logs");
-              setLogOpen(true);
-            }}
+            onOpenLog={openLogsTab}
             onOpenStatus={openStatusTab}
             onOpenStorage={openStorageTab}
             onPreloadLog={preloadLogDialog}
@@ -914,6 +911,11 @@ function WebappRoot({
           <Suspense fallback={null}>
             <LogDialog
               initialTab={logTab}
+              licensesHref={`${resolvedAssetBaseUrl}docs/notices`}
+              onOpenWhatsNew={() => {
+                closeDialogForNavigation();
+                openWhatsNew();
+              }}
               level={state.settings.logLevel}
               onClose={closeDialog}
               onLevelChange={actions.onLogLevelChange}

@@ -1279,9 +1279,9 @@ describe("webapp responsive navigation", () => {
       const dock = host.querySelector(".dock");
       expect(getComputedStyle(dock).display).toBe("grid");
       expect(getComputedStyle(dock).position).toBe("fixed");
-      // Three workflows plus Find and Menu, each with a word under its glyph.
+      // Three workflows plus Find, Menu and Settings, each with a word under its glyph.
       const slots = [...dock.querySelectorAll(".dock-tab")];
-      expect(slots.length).toBe(5);
+      expect(slots.length).toBe(6);
       for (const slot of slots) {
         const label = slot.lastElementChild;
         expect(label.textContent.trim().length).toBeGreaterThan(0);
@@ -1312,7 +1312,7 @@ describe("webapp responsive navigation", () => {
     }
   });
 
-  test("the dock keeps Status and Menu lists the other sidebar rows", async () => {
+  test("the dock reaches This device and Menu lists the other sidebar rows", async () => {
     await setViewport(VIEWPORTS[0]);
     await renderMastheadOnly(ALL_TABS);
     const labels = (scope) => [...host.querySelectorAll(`${scope} .nav-row-label`)].map((label) => label.textContent);
@@ -1322,7 +1322,15 @@ describe("webapp responsive navigation", () => {
     await settleUntil(() => !host.querySelector(".menu-sheet").hidden);
 
     const sortLabels = (items) => items.sort((left, right) => left.localeCompare(right));
-    expect(sortLabels(labels(".menu-sheet"))).toEqual(sortLabels(labels(".side-nav")));
+    // This device sits behind the dock's Settings link on a phone.
+    const deviceGroup = [...host.querySelectorAll(".side-nav .nav-group")].find(
+      (group) => group.querySelector(".nav-group-label")?.textContent === "This device",
+    );
+    const device = new Set([...deviceGroup.querySelectorAll(".nav-row-label")].map((label) => label.textContent));
+    expect(sortLabels(labels(".menu-sheet"))).toEqual(
+      sortLabels(labels(".side-nav").filter((label) => !device.has(label))),
+    );
+    expect(host.querySelector(".dock-settings")?.textContent).toBe("Settings");
     expect(host.querySelector(".phone-runtime .sub-status")?.getAttribute("aria-label")).toBe(
       host.querySelector(".desktop-runtime .sub-status")?.getAttribute("aria-label"),
     );

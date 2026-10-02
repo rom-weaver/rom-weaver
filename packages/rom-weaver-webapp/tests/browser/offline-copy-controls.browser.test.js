@@ -63,7 +63,8 @@ for (const width of [390, 1280]) {
     renderProgress(before);
     const remove = page.getByRole("button", { name: "Remove offline copy", exact: true });
     await expect.element(remove).toBeVisible();
-    const columnRight = container.querySelector(".status-row dd").getBoundingClientRect().right;
+    // Build facts moved to About, so the offline section's own edge bounds the notes.
+    const columnRight = container.querySelector(".offline-group").getBoundingClientRect().right;
     for (const detail of container.querySelectorAll(".sw-status-cell > *")) {
       expect(detail.getBoundingClientRect().right).toBeLessThanOrEqual(columnRight + 1);
     }

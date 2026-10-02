@@ -3,10 +3,36 @@ import { fireEvent, render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { getDefaultSettings, getSettingsUiState } from "../../src/webapp/settings/settings-state.ts";
+import { setAdvancedSettings } from "../../src/webapp/advanced-settings.ts";
 import { SettingsPanel } from "../../src/webapp/webapp-settings.tsx";
 import { createEmptyValidationState } from "../../src/webapp/webapp-state-types.ts";
 
 describe("SettingsPanel sections", () => {
+  it("hides threads and codec settings until Advanced is on", () => {
+    setAdvancedSettings(false);
+    const draftSettings = getDefaultSettings();
+    const { container, getByRole } = render(
+      <RomWeaverSettingsProvider settings={draftSettings}>
+        <SettingsPanel
+          draftSettings={draftSettings}
+          onDraftChange={() => undefined}
+          uiState={getSettingsUiState(draftSettings)}
+          validation={createEmptyValidationState()}
+        />
+      </RomWeaverSettingsProvider>,
+    );
+    const titles = () => Array.from(container.querySelectorAll(".setgroup .gtitle"), (title) => title.textContent);
+
+    expect(container.querySelector("#settings-worker-threads")).toBeNull();
+    expect(titles()).not.toContain("Codecs");
+    expect(container.querySelector("#settings-group-compression")).not.toBeNull();
+    fireEvent.click(getByRole("button", { name: "Show advanced" }));
+    expect(container.querySelector("#settings-worker-threads")).not.toBeNull();
+    expect(titles()).toContain("Codecs");
+    expect(container.querySelector(".console-hidden-note")).toBeNull();
+    setAdvancedSettings(false);
+  });
+
   it("starts with the offline-copy choice enabled and stages changes", () => {
     const draftSettings = getDefaultSettings();
     const onDraftChange = vi.fn();

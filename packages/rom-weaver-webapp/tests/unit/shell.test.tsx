@@ -127,8 +127,11 @@ describe("the navigation both layouts share", () => {
     fireEvent.click(container.querySelector(".title-build-row .sub-status") as HTMLButtonElement);
     for (const scope of Object.values(navs(container))) {
       onSelectTab.mockClear();
-      if (scope.classList.contains("side-nav")) fireEvent.click(rowNamed(scope, "Status"));
-      fireEvent.click(rowNamed(scope, "Logs"));
+      // This device stays in the sidebar; on a phone the dock's Settings button reaches it.
+      if (scope.classList.contains("side-nav")) {
+        fireEvent.click(rowNamed(scope, "Offline app"));
+        fireEvent.click(rowNamed(scope, "Logs"));
+      }
       fireEvent.click(rowNamed(scope, "What\u2019s new"));
       expect(onSelectTab).toHaveBeenCalledWith("whats-new");
       fireEvent.click(rowNamed(scope, "Trim"));
@@ -139,7 +142,7 @@ describe("the navigation both layouts share", () => {
       expect(onSelectTab).toHaveBeenCalledWith("bundle");
     }
     expect(onOpenStatus).toHaveBeenCalledTimes(2);
-    expect(onOpenLog).toHaveBeenCalledTimes(2);
+    expect(onOpenLog).toHaveBeenCalledTimes(1);
   });
 
   it("leaves Overview links to the URL router while reading a guide", () => {
@@ -165,7 +168,7 @@ describe("the navigation both layouts share", () => {
     const onOpenLog = vi.fn();
     const { container } = render(withSettings(<Masthead {...mastheadProps} onOpenLog={onOpenLog} />));
 
-    fireEvent.click(rowNamed(navs(container).side, "Storage"));
+    fireEvent.click(rowNamed(navs(container).side, "Saves & storage"));
 
     expect(onOpenLog).toHaveBeenCalledTimes(1);
   });
@@ -175,7 +178,7 @@ describe("the navigation both layouts share", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} onOpenSettings={onOpenSettings} />));
     const { side } = navs(container);
     // Each is a button, not a link: a dialog is not a URL.
-    for (const name of ["Status", "Storage", "Logs", "Settings"]) {
+    for (const name of ["Offline app", "Saves & storage", "Logs", "Settings"]) {
       expect(rowNamed(side, name).tagName).toBe("BUTTON");
     }
     fireEvent.click(rowNamed(side, "Settings"));

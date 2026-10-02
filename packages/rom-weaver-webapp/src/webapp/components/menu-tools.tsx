@@ -10,9 +10,6 @@ import { useTheme } from "../theme.ts";
 import { Github } from "./shell-common.tsx";
 import { guardExternalClick } from "./runtime-status.tsx";
 
-/** The Menu sheet's copy of the appearance pair, as its popover keys spell it. */
-const MENU_TOOL_SCOPE = "menu";
-
 const THEME_CHOICES: ReadonlyArray<{ icon: ReactNode; label: MessageId; value: ThemePreference }> = [
   { icon: <SunMedium aria-hidden="true" />, label: "ui.theme.light", value: "light" },
   { icon: <Moon aria-hidden="true" />, label: "ui.theme.dark", value: "dark" },
@@ -312,4 +309,4 @@ const SettingsTile = ({ localizer, onOpenSettings }: { localizer: Localizer; onO
   );
 };
 
-export { AccentTile, MENU_TOOL_SCOPE, ProjectTiles, SettingsTile, ThemeTile };
+export { AccentTile, ProjectTiles, SettingsTile, ThemeTile };

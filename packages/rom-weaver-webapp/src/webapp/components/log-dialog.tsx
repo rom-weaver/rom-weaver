@@ -1,10 +1,14 @@
 import {
-  Activity,
   ArrowUp,
   Check,
+  ChevronLeft,
+  ChevronRight,
+  Cloud,
   Copy,
   Download,
+  ExternalLink,
   HardDrive,
+  Info,
   RefreshCw,
   RotateCcw,
   Save,
@@ -13,7 +17,16 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { copyToClipboard } from "../../lib/clipboard.ts";
 import { createLogger } from "../../lib/logging.ts";
 import { triggerBrowserDownload } from "../../platform/browser/browser-download.ts";
@@ -39,6 +52,14 @@ import {
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 import type { OfflineCachedFile } from "../offline-warmup.ts";
 import { isReactWebappDevelopmentMode } from "../development-defaults.ts";
+import { setAdvancedSettings, useAdvancedSettings } from "../advanced-settings.ts";
+import {
+  ADVANCED_SETTINGS_FIELDS,
+  SETTINGS_FIELD_ID_TO_KEY,
+  SETTINGS_FIELD_METADATA,
+  SETTINGS_PANEL_SECTIONS,
+  settingsGroupId,
+} from "../settings/settings-state.ts";
 import { EmulatorSavesPanel } from "./emulator-saves-panel.tsx";
 import {
   describeWarmupUnit,
@@ -55,7 +76,9 @@ import type { OfflineWarmupDisplayProgress, RuntimeState } from "./shell.tsx";
 import type { Localizer } from "../../presentation/localization/index.ts";
 
 /**
- * The shared native dialog contains settings, runtime status, logs, and storage views.
+ * The settings console: one native dialog holding settings, the offline app,
+ * saves and storage, logs, and About. Desktop shows a sidebar; a phone shows a
+ * full-screen page that slides in from the right with its sections at the foot.
  * The log level control updates the persisted setting used by the logger and subsequent workflow runs.
  */
 
@@ -213,27 +236,42 @@ const TraceLine = ({ entry }: { entry: LogStoreEntry }) => {
 };
 
 /**
- * Every chrome-level surface the app owns, in one dialog: the tabs ARE the
- * header, so there is no title. Settings leads because it is the tab people
- * come here for; the rest are diagnostics. Storage hosts the OPFS inspector.
+ * Every chrome-level surface the app owns, in one console. Settings leads
+ * because it is the section people come here for; About closes the list.
  */
-const DIALOG_TABS = ["settings", "status", "logs", "storage"] as const;
+const DIALOG_TABS = ["settings", "offline", "storage", "logs", "about"] as const;
 type LogDialogTab = (typeof DIALOG_TABS)[number];
-const TAB_MESSAGES: Record<
-  LogDialogTab,
-  "ui.settings.title" | "ui.log.tabStatus" | "ui.log.tabLogs" | "ui.log.tabStorage"
-> = {
+const TAB_MESSAGES = {
+  about: "ui.console.about",
   logs: "ui.log.tabLogs",
+  offline: "ui.console.offline",
   settings: "ui.settings.title",
-  status: "ui.log.tabStatus",
+  storage: "ui.console.storage",
+} as const;
+// Phone section bar: five columns beside the back link, so every label is one short word.
+const TAB_SHORT_MESSAGES = {
+  about: "ui.console.about",
+  logs: "ui.log.tabLogs",
+  offline: "ui.status.offline",
+  settings: "ui.settings.title",
   storage: "ui.log.tabStorage",
-};
+} as const;
+const TAB_DESCRIPTIONS = {
+  about: "ui.console.aboutDescription",
+  logs: "ui.console.logsDescription",
+  offline: "ui.console.offlineDescription",
+  settings: "ui.console.settingsDescription",
+  storage: "ui.console.storageDescription",
+} as const;
 const TAB_ICONS = {
+  about: Info,
   logs: ScrollText,
+  offline: Cloud,
   settings: Settings,
-  status: Activity,
   storage: HardDrive,
 } as const;
+// Levels that only matter when chasing a bug; the select offers them with Advanced on.
+const ADVANCED_LOG_LEVELS: ReadonlySet<LogLevel> = new Set<LogLevel>(["debug", "trace"]);
 
 /** How long to keep looking for a deep-linked field while its lazy panel loads. */
 const FOCUS_HINT_MAX_FRAMES = 90;
@@ -273,8 +311,6 @@ const StatusRows = ({
   children?: ReactNode;
 }) => {
   const removePointerDown = useRef(false);
-  const distance =
-    typeof COMMITS_SINCE_VERSION === "number" && COMMITS_SINCE_VERSION > 0 ? `+${COMMITS_SINCE_VERSION}` : "";
   const transferredBytes = offlineProgress?.transferredBytes;
   const transferDetail =
     typeof transferredBytes === "number" && Number.isFinite(transferredBytes) && transferredBytes >= 0
@@ -354,6 +390,25 @@ const StatusRows = ({
       {transferDetail ? <span className="sw-progress-detail">{transferDetail}</span> : null}
     </div>
   );
+  return (
+    <section className="status-group offline-group">
+      <h3 className="dlg-section-title">{localizer.message("ui.status.offline")}</h3>
+      <OfflineLegend
+        current={runtimeState}
+        localizer={localizer}
+        offlineProgress={offlineProgress}
+        onUpdate={onUpdate}
+      />
+      {offlineStatus}
+      {children}
+    </section>
+  );
+};
+
+/** Version, commit, branch, channel or PR, and environment of the running build. */
+const BuildFacts = ({ localizer }: { localizer: Localizer }) => {
+  const distance =
+    typeof COMMITS_SINCE_VERSION === "number" && COMMITS_SINCE_VERSION > 0 ? `+${COMMITS_SINCE_VERSION}` : "";
   const rows: Array<[string, React.ReactNode]> = [
     [
       localizer.message("ui.status.version"),
@@ -400,32 +455,59 @@ const StatusRows = ({
     localizer.message(readPwaState() ? "ui.status.envPwa" : "ui.status.envWeb"),
   ]);
   return (
-    <>
-      <section className="status-group offline-group">
-        <h3 className="dlg-section-title">{localizer.message("ui.status.offline")}</h3>
-        <OfflineLegend
-          current={runtimeState}
-          localizer={localizer}
-          offlineProgress={offlineProgress}
-          onUpdate={onUpdate}
-        />
-        {offlineStatus}
-        {children}
-      </section>
-      <section className="status-group">
-        <h3 className="dlg-section-title">{localizer.message("ui.status.build")}</h3>
-        <dl className="status-rows">
-          {rows.map(([label, value]) => (
-            <div className="status-row" key={label}>
-              <dt>{label}</dt>
-              <dd>{value}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-    </>
+    <section className="status-group">
+      <h3 className="dlg-section-title">{localizer.message("ui.status.build")}</h3>
+      <dl className="status-rows">
+        {rows.map(([label, value]) => (
+          <div className="status-row" key={label}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 };
+
+/**
+ * About: what this is, the build facts a bug report needs, and the ways out to
+ * the full changelog and the license notices, which keep their own pages.
+ */
+const AboutPanel = ({
+  licensesHref,
+  localizer,
+  onOpenWhatsNew,
+}: {
+  licensesHref?: string;
+  localizer: Localizer;
+  onOpenWhatsNew?: () => void;
+}) => (
+  <>
+    <section className="status-group about-ident">
+      <h3 className="about-name">{`rom-weaver ${APP_VERSION}`}</h3>
+      <p className="about-tagline">{localizer.message("ui.console.aboutTagline")}</p>
+    </section>
+    <BuildFacts localizer={localizer} />
+    <nav aria-label={localizer.message("ui.console.about")} className="about-links">
+      {onOpenWhatsNew ? (
+        <button className="about-link" onClick={onOpenWhatsNew} type="button">
+          <span>{localizer.message("ui.update.whatsNew")}</span>
+          <ChevronRight aria-hidden="true" />
+        </button>
+      ) : null}
+      {licensesHref ? (
+        <a className="about-link" href={licensesHref}>
+          <span>{localizer.message("ui.console.licenses")}</span>
+          <ChevronRight aria-hidden="true" />
+        </a>
+      ) : null}
+      <a className="about-link" href={`${GITHUB_BASE}/issues`} rel="noreferrer" target="_blank">
+        <span>{localizer.message("ui.console.reportIssue")}</span>
+        <ExternalLink aria-hidden="true" />
+      </a>
+    </nav>
+  </>
+);
 
 const OfflineLegend = ({
   current,
@@ -668,58 +750,259 @@ const nextTabIndex = (key: string, index: number): number => {
   return -1;
 };
 
+/** Settings groups the jump links can reach, in panel order. */
+const visibleSettingsGroups = (advanced: boolean) =>
+  SETTINGS_PANEL_SECTIONS.filter((section) =>
+    section.fields.some(
+      (fieldKey) =>
+        SETTINGS_FIELD_METADATA[fieldKey].kind !== "hidden" && (advanced || !ADVANCED_SETTINGS_FIELDS.has(fieldKey)),
+    ),
+  );
+
+const AdvancedSwitch = ({ advanced, id, localizer }: { advanced: boolean; id: string; localizer: Localizer }) => (
+  <button
+    aria-checked={advanced}
+    className="console-advanced"
+    id={id}
+    onClick={() => setAdvancedSettings(!advanced)}
+    role="switch"
+    type="button"
+  >
+    <span className="console-advanced-text">
+      <span className="console-advanced-label">{localizer.message("ui.console.advanced")}</span>
+      <span className="console-advanced-hint">{localizer.message("ui.console.advancedHint")}</span>
+    </span>
+    <span aria-hidden="true" className="console-switch" />
+  </button>
+);
+
+/** One line naming what Advanced would show here, with the switch's shortcut. */
+const HiddenNote = ({ children, localizer }: { children: ReactNode; localizer: Localizer }) => (
+  <p className="console-hidden-note">
+    <span>{children}</span>
+    <button className="console-hidden-show" onClick={() => setAdvancedSettings(true)} type="button">
+      {localizer.message("ui.console.showAdvanced")}
+    </button>
+  </p>
+);
+
 /**
- * The weft sub-rail that doubles as the dialog header. On a phone the whole head
- * drops to the foot of the sheet - see responsive.css.
+ * The console's section list. Desktop draws it as a sidebar with jump links
+ * under Settings and the Advanced switch at its foot; a phone draws it as the
+ * bar at the foot of the page, led by the back link (see dialogs.css).
  */
-const DialogTabRail = ({
+const ConsoleNav = ({
+  advanced,
   localizer,
+  onClose,
+  onJump,
   onSelect,
   tab,
 }: {
+  advanced: boolean;
   localizer: Localizer;
+  onClose: () => void;
+  onJump: (title: string) => void;
   onSelect: (tab: LogDialogTab) => void;
   tab: LogDialogTab;
 }) => {
   const tabsRef = useRef<HTMLDivElement | null>(null);
   return (
-    <div
-      aria-label={localizer.message("ui.log.tabsLabel")}
-      aria-orientation="horizontal"
-      className="subrail dialog-subrail"
-      onKeyDown={(event) => {
-        const next = nextTabIndex(event.key, DIALOG_TABS.indexOf(tab));
-        if (next < 0) return;
-        event.preventDefault();
-        const nextTab = DIALOG_TABS[next] as LogDialogTab;
-        onSelect(nextTab);
-        tabsRef.current?.querySelector<HTMLButtonElement>(`[data-logtab="${nextTab}"]`)?.focus();
-      }}
-      ref={tabsRef}
-      role="tablist"
-    >
-      {DIALOG_TABS.map((entry) => {
-        const TabIcon = TAB_ICONS[entry];
-        return (
-          <button
-            aria-controls={`logpanel-${entry}`}
-            aria-selected={entry === tab}
-            className="subtab"
-            data-logtab={entry}
-            id={`logtab-${entry}`}
-            key={entry}
-            onClick={() => onSelect(entry)}
-            role="tab"
-            tabIndex={entry === tab ? 0 : -1}
-            type="button"
-          >
-            <TabIcon aria-hidden="true" />
-            <span>{localizer.message(TAB_MESSAGES[entry])}</span>
-          </button>
-        );
-      })}
-    </div>
+    <nav aria-label={localizer.message("ui.log.tabsLabel")} className="console-nav">
+      <h2 className="console-nav-title">{localizer.message("ui.settings.title")}</h2>
+      <button
+        aria-label={localizer.message("ui.docs.backToTools")}
+        className="console-back"
+        onClick={onClose}
+        type="button"
+      >
+        <ChevronLeft aria-hidden="true" />
+        <span>{localizer.message("ui.console.back")}</span>
+      </button>
+      <div
+        aria-label={localizer.message("ui.log.tabsLabel")}
+        aria-orientation="vertical"
+        className="console-tabs"
+        onKeyDown={(event) => {
+          const next = nextTabIndex(event.key, DIALOG_TABS.indexOf(tab));
+          if (next < 0) return;
+          event.preventDefault();
+          const nextTab = DIALOG_TABS[next] as LogDialogTab;
+          onSelect(nextTab);
+          tabsRef.current?.querySelector<HTMLButtonElement>(`[data-logtab="${nextTab}"]`)?.focus();
+        }}
+        ref={tabsRef}
+        role="tablist"
+      >
+        {DIALOG_TABS.map((entry) => {
+          const TabIcon = TAB_ICONS[entry];
+          return (
+            <button
+              aria-controls={`logpanel-${entry}`}
+              aria-selected={entry === tab}
+              className="console-tab"
+              data-logtab={entry}
+              id={`logtab-${entry}`}
+              key={entry}
+              onClick={() => onSelect(entry)}
+              role="tab"
+              tabIndex={entry === tab ? 0 : -1}
+              type="button"
+            >
+              <TabIcon aria-hidden="true" />
+              <span className="console-tab-label">{localizer.message(TAB_MESSAGES[entry])}</span>
+              <span aria-hidden="true" className="console-tab-short">
+                {localizer.message(TAB_SHORT_MESSAGES[entry])}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {tab === "settings" ? (
+        <ul className="console-jumps">
+          {visibleSettingsGroups(advanced).map((section) => (
+            <li key={section.title}>
+              <button className="console-jump" onClick={() => onJump(section.title)} type="button">
+                {section.title}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <div className="console-nav-foot">
+        <AdvancedSwitch advanced={advanced} id="console-advanced-desktop" localizer={localizer} />
+        <span className="console-build">{`v${APP_VERSION}`}</span>
+      </div>
+    </nav>
   );
+};
+
+/**
+ * Phone only: drag the section bar or the page's left edge to the right to
+ * close, the way a pushed page goes back. The frame follows the finger, and a
+ * release past a third of the width, or a flick, finishes the close.
+ */
+const PHONE_QUERY = "(max-width: 720px), (max-width: 860px) and (max-height: 520px)";
+// Matches the frame's slide transition in dialogs.css.
+const SLIDE_MS = 260;
+
+/**
+ * The root unmounts the dialog the moment it closes, so on a phone the page
+ * slides out first and reports the close once it is off screen.
+ */
+const useSlideClose = (frameRef: RefObject<HTMLDivElement | null>, onClose: () => void) => {
+  const leavingRef = useRef(false);
+  useEffect(
+    () => () => {
+      leavingRef.current = false;
+    },
+    [],
+  );
+  return useCallback(() => {
+    const frame = frameRef.current;
+    if (!frame || prefersReducedMotion() || !window.matchMedia(PHONE_QUERY).matches) {
+      onClose();
+      return;
+    }
+    if (leavingRef.current) return;
+    leavingRef.current = true;
+    frame.style.transform = "translateX(100%)";
+    window.setTimeout(() => {
+      leavingRef.current = false;
+      onClose();
+      // A close the settings draft holds back (discard prompt) leaves the
+      // dialog mounted, so the page slides back in under the prompt.
+      frame.style.removeProperty("transform");
+    }, SLIDE_MS);
+  }, [frameRef, onClose]);
+};
+
+const useSwipeToClose = (frameRef: RefObject<HTMLDivElement | null>, onClose: () => void, open: boolean) => {
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!(open && frame)) return undefined;
+    const phone = window.matchMedia(PHONE_QUERY);
+    let drag: {
+      id: number;
+      lastTime: number;
+      lastX: number;
+      on: boolean;
+      velocity: number;
+      x: number;
+      y: number;
+    } | null = null;
+    let suppressClick = false;
+    const release = () => {
+      frame.classList.remove("is-dragging");
+      frame.style.removeProperty("transform");
+    };
+    const onDown = (event: PointerEvent) => {
+      suppressClick = false;
+      if (!phone.matches || event.button !== 0) return;
+      const target = event.target as Element | null;
+      if (!target?.closest(".console-nav, .console-edge")) return;
+      drag = {
+        id: event.pointerId,
+        lastTime: event.timeStamp,
+        lastX: event.clientX,
+        on: false,
+        velocity: 0,
+        x: event.clientX,
+        y: event.clientY,
+      };
+    };
+    const onMove = (event: PointerEvent) => {
+      if (!drag || event.pointerId !== drag.id) return;
+      const dx = event.clientX - drag.x;
+      if (!drag.on) {
+        if (Math.abs(dx) < 8) return;
+        if (Math.abs(event.clientY - drag.y) > Math.abs(dx)) {
+          drag = null;
+          return;
+        }
+        drag.on = true;
+        frame.classList.add("is-dragging");
+        frame.setPointerCapture(drag.id);
+      }
+      frame.style.transform = `translateX(${Math.max(0, dx)}px)`;
+      const elapsed = event.timeStamp - drag.lastTime;
+      if (elapsed > 0) drag.velocity = (event.clientX - drag.lastX) / elapsed;
+      drag.lastX = event.clientX;
+      drag.lastTime = event.timeStamp;
+    };
+    const onUp = (event: PointerEvent) => {
+      const current = drag;
+      drag = null;
+      if (!current?.on) return;
+      suppressClick = true;
+      const dx = event.clientX - current.x;
+      const closing = current.velocity > 0.4 || (current.velocity > -0.4 && dx > frame.clientWidth / 3);
+      logger.trace("console swipe released", { closing, dx, velocity: current.velocity });
+      frame.classList.remove("is-dragging");
+      if (closing) onClose();
+      else frame.style.removeProperty("transform");
+    };
+    // A drag that ends over a button must not also press it.
+    const onClickCapture = (event: MouseEvent) => {
+      if (!suppressClick) return;
+      suppressClick = false;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    frame.addEventListener("pointerdown", onDown);
+    frame.addEventListener("pointermove", onMove);
+    frame.addEventListener("pointerup", onUp);
+    frame.addEventListener("pointercancel", onUp);
+    frame.addEventListener("click", onClickCapture, true);
+    return () => {
+      release();
+      frame.removeEventListener("pointerdown", onDown);
+      frame.removeEventListener("pointermove", onMove);
+      frame.removeEventListener("pointerup", onUp);
+      frame.removeEventListener("pointercancel", onUp);
+      frame.removeEventListener("click", onClickCapture, true);
+    };
+  }, [frameRef, onClose, open]);
 };
 
 /** Save/restore for the settings tab; absent handlers drop their buttons. */
@@ -787,10 +1070,12 @@ const LogViewToggle = ({
 );
 
 const LogLevelSelect = ({
+  advanced,
   currentLevel,
   localizer,
   onLevelChange,
 }: {
+  advanced: boolean;
   currentLevel: LogLevel;
   localizer: Localizer;
   onLevelChange: (level: string) => void;
@@ -803,11 +1088,13 @@ const LogLevelSelect = ({
       onChange={(event) => onLevelChange(event.currentTarget.value)}
       value={currentLevel}
     >
-      {LOG_LEVELS.map((value) => (
-        <option key={value} value={value}>
-          {`level: ${value}`}
-        </option>
-      ))}
+      {LOG_LEVELS.filter((value) => advanced || value === currentLevel || !ADVANCED_LOG_LEVELS.has(value)).map(
+        (value) => (
+          <option key={value} value={value}>
+            {`level: ${value}`}
+          </option>
+        ),
+      )}
     </DropdownSelect>
   </label>
 );
@@ -906,6 +1193,7 @@ const OpfsInspector = ({
  * not re-run the scroll-to-newest effect and lose the reader's place.
  */
 const TraceList = ({
+  advanced,
   entries,
   filter,
   localizer,
@@ -914,6 +1202,7 @@ const TraceList = ({
   scrollTop,
   viewportHeight,
 }: {
+  advanced: boolean;
   entries: readonly LogStoreEntry[];
   filter: string;
   localizer: Localizer;
@@ -932,7 +1221,7 @@ const TraceList = ({
     <div
       aria-atomic="false"
       aria-live="polite"
-      className="tracelog mono"
+      className={advanced ? "tracelog mono" : "tracelog mono no-caller"}
       onScroll={(event) => onScroll(event.currentTarget.scrollTop)}
       ref={traceRef}
     >
@@ -957,6 +1246,7 @@ const TraceList = ({
  * OPFS listing, the filter, and the reader's scroll position.
  */
 const LogsStoragePanel = ({
+  advanced,
   copyFeedback,
   currentLevel,
   entries,
@@ -977,6 +1267,7 @@ const LogsStoragePanel = ({
   traceRef,
   viewportHeight,
 }: {
+  advanced: boolean;
   copyFeedback: CopyFeedback;
   currentLevel: LogLevel;
   entries: readonly LogStoreEntry[];
@@ -999,6 +1290,16 @@ const LogsStoragePanel = ({
 }) => {
   const showingOpfs = tab === "storage";
   const exportText = showingOpfs ? opfsEntries.map(formatOpfsEntry).join("\n") : entries.map(formatCopyLine).join("\n");
+  // The raw OPFS listing is a debugging tool, so without Advanced the storage
+  // section is the emulator saves alone.
+  if (showingOpfs && !advanced) {
+    return (
+      <div aria-labelledby="logtab-storage" className="dlg-body storage-body" id="logpanel-storage" role="tabpanel">
+        <EmulatorSavesPanel active />
+        <HiddenNote localizer={localizer}>{localizer.message("ui.console.hiddenOpfs")}</HiddenNote>
+      </div>
+    );
+  }
   return (
     <>
       {showingOpfs ? <EmulatorSavesPanel active /> : null}
@@ -1029,7 +1330,12 @@ const LogsStoragePanel = ({
               <RefreshCw aria-hidden="true" className={opfsLoading ? "spin" : undefined} />
             </button>
           ) : (
-            <LogLevelSelect currentLevel={currentLevel} localizer={localizer} onLevelChange={onLevelChange} />
+            <LogLevelSelect
+              advanced={advanced}
+              currentLevel={currentLevel}
+              localizer={localizer}
+              onLevelChange={onLevelChange}
+            />
           )}
           <LogExportActions
             copyFeedback={copyFeedback}
@@ -1060,6 +1366,7 @@ const LogsStoragePanel = ({
           </section>
         ) : (
           <TraceList
+            advanced={advanced}
             entries={entries}
             filter={filter}
             localizer={localizer}
@@ -1079,7 +1386,9 @@ const LogDialog = ({
   onClose,
   level,
   onLevelChange,
-  initialTab = "status",
+  initialTab = "offline",
+  licensesHref,
+  onOpenWhatsNew,
   onRestoreDefaults,
   onSaveSettings,
   onTabChange,
@@ -1099,6 +1408,10 @@ const LogDialog = ({
   level?: string;
   onLevelChange: (level: string) => void;
   initialTab?: LogDialogTab;
+  /** The license notices page; About links to it rather than repeating it. */
+  licensesHref?: string;
+  /** Opens the What's New page, which owns the full changelog. */
+  onOpenWhatsNew?: () => void;
   onRestoreDefaults?: () => void;
   onSaveSettings?: () => void;
   onTabChange?: (tab: LogDialogTab) => void;
@@ -1124,6 +1437,21 @@ const LogDialog = ({
   const [view, setView] = useState<"current" | "previous">("current");
   const [tab, setTab] = useState<LogDialogTab>(initialTab);
   const copyFeedback = useCopyFeedback(1300, 1600);
+  const advanced = useAdvancedSettings();
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const close = useSlideClose(frameRef, onClose);
+  useSwipeToClose(frameRef, close, open);
+  // A deep link to a field Advanced hides (Find, a tool's Threads link) turns Advanced on, or it would land nowhere.
+  useEffect(() => {
+    const fieldKey = settingsFocusHint ? SETTINGS_FIELD_ID_TO_KEY[settingsFocusHint.fieldId] : undefined;
+    if (fieldKey && ADVANCED_SETTINGS_FIELDS.has(fieldKey)) setAdvancedSettings(true);
+  }, [settingsFocusHint]);
+  const jumpToGroup = useCallback((title: string) => {
+    const group = document.getElementById(settingsGroupId(title));
+    if (!group) return;
+    logger.trace("settings jump link", { title });
+    group.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
+  }, []);
   // Each open lands on the tab the control that opened it names.
   useEffect(() => {
     if (open) setTab(initialTab);
@@ -1196,7 +1524,7 @@ const LogDialog = ({
   // actually adding files with this panel in front of the user.
   const installing = runtimeState === "installing";
   useEffect(() => {
-    if (!(open && tab === "status") || offlineCopy.pending) return undefined;
+    if (!(open && tab === "offline" && advanced) || offlineCopy.pending) return undefined;
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const load = (initial: boolean) => {
@@ -1224,7 +1552,7 @@ const LogDialog = ({
       active = false;
       clearTimeout(timer);
     };
-  }, [installing, offlineCopy.pending, open, tab]);
+  }, [advanced, installing, offlineCopy.pending, open, tab]);
   // Subscribe to the live store only when actually showing it, so the previous/closed case doesn't
   // re-render every frame during trace-heavy runs.
   const liveEntries = useSyncExternalStore(
@@ -1282,150 +1610,182 @@ const LogDialog = ({
 
   return (
     <dialog
-      aria-label={localizer.message("ui.log.dialogLabel")}
+      aria-label={localizer.message("ui.settings.title")}
       className="dlg log-dlg"
       /* focusable only on purpose: the open effect parks focus here so no
          control wears a ring before the user reaches it */
       tabIndex={-1}
       onCancel={(event) => {
         event.preventDefault();
-        onClose();
+        close();
       }}
       onClick={(event) => {
-        if (event.target === dialogRef.current) onClose();
+        if (event.target === dialogRef.current) close();
       }}
       onKeyDown={(event) => {
-        if (event.key === "Escape") onClose();
+        if (event.key === "Escape") close();
       }}
       ref={dialogRef}
     >
-      <div className="dlg-frame">
-        {/* the weft sub-rail IS the header: no title competing with it, and the
-            close button parks at the rail's end. On a phone the whole head
-            drops to the foot of the sheet - see responsive.css. */}
-        <header className="dlg-head">
-          <DialogTabRail localizer={localizer} onSelect={selectTab} tab={tab} />
-          <button
-            aria-label={localizer.message("ui.common.close")}
-            className="dlg-x"
-            onClick={onClose}
-            title={localizer.message("ui.common.close")}
-            type="button"
-          >
-            <X aria-hidden="true" />
-            {/* Only shown when the head is the phone's bottom bar, where a bare
-                glyph among labelled columns is the odd one out. */}
-            <span className="dlg-x-label">{localizer.message("ui.common.close")}</span>
-          </button>
-        </header>
-        {tab === "settings" ? (
-          <SettingsActionsBar
-            localizer={localizer}
-            onRestoreDefaults={onRestoreDefaults}
-            onSaveSettings={onSaveSettings}
-          />
-        ) : null}
-        {tab === "settings" ? (
-          <div
-            aria-labelledby="logtab-settings"
-            className="dlg-body settings-body"
-            id="logpanel-settings"
-            role="tabpanel"
-          >
-            {settingsPanel}
-          </div>
-        ) : null}
-        {tab === "status" ? (
-          <div aria-labelledby="logtab-status" className="dlg-body status-panel" id="logpanel-status" role="tabpanel">
-            <StatusRows
-              downloadRequested={previewRuntimeState === null && offlineCopy.downloadRequested}
-              downloadUnavailable={
-                previewRuntimeState === null && (downloadUnavailable || (offlineCopy.enabled && !!offlineCopy.error))
-              }
-              offlineCopyEnabled={
-                previewRuntimeState === null
-                  ? offlineCopyEnabled
-                  : previewRuntimeState !== "online" && previewRuntimeState !== "disabled"
-              }
-              removing={previewRuntimeState === null && !offlineCopy.enabled && offlineCopy.pending}
-              removeUnavailable={previewRuntimeState === null && !offlineCopy.enabled && !!offlineCopy.error}
-              onRemove={requestRemoval}
-              onUpdate={onReloadUpdate || onPreviewRuntimeStateChange ? requestUpdate : undefined}
-              localizer={localizer}
-              offlineProgress={offlineProgress}
-              onDownload={requestDownload}
-              runtimeState={runtimeState}
+      <div className="dlg-frame console" ref={frameRef}>
+        <ConsoleNav
+          advanced={advanced}
+          localizer={localizer}
+          onClose={close}
+          onJump={jumpToGroup}
+          onSelect={selectTab}
+          tab={tab}
+        />
+        <section aria-labelledby="console-pane-title" className="console-pane">
+          <header className="dlg-head console-head">
+            <div className="console-titles">
+              <h2 className="console-title" id="console-pane-title">
+                {localizer.message(TAB_MESSAGES[tab])}
+              </h2>
+              <p className="console-description">{localizer.message(TAB_DESCRIPTIONS[tab])}</p>
+            </div>
+            <AdvancedSwitch advanced={advanced} id="console-advanced-phone" localizer={localizer} />
+            <button
+              aria-label={localizer.message("ui.common.close")}
+              className="dlg-x"
+              onClick={close}
+              title={localizer.message("ui.common.close")}
+              type="button"
             >
-              <OfflineCachedFiles
-                error={cachedFilesError}
-                files={cachedFiles}
-                loading={cachedFilesLoading}
+              <X aria-hidden="true" />
+            </button>
+          </header>
+          {tab === "settings" ? (
+            <SettingsActionsBar
+              localizer={localizer}
+              onRestoreDefaults={onRestoreDefaults}
+              onSaveSettings={onSaveSettings}
+            />
+          ) : null}
+          {tab === "settings" ? (
+            <div
+              aria-labelledby="logtab-settings"
+              className="dlg-body settings-body"
+              id="logpanel-settings"
+              role="tabpanel"
+            >
+              {settingsPanel}
+            </div>
+          ) : null}
+          {tab === "offline" ? (
+            <div
+              aria-labelledby="logtab-offline"
+              className="dlg-body status-panel"
+              id="logpanel-offline"
+              role="tabpanel"
+            >
+              <StatusRows
+                downloadRequested={previewRuntimeState === null && offlineCopy.downloadRequested}
+                downloadUnavailable={
+                  previewRuntimeState === null && (downloadUnavailable || (offlineCopy.enabled && !!offlineCopy.error))
+                }
+                offlineCopyEnabled={
+                  previewRuntimeState === null
+                    ? offlineCopyEnabled
+                    : previewRuntimeState !== "online" && previewRuntimeState !== "disabled"
+                }
+                removing={previewRuntimeState === null && !offlineCopy.enabled && offlineCopy.pending}
+                removeUnavailable={previewRuntimeState === null && !offlineCopy.enabled && !!offlineCopy.error}
+                onRemove={requestRemoval}
+                onUpdate={onReloadUpdate || onPreviewRuntimeStateChange ? requestUpdate : undefined}
                 localizer={localizer}
-              />
-            </StatusRows>
-            {isReactWebappDevelopmentMode() && onPreviewRuntimeStateChange ? (
-              <section aria-label="Development" className="status-group sw-preview">
-                <h3 className="dlg-section-title">Development</h3>
-                <div className="sw-preview-control">
-                  <label htmlFor="dev-offline-state">Offline status preview</label>
-                  <span className="sw-preview-select">
-                    <select
-                      aria-describedby="dev-offline-state-help"
-                      className="select"
-                      id="dev-offline-state"
-                      value={previewRuntimeState ?? "actual"}
-                      onChange={(event) => {
-                        const value = event.currentTarget.value;
-                        if (value === "actual") onPreviewRuntimeStateChange?.(null);
-                        else if ((RUNTIME_STATES as readonly string[]).includes(value)) {
-                          onPreviewRuntimeStateChange?.(value as RuntimeState);
-                        }
-                      }}
-                    >
-                      <option value="actual">Actual</option>
-                      {RUNTIME_STATES.map((value) => (
-                        <option key={value} value={value}>
-                          {PREVIEW_STATE_LABELS[value]}
-                        </option>
-                      ))}
-                    </select>
-                  </span>
-                </div>
-                <p className="sw-cache-note" id="dev-offline-state-help">
-                  Preview only. Resets on reload. Does not change the offline cache or service worker.
-                </p>
-              </section>
-            ) : null}
-          </div>
-        ) : null}
-        {tab === "logs" || tab === "storage" ? (
-          <LogsStoragePanel
-            copyFeedback={copyFeedback}
-            currentLevel={currentLevel}
-            entries={visible}
-            filter={filter}
-            hasPrevious={hasPrevious}
-            localizer={localizer}
-            onFilterChange={(next) => {
-              setFilter(next);
-              // A new query re-ranges the list, so start reading it from the top.
-              if (traceRef.current) traceRef.current.scrollTop = 0;
-              setScrollTop(0);
-            }}
-            onLevelChange={onLevelChange}
-            onRefreshOpfs={() => void refreshOpfs()}
-            onScroll={setScrollTop}
-            onViewChange={setView}
-            opfsEntries={visibleOpfs}
-            opfsError={opfsError}
-            opfsLoading={opfsLoading}
-            scrollTop={scrollTop}
-            showingPrevious={showingPrevious}
-            tab={tab}
-            traceRef={traceRef}
-            viewportHeight={viewportHeight}
-          />
-        ) : null}
+                offlineProgress={offlineProgress}
+                onDownload={requestDownload}
+                runtimeState={runtimeState}
+              >
+                {advanced ? (
+                  <OfflineCachedFiles
+                    error={cachedFilesError}
+                    files={cachedFiles}
+                    loading={cachedFilesLoading}
+                    localizer={localizer}
+                  />
+                ) : (
+                  <HiddenNote localizer={localizer}>{localizer.message("ui.console.hiddenCachedFiles")}</HiddenNote>
+                )}
+              </StatusRows>
+              {isReactWebappDevelopmentMode() && onPreviewRuntimeStateChange ? (
+                <section aria-label="Development" className="status-group sw-preview">
+                  <h3 className="dlg-section-title">Development</h3>
+                  <div className="sw-preview-control">
+                    <label htmlFor="dev-offline-state">Offline status preview</label>
+                    <span className="sw-preview-select">
+                      <select
+                        aria-describedby="dev-offline-state-help"
+                        className="select"
+                        id="dev-offline-state"
+                        value={previewRuntimeState ?? "actual"}
+                        onChange={(event) => {
+                          const value = event.currentTarget.value;
+                          if (value === "actual") onPreviewRuntimeStateChange?.(null);
+                          else if ((RUNTIME_STATES as readonly string[]).includes(value)) {
+                            onPreviewRuntimeStateChange?.(value as RuntimeState);
+                          }
+                        }}
+                      >
+                        <option value="actual">Actual</option>
+                        {RUNTIME_STATES.map((value) => (
+                          <option key={value} value={value}>
+                            {PREVIEW_STATE_LABELS[value]}
+                          </option>
+                        ))}
+                      </select>
+                    </span>
+                  </div>
+                  <p className="sw-cache-note" id="dev-offline-state-help">
+                    Preview only. Resets on reload. Does not change the offline cache or service worker.
+                  </p>
+                </section>
+              ) : null}
+            </div>
+          ) : null}
+          {tab === "logs" || tab === "storage" ? (
+            <LogsStoragePanel
+              advanced={advanced}
+              copyFeedback={copyFeedback}
+              currentLevel={currentLevel}
+              entries={visible}
+              filter={filter}
+              hasPrevious={hasPrevious}
+              localizer={localizer}
+              onFilterChange={(next) => {
+                setFilter(next);
+                // A new query re-ranges the list, so start reading it from the top.
+                if (traceRef.current) traceRef.current.scrollTop = 0;
+                setScrollTop(0);
+              }}
+              onLevelChange={onLevelChange}
+              onRefreshOpfs={() => void refreshOpfs()}
+              onScroll={setScrollTop}
+              onViewChange={setView}
+              opfsEntries={visibleOpfs}
+              opfsError={opfsError}
+              opfsLoading={opfsLoading}
+              scrollTop={scrollTop}
+              showingPrevious={showingPrevious}
+              tab={tab}
+              traceRef={traceRef}
+              viewportHeight={viewportHeight}
+            />
+          ) : null}
+          {tab === "about" ? (
+            <div
+              aria-labelledby="logtab-about"
+              className="dlg-body status-panel about-panel"
+              id="logpanel-about"
+              role="tabpanel"
+            >
+              <AboutPanel licensesHref={licensesHref} localizer={localizer} onOpenWhatsNew={onOpenWhatsNew} />
+            </div>
+          ) : null}
+        </section>
+        {/* Phone only: a strip on the left edge that starts the swipe back. */}
+        <div aria-hidden="true" className="console-edge" />
       </div>
     </dialog>
   );

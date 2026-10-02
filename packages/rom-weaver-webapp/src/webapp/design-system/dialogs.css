@@ -148,39 +148,407 @@
   height: min(90dvh, 940px);
   max-height: min(90dvh, 940px);
 }
-/* One row, never two. The rail is a scroller by design, so when the head runs
-   out of width the tabs are what should give - wrapping instead sent the close
-   button down to a line of its own, adrift at the far side of the dialog from
-   the rail it belongs to. */
-/* The tabs ARE the title here, so the rail rides the head's own bottom rule
-   rather than floating above it - the selected tab's weft then reads as a mark
-   on a rail instead of a stray underline in open space. */
-.rw-app .log-dlg .dlg-head {
-  flex-wrap: nowrap;
-  row-gap: var(--sp-m);
-  align-items: flex-end;
-  padding-block-end: 0;
+/* ── settings console ──
+   Wide screens: a sidebar of sections beside the pane, with jump links under
+   Settings and the Advanced switch at the sidebar's foot. Phones: see the
+   media block below. */
+.rw-app .log-dlg .dlg-frame.console {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
 }
-/* Close shares the rail's row but not its baseline - sitting it on the rule
-   would read as one more tab. Every other control moved to the bar below.
-   It also drops the box every other dialog's close wears: in a rail of bare
-   text tabs the border was the only chrome on screen, so a 15px glyph rattling
-   inside it read as an empty frame rather than a control. Bare, at the tabs'
-   own weight, it belongs to the rail. The touch halo still carries it past
-   44px. */
-.rw-app .log-dlg .dlg-head > .dlg-x {
+.rw-app .console-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  padding: var(--sp-l) var(--sp-s) var(--sp-m);
+  overflow: auto;
+  background: var(--plate-2);
+  border-inline-end: 1px solid var(--seam-soft);
+}
+.rw-app .console-nav-title {
+  padding-inline: 10px;
+  margin: 0 0 var(--sp-s);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.rw-app .console-back,
+.rw-app .console-edge,
+.rw-app .console-tab-short {
+  display: none;
+}
+/* The tabs join the sidebar's own column so the jump links can sit right under
+   Settings. Only the selected tab is tabbable (roving tabindex), so focus still
+   reaches the jump links straight after Settings, the order they are seen in. */
+.rw-app .console-tabs {
+  display: contents;
+}
+.rw-app .console-tab[data-logtab="settings"] {
+  order: 1;
+}
+.rw-app .console-tab {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  order: 3;
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  text-align: start;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-m);
+}
+.rw-app .console-tab svg {
+  flex: none;
+  width: 17px;
+  height: 17px;
+}
+.rw-app .console-tab[aria-selected="true"] {
+  color: var(--ink);
+  background: var(--plate);
+  box-shadow: inset 0 0 0 1px var(--seam);
+}
+.rw-app .console-tab[aria-selected="true"] svg {
+  color: var(--thread-text);
+}
+@media (hover: hover) {
+  .rw-app .console-tab:not([aria-selected="true"]):hover {
+    background: color-mix(in oklab, var(--ink) 6%, transparent);
+  }
+  .rw-app .console-jump:hover {
+    color: var(--ink);
+  }
+}
+.rw-app .console-tab:not([aria-selected="true"]):active {
+  background: color-mix(in oklab, var(--ink) 10%, transparent);
+}
+.rw-app .console-jumps {
+  order: 2;
+  padding: 0;
+  margin: 0 0 var(--sp-s);
+  list-style: none;
+}
+.rw-app .console-jump {
+  display: block;
+  width: 100%;
+  padding: 4px 10px 4px 37px;
+  font-size: 0.8rem;
+  color: var(--ink-3);
+  text-align: start;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-s);
+}
+.rw-app .console-jump:active {
+  color: var(--ink);
+}
+.rw-app .console-nav-foot {
+  display: grid;
+  gap: var(--sp-s);
+  order: 4;
+  padding-block-start: var(--sp-m);
+  margin-block-start: auto;
+  border-block-start: 1px solid var(--seam-soft);
+}
+.rw-app .console-build {
+  padding-inline: 10px;
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  color: var(--ink-3);
+}
+.rw-app .console-advanced {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 10px;
+  color: var(--ink);
+  text-align: start;
+  cursor: pointer;
+  background: var(--plate);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-m);
+}
+.rw-app .console-advanced-text {
+  display: grid;
+  min-width: 0;
+}
+.rw-app .console-advanced-label {
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+.rw-app .console-advanced-hint {
+  font-size: 0.7rem;
+  color: var(--ink-3);
+}
+.rw-app .console-switch {
+  position: relative;
   flex: none;
   width: 34px;
-  height: 34px;
-  margin-block-end: var(--sp-s);
-  border-color: transparent;
+  height: 20px;
+  background: var(--seam-strong);
+  border-radius: 999px;
+  transition: background 0.15s;
 }
-.rw-app .log-dlg .dlg-head > .dlg-x svg {
-  width: 18px;
-  height: 18px;
+.rw-app .console-switch::after {
+  position: absolute;
+  inset-block-start: 3px;
+  inset-inline-start: 3px;
+  width: 14px;
+  height: 14px;
+  content: "";
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+  transition: transform 0.15s var(--ease);
 }
-.rw-app .dlg-x-label {
+.rw-app .console-advanced[aria-checked="true"] .console-switch {
+  background: var(--thread);
+}
+.rw-app .console-advanced[aria-checked="true"] .console-switch::after {
+  transform: translateX(14px);
+}
+.rw-app .console-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.rw-app .log-dlg .console-head {
+  align-items: center;
+  padding-block: var(--sp-m);
+  padding-inline: var(--sp-l) var(--sp-m);
+}
+.rw-app .console-head .console-advanced {
   display: none;
+}
+.rw-app .console-titles {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.rw-app .console-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.rw-app .console-description {
+  margin: 1px 0 0;
+  font-size: 0.8rem;
+  color: var(--ink-3);
+}
+.rw-app .console-hidden-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-xs) var(--sp-m);
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  margin: var(--sp-l) 0 0;
+  font-size: 0.8rem;
+  color: var(--ink-3);
+  border: 1px dashed var(--seam-strong);
+  border-radius: var(--r-m);
+}
+.rw-app .storage-body > .console-hidden-note {
+  margin: var(--sp-l);
+}
+.rw-app .console-hidden-show {
+  padding: 0;
+  font-weight: 650;
+  color: var(--thread-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+}
+.rw-app .about-ident {
+  gap: 2px;
+}
+.rw-app .about-name {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.rw-app .about-tagline {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--ink-3);
+}
+.rw-app .about-links {
+  display: grid;
+  border-block-start: 1px solid var(--seam-soft);
+}
+.rw-app .about-link {
+  display: flex;
+  gap: var(--sp-m);
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 0 2px;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-block-end: 1px solid var(--seam-soft);
+}
+.rw-app .about-link svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--ink-3);
+}
+@media (hover: hover) {
+  .rw-app .about-link:hover {
+    color: var(--thread-text);
+  }
+}
+.rw-app .about-link:active {
+  color: var(--thread-text);
+}
+
+/* Phones: a full-screen page that slides in from the right edge, where the
+   dock's › Settings button points, and its sections in a bar at the foot led by
+   ‹ Tools, the way back. Dragging that bar or the left edge rightward follows
+   the finger (log-dialog.tsx). */
+@media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
+  .rw-app .log-dlg .dlg-frame.console {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  .rw-app .log-dlg .dlg-frame {
+    opacity: 1;
+    transform: translateX(100%);
+    transition: transform 0.26s var(--ease);
+  }
+  .rw-app .log-dlg[open] .dlg-frame {
+    transform: none;
+  }
+  .rw-app .log-dlg .dlg-frame.is-dragging {
+    transition: none;
+  }
+  .rw-app .console-pane {
+    flex: 1 1 auto;
+  }
+  .rw-app .console-nav {
+    display: grid;
+    flex: none;
+    grid-template-columns: 58px repeat(5, minmax(0, 1fr));
+    gap: 0;
+    order: 2;
+    padding: 4px max(var(--sp-s), var(--safe-r)) 4px max(var(--sp-s), var(--safe-l));
+    overflow: visible;
+    touch-action: pan-y;
+    border-block-start: 1px solid var(--seam-soft);
+    border-inline-end: 0;
+  }
+  .rw-app .console-nav-title,
+  .rw-app .console-jumps,
+  .rw-app .console-nav-foot,
+  .rw-app .console-head .dlg-x {
+    display: none;
+  }
+  .rw-app .console-tabs {
+    display: contents;
+  }
+  .rw-app .console-back,
+  .rw-app .console-tab {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: center;
+    justify-content: center;
+    min-block-size: 48px;
+    padding: 6px 2px 4px;
+    font-size: 0.62rem;
+    font-weight: 650;
+    color: var(--ink-3);
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    border-radius: var(--r-s);
+    box-shadow: none;
+  }
+  .rw-app .console-back {
+    margin-inline-end: 4px;
+    color: var(--ink-2);
+    border-inline-end: 1px solid var(--seam);
+    border-radius: 0;
+  }
+  .rw-app .console-back svg,
+  .rw-app .console-tab svg {
+    width: 20px;
+    height: 20px;
+  }
+  /* The full name stays the tab's accessible name; the bar shows the short one. */
+  .rw-app .console-tab-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    white-space: nowrap;
+    clip-path: inset(50%);
+  }
+  .rw-app .console-tab-short {
+    display: block;
+    max-inline-size: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .rw-app .console-tab[aria-selected="true"] {
+    color: var(--thread-text);
+    background: transparent;
+    box-shadow: none;
+  }
+  .rw-app .console-tab[aria-selected="true"]::before {
+    position: absolute;
+    inset-block-start: -5px;
+    inset-inline: 8px;
+    block-size: 2px;
+    content: "";
+    background: var(--thread);
+    border-radius: 1px;
+  }
+  .rw-app .console-head .console-advanced {
+    display: flex;
+    width: auto;
+    padding: 4px 6px 4px 12px;
+    border-radius: 999px;
+  }
+  .rw-app .console-head .console-advanced-hint {
+    display: none;
+  }
+  .rw-app .console-head .console-advanced-label {
+    white-space: nowrap;
+  }
+  .rw-app .console-edge {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    z-index: 2;
+    display: block;
+    inline-size: 20px;
+    touch-action: pan-y;
+  }
+}
+@starting-style {
+  @media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
+    .rw-app .log-dlg[open] .dlg-frame {
+      opacity: 1;
+      transform: translateX(100%);
+    }
+  }
 }
 .rw-app .log-actions {
   display: flex;
@@ -878,80 +1246,6 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
   animation: none !important;
 }
 
-/* ── the weft sub-rail ──
-   One pattern for every second-level nav: visually subordinate to the mode rail
-   (an underline weft, not a filled pill), scrolling horizontally when cramped so
-   it never wraps and never vanishes. The status/logs dialog wears it as its
-   header - the tabs are the title. */
-.rw-app .subrail {
-  position: relative;
-  display: flex;
-  flex: 1 1 0;
-  gap: var(--sp-xs);
-  min-inline-size: 0;
-  overflow-x: auto;
-  /* Keeps a part-scrolled tab from resting half-cut, so the rail always reads as
-     whole tabs and the cut edge is never mistaken for the end of the list. */
-  scroll-snap-type: inline proximity;
-  scrollbar-width: none;
-}
-.rw-app .subrail::-webkit-scrollbar {
-  display: none;
-}
-.rw-app .dialog-subrail {
-  padding: 0;
-  background: transparent;
-}
-.rw-app .subtab {
-  display: inline-flex;
-  gap: var(--sp-s);
-  align-items: center;
-  min-height: 36px;
-  padding: 4px 12px 7px;
-  font-size: 0.8rem;
-  font-weight: 650;
-  color: var(--ink-3);
-  white-space: nowrap;
-  appearance: none;
-  cursor: pointer;
-  scroll-snap-align: start;
-  background: transparent;
-  border: 0;
-  border-block-end: 3px solid transparent;
-  border-radius: var(--r-s) var(--r-s) 0 0;
-  transition:
-    color 0.18s,
-    background-color 0.18s;
-}
-.rw-app .subtab svg {
-  flex: none;
-  width: 15px;
-  height: 15px;
-}
-/* The weft, doubled: a tinted riser standing on a thicker rule. A bare label
-   with a hairline under it left the tabs reading as running text - at a glance
-   there was no telling the rail from the sentence above it. The riser gives the
-   selected tab a body without turning the rail into filled pills, which would
-   put it in competition with the masthead's mode rail. */
-.rw-app .subtab[aria-selected="true"] {
-  color: var(--thread-text);
-  background: color-mix(in oklab, var(--thread) 15%, transparent);
-  border-block-end-color: var(--thread);
-}
-@media (hover: hover) {
-  .rw-app .subtab:not([aria-selected="true"]):hover {
-    color: var(--ink);
-  }
-}
-.rw-app .subtab:not([aria-selected="true"]):active {
-  color: var(--ink);
-}
-@media (forced-colors: active) {
-  .rw-app .subtab[aria-selected="true"] {
-    border-block-end-color: SelectedItem;
-  }
-}
-
 /* ── status tab ── */
 /* The tab is a readout, so it is built the way the workbench builds a form:
    plates carrying their own woven seam, not label rows loose on the dialog. */
@@ -1319,11 +1613,27 @@ html.vt-mode .drop:has(#ppf-undo-input-picker) {
   flex-wrap: wrap;
   gap: var(--sp-xs);
 }
+/* The heading text gives way; the two actions keep one row at their own width,
+   one height, so "Import save" never breaks onto a second line beside a square
+   refresh button. */
+.rw-app .emulator-saves-heading {
+  align-items: flex-start;
+}
+.rw-app .emulator-saves-heading > div:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.rw-app .emulator-saves-actions {
+  flex: none;
+  flex-wrap: nowrap;
+}
 .rw-app .emulator-saves-actions .btn {
-  min-height: 30px;
+  height: 32px;
+  min-height: 32px;
+  white-space: nowrap;
 }
 .rw-app .emulator-saves-actions .btn:first-child {
-  width: 30px;
+  width: 32px;
   padding-inline: 0;
 }
 .rw-app .emulator-saves-actions svg,

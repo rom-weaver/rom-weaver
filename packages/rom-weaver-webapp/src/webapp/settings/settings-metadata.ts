@@ -270,6 +270,23 @@ const SETTINGS_PANEL_SECTIONS: ReadonlyArray<{ fields: SettingsFieldKey[]; title
   { fields: ["rvzBlockSize"], title: "RVZ" },
 ];
 
+/** Anchor id of a settings panel group; the console's jump links scroll to it. */
+const settingsGroupId = (title: string) => `settings-group-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+
+/**
+ * Fields the console hides until Advanced is on: tuning knobs whose
+ * defaults suit almost everyone. Hidden fields keep their saved values.
+ */
+const ADVANCED_SETTINGS_FIELDS: ReadonlySet<SettingsFieldKey> = new Set<SettingsFieldKey>([
+  "threads",
+  "zipCodec",
+  "sevenZipCodec",
+  "rvzCodec",
+  "chdCreateCdCodecs",
+  "chdCreateDvdCodecs",
+  "rvzBlockSize",
+]);
+
 const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<K> } = {
   betaToolsEnabled: {
     defaultValue: false,
@@ -779,7 +796,9 @@ export type {
   StorageLike,
 };
 export {
+  ADVANCED_SETTINGS_FIELDS,
   copySettings,
+  settingsGroupId,
   SETTINGS_PANEL_SECTIONS,
   getCompressionProfileFromIndex,
   getDefaultSettings,

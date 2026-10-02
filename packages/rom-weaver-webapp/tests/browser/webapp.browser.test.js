@@ -146,6 +146,9 @@ beforeEach(() => {
   document.documentElement.dataset.offlineLayout = "strip";
   mountedRoot?.unmount?.();
   mountedRoot = null;
+  // A console section hash reopens the console on mount, so a test that left
+  // it open must not open it for the next one.
+  if (window.location.hash) window.history.replaceState(null, "", window.location.pathname + window.location.search);
   rootElement = document.createElement("div");
   rootElement.id = "webapp-root";
   rootElement.setAttribute("aria-busy", "true");
@@ -206,10 +209,10 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
 
 test("WebappRoot keeps the beta workflows out of the nav while the setting is off", async () => {
   mountWebappRoot();
-  // The dock keeps its three workflow slots plus Find and Menu at every setting.
+  // The dock keeps its three workflow slots plus Find, Menu and Settings at every setting.
   await expect
     .poll(() => [...document.querySelectorAll(".dock .dock-tab")].map((tab) => tab.textContent))
-    .toEqual(["Apply", "Create", "Find", "Test", "Menu"]);
+    .toEqual(["Apply", "Create", "Find", "Test", "Menu", "Settings"]);
   expect(navRow("PPF undo")).toBeUndefined();
   expect(navRow("Identify")).toBeTruthy();
   navRow("Identify").click();
@@ -290,6 +293,7 @@ test("mobile Docs keeps the workflow dock and owns a separate navigation dialog"
     "Find",
     "Test",
     "Menu",
+    "Settings",
   ]);
   const trigger = document.querySelector(".docs-browse-trigger");
   expect(document.querySelector(".docs-mobile-toolbar a")).toBeNull();
@@ -398,13 +402,20 @@ test("enabled PPF undo and Identify are named in the nav on desktop and phone", 
     expect(document.querySelector(`.dock-tab[data-mode="identify"]`)).toBeNull();
     expect(document.querySelector(`.dock-tab[data-mode="ppf-undo"]`)).toBeNull();
     expect(getComputedStyle(document.querySelector(".panel-view-toggle")).display).not.toBe("none");
-    // Mobile Status stays in the dock; other destinations keep their groups.
+    // On a phone This device sits behind the dock's Settings link; other
+    // destinations keep their groups.
     if (width < 1000) await openMenuSheet();
-    for (const name of ["Docs", "Settings", "Storage", "Logs", "Support"]) {
+    for (const name of ["Docs", "Support"]) {
       expect(navRow(name, scope)).toBeTruthy();
     }
-    if (width < 1000) expect(document.querySelector(".phone-runtime .sub-status")).toBeTruthy();
-    else expect(navRow("Status", scope)).toBeTruthy();
+    if (width < 1000) {
+      expect(document.querySelector(".phone-runtime .sub-status")).toBeTruthy();
+      expect(document.querySelector(".dock-settings")).toBeTruthy();
+      expect(navRow("Logs", scope)).toBeFalsy();
+    } else {
+      for (const name of ["Offline app", "Saves & storage", "Logs", "Settings"])
+        expect(navRow(name, scope)).toBeTruthy();
+    }
   }
   await page.viewport(1280, 900);
 });
@@ -655,55 +666,68 @@ test("WebappRoot resolves an auto thread count the same way the Threads setting 
   }
 });
 
-test("WebappRoot names diagnostics in the nav - the Log dialog owns them", async () => {
-  // Status, Storage and Logs are each their own row; the dialog they open is
-  // still the one place the detail lives.
+test("WebappRoot names diagnostics in the nav - the settings console owns them", async () => {
+  // Offline app, Saves & storage and Logs are each their own row; the console
+  // they open is still the one place the detail lives.
   mountWebappRoot();
   await expect.poll(() => navRow("Logs")).toBeTruthy();
-  expect(navRow("Status")).toBeTruthy();
-  expect(navRow("Storage")).toBeTruthy();
+  expect(navRow("Offline app")).toBeTruthy();
+  expect(navRow("Saves & storage")).toBeTruthy();
   await expect.element(page.getByRole("button", { name: "Copy console logs" })).not.toBeInTheDocument();
   await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).not.toBeInTheDocument();
 });
 
-test("navigation Status keeps a plain label and opens the current Status view", async () => {
+test("navigation Offline app keeps a plain label and opens the current offline view", async () => {
   await page.viewport(1280, 900);
   mountWebappRoot({ updateReady: true });
-  await expect.poll(() => navRow("Status")).toBeTruthy();
-  expect(navRow("Status").querySelector(".nav-row-label").textContent).toBe("Status");
-  expect(navRow("Status").querySelector(".nav-row-state")).toBeNull();
-  navRow("Status").click();
+  await expect.poll(() => navRow("Offline app")).toBeTruthy();
+  expect(navRow("Offline app").querySelector(".nav-row-label").textContent).toBe("Offline app");
+  expect(navRow("Offline app").querySelector(".nav-row-state")).toBeNull();
+  navRow("Offline app").click();
   await expect
-    .poll(() => document.querySelector(".log-dlg[open] #logpanel-status .sw-legend [data-current]"))
+    .poll(() => document.querySelector(".log-dlg[open] #logpanel-offline .sw-legend [data-current]"))
     .toBeTruthy();
   expect(
-    document.querySelector(".log-dlg #logpanel-status .sw-legend [data-current] .sw-legend-label")?.textContent,
+    document.querySelector(".log-dlg #logpanel-offline .sw-legend [data-current] .sw-legend-label")?.textContent,
   ).toContain("Update available");
 });
 
-test("mobile diagnostics keep the Storage tab on one tab row", async () => {
+test("the phone console keeps Tools and its five sections on one bar at the foot", async () => {
   const height = 844;
   await page.viewport(393, height);
   mountWebappRoot();
 
-  await openMenuSheet();
-  navRow("Status", ".menu-sheet").click();
-  await expect.poll(() => document.querySelector(".log-dlg .dialog-subrail")).toBeTruthy();
+  await expect.poll(() => document.querySelector(".dock-settings")).toBeTruthy();
+  document.querySelector(".dock-settings").click();
+  await expect.poll(() => document.querySelector(".log-dlg[open] .console-nav")).toBeTruthy();
 
-  const rail = document.querySelector(".log-dlg .dialog-subrail");
-  const tabs = Array.from(document.querySelectorAll(".log-dlg .dialog-subrail .subtab"));
-  expect(tabs.map((tab) => tab.textContent)).toEqual(["Settings", "Status", "Logs", "Storage"]);
-  expect(new Set(tabs.map((tab) => tab.getBoundingClientRect().top)).size).toBe(1);
-  expect(rail?.scrollHeight).toBe(rail?.clientHeight);
-  expect(document.querySelector('[data-logtab="test"]')).toBeNull();
-  expect(document.querySelector("#logpanel-status .emulator-prefetch-panel")).toBeNull();
+  const nav = document.querySelector(".log-dlg .console-nav");
+  const items = [nav.querySelector(".console-back"), ...nav.querySelectorAll(".console-tab")];
+  const visibleLabel = (item) => item.querySelector(item.matches(".console-back") ? "span" : ".console-tab-short");
+  expect(items.map((item) => visibleLabel(item)?.textContent)).toEqual([
+    "Tools",
+    "Settings",
+    "Offline",
+    "Storage",
+    "Logs",
+    "About",
+  ]);
+  expect(new Set(items.map((item) => Math.round(item.getBoundingClientRect().top))).size).toBe(1);
+  expect(nav.getBoundingClientRect().bottom).toBeGreaterThan(height - 100);
+  expect(nav.querySelector(".console-nav-foot")?.getBoundingClientRect().height ?? 0).toBe(0);
 
+  // Storage shows the saves; the raw OPFS listing waits for Advanced.
   document.querySelector('[data-logtab="storage"]')?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  await expect.poll(() => document.querySelector("#logpanel-storage .emulator-saves-panel")).toBeTruthy();
+  expect(document.querySelector("#logpanel-storage .opfs-inspector")).toBeNull();
+  document.querySelector("#console-advanced-phone").click();
   await expect.poll(() => document.querySelector("#logpanel-storage .opfs-inspector")).toBeTruthy();
-  expect(document.querySelector("#logpanel-storage .emulator-saves-panel")).toBeNull();
-  expect(document.querySelector("#logpanel-storage .storage-settings-field")).toBeNull();
-  expect(document.querySelector("#logpanel-storage .emulator-prefetch-panel")).toBeNull();
   expect(document.querySelector("#storage-opfs-title")?.textContent).toBe("OPFS");
+  document.querySelector("#console-advanced-phone").click();
+
+  // ‹ Tools slides the page out and closes the console.
+  nav.querySelector(".console-back").click();
+  await expect.poll(() => document.querySelector(".log-dlg")).toBeNull();
   await page.viewport(1280, 900);
 });
 
@@ -733,19 +757,12 @@ test("the phone header carries device controls and project links, and Menu carri
   }
 
   await openMenuSheet();
-  for (const name of [
-    "Status",
-    "Storage",
-    "Logs",
-    "Settings",
-    "Theme",
-    "Accent",
-    "Home",
-    "Docs",
-    "GitHub",
-    "Support",
-  ]) {
+  for (const name of ["Home", "Docs", "GitHub", "Support"]) {
     expect(navRow(name, ".menu-sheet")).toBeTruthy();
+  }
+  // This device lives behind the dock's Settings link, not in Menu.
+  for (const name of ["Offline app", "Saves & storage", "Logs", "Settings", "Theme", "Accent"]) {
+    expect(navRow(name, ".menu-sheet")).toBeFalsy();
   }
   expect(document.querySelector(".phone-runtime .sub-status-text").textContent).toBe(
     document.querySelector(".desktop-runtime .sub-status-text").textContent,
@@ -755,7 +772,7 @@ test("the phone header carries device controls and project links, and Menu carri
   expect(navRow("Support", ".menu-sheet").getAttribute("href")).toBe("https://ko-fi.com/brandonocasey");
   // Support is the one row that is not neutral; every other row shares one ink.
   const support = navRow("Support", ".menu-sheet");
-  const neutral = getComputedStyle(navRow("Storage", ".menu-sheet")).color;
+  const neutral = getComputedStyle(navRow("Docs", ".menu-sheet")).color;
   expect(getComputedStyle(support).color).not.toBe(neutral);
   expect(getComputedStyle(support.querySelector("svg")).color).toBe(getComputedStyle(support).color);
   for (const row of document.querySelectorAll(".menu-sheet .nav-row")) {
@@ -763,7 +780,7 @@ test("the phone header carries device controls and project links, and Menu carri
     expect(getComputedStyle(row).color).toBe(neutral);
   }
 
-  navRow("Accent", ".menu-sheet").click();
+  document.querySelector(".shell-head-tools .accent-tool").click();
   await expect.element(page.getByRole("radiogroup", { name: "Accent" })).toBeInTheDocument();
 
   const buildTag = document.querySelector(".build-tag");
@@ -799,17 +816,14 @@ test("the Menu sheet stays on screen and scrolls on a short screen", async () =>
   expect(document.querySelector(".phone-runtime .sub-status-text")?.textContent?.trim()).not.toBe("");
   expect(sheet.querySelector(".dock-find")).toBeNull();
 
-  navRow("Logs", ".menu-sheet").click();
+  document.querySelector(".dock-settings").click();
   await expect.element(page.getByRole("dialog")).toBeInTheDocument();
   await page.viewport(1280, 900);
 });
 
 test("Theme and Accent float above the navigation without moving its rows", async () => {
-  for (const [width, height] of [
-    [320, 480],
-    [390, 664],
-    [1280, 900],
-  ]) {
+  // Only the sidebar carries them as rows; the phone keeps them in its header.
+  for (const [width, height] of [[1280, 900]]) {
     await page.viewport(width, height);
     mountWebappRoot();
     const scope = width < 1000 ? ".menu-sheet" : ".side-nav";
@@ -865,7 +879,7 @@ test("the Menu sheet uses its content height and stays above the dock", async ()
   expect(sheet.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
   expect(body.scrollHeight).toBe(body.clientHeight);
   expect(sheet.getBoundingClientRect().bottom).toBeCloseTo(dock.getBoundingClientRect().top, 1);
-  await page.viewport(390, 520);
+  await page.viewport(390, 420);
   expect(sheet.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
   expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
   expect(sheet.getBoundingClientRect().bottom).toBeCloseTo(dock.getBoundingClientRect().top, 1);

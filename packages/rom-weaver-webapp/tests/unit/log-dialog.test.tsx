@@ -11,6 +11,7 @@ import {
   queryOfflineCachedFiles,
   setOfflineWarmupEnabled,
 } from "../../src/webapp/pwa/offline-warmup-client.ts";
+import { setAdvancedSettings } from "../../src/webapp/advanced-settings.ts";
 import { cachedFileTotals, LogDialog, sortCachedFiles } from "../../src/webapp/components/log-dialog.tsx";
 import type { OfflineCachedFile } from "../../src/webapp/offline-warmup.ts";
 
@@ -104,6 +105,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  setAdvancedSettings(false);
   offlineCopyStore.reset();
   vi.mocked(listBrowserOpfs).mockClear();
   vi.mocked(queryOfflineCachedFiles).mockClear();
@@ -321,6 +323,7 @@ describe("log download", () => {
   });
 
   it("names the OPFS listing's file", async () => {
+    setAdvancedSettings(true);
     vi.mocked(listBrowserOpfs).mockResolvedValue([{ kind: "file", path: "/user-files/game.iso", size: 42 }]);
     const { container } = renderDialog({ initialTab: "storage" });
 
@@ -335,6 +338,9 @@ describe("log download", () => {
 });
 
 describe("OPFS inspector", () => {
+  // The raw listing is an Advanced view.
+  beforeEach(() => setAdvancedSettings(true));
+
   it("re-reads the listing when refresh is pressed", async () => {
     const { container } = renderDialog({ initialTab: "storage" });
     await waitFor(() => expect(listBrowserOpfs).toHaveBeenCalledTimes(1));
@@ -394,7 +400,7 @@ describe("manual offline installation", () => {
     const onPreviewRuntimeStateChange = vi.fn();
     const view = renderDialog({ onPreviewRuntimeStateChange });
     const select = view.getByLabelText("Offline status preview");
-    expect(select.closest("#logpanel-status")).toBeTruthy();
+    expect(select.closest("#logpanel-offline")).toBeTruthy();
     expect(select.closest(".sw-status-cell")).toBeNull();
     expect(select.closest(".status-group")?.querySelector("h3")?.textContent).toBe("Development");
     fireEvent.change(select, { target: { value: "ready" } });
@@ -528,6 +534,9 @@ describe("manual offline installation", () => {
 });
 
 describe("cached file inventory", () => {
+  // The cached-file list is an Advanced view.
+  beforeEach(() => setAdvancedSettings(true));
+
   it("keeps the cached-file drawer with the offline controls", () => {
     const { container } = renderDialog();
     const section = container.querySelector(".sw-status-cell")?.closest(".status-group");
@@ -700,14 +709,14 @@ describe("status offline row", () => {
   });
 });
 
-describe("tab rail keyboard movement", () => {
-  it("walks to the first and last tab with Home and End", () => {
+describe("section list keyboard movement", () => {
+  it("walks to the first and last section with Home and End", () => {
     const onTabChange = vi.fn();
     const { container } = renderDialog({ onTabChange });
-    const rail = container.querySelector(".dialog-subrail") as HTMLElement;
+    const rail = container.querySelector(".console-tabs") as HTMLElement;
 
     fireEvent.keyDown(rail, { key: "End" });
-    expect(onTabChange).toHaveBeenLastCalledWith("storage");
+    expect(onTabChange).toHaveBeenLastCalledWith("about");
 
     fireEvent.keyDown(rail, { key: "Home" });
     expect(onTabChange).toHaveBeenLastCalledWith("settings");
@@ -717,13 +726,25 @@ describe("tab rail keyboard movement", () => {
     const onTabChange = vi.fn();
     const { container } = renderDialog({ onTabChange });
 
-    fireEvent.keyDown(container.querySelector(".dialog-subrail") as HTMLElement, { key: "a" });
+    fireEvent.keyDown(container.querySelector(".console-tabs") as HTMLElement, { key: "a" });
 
     expect(onTabChange).not.toHaveBeenCalled();
   });
 });
 
 describe("settings deep link", () => {
+  it("turns Advanced on for a field it hides", async () => {
+    const { container } = renderDialog({
+      initialTab: "settings",
+      settingsFocusHint: { fieldId: "settings-worker-threads", token: 1 },
+      settingsPanel: <input id="settings-worker-threads" />,
+    });
+
+    await waitFor(() =>
+      expect(container.querySelector("#console-advanced-desktop")?.getAttribute("aria-checked")).toBe("true"),
+    );
+  });
+
   it("focuses the field a deep link names", async () => {
     const { container } = renderDialog({
       initialTab: "settings",

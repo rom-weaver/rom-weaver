@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, within } from "@testing-library/react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
@@ -124,8 +124,8 @@ describe("Masthead", () => {
       "Test",
       "Trim",
       "Saves",
-      "Status",
-      "Storage",
+      "Offline app",
+      "Saves & storage",
       "Logs",
       "Settings",
       "Theme",
@@ -165,7 +165,7 @@ describe("Masthead", () => {
     expect(onSelectTab).toHaveBeenCalledWith("creator");
   });
 
-  it("keeps mobile Status in the dock and other sidebar destinations in Menu", () => {
+  it("lists every sidebar destination but This device in the phone Menu", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
     const sheet = container.querySelector(".menu-sheet") as HTMLElement;
     expect(sheet.getAttribute("aria-label")).toBe("Menu");
@@ -174,12 +174,17 @@ describe("Masthead", () => {
 
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
 
-    expect(rowsOf(sheet).toSorted()).toEqual(rowsOf(container.querySelector(".side-nav")).toSorted());
+    // This device lives behind the dock's Settings button on a phone.
+    const device = ["Offline app", "Saves & storage", "Logs", "Settings", "Theme", "Accent"];
+    expect(rowsOf(sheet).toSorted()).toEqual(
+      rowsOf(container.querySelector(".side-nav"))
+        .filter((row) => !device.includes(row))
+        .toSorted(),
+    );
     expect(Array.from(sheet.querySelectorAll(".nav-group-label")).map((heading) => heading.textContent)).toEqual([
       "Patches",
       "ROMs",
       "Files",
-      "This device",
       "Project",
     ]);
     expect(sheet.querySelector(".sub-status")).toBeNull();
@@ -188,12 +193,15 @@ describe("Masthead", () => {
     );
   });
 
-  it("docks three workflows plus Find and Menu", () => {
+  it("docks three workflows plus Find, Menu and the Settings link", () => {
     const onSelectTab = vi.fn();
-    const { container } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
+    const onOpenSettings = vi.fn();
+    const { container } = render(
+      withSettings(<Masthead {...mastheadProps} onOpenSettings={onOpenSettings} onSelectTab={onSelectTab} />),
+    );
     const dockNav = container.querySelector(".dock") as HTMLElement;
     const slots = Array.from(dockNav.querySelectorAll(".dock-tab"));
-    expect(slots.map((slot) => slot.textContent)).toEqual(["Apply", "Create", "Find", "Test", "Menu"]);
+    expect(slots.map((slot) => slot.textContent)).toEqual(["Apply", "Create", "Find", "Test", "Menu", "Settings"]);
     expect(slots[0]?.getAttribute("aria-current")).toBe("page");
     expect(container.querySelector(".phone-runtime .sub-status")).toBeTruthy();
 
@@ -221,6 +229,24 @@ describe("Masthead", () => {
 
     fireEvent.click(dockNav.querySelector('[data-mode="test"]') as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("test");
+
+    // Settings closes the sheet and opens the console.
+    fireEvent.click(menu);
+    fireEvent.click(dockNav.querySelector(".dock-settings") as HTMLButtonElement);
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+    expect(sheet.hidden).toBe(true);
+  });
+
+  it("opens the console on a leftward swipe across the dock, not on a vertical drag", () => {
+    const onOpenSettings = vi.fn();
+    const { container } = render(withSettings(<Masthead {...mastheadProps} onOpenSettings={onOpenSettings} />));
+    const dockNav = container.querySelector(".dock") as HTMLElement;
+    fireEvent.pointerDown(dockNav, { clientX: 300, clientY: 700, isPrimary: true });
+    fireEvent.pointerUp(dockNav, { clientX: 290, clientY: 600, isPrimary: true });
+    expect(onOpenSettings).not.toHaveBeenCalled();
+    fireEvent.pointerDown(dockNav, { clientX: 300, clientY: 700, isPrimary: true });
+    fireEvent.pointerUp(dockNav, { clientX: 180, clientY: 705, isPrimary: true });
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
 
   it("spends Escape on the sheet when the open popover is the chrome's, not the sheet's", () => {
@@ -236,29 +262,13 @@ describe("Masthead", () => {
     expect(sheet.hidden).toBe(true);
   });
 
-  it("spends Escape on the sheet's own popover before the sheet", () => {
-    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
-    fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
-    const sheet = container.querySelector(".menu-sheet") as HTMLElement;
-    fireEvent.click(sheet.querySelector(".nav-tool-anchor .accent-tool") as HTMLButtonElement);
-    expect(sheet.querySelector(".accent-tray")).toBeTruthy();
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(sheet.querySelector(".accent-tray")).toBeNull();
-    expect(sheet.hidden).toBe(false);
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(sheet.hidden).toBe(true);
-  });
-
   it("closes the Menu sheet when a row inside it routes", () => {
     const onSelectTab = vi.fn();
-    const onOpenStorage = vi.fn();
-    const { container } = render(
-      withSettings(<Masthead {...mastheadProps} onOpenStorage={onOpenStorage} onSelectTab={onSelectTab} />),
-    );
+    const { container } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
     const sheet = container.querySelector(".menu-sheet") as HTMLElement;
-    fireEvent.click(within(sheet).getByRole("button", { name: "Storage" }));
-    expect(onOpenStorage).toHaveBeenCalledTimes(1);
+    fireEvent.click(sheet.querySelector('.nav-row[href="trim"]') as HTMLAnchorElement);
+    expect(onSelectTab).toHaveBeenCalledWith("trim");
     expect(sheet.hidden).toBe(true);
   });
 
@@ -407,23 +417,29 @@ describe("Masthead", () => {
     });
     // One shared name would make the pickers one radio group and leave only one
     // of them able to show a choice.
-    expect(names.length).toBe(4);
-    expect(new Set(names).size).toBe(4);
+    // Desktop top bar, sidebar and phone header each carry one; the Menu sheet no longer does.
+    expect(names.length).toBe(3);
+    expect(new Set(names).size).toBe(3);
   });
 
-  it("puts theme and accent under This device in both navigation layouts", () => {
+  it("puts theme and accent under This device in the sidebar, and none in the phone Menu", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
     expect(container.querySelector(".nav-appearance")).toBeNull();
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
-    for (const scope of [".side-nav", ".menu-sheet"]) {
-      const device = Array.from(container.querySelectorAll(`${scope} .nav-group`)).find(
-        (group) => group.querySelector(".nav-group-label")?.textContent === "This device",
-      );
-      const expected = ["Status", "Storage", "Logs", "Settings", "Theme", "Accent"];
-      expect(Array.from(device?.querySelectorAll(".nav-row-label") ?? []).map((label) => label.textContent)).toEqual(
-        expected,
-      );
-    }
+    const device = Array.from(container.querySelectorAll(".side-nav .nav-group")).find(
+      (group) => group.querySelector(".nav-group-label")?.textContent === "This device",
+    );
+    expect(Array.from(device?.querySelectorAll(".nav-row-label") ?? []).map((label) => label.textContent)).toEqual([
+      "Offline app",
+      "Saves & storage",
+      "Logs",
+      "Settings",
+      "Theme",
+      "Accent",
+    ]);
+    // The phone header keeps its own theme and accent tools.
+    expect(container.querySelector(".menu-sheet .accent-tool")).toBeNull();
+    expect(container.querySelector(".shell-head-tools .accent-tool")).not.toBeNull();
     expect(container.querySelector(".menu-sheet .sub-status")).toBeNull();
     expect(container.querySelector(".phone-runtime .sub-status-text")?.textContent).toBe(
       container.querySelector(".desktop-runtime .sub-status-text")?.textContent,
@@ -528,9 +544,9 @@ describe("Masthead", () => {
     );
     expect(container.querySelector(".sub-status")?.getAttribute("data-sw")).toBe("update");
     const statusRow = Array.from(container.querySelectorAll<HTMLButtonElement>(".side-nav button.nav-row")).find(
-      (row) => row.querySelector(".nav-row-label")?.firstChild?.textContent === "Status",
+      (row) => row.querySelector(".nav-row-label")?.firstChild?.textContent === "Offline app",
     ) as HTMLButtonElement;
-    expect(statusRow.querySelector(".nav-row-label")?.firstChild?.textContent).toBe("Status");
+    expect(statusRow.querySelector(".nav-row-label")?.firstChild?.textContent).toBe("Offline app");
     expect(statusRow.querySelector(".nav-row-state")).toBeNull();
     fireEvent.click(statusRow);
     expect(onOpenStatus).toHaveBeenCalledTimes(2);
