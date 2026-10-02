@@ -1,7 +1,6 @@
 import {
   ArrowUp,
   Check,
-  ChevronLeft,
   ChevronRight,
   Copy,
   Download,
@@ -814,10 +813,6 @@ const ConsoleNav = ({
   return (
     <nav aria-label={localizer.message("ui.log.tabsLabel")} className="console-nav">
       <h2 className="console-nav-title">{localizer.message("ui.settings.title")}</h2>
-      <button aria-label={localizer.message("ui.tools.tools")} className="console-back" onClick={onClose} type="button">
-        <ChevronLeft aria-hidden="true" />
-        <span>{localizer.message("ui.console.back")}</span>
-      </button>
       <div
         aria-label={localizer.message("ui.log.tabsLabel")}
         aria-orientation="vertical"
@@ -863,6 +858,10 @@ const ConsoleNav = ({
           );
         })}
       </div>
+      <button className="console-close" onClick={onClose} type="button">
+        <X aria-hidden="true" />
+        <span>{localizer.message("ui.common.close")}</span>
+      </button>
       {tab === "settings" ? (
         <ul className="console-jumps">
           {visibleSettingsGroups(advanced).map((section) => (

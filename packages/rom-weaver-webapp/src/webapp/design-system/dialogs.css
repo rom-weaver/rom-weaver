@@ -172,7 +172,7 @@
   font-size: 1.05rem;
   font-weight: 700;
 }
-.rw-app .console-back,
+.rw-app .console-close,
 .rw-app .console-edge,
 .rw-app .console-tab-short {
   display: none;
@@ -417,8 +417,8 @@
 }
 
 /* Phones: a full-screen page that slides in from the right edge, where the
-   dock's › Settings button points, and its sections in a bar at the foot led by
-   ‹ Tools, the way back. Dragging that bar or the left edge rightward follows
+   dock's Controls button points, and its sections in a bar at the foot that
+   ends with Close. Dragging that bar or the left edge rightward follows
    the finger (log-dialog.tsx). */
 @media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
   .rw-app .log-dlg .dlg-frame.console {
@@ -443,7 +443,7 @@
   .rw-app .console-nav {
     display: grid;
     flex: none;
-    grid-template-columns: 58px repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr)) 58px;
     gap: 0;
     order: 2;
     padding: 4px max(var(--sp-s), var(--safe-r)) 4px max(var(--sp-s), var(--safe-l));
@@ -462,7 +462,7 @@
   .rw-app .console-tabs {
     display: contents;
   }
-  .rw-app .console-back,
+  .rw-app .console-close,
   .rw-app .console-tab {
     position: relative;
     display: flex;
@@ -481,13 +481,15 @@
     border-radius: var(--r-s);
     box-shadow: none;
   }
-  .rw-app .console-back {
-    margin-inline-end: 4px;
+  /* The tabs carry desktop sidebar orders, so Close needs a later one to end the bar. */
+  .rw-app .console-close {
+    order: 4;
+    margin-inline-start: 4px;
     color: var(--ink-2);
-    border-inline-end: 1px solid var(--seam);
+    border-inline-start: 1px solid var(--seam);
     border-radius: 0;
   }
-  .rw-app .console-back svg,
+  .rw-app .console-close svg,
   .rw-app .console-tab svg {
     width: 20px;
     height: 20px;

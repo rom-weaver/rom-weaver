@@ -686,7 +686,7 @@ test("navigation Offline app keeps a plain label and opens the current offline v
   ).toContain("Update available");
 });
 
-test("the phone console keeps Tools and its five sections on one bar at the foot", async () => {
+test("the phone console keeps its five sections and Close on one bar at the foot", async () => {
   const height = 844;
   await page.viewport(393, height);
   mountWebappRoot();
@@ -696,16 +696,19 @@ test("the phone console keeps Tools and its five sections on one bar at the foot
   await expect.poll(() => document.querySelector(".log-dlg[open] .console-nav")).toBeTruthy();
 
   const nav = document.querySelector(".log-dlg .console-nav");
-  const items = [nav.querySelector(".console-back"), ...nav.querySelectorAll(".console-tab")];
-  const visibleLabel = (item) => item.querySelector(item.matches(".console-back") ? "span" : ".console-tab-short");
+  const close = nav.querySelector(".console-close");
+  const items = [...nav.querySelectorAll(".console-tab"), close];
+  const visibleLabel = (item) => item.querySelector(item === close ? "span" : ".console-tab-short");
   expect(items.map((item) => visibleLabel(item)?.textContent)).toEqual([
-    "Menu",
     "Settings",
     "Offline",
     "Storage",
     "Logs",
     "About",
+    "Close",
   ]);
+  // Close takes the bottom-right corner, after every section.
+  expect(close.getBoundingClientRect().right).toBeGreaterThan(nav.getBoundingClientRect().right - 20);
   expect(new Set(items.map((item) => Math.round(item.getBoundingClientRect().top))).size).toBe(1);
   expect(nav.getBoundingClientRect().bottom).toBeGreaterThan(height - 100);
   expect(nav.querySelector(".console-nav-foot")?.getBoundingClientRect().height ?? 0).toBe(0);
@@ -719,8 +722,8 @@ test("the phone console keeps Tools and its five sections on one bar at the foot
   expect(document.querySelector("#storage-opfs-title")?.textContent).toBe("OPFS");
   document.querySelector("#console-advanced-phone").click();
 
-  // ‹ Tools slides the page out and closes the console.
-  nav.querySelector(".console-back").click();
+  // Close slides the page out and closes the console.
+  close.click();
   await expect.poll(() => document.querySelector(".log-dlg")).toBeNull();
   await page.viewport(1280, 900);
 });

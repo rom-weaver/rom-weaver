@@ -1105,7 +1105,6 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.console.advanced": msg({ id: "ui.console.advanced", message: "Advanced" }),
   "ui.console.advancedHint": msg({ id: "ui.console.advancedHint", message: "Codecs, threads, raw file lists" }),
-  "ui.console.back": msg({ id: "ui.console.back", message: "Menu" }),
   "ui.console.hiddenCachedFiles": msg({
     id: "ui.console.hiddenCachedFiles",
     message: "The cached file list is hidden.",

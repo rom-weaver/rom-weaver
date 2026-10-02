@@ -3810,11 +3810,6 @@ msgstr "Herramienta"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.console.back"
-msgstr "Menú"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.tools.tools"
 msgstr "Menú"
 
