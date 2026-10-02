@@ -448,7 +448,8 @@
     order: 2;
     padding: 4px max(var(--sp-s), var(--safe-r)) 4px max(var(--sp-s), var(--safe-l));
     overflow: visible;
-    touch-action: pan-y;
+    /* The bar never scrolls, so a diagonal swipe MUST NOT pan and bounce the page under the finger. */
+    touch-action: none;
     border-block-start: 1px solid var(--seam-soft);
     border-inline-end: 0;
   }

@@ -885,7 +885,8 @@ const ConsoleNav = ({
 /**
  * Phone only: drag the section bar or the page's left edge to the right to
  * close, the way a pushed page goes back. The frame follows the finger, and a
- * release past a third of the width, or a flick, finishes the close.
+ * release past a quarter of the width, or a light flick, finishes the close so
+ * a deliberate swipe does not spring back.
  */
 const PHONE_QUERY = "(max-width: 720px), (max-width: 860px) and (max-height: 520px)";
 // Matches the frame's slide transition in dialogs.css.
@@ -981,7 +982,7 @@ const useSwipeToClose = (frameRef: RefObject<HTMLDivElement | null>, onClose: ()
       if (!current?.on) return;
       suppressClick = true;
       const dx = event.clientX - current.x;
-      const closing = current.velocity > 0.4 || (current.velocity > -0.4 && dx > frame.clientWidth / 3);
+      const closing = current.velocity > 0.25 || (current.velocity > -0.25 && dx > frame.clientWidth / 4);
       logger.trace("console swipe released", { closing, dx, velocity: current.velocity });
       frame.classList.remove("is-dragging");
       if (closing) onClose();
