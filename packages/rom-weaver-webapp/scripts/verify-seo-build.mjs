@@ -439,12 +439,11 @@ for (const route of DOC_ROUTES) {
     route.slug === "docs" ? 1 : 0,
     `${route.slug} Overview is current only on the Docs index`,
   );
-  assertCount(
-    docsHtml,
-    `<a aria-current="page" href="/${route.slug}"`,
-    1,
-    `${route.slug} current guide in the navigation tree`,
+  const currentGuideLinks = [...docsHtml.matchAll(/<a\b[^>]*>/g)].filter(
+    ([tag]) => tag.includes('aria-current="page"') && tag.includes(`href="/${route.slug}"`),
   );
+  if (currentGuideLinks.length !== 1)
+    throw new Error(`${route.slug} has ${currentGuideLinks.length} current guide links; expected 1`);
   assertIncludes(
     docsHtml,
     '<button aria-expanded="false" aria-label="Theme: Match system" class="tool"',
