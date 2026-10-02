@@ -76,7 +76,7 @@ describe("the navigation both layouts share", () => {
     expect(rowNamed(navigation.side, "Docs").id).toBe("tab-docs");
   });
 
-  it("uses dedicated Docs navigation beside the global mobile controls", () => {
+  it("uses dedicated Docs navigation in the sidebar and leaves the phone to the docs bar", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} currentTab="docs" />));
 
     const side = container.querySelector(".side-nav") as HTMLElement;
@@ -85,21 +85,12 @@ describe("the navigation both layouts share", () => {
     expect(side.querySelector(".guide-nav")).not.toBeNull();
     expect(side.querySelectorAll(".nav-row")).toHaveLength(1);
     expect(container.querySelector(".dock")).not.toBeNull();
-
-    const browse = within(container).getByRole("button", { name: "Browse docs" });
-    fireEvent.click(browse);
-    const sheet = container.querySelector("#docs-menu-sheet.menu-sheet-docs") as HTMLDialogElement;
-    expect(sheet.open).toBe(true);
-    expect(within(sheet).getByRole("button", { name: "Close navigation" })).toBeTruthy();
-    expect(rowNamed(sheet, "Back to tools").getAttribute("href")).toBe("/apply-patches");
-    expect(sheet.querySelector(".guide-nav")).not.toBeNull();
-    expect(container.querySelector(".docs-mobile-toolbar button[aria-label]")).toBeNull();
-    expect(container.querySelector("#menu-sheet .find-palette")).toBeNull();
+    // The phone's docs controls belong to the docs page (DocsBar), not the shell.
+    expect(within(container).queryByRole("button", { name: "Browse docs" })).toBeNull();
+    expect(container.querySelector("#docs-menu-sheet")).toBeNull();
     expect(container.querySelectorAll("#menu-sheet")).toHaveLength(1);
-    expect(container.querySelectorAll("#docs-menu-sheet")).toHaveLength(1);
 
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
-    expect(sheet.open).toBe(false);
     const globalMenu = container.querySelector("#menu-sheet") as HTMLElement;
     expect(globalMenu.hidden).toBe(false);
     expect(rowNamed(globalMenu, "Docs")).toBeTruthy();
@@ -151,16 +142,11 @@ describe("the navigation both layouts share", () => {
       withSettings(<Masthead {...mastheadProps} currentTab="docs" docsSlug="docs/faq" onSelectTab={onSelectTab} />),
     );
 
-    const side = container.querySelector(".side-nav") as HTMLElement;
-    fireEvent.click(within(container).getByRole("button", { name: "Browse docs" }));
-    const sheet = container.querySelector("#docs-menu-sheet.menu-sheet-docs") as HTMLElement;
-    for (const scope of [side, sheet]) {
-      const link = rowNamed(scope, "Overview");
-      const event = new MouseEvent("click", { bubbles: true, cancelable: true });
-      link.dispatchEvent(event);
-      expect(event.defaultPrevented).toBe(false);
-      expect(link.getAttribute("href")).toBe("/docs");
-    }
+    const link = rowNamed(container.querySelector(".side-nav") as HTMLElement, "Overview");
+    const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+    link.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(link.getAttribute("href")).toBe("/docs");
     expect(onSelectTab).not.toHaveBeenCalled();
   });
 

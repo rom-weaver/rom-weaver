@@ -963,7 +963,7 @@ describe("webapp keyboard navigation", () => {
     expect(selected).toEqual(["creator"]);
   });
 
-  test("Escape from the phone's Find box closes Tools and returns focus to it", async () => {
+  test("Escape from the phone's Find box closes Menu and returns focus to it", async () => {
     // `.topbar-find` is display:none below the threshold, and focusing a hidden
     // button silently drops focus to the body.
     await setViewport(VIEWPORTS[0]);
@@ -981,7 +981,7 @@ describe("webapp keyboard navigation", () => {
     expect(document.activeElement.closest(".dock-menu")).toBeTruthy();
   });
 
-  test("the Find shortcut opens Tools below the threshold, so Escape has a visible trigger", async () => {
+  test("the Find shortcut opens Menu below the threshold, so Escape has a visible trigger", async () => {
     await setViewport(VIEWPORTS[0]);
     await renderMasthead(noop);
     document.body.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "/" }));
@@ -996,7 +996,7 @@ describe("webapp keyboard navigation", () => {
     expect(document.activeElement.closest(".dock-menu")).toBeTruthy();
   });
 
-  test("the Tools sheet makes what it covers inert, so the keyboard agrees with the scrim", async () => {
+  test("the Menu sheet makes what it covers inert, so the keyboard agrees with the scrim", async () => {
     await setViewport(VIEWPORTS[0]);
     await renderMasthead(noop);
     const banner = host.querySelector(".shell-banner");
@@ -1010,7 +1010,7 @@ describe("webapp keyboard navigation", () => {
     expect(banner.hasAttribute("inert")).toBe(true);
     covered.focus();
     expect(document.activeElement).not.toBe(covered);
-    // The dock stays reachable: Tools is what closes the sheet again.
+    // The dock stays reachable: Menu is what closes the sheet again.
     const menu = host.querySelector(".dock-menu");
     expect(host.querySelector(".dock").hasAttribute("inert")).toBe(false);
     menu.focus();
@@ -1023,7 +1023,7 @@ describe("webapp keyboard navigation", () => {
     expect(document.activeElement).toBe(covered);
   });
 
-  test("Tools closes on Escape and hands focus back to its trigger", async () => {
+  test("Menu closes on Escape and hands focus back to its trigger", async () => {
     // The dock only exists below the layout threshold, and focus cannot return
     // to a control the current layout does not show.
     await setViewport(VIEWPORTS[0]);
@@ -1292,7 +1292,7 @@ describe("webapp responsive navigation", () => {
     expect(host.querySelector(".topbar .nav-row")).toBeNull();
   });
 
-  test("below the threshold the primary nav is the dock, and Tools holds the rest", async () => {
+  test("below the threshold the primary nav is the dock, and Menu holds the rest", async () => {
     for (const viewport of [VIEWPORTS[0], { height: 900, width: 999 }]) {
       await setViewport(viewport);
       await renderMastheadOnly(ALL_TABS);
@@ -1335,7 +1335,7 @@ describe("webapp responsive navigation", () => {
     }
   });
 
-  test("Tools lists every sidebar row but theme and accent, and the dock ends with Controls", async () => {
+  test("Menu lists every sidebar row but theme and accent, and the dock ends with Controls", async () => {
     await setViewport(VIEWPORTS[0]);
     await renderMastheadOnly(ALL_TABS);
     const labels = (scope) => [...host.querySelectorAll(`${scope} .nav-row-label`)].map((label) => label.textContent);

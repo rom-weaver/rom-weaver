@@ -48,7 +48,7 @@ describe("useReadingProgress", () => {
     const sections = [{ id: "one" }, { id: "two" }];
     const { result } = renderHook(() => useReadingProgress(sections, true));
     await waitFor(() => expect(result.current.initializing).toBe(false));
-    expect(result.current.activeIndex).toBe(0);
+    expect(result.current.activeIndex).toBe(-1);
 
     setScrollY(700);
     await act(async () => {

@@ -169,7 +169,7 @@
     flex-shrink: 0;
   }
 }
-/* Find inside the phone's Tools sheet: the sheet supplies the frame and the
+/* Find inside the phone's Menu sheet: the sheet supplies the frame and the
    position, so the box is a plain strip at the sheet's foot. */
 .rw-app .find-palette.is-embedded {
   position: static;

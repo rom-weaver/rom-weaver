@@ -220,7 +220,7 @@ describe("Masthead", () => {
     fireEvent.click(menu);
     expect(menu.getAttribute("aria-expanded")).toBe("true");
     expect(sheet.hidden).toBe(false);
-    // Clicking Tools again closes it; so does Escape.
+    // Clicking Menu again closes it; so does Escape.
     fireEvent.click(menu);
     expect(sheet.hidden).toBe(true);
     fireEvent.click(menu);
@@ -637,7 +637,7 @@ describe("Masthead", () => {
     expect((container.querySelector(".channel-badge") as HTMLButtonElement).textContent).toBe("v1.2.3d+3*");
   });
 
-  it("preloads the Log dialog when Tools is about to open", () => {
+  it("preloads the Log dialog when Menu is about to open", () => {
     const onPreloadLog = vi.fn();
     const { container } = render(withSettings(<Masthead {...mastheadProps} onPreloadLog={onPreloadLog} />));
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);

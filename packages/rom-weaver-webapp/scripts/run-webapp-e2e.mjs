@@ -715,7 +715,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.goto(new URL("apply", baseUrl).href, { waitUntil: "domcontentloaded" });
     await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
 
-    // On a mobile Docs reload the trail is already in the prerendered shell.
+    // On a mobile Docs reload the docs bar is already in the prerendered shell.
     // Its fixed position must be viewport-relative before hydration finishes;
     // WebKit otherwise treats the workflow body's entrance translate as its
     // containing block and leaves the bar below the article.
@@ -748,9 +748,9 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     if (guideChunkPattern.test(docsReloadHtml)) {
       throw new Error("Docs route document preloads the guide chunk whose article it already carries");
     }
-    const docsTrail = page.locator(".docs-trail");
-    await docsTrail.waitFor({ state: "attached" });
-    const trailGeometry = await docsTrail.evaluate((element) => {
+    const docsBar = page.locator(".docs-bar");
+    await docsBar.waitFor({ state: "attached" });
+    const trailGeometry = await docsBar.evaluate((element) => {
       const rect = element.getBoundingClientRect();
       return {
         bottom: rect.bottom,
@@ -761,22 +761,21 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     });
     const bottomGap = trailGeometry.viewportHeight - trailGeometry.bottom;
     if (trailGeometry.position !== "fixed" || bottomGap < -1 || bottomGap > 128 || trailGeometry.height <= 0) {
-      throw new Error(`Mobile Docs trail is not fixed to the viewport on reload: ${JSON.stringify(trailGeometry)}`);
+      throw new Error(`Mobile Docs bar is not fixed to the viewport on reload: ${JSON.stringify(trailGeometry)}`);
     }
     await page.locator(".docs-article h1").waitFor({ state: "visible" });
     await page.locator(".dock").waitFor({ state: "visible" });
     await page.locator(".dock-menu").waitFor({ state: "visible" });
     await page.locator(".dock-app").waitFor({ state: "visible" });
-    await page.getByRole("button", { name: "Browse docs" }).waitFor({ state: "visible" });
-    await page.getByRole("button", { name: "Browse docs" }).click();
-    await page.locator("#docs-menu-sheet:visible").waitFor({ state: "visible" });
-    await page
-      .locator("#docs-menu-sheet")
-      .getByRole("button", { name: "Close navigation" })
-      .waitFor({ state: "visible" });
-    await page.locator("#docs-menu-sheet").getByRole("link", { name: "Back to tools" }).waitFor({ state: "visible" });
-    if (await page.locator("#menu-sheet:visible").count()) throw new Error("Both mobile navigation dialogs are open");
-    await page.locator("#docs-menu-sheet").getByRole("button", { name: "Close navigation" }).click();
+    const docsOpen = page.locator(".docs-bar-open");
+    await docsOpen.waitFor({ state: "visible" });
+    await docsOpen.click();
+    await page.locator("#docs-drawer:visible").waitFor({ state: "visible" });
+    await page.locator("#docs-drawer .docs-row.is-here").waitFor({ state: "visible" });
+    if (await page.locator("#menu-sheet:visible").count()) throw new Error("Both mobile navigation layers are open");
+    // The same button closes the drawer, so it MUST stay above the drawer's scrim.
+    await page.locator(".docs-bar-open", { hasText: "Close" }).click();
+    await page.locator("#docs-drawer").waitFor({ state: "hidden" });
     page.off("request", recordGuideChunkRequest);
     if (guideChunkRequests.length > 0) {
       throw new Error(`Docs route refetched the article it was served: ${guideChunkRequests.join(", ")}`);

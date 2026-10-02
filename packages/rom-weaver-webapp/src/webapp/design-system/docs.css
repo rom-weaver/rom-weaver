@@ -44,15 +44,21 @@ html:has(.docs-workbench) {
   gap: var(--sp-l);
 }
 
+/* The shelf and the part being read, the same pair the phone docs bar shows. */
 .rw-app .warp-rail-title {
-  display: block;
-  padding: var(--sp-m) 0 var(--sp-s) 1.15rem;
-  font-size: 0.655rem;
+  display: flex;
+  gap: var(--sp-s);
+  justify-content: space-between;
+  padding: var(--sp-m) var(--sp-s) var(--sp-s) 1.15rem;
+  margin: 0;
+  font-size: 0.72rem;
   font-weight: 700;
-  font-stretch: 86%;
+  font-stretch: 90%;
   color: var(--ink-3);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+}
+.rw-app .warp-rail-count {
+  flex: none;
+  font-variant-numeric: tabular-nums;
 }
 .rw-app .docs-search-highlight {
   padding-inline: 0.08em;
@@ -124,6 +130,9 @@ html:has(.docs-workbench) {
 .rw-app .warp-rail-list a:active {
   color: var(--ink);
 }
+.rw-app .warp-rail-list a.is-read {
+  color: var(--ink-2);
+}
 .rw-app .warp-rail-list a[aria-current="true"] {
   font-weight: 700;
   color: var(--ink);
@@ -142,6 +151,30 @@ html:has(.docs-workbench) {
   border: 1px solid var(--seam);
   border-radius: var(--r-l);
   box-shadow: 0 18px 50px -38px rgb(0 0 0 / 0.7);
+}
+/* Shelf breadcrumb, at every width: the article never leaves the reader guessing where it sits. */
+.rw-app .docs-crumb {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: var(--article-pad) var(--article-pad) 0;
+  margin-block-end: calc(-1 * var(--article-pad) + var(--sp-s));
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.rw-app .docs-crumb a {
+  color: inherit;
+  text-underline-offset: 2px;
+}
+@media (hover: hover) {
+  .rw-app .docs-crumb a:hover {
+    color: var(--ink);
+  }
+}
+.rw-app .docs-crumb a:active {
+  color: var(--ink);
 }
 .rw-app .docs-article {
   padding: var(--article-pad);
@@ -769,13 +802,12 @@ html:has(.docs-workbench) {
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
+/* Page names wrap rather than truncate: a cut-off name cannot say where the step goes. */
 .rw-app .docs-step-copy b {
-  overflow: hidden;
-  text-overflow: ellipsis;
   font-size: 0.9rem;
   font-weight: 700;
   color: var(--ink);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 .rw-app .docs-source-link {
   display: flex;
@@ -822,9 +854,9 @@ html:has(.docs-workbench) {
   transform: translateY(0) scale(0.99);
 }
 
-/* --- the trail ---
-   Desktop keeps the sidebar and never shows this. */
-.rw-app .docs-trail {
+/* --- the phone docs bar ---
+   Desktop keeps the rails and never shows this. */
+.rw-app .docs-bar-layer {
   display: none;
 }
 
@@ -839,13 +871,482 @@ html:has(.docs-workbench) {
 /* --- responsive --- */
 @media (max-width: 999px) {
   .rw-app .docs-workbench {
-    padding-bottom: calc(72px + var(--safe-b));
+    padding-bottom: calc(var(--docs-bar-h) + var(--sp-xl));
+  }
+  .rw-app {
+    --docs-bar-h: 47px;
+  }
+  .rw-app .docs-bar-layer {
+    display: contents;
+  }
+  /* Docked flush on the app dock: part of the bottom chrome, never floating over the article. */
+  .rw-app .docs-bar {
+    position: fixed;
+    inset: auto 0 var(--dock-h);
+    z-index: 998;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: var(--docs-bar-h);
+    padding-inline: var(--safe-l) var(--safe-r);
+    background: color-mix(in oklab, var(--plate) 92%, transparent);
+    border-block-start: 1px solid var(--seam-soft);
+    backdrop-filter: blur(12px);
+  }
+  /* The reading thread: dashed where unread, solid where read, a knot per section. */
+  .rw-app .docs-bar-thread {
+    position: absolute;
+    inset: -2px 0 auto;
+    height: 4px;
+    pointer-events: none;
+    background: repeating-linear-gradient(90deg, var(--seam) 0 5px, transparent 5px 9px) center / 100% 2px no-repeat;
+  }
+  .rw-app .docs-bar-thread-done {
+    position: absolute;
+    inset: 0.5px auto 0.5px 0;
+    background: var(--thread);
+    border-radius: 2px;
+  }
+  .rw-app .docs-bar-knot {
+    position: absolute;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    background: var(--plate);
+    border: 1.5px solid var(--seam-strong);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+  }
+  .rw-app .docs-bar-knot.is-read {
+    background: var(--thread);
+    border-color: var(--thread);
+  }
+  .rw-app .docs-bar-where,
+  .rw-app .docs-bar-open {
+    font: inherit;
+    color: var(--ink);
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+  }
+  .rw-app .docs-bar-where {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 14px;
+    column-gap: var(--sp-s);
+    align-items: center;
+    min-width: 0;
+    padding: 4px 12px 5px max(16px, var(--gutter));
+    text-align: start;
+  }
+  .rw-app .docs-bar-where:disabled {
+    cursor: default;
+  }
+  .rw-app .docs-bar-where small {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: var(--sp-s);
+    font-size: 0.69rem;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--ink-3);
+  }
+  .rw-app .docs-bar-where small span + span {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .rw-app .docs-bar-section {
+    font-size: 0.875rem;
+    font-weight: 700;
+    line-height: 1.22;
+    text-wrap: balance;
+    overflow-wrap: anywhere;
+  }
+  .rw-app .docs-bar-where.is-long .docs-bar-section {
+    font-size: 0.78rem;
+    line-height: 1.2;
+  }
+  .rw-app .docs-bar-where svg {
+    grid-row: 1 / span 2;
+    grid-column: 2;
+    width: 14px;
+    height: 14px;
+    color: var(--ink-3);
+    transition: transform 0.2s var(--ease);
+  }
+  .rw-app .docs-bar-where[aria-expanded="true"] svg {
+    transform: rotate(180deg);
+  }
+  /* Labelled like a dock tab so it reads as "open the docs", and becomes Close in the same spot. */
+  .rw-app .docs-bar-open {
+    display: grid;
+    gap: 1px;
+    place-content: center;
+    justify-items: center;
+    min-width: 60px;
+    padding: 0 8px;
+    font-size: 0.69rem;
+    font-weight: 700;
+    color: var(--thread-text);
+    border-inline-start: 1px solid var(--seam-soft);
+  }
+  .rw-app .docs-bar-open svg {
+    width: 20px;
+    height: 20px;
+  }
+  @media (hover: hover) {
+    .rw-app .docs-bar-where:not(:disabled):hover,
+    .rw-app .docs-bar-open:hover {
+      background: var(--well);
+    }
+  }
+  .rw-app .docs-bar-where:not(:disabled):active,
+  .rw-app .docs-bar-open:active {
+    background: var(--well);
+  }
+  .rw-app .docs-bar-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 996;
+    padding: 0;
+    appearance: none;
+    cursor: default;
+    background: color-mix(in oklab, var(--chassis) 55%, transparent);
+    border: 0;
+  }
+  .rw-app .docs-bar-scrim[hidden],
+  .rw-app .docs-parts[hidden],
+  .rw-app .docs-drawer[hidden] {
+    display: none;
+  }
+  /* Both overlays rise out of the bar, so the controls that open and close them stay in thumb reach. */
+  @keyframes docs-rise {
+    from {
+      opacity: 0;
+      translate: 0 12px;
+    }
+  }
+  .rw-app .docs-parts,
+  .rw-app .docs-drawer {
+    position: fixed;
+    inset: auto 0 calc(var(--dock-h) + var(--docs-bar-h));
+    z-index: 997;
+    background: var(--plate);
+    border-radius: var(--r-l) var(--r-l) 0 0;
+    box-shadow: var(--overlay-shadow);
+    animation: docs-rise 0.22s var(--ease);
+  }
+  .rw-app .docs-parts {
+    padding: var(--sp-s) var(--sp-s) var(--sp-s);
+  }
+  .rw-app .docs-parts-head {
+    display: flex;
+    gap: var(--sp-s);
+    justify-content: space-between;
+    margin: var(--sp-xs) 12px var(--sp-xs);
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--ink-3);
+  }
+  .rw-app .docs-parts ol {
+    position: relative;
+    display: grid;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+  .rw-app .docs-parts ol::before {
+    position: absolute;
+    inset-block: 24px;
+    left: 18px;
+    content: "";
+    border-left: 2px dashed color-mix(in oklab, var(--thread) 45%, transparent);
+  }
+  .rw-app .docs-parts a {
+    position: relative;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    min-height: 48px;
+    padding: 6px 10px 6px 14px;
+    font-size: 0.94rem;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--ink-2);
+    text-decoration: none;
+    border-radius: var(--r-m);
+  }
+  .rw-app .docs-parts a::before {
+    z-index: 1;
+    flex: none;
+    width: 10px;
+    height: 10px;
+    content: "";
+    background: var(--plate);
+    border: 2px solid var(--thread);
+    border-radius: 50%;
+  }
+  .rw-app .docs-parts a.is-read::before,
+  .rw-app .docs-parts a[aria-current="true"]::before {
+    background: var(--thread);
+  }
+  .rw-app .docs-parts a[aria-current="true"] {
+    color: var(--ink);
+    background: color-mix(in oklab, var(--thread) 14%, var(--plate));
+  }
+  @media (hover: hover) {
+    .rw-app .docs-parts a:hover {
+      background: var(--well);
+    }
+  }
+  .rw-app .docs-parts a:active {
+    background: var(--well);
+  }
+  .rw-app .docs-drawer {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    max-height: calc(100dvh - var(--dock-h) - var(--docs-bar-h) - var(--safe-t) - 48px);
+  }
+  :root:has(.rw-app .docs-drawer:not([hidden])) {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+  .rw-app .docs-drawer-grab {
+    display: grid;
+    place-items: center;
+    height: 22px;
+  }
+  .rw-app .docs-drawer-grab::before {
+    width: 38px;
+    height: 5px;
+    content: "";
+    background: var(--seam);
+    border-radius: 3px;
+  }
+  .rw-app .docs-drawer-body {
+    min-height: 0;
+    padding: 0 var(--sp-s) var(--sp-l);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .rw-app .docs-drawer-level {
+    animation: docs-rise 0.2s var(--ease);
+  }
+  .rw-app .docs-drawer-group {
+    display: flex;
+    gap: var(--sp-m);
+    align-items: center;
+    justify-content: space-between;
+    margin: var(--sp-l) 8px var(--sp-xs);
+  }
+  .rw-app .docs-drawer-level > .docs-drawer-group:first-child {
+    margin-block-start: var(--sp-xs);
+  }
+  .rw-app .docs-drawer-group h2 {
+    margin: 0;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--ink-3);
+  }
+  .rw-app .docs-drawer-group .docs-audience {
+    margin: 0;
+  }
+  .rw-app .docs-rows,
+  .rw-app .docs-drawer-pages {
+    display: grid;
+    gap: 2px;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+  .rw-app .docs-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto 16px;
+    column-gap: 10px;
+    align-items: center;
+    width: 100%;
+    min-height: 56px;
+    padding: 8px 10px;
+    font: inherit;
+    color: var(--ink);
+    text-align: start;
+    text-decoration: none;
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    border-radius: var(--r-m);
+  }
+  .rw-app .docs-row b {
+    font-size: 0.97rem;
+  }
+  .rw-app .docs-row-sub {
+    grid-column: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+  .rw-app .docs-row-count {
+    grid-row: 1 / span 2;
+    grid-column: 2;
+    padding: 1px 8px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-3);
+    background: var(--well);
+    border-radius: 999px;
+  }
+  .rw-app .docs-row svg {
+    grid-row: 1 / span 2;
+    grid-column: 3;
+    width: 16px;
+    height: 16px;
+    color: var(--ink-3);
+  }
+  .rw-app .docs-row.is-link {
+    grid-template-columns: minmax(0, 1fr) 16px;
+    min-height: 48px;
+  }
+  .rw-app .docs-row.is-link svg {
+    grid-column: 2;
+  }
+  .rw-app .docs-row.is-here,
+  .rw-app .docs-row.is-link[aria-current="page"] {
+    background: color-mix(in oklab, var(--thread) 14%, var(--plate));
+  }
+  .rw-app .docs-row.is-here .docs-row-sub {
+    font-weight: 600;
+    color: var(--thread-text);
+  }
+  .rw-app .docs-row.is-here .docs-row-count {
+    background: var(--plate);
+  }
+  @media (hover: hover) {
+    .rw-app .docs-row:hover {
+      background: var(--well);
+    }
+  }
+  .rw-app .docs-row:active {
+    background: var(--well);
+  }
+  .rw-app .docs-drawer-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 0 0 var(--sp-m);
+    margin-block-end: var(--sp-s);
+    background: var(--plate);
+    border-block-end: 1px solid var(--seam-soft);
+  }
+  .rw-app .docs-drawer-back {
+    display: inline-flex;
+    gap: 2px;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 10px 0 2px;
+    font: inherit;
+    font-weight: 700;
+    color: var(--thread-text);
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+    border-radius: var(--r-m);
+  }
+  .rw-app .docs-drawer-back svg {
+    width: 18px;
+    height: 18px;
+  }
+  @media (hover: hover) {
+    .rw-app .docs-drawer-back:hover {
+      background: var(--well);
+    }
+  }
+  .rw-app .docs-drawer-back:active {
+    background: var(--well);
+  }
+  .rw-app .docs-drawer-head h2 {
+    margin: 2px 10px 0;
+    font-size: 1.3rem;
+    letter-spacing: -0.01em;
+  }
+  .rw-app .docs-drawer-head p {
+    margin: 2px 10px 0;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ink-3);
+  }
+  .rw-app .docs-drawer-pages a {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    min-height: 50px;
+    padding: 8px 12px;
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--ink);
+    text-decoration: none;
+    border-radius: var(--r-m);
+  }
+  .rw-app .docs-drawer-pages a::before {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    content: "";
+    border: 2px solid var(--seam-strong);
+    border-radius: 50%;
+  }
+  .rw-app .docs-drawer-pages a[aria-current="page"] {
+    color: var(--thread-text);
+    background: color-mix(in oklab, var(--thread) 14%, var(--plate));
+  }
+  .rw-app .docs-drawer-pages a[aria-current="page"]::before {
+    background: var(--thread);
+    border-color: var(--thread);
+  }
+  @media (hover: hover) {
+    .rw-app .docs-drawer-pages a:hover {
+      background: var(--well);
+    }
+  }
+  .rw-app .docs-drawer-pages a:active {
+    background: var(--well);
+  }
+  .rw-app .docs-drawer-twin {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    margin: var(--sp-l) 8px 0;
+    font-size: 0.88rem;
+    color: var(--ink-2);
+    border: 1px dashed var(--seam);
+    border-radius: var(--r-m);
+  }
+  .rw-app .docs-drawer-twin button {
+    padding: 6px 12px;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--ink);
+    white-space: nowrap;
+    cursor: pointer;
+    background: var(--plate);
+    border: 1px solid var(--seam);
+    border-radius: 999px;
+  }
+  @media (hover: hover) {
+    .rw-app .docs-drawer-twin button:hover {
+      background: var(--well);
+    }
+  }
+  .rw-app .docs-drawer-twin button:active {
+    background: var(--well);
   }
 }
 @media (max-width: 860px) {
-  .rw-app {
-    --docs-chip-h: 36px;
-  }
   .rw-app .docs-layout {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -864,81 +1365,19 @@ html:has(.docs-workbench) {
   .rw-app .docs-index {
     display: grid;
   }
-  /* A small opaque control keeps the outline within thumb reach without
-     reserving a full-width strip above the app dock. */
-  .rw-app .docs-trail {
-    position: fixed;
-    inset: auto max(var(--gutter), var(--safe-r)) calc(var(--dock-h, 0px) + var(--sp-xs)) auto;
-    /* under the dock (1000) and the update banner (999), over the article */
-    z-index: 998;
-    display: block;
-  }
-  .rw-app .docs-trail-row {
-    display: flex;
-    align-items: center;
-  }
-  .rw-app .docs-trail-menu {
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    justify-content: center;
-    width: var(--docs-chip-h);
-    height: var(--docs-chip-h);
-    padding: 0;
-    font: inherit;
-    font-size: 0.68rem;
-    font-weight: 700;
-    font-stretch: 88%;
-    color: var(--ink-2);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    cursor: pointer;
-    background: color-mix(in oklab, var(--plate) 88%, transparent);
-    border: 1px solid var(--seam);
-    border-radius: 999px;
-  }
-  .rw-app .docs-trail-menu svg {
-    flex: none;
-    width: 18px;
-    height: 18px;
-    color: currentColor;
-  }
-  .rw-app .docs-trail-menu[aria-expanded="true"] {
-    color: var(--ink);
-    background: var(--well);
-    border-color: var(--seam-strong);
-  }
-  @media (hover: hover) {
-    .rw-app .docs-trail-menu:hover {
-      color: var(--ink);
-      border-color: var(--seam-strong);
-    }
-  }
-  .rw-app .docs-trail-menu:active {
-    color: var(--ink);
-    background: var(--well);
-    border-color: var(--seam-strong);
-  }
-  .rw-app .docs-contents-menu {
-    position: fixed;
-    inset: auto var(--gutter) calc(var(--dock-h, 0px) + var(--docs-chip-h) + 2 * var(--sp-xs));
-    z-index: 999;
-    display: grid;
-    gap: var(--sp-s);
-    max-height: min(50dvh, calc(100dvh - var(--dock-h, 0px) - var(--docs-chip-h) - var(--safe-t) - 3 * var(--sp-xs)));
-    padding: var(--sp-s);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    background: var(--plate);
-    border: 1px solid var(--seam-strong);
-    border-radius: var(--r-l);
-    box-shadow: var(--overlay-shadow);
-  }
   /* --- the way back up ---
      On its own row under the two steps: three controls abreast leaves each step
      too narrow to read the page it names. */
   .rw-app .docs-onward {
     flex-wrap: wrap;
+  }
+  /* Each step gets the full width so its page name never has to shorten. */
+  .rw-app .docs-step,
+  .rw-app .docs-step-gap {
+    flex: 1 0 100%;
+  }
+  .rw-app .docs-step-gap {
+    display: none;
   }
   .rw-app .docs-to-top {
     flex: 1 0 100%;
