@@ -196,6 +196,10 @@ fn registry_lists_every_game_with_format_metadata() {
             "game-and-watch-gallery-3",
             "final-fight-one",
             "super-street-fighter-ii-turbo-revival",
+            "f-zero-x",
+            "diddy-kong-racing",
+            "lylat-wars",
+            "mission-impossible",
             "donkey-kong-land",
             "f-zero-maximum-velocity",
             "pokemon-trading-card-game",
@@ -206,6 +210,7 @@ fn registry_lists_every_game_with_format_metadata() {
             "zelda-oracle-of-seasons-slot-1",
             "zelda-oracle-of-seasons-slot-2",
             "zelda-oracle-of-seasons-slot-3",
+            "mario-kart-64",
         ]
     );
     assert!(definitions[3..8].iter().all(|definition| {

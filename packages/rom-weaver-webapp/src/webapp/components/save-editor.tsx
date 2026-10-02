@@ -45,7 +45,7 @@ type FieldGroup = { id: string; title: string; fields: SaveField[] };
 type FieldSlot = { id: string; title: string; groups: FieldGroup[] };
 
 const SAVE_SUPPORTED_FILES = [
-  { extensions: ["sav", "srm", "eep", "fla", "mpk", "mcr", "mcd"], label: "Raw game saves" },
+  { extensions: ["sav", "srm", "sra", "eep", "fla", "mpk", "mcr", "mcd"], label: "Raw game saves" },
   { extensions: ["sps", "xps", "gsv"], label: "GameShark SP wrappers" },
   { extensions: ["dsv", "gme", "mem", "vgs"], label: "Emulator and memory card wrappers" },
 ] as const;
