@@ -1,4 +1,4 @@
-import { SlidersHorizontal, X } from "lucide-react";
+import { SlidersHorizontal, TextSearch, X } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
 import { useEffect, useRef } from "react";
 import type { Localizer } from "../../presentation/localization/index.ts";
@@ -247,19 +247,7 @@ const PhoneDock = ({
         ref={triggerRef}
         type="button"
       >
-        <svg
-          aria-hidden="true"
-          fill="none"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="2"
-          viewBox="0 0 24 24"
-        >
-          <path d="M3 5h18M3 12h8M3 19h8" />
-          <circle cx="17" cy="15" r="4" />
-          <path d="m20 18 2 3" />
-        </svg>
+        <TextSearch aria-hidden="true" />
         <span>{menuLabel}</span>
       </button>
       {tabs.slice(toolsIndex).map(renderWorkflowTab)}

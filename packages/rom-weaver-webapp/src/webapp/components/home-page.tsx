@@ -3,16 +3,16 @@ import {
   Check,
   Copy,
   Download,
-  Footprints,
-  Gamepad2,
   FileDiff,
+  Footprints,
+  Gamepad,
   Hash,
   ListChecks,
   Package,
   Server,
+  Stamp,
   Terminal,
 } from "lucide-react";
-import { ApplyStampIcon } from "../../public/react/components/apply-stamp-icon.tsx";
 import { useClipboardCopy } from "../../public/react/components/ds/use-clipboard-copy.ts";
 import { HomeLoom } from "./home-loom.tsx";
 import { resolveGuidedSampleHref } from "../../public/react/guided-sample-start.ts";
@@ -73,7 +73,7 @@ const HomeCapabilities = ({ baseUrl, className, headingId }: HomeCapabilitiesPro
           {localizer.message("ui.home.flowBundle")}
         </a>
         <a className="btn ghost" href={route("test-rom")}>
-          <Gamepad2 aria-hidden="true" />
+          <Gamepad aria-hidden="true" />
           {localizer.message("ui.home.flowTest")}
         </a>
         <a className="btn ghost" href={route("checksum")}>
@@ -114,7 +114,7 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
             <p className="home-lede">{localizer.message("ui.home.lede")}</p>
             <div className="home-actions home-main-actions">
               <a className="btn primary lg" href={route("apply-patches")}>
-                <ApplyStampIcon />
+                <Stamp aria-hidden="true" />
                 {localizer.message("ui.home.applyPatchCta")}
               </a>
               <a className="btn ghost lg" href={`${route("docs")}/features`}>

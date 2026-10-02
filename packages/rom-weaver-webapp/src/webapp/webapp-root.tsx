@@ -2,7 +2,7 @@ import {
   Archive,
   BookOpen,
   FileDiff,
-  Gamepad2,
+  Gamepad,
   Hash,
   House,
   Package,
@@ -11,6 +11,7 @@ import {
   Save as SaveIcon,
   ScanSearch,
   Scissors,
+  Stamp,
   Undo2,
 } from "lucide-react";
 import {
@@ -31,7 +32,6 @@ import { createLogger } from "../lib/logging.ts";
 import { markDropReceived, markResultPaintedAfterFinish } from "../lib/perf/op-perf-marks.ts";
 import { perfNow, recordDrop } from "../lib/runtime/perf-latency.ts";
 import { getDefaultBrowserThreadCount } from "../platform/shared/compression-options.ts";
-import { ApplyStampIcon } from "../public/react/components/apply-stamp-icon.tsx";
 import { runFlatViewTransition } from "../public/react/components/ds/flat-transition.ts";
 import { ConfirmDialog } from "../public/react/components/ds/index.ts";
 import { notifyGuidedSampleView } from "../public/react/guided-sample-start.ts";
@@ -88,7 +88,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     dock: true,
     group: "patches",
     href: "apply-patches",
-    icon: <ApplyStampIcon className="apply-tab-icon" />,
+    icon: <Stamp aria-hidden="true" />,
     id: "patcher",
     label: "Apply Patches",
     railLabel: "Apply",
@@ -163,7 +163,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     dock: true,
     group: "roms",
     href: "test-rom",
-    icon: <Gamepad2 aria-hidden="true" />,
+    icon: <Gamepad aria-hidden="true" />,
     id: "test",
     label: "Test ROM",
     railLabel: "Test",

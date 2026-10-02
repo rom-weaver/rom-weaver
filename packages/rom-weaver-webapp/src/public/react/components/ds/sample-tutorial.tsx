@@ -4,14 +4,15 @@ import {
   BookOpen,
   Download,
   EllipsisVertical,
-  Gamepad2,
   FileDiff,
+  Gamepad,
   ListChecks,
   ListOrdered,
   Package,
   RefreshCw,
   Scissors,
   SlidersHorizontal,
+  Stamp,
   ToggleRight,
   Upload,
   X,
@@ -20,7 +21,6 @@ import type { ComponentType, MouseEvent } from "react";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createLogger } from "../../../../lib/logging.ts";
-import { ApplyStampIcon } from "../apply-stamp-icon.tsx";
 import {
   GUIDED_SAMPLE_START_EVENT,
   GUIDED_SAMPLE_VIEWS,
@@ -99,7 +99,7 @@ type SampleTutorialStep = {
 };
 
 const ACTION_ICONS: Record<SampleTutorialAction, ComponentType<{ className?: string }>> = {
-  apply: ApplyStampIcon,
+  apply: Stamp,
   archive: Archive,
   checks: ListChecks,
   create: FileDiff,
@@ -108,7 +108,7 @@ const ACTION_ICONS: Record<SampleTutorialAction, ComponentType<{ className?: str
   menu: EllipsisVertical,
   options: SlidersHorizontal,
   package: Package,
-  play: Gamepad2,
+  play: Gamepad,
   remove: X,
   reorder: ListOrdered,
   replace: RefreshCw,

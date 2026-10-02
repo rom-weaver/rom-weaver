@@ -1,4 +1,4 @@
-import { Download, Gamepad2, RotateCcw, Save, Search, Undo2 } from "lucide-react";
+import { Download, Gamepad, RotateCcw, Save, Search, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   clearPendingTestSave,
@@ -1202,7 +1202,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
                   onClick={() => void testSave()}
                   type="button"
                 >
-                  <Gamepad2 aria-hidden="true" /> {canTest ? "Test save in ROM" : "Choose ROM and test"}
+                  <Gamepad aria-hidden="true" /> {canTest ? "Test save in ROM" : "Choose ROM and test"}
                 </button>
               ) : null}
             </div>

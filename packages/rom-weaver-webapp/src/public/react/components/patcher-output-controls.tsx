@@ -1,9 +1,8 @@
-import { Download } from "lucide-react";
+import { Download, Stamp } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import { useUiLocalizer } from "../settings-context.tsx";
 import { RunButton } from "../components/ds/feedback.tsx";
 import type { PatcherOutputState } from "../patcher-presentation.ts";
-import { ApplyStampIcon } from "./apply-stamp-icon.tsx";
 import { ProgressActionButton } from "./progress-action-button.tsx";
 
 type OutputController = {
@@ -72,7 +71,7 @@ function PatcherPrimaryAction({
     <ProgressActionButton
       cancelLabel={localizer.message("ui.output.cancelApply")}
       disabled={state.applyButton.disabled || !!disableRun}
-      icon={<ApplyStampIcon className="apply-button-icon" />}
+      icon={<Stamp aria-hidden="true" />}
       id="rom-weaver-button-apply"
       label={
         state.pendingDownloadFileName

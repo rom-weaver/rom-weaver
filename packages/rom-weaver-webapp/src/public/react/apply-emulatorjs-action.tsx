@@ -1,4 +1,4 @@
-import { Gamepad2 } from "lucide-react";
+import { Gamepad } from "lucide-react";
 import { useState } from "react";
 import type { BrowserApplyResult } from "../../platform/browser/browser-api.ts";
 import { addEntry, getApplyEntry, prepareEntry, setCurrentGame } from "./emulator-session-store.ts";
@@ -34,7 +34,7 @@ export const EmulatorJsAction = ({
     return (
       <div className="emulatorjs-test">
         <button className="btn play" disabled id="rom-weaver-button-test-emulator" type="button">
-          <Gamepad2 aria-hidden="true" />
+          <Gamepad aria-hidden="true" />
           <span className="play-label">{unavailableLabel}</span>
         </button>
       </div>
@@ -94,7 +94,7 @@ export const EmulatorJsAction = ({
         onClick={() => void openInEmulator()}
         type="button"
       >
-        <Gamepad2 aria-hidden="true" />
+        <Gamepad aria-hidden="true" />
         <span className="play-label">
           {loading ? localizer.message("ui.apply.emulator.preparing") : localizer.message("ui.apply.emulator.openTest")}
         </span>

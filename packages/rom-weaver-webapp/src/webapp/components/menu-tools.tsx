@@ -1,4 +1,4 @@
-import { Heart, MonitorCog, Moon, Palette, Settings, SunMedium } from "lucide-react";
+import { Heart, MonitorCog, Moon, Paintbrush, Settings, SunMedium } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { ACCENTS, useAccent } from "../accent.ts";
@@ -207,7 +207,7 @@ const AccentTile = ({
         ref={buttonRef}
         type="button"
       >
-        <Palette aria-hidden="true" />
+        <Paintbrush aria-hidden="true" />
         <span aria-hidden="true" className="accent-tool-dot" />
         {navRow ? (
           <span className="nav-row-label">{label}</span>
