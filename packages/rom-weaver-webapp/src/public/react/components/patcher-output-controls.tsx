@@ -3,7 +3,7 @@ import { useSyncExternalStore } from "react";
 import { useUiLocalizer } from "../settings-context.tsx";
 import { RunButton } from "../components/ds/feedback.tsx";
 import type { PatcherOutputState } from "../patcher-presentation.ts";
-import { ApplyBandaidIcon } from "./apply-bandaid-icon.tsx";
+import { ApplyStampIcon } from "./apply-stamp-icon.tsx";
 import { ProgressActionButton } from "./progress-action-button.tsx";
 
 type OutputController = {
@@ -72,7 +72,7 @@ function PatcherPrimaryAction({
     <ProgressActionButton
       cancelLabel={localizer.message("ui.output.cancelApply")}
       disabled={state.applyButton.disabled || !!disableRun}
-      icon={<ApplyBandaidIcon className="apply-button-icon" />}
+      icon={<ApplyStampIcon className="apply-button-icon" />}
       id="rom-weaver-button-apply"
       label={
         state.pendingDownloadFileName

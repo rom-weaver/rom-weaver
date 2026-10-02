@@ -451,7 +451,7 @@ msgstr "App"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tools.app"
-msgstr "App"
+msgstr "Controls"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1636,7 +1636,7 @@ msgstr "Find"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.find.placeholder"
-msgstr "Find a tool, doc, device information, or setting"
+msgstr "Find games (by name/checksum), tools, docs, or settings..."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3811,12 +3811,12 @@ msgstr "Tool"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.console.back"
-msgstr "Tools"
+msgstr "Menu"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tools.tools"
-msgstr "Tools"
+msgstr "Menu"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

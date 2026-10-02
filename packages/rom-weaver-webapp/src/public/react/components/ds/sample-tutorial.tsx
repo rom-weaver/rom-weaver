@@ -5,7 +5,7 @@ import {
   Download,
   EllipsisVertical,
   Gamepad2,
-  GitCompare,
+  FileDiff,
   ListChecks,
   ListOrdered,
   Package,
@@ -20,7 +20,7 @@ import type { ComponentType, MouseEvent } from "react";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createLogger } from "../../../../lib/logging.ts";
-import { ApplyBandaidIcon } from "../apply-bandaid-icon.tsx";
+import { ApplyStampIcon } from "../apply-stamp-icon.tsx";
 import {
   GUIDED_SAMPLE_START_EVENT,
   GUIDED_SAMPLE_VIEWS,
@@ -99,10 +99,10 @@ type SampleTutorialStep = {
 };
 
 const ACTION_ICONS: Record<SampleTutorialAction, ComponentType<{ className?: string }>> = {
-  apply: ApplyBandaidIcon,
+  apply: ApplyStampIcon,
   archive: Archive,
   checks: ListChecks,
-  create: GitCompare,
+  create: FileDiff,
   drop: Upload,
   header: Scissors,
   menu: EllipsisVertical,

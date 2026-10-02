@@ -1076,7 +1076,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.find.label": msg({ id: "ui.find.label", message: "Find" }),
   "ui.find.placeholder": msg({
     id: "ui.find.placeholder",
-    message: "Find a tool, doc, device information, or setting",
+    message: "Find games (by name/checksum), tools, docs, or settings...",
   }),
   "ui.find.resultCount": msg({ id: "ui.find.resultCount", message: "{count} results" }),
   "ui.footer.donate": msg({ id: "ui.footer.donate", message: "Support" }),
@@ -1105,7 +1105,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.console.advanced": msg({ id: "ui.console.advanced", message: "Advanced" }),
   "ui.console.advancedHint": msg({ id: "ui.console.advancedHint", message: "Codecs, threads, raw file lists" }),
-  "ui.console.back": msg({ id: "ui.console.back", message: "Tools" }),
+  "ui.console.back": msg({ id: "ui.console.back", message: "Menu" }),
   "ui.console.hiddenCachedFiles": msg({
     id: "ui.console.hiddenCachedFiles",
     message: "The cached file list is hidden.",
@@ -1498,7 +1498,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.theme.light": msg({ id: "ui.theme.light", message: "Light" }),
   "ui.theme.matchSystem": msg({ id: "ui.theme.matchSystem", message: "Match system" }),
   "ui.tools.accent": msg({ id: "ui.tools.accent", message: "Accent" }),
-  "ui.tools.app": msg({ id: "ui.tools.app", message: "App" }),
+  "ui.tools.app": msg({ id: "ui.tools.app", message: "Controls" }),
   "ui.tools.appearance": msg({ id: "ui.tools.appearance", message: "Appearance" }),
   "ui.tools.beta": msg({ id: "ui.tools.beta", message: "Beta" }),
   "ui.tools.github": msg({ id: "ui.tools.github", message: "View source on GitHub" }),
@@ -1508,7 +1508,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.tools.more": msg({ id: "ui.tools.more", message: "More" }),
   "ui.tools.project": msg({ id: "ui.tools.project", message: "Project" }),
   "ui.tools.theme": msg({ id: "ui.tools.theme", message: "Theme" }),
-  "ui.tools.tools": msg({ id: "ui.tools.tools", message: "Tools" }),
+  "ui.tools.tools": msg({ id: "ui.tools.tools", message: "Menu" }),
   "ui.update.later": msg({ id: "ui.update.later", message: "Later" }),
   "ui.update.note": msg({
     id: "ui.update.note",

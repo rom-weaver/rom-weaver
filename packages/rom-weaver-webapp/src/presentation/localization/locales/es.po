@@ -451,7 +451,7 @@ msgstr "App"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tools.app"
-msgstr "App"
+msgstr "Controles"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1636,7 +1636,7 @@ msgstr "Buscar"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.find.placeholder"
-msgstr "Buscar una herramienta, guía o ajuste"
+msgstr "Buscar juegos (por nombre/suma de verificación), herramientas, guías o ajustes..."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3811,12 +3811,12 @@ msgstr "Herramienta"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.console.back"
-msgstr "Herramientas"
+msgstr "Menú"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tools.tools"
-msgstr "Herramientas"
+msgstr "Menú"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

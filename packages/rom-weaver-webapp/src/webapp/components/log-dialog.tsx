@@ -810,12 +810,7 @@ const ConsoleNav = ({
   return (
     <nav aria-label={localizer.message("ui.log.tabsLabel")} className="console-nav">
       <h2 className="console-nav-title">{localizer.message("ui.settings.title")}</h2>
-      <button
-        aria-label={localizer.message("ui.docs.backToTools")}
-        className="console-back"
-        onClick={onClose}
-        type="button"
-      >
+      <button aria-label={localizer.message("ui.tools.tools")} className="console-back" onClick={onClose} type="button">
         <ChevronLeft aria-hidden="true" />
         <span>{localizer.message("ui.console.back")}</span>
       </button>

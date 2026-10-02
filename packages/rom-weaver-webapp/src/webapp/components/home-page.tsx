@@ -5,14 +5,14 @@ import {
   Download,
   Footprints,
   Gamepad2,
-  GitCompare,
+  FileDiff,
   Hash,
   ListChecks,
   Package,
   Server,
   Terminal,
 } from "lucide-react";
-import { ApplyBandaidIcon } from "../../public/react/components/apply-bandaid-icon.tsx";
+import { ApplyStampIcon } from "../../public/react/components/apply-stamp-icon.tsx";
 import { useClipboardCopy } from "../../public/react/components/ds/use-clipboard-copy.ts";
 import { HomeLoom } from "./home-loom.tsx";
 import { resolveGuidedSampleHref } from "../../public/react/guided-sample-start.ts";
@@ -65,7 +65,7 @@ const HomeCapabilities = ({ baseUrl, className, headingId }: HomeCapabilitiesPro
       <p className="home-blurb">{localizer.message("ui.home.workflowsDescription")}</p>
       <div className="home-actions">
         <a className="btn ghost" href={route("create-patch")}>
-          <GitCompare aria-hidden="true" />
+          <FileDiff aria-hidden="true" />
           {localizer.message("ui.home.flowCreate")}
         </a>
         <a className="btn ghost" href={route("bundle-patches")}>
@@ -114,7 +114,7 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
             <p className="home-lede">{localizer.message("ui.home.lede")}</p>
             <div className="home-actions home-main-actions">
               <a className="btn primary lg" href={route("apply-patches")}>
-                <ApplyBandaidIcon />
+                <ApplyStampIcon />
                 {localizer.message("ui.home.applyPatchCta")}
               </a>
               <a className="btn ghost lg" href={`${route("docs")}/features`}>

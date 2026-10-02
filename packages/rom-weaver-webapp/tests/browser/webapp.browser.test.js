@@ -209,10 +209,10 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
 
 test("WebappRoot keeps the beta workflows out of the nav while the setting is off", async () => {
   mountWebappRoot();
-  // The dock keeps its three workflow slots plus Tools and App at every setting.
+  // The dock keeps its three workflow slots plus Menu and Controls at every setting.
   await expect
     .poll(() => [...document.querySelectorAll(".dock .dock-tab")].map((tab) => tab.textContent))
-    .toEqual(["Apply", "Create", "Tools", "Test", "App"]);
+    .toEqual(["Apply", "Create", "Menu", "Test", "Controls"]);
   expect(navRow("PPF undo")).toBeUndefined();
   expect(navRow("Identify")).toBeTruthy();
   navRow("Identify").click();
@@ -290,9 +290,9 @@ test("mobile Docs keeps the workflow dock and owns a separate navigation dialog"
   expect([...dock.querySelectorAll(".dock-tab")].map((tab) => tab.textContent)).toEqual([
     "Apply",
     "Create",
-    "Tools",
+    "Menu",
     "Test",
-    "App",
+    "Controls",
   ]);
   const trigger = document.querySelector(".docs-browse-trigger");
   expect(document.querySelector(".docs-mobile-toolbar a")).toBeNull();
@@ -457,7 +457,7 @@ test("the wordmark keeps its version while persistent status sits beside navigat
         document.querySelector(".side-nav").getBoundingClientRect().top,
       );
     } else {
-      expect(document.querySelector(".dock-menu")?.getAttribute("aria-label")).toBe("Tools");
+      expect(document.querySelector(".dock-menu")?.getAttribute("aria-label")).toBe("Menu");
       expect(status.getBoundingClientRect().bottom).toBeLessThanOrEqual(
         document.querySelector(".dock-tab").getBoundingClientRect().top,
       );
@@ -699,7 +699,7 @@ test("the phone console keeps Tools and its five sections on one bar at the foot
   const items = [nav.querySelector(".console-back"), ...nav.querySelectorAll(".console-tab")];
   const visibleLabel = (item) => item.querySelector(item.matches(".console-back") ? "span" : ".console-tab-short");
   expect(items.map((item) => visibleLabel(item)?.textContent)).toEqual([
-    "Tools",
+    "Menu",
     "Settings",
     "Offline",
     "Storage",
@@ -730,7 +730,7 @@ test("the phone header carries status and appearance, and Tools carries every de
   mountWebappRoot();
 
   await expect.poll(() => document.querySelector(".shell-head-tools")).toBeTruthy();
-  // The footer is gone; GitHub, Support and Settings reach the phone through Tools and App.
+  // The footer is gone; GitHub, Support and Settings reach the phone through Menu and Controls.
   expect(document.querySelector(".site-footer")).toBeNull();
   const tiles = [...document.querySelectorAll(".shell-head-tools .tool")];
   expect(tiles.map((tile) => tile.getAttribute("aria-label"))).toEqual([

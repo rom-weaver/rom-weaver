@@ -8,8 +8,8 @@ import type { WorkflowTab } from "../../../src/webapp/components/shell.tsx";
 
 /**
  * App-shell contract: one description of the navigation rendered as the desktop
- * sidebar and as the phone Tools sheet, the dock's three workflow slots plus
- * Tools and App, the identity block's build/runtime controls, the top bar's
+ * sidebar and as the phone Menu sheet, the dock's three workflow slots plus
+ * Menu and Controls, the identity block's build/runtime controls, the top bar's
  * appearance and project tiles, and the update banner.
  */
 
@@ -110,7 +110,7 @@ describe("Masthead", () => {
       "Patches",
       "ROMs",
       "Files",
-      "App",
+      "Controls",
     ]);
     expect(rowsOf(nav)).toEqual([
       "Home",
@@ -165,10 +165,10 @@ describe("Masthead", () => {
     expect(onSelectTab).toHaveBeenCalledWith("creator");
   });
 
-  it("lists every sidebar destination in the phone Tools sheet, App last, with Find at its foot", () => {
+  it("lists every sidebar destination in the phone Menu sheet, Controls last, with Find at its foot", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
     const sheet = container.querySelector(".menu-sheet") as HTMLElement;
-    expect(sheet.getAttribute("aria-label")).toBe("Tools");
+    expect(sheet.getAttribute("aria-label")).toBe("Menu");
     expect(sheet.hasAttribute("hidden")).toBe(true);
     expect(rowsOf(sheet)).toEqual([]);
 
@@ -186,9 +186,9 @@ describe("Masthead", () => {
       "ROMs",
       "Files",
       "Project",
-      "App",
+      "Controls",
     ]);
-    // Opening Tools puts the cursor in its Find box, so the keyboard comes with it.
+    // Opening Menu puts the cursor in its Find box, so the keyboard comes with it.
     const find = sheet.querySelector(".find-palette.is-embedded .find-input");
     expect(find).toBeTruthy();
     expect(document.activeElement).toBe(find);
@@ -199,7 +199,7 @@ describe("Masthead", () => {
     );
   });
 
-  it("docks three workflows plus Tools and App", () => {
+  it("docks three workflows plus Menu and Controls", () => {
     const onSelectTab = vi.fn();
     const onOpenSettings = vi.fn();
     const { container } = render(
@@ -207,14 +207,14 @@ describe("Masthead", () => {
     );
     const dockNav = container.querySelector(".dock") as HTMLElement;
     const slots = Array.from(dockNav.querySelectorAll(".dock-tab"));
-    expect(slots.map((slot) => slot.textContent)).toEqual(["Apply", "Create", "Tools", "Test", "App"]);
+    expect(slots.map((slot) => slot.textContent)).toEqual(["Apply", "Create", "Menu", "Test", "Controls"]);
     expect(slots[0]?.getAttribute("aria-current")).toBe("page");
     expect(container.querySelector(".phone-runtime .sub-status")).toBeTruthy();
     expect(container.querySelector(".dock-find")).toBeNull();
 
     const menu = container.querySelector(".dock-menu") as HTMLButtonElement;
     const sheet = container.querySelector(".menu-sheet") as HTMLElement;
-    expect(menu.getAttribute("aria-label")).toBe("Tools");
+    expect(menu.getAttribute("aria-label")).toBe("Menu");
     expect(menu.getAttribute("aria-controls")).toBe(sheet.id);
     expect(menu.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(menu);
@@ -350,7 +350,7 @@ describe("Masthead", () => {
       "Settings",
     ];
     expect(names(".topbar-tools")).toEqual(expected);
-    // The phone reaches GitHub, Support and Settings through Tools and App.
+    // The phone reaches GitHub, Support and Settings through Menu and Controls.
     expect(names(".shell-head-tools")).toEqual(["Installing offline copy", "Theme: Match system", "Accent: Madder"]);
     expect(container.querySelector(".shell-head-tools .tool-separator")).toBeNull();
     {
@@ -424,12 +424,12 @@ describe("Masthead", () => {
     expect(new Set(names).size).toBe(3);
   });
 
-  it("puts theme and accent under App in the sidebar, and none in the phone Tools sheet", () => {
+  it("puts theme and accent under Controls in the sidebar, and none in the phone Menu sheet", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
     expect(container.querySelector(".nav-appearance")).toBeNull();
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
     const device = Array.from(container.querySelectorAll(".side-nav .nav-group")).find(
-      (group) => group.querySelector(".nav-group-label")?.textContent === "App",
+      (group) => group.querySelector(".nav-group-label")?.textContent === "Controls",
     );
     expect(Array.from(device?.querySelectorAll(".nav-row-label") ?? []).map((label) => label.textContent)).toEqual([
       "Settings",
@@ -448,12 +448,12 @@ describe("Masthead", () => {
     );
   });
 
-  it("ends the App group with About when the console can open it", () => {
+  it("ends the Controls group with About when the console can open it", () => {
     const onOpenAbout = vi.fn();
     const { container } = render(withSettings(<Masthead {...mastheadProps} onOpenAbout={onOpenAbout} />));
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
     const app = Array.from(container.querySelectorAll("#menu-sheet .nav-group")).find(
-      (group) => group.querySelector(".nav-group-label")?.textContent === "App",
+      (group) => group.querySelector(".nav-group-label")?.textContent === "Controls",
     );
     expect(rowsOf(app ?? null)).toEqual(["Settings", "Offline app", "Saves & storage", "Logs", "About"]);
     fireEvent.click(Array.from(app?.querySelectorAll<HTMLElement>(".nav-row") ?? []).at(-1) as HTMLElement);
@@ -526,7 +526,7 @@ describe("Masthead", () => {
     expect(status.getAttribute("aria-label")).toBe("Offline active");
     // The state is a word, not a lone glyph.
     expect(status.querySelector(".sub-status-text")?.textContent).toBe("Offline active");
-    expect(container.querySelector(".dock-menu")?.getAttribute("aria-label")).toBe("Tools");
+    expect(container.querySelector(".dock-menu")?.getAttribute("aria-label")).toBe("Menu");
     fireEvent.click(status);
     expect(onOpenStatus).toHaveBeenCalledTimes(1);
 

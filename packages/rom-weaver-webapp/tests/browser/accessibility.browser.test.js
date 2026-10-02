@@ -1302,7 +1302,7 @@ describe("webapp responsive navigation", () => {
       const dock = host.querySelector(".dock");
       expect(getComputedStyle(dock).display).toBe("grid");
       expect(getComputedStyle(dock).position).toBe("fixed");
-      // Three workflows plus Tools and App, each with a word under its glyph.
+      // Three workflows plus Menu and Controls, each with a word under its glyph.
       const slots = [...dock.querySelectorAll(".dock-tab")];
       expect(slots.length).toBe(5);
       for (const slot of slots) {
@@ -1335,7 +1335,7 @@ describe("webapp responsive navigation", () => {
     }
   });
 
-  test("Tools lists every sidebar row but theme and accent, and the dock ends with App", async () => {
+  test("Tools lists every sidebar row but theme and accent, and the dock ends with Controls", async () => {
     await setViewport(VIEWPORTS[0]);
     await renderMastheadOnly(ALL_TABS);
     const labels = (scope) => [...host.querySelectorAll(`${scope} .nav-row-label`)].map((label) => label.textContent);
@@ -1349,7 +1349,7 @@ describe("webapp responsive navigation", () => {
     expect(sortLabels(labels(".menu-sheet"))).toEqual(
       sortLabels(labels(".side-nav").filter((label) => !appearance.has(label))),
     );
-    expect(host.querySelector(".dock-app")?.textContent).toBe("App");
+    expect(host.querySelector(".dock-app")?.textContent).toBe("Controls");
     expect(host.querySelector(".phone-runtime .sub-status")?.getAttribute("aria-label")).toBe(
       host.querySelector(".desktop-runtime .sub-status")?.getAttribute("aria-label"),
     );
