@@ -212,7 +212,8 @@
   background: var(--plate);
   box-shadow: inset 0 0 0 1px var(--seam);
 }
-.rw-app .console-tab[aria-selected="true"] svg {
+/* Direct children only: the Offline tab's live glyph keeps its state color. */
+.rw-app .console-tab[aria-selected="true"] > svg {
   color: var(--thread-text);
 }
 @media (hover: hover) {
