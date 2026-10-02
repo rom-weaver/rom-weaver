@@ -157,10 +157,13 @@ pub(in crate::save) mod builtin_pokemon_gen4;
 pub(in crate::save) mod builtin_pokemon_gen5;
 pub(in crate::save) mod builtin_super_mario_world;
 pub(in crate::save) mod builtin_zelda_alttp;
+pub(in crate::save) mod capcom_gba_eeprom;
 pub(in crate::save) mod donkey_kong_country;
 pub(in crate::save) mod donkey_kong_country_2_diddy_s_kong_quest;
 pub(in crate::save) mod donkey_kong_country_3_dixie_kong_s_double_trouble;
+pub(in crate::save) mod donkey_kong_land;
 pub(in crate::save) mod f_zero;
+pub(in crate::save) mod f_zero_maximum_velocity;
 pub(in crate::save) mod final_fantasy_nes;
 pub(in crate::save) mod game_and_watch_gallery_3;
 pub(in crate::save) mod kirbys_adventure;
@@ -168,6 +171,7 @@ pub(in crate::save) mod mario_party;
 pub(in crate::save) mod mario_party_2;
 pub(in crate::save) mod pokemon_generation_i;
 pub(in crate::save) mod pokemon_generation_ii;
+pub(in crate::save) mod pokemon_trading_card_game;
 pub(in crate::save) mod secret_of_mana;
 pub(in crate::save) mod solatorobo_red_the_hunter;
 pub(in crate::save) mod super_mario_64;
@@ -175,8 +179,11 @@ pub(in crate::save) mod super_mario_kart;
 pub(in crate::save) mod super_mario_rpg;
 pub(in crate::save) mod super_mario_world;
 pub(in crate::save) mod super_metroid;
+pub(in crate::save) mod wario_land_3;
 pub(in crate::save) mod wario_land_super_mario_land_3;
 pub(in crate::save) mod zelda_a_link_to_the_past;
+pub(in crate::save) mod zelda_oracle_of_ages;
+pub(in crate::save) mod zelda_oracle_of_seasons;
 pub(in crate::save) fn all() -> Vec<SchemaSaveHandler> {
     static CATALOG: std::sync::OnceLock<Vec<SchemaSaveHandler>> = std::sync::OnceLock::new();
     CATALOG
@@ -209,6 +216,13 @@ pub(in crate::save) fn all() -> Vec<SchemaSaveHandler> {
             games.extend(kirbys_adventure::schemas());
             games.extend(f_zero::schemas());
             games.extend(game_and_watch_gallery_3::schemas());
+            games.extend(capcom_gba_eeprom::schemas());
+            games.extend(donkey_kong_land::schemas());
+            games.extend(f_zero_maximum_velocity::schemas());
+            games.extend(pokemon_trading_card_game::schemas());
+            games.extend(wario_land_3::schemas());
+            games.extend(zelda_oracle_of_ages::schemas());
+            games.extend(zelda_oracle_of_seasons::schemas());
             games
         })
         .clone()

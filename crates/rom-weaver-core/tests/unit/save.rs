@@ -194,6 +194,18 @@ fn registry_lists_every_game_with_format_metadata() {
             "kirbys-adventure-canada-slot-3",
             "f-zero",
             "game-and-watch-gallery-3",
+            "final-fight-one",
+            "super-street-fighter-ii-turbo-revival",
+            "donkey-kong-land",
+            "f-zero-maximum-velocity",
+            "pokemon-trading-card-game",
+            "wario-land-3",
+            "zelda-oracle-of-ages-slot-1",
+            "zelda-oracle-of-ages-slot-2",
+            "zelda-oracle-of-ages-slot-3",
+            "zelda-oracle-of-seasons-slot-1",
+            "zelda-oracle-of-seasons-slot-2",
+            "zelda-oracle-of-seasons-slot-3",
         ]
     );
     assert!(definitions[3..8].iter().all(|definition| {
