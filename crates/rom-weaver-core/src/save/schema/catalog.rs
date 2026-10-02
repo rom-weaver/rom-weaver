@@ -159,6 +159,8 @@ pub(in crate::save) mod builtin_pokemon_gen5;
 pub(in crate::save) mod builtin_super_mario_world;
 pub(in crate::save) mod builtin_zelda_alttp;
 pub(in crate::save) mod capcom_gba_eeprom;
+pub(in crate::save) mod castlevania_aria_of_sorrow;
+pub(in crate::save) mod castlevania_circle_of_the_moon;
 pub(in crate::save) mod chrono_trigger;
 pub(in crate::save) mod diddy_kong_racing;
 pub(in crate::save) mod donkey_kong_country;
@@ -183,6 +185,7 @@ pub(in crate::save) mod pokemon_generation_ii;
 pub(in crate::save) mod pokemon_trading_card_game;
 pub(in crate::save) mod secret_of_mana;
 pub(in crate::save) mod shining_force;
+pub(in crate::save) mod snowboarding_1080;
 pub(in crate::save) mod solatorobo_red_the_hunter;
 pub(in crate::save) mod soleil;
 pub(in crate::save) mod sonic_3;
@@ -193,8 +196,11 @@ pub(in crate::save) mod super_mario_world;
 pub(in crate::save) mod super_metroid;
 pub(in crate::save) mod super_punch_out;
 pub(in crate::save) mod wario_land_3;
+pub(in crate::save) mod wario_land_ii;
 pub(in crate::save) mod wario_land_super_mario_land_3;
+pub(in crate::save) mod yoshis_story;
 pub(in crate::save) mod zelda_a_link_to_the_past;
+pub(in crate::save) mod zelda_links_awakening;
 pub(in crate::save) mod zelda_oracle_of_ages;
 pub(in crate::save) mod zelda_oracle_of_seasons;
 pub(in crate::save) fn all() -> Vec<SchemaSaveHandler> {
@@ -249,6 +255,12 @@ pub(in crate::save) fn all() -> Vec<SchemaSaveHandler> {
             games.extend(sonic_3::schemas());
             games.extend(shining_force::schemas());
             games.extend(soleil::schemas());
+            games.extend(castlevania_aria_of_sorrow::schemas());
+            games.extend(castlevania_circle_of_the_moon::schemas());
+            games.extend(snowboarding_1080::schemas());
+            games.extend(yoshis_story::schemas());
+            games.extend(wario_land_ii::schemas());
+            games.extend(zelda_links_awakening::schemas());
             games
         })
         .clone()

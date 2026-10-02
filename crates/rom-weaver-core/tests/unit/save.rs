@@ -242,6 +242,17 @@ fn registry_lists_every_game_with_format_metadata() {
             "soleil-8704",
             "soleil-12800",
             "soleil-65536",
+            "castlevania-aria-of-sorrow",
+            "castlevania-circle-of-the-moon",
+            "1080-snowboarding",
+            "yoshis-story-canonical-eeprom-europe",
+            "yoshis-story-canonical-eeprom-usa",
+            "yoshis-story-canonical-eeprom-japan",
+            "wario-land-ii",
+            "zelda-links-awakening-gb-international",
+            "zelda-links-awakening-gb-japan-alternate",
+            "zelda-links-awakening-gbc-international",
+            "zelda-links-awakening-gbc-japan-alternate",
         ]
     );
     assert!(definitions[3..8].iter().all(|definition| {
