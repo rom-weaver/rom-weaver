@@ -201,19 +201,19 @@
 
         // Same glyphs and wording as RuntimeGlyph/RUNTIME_MESSAGES in shell.tsx -
         // React hydrates against exactly what is written here.
+        // Four glyphs share Lucide's monitor; it is written once to keep the shell small.
+        const monitor =
+          '<rect width="20" height="14" x="2" y="3" rx="2"></rect><path d="M12 17v4"></path><path d="M8 21h8"></path>';
+        const checked = '<path d="m9 10 2 2 4-4"></path>' + monitor;
         const glyphs = {
-          active:
-            '<path d="m9 10 2 2 4-4"></path><rect width="20" height="14" x="2" y="3" rx="2"></rect><path d="M12 17v4"></path><path d="M8 21h8"></path>',
-          ready:
-            '<path d="m9 10 2 2 4-4"></path><rect width="20" height="14" x="2" y="3" rx="2"></rect><path d="M12 17v4"></path><path d="M8 21h8"></path>',
+          active: checked,
+          ready: checked,
           disabled:
             '<path d="M12 17v4"></path><path d="M17 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 1.184-1.826"></path><path d="m2 2 20 20"></path><path d="M8 21h8"></path><path d="M8.656 3H20a2 2 0 0 1 2 2v10a2 2 0 0 1-.293 1.042"></path>',
-          installing:
-            '<path d="M12 13V7"></path><path d="m15 10-3 3-3-3"></path><rect width="20" height="14" x="2" y="3" rx="2"></rect><path d="M12 17v4"></path><path d="M8 21h8"></path>',
+          installing: '<path d="M12 13V7"></path><path d="m15 10-3 3-3-3"></path>' + monitor,
           online:
             '<circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path>',
-          update:
-            '<path d="m9 10 3-3 3 3"></path><path d="M12 13V7"></path><rect width="20" height="14" x="2" y="3" rx="2"></rect><path d="M12 17v4"></path><path d="M8 21h8"></path>',
+          update: '<path d="m9 10 3-3 3 3"></path><path d="M12 13V7"></path>' + monitor,
         };
         const wording = {
           active: "Offline active",
