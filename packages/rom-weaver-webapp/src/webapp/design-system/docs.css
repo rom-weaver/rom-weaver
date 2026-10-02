@@ -1035,7 +1035,10 @@ html:has(.docs-workbench) {
     animation: docs-rise 0.22s var(--ease);
   }
   .rw-app .docs-parts {
+    max-height: calc(100dvh - var(--dock-h) - var(--docs-bar-h) - var(--safe-t) - 48px);
     padding: var(--sp-s) var(--sp-s) var(--sp-s);
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .rw-app .docs-parts-head {
     display: flex;
