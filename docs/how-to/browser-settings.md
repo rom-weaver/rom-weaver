@@ -18,7 +18,7 @@ Open **Settings** from the app navigation. On a phone, select **Controls** at th
 
 The settings cover language, byte units, guided help, output defaults, and compression. Turn on **Advanced** to show worker threads, codecs, and the RVZ block size. Leave automatic thread selection enabled unless you need to limit resource use.
 
-To leave Settings on a phone, select **Menu**, swipe the bottom bar to the right, or use your browser's back gesture.
+To leave Settings on a phone, select **Close** at the right end of the bottom bar, swipe the bottom bar to the right, or use your browser's back gesture.
 
 The separate **Theme** and **Accent** controls in the navigation apply changes immediately. Theme offers light, dark, and system appearance; Accent changes the highlight color.
 
