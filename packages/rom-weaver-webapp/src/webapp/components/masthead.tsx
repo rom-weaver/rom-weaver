@@ -585,10 +585,13 @@ const Masthead = ({
                 </span>
                 {previewVersionStatus ? <span className="title-build-row">{buildFacts}</span> : null}
               </span>
-              {/* GitHub, Support and Settings reach the phone through Menu and Controls. */}
+              {/* The phone carries the same tools, in the same order, as the desktop top bar. */}
               <div className="shell-head-tools">
+                <span className="phone-project-tools">{projectTiles}</span>
+                <span aria-hidden="true" className="tool-separator" />
                 <span className="phone-runtime header-runtime">{headerStatus}</span>
                 {appearanceTiles("phone")}
+                {settingsTile}
               </div>
             </div>
           </div>

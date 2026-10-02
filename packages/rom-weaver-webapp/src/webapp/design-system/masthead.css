@@ -679,6 +679,14 @@
   gap: 0;
   align-items: center;
 }
+.rw-app .phone-project-tools {
+  display: contents;
+}
+.rw-app .shell-head-tools > .tool-separator {
+  align-self: center;
+  block-size: 24px;
+  background: var(--seam-strong);
+}
 /* Project links stay left of the separator; browser status and controls stay
    together on its right in both layouts. */
 .rw-app .tool-separator {
@@ -1025,7 +1033,7 @@
   align-items: center;
   justify-content: center;
   min-height: 49px;
-  padding: 5px 2px;
+  padding: 3px 2px;
   font-family: inherit;
   font-size: 0.62rem;
   font-weight: 650;
@@ -1040,9 +1048,11 @@
   border-radius: var(--r-s);
 }
 
+/* Every phone icon - header, Menu tiles, dock - is 24px, so none reads as
+   more important than its neighbours. */
 .rw-app .dock-tab svg {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
 }
 .rw-app .dock-tab span {
   max-width: 100%;
@@ -1150,6 +1160,10 @@
 .rw-app .menu-sheet .nav-row {
   min-block-size: 41px;
   padding: 10px 8px;
+}
+.rw-app .menu-sheet .nav-row svg {
+  width: 24px;
+  height: 24px;
 }
 /* Tools: five tiles across, so every destination still fits above the
    keyboard that opens with the sheet. */
@@ -1415,6 +1429,9 @@
     }
     .rw-app .brand-word {
       font-size: 1.2rem;
+    }
+    .rw-app .shell-head-tools > .tool-separator {
+      margin-inline: 2px;
     }
   }
   @media (max-width: 599px) {

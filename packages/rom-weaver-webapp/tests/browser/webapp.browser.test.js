@@ -725,21 +725,30 @@ test("the phone console keeps Tools and its five sections on one bar at the foot
   await page.viewport(1280, 900);
 });
 
-test("the phone header carries status and appearance, and Tools carries every destination", async () => {
+test("the phone header carries the desktop tools, and Tools carries every destination", async () => {
   await page.viewport(390, 844);
   mountWebappRoot();
 
   await expect.poll(() => document.querySelector(".shell-head-tools")).toBeTruthy();
-  // The footer is gone; GitHub, Support and Settings reach the phone through Menu and Controls.
+  // The footer is gone; the phone header carries the same tools as the desktop top bar.
   expect(document.querySelector(".site-footer")).toBeNull();
   const tiles = [...document.querySelectorAll(".shell-head-tools .tool")];
   expect(tiles.map((tile) => tile.getAttribute("aria-label"))).toEqual([
+    "View source on GitHub",
+    "Support",
     document.querySelector(".desktop-runtime .sub-status").getAttribute("aria-label"),
     "Theme: Match system",
     "Accent: Madder",
+    "Settings",
   ]);
   expect(document.querySelector('.shell-head-tools [aria-label="Docs"]')).toBeNull();
   for (const tile of tiles) expect(getComputedStyle(tile).display).not.toBe("none");
+  for (const [label, href] of [
+    ["View source on GitHub", "https://github.com/rom-weaver/rom-weaver/"],
+    ["Support", "https://ko-fi.com/brandonocasey"],
+  ]) {
+    expect(tiles.find((tile) => tile.getAttribute("aria-label") === label).getAttribute("href")).toBe(href);
+  }
 
   await openMenuSheet();
   for (const name of ["Home", "Docs", "GitHub", "Support", "Settings", "Offline app", "Saves & storage", "Logs"]) {

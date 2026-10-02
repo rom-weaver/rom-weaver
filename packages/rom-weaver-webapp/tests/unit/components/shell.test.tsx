@@ -336,7 +336,7 @@ describe("Masthead", () => {
     expect(container.querySelector(".guide-nav")).not.toBeNull();
   });
 
-  it("puts project links before the separator and device controls after it on desktop", () => {
+  it("puts project links before the separator and device controls after it", () => {
     const onOpenSettings = vi.fn();
     const { container } = render(withSettings(<Masthead {...mastheadProps} onOpenSettings={onOpenSettings} />));
     const names = (scope: string) =>
@@ -350,11 +350,9 @@ describe("Masthead", () => {
       "Settings",
     ];
     expect(names(".topbar-tools")).toEqual(expected);
-    // The phone reaches GitHub, Support and Settings through Menu and Controls.
-    expect(names(".shell-head-tools")).toEqual(["Installing offline copy", "Theme: Match system", "Accent: Madder"]);
-    expect(container.querySelector(".shell-head-tools .tool-separator")).toBeNull();
-    {
-      const tools = container.querySelector(".topbar-tools") as HTMLElement;
+    expect(names(".shell-head-tools")).toEqual(expected);
+    for (const scope of [".topbar-tools", ".shell-head-tools"]) {
+      const tools = container.querySelector(scope) as HTMLElement;
       const separator = tools.querySelector(".tool-separator");
       const previous = separator?.previousElementSibling;
       const previousTools = previous?.matches(".tool")
