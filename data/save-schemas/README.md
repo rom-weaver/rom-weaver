@@ -131,9 +131,9 @@ The additional handheld, Nintendo 64, and SNES profiles also require explicit se
 | Mario Kart 64 | Mario GP trophies for four cups in four classes |
 | Mission: Impossible | Music, sound-effects, audio-mode, and screen-ratio options in four records |
 | Mystic Quest Legend | Money, location code, and hero level in each slot |
-| Pokémon Trading Card Game | Playtime, position, location, and eight Master Medals |
+| Pokémon Trading Card Game | Playtime, position, location with both preview copies, and eight Master Medals with their total |
 | Super Punch-Out!! | Losses in eight profiles; wins and championship progression are read-only |
-| Wario Land 3 | Coins, language, time of day, and three acquired powers |
+| Wario Land 3 | Coins, language, encoded day/night, and the first three sequential power upgrades |
 | The Legend of Zelda: Oracle of Ages and Oracle of Seasons | Mode, health, maximum health, heart pieces, and rupees in three slots per title |
 
 These definitions derive from [Game Tools Collection commit `8fb075e7c130da9e72c3c46ec8efa447a252ad88`](https://github.com/RyudoSynbios/game-tools-collection/tree/8fb075e7c130da9e72c3c46ec8efa447a252ad88). Diddy Kong Racing also uses the checksum rules in [DavidSM64/Diddy-Kong-Racing `save_data.c`](https://github.com/DavidSM64/Diddy-Kong-Racing/blob/1339ad6304118207b342fe8669c500efb91969df/src/save_data.c).
