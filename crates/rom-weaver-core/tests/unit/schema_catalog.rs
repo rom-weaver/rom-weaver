@@ -7,7 +7,7 @@ fn every_catalog_pack_loads_and_builtins_match_the_default_registry() {
     let registry = SaveGameRegistry::default();
     let mut ids = HashSet::new();
     let handlers = super::catalog::all();
-    assert_eq!(handlers.len(), 98);
+    assert_eq!(handlers.len(), 129);
     for handler in handlers {
         let definition = super::SchemaSaveHandler::definitions(&handler)
             .into_iter()

@@ -150,6 +150,7 @@ fn read_at(bytes: &[u8], offset: i64, storage: Storage) -> Result<i64> {
     .read(bytes)
 }
 
+pub(in crate::save) mod actraiser;
 pub(in crate::save) mod builtin_pokemon_gen1;
 pub(in crate::save) mod builtin_pokemon_gen2;
 pub(in crate::save) mod builtin_pokemon_gen3;
@@ -158,6 +159,7 @@ pub(in crate::save) mod builtin_pokemon_gen5;
 pub(in crate::save) mod builtin_super_mario_world;
 pub(in crate::save) mod builtin_zelda_alttp;
 pub(in crate::save) mod capcom_gba_eeprom;
+pub(in crate::save) mod chrono_trigger;
 pub(in crate::save) mod diddy_kong_racing;
 pub(in crate::save) mod donkey_kong_country;
 pub(in crate::save) mod donkey_kong_country_2_diddy_s_kong_quest;
@@ -167,6 +169,7 @@ pub(in crate::save) mod f_zero;
 pub(in crate::save) mod f_zero_maximum_velocity;
 pub(in crate::save) mod f_zero_x;
 pub(in crate::save) mod final_fantasy_nes;
+pub(in crate::save) mod final_fantasy_vi;
 pub(in crate::save) mod game_and_watch_gallery_3;
 pub(in crate::save) mod kirbys_adventure;
 pub(in crate::save) mod lylat_wars;
@@ -174,16 +177,21 @@ pub(in crate::save) mod mario_kart_64;
 pub(in crate::save) mod mario_party;
 pub(in crate::save) mod mario_party_2;
 pub(in crate::save) mod mission_impossible;
+pub(in crate::save) mod mystic_quest_legend;
 pub(in crate::save) mod pokemon_generation_i;
 pub(in crate::save) mod pokemon_generation_ii;
 pub(in crate::save) mod pokemon_trading_card_game;
 pub(in crate::save) mod secret_of_mana;
+pub(in crate::save) mod shining_force;
 pub(in crate::save) mod solatorobo_red_the_hunter;
+pub(in crate::save) mod soleil;
+pub(in crate::save) mod sonic_3;
 pub(in crate::save) mod super_mario_64;
 pub(in crate::save) mod super_mario_kart;
 pub(in crate::save) mod super_mario_rpg;
 pub(in crate::save) mod super_mario_world;
 pub(in crate::save) mod super_metroid;
+pub(in crate::save) mod super_punch_out;
 pub(in crate::save) mod wario_land_3;
 pub(in crate::save) mod wario_land_super_mario_land_3;
 pub(in crate::save) mod zelda_a_link_to_the_past;
@@ -226,6 +234,8 @@ pub(in crate::save) fn all() -> Vec<SchemaSaveHandler> {
             games.extend(diddy_kong_racing::schemas());
             games.extend(lylat_wars::schemas());
             games.extend(mission_impossible::schemas());
+            games.extend(final_fantasy_vi::schemas());
+            games.extend(mystic_quest_legend::schemas());
             games.extend(donkey_kong_land::schemas());
             games.extend(f_zero_maximum_velocity::schemas());
             games.extend(pokemon_trading_card_game::schemas());
@@ -233,6 +243,12 @@ pub(in crate::save) fn all() -> Vec<SchemaSaveHandler> {
             games.extend(zelda_oracle_of_ages::schemas());
             games.extend(zelda_oracle_of_seasons::schemas());
             games.extend(mario_kart_64::schemas());
+            games.extend(actraiser::schemas());
+            games.extend(chrono_trigger::schemas());
+            games.extend(super_punch_out::schemas());
+            games.extend(sonic_3::schemas());
+            games.extend(shining_force::schemas());
+            games.extend(soleil::schemas());
             games
         })
         .clone()
