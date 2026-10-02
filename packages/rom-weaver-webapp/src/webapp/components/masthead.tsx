@@ -128,7 +128,7 @@ const Masthead = ({
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const docsMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
   /* Find opens from the top bar on desktop. The phone has no Find trigger:
-     its Find box lives at the foot of the Tools sheet. */
+     its Find box lives at the foot of the Menu sheet. */
   const findTriggerRef = useRef<HTMLButtonElement | null>(null);
   const navLabel = localizer.message("ui.nav.primary");
 
@@ -207,8 +207,8 @@ const Masthead = ({
       // palette nobody can reach behind its backdrop.
       if (document.querySelector("dialog[open]")) return;
       event.preventDefault();
-      // Below the threshold the top bar is hidden and Find lives in Tools, so
-      // the shortcut opens Tools; Escape then has a visible trigger to return to.
+      // Below the threshold the top bar is hidden and Find lives in Menu, so
+      // the shortcut opens Menu; Escape then has a visible trigger to return to.
       if (window.matchMedia("(max-width: 999px)").matches) {
         if (document.getElementById("menu-sheet")?.hidden === false) setMenuOpen(false);
         else openTools();
@@ -224,7 +224,7 @@ const Masthead = ({
   /* The sheet covers the page and its scrim blocks pointer input, so the
      keyboard has to agree: what the sheet covers goes inert while it is open,
      or Tab walks into controls nobody can see or click. The dock stays live
-     because its Tools button is what closes the sheet again, and the scrim is a
+     because its Menu button is what closes the sheet again, and the scrim is a
      close control in its own right. Only attributes set here are cleared, so a
      dialog that inerted the same node keeps its own. */
   useEffect(() => {
@@ -582,7 +582,7 @@ const Masthead = ({
                 </span>
                 {previewVersionStatus ? <span className="title-build-row">{buildFacts}</span> : null}
               </span>
-              {/* GitHub, Support and Settings reach the phone through Tools and App. */}
+              {/* GitHub, Support and Settings reach the phone through Menu and Controls. */}
               <div className="shell-head-tools">
                 <span className="phone-runtime header-runtime">{headerStatus}</span>
                 {appearanceTiles("phone")}

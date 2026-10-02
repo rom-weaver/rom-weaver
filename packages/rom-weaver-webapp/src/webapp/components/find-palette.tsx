@@ -28,7 +28,7 @@ const isPlainActivation = (event: React.MouseEvent) =>
  * dock with the input at the bottom edge and the best match right above it
  * (see find.css). The result list is a listbox driven from the input, so
  * focus never leaves the box: arrows move the active option, Enter opens it.
- * `embedded` renders the same box inside the phone's Tools sheet: the sheet
+ * `embedded` renders the same box inside the phone's Menu sheet: the sheet
  * owns dismissal, and an empty box shows the sheet's own nav instead of results.
  */
 const FindPalette = ({

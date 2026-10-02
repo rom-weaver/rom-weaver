@@ -174,9 +174,9 @@ const SideNav = ({
 );
 
 /**
- * The phone dock: two workflows, Tools, the third workflow, then App. Tools
+ * The phone dock: two workflows, Menu, the third workflow, then Controls. Menu
  * opens the menu sheet, which carries every destination and the Find box;
- * App opens the settings console from the right-hand edge, where a leftward
+ * Controls opens the settings console from the right-hand edge, where a leftward
  * swipe across the dock also pulls it in.
  */
 const PhoneDock = ({
