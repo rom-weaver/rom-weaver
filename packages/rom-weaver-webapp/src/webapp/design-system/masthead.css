@@ -1189,10 +1189,30 @@
   line-height: 1.15;
   text-wrap: balance;
 }
+/* A solid tag on the icon's top-right corner: an outline chip there drew its
+   text across the icon's strokes. The ring in the sheet's colour cuts it off
+   the icon. */
 .rw-app #menu-sheet .nav-beta {
   position: absolute;
-  inset-block-start: 2px;
-  inset-inline-end: 2px;
+  inset-block-start: 1px;
+  inset-inline-start: calc(50% + 3px);
+  padding: 1px 4px;
+  margin: 0;
+  font-size: 0.5rem;
+  line-height: 1.2;
+  color: var(--thread-ink);
+  letter-spacing: 0.06em;
+  background: var(--thread);
+  border: 0;
+  box-shadow: 0 0 0 2px var(--plate);
+}
+.rw-app #menu-sheet .nav-row[aria-current="page"] .nav-beta {
+  color: var(--thread-ink);
+}
+@media (forced-colors: active) {
+  .rw-app #menu-sheet .nav-beta {
+    border: 1px solid CanvasText;
+  }
 }
 /* A query swaps the nav for Find's results, which stack upward from the box. */
 .rw-app #menu-sheet:has(.find-palette[data-has-query]) .menu-sheet-body {
