@@ -210,6 +210,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.nav.groupDevice"
+#~ msgstr "This device"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.tools.menu"
+#~ msgstr "Menu"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", an output extension. The format selector adds the extension; remove it to avoid a doubled name."
 
@@ -345,12 +355,12 @@ msgstr "A rom-weaver bundle is a recipe for applying a patch chain to a ROM. Its
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.console.about"
+msgid "ui.footer.about"
 msgstr "About"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.footer.about"
+msgid "ui.console.about"
 msgstr "About"
 
 #. js-lingui-explicit-id
@@ -2120,11 +2130,6 @@ msgstr "Media profile not supported"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tools.menu"
-msgstr "Menu"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.quality.metadata_only"
 msgstr "Metadata only"
 
@@ -3757,11 +3762,6 @@ msgstr "This build"
 #: src/presentation/localization/messages.ts
 msgid "ui.console.aboutDescription"
 msgstr "This build, what's new, and licenses."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.nav.groupDevice"
-msgstr "This device"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

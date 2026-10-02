@@ -491,6 +491,7 @@ function WebappRoot({
     handleDialogTabChange,
     logOpen,
     logTab,
+    openAboutTab,
     openLogsTab,
     openSettingsTab,
     openStatusTab,
@@ -725,6 +726,7 @@ function WebappRoot({
             commitsSinceVersion={COMMITS_SINCE_VERSION}
             dirty={Boolean(DIRTY_HASH)}
             onOpenWhatsNew={openWhatsNew}
+            onOpenAbout={openAboutTab}
             onOpenLog={openLogsTab}
             onOpenStatus={openStatusTab}
             onOpenStorage={openStorageTab}

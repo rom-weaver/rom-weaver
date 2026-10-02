@@ -210,6 +210,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.nav.groupDevice"
+#~ msgstr "Dieses Gerät"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.tools.menu"
+#~ msgstr "Menü"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", eine Ausgabe-Endung. Die Formatauswahl fügt die Endung hinzu; entferne sie, um einen doppelten Namen zu vermeiden."
 
@@ -345,13 +355,13 @@ msgstr "Ein rom-weaver-Bundle ist eine Anleitung zum Anwenden einer Patch-Kette 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.console.about"
-msgstr "Info"
+msgid "ui.footer.about"
+msgstr "Über"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.footer.about"
-msgstr "Über"
+msgid "ui.console.about"
+msgstr "Info"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2120,11 +2130,6 @@ msgstr "Medienprofil nicht unterstützt"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tools.menu"
-msgstr "Menü"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.quality.metadata_only"
 msgstr "Nur Metadaten"
 
@@ -3757,11 +3762,6 @@ msgstr "Dieser Build"
 #: src/presentation/localization/messages.ts
 msgid "ui.console.aboutDescription"
 msgstr "Dieser Build, Neuigkeiten und Lizenzen."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.nav.groupDevice"
-msgstr "Dieses Gerät"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

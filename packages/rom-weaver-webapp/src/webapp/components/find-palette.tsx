@@ -28,8 +28,11 @@ const isPlainActivation = (event: React.MouseEvent) =>
  * dock with the input at the bottom edge and the best match right above it
  * (see find.css). The result list is a listbox driven from the input, so
  * focus never leaves the box: arrows move the active option, Enter opens it.
+ * `embedded` renders the same box inside the phone's Tools sheet: the sheet
+ * owns dismissal, and an empty box shows the sheet's own nav instead of results.
  */
 const FindPalette = ({
+  embedded = false,
   localizer,
   onAction,
   onClose,
@@ -37,6 +40,7 @@ const FindPalette = ({
   sources,
   triggerRef,
 }: {
+  embedded?: boolean;
   localizer: Localizer;
   onAction: (action: FindAction, entry: FindEntry) => void;
   onClose: () => void;
@@ -104,6 +108,7 @@ const FindPalette = ({
       return undefined;
     }
     inputRef.current?.focus();
+    if (embedded) return undefined;
     const dismiss = (event: Event) => {
       const target = event.target;
       if (!(target instanceof Node)) return;
@@ -112,7 +117,7 @@ const FindPalette = ({
     };
     document.addEventListener("pointerdown", dismiss);
     return () => document.removeEventListener("pointerdown", dismiss);
-  }, [onClose, open, triggerRef]);
+  }, [embedded, onClose, open, triggerRef]);
 
   useEffect(() => {
     if (!open) return;
@@ -152,8 +157,13 @@ const FindPalette = ({
 
   if (!open) return null;
   const label = localizer.message("ui.find.label");
+  const showResults = hasQuery || !embedded;
+  // Inside the sheet the box is a search landmark; on its own it is the dialog.
+  const frame = embedded
+    ? ({ "aria-label": label, role: "search" } as const)
+    : ({ "aria-label": label, id: "find-palette", role: "dialog" } as const);
   return (
-    <div aria-label={label} className="find-palette" id="find-palette" ref={paletteRef} role="dialog">
+    <div {...frame} className={embedded ? "find-palette is-embedded" : "find-palette"} ref={paletteRef}>
       <div className="find-box">
         <Search aria-hidden="true" />
         <input
@@ -186,9 +196,8 @@ const FindPalette = ({
           ? localizer.message("ui.find.empty")
           : localizer.message("ui.find.resultCount", { count: String(results.length) })}
       </p>
-      {results.length === 0 ? (
-        <p className="find-empty">{localizer.message("ui.find.empty")}</p>
-      ) : (
+      {showResults && results.length === 0 ? <p className="find-empty">{localizer.message("ui.find.empty")}</p> : null}
+      {showResults && results.length > 0 ? (
         <div aria-label={label} className="find-results" id={listId} role="listbox">
           {results.map((result, resultIndex) => {
             const { entry } = result;
@@ -243,7 +252,7 @@ const FindPalette = ({
             );
           })}
         </div>
-      )}
+      ) : null}
     </div>
   );
 };

@@ -155,12 +155,14 @@ const useUnifiedDialog = (actions: WebappRootProps["actions"], state: WebappRoot
   const openStatusTab = useCallback(() => showTab("offline"), [showTab]);
   const openStorageTab = useCallback(() => showTab("storage"), [showTab]);
   const openLogsTab = useCallback(() => showTab("logs"), [showTab]);
+  const openAboutTab = useCallback(() => showTab("about"), [showTab]);
   return {
     closeDialog,
     closeDialogForNavigation,
     handleDialogTabChange,
     logOpen,
     logTab,
+    openAboutTab,
     openLogsTab,
     openSettingsTab,
     openStatusTab,

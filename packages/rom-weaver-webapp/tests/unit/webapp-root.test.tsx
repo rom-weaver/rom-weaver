@@ -622,10 +622,10 @@ describe("console history", () => {
 });
 
 describe("the phone dock", () => {
-  it("opens the settings console from the dock's Settings link", async () => {
+  it("opens the settings console from the dock's App button", async () => {
     const { called, container } = await renderRoot();
 
-    fireEvent.click(container.querySelector(".dock-settings") as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".dock-app") as HTMLButtonElement);
 
     expect(called("onOpenSettings")).toHaveBeenCalledTimes(1);
     await waitFor(() =>

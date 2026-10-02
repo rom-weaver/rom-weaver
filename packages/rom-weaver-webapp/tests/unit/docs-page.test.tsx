@@ -730,7 +730,8 @@ Fixture description.
     expect(document.querySelector(".docs-mobile-toolbar a")).toBeNull();
     const trigger = document.querySelector(".docs-browse-trigger") as HTMLElement;
     expect(trigger.textContent).toBe(browse);
-    expect(document.querySelector(".dock-find")?.getAttribute("aria-label")).toBe(find);
+    fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
+    expect(document.querySelector("#menu-sheet .find-input")?.getAttribute("aria-label")).toBe(find);
     fireEvent.click(trigger);
     expect(document.querySelector("#docs-menu-sheet")?.getAttribute("aria-label")).toBe(navigation);
     expect(document.querySelector("#docs-menu-sheet .docs-menu-header strong")?.textContent).toBe(browse);
@@ -747,7 +748,7 @@ Fixture description.
     expect(currentLink?.closest("details")?.querySelector("summary")?.textContent).toBe("Patching & bundles");
   });
 
-  it("keeps global Find and Menu beside the separate Docs navigation", async () => {
+  it("keeps Find in the global Tools sheet beside the separate Docs navigation", async () => {
     renderDocsShell("docs/cli");
     expect(document.querySelector(".dock")).not.toBeNull();
     expect(document.querySelector('.side-nav a[href="/apply-patches"]')?.textContent).toBe("Back to tools");
@@ -761,14 +762,14 @@ Fixture description.
     );
     fireEvent.click(document.querySelector("#docs-menu-sheet .guide-nav-list a") as HTMLElement);
     expect((document.querySelector("#docs-menu-sheet") as HTMLDialogElement).open).toBe(false);
-    fireEvent.click(document.querySelector(".dock-find") as HTMLElement);
-    expect((document.querySelector("#docs-menu-sheet") as HTMLDialogElement).open).toBe(false);
-    const input = document.querySelector(".find-input") as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "OPFS" } });
-    await vi.waitFor(() => expect(document.querySelector('.find-results a[href*="highlight=OPFS"]')).toBeTruthy());
-
     fireEvent.click(document.querySelector(".dock-menu") as HTMLElement);
+    expect((document.querySelector("#docs-menu-sheet") as HTMLDialogElement).open).toBe(false);
     expect((document.querySelector("#menu-sheet") as HTMLElement).hidden).toBe(false);
+    const input = document.querySelector("#menu-sheet .find-input") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "OPFS" } });
+    await vi.waitFor(() =>
+      expect(document.querySelector('#menu-sheet .find-results a[href*="highlight=OPFS"]')).toBeTruthy(),
+    );
     expect((document.querySelector("#docs-menu-sheet") as HTMLDialogElement).open).toBe(false);
     expect(document.querySelector("#menu-sheet .guide-nav")).toBeNull();
     expect(document.querySelector('#menu-sheet a[href="/docs"]')?.closest(".nav-group")?.textContent).toContain("Home");

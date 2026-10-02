@@ -245,16 +245,21 @@ describe("Find", () => {
     expect(onOpenSettingsField).toHaveBeenCalledWith("settings-worker-threads");
   });
 
-  it("swaps with the phone Menu sheet and opens from the dock", () => {
+  it("lives at the foot of the phone Tools sheet, replacing the floating palette", () => {
     const { container } = render(withSettings(<Masthead {...props} />));
     fireEvent.click(container.querySelector(".topbar-find") as HTMLButtonElement);
-    expect(container.querySelector(".find-palette")).not.toBeNull();
+    expect(container.querySelector("#find-palette")).not.toBeNull();
 
-    // Opening Menu closes Find; the dock's Find tab replaces the sheet.
+    // Opening Tools closes the floating palette and focuses the sheet's own box.
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
-    expect(container.querySelector(".find-palette")).toBeNull();
-    fireEvent.click(container.querySelector(".dock-find") as HTMLButtonElement);
-    expect(container.querySelector(".find-palette")).not.toBeNull();
-    expect(container.querySelector(".menu-sheet")?.hasAttribute("hidden")).toBe(true);
+    expect(container.querySelector("#find-palette")).toBeNull();
+    const embedded = container.querySelector("#menu-sheet .find-palette.is-embedded") as HTMLElement;
+    expect(embedded.getAttribute("role")).toBe("search");
+    expect(document.activeElement).toBe(embedded.querySelector(".find-input"));
+    expect(container.querySelector(".dock-find")).toBeNull();
+
+    // Closing the sheet takes its Find box with it.
+    fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
+    expect(container.querySelector("#menu-sheet .find-palette")).toBeNull();
   });
 });

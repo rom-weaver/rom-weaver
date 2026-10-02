@@ -5,12 +5,14 @@ import {
   HardDrive,
   Heart,
   House,
+  Info,
   Newspaper,
   ScrollText,
   Search,
   Settings,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { DocsNavigation } from "../docs-navigation.tsx";
 import { BrandMark } from "./brand-mark.tsx";
 import { FIND_SHORTCUT_HINT, FindPalette } from "./find-palette.tsx";
@@ -20,7 +22,7 @@ import { useRomWeaverSettings, useUiLocalizer } from "../../public/react/setting
 import type { ServiceWorkerStatus } from "../pwa/service-worker-cache-state.ts";
 import { Github } from "./shell-common.tsx";
 import type { NavGroup, NavSectionData, WorkflowTab } from "./shell-nav.tsx";
-import { MenuSheet, NAV_GROUP_TITLES, PhoneDock, SideNav, fullNameFor, visibleFirst } from "./shell-nav.tsx";
+import { MenuSheet, NAV_GROUP_TITLES, PhoneDock, SideNav, fullNameFor } from "./shell-nav.tsx";
 import { AccentTile, ProjectTiles, SettingsTile, ThemeTile } from "./menu-tools.tsx";
 import type { OfflineWarmupDisplayProgress, RuntimeState } from "./runtime-status.tsx";
 import {
@@ -49,6 +51,7 @@ const Masthead = ({
   homeHref,
   onSelectTab,
   onOpenWhatsNew,
+  onOpenAbout,
   onOpenLog,
   onOpenStatus,
   onOpenStorage,
@@ -80,6 +83,7 @@ const Masthead = ({
   homeHref: string;
   onSelectTab: (id: string) => void;
   onOpenWhatsNew: () => void;
+  onOpenAbout?: () => void;
   onOpenLog: () => void;
   onOpenStatus: () => void;
   onOpenStorage?: () => void;
@@ -123,23 +127,9 @@ const Masthead = ({
   const [findOpen, setFindOpen] = useState(false);
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const docsMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  /* Find opens from the top bar on desktop. The phone has no Find trigger:
+     its Find box lives at the foot of the Tools sheet. */
   const findTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const dockFindRef = useRef<HTMLButtonElement | null>(null);
-  /* Find opens from the top bar on desktop and from the dock on the phone.
-     Escape restores focus to whichever of those the layout shows,
-     resolved at call time rather than stored, because the layout is CSS's
-     decision and this component never reads a breakpoint. */
-  const activeFindRef = useMemo(
-    () => ({
-      get current() {
-        return visibleFirst([findTriggerRef.current, dockFindRef.current]);
-      },
-      set current(node: HTMLButtonElement | null) {
-        findTriggerRef.current = node;
-      },
-    }),
-    [],
-  );
   const navLabel = localizer.message("ui.nav.primary");
 
   /* The beta-tools setting is client-only, so the prerendered shell must not
@@ -216,7 +206,7 @@ const Masthead = ({
   /* The sheet covers the page and its scrim blocks pointer input, so the
      keyboard has to agree: what the sheet covers goes inert while it is open,
      or Tab walks into controls nobody can see or click. The dock stays live
-     because its Menu button is what closes the sheet again, and the scrim is a
+     because its Tools button is what closes the sheet again, and the scrim is a
      close control in its own right. Only attributes set here are cleared, so a
      dialog that inerted the same node keeps its own. */
   useEffect(() => {
@@ -228,6 +218,27 @@ const Masthead = ({
     for (const node of covered) node.setAttribute("inert", "");
     return () => {
       for (const node of covered) node.removeAttribute("inert");
+    };
+  }, [menuOpen]);
+
+  /* The on-screen keyboard covers the dock without resizing the layout
+     viewport on iOS, so the sheet reads the visual viewport and sits on top of
+     the keyboard instead of behind it. */
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!(menuOpen && viewport)) return undefined;
+    const root = document.documentElement;
+    const update = () => {
+      const covered = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+      root.style.setProperty("--keyboard-inset", `${Math.round(covered)}px`);
+    };
+    update();
+    viewport.addEventListener("resize", update);
+    viewport.addEventListener("scroll", update);
+    return () => {
+      viewport.removeEventListener("resize", update);
+      viewport.removeEventListener("scroll", update);
+      root.style.removeProperty("--keyboard-inset");
     };
   }, [menuOpen]);
 
@@ -307,7 +318,14 @@ const Masthead = ({
       title: localizer.message(NAV_GROUP_TITLES[group]),
     });
     const device: NavSectionData = {
+      /* The settings console's own order, so the group reads like its tab bar. */
       entries: [
+        {
+          icon: <Settings aria-hidden="true" />,
+          id: "settings",
+          label: localizer.message("ui.settings.title"),
+          onSelect: onOpenSettings,
+        },
         {
           /* The first client render MUST match the prerendered glyph. The
              parser-time resolver only updates the identity status chips. */
@@ -328,15 +346,19 @@ const Masthead = ({
           label: localizer.message("ui.log.tabLogs"),
           onSelect: onOpenLog,
         },
-        {
-          icon: <Settings aria-hidden="true" />,
-          id: "settings",
-          label: localizer.message("ui.settings.title"),
-          onSelect: onOpenSettings,
-        },
+        ...(onOpenAbout
+          ? [
+              {
+                icon: <Info aria-hidden="true" />,
+                id: "about",
+                label: localizer.message("ui.console.about"),
+                onSelect: onOpenAbout,
+              },
+            ]
+          : []),
       ],
       id: "device",
-      title: localizer.message("ui.nav.groupDevice"),
+      title: localizer.message("ui.tools.app"),
     };
     const project = workflowGroup("project");
     project.entries.unshift({
@@ -388,6 +410,7 @@ const Masthead = ({
     homeHref,
     hydrated,
     localizer,
+    onOpenAbout,
     onOpenLog,
     onOpenSettings,
     onOpenStatus,
@@ -541,12 +564,10 @@ const Masthead = ({
                 </span>
                 {previewVersionStatus ? <span className="title-build-row">{buildFacts}</span> : null}
               </span>
+              {/* GitHub, Support and Settings reach the phone through Tools and App. */}
               <div className="shell-head-tools">
-                <span className="phone-project-tools">{projectTiles}</span>
-                <span aria-hidden="true" className="tool-separator" />
                 <span className="phone-runtime header-runtime">{headerStatus}</span>
                 {appearanceTiles("phone")}
-                {settingsTile}
               </div>
             </div>
           </div>
@@ -614,7 +635,7 @@ const Masthead = ({
         onClose={closeFind}
         open={findOpen}
         sources={findSources}
-        triggerRef={activeFindRef}
+        triggerRef={findTriggerRef}
       />
       {previewPhoneOverlay ? (
         <span className="phone-overlay-runtime" data-sw={runtimeState} hidden={menuOpen || docsMenuOpen || findOpen}>
@@ -631,33 +652,35 @@ const Masthead = ({
         </span>
       ) : null}
       <PhoneDock
+        appLabel={localizer.message("ui.tools.app")}
         current={currentTab}
-        findLabel={localizer.message("ui.find.label")}
-        findOpen={findOpen}
-        findTriggerRef={dockFindRef}
-        menuLabel={localizer.message("ui.tools.menu")}
+        menuLabel={localizer.message("ui.tools.tools")}
         menuOpen={menuOpen}
         navLabel={navLabel}
-        onOpenSettings={() => {
+        onOpenApp={() => {
           setFindOpen(false);
           setMenuOpen(false);
           setDocsMenuOpen(false);
           onOpenSettings();
         }}
         onSelect={onSelectTab}
-        onToggleFind={() => {
-          setMenuOpen(false);
-          setDocsMenuOpen(false);
-          setFindOpen((open) => !open);
-        }}
         onToggleMenu={() => {
           setFindOpen(false);
           setDocsMenuOpen(false);
           onPreloadLog?.();
-          setMenuMounted(true);
-          setMenuOpen((open) => !open);
+          if (menuOpen) {
+            setMenuOpen(false);
+            return;
+          }
+          /* iOS raises the keyboard only for a focus made inside the tap, on a
+             field that is already rendered, so the sheet MUST commit before the
+             handler returns. */
+          flushSync(() => {
+            setMenuMounted(true);
+            setMenuOpen(true);
+          });
+          document.querySelector<HTMLInputElement>("#menu-sheet .find-input")?.focus();
         }}
-        settingsLabel={localizer.message("ui.settings.title")}
         tabs={dockTabs}
         triggerRef={menuTriggerRef}
       />
@@ -682,11 +705,21 @@ const Masthead = ({
         onClose={closeMenu}
         open={menuOpen}
         opened={menuMounted}
-        /* This device lives behind the dock's › Settings button, so the sheet
-           lists only destinations. */
+        search={
+          <FindPalette
+            embedded
+            localizer={localizer}
+            onAction={onFindAction}
+            onClose={closeMenu}
+            open={menuOpen}
+            sources={findSources}
+            triggerRef={menuTriggerRef}
+          />
+        }
         sections={[
           ...sections.filter((section) => section.id !== "project" && section.id !== "device"),
           ...sections.filter((section) => section.id === "project"),
+          ...sections.filter((section) => section.id === "device"),
         ]}
         toolOpen={false}
         triggerRef={menuTriggerRef}

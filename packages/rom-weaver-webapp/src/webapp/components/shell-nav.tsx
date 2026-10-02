@@ -1,4 +1,4 @@
-import { ChevronRight, Menu, Search, X } from "lucide-react";
+import { LayoutGrid, Settings, X } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
 import { useEffect, useRef } from "react";
 import type { Localizer } from "../../presentation/localization/index.ts";
@@ -66,22 +66,6 @@ type NavSectionData = { entries: NavEntry[]; id: string; title: string; content?
 const fullNameFor = (tab: WorkflowTab) => {
   if (!tab.railLabel) return undefined;
   return tab.label.toLowerCase().includes(tab.railLabel.toLowerCase()) ? tab.label : undefined;
-};
-
-/**
- * The first candidate the current layout actually shows, falling back to the
- * first that exists. The chrome renders some controls twice and hides one copy
- * with CSS, and `focus()` on a `display: none` element silently does nothing
- * and drops focus to the body. The fallback matters where there is no layout
- * to read - a test environment, or a control measured before first paint.
- */
-const visibleFirst = <T extends HTMLElement>(candidates: Iterable<T | null | undefined>): T | null => {
-  let fallback: T | null = null;
-  for (const node of candidates) {
-    if (node?.offsetParent) return node;
-    fallback ??= node ?? null;
-  }
-  return fallback;
 };
 
 const activateOnClick = (event: React.MouseEvent, run: () => void) => {
@@ -189,41 +173,37 @@ const SideNav = ({
   </nav>
 );
 
+/**
+ * The phone dock: two workflows, Tools, the third workflow, then App. Tools
+ * opens the menu sheet, which carries every destination and the Find box;
+ * App opens the settings console from the right-hand edge, where a leftward
+ * swipe across the dock also pulls it in.
+ */
 const PhoneDock = ({
+  appLabel,
   current,
-  findLabel,
-  findOpen,
-  findTriggerRef,
   menuLabel,
   menuOpen,
   navLabel,
+  onOpenApp,
   onSelect,
-  onOpenSettings,
-  onToggleFind,
   onToggleMenu,
-  settingsLabel,
   tabs,
   triggerRef,
 }: {
+  appLabel: string;
   current: string;
-  findLabel: string;
-  findOpen: boolean;
-  findTriggerRef: RefObject<HTMLButtonElement | null>;
   menuLabel: string;
   menuOpen: boolean;
   navLabel: string;
+  onOpenApp: () => void;
   onSelect: (id: string) => void;
-  /** Opens the settings console; the dock's last slot and a leftward swipe both call it. */
-  onOpenSettings: () => void;
-  onToggleFind: () => void;
   onToggleMenu: () => void;
-  settingsLabel: string;
   tabs: WorkflowTab[];
   triggerRef: RefObject<HTMLButtonElement | null>;
 }) => {
-  const findIndex = Math.ceil(tabs.length / 2);
-  // A leftward swipe across the dock pulls the console in from the right edge,
-  // where its › Settings button points. Mostly-vertical drags are page scrolls.
+  const toolsIndex = Math.ceil(tabs.length / 2);
+  // Mostly-vertical drags are page scrolls, not a request for the console.
   const swipeRef = useRef<{ x: number; y: number } | null>(null);
   const renderWorkflowTab = (tab: WorkflowTab) => (
     <a
@@ -254,25 +234,10 @@ const PhoneDock = ({
         swipeRef.current = null;
         if (!start) return;
         const dx = event.clientX - start.x;
-        if (dx < -60 && Math.abs(dx) > 2 * Math.abs(event.clientY - start.y)) onOpenSettings();
+        if (dx < -60 && Math.abs(dx) > 2 * Math.abs(event.clientY - start.y)) onOpenApp();
       }}
     >
-      {tabs.slice(0, findIndex).map(renderWorkflowTab)}
-      <button
-        aria-controls="find-palette"
-        aria-expanded={findOpen}
-        aria-haspopup="dialog"
-        aria-keyshortcuts="/ Control+K Meta+K"
-        aria-label={findLabel}
-        className="dock-tab dock-find"
-        onClick={onToggleFind}
-        ref={findTriggerRef}
-        type="button"
-      >
-        <Search aria-hidden="true" />
-        <span>{findLabel}</span>
-      </button>
-      {tabs.slice(findIndex).map(renderWorkflowTab)}
+      {tabs.slice(0, toolsIndex).map(renderWorkflowTab)}
       <button
         aria-controls="menu-sheet"
         aria-expanded={menuOpen}
@@ -282,12 +247,13 @@ const PhoneDock = ({
         ref={triggerRef}
         type="button"
       >
-        <Menu aria-hidden="true" />
+        <LayoutGrid aria-hidden="true" />
         <span>{menuLabel}</span>
       </button>
-      <button className="dock-tab dock-settings" onClick={onOpenSettings} type="button">
-        <ChevronRight aria-hidden="true" />
-        <span>{settingsLabel}</span>
+      {tabs.slice(toolsIndex).map(renderWorkflowTab)}
+      <button className="dock-tab dock-app" onClick={onOpenApp} type="button">
+        <Settings aria-hidden="true" />
+        <span>{appLabel}</span>
       </button>
     </nav>
   );
@@ -300,6 +266,7 @@ const MenuSheet = ({
   onClose,
   open,
   opened,
+  search,
   sections,
   toolOpen,
   triggerRef,
@@ -312,6 +279,8 @@ const MenuSheet = ({
   open: boolean;
   /** The secondary nav mounts after the first open, once hydration is complete. */
   opened: boolean;
+  /** The Find box, pinned to the sheet's foot; while it holds a query its results replace the nav. */
+  search?: ReactNode;
   sections: NavSectionData[];
   /** True while a popover inside THIS sheet is open; Escape closes that first.
       A popover in the chrome must not count: it is inert behind the sheet, so
@@ -379,6 +348,7 @@ const MenuSheet = ({
             ))
           : null}
       </div>
+      {search}
     </>
   );
   if (documentation)
@@ -398,11 +368,11 @@ const MenuSheet = ({
       </dialog>
     );
   return (
-    <nav aria-label={localizer.message("ui.tools.menu")} className="menu-sheet" hidden={!open} id="menu-sheet">
+    <nav aria-label={localizer.message("ui.tools.tools")} className="menu-sheet" hidden={!open} id="menu-sheet">
       {contents}
     </nav>
   );
 };
 
 export type { NavGroup, NavSectionData, WorkflowTab };
-export { MenuSheet, NAV_GROUP_TITLES, PhoneDock, SideNav, fullNameFor, visibleFirst };
+export { MenuSheet, NAV_GROUP_TITLES, PhoneDock, SideNav, fullNameFor };

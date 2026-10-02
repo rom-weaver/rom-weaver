@@ -963,28 +963,29 @@ describe("webapp keyboard navigation", () => {
     expect(selected).toEqual(["creator"]);
   });
 
-  test("Escape from Find returns focus to the trigger the layout shows", async () => {
+  test("Escape from the phone's Find box closes Tools and returns focus to it", async () => {
     // `.topbar-find` is display:none below the threshold, and focusing a hidden
     // button silently drops focus to the body.
     await setViewport(VIEWPORTS[0]);
     await renderMasthead(noop);
-    host.querySelector(".dock-find").click();
-    await settleUntil(() => !!host.querySelector(".find-input"));
+    host.querySelector(".dock-menu").click();
+    await settleUntil(() => !!host.querySelector("#menu-sheet .find-input"));
+    expect(document.activeElement).toBe(host.querySelector("#menu-sheet .find-input"));
 
     host
-      .querySelector(".find-input")
+      .querySelector("#menu-sheet .find-input")
       .dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Escape" }));
     await settleUntil(() => !host.querySelector(".find-input"));
 
-    expect(document.activeElement).not.toBe(document.body);
-    expect(document.activeElement.closest(".dock-find")).toBeTruthy();
+    expect(host.querySelector(".menu-sheet").hidden).toBe(true);
+    expect(document.activeElement.closest(".dock-menu")).toBeTruthy();
   });
 
-  test("the Menu sheet makes what it covers inert, so the keyboard agrees with the scrim", async () => {
+  test("the Tools sheet makes what it covers inert, so the keyboard agrees with the scrim", async () => {
     await setViewport(VIEWPORTS[0]);
     await renderMasthead(noop);
     const banner = host.querySelector(".shell-banner");
-    const covered = host.querySelector('.shell-head-tools .tool[aria-label="Settings"]');
+    const covered = host.querySelector('.shell-head-tools .tool[aria-label^="Accent"]');
     expect(banner.hasAttribute("inert")).toBe(false);
 
     if (host.querySelector(".menu-sheet").hidden) host.querySelector(".dock-menu").click();
@@ -994,7 +995,7 @@ describe("webapp keyboard navigation", () => {
     expect(banner.hasAttribute("inert")).toBe(true);
     covered.focus();
     expect(document.activeElement).not.toBe(covered);
-    // The dock stays reachable: Menu is what closes the sheet again.
+    // The dock stays reachable: Tools is what closes the sheet again.
     const menu = host.querySelector(".dock-menu");
     expect(host.querySelector(".dock").hasAttribute("inert")).toBe(false);
     menu.focus();
@@ -1007,7 +1008,7 @@ describe("webapp keyboard navigation", () => {
     expect(document.activeElement).toBe(covered);
   });
 
-  test("Menu closes on Escape and hands focus back to its trigger", async () => {
+  test("Tools closes on Escape and hands focus back to its trigger", async () => {
     // The dock only exists below the layout threshold, and focus cannot return
     // to a control the current layout does not show.
     await setViewport(VIEWPORTS[0]);
@@ -1207,9 +1208,16 @@ describe("webapp responsive navigation", () => {
       await setViewport({ height: 430, width });
       await renderMastheadOnly(ALL_TABS);
       if (width > 999) host.querySelector(".topbar-find").click();
-      else host.querySelector(".dock-find").click();
+      else host.querySelector(".dock-menu").click();
       await settle();
       const input = host.querySelector(".find-input");
+      // The phone's box lists the sheet's nav until it holds a query.
+      if (width <= 999) {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, "e");
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        await settle();
+        expect(host.querySelectorAll(".find-option").length).toBeGreaterThan(3);
+      }
       const options = host.querySelectorAll(".find-option");
       for (let index = 1; index < options.length; index += 1) {
         input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowDown" }));
@@ -1269,7 +1277,7 @@ describe("webapp responsive navigation", () => {
     expect(host.querySelector(".topbar .nav-row")).toBeNull();
   });
 
-  test("below the threshold the primary nav is the dock, and Menu holds the rest", async () => {
+  test("below the threshold the primary nav is the dock, and Tools holds the rest", async () => {
     for (const viewport of [VIEWPORTS[0], { height: 900, width: 999 }]) {
       await setViewport(viewport);
       await renderMastheadOnly(ALL_TABS);
@@ -1279,9 +1287,9 @@ describe("webapp responsive navigation", () => {
       const dock = host.querySelector(".dock");
       expect(getComputedStyle(dock).display).toBe("grid");
       expect(getComputedStyle(dock).position).toBe("fixed");
-      // Three workflows plus Find, Menu and Settings, each with a word under its glyph.
+      // Three workflows plus Tools and App, each with a word under its glyph.
       const slots = [...dock.querySelectorAll(".dock-tab")];
-      expect(slots.length).toBe(6);
+      expect(slots.length).toBe(5);
       for (const slot of slots) {
         const label = slot.lastElementChild;
         expect(label.textContent.trim().length).toBeGreaterThan(0);
@@ -1312,25 +1320,21 @@ describe("webapp responsive navigation", () => {
     }
   });
 
-  test("the dock reaches This device and Menu lists the other sidebar rows", async () => {
+  test("Tools lists every sidebar row but theme and accent, and the dock ends with App", async () => {
     await setViewport(VIEWPORTS[0]);
     await renderMastheadOnly(ALL_TABS);
     const labels = (scope) => [...host.querySelectorAll(`${scope} .nav-row-label`)].map((label) => label.textContent);
 
-    // Menu toggles, and re-rendering the same tree keeps its open state.
     if (host.querySelector(".menu-sheet").hidden) host.querySelector(".dock-menu").click();
     await settleUntil(() => !host.querySelector(".menu-sheet").hidden);
 
     const sortLabels = (items) => items.sort((left, right) => left.localeCompare(right));
-    // This device sits behind the dock's Settings link on a phone.
-    const deviceGroup = [...host.querySelectorAll(".side-nav .nav-group")].find(
-      (group) => group.querySelector(".nav-group-label")?.textContent === "This device",
-    );
-    const device = new Set([...deviceGroup.querySelectorAll(".nav-row-label")].map((label) => label.textContent));
+    // The phone header keeps theme and accent, so only they are missing from Tools.
+    const appearance = new Set(["Theme", "Accent"]);
     expect(sortLabels(labels(".menu-sheet"))).toEqual(
-      sortLabels(labels(".side-nav").filter((label) => !device.has(label))),
+      sortLabels(labels(".side-nav").filter((label) => !appearance.has(label))),
     );
-    expect(host.querySelector(".dock-settings")?.textContent).toBe("Settings");
+    expect(host.querySelector(".dock-app")?.textContent).toBe("App");
     expect(host.querySelector(".phone-runtime .sub-status")?.getAttribute("aria-label")).toBe(
       host.querySelector(".desktop-runtime .sub-status")?.getAttribute("aria-label"),
     );

@@ -210,6 +210,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.nav.groupDevice"
+#~ msgstr "Este dispositivo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.tools.menu"
+#~ msgstr "Menú"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", una extensión de salida. El selector de formato agrega la extensión; elimínala para evitar un nombre duplicado."
 
@@ -345,12 +355,12 @@ msgstr "Un paquete de rom-weaver es una receta para aplicar una cadena de parche
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.console.about"
+msgid "ui.footer.about"
 msgstr "Acerca de"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.footer.about"
+msgid "ui.console.about"
 msgstr "Acerca de"
 
 #. js-lingui-explicit-id
@@ -2120,11 +2130,6 @@ msgstr "Perfil de medio no compatible"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tools.menu"
-msgstr "Menú"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.quality.metadata_only"
 msgstr "Solo metadatos"
 
@@ -3757,11 +3762,6 @@ msgstr "Esta compilación"
 #: src/presentation/localization/messages.ts
 msgid "ui.console.aboutDescription"
 msgstr "Esta versión, novedades y licencias."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.nav.groupDevice"
-msgstr "Este dispositivo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

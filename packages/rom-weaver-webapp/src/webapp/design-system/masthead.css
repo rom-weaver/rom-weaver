@@ -655,14 +655,6 @@
   gap: 0;
   align-items: center;
 }
-.rw-app .phone-project-tools {
-  display: contents;
-}
-.rw-app .shell-head-tools > .tool-separator {
-  align-self: center;
-  block-size: 24px;
-  background: var(--seam-strong);
-}
 /* Project links stay left of the separator; browser status and controls stay
    together on its right in both layouts. */
 .rw-app .tool-separator {
@@ -966,15 +958,15 @@
 }
 
 /* ── the phone dock ──
-   One row: the three workflows, Find, Menu, then › Settings, the forward link
-   to the settings console that slides in from that edge. */
+   One row: two workflows, Tools, the third workflow, then App, which opens the
+   settings console from that edge. */
 .rw-app .dock {
   position: fixed;
   inset-block-end: 0;
   inset-inline: 0;
   z-index: 1000;
   display: none;
-  grid-template-columns: repeat(5, minmax(0, 1fr)) 62px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   row-gap: 0;
   padding: 3px max(var(--sp-s), var(--safe-r)) max(3px, var(--safe-b)) max(var(--sp-s), var(--safe-l));
   touch-action: pan-y;
@@ -1040,16 +1032,6 @@
 .rw-app .dock-menu[aria-expanded="true"] {
   color: var(--thread-text);
 }
-/* Mirrors the console bar's ‹ Tools: same divider and grey, sentence case. */
-.rw-app .dock-settings {
-  margin-inline-start: 4px;
-  font-size: 0.66rem;
-  color: var(--ink-2);
-  text-transform: none;
-  letter-spacing: 0;
-  border-inline-start: 1px solid var(--seam);
-  border-radius: 0;
-}
 @media (hover: hover) {
   .rw-app .dock-tab:not([aria-current="page"]):hover {
     color: var(--ink);
@@ -1091,13 +1073,16 @@
   background: color-mix(in oklab, var(--chassis) 55%, transparent);
   border: 0;
 }
+/* --keyboard-inset is set while the sheet is open (masthead.tsx), so the sheet
+   and its Find box sit on the on-screen keyboard rather than behind it. */
 .rw-app .menu-sheet {
+  --sheet-floor: max(var(--dock-h), var(--keyboard-inset, 0px));
   position: fixed;
-  inset: auto 0 var(--dock-h);
+  inset: auto 0 var(--sheet-floor);
   z-index: 1001;
   display: none;
   flex-direction: column;
-  max-block-size: calc(100dvh - var(--dock-h));
+  max-block-size: calc(100dvh - var(--sheet-floor));
   background: var(--plate);
   border-block-start: 1px solid var(--seam-strong);
 }
@@ -1141,6 +1126,39 @@
 .rw-app .menu-sheet .nav-row {
   min-block-size: 41px;
   padding: 10px 8px;
+}
+/* Tools: five tiles across, so every destination still fits above the
+   keyboard that opens with the sheet. */
+.rw-app #menu-sheet .nav-group-label {
+  padding-block: 6px 1px;
+}
+.rw-app #menu-sheet .nav-group-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 2px;
+}
+.rw-app #menu-sheet .nav-row {
+  position: relative;
+  flex-direction: column;
+  gap: 3px;
+  justify-content: center;
+  min-block-size: 50px;
+  padding: 6px 0;
+  font-size: 0.66rem;
+  text-align: center;
+}
+.rw-app #menu-sheet .nav-row-label {
+  max-inline-size: 100%;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+.rw-app #menu-sheet .nav-beta {
+  position: absolute;
+  inset-block-start: 2px;
+  inset-inline-end: 2px;
+}
+/* A query swaps the nav for Find's results, which stack upward from the box. */
+.rw-app #menu-sheet:has(.find-input:not(:placeholder-shown)) .menu-sheet-body {
+  display: none;
 }
 /* ── the layout threshold ──
    ▼ The single number that decides which of the two shells is on screen. */
@@ -1373,9 +1391,6 @@
     }
     .rw-app .brand-word {
       font-size: 1.2rem;
-    }
-    .rw-app .shell-head-tools > .tool-separator {
-      margin-inline: 2px;
     }
   }
   @media (max-width: 599px) {

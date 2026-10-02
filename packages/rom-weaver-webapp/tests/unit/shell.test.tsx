@@ -94,7 +94,7 @@ describe("the navigation both layouts share", () => {
     expect(rowNamed(sheet, "Back to tools").getAttribute("href")).toBe("/apply-patches");
     expect(sheet.querySelector(".guide-nav")).not.toBeNull();
     expect(container.querySelector(".docs-mobile-toolbar button[aria-label]")).toBeNull();
-    expect(container.querySelector(".dock-find")).not.toBeNull();
+    expect(container.querySelector("#menu-sheet .find-palette")).toBeNull();
     expect(container.querySelectorAll("#menu-sheet")).toHaveLength(1);
     expect(container.querySelectorAll("#docs-menu-sheet")).toHaveLength(1);
 

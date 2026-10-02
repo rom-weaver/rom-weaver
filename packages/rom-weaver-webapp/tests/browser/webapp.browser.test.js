@@ -209,10 +209,10 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
 
 test("WebappRoot keeps the beta workflows out of the nav while the setting is off", async () => {
   mountWebappRoot();
-  // The dock keeps its three workflow slots plus Find, Menu and Settings at every setting.
+  // The dock keeps its three workflow slots plus Tools and App at every setting.
   await expect
     .poll(() => [...document.querySelectorAll(".dock .dock-tab")].map((tab) => tab.textContent))
-    .toEqual(["Apply", "Create", "Find", "Test", "Menu", "Settings"]);
+    .toEqual(["Apply", "Create", "Tools", "Test", "App"]);
   expect(navRow("PPF undo")).toBeUndefined();
   expect(navRow("Identify")).toBeTruthy();
   navRow("Identify").click();
@@ -290,10 +290,9 @@ test("mobile Docs keeps the workflow dock and owns a separate navigation dialog"
   expect([...dock.querySelectorAll(".dock-tab")].map((tab) => tab.textContent)).toEqual([
     "Apply",
     "Create",
-    "Find",
+    "Tools",
     "Test",
-    "Menu",
-    "Settings",
+    "App",
   ]);
   const trigger = document.querySelector(".docs-browse-trigger");
   expect(document.querySelector(".docs-mobile-toolbar a")).toBeNull();
@@ -336,8 +335,8 @@ test("mobile Docs keeps the workflow dock and owns a separate navigation dialog"
   document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
   await expect.poll(() => globalMenu.hidden).toBe(true);
   await expect.poll(() => document.activeElement).toBe(document.querySelector(".dock-menu"));
-  document.querySelector(".dock-find").click();
-  await expect.poll(() => document.querySelector(".find-palette")).toBeTruthy();
+  document.querySelector(".dock-menu").click();
+  await expect.poll(() => document.querySelector("#menu-sheet .find-palette")).toBeTruthy();
   trigger.click();
   await expect.poll(() => panel.open).toBe(true);
   panel.dispatchEvent(new Event("cancel", { cancelable: true }));
@@ -402,19 +401,14 @@ test("enabled PPF undo and Identify are named in the nav on desktop and phone", 
     expect(document.querySelector(`.dock-tab[data-mode="identify"]`)).toBeNull();
     expect(document.querySelector(`.dock-tab[data-mode="ppf-undo"]`)).toBeNull();
     expect(getComputedStyle(document.querySelector(".panel-view-toggle")).display).not.toBe("none");
-    // On a phone This device sits behind the dock's Settings link; other
-    // destinations keep their groups.
+    // Both layouts list every destination, App's included, under the same groups.
     if (width < 1000) await openMenuSheet();
-    for (const name of ["Docs", "Support"]) {
+    for (const name of ["Docs", "Support", "Settings", "Offline app", "Saves & storage", "Logs"]) {
       expect(navRow(name, scope)).toBeTruthy();
     }
     if (width < 1000) {
       expect(document.querySelector(".phone-runtime .sub-status")).toBeTruthy();
-      expect(document.querySelector(".dock-settings")).toBeTruthy();
-      expect(navRow("Logs", scope)).toBeFalsy();
-    } else {
-      for (const name of ["Offline app", "Saves & storage", "Logs", "Settings"])
-        expect(navRow(name, scope)).toBeTruthy();
+      expect(document.querySelector(".dock-app")).toBeTruthy();
     }
   }
   await page.viewport(1280, 900);
@@ -463,7 +457,7 @@ test("the wordmark keeps its version while persistent status sits beside navigat
         document.querySelector(".side-nav").getBoundingClientRect().top,
       );
     } else {
-      expect(document.querySelector(".dock-menu")?.getAttribute("aria-label")).toBe("Menu");
+      expect(document.querySelector(".dock-menu")?.getAttribute("aria-label")).toBe("Tools");
       expect(status.getBoundingClientRect().bottom).toBeLessThanOrEqual(
         document.querySelector(".dock-tab").getBoundingClientRect().top,
       );
@@ -697,8 +691,8 @@ test("the phone console keeps Tools and its five sections on one bar at the foot
   await page.viewport(393, height);
   mountWebappRoot();
 
-  await expect.poll(() => document.querySelector(".dock-settings")).toBeTruthy();
-  document.querySelector(".dock-settings").click();
+  await expect.poll(() => document.querySelector(".dock-app")).toBeTruthy();
+  document.querySelector(".dock-app").click();
   await expect.poll(() => document.querySelector(".log-dlg[open] .console-nav")).toBeTruthy();
 
   const nav = document.querySelector(".log-dlg .console-nav");
@@ -731,37 +725,28 @@ test("the phone console keeps Tools and its five sections on one bar at the foot
   await page.viewport(1280, 900);
 });
 
-test("the phone header carries device controls and project links, and Menu carries the rest", async () => {
+test("the phone header carries status and appearance, and Tools carries every destination", async () => {
   await page.viewport(390, 844);
   mountWebappRoot();
 
   await expect.poll(() => document.querySelector(".shell-head-tools")).toBeTruthy();
-  // The footer is gone: project links stay in the header and Docs stays in Menu.
+  // The footer is gone; GitHub, Support and Settings reach the phone through Tools and App.
   expect(document.querySelector(".site-footer")).toBeNull();
   const tiles = [...document.querySelectorAll(".shell-head-tools .tool")];
   expect(tiles.map((tile) => tile.getAttribute("aria-label"))).toEqual([
-    "View source on GitHub",
-    "Support",
     document.querySelector(".desktop-runtime .sub-status").getAttribute("aria-label"),
     "Theme: Match system",
     "Accent: Madder",
-    "Settings",
   ]);
   expect(document.querySelector('.shell-head-tools [aria-label="Docs"]')).toBeNull();
   for (const tile of tiles) expect(getComputedStyle(tile).display).not.toBe("none");
-  for (const [label, href] of [
-    ["View source on GitHub", "https://github.com/rom-weaver/rom-weaver/"],
-    ["Support", "https://ko-fi.com/brandonocasey"],
-  ]) {
-    expect(tiles.find((tile) => tile.getAttribute("aria-label") === label).getAttribute("href")).toBe(href);
-  }
 
   await openMenuSheet();
-  for (const name of ["Home", "Docs", "GitHub", "Support"]) {
+  for (const name of ["Home", "Docs", "GitHub", "Support", "Settings", "Offline app", "Saves & storage", "Logs"]) {
     expect(navRow(name, ".menu-sheet")).toBeTruthy();
   }
-  // This device lives behind the dock's Settings link, not in Menu.
-  for (const name of ["Offline app", "Saves & storage", "Logs", "Settings", "Theme", "Accent"]) {
+  // Theme and accent stay in the header.
+  for (const name of ["Theme", "Accent"]) {
     expect(navRow(name, ".menu-sheet")).toBeFalsy();
   }
   expect(document.querySelector(".phone-runtime .sub-status-text").textContent).toBe(
@@ -796,8 +781,9 @@ test("the phone header carries device controls and project links, and Menu carri
   await page.viewport(1280, 900);
 });
 
-test("the Menu sheet stays on screen and scrolls on a short screen", async () => {
-  await page.viewport(320, 480);
+test("the Tools sheet stays on screen and scrolls on a short screen", async () => {
+  // Five tiles across fit every row at 320x480, so the overflow case needs a shorter screen.
+  await page.viewport(320, 400);
   mountWebappRoot({ settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
 
   const sheet = await openMenuSheet();
@@ -814,9 +800,9 @@ test("the Menu sheet stays on screen and scrolls on a short screen", async () =>
   body.scrollTop = 150;
   expect(body.getBoundingClientRect().top).toBe(bodyTop);
   expect(document.querySelector(".phone-runtime .sub-status-text")?.textContent?.trim()).not.toBe("");
-  expect(sheet.querySelector(".dock-find")).toBeNull();
+  expect(sheet.querySelector(".find-palette.is-embedded")).toBeTruthy();
 
-  document.querySelector(".dock-settings").click();
+  document.querySelector(".dock-app").click();
   await expect.element(page.getByRole("dialog")).toBeInTheDocument();
   await page.viewport(1280, 900);
 });
@@ -851,7 +837,7 @@ test("Theme and Accent float above the navigation without moving its rows", asyn
   await page.viewport(1280, 900);
 });
 
-test("the Menu sheet uses its content height and stays above the dock", async () => {
+test("the Tools sheet uses its content height and stays above the dock", async () => {
   await page.viewport(390, 1200);
   mountWebappRoot();
 
