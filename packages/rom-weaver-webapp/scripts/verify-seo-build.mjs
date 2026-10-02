@@ -439,9 +439,14 @@ for (const route of DOC_ROUTES) {
     route.slug === "docs" ? 1 : 0,
     `${route.slug} Overview is current only on the Docs index`,
   );
-  const currentGuideLinks = [...docsHtml.matchAll(/<a\b[^>]*>/g)].filter(
-    ([tag]) => tag.includes('aria-current="page"') && tag.includes(`href="/${route.slug}"`),
-  );
+  const currentGuideLinks = [...docsHtml.matchAll(/<a\b(?:[^"'<>]|"[^"]*"|'[^']*')*>/g)].filter(([tag]) => {
+    const attributes = new Map(
+      [...tag.matchAll(/\s([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g)].map(
+        ([, name, doubleQuoted, singleQuoted, unquoted]) => [name, doubleQuoted ?? singleQuoted ?? unquoted ?? ""],
+      ),
+    );
+    return attributes.get("aria-current") === "page" && attributes.get("href") === `/${route.slug}`;
+  });
   if (currentGuideLinks.length !== 1)
     throw new Error(`${route.slug} has ${currentGuideLinks.length} current guide links; expected 1`);
   assertIncludes(
