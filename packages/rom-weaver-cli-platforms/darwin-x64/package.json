@@ -1,6 +1,6 @@
 {
   "name": "@rom-weaver/darwin-x64",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "description": "macOS x64 binary for rom-weaver",
   "keywords": [
     "chd",
