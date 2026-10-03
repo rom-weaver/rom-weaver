@@ -1,6 +1,6 @@
-# Apply a ROM patch in the browser
+# Apply BPS, IPS, UPS, and xdelta ROM patches online
 
-Use the Apply Patches page to combine your clean ROM with one or more patches. The original stays untouched and the new file never leaves your device.
+Apply BPS, IPS, UPS, xdelta, PPF, and other supported ROM patches locally in your browser. Your original stays untouched. No uploads or account are needed.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -8,6 +8,13 @@ Use the Apply Patches page to combine your clean ROM with one or more patches. T
 - [What do you need?](#what-do-you-need)
 - [Add the files](#add-the-files)
 - [Apply a BPS patch](#apply-a-bps-patch)
+- [Apply an IPS or IPS32 patch](#apply-an-ips-or-ips32-patch)
+- [Apply a UPS patch](#apply-a-ups-patch)
+- [Apply an xdelta or VCDIFF patch](#apply-an-xdelta-or-vcdiff-patch)
+- [Apply a PPF patch](#apply-a-ppf-patch)
+- [Apply APS, APSGBA, RUP, and other patch formats](#apply-aps-apsgba-rup-and-other-patch-formats)
+- [Apply an HDiffPatch or HPatchZ patch](#apply-an-hdiffpatch-or-hpatchz-patch)
+- [Dreamcast DCP patches need the CLI](#dreamcast-dcp-patches-need-the-cli)
 - [Read the ROM and patch cards](#read-the-rom-and-patch-cards)
 - [Put several patches in order](#put-several-patches-in-order)
 - [Choose the output and apply](#choose-the-output-and-apply)
@@ -39,7 +46,7 @@ Keep one clean original somewhere safe. rom-weaver writes a separate result, but
 
 ## Add the files
 
-1. Open [Apply](https://rom-weaver.com/apply).
+1. Open [Apply](https://rom-weaver.com/apply-patches).
 2. Drag the ROM and patch onto **0x01 Inputs**, or choose **Add files**. You may add both at once.
 3. Wait while the temporary cards say **Reading** or **Checksumming**.
 4. If an archive contains several possible files, choose the entry the patch author named.
@@ -55,6 +62,48 @@ Use [cheats](use-browser-cheats.md) to add supported codes to that order. To cha
 A BPS patch records the checksum of the ROM it was made for. Add the `.bps` file and your clean ROM together. rom-weaver reads the BPS check and stops if the ROM does not match.
 
 Read the patch author's required region and revision before you add the files. When the checks match, set the output name and choose **APPLY & DOWNLOAD**. For headers, patch order, or a failed check, use the relevant steps in this guide. The [CLI Apply guide](cli-apply.md) has the terminal command for the same BPS workflow.
+
+## Apply an IPS or IPS32 patch
+
+Add the `.ips` or `.ips32` patch with the ROM named by its author. Check the author's source checksum through [Checksum](checksum-roms-browser.md) before applying it.
+
+IPS and IPS32 contain no source checksum. A successful patch operation alone does not prove that you used the correct ROM. Check the required header state, then use **APPLY & DOWNLOAD**.
+
+## Apply a UPS patch
+
+Add the `.ups` patch and the clean ROM together. Read the patch card's input checks before selecting **APPLY & DOWNLOAD**.
+
+If the check fails, compare the required region, revision, and header state with the author's notes. Follow [Fix a checksum error](fix-checksum-errors.md) before applying the patch.
+
+## Apply an xdelta or VCDIFF patch
+
+Add the patch as supplied, including an `.xdelta`, `.delta`, `.dat`, or `.vcdiff` file. For disc patches, use the exact image or track named by the author.
+
+Compare any published source checksum before applying. Source checks depend on how the patch was made. Select a plain output file unless the author or emulator requires compression, then use **APPLY & DOWNLOAD**.
+
+## Apply a PPF patch
+
+Add the `.ppf` file and the exact ROM or disc track the author named. Check the image layout as well as its checksum. For a BIN/CUE disc, add the cue sheet and all referenced tracks.
+
+Use **APPLY & DOWNLOAD** after the input checks pass. To restore a result from a PPF3 patch with undo data, follow [Undo PPF](undo-ppf-browser.md).
+
+## Apply APS, APSGBA, RUP, and other patch formats
+
+Use the same [input steps](#add-the-files) for APS, APSGBA, RUP, SOLID, GDIFF, PAT/FireFlower, EBP, BDF/BSDIFF40, BSP, MOD/PMSR, DLDI, and DPS. Check the detected format on the patch card.
+
+Use the author's source file and checksum. Wait for the input checks, choose the output, then select **APPLY & DOWNLOAD**. The [format reference](../reference/formats.md#patch-formats) lists extensions and creation support.
+
+## Apply an HDiffPatch or HPatchZ patch
+
+Add a single-file `.hdiff` or `.hpatchz` patch and the source file it expects. Compare the author's source checksum, then use **APPLY & DOWNLOAD**.
+
+Directory patches marked `HDIFF19` are unsupported. Use the author's directory-patching tool for those inputs.
+
+## Dreamcast DCP patches need the CLI
+
+Use the [CLI Dreamcast DCP procedure](cli-apply.md#apply-a-dreamcast-dcp-patch) for `.dcp` files. Browser Apply does not support the required disc-sheet workflow.
+
+NINJA1 and PDS patches cannot be applied. Check the [support limits](../reference/formats.md#patch-formats) before choosing a patcher.
 
 ## Read the ROM and patch cards
 

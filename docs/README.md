@@ -48,6 +48,7 @@ Guided app samples: [Apply](https://rom-weaver.com/apply-patches?guide=apply), [
 | Make a game's file smaller | [Compress files](how-to/convert-roms-browser.md), or [trim padding](how-to/trim-roms-browser.md) |
 | Convert RVZ to ISO | [Extract an ISO from RVZ](how-to/convert-rvz-to-iso-browser.md) |
 | Convert ISO or BIN/CUE to CHD | [Create a CHD](how-to/convert-to-chd-browser.md) |
+| Convert CHD to ISO or BIN/CUE | [Extract a disc from CHD](how-to/extract-files-browser.md#convert-chd-to-iso-or-bincue) |
 | Compress a GameCube or Wii ISO | [Convert ISO to RVZ](how-to/convert-to-rvz-browser.md) |
 | Compress a Nintendo 3DS ROM | [Create a Z3DS file](how-to/convert-to-z3ds-browser.md) |
 | Decompress Z3DS, ZCCI, ZCXI, ZCIA, or Z3DSX | [Extract a Nintendo 3DS file](how-to/extract-z3ds-browser.md) |
@@ -161,6 +162,6 @@ Background on the engine, formats, and design decisions.
 
 - [CI workflows](development/ci.md) and [local CI checks](development/reproduce-ci-locally.md).
 - [Commit conventions](development/commits.md) and the [release guide](../.github/RELEASING.md).
-- [Performance](development/performance.md), [browser concurrency](development/browser-concurrency.md), and [Mobile Safari verification](development/mobile-safari-verification.md).
+- [CHD, RVZ, ZIP, and 7z speed benchmarks](development/performance.md), [browser concurrency](development/browser-concurrency.md), and [Mobile Safari verification](development/mobile-safari-verification.md).
 - [Vendored code](development/vendor-code.md), [trim footer format](development/trim-revert-footer.md), and [screenshots](development/screenshots.md).
 - [CLA](../CLA.md), [code of conduct](../.github/CODE_OF_CONDUCT.md), [security policy](../.github/SECURITY.md), and [commercial licensing](../COMMERCIAL.md).

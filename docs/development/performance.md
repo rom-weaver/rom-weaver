@@ -1,8 +1,12 @@
-# Performance
+# CHD, RVZ, ZIP, and 7z speed benchmarks
 
-This page explains how rom-weaver is benchmarked. It records measurements for the versions listed below and shows how to reproduce them.
+Compare native rom-weaver CLI conversion speeds with chdman, dolphin-tool, 7zz, and Info-ZIP using recorded timings and matching codec settings.
 
 The suites below measure CHD, RVZ, 7z, and zip against their reference tools. Each suite measures both directions: compress and extract. Output size is recorded next to every timing.
+
+These competitor comparisons measure the native CLI, not the browser app. They do not measure Z3DS conversion or patching against other tools. Results apply to the listed versions, inputs, and machine.
+
+[Comparison with similar tools](../explanation/comparisons.md) explains the workflow differences beyond speed.
 
 <!-- START doctoc -->
 ## Table of contents

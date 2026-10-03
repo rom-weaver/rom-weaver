@@ -10,7 +10,7 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
   creator: Object.freeze({
     description:
-      "Create BPS, IPS, UPS, xdelta, and other ROM patches locally in your browser with checksums and distributable bundles. No uploads or account required.",
+      "Create BPS, IPS, IPS32, UPS, xdelta, VCDIFF, PPF, and other supported ROM patches online. Build patch bundles locally in your browser. No uploads.",
     slug: "create-patch",
     title: `${SITE_NAME}: Create ROM patches online`,
   }),
@@ -28,9 +28,9 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
   extract: Object.freeze({
     description:
-      "Extract Z3DS, ZCCI, ZCXI, ZCIA, Z3DSX, CHD, RVZ, and supported ROM archives locally in your browser. Download uncompressed files without uploads.",
+      "Convert RVZ to ISO, extract CHD to ISO or BIN/CUE, and decompress Z3DS, ZCCI, ZCXI, ZCIA, and Z3DSX locally in your browser. No uploads.",
     slug: "extract",
-    title: `${SITE_NAME}: Extract Z3DS files and ROM archives online`,
+    title: `RVZ to ISO, CHD & Z3DS extractor online | ${SITE_NAME}`,
   }),
   // The apex. An empty slug is deliberate: the canonical URL is the bare origin.
   home: Object.freeze({
@@ -47,9 +47,9 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
   patcher: Object.freeze({
     description:
-      "Apply BPS, IPS, UPS, xdelta, and other ROM patches privately in your browser with checksum validation and ordered patch chains. No uploads or account required.",
+      "Apply BPS, IPS, IPS32, UPS, xdelta, PPF, APS, RUP, and other supported ROM patches online. Check and chain patches on your device. No uploads.",
     slug: "apply-patches",
-    title: `ROM Patcher Online: BPS, IPS, UPS & xdelta | ${SITE_NAME}`,
+    title: `ROM Patcher Online: BPS, IPS, UPS, xdelta & PPF | ${SITE_NAME}`,
   }),
   test: Object.freeze({
     description: "Test patched and local ROMs in EmulatorJS directly in your browser. No uploads or account required.",
