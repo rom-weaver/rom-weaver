@@ -11,3 +11,5 @@ ActRaiser, the two Capcom GBA EEPROM games, Chrono Trigger, Donkey Kong Land, th
 Sonic 3, Shining Force, and Soleil also use Game Tools Collection revision [`8fb075e7c130da9e72c3c46ec8efa447a252ad88`](https://github.com/RyudoSynbios/game-tools-collection/tree/8fb075e7c130da9e72c3c46ec8efa447a252ad88). Sonic 3 checksum and block rules follow [jcfields/sonic3-save-editor](https://gitlab.com/jcfields/sonic3-save-editor/-/blob/8b740b670ff8e46f7c35ff8fac98169efccfe3b9/save%20format.md).
 
 All profiles in these modules require explicit selection and a game-made template. Their definitions expose only the fields whose write and integrity rules are implemented. Omitted game data is not editable.
+
+The Castlevania GBA, 1080° Snowboarding, Wario Land II, Yoshi's Story, and Link's Awakening modules also use revision `75ce8f848b628f202c50daa75d95dda58eb1f3a5`. Their module comments and the [source catalog](../../../../../../data/save-schemas/README.md) identify the layouts and write rules.

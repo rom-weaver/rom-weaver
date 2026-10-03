@@ -67,6 +67,16 @@ fn save_catalog_lists_compiled_games_and_generation_support() {
     assert!(game_ids.contains(&"f-zero"));
     assert!(game_ids.contains(&"game-and-watch-gallery-3"));
     assert!(game_ids.contains(&"kirbys-adventure-canada-slot-3"));
+    for id in [
+        "1080-snowboarding",
+        "yoshis-story-canonical-eeprom-japan",
+        "castlevania-aria-of-sorrow",
+        "castlevania-circle-of-the-moon",
+        "wario-land-ii",
+        "zelda-links-awakening-gbc-international",
+    ] {
+        assert!(game_ids.contains(&id), "missing save profile: {id}");
+    }
     assert!(game_ids.contains(&"zelda-a-link-to-the-past-file-1-schema"));
     assert!(game_ids.contains(&"zelda-a-link-to-the-past"));
     for id in [
@@ -178,6 +188,66 @@ fn save_edits_rotating_gba_eeprom_without_changing_its_backup() {
         0,
     );
     assert_eq!(fs::read(source.path()).unwrap(), original);
+}
+
+#[test]
+fn save_yoshi_edits_preserve_packed_options_and_repair_eeprom_checksum() {
+    fn repair(bytes: &mut [u8]) {
+        let sum = bytes[..0x3fa]
+            .iter()
+            .fold(0u32, |sum, byte| ((sum ^ u32::from(*byte)) * 2) % 65535)
+            as u16;
+        bytes[0x3fa..0x3fc].copy_from_slice(&sum.to_be_bytes());
+    }
+    let temp = setup_temp_dir();
+    let source = temp.child("yoshi.eep");
+    let output = temp.child("yoshi-edited.eep");
+    let mut bytes = vec![0; 2048];
+    bytes[0] = 0x65;
+    bytes[0x400..].fill(0xa5);
+    bytes[0x3fd..0x400].copy_from_slice(b"1u1");
+    repair(&mut bytes);
+    fs::write(source.path(), &bytes).unwrap();
+    let args = [
+        "save",
+        "set",
+        source.path().to_str().unwrap(),
+        "options.audio=Headphones",
+        "unlocked.black_yoshi=true",
+        "--game",
+        "yoshis-story-canonical-eeprom-usa",
+        "--output",
+        output.path().to_str().unwrap(),
+        "--json",
+    ];
+    let preview_args: Vec<_> = args.iter().copied().chain(["--dry-run"]).collect();
+    let preview = run_single_json_event(&preview_args, 0);
+    assert_eq!(
+        preview["details"]["save_editor"]["result"]["preview"]["output_valid"],
+        true
+    );
+    assert!(!output.path().exists());
+    run_single_json_event(&args, 0);
+    let mut expected = bytes.clone();
+    expected[0] = (expected[0] & !0xc0) | 0x80 | 0x10;
+    repair(&mut expected);
+    assert_eq!(fs::read(output.path()).unwrap(), expected);
+    assert_eq!(fs::read(source.path()).unwrap(), bytes);
+    let report = run_single_json_event(
+        &[
+            "save",
+            "inspect",
+            output.path().to_str().unwrap(),
+            "--game",
+            "yoshis-story-canonical-eeprom-usa",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(
+        report["details"]["save_editor"]["document"]["integrity"]["state"],
+        "valid"
+    );
 }
 
 #[test]

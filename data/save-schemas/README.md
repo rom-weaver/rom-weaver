@@ -2,7 +2,7 @@
 
 The application defines its save layouts and editing rules as typed Rust under [`crates/rom-weaver-core/src/save/schema/catalog/`](../../crates/rom-weaver-core/src/save/schema/catalog). This directory keeps the source attribution and license for those definitions. It does not contain runtime schema packs.
 
-The default registry includes 129 profiles: the original seven game-family definitions and 107 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. A profile selects one fixed region, slot, player, or storage variant.
+The default registry includes 140 profiles: the original seven game-family definitions and 118 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. A profile selects one fixed region, slot, player, or storage variant.
 
 | Original catalog module | Games |
 | --- | --- |
@@ -56,7 +56,13 @@ The default registry includes 129 profiles: the original seven game-family defin
 | `sonic_3.rs` | 1 | 3 | 136 | Template only |
 | `shining_force.rs` | 1 | 3 | 54 | Template only |
 | `soleil.rs` | 1 | 5 | 84 | Template only |
-| **Total** | **45** | **107** | **6,575** | **2 fresh profiles** |
+| `castlevania_aria_of_sorrow.rs` | 1 | 1 | 38 | Template only |
+| `castlevania_circle_of_the_moon.rs` | 1 | 1 | 96 | Template only |
+| `snowboarding_1080.rs` | 1 | 1 | 74 | Template only |
+| `wario_land_ii.rs` | 1 | 1 | 4 | Template only |
+| `yoshis_story.rs` | 1 | 3 | 39 | Template only |
+| `zelda_links_awakening.rs` | 1 | 4 | 288 | Template only |
+| **Total** | **51** | **118** | **7,114** | **2 fresh profiles** |
 
 Fresh creation uses a verified initializer. Template creation starts from an existing valid save and preserves bytes outside the requested edits and integrity repairs. A profile without an initializer cannot create a fresh save.
 
@@ -72,6 +78,7 @@ The Generation I and II definitions use Rust loops and shared constructors for r
 ## Table of contents
 
 - [Sources and attribution](#sources-and-attribution)
+- [Additional handheld and Nintendo 64 profiles](#additional-handheld-and-nintendo-64-profiles)
 
 <!-- END doctoc -->
 
@@ -147,3 +154,27 @@ The Genesis definitions accept only their listed odd-byte SRAM dump sizes. They 
 | Soleil (Crusader of Centy) | 512 B, 4,608 B, 8,704 B, 12,800 B, or 64 KiB | Current and maximum health, Malins, two equipped animals, and location in each present slot |
 
 The Genesis field offsets derive from [Game Tools Collection commit `8fb075e7c130da9e72c3c46ec8efa447a252ad88`](https://github.com/RyudoSynbios/game-tools-collection/tree/8fb075e7c130da9e72c3c46ec8efa447a252ad88). The Sonic 3 checksum and block layout also follow [jcfields/sonic3-save-editor `save format.md`](https://gitlab.com/jcfields/sonic3-save-editor/-/blob/8b740b670ff8e46f7c35ff8fac98169efccfe3b9/save%20format.md).
+
+## Additional handheld and Nintendo 64 profiles
+
+These six editors use Game Tools Collection revision `75ce8f848b628f202c50daa75d95dda58eb1f3a5`. All require explicit selection and an existing save.
+
+| Game | Supported edits | Storage and integrity |
+| --- | --- | --- |
+| Castlevania: Aria of Sorrow | Level, experience, HP, MP, stats, gold, playtime, and mode unlocks | Raw 32 KiB GBA SRAM; edits update level and gold preview copies. Empty slots cannot be edited. |
+| Castlevania: Circle of the Moon | Level, experience, HP, MP, hearts, bonus pickups, equipment, and playtime | Raw 32 KiB GBA SRAM; edits repair the selected slot checksum. Empty slots stay unchanged. |
+| 1080° Snowboarding | Progression, course unlocks, tricks, contest scores, and audio | 32 KiB SRAM; edits preserve canonical or byte-swapped word order and repair section checksums, the master checksum, and linked contest totals. |
+| Wario Land II | Progression, stage coins, total coins, and Flagman D.D high score | Raw 32 KiB SRAM; the editor selects the newest section and repairs its checksum. A damaged newest section is rejected. |
+| Yoshi's Story | Black and White Yoshi unlocks, audio, and regional continuation fields and language | Canonical 2 KiB EEPROM; separate Europe, USA, and Japan profiles repair the rolling checksum. Japan omits continuation and language fields. |
+| The Legend of Zelda: Link's Awakening | Health, rupees, deaths, resource quantities, key items, and instruments | Raw 8 KiB GB or 32 KiB GBC SRAM; separate layouts and release markers. Empty slots cannot be edited. |
+
+The source directories contain each game's `template.ts` layout and `utils.ts` write rules:
+
+- [Aria of Sorrow](https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/castlevania-aria-of-sorrow/saveEditor)
+- [Circle of the Moon](https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/castlevania-circle-of-the-moon/saveEditor)
+- [1080° Snowboarding](https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/1080-snowboarding/saveEditor)
+- [Wario Land II](https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/wario-land-ii/saveEditor)
+- [Yoshi's Story](https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/yoshi-s-story/saveEditor)
+- [Link's Awakening](https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/legend-of-zelda-the-link-s-awakening/saveEditor)
+
+Link's Awakening stores no checksum in these layouts. Its write path also follows [LADX-Disassembly `SaveGameToFile`](https://github.com/zladx/LADX-Disassembly/blob/2a5c2c0d6df93a54df81ae9e1fe28b5c2fd60d03/src/code/bank1.asm) and [SRAM definitions](https://github.com/zladx/LADX-Disassembly/blob/2a5c2c0d6df93a54df81ae9e1fe28b5c2fd60d03/src/constants/memory/sram.asm).
