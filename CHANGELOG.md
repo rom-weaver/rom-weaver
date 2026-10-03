@@ -2,10 +2,21 @@
 
 ## [0.18.0](https://github.com/rom-weaver/rom-weaver/compare/v0.17.0...v0.18.0) (2026-10-03)
 
+### Highlights
+
+* Breaking: initialize `error_kind` in Rust `OperationReport` struct literals ([#886](https://github.com/rom-weaver/rom-weaver/issues/886))
+* Compress, extract, and checksum files with dedicated browser tools ([#919](https://github.com/rom-weaver/rom-weaver/issues/919)) ([#878](https://github.com/rom-weaver/rom-weaver/issues/878)) ([#937](https://github.com/rom-weaver/rom-weaver/issues/937))
+* Try beta save editors for supported games and test edited saves with ROMs ([#879](https://github.com/rom-weaver/rom-weaver/issues/879)) ([#914](https://github.com/rom-weaver/rom-weaver/issues/914)) ([#941](https://github.com/rom-weaver/rom-weaver/issues/941))
+* Use cheats out of beta, order them alongside patches, and bake more native cheat code formats into ROMs ([#877](https://github.com/rom-weaver/rom-weaver/issues/877)) ([#926](https://github.com/rom-weaver/rom-weaver/issues/926))
+* Use improved mobile and desktop interfaces with Simple and Detailed views, a settings console, and dedicated documentation navigation ([#860](https://github.com/rom-weaver/rom-weaver/issues/860)) ([#946](https://github.com/rom-weaver/rom-weaver/issues/946)) ([#938](https://github.com/rom-weaver/rom-weaver/issues/938)) ([#955](https://github.com/rom-weaver/rom-weaver/issues/955))
+* Use MCP support for public reference data and WebMCP support for local browser workflows ([#945](https://github.com/rom-weaver/rom-weaver/issues/945))
 
 ### ⚠ BREAKING CHANGES
 
 * **core:** preserve report error kinds ([#886](https://github.com/rom-weaver/rom-weaver/issues/886))
+
+<details>
+<summary>All changes</summary>
 
 ### Features
 
@@ -34,7 +45,6 @@
 * **webapp:** show workflow guide links on every page ([#928](https://github.com/rom-weaver/rom-weaver/issues/928)) ([691f479](https://github.com/rom-weaver/rom-weaver/commit/691f479303b8451958eb1f3014cd9babe759a6c2))
 * **webapp:** turn diagnostics into a settings console ([#946](https://github.com/rom-weaver/rom-weaver/issues/946)) ([980ed8d](https://github.com/rom-weaver/rom-weaver/commit/980ed8d66caa4b0056a47cfbddde6d3130f44011))
 
-
 ### Bug Fixes
 
 * **chd:** skip cd codecs for incompressible hunks ([#927](https://github.com/rom-weaver/rom-weaver/issues/927)) ([bd83b89](https://github.com/rom-weaver/rom-weaver/commit/bd83b89231421a3abc437d27979992496bae2766))
@@ -50,20 +60,18 @@
 * **webapp:** unify patch input and track selection ([#859](https://github.com/rom-weaver/rom-weaver/issues/859)) ([e9bfa26](https://github.com/rom-weaver/rom-weaver/commit/e9bfa266c36ed630e9ae45394444fba916333f2c))
 * **webapp:** wait for staged ROM before cheat checks ([#917](https://github.com/rom-weaver/rom-weaver/issues/917)) ([0e60c12](https://github.com/rom-weaver/rom-weaver/commit/0e60c12440c36fdacbab8b2c2c2cf7df27698630))
 
-
 ### Documentation
 
 * cover features and refresh browser guides ([#908](https://github.com/rom-weaver/rom-weaver/issues/908)) ([ba6ebee](https://github.com/rom-weaver/rom-weaver/commit/ba6ebeeca4856757fa4dbedbbc2c48042021b55d))
 * **webapp:** expand format and conversion guides ([#957](https://github.com/rom-weaver/rom-weaver/issues/957)) ([6357c60](https://github.com/rom-weaver/rom-weaver/commit/6357c60e97b2e5c3ecf887a72570f4318c3c3077))
-
 
 ### Dependencies
 
 * bump lefthook from 2.1.14 to 2.1.15 in the root-npm group ([#960](https://github.com/rom-weaver/rom-weaver/issues/960)) ([234a4ae](https://github.com/rom-weaver/rom-weaver/commit/234a4aefe43df58ccb3fd49c889c9c68d64dc97b))
 * bump the other-webapp group in /packages/rom-weaver-webapp with 2 updates ([#961](https://github.com/rom-weaver/rom-weaver/issues/961)) ([b99d199](https://github.com/rom-weaver/rom-weaver/commit/b99d199e6037d1e3fb2d10bb21d3cbc3f8433e7b))
 
-
-### Internal
+<details>
+<summary>Internal</summary>
 
 * add ux, a11y, i18n, security, deps types ([#959](https://github.com/rom-weaver/rom-weaver/issues/959)) ([2789bf5](https://github.com/rom-weaver/rom-weaver/commit/2789bf5235a99bff13b073200adb9edf82bbf4a7))
 * **chd:** split long disc extract functions into helpers ([#895](https://github.com/rom-weaver/rom-weaver/issues/895)) ([b1e2375](https://github.com/rom-weaver/rom-weaver/commit/b1e237548ac06db8b1049225850cb46cc71aaf6f))
@@ -100,6 +108,8 @@
 * **webapp:** split shell and webapp root ([#893](https://github.com/rom-weaver/rom-weaver/issues/893)) ([103e92c](https://github.com/rom-weaver/rom-weaver/commit/103e92c04a8b7fb29098b90e1c060f1946199a84))
 * **webapp:** split vite config into focused modules ([#892](https://github.com/rom-weaver/rom-weaver/issues/892)) ([820c2de](https://github.com/rom-weaver/rom-weaver/commit/820c2de7b226601f036dd06aee020febddbab0b0))
 * **webapp:** split wasm command runtime by command ([#896](https://github.com/rom-weaver/rom-weaver/issues/896)) ([1903a7e](https://github.com/rom-weaver/rom-weaver/commit/1903a7efca39eac1ae3691bd2af86275890f5583))
+</details>
+</details>
 
 ## [0.17.0](https://github.com/rom-weaver/rom-weaver/compare/v0.16.1...v0.17.0) (2026-09-23)
 
