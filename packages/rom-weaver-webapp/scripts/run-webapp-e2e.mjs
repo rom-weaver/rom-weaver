@@ -13,6 +13,7 @@ import { chromium, webkit } from "playwright";
 import { DOC_SOURCES, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
 import { buildStoredZip } from "../tests/wasm/stored-zip-fixture.mjs";
 import { summarizeCssCoverage } from "./css-coverage.mjs";
+import { createGuidedLoadingAudit } from "./guided-loading-audit.mjs";
 
 const PACKAGE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FIXTURE_DIR = path.join(PACKAGE_DIR, "tests", "fixtures");
@@ -581,28 +582,6 @@ export const checkCssCoverage = (entries) => {
   process.stdout.write(`PASS CSS coverage: ${label}\n`);
 };
 
-// Samples MUST stay pending during loading audits: staging them can move
-// controls while axe measures their clickable bounds.
-const scanGuidedLoading = async (page, samplePattern, label, start) => {
-  const sampleFetch = Promise.withResolvers();
-  const pendingRequests = [];
-  const holdSample = (route) => {
-    const continued = sampleFetch.promise.then(() => route.continue());
-    pendingRequests.push(continued);
-    return continued;
-  };
-  await page.route(samplePattern, holdSample);
-  try {
-    await start();
-    await page.locator('.sample-tutorial-dialog[data-loading="true"]').waitFor({ state: "visible" });
-    await scanLiveApp(page, label);
-  } finally {
-    sampleFetch.resolve();
-    await Promise.all(pendingRequests);
-    await page.unroute(samplePattern, holdSample);
-  }
-};
-
 const runAccessibilityAudit = async (createContext, baseUrl) => {
   // Reduced motion keeps the guided tour's re-reveal scrolls instant. Its
   // smooth `scrollBy` otherwise glides the page while Playwright is hovering
@@ -614,6 +593,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     ignoreHTTPSErrors: true,
     ...(browserName === "chromium" ? { reducedMotion: "reduce" } : {}),
   });
+  const scanGuidedLoading = await createGuidedLoadingAudit(context, scanLiveApp);
   let page = await context.newPage();
   const cssCoverageEntries = [];
   const failures = [];
@@ -941,7 +921,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     const guidedApply = page.getByRole("link", { name: "Start guided Apply" });
     await guidedApply.waitFor({ state: "visible", timeout: 60_000 });
     const tutorial = page.locator(".sample-tutorial-dialog");
-    await scanGuidedLoading(page, "**/first-weave.zip", "guided Apply loading (desktop, light)", () =>
+    await scanGuidedLoading(page, ["first-weave.zip"], "guided Apply loading (desktop, light)", () =>
       guidedApply.click(),
     );
     for (let step = 1; step <= 4; step += 1) {
@@ -961,7 +941,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.locator("#rom-weaver-button-apply").waitFor({ state: "visible", timeout: 60_000 });
     await page.locator("#rom-weaver-button-test-emulator").waitFor({ state: "visible", timeout: 60_000 });
 
-    await scanGuidedLoading(page, "**/first-weave.zip", "guided Bundle loading (desktop, light)", async () => {
+    await scanGuidedLoading(page, ["first-weave.zip"], "guided Bundle loading (desktop, light)", async () => {
       await page.goto(new URL("bundle?guide=bundle", baseUrl).href, { waitUntil: "domcontentloaded" });
       await page.locator("#rom-weaver-input-file-unified-bundle").waitFor({ state: "attached" });
       await installAuditTools();
@@ -1039,7 +1019,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await guidedCreate.waitFor({ state: "visible" });
     await scanGuidedLoading(
       page,
-      /\/(?:hello-world|modified-world)\.nes$/,
+      ["hello-world.nes", "modified-world.nes"],
       "guided Create loading (desktop, light)",
       () => guidedCreate.click(),
     );

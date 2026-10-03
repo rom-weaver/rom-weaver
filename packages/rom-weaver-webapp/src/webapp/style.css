@@ -76,6 +76,13 @@ textarea::placeholder {
   opacity: 0.95;
 }
 
+/* Navigation opt-in must be available before the first render. */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition {
+    navigation: auto;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
