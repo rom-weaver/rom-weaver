@@ -16,6 +16,7 @@ import { createOfflineProgressReporter } from "./pwa/offline-progress-reporter.t
 import { prioritizePrecacheInstallRequest } from "./pwa/fetch-priority.ts";
 import { createDeferredPrecache } from "./pwa/deferred-precache.ts";
 import { createOfflineCopyPolicy } from "./pwa/offline-copy-policy.ts";
+import { createDocsImagePolicy } from "./pwa/docs-image-format.ts";
 import { cacheWithDownloadLog, fetchWithDownloadLog, observeDownloadTimings } from "./pwa/offline-download-log.ts";
 import {
   createCachedTransferSizeReader,
@@ -75,6 +76,7 @@ const IDENTIFY_OPTIONAL_CACHE_NAME = `${MANAGED_CACHE_PREFIX}identify-optional`;
 const DEFERRED_CACHE_NAME = `${MANAGED_CACHE_PREFIX}app-deferred`;
 const OFFLINE_POLICY_CACHE_NAME = `${MANAGED_CACHE_PREFIX}offline-policy`;
 const offlineCopyPolicy = createOfflineCopyPolicy(OFFLINE_POLICY_CACHE_NAME, self.registration.scope);
+const docsImagePolicy = createDocsImagePolicy(OFFLINE_POLICY_CACHE_NAME, self.registration.scope);
 const CACHE_POLICY = createServiceWorkerCachePolicy({
   additionalCacheNames: [DEFERRED_CACHE_NAME, OFFLINE_POLICY_CACHE_NAME],
   emulatorJsCacheName: EMULATORJS_CACHE_NAME,
@@ -620,6 +622,7 @@ const deferredPrecache = createDeferredPrecache({
   scope: self.registration.scope,
   download: fetchForWarmup,
   policy: offlineCopyPolicy,
+  selectEntries: docsImagePolicy.selectEntries,
   log: logServiceWorker,
 });
 
@@ -775,10 +778,16 @@ const removeOfflineCopyFiles = async () => {
 };
 
 let offlineCopyTransition: Promise<unknown> = Promise.resolve();
-const setOfflineCopyEnabled = (enabled: boolean) => {
+const setOfflineCopyEnabled = (enabled: boolean, docImageFormat?: "avif" | "webp") => {
   if (!enabled) appPumpGeneration += 1;
   offlineCopyRequestedEnabled = enabled;
   const transition = offlineCopyTransition.then(async () => {
+    if (enabled && docImageFormat && (await docsImagePolicy.setFormat(docImageFormat))) {
+      logServiceWorker("offline documentation image format selected", { format: docImageFormat });
+      appPumpGeneration += 1;
+      await appPumpChain;
+      await deferredPrecache.cleanup();
+    }
     const wasEnabled = await offlineCopyPolicy.isEnabled();
     await offlineCopyPolicy.setEnabled(enabled);
     if (!enabled) await removeOfflineCopyFiles();
@@ -930,11 +939,14 @@ self.addEventListener("message", (event) => {
   }
 
   if (event.data.action === "set-offline-copy-enabled") {
-    const update = (
-      typeof event.data.enabled === "boolean"
-        ? setOfflineCopyEnabled(event.data.enabled)
-        : Promise.reject(new Error("Offline copy enabled value must be a boolean"))
-    ).catch((error) => ({
+    const update = (async () => {
+      const { enabled, docImageFormat } = event.data;
+      if (typeof enabled !== "boolean") throw new Error("Offline copy enabled value must be a boolean");
+      return setOfflineCopyEnabled(
+        enabled,
+        docImageFormat === "avif" || docImageFormat === "webp" ? docImageFormat : undefined,
+      );
+    })().catch((error) => ({
       action: "offline-copy-state-failed",
       error: formatError(error),
     }));

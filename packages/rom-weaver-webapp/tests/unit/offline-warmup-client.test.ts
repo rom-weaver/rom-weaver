@@ -16,6 +16,10 @@ import {
 
 type Reply = Record<string, unknown>;
 
+vi.mock("../../src/webapp/pwa/docs-image-format.ts", () => ({
+  detectDocsImageFormat: vi.fn().mockResolvedValue("avif"),
+}));
+
 const acknowledgePolicy = (message: Reply, transfer?: Transferable[]) => {
   if (message.action !== "set-offline-copy-enabled") return false;
   const port = transfer?.[0] as MessagePort;
@@ -105,11 +109,14 @@ describe("offline warm-up client", () => {
     const onProgress = vi.fn();
     cancel = scheduleOfflineWarmup({ navigator: { serviceWorker }, onProgress });
     await flush();
-    expect(postMessage).toHaveBeenCalledWith({ action: "set-offline-copy-enabled", enabled: true }, expect.any(Array));
+    expect(postMessage).toHaveBeenCalledWith(
+      { action: "set-offline-copy-enabled", enabled: true, docImageFormat: "avif" },
+      expect.any(Array),
+    );
     serviceWorker.controller = controller;
     notifyControllerChange();
     await flush();
-    expect(policyMessages).toEqual([{ action: "set-offline-copy-enabled", enabled: true }]);
+    expect(policyMessages).toEqual([{ action: "set-offline-copy-enabled", enabled: true, docImageFormat: "avif" }]);
     expect(messages).toEqual([{ action: "offline-warmup-pump" }]);
     expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({ ready: true }));
   });

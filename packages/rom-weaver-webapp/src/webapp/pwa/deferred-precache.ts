@@ -27,6 +27,7 @@ const createDeferredPrecache = ({
   scope,
   download,
   policy,
+  selectEntries,
   log = () => undefined,
 }: {
   entries: DeferredEntry[];
@@ -34,6 +35,7 @@ const createDeferredPrecache = ({
   scope: string;
   download: (request: Request) => Promise<Response>;
   policy?: OfflineCopyPolicy;
+  selectEntries?: (entries: readonly DeferredEntry[]) => Promise<readonly DeferredEntry[]>;
   log?: (message: string, details?: Record<string, unknown>) => void;
 }) => {
   const files = entries.map((entry) => {
@@ -46,6 +48,11 @@ const createDeferredPrecache = ({
     return { ...entry, downloadUrl: downloadUrl.href, key: key.href, url: url.href };
   });
   const byUrl = new Map(files.map((file) => [file.url, file]));
+  const requiredFiles = async () => {
+    if (!selectEntries) return files;
+    const required = new Set((await selectEntries(entries)).map((entry) => new URL(entry.url, scope).href));
+    return files.filter((file) => required.has(file.url));
+  };
   // One download per file. Every caller that joins it gets the same byte
   // progress, so a pump that arrives after the app requested the file itself
   // still reports that download as it happens instead of crediting the whole
@@ -64,18 +71,19 @@ const createDeferredPrecache = ({
   };
 
   const state = async (): Promise<DeferredState> => {
+    const required = await requiredFiles();
     const cache = await caches.open(cacheName);
     const keys = new Set((await cache.keys()).map((request) => request.url));
     const result = {
       cachedBytes: 0,
       cachedFiles: 0,
       totalBytes: 0,
-      totalFiles: files.length,
+      totalFiles: required.length,
       transferredBytes: 0,
       transferBytesIncomplete: false,
     };
     const measurements: Array<Promise<void>> = [];
-    for (const file of files) {
+    for (const file of required) {
       result.totalBytes += file.sizeBytes ?? 0;
       if (!keys.has(file.key)) {
         result.cachedBytes += Math.min(file.sizeBytes ?? 0, inFlight.get(file.key)?.loadedBytes ?? 0);
@@ -153,6 +161,7 @@ const createDeferredPrecache = ({
             for (const listener of progressListeners) listener(file.key, entry.loadedBytes);
           });
           const complete = bufferedResponse(response, buffer, encodedSizeOf(file.downloadUrl));
+          if (selectEntries && !(await requiredFiles()).some((required) => required.key === file.key)) return complete;
           const stored = policy
             ? await policy.write(() => cacheWithDownloadLog(cache, file.key, complete.clone(), log), generation)
             : (await cacheWithDownloadLog(cache, file.key, complete.clone(), log), true);
@@ -181,13 +190,14 @@ const createDeferredPrecache = ({
     shouldContinue = () => true,
   ) => {
     if (policy && !(await policy.isEnabled())) return false;
+    const required = await requiredFiles();
     const generation = policy?.token();
     let cachedKeys: Set<string> | undefined;
     const loaded = new Map([...inFlight].map(([key, pending]) => [key, pending.loadedBytes]));
     const report = () => {
       const keys = cachedKeys;
       if (!(keys && onProgress)) return;
-      const cachedBytes = files.reduce((sum, file) => {
+      const cachedBytes = required.reduce((sum, file) => {
         const size = file.sizeBytes ?? 0;
         return sum + (keys.has(file.key) ? size : Math.min(size, loaded.get(file.key) ?? 0));
       }, 0);
@@ -204,7 +214,7 @@ const createDeferredPrecache = ({
       const cache = await caches.open(cacheName);
       const keys = new Set((await cache.keys()).map((request) => request.url));
       cachedKeys = keys;
-      const missing = files.filter((file) => !keys.has(file.key));
+      const missing = required.filter((file) => !keys.has(file.key));
       const started = missing.filter((file) => inFlight.has(file.key));
       const batch = [...started, ...missing.filter((file) => !inFlight.has(file.key))].slice(0, BATCH_FILE_LIMIT);
       if (batch.length > 0) report();
@@ -241,7 +251,7 @@ const createDeferredPrecache = ({
     if (policy && !(await policy.isEnabled())) return;
     const generation = policy?.token();
     const [source, destination] = await Promise.all([caches.open(sourceCacheName), caches.open(cacheName)]);
-    for (const file of files) {
+    for (const file of await requiredFiles()) {
       if (await destination.match(file.key)) continue;
       const cached = await source.match(file.key);
       if (cached) {
@@ -252,8 +262,9 @@ const createDeferredPrecache = ({
   };
 
   const cleanup = async () => {
+    await Promise.allSettled([...inFlight.values()].map((pending) => pending.promise));
     const cache = await caches.open(cacheName);
-    const expected = new Set(files.map((file) => file.key));
+    const expected = new Set((await requiredFiles()).map((file) => file.key));
     await Promise.all(
       (await cache.keys()).filter((request) => !expected.has(request.url)).map((request) => cache.delete(request)),
     );
