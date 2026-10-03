@@ -1,14 +1,4 @@
-import {
-  ArrowLeft,
-  HardDrive,
-  Heart,
-  House,
-  Info,
-  Newspaper,
-  ScrollText,
-  Search,
-  Settings,
-} from "lucide-react";
+import { ArrowLeft, HardDrive, Heart, House, Info, Newspaper, ScrollText, Search, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { DocsNavigation } from "../docs-navigation.tsx";
