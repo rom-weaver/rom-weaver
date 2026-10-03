@@ -4,7 +4,9 @@ import { type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider, useUiLocalizer } from "../../../src/public/react/settings-context.tsx";
 import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH } from "../../../src/webapp/build-version.ts";
+import releasePleaseConfig from "../../../../../release-please-config.json";
 import { ChangelogPanel } from "../../../src/webapp/components/changelog-panel.tsx";
+import { COMMIT_SECTIONS } from "../../../src/webapp/components/changelog-source.tsx";
 
 /**
  * Scope update assertions to the pending-deploy section because the changelog history can repeat the same entries.
@@ -268,6 +270,27 @@ describe("ChangelogPanel pending update", () => {
     // No PR in the subject, so the commit itself is the link.
     expect(update.getByRole("link", { name: "b" }).getAttribute("href")).toBe(`${REPOSITORY_URL}/commit/b`);
     expect(update.getByText("not a conventional commit")).toBeTruthy();
+  });
+
+  it("lists the same changelog sections as release-please", () => {
+    const sections = releasePleaseConfig.packages["."]["changelog-sections"];
+    expect(COMMIT_SECTIONS.map(([type, section]) => ({ section, type }))).toEqual(sections);
+  });
+
+  it("puts types that share a release-please section in one group", async () => {
+    mockChangelog([
+      { date: "", hash: "a", subject: "ci: cache compiler output" },
+      { date: "", hash: "b", subject: "ux(webapp): shorten the download label" },
+      { date: "", hash: "c", subject: "refactor(cli): split the runner" },
+      { date: "", hash: "d", subject: "style: an old retired type" },
+    ]);
+
+    const update = await renderUpdate();
+
+    const headings = await update.findAllByRole("heading", { level: 3 });
+    expect(headings.map((heading) => heading.textContent)).toEqual(["User Experience", "Internal", "Other Changes"]);
+    expect(update.getByText("cache compiler output")).toBeTruthy();
+    expect(update.getByText("split the runner")).toBeTruthy();
   });
 
   it("skips the subject-less placeholder a git-less build uses to carry the notes", async () => {
