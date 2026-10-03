@@ -11,8 +11,7 @@ import { rootDir } from "./paths.mjs";
 // savings bar and stay on the ordinary static path. Mutable root files (such
 // as index.html, the service worker, and changelog.json) stay off this path.
 const PAGES_BROTLI_MIN_SAVINGS = 0.02;
-// Pages limits _routes.json to 100 include/exclude entries; identify assets
-// share one wildcard route to stay within that limit.
+// Related assets MUST share wildcard routes to fit the 100-entry Pages include limit.
 const PAGES_ROUTES_MAX_INCLUDES = 100;
 
 export const writeBrotliSidecars = () => {
@@ -76,13 +75,10 @@ export const writeBrotliSidecars = () => {
         // Every identify asset rides the one wildcard include staged above. An exact
         // entry per pack, shard, and manifest would be redundant and eat the budget
         // asserted below.
-        // Browser runtime chunks share a route as the workflow count grows.
+        // Browser and documentation chunks share routes as the page count grows.
         // The asset function falls back to static serving for missing sidecars.
-        const route = name.startsWith("identify-")
-          ? "/assets/identify-*"
-          : name.startsWith("browser-")
-            ? "/assets/browser-*"
-            : `/assets/${name}`;
+        const prefix = ["identify-", "browser-", "docs-"].find((candidate) => name.startsWith(candidate));
+        const route = prefix ? `/assets/${prefix}*` : `/assets/${name}`;
         if (!sidecarUrls.includes(route)) sidecarUrls.push(route);
       }
       const include = [

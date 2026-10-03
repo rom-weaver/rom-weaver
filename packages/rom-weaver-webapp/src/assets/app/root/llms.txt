@@ -4,7 +4,7 @@
 
 ## Web app
 
-- [Apply ROM patches](https://rom-weaver.com/apply-patches): Apply patches with format detection, checksum validation, and ordered patch chains.
+- [Apply ROM patches](https://rom-weaver.com/apply-patches): Apply BPS, IPS, IPS32, UPS, xdelta, VCDIFF, PPF, APS, RUP, and other supported patches with format detection and ordered patch chains.
 - [Create ROM patches](https://rom-weaver.com/create-patch): Create patches with format-aware settings and distributable bundles.
 - [Compress files](https://rom-weaver.com/compress): Convert ISO or BIN/CUE to CHD, GameCube and Wii ISO to RVZ, and Nintendo 3DS ROMs to Z3DS; create ZIP or 7z archives.
 - [Extract files](https://rom-weaver.com/extract): Decompress Z3DS, ZCCI, ZCXI, ZCIA, Z3DSX, CHD, RVZ, and supported archives locally in the browser.
@@ -19,6 +19,7 @@
 - [Compress files in the browser](https://rom-weaver.com/docs/convert-roms-browser): Package files or compress compatible disc images without applying a patch.
 - [Convert RVZ to ISO in the browser](https://rom-weaver.com/docs/convert-rvz-to-iso): Extract a GameCube or Wii RVZ disc image to ISO on your device.
 - [Convert ISO or BIN/CUE to CHD in the browser](https://rom-weaver.com/docs/convert-to-chd): Compress a supported disc image to CHD without applying a patch.
+- [Convert CHD to ISO or BIN/CUE in the browser](https://rom-weaver.com/docs/extract-files-browser#convert-chd-to-iso-or-bincue): Extract DVD CHDs to ISO, CD CHDs to BIN/CUE, and Dreamcast GD-ROM CHDs to GDI and tracks.
 - [Convert ISO to RVZ in the browser](https://rom-weaver.com/docs/convert-to-rvz): Compress a GameCube or Wii disc image to RVZ with the Compress tool.
 - [Compress Nintendo 3DS ROMs to Z3DS in the browser](https://rom-weaver.com/docs/convert-to-z3ds): Create Z3DS, ZCCI, ZCXI, ZCIA, or Z3DSX files from uncompressed Nintendo 3DS inputs.
 - [Extract Z3DS files in the browser](https://rom-weaver.com/docs/extract-z3ds): Decompress Z3DS, ZCCI, ZCXI, ZCIA, and Z3DSX files to their underlying Nintendo 3DS formats.
@@ -27,7 +28,8 @@
 - [Settings and offline use](https://rom-weaver.com/docs/browser-settings): Preferences, beta tools, offline preparation, and local storage.
 - [Markdown documentation index](https://rom-weaver.com/docs.md): Generated Markdown index for every published documentation page.
 - [Your first patch](https://rom-weaver.com/docs/get-started): Tutorial that patches a homebrew ROM in the browser and verifies the result.
-- [Apply patches guide](https://rom-weaver.com/docs/apply-rom-patches): Use the browser's Apply workflow with loose patches, patch chains, archives, or bundles.
+- [Apply patches guide](https://rom-weaver.com/docs/apply-rom-patches): Browser instructions for supported byte-level patch families, including SOLID, GDIFF, APSGBA, PAT/FireFlower, EBP, BDF/BSDIFF40, BSP, MOD/PMSR, DLDI, DPS, and single-file HDiffPatch/HPatchZ. NINJA1 and PDS cannot be applied.
+- [Apply Dreamcast DCP patches (CLI)](https://rom-weaver.com/docs/cli-apply#apply-a-dreamcast-dcp-patch): Rebuild a Dreamcast disc from one DCP patch and its CUE or GDI input. DCP must run alone and is unavailable in browser Apply.
 - [Use cheats guide](https://rom-weaver.com/docs/use-cheats): Bake ROM cheats into a ROM from the browser Apply workflow.
 - [Create patches guide](https://rom-weaver.com/docs/create-rom-patches): Compare Original and Modified, create a patch, then test the downloaded artifact.
 - [Create bundles guide](https://rom-weaver.com/docs/create-bundles): Build, download, test, and publish a patch-only bundle in the browser's Apply workflow.
@@ -39,6 +41,7 @@
 - [Browser and CLI](https://rom-weaver.com/docs/browser-and-cli): One engine, two front ends, and how to choose.
 - [Identify data sources](https://rom-weaver.com/docs/identify-sources): How pinned Libretro and OpenGood data provides local ROM identification.
 - [Comparison with similar tools](https://rom-weaver.com/docs/comparisons): Workflow trade-offs between rom-weaver, RomPatcher.js, Flips, MultiPatch, xdelta3, chdman, and Dolphin tool.
+- [CHD, RVZ, ZIP, and 7z speed benchmarks](https://rom-weaver.com/docs/performance): Recorded native CLI timings against chdman, dolphin-tool, 7zz, and Info-ZIP, with versions, inputs, settings, and limits. These are not browser, Z3DS, or patching competitor benchmarks.
 - [Compression formats guide](https://rom-weaver.com/docs/compression-formats): Pick format-specific compression such as CHD, RVZ, or Z3DS, plus ZIP and 7z, and learn when trimming beats compressing.
 - [Install the CLI](https://rom-weaver.com/docs/install): Install rom-weaver with package managers, verified scripts, npm, Docker, or from source.
 - [Verify a download](https://rom-weaver.com/docs/verify-downloads): Check that a release archive, npm package, or container image carries the repository's build provenance.

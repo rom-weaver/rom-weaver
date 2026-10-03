@@ -59,7 +59,7 @@ Every supported Apply entry also supports probe/parse, except DCP. DCP uses a sp
 
 > ¹ Single-file `.hdiff` and `.hpatchz` patches are supported. Directory patches (`HDIFF19`) are not supported.
 >
-> ² DCP requires a Dreamcast `.cue` or `.gdi` input and must be applied alone. Byte-level patch flags do not apply to this filesystem rebuild.
+> ² DCP requires a Dreamcast `.cue` or `.gdi` input and must be applied alone. Byte-level patch flags do not apply to this filesystem rebuild. This workflow is available through the native CLI, not browser Apply.
 
 NINJA1 headers can be detected but not applied. PDS is unsupported.
 

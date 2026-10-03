@@ -10,6 +10,7 @@ The useful distinction is the job each tool handles: a single patch, an embedded
 - [Applying a patch](#applying-a-patch)
 - [Creating a patch](#creating-a-patch)
 - [Containers and disc images](#containers-and-disc-images)
+- [Native conversion speed against chdman and dolphin-tool](#native-conversion-speed-against-chdman-and-dolphin-tool)
 - [Checksums](#checksums)
 - [Headers and byte order](#headers-and-byte-order)
 - [Patching features](#patching-features)
@@ -53,6 +54,12 @@ A patch creator must reproduce the intended Modified file from the documented Or
 chdman and Dolphin tool handle disc conversion directly. rom-weaver combines supported container extraction, patching, and compression in one workflow. When the required output is unsupported, a separate converter remains necessary.
 
 Parity tests compare reconstructed payloads. They do not establish that every compressed container or patch stream is identical across tools. [Performance](../development/performance.md#benchmarks-in-this-repository) describes the parity harness.
+
+## Native conversion speed against chdman and dolphin-tool
+
+The recorded native CLI benchmarks show faster [CHD extraction than chdman](../development/performance.md#chd-vs-chdman) and [RVZ conversion than dolphin-tool](../development/performance.md#rvz-vs-dolphin-tool) on the measured corpus. CHD compression includes both faster and slower results.
+
+The measurements identify the versions, machine, codec settings, input types, and timing variation. They do not establish browser speed against competitors. Z3DS conversion and patching have no competitor comparison in these results.
 
 ## Checksums
 

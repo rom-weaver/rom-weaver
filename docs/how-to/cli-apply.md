@@ -6,6 +6,7 @@ Apply one patch or an ordered chain in the terminal, handle headers and byte ord
 ## Table of contents
 
 - [Apply one or more patches](#apply-one-or-more-patches)
+- [Apply a Dreamcast DCP patch](#apply-a-dreamcast-dcp-patch)
 - [Pipe the patched ROM to another program](#pipe-the-patched-rom-to-another-program)
 - [Pick one patch out of an archive](#pick-one-patch-out-of-an-archive)
 - [Verify the ROM before and after](#verify-the-rom-before-and-after)
@@ -41,6 +42,22 @@ An output extension matching the selected ROM leaf writes a plain ROM, so `trans
 For an ordinary file apply, omit `--output` to write a sibling such as `original-patched.sfc`. Existing names are preserved by adding a numeric suffix. Bundle applies keep their bundle-provided output name; a bundle without one still requires `--output`.
 
 Formats that carry their own checksums are verified strictly, so a wrong starting ROM stops the run - see [Fix a checksum error](fix-checksum-errors.md) when that happens.
+
+## Apply a Dreamcast DCP patch
+
+1. Keep the Dreamcast `.gdi` or `.cue` sheet with every referenced track at its recorded path.
+2. Check that the disc matches the DCP author's required release.
+3. Apply the `.dcp` alone, using the sheet as the input:
+
+```sh
+rom-weaver patch apply --input game.gdi --patch hack.dcp --output patched.chd
+```
+
+For a CUE-based disc, replace `game.gdi` with the `.cue` path. DCP rebuilds the high-density data track's filesystem and selects that track automatically.
+
+DCP cannot run in a patch chain or with cheats, an explicit target, or byte-level header, checksum-repair, and N64 byte-order transforms. Browser Apply does not support this disc-sheet workflow.
+
+Test the resulting CHD in a compatible Dreamcast emulator. Keep the original disc and tracks until you check the result.
 
 ## Pipe the patched ROM to another program
 

@@ -77,7 +77,7 @@ rom-weaver applies and creates PPF.
 
 Less common formats often reflect one platform's tools or a specialized workflow, such as Dreamcast DCP. Apply support and creation support can differ.
 
-The [full format table](../reference/formats.md#patch-formats) is the authoritative list of names, extensions, and what rom-weaver can currently apply and create.
+The [full format table](../reference/formats.md#patch-formats) is the authoritative list of names, extensions, and what rom-weaver can currently apply and create. The [browser Apply guide](../how-to/apply-rom-patches.md#apply-aps-apsgba-rup-and-other-patch-formats) covers the byte-level formats and single-file HDiffPatch requirements. Dreamcast DCP needs the [CLI disc-sheet workflow](../how-to/cli-apply.md#apply-a-dreamcast-dcp-patch).
 
 ## How rom-weaver picks a patch's bytes
 
