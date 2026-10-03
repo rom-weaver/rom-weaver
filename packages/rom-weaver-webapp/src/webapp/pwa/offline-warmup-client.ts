@@ -5,6 +5,7 @@
 import { createLogger } from "../../lib/logging.ts";
 import type { LogDetails } from "../../types/logging.ts";
 import type { OfflineCachedFile, OfflineReadyState, WarmupBumpTarget, WarmupProgress } from "../offline-warmup.ts";
+import { detectDocsImageFormat } from "./docs-image-format.ts";
 
 const PUMP_TIMEOUT_MS = 120_000;
 const CACHE_INVENTORY_TIMEOUT_MS = 2000;
@@ -269,6 +270,7 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
   let policyChain = Promise.resolve(false);
   let requestController = new AbortController();
   let observedController = serviceWorker.controller;
+  let docImageFormatPromise: ReturnType<typeof detectDocsImageFormat> | null = null;
 
   const synchronizePolicy = () => {
     const controller = serviceWorker.controller;
@@ -283,12 +285,17 @@ const scheduleOfflineWarmup = (options: ScheduleOfflineWarmupOptions = {}): (() 
     policyChain = policyChain.then(async () => {
       if (signal.aborted) return false;
       try {
+        const payload: Record<string, unknown> = { enabled };
+        if (enabled) {
+          docImageFormatPromise ??= detectDocsImageFormat();
+          payload.docImageFormat = await docImageFormatPromise;
+        }
         const reply = await postPump(
           controller,
           "set-offline-copy-enabled",
           undefined,
           PUMP_TIMEOUT_MS,
-          { enabled },
+          payload,
           requestSignal,
         );
         if (reply.action !== "offline-copy-state" || reply.enabled !== enabled) {

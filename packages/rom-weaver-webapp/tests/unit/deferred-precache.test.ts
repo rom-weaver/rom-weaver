@@ -3,6 +3,7 @@ import { brotliCompressSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDeferredPrecache } from "../../src/webapp/pwa/deferred-precache.ts";
 import { createOfflineCopyPolicy } from "../../src/webapp/pwa/offline-copy-policy.ts";
+import { createDocsImagePolicy } from "../../src/webapp/pwa/docs-image-format.ts";
 
 const SCOPE = "https://example.test/";
 const CACHE_NAME = "deferred-precache";
@@ -60,6 +61,99 @@ afterEach(() => {
 });
 
 describe("deferred precache", () => {
+  it.each(["avif", "webp"] as const)(
+    "downloads only %s for paired screenshots and preserves the choice after restart",
+    async (format) => {
+      const screenshotEntries = [
+        { url: "docs/screenshots/example.avif", revision: "avif", sizeBytes: 2 },
+        { url: "docs/screenshots/example.webp", revision: "webp", sizeBytes: 5 },
+        { url: "docs/screenshots/legacy.webp", revision: "legacy", sizeBytes: 3 },
+        { url: "docs/guide.md", revision: "guide", sizeBytes: 4 },
+      ];
+      const imagePolicy = createDocsImagePolicy("image-policy", SCOPE);
+      const download = vi.fn(async (request: Request) => {
+        const entry = screenshotEntries.find((entry) => new URL(request.url).pathname === `/${entry.url}`);
+        return new Response(new Uint8Array(entry?.sizeBytes ?? 0));
+      });
+      const queue = createDeferredPrecache({
+        cacheName: CACHE_NAME,
+        entries: screenshotEntries,
+        scope: SCOPE,
+        download,
+        selectEntries: imagePolicy.selectEntries,
+      });
+      expect((await queue.state()).totalFiles).toBe(4);
+      await imagePolicy.setFormat(format);
+      const progress = vi.fn();
+      await queue.runNextBatch(progress);
+      expect(download.mock.calls.map(([request]) => new URL(request.url).pathname)).toEqual([
+        `/docs/screenshots/example.${format}`,
+        "/docs/screenshots/legacy.webp",
+        "/docs/guide.md",
+      ]);
+      const totalBytes = format === "avif" ? 9 : 12;
+      expect(await queue.state()).toMatchObject({ totalFiles: 3, cachedFiles: 3, totalBytes, cachedBytes: totalBytes });
+      expect(progress).toHaveBeenLastCalledWith(totalBytes);
+      expect(await queue.runNextBatch()).toBe(false);
+      const restored = createDocsImagePolicy("image-policy", SCOPE);
+      expect((await restored.selectEntries(screenshotEntries)).map(({ url }) => url)).toEqual([
+        `docs/screenshots/example.${format}`,
+        "docs/screenshots/legacy.webp",
+        "docs/guide.md",
+      ]);
+      const offlineDownload = vi.fn().mockRejectedValue(new Error("offline"));
+      const restartedQueue = createDeferredPrecache({
+        cacheName: CACHE_NAME,
+        entries: screenshotEntries,
+        scope: SCOPE,
+        download: offlineDownload,
+        selectEntries: restored.selectEntries,
+      });
+      expect(await restartedQueue.serve(`docs/screenshots/example.${format}`)).toBeInstanceOf(Response);
+      expect(await restartedQueue.runNextBatch()).toBe(false);
+      expect(offlineDownload).not.toHaveBeenCalled();
+      const unselected = format === "avif" ? "webp" : "avif";
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(
+        `${SCOPE}docs/screenshots/example.${unselected}?__WB_REVISION__=${unselected}`,
+        new Response("old"),
+      );
+      await queue.cleanup();
+      expect(await cache.keys()).toHaveLength(3);
+      expect(await queue.serve(`docs/screenshots/example.${format}`)).toBeInstanceOf(Response);
+      expect(download).toHaveBeenCalledTimes(3);
+      await queue.serve(`docs/screenshots/example.${unselected}`);
+      expect(await cache.keys()).toHaveLength(3);
+    },
+  );
+
+  it("replaces a previous format without retaining an in-flight old variant", async () => {
+    const imagePolicy = createDocsImagePolicy("image-policy", SCOPE);
+    await imagePolicy.setFormat("webp");
+    let finish: ((response: Response) => void) | undefined;
+    const queue = createDeferredPrecache({
+      cacheName: CACHE_NAME,
+      entries: [
+        { url: "docs/screenshots/example.avif", revision: "avif", sizeBytes: 2 },
+        { url: "docs/screenshots/example.webp", revision: "webp", sizeBytes: 5 },
+      ],
+      scope: SCOPE,
+      download: () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        }),
+      selectEntries: imagePolicy.selectEntries,
+    });
+    const serve = queue.serve("docs/screenshots/example.webp");
+    await vi.waitFor(() => expect(finish).toBeDefined());
+    await imagePolicy.setFormat("avif");
+    const cleanup = queue.cleanup();
+    finish?.(new Response("older"));
+    await Promise.all([serve, cleanup]);
+    expect(await (await caches.open(CACHE_NAME)).keys()).toHaveLength(0);
+    expect(await queue.state()).toMatchObject({ totalFiles: 1, totalBytes: 2, cachedFiles: 0 });
+  });
+
   it("ignores old stream progress after removal starts a fresh download", async () => {
     const policy = createOfflineCopyPolicy("offline-policy", SCOPE);
     let oldStream: ReadableStreamDefaultController<Uint8Array> | undefined;
