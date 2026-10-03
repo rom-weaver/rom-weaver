@@ -21,7 +21,7 @@ const DOCS_SCREENSHOT_CASES = [
     name: "create-inputs",
     route: "/create-patch?guide=create",
     target: "#patch-builder-row-original, .swap-row, #patch-builder-row-modified",
-    waitFor: "Checksum from extract",
+    waitFor: "Start with the original",
   },
   {
     dismissGuide: true,
@@ -29,7 +29,7 @@ const DOCS_SCREENSHOT_CASES = [
     name: "create-output",
     route: "/create-patch?guide=create",
     target: "#patch-builder-row-output",
-    waitFor: "Checksum from extract",
+    waitFor: "Start with the original",
   },
   {
     dismissGuide: true,
