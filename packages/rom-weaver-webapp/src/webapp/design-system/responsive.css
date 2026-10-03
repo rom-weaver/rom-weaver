@@ -134,97 +134,9 @@
     max-height: 100dvh;
     margin: 0;
   }
-  /* Everything the sheet steers by drops to its foot, in thumb reach: the tab
-     bar last, a tab's own controls just above it. Both stay in flow - the sheet
-     is a fixed-height column, so the body between them is the only part that
-     scrolls, no bar needs a guessed reserve under it, and none can drift over
-     another when 100dvh and the visual viewport disagree. Order moves them;
-     source order still reads rail, then controls, then content. */
-  /* The tab bar wears the app dock's own measurements. Two docks a few pixels
-     apart would read as a near-miss; one shape doing duty for whichever
-     navigation is in front reads as the same control. */
-  .rw-app .log-dlg .dlg-head {
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 0;
-    order: 2;
-    /* Height comes from the same padding and column minimum the dock uses, not
-       from --dock-h: that variable is the reserve the page leaves for the dock,
-       which is taller than the dock actually renders. Built from the parts, the
-       two bars match without either having to name a number. The frame already
-       pays the bottom safe area. */
-    padding: 4px max(var(--sp-s), var(--safe-r)) 4px max(var(--sp-s), var(--safe-l));
-    border-block-start: 1px solid var(--seam-soft);
-    border-block-end: 0;
-  }
-  .rw-app .log-dlg .dialog-subrail {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    grid-column: span 4;
-    gap: 0;
-    overflow: visible;
-  }
-  /* One column apiece: four tabs and the way out. */
-  .rw-app .log-dlg .dialog-subrail .subtab,
-  .rw-app .log-dlg .dlg-head > .dlg-x {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    align-items: center;
-    justify-content: center;
-    inline-size: auto;
-    min-inline-size: 0;
-    block-size: auto;
-    min-block-size: 48px;
-    padding: 6px 2px 4px;
-    margin: 0;
-    /* Matches the app dock's own label size, column for column, so a tab here
-       and a dock item read as one control. */
-    font-size: 0.58rem;
-    font-weight: 650;
-    color: var(--ink-3);
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-    background: transparent;
-    border: 0;
-    border-radius: var(--r-s);
-  }
-  .rw-app .log-dlg .dialog-subrail .subtab svg,
-  .rw-app .log-dlg .dlg-head > .dlg-x svg {
-    inline-size: 20px;
-    block-size: 20px;
-  }
-  .rw-app .log-dlg .dialog-subrail .subtab span,
-  .rw-app .log-dlg .dlg-x-label {
-    display: block;
-    max-inline-size: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  /* The dock's stitch: a thread on the bar's own top seam, not a rule under a
-     label - an underline down here would read as a stray mark rather than a
-     mark on a rail. */
-  .rw-app .log-dlg .dialog-subrail .subtab[aria-selected="true"] {
-    color: var(--thread-text);
-    background: transparent;
-    border: 0;
-  }
-  .rw-app .log-dlg .dialog-subrail .subtab[aria-selected="true"]::before {
-    position: absolute;
-    inset-block-start: -5px;
-    inset-inline: 8px;
-    block-size: 2px;
-    content: "";
-    background: var(--thread);
-    border-radius: 1px;
-  }
-  /* The close column is a column like any other, so it needs no halo of its
-     own - it is already past 48px in both directions. */
-  .rw-app .log-dlg .dlg-head > .dlg-x::after {
-    content: none;
-  }
+  /* A section's own controls sit just above the console's section bar, in
+     thumb reach; the body between the head and them is the only part that
+     scrolls. */
   .rw-app .log-dlg .dlg-subhead {
     order: 1;
     padding-block: var(--sp-s);
@@ -241,32 +153,38 @@
     min-height: 44px;
   }
   /**
-   * The level or refresh control shares a row with copy/download; the view toggle and filter each span a separate row.
+   * One row of controls: the Now/Last toggle, the level (or refresh on
+   * storage) taking the free width, then copy/download. The filter has the
+   * row below to itself.
    */
   .rw-app .log-dlg .dlg-subhead .log-controls {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    display: flex;
+    flex-wrap: nowrap;
     gap: var(--sp-s);
   }
   .rw-app .log-dlg .dlg-subhead .logview {
-    grid-column: 1 / -1;
-    width: 100%;
+    flex: none;
     min-height: 44px;
   }
   .rw-app .log-dlg .dlg-subhead .logview .seg-btn {
     height: 38px;
   }
   .rw-app .log-dlg .dlg-subhead .loglevel {
+    flex: 1 1 auto;
+    min-width: 0;
     margin-inline-start: 0;
   }
-  /* Refresh takes the level select's slot on the storage tab, so it auto-places
-     into the first column - pinning it to the second instead pushed the copy
-     and download pair onto a row of its own. */
+  .rw-app .log-dlg .dlg-subhead .loglevel .dropdown-select,
+  .rw-app .log-dlg .dlg-subhead .loglevel .select {
+    width: 100%;
+  }
   .rw-app .log-dlg .dlg-subhead .log-refresh {
-    justify-self: start;
     inline-size: 44px;
     height: 44px;
     margin-inline-start: 0;
+  }
+  .rw-app .log-dlg .dlg-subhead .log-actions {
+    margin-inline-start: auto;
   }
   .rw-app .log-dlg .dlg-subhead .loglevel .select,
   .rw-app .log-dlg .dlg-subhead .log-filter {

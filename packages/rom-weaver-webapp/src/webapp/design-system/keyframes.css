@@ -113,8 +113,18 @@
     translate: 0 0;
   }
 }
-@keyframes sw-spin {
-  to {
-    rotate: 360deg;
+@keyframes install-nudge {
+  0%,
+  30%,
+  100% {
+    translate: 0 0;
+  }
+  10%,
+  20% {
+    translate: 0 2px;
+  }
+  15%,
+  25% {
+    translate: 0 0;
   }
 }

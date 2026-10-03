@@ -183,9 +183,8 @@ const requestStatus = (url, { headers = {}, maxRedirects = 5 } = {}) =>
   });
 
 const openSettingsPanel = async (page) => {
-  const settings = page.locator(
-    ".shell-head-tools .tool[aria-label='Settings']:visible, .topbar-tools .tool[aria-label='Settings']:visible",
-  );
+  // Phones reach Settings through the dock's App button; desktop keeps the header tool.
+  const settings = page.locator(".dock-app:visible, .topbar-tools .tool[aria-label='Settings']:visible");
   await settings.first().click();
   await page.getByRole("dialog").waitFor({ state: "visible" });
 };
@@ -766,8 +765,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     }
     await page.locator(".docs-article h1").waitFor({ state: "visible" });
     await page.locator(".dock").waitFor({ state: "visible" });
-    await page.locator(".dock-find").waitFor({ state: "visible" });
     await page.locator(".dock-menu").waitFor({ state: "visible" });
+    await page.locator(".dock-app").waitFor({ state: "visible" });
     await page.getByRole("button", { name: "Browse docs" }).waitFor({ state: "visible" });
     await page.getByRole("button", { name: "Browse docs" }).click();
     await page.locator("#docs-menu-sheet:visible").waitFor({ state: "visible" });
@@ -879,6 +878,9 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await infoButton.click();
 
     await openSettingsPanel(page);
+    // Codecs are Advanced fields, so the console hides them until the switch is on.
+    const advancedSwitch = page.getByRole("switch", { name: /^Advanced/ }).first();
+    if ((await advancedSwitch.getAttribute("aria-checked")) !== "true") await advancedSwitch.click();
     const codecCombobox = page.locator(".codec-combobox input").first();
     await codecCombobox.click();
     await page.locator(".codec-combobox-list").waitFor({ state: "visible" });

@@ -1,5 +1,6 @@
 export type { SettingsDraftState, SettingsFieldKey, SettingsState, SettingsUiState } from "./settings-metadata.ts";
 export {
+  ADVANCED_SETTINGS_FIELDS,
   copySettings,
   getCompressionProfileFromIndex,
   getDefaultThreads,
@@ -19,6 +20,7 @@ export {
   SETTINGS_PANEL_SECTIONS,
   SETTINGS_PANEL_FIELD_ORDER,
   SETTINGS_VALID_COMPRESSION_PROFILES,
+  settingsGroupId,
 } from "./settings-metadata.ts";
 export {
   getDefaultSettings,

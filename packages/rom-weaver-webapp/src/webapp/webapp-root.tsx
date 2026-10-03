@@ -1,16 +1,18 @@
 import {
   Archive,
   BookOpen,
-  FileArchive,
-  Gamepad2,
-  GitCompare,
+  FileDiff,
+  Gamepad,
   Hash,
   House,
   Package,
+  PackageOpen,
   RotateCcw,
   Save as SaveIcon,
   ScanSearch,
   Scissors,
+  Stamp,
+  Undo2,
 } from "lucide-react";
 import {
   lazy,
@@ -30,7 +32,6 @@ import { createLogger } from "../lib/logging.ts";
 import { markDropReceived, markResultPaintedAfterFinish } from "../lib/perf/op-perf-marks.ts";
 import { perfNow, recordDrop } from "../lib/runtime/perf-latency.ts";
 import { getDefaultBrowserThreadCount } from "../platform/shared/compression-options.ts";
-import { ApplyBandaidIcon } from "../public/react/components/apply-bandaid-icon.tsx";
 import { runFlatViewTransition } from "../public/react/components/ds/flat-transition.ts";
 import { ConfirmDialog } from "../public/react/components/ds/index.ts";
 import { notifyGuidedSampleView } from "../public/react/guided-sample-start.ts";
@@ -87,7 +88,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     dock: true,
     group: "patches",
     href: "apply-patches",
-    icon: <ApplyBandaidIcon className="apply-tab-icon" />,
+    icon: <Stamp aria-hidden="true" />,
     id: "patcher",
     label: "Apply Patches",
     railLabel: "Apply",
@@ -96,7 +97,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     dock: true,
     group: "patches",
     href: "create-patch",
-    icon: <GitCompare aria-hidden="true" />,
+    icon: <FileDiff aria-hidden="true" />,
     id: "creator",
     label: "Create Patch",
     railLabel: "Create",
@@ -113,7 +114,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     beta: true,
     group: "patches",
     href: "ppf-undo",
-    icon: <RotateCcw aria-hidden="true" />,
+    icon: <Undo2 aria-hidden="true" />,
     id: "ppf-undo",
     label: "PPF undo",
   },
@@ -144,7 +145,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   {
     group: "files",
     href: "extract",
-    icon: <FileArchive aria-hidden="true" />,
+    icon: <PackageOpen aria-hidden="true" />,
     id: "extract",
     label: "Extract files",
     railLabel: "Extract",
@@ -162,7 +163,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     dock: true,
     group: "roms",
     href: "test-rom",
-    icon: <Gamepad2 aria-hidden="true" />,
+    icon: <Gamepad aria-hidden="true" />,
     id: "test",
     label: "Test ROM",
     railLabel: "Test",
@@ -487,17 +488,18 @@ function WebappRoot({
   }, [notFound, state.currentView, threads]);
   const {
     closeDialog,
+    closeDialogForNavigation,
     handleDialogTabChange,
     logOpen,
     logTab,
+    openAboutTab,
+    openLogsTab,
     openSettingsTab,
     openStatusTab,
     openStorageTab,
     preloadLogDialog,
     preloadSettingsPanel,
     saveSettings,
-    setLogOpen,
-    setLogTab,
     settingsFocusHint,
   } = useUnifiedDialog(actions, state);
   /* Every workflow the user has visited stays mounted, so a single page drop
@@ -725,10 +727,8 @@ function WebappRoot({
             commitsSinceVersion={COMMITS_SINCE_VERSION}
             dirty={Boolean(DIRTY_HASH)}
             onOpenWhatsNew={openWhatsNew}
-            onOpenLog={() => {
-              setLogTab("logs");
-              setLogOpen(true);
-            }}
+            onOpenAbout={openAboutTab}
+            onOpenLog={openLogsTab}
             onOpenStatus={openStatusTab}
             onOpenStorage={openStorageTab}
             onPreloadLog={preloadLogDialog}
@@ -914,6 +914,11 @@ function WebappRoot({
           <Suspense fallback={null}>
             <LogDialog
               initialTab={logTab}
+              licensesHref={`${resolvedAssetBaseUrl}docs/notices`}
+              onOpenWhatsNew={() => {
+                closeDialogForNavigation();
+                openWhatsNew();
+              }}
               level={state.settings.logLevel}
               onClose={closeDialog}
               onLevelChange={actions.onLogLevelChange}

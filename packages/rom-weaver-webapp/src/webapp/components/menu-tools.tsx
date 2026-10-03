@@ -1,4 +1,4 @@
-import { Heart, MonitorCog, Moon, Palette, Settings, SunMedium } from "lucide-react";
+import { Heart, MonitorCog, Moon, Paintbrush, Settings, SunMedium } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { ACCENTS, useAccent } from "../accent.ts";
@@ -9,9 +9,6 @@ import type { ThemePreference } from "../theme.ts";
 import { useTheme } from "../theme.ts";
 import { Github } from "./shell-common.tsx";
 import { guardExternalClick } from "./runtime-status.tsx";
-
-/** The Menu sheet's copy of the appearance pair, as its popover keys spell it. */
-const MENU_TOOL_SCOPE = "menu";
 
 const THEME_CHOICES: ReadonlyArray<{ icon: ReactNode; label: MessageId; value: ThemePreference }> = [
   { icon: <SunMedium aria-hidden="true" />, label: "ui.theme.light", value: "light" },
@@ -210,7 +207,7 @@ const AccentTile = ({
         ref={buttonRef}
         type="button"
       >
-        <Palette aria-hidden="true" />
+        <Paintbrush aria-hidden="true" />
         <span aria-hidden="true" className="accent-tool-dot" />
         {navRow ? (
           <span className="nav-row-label">{label}</span>
@@ -312,4 +309,4 @@ const SettingsTile = ({ localizer, onOpenSettings }: { localizer: Localizer; onO
   );
 };
 
-export { AccentTile, MENU_TOOL_SCOPE, ProjectTiles, SettingsTile, ThemeTile };
+export { AccentTile, ProjectTiles, SettingsTile, ThemeTile };

@@ -146,6 +146,9 @@ beforeEach(() => {
   document.documentElement.dataset.offlineLayout = "strip";
   mountedRoot?.unmount?.();
   mountedRoot = null;
+  // A console section hash reopens the console on mount, so a test that left
+  // it open must not open it for the next one.
+  if (window.location.hash) window.history.replaceState(null, "", window.location.pathname + window.location.search);
   rootElement = document.createElement("div");
   rootElement.id = "webapp-root";
   rootElement.setAttribute("aria-busy", "true");
@@ -206,10 +209,10 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
 
 test("WebappRoot keeps the beta workflows out of the nav while the setting is off", async () => {
   mountWebappRoot();
-  // The dock keeps its three workflow slots plus Find and Menu at every setting.
+  // The dock keeps its three workflow slots plus Menu and Controls at every setting.
   await expect
     .poll(() => [...document.querySelectorAll(".dock .dock-tab")].map((tab) => tab.textContent))
-    .toEqual(["Apply", "Create", "Find", "Test", "Menu"]);
+    .toEqual(["Apply", "Create", "Menu", "Test", "Controls"]);
   expect(navRow("PPF undo")).toBeUndefined();
   expect(navRow("Identify")).toBeTruthy();
   navRow("Identify").click();
@@ -287,9 +290,9 @@ test("mobile Docs keeps the workflow dock and owns a separate navigation dialog"
   expect([...dock.querySelectorAll(".dock-tab")].map((tab) => tab.textContent)).toEqual([
     "Apply",
     "Create",
-    "Find",
-    "Test",
     "Menu",
+    "Test",
+    "Controls",
   ]);
   const trigger = document.querySelector(".docs-browse-trigger");
   expect(document.querySelector(".docs-mobile-toolbar a")).toBeNull();
@@ -332,8 +335,8 @@ test("mobile Docs keeps the workflow dock and owns a separate navigation dialog"
   document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
   await expect.poll(() => globalMenu.hidden).toBe(true);
   await expect.poll(() => document.activeElement).toBe(document.querySelector(".dock-menu"));
-  document.querySelector(".dock-find").click();
-  await expect.poll(() => document.querySelector(".find-palette")).toBeTruthy();
+  document.querySelector(".dock-menu").click();
+  await expect.poll(() => document.querySelector("#menu-sheet .find-palette")).toBeTruthy();
   trigger.click();
   await expect.poll(() => panel.open).toBe(true);
   panel.dispatchEvent(new Event("cancel", { cancelable: true }));
@@ -398,13 +401,15 @@ test("enabled PPF undo and Identify are named in the nav on desktop and phone", 
     expect(document.querySelector(`.dock-tab[data-mode="identify"]`)).toBeNull();
     expect(document.querySelector(`.dock-tab[data-mode="ppf-undo"]`)).toBeNull();
     expect(getComputedStyle(document.querySelector(".panel-view-toggle")).display).not.toBe("none");
-    // Mobile Status stays in the dock; other destinations keep their groups.
+    // Both layouts list every destination, App's included, under the same groups.
     if (width < 1000) await openMenuSheet();
-    for (const name of ["Docs", "Settings", "Storage", "Logs", "Support"]) {
+    for (const name of ["Docs", "Support", "Settings", "Offline app", "Saves & storage", "Logs"]) {
       expect(navRow(name, scope)).toBeTruthy();
     }
-    if (width < 1000) expect(document.querySelector(".phone-runtime .sub-status")).toBeTruthy();
-    else expect(navRow("Status", scope)).toBeTruthy();
+    if (width < 1000) {
+      expect(document.querySelector(".phone-runtime .sub-status")).toBeTruthy();
+      expect(document.querySelector(".dock-app")).toBeTruthy();
+    }
   }
   await page.viewport(1280, 900);
 });
@@ -655,64 +660,128 @@ test("WebappRoot resolves an auto thread count the same way the Threads setting 
   }
 });
 
-test("WebappRoot names diagnostics in the nav - the Log dialog owns them", async () => {
-  // Status, Storage and Logs are each their own row; the dialog they open is
-  // still the one place the detail lives.
+test("WebappRoot names diagnostics in the nav - the settings console owns them", async () => {
+  // Offline app, Saves & storage and Logs are each their own row; the console
+  // they open is still the one place the detail lives.
   mountWebappRoot();
   await expect.poll(() => navRow("Logs")).toBeTruthy();
-  expect(navRow("Status")).toBeTruthy();
-  expect(navRow("Storage")).toBeTruthy();
+  expect(navRow("Offline app")).toBeTruthy();
+  expect(navRow("Saves & storage")).toBeTruthy();
   await expect.element(page.getByRole("button", { name: "Copy console logs" })).not.toBeInTheDocument();
   await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).not.toBeInTheDocument();
 });
 
-test("navigation Status keeps a plain label and opens the current Status view", async () => {
+test("navigation Offline app keeps a plain label and opens the current offline view", async () => {
   await page.viewport(1280, 900);
   mountWebappRoot({ updateReady: true });
-  await expect.poll(() => navRow("Status")).toBeTruthy();
-  expect(navRow("Status").querySelector(".nav-row-label").textContent).toBe("Status");
-  expect(navRow("Status").querySelector(".nav-row-state")).toBeNull();
-  navRow("Status").click();
+  await expect.poll(() => navRow("Offline app")).toBeTruthy();
+  expect(navRow("Offline app").querySelector(".nav-row-label").textContent).toBe("Offline app");
+  expect(navRow("Offline app").querySelector(".nav-row-state")).toBeNull();
+  navRow("Offline app").click();
   await expect
-    .poll(() => document.querySelector(".log-dlg[open] #logpanel-status .sw-legend [data-current]"))
+    .poll(() => document.querySelector(".log-dlg[open] #logpanel-offline .sw-legend [data-current]"))
     .toBeTruthy();
   expect(
-    document.querySelector(".log-dlg #logpanel-status .sw-legend [data-current] .sw-legend-label")?.textContent,
+    document.querySelector(".log-dlg #logpanel-offline .sw-legend [data-current] .sw-legend-label")?.textContent,
   ).toContain("Update available");
 });
 
-test("mobile diagnostics keep the Storage tab on one tab row", async () => {
+test("the phone console keeps its five sections and Close on one bar at the foot", async () => {
   const height = 844;
   await page.viewport(393, height);
   mountWebappRoot();
 
-  await openMenuSheet();
-  navRow("Status", ".menu-sheet").click();
-  await expect.poll(() => document.querySelector(".log-dlg .dialog-subrail")).toBeTruthy();
+  await expect.poll(() => document.querySelector(".dock-app")).toBeTruthy();
+  document.querySelector(".dock-app").click();
+  await expect.poll(() => document.querySelector(".log-dlg[open] .console-nav")).toBeTruthy();
 
-  const rail = document.querySelector(".log-dlg .dialog-subrail");
-  const tabs = Array.from(document.querySelectorAll(".log-dlg .dialog-subrail .subtab"));
-  expect(tabs.map((tab) => tab.textContent)).toEqual(["Settings", "Status", "Logs", "Storage"]);
-  expect(new Set(tabs.map((tab) => tab.getBoundingClientRect().top)).size).toBe(1);
-  expect(rail?.scrollHeight).toBe(rail?.clientHeight);
-  expect(document.querySelector('[data-logtab="test"]')).toBeNull();
-  expect(document.querySelector("#logpanel-status .emulator-prefetch-panel")).toBeNull();
+  const nav = document.querySelector(".log-dlg .console-nav");
+  const close = nav.querySelector(".console-close");
+  const items = [...nav.querySelectorAll(".console-tab"), close];
+  const visibleLabel = (item) => item.querySelector(item === close ? "span" : ".console-tab-short");
+  expect(items.map((item) => visibleLabel(item)?.textContent)).toEqual([
+    "Settings",
+    "Offline",
+    "Storage",
+    "Logs",
+    "About",
+    "Close",
+  ]);
+  // Close takes the bottom-right corner, after every section.
+  expect(close.getBoundingClientRect().right).toBeGreaterThan(nav.getBoundingClientRect().right - 20);
+  expect(new Set(items.map((item) => Math.round(item.getBoundingClientRect().top))).size).toBe(1);
+  expect(nav.getBoundingClientRect().bottom).toBeGreaterThan(height - 100);
+  expect(nav.querySelector(".console-nav-foot")?.getBoundingClientRect().height ?? 0).toBe(0);
 
+  // Storage shows the saves; the raw OPFS listing waits for Advanced.
   document.querySelector('[data-logtab="storage"]')?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  await expect.poll(() => document.querySelector("#logpanel-storage .emulator-saves-panel")).toBeTruthy();
+  expect(document.querySelector("#logpanel-storage .opfs-inspector")).toBeNull();
+  document.querySelector("#console-advanced-phone").click();
   await expect.poll(() => document.querySelector("#logpanel-storage .opfs-inspector")).toBeTruthy();
-  expect(document.querySelector("#logpanel-storage .emulator-saves-panel")).toBeNull();
-  expect(document.querySelector("#logpanel-storage .storage-settings-field")).toBeNull();
-  expect(document.querySelector("#logpanel-storage .emulator-prefetch-panel")).toBeNull();
   expect(document.querySelector("#storage-opfs-title")?.textContent).toBe("OPFS");
+  document.querySelector("#console-advanced-phone").click();
+
+  // Close slides the page out and closes the console.
+  close.click();
+  await expect.poll(() => document.querySelector(".log-dlg")).toBeNull();
   await page.viewport(1280, 900);
 });
 
-test("the phone header carries device controls and project links, and Menu carries the rest", async () => {
+test("a phone console swipe closes past a quarter of the width and springs back after a hold", async () => {
+  await page.viewport(393, 844);
+  mountWebappRoot();
+  const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const openConsole = async () => {
+    document.querySelector(".dock-app").click();
+    await expect.poll(() => document.querySelector(".log-dlg[open] .console-nav")).toBeTruthy();
+    // The page MUST finish sliding in, or the swipe starts from a moving frame.
+    await pause(400);
+  };
+  const swipe = async (points, holdMs) => {
+    const tab = document.querySelector('.log-dlg [data-logtab="storage"]');
+    const { top, height } = tab.getBoundingClientRect();
+    const send = (type, clientX) =>
+      tab.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          button: 0,
+          cancelable: true,
+          clientX,
+          clientY: top + height / 2,
+          isPrimary: true,
+          pointerId: 1,
+          pointerType: "mouse",
+        }),
+      );
+    send("pointerdown", points[0]);
+    for (const x of points.slice(1)) {
+      await pause(30);
+      send("pointermove", x);
+    }
+    await pause(holdMs);
+    send("pointerup", points.at(-1));
+  };
+
+  await expect.poll(() => document.querySelector(".dock-app")).toBeTruthy();
+  await openConsole();
+  // A quick 80px (about 20%) drag that stops before release is no flick.
+  await swipe([40, 80, 120], 200);
+  await pause(400);
+  expect(document.querySelector(".log-dlg[open]")).toBeTruthy();
+
+  // A slow drag past a quarter of the width (about 28%) closes.
+  await swipe([40, 60, 80, 100, 120, 140, 150], 200);
+  await expect.poll(() => document.querySelector(".log-dlg")).toBeNull();
+  await page.viewport(1280, 900);
+});
+
+test("the phone header carries the desktop tools, and Tools carries every destination", async () => {
   await page.viewport(390, 844);
   mountWebappRoot();
 
   await expect.poll(() => document.querySelector(".shell-head-tools")).toBeTruthy();
-  // The footer is gone: project links stay in the header and Docs stays in Menu.
+  // The footer is gone; the phone header carries the same tools as the desktop top bar.
   expect(document.querySelector(".site-footer")).toBeNull();
   const tiles = [...document.querySelectorAll(".shell-head-tools .tool")];
   expect(tiles.map((tile) => tile.getAttribute("aria-label"))).toEqual([
@@ -733,19 +802,12 @@ test("the phone header carries device controls and project links, and Menu carri
   }
 
   await openMenuSheet();
-  for (const name of [
-    "Status",
-    "Storage",
-    "Logs",
-    "Settings",
-    "Theme",
-    "Accent",
-    "Home",
-    "Docs",
-    "GitHub",
-    "Support",
-  ]) {
+  for (const name of ["Home", "Docs", "GitHub", "Support", "Settings", "Offline app", "Saves & storage", "Logs"]) {
     expect(navRow(name, ".menu-sheet")).toBeTruthy();
+  }
+  // Theme and accent stay in the header.
+  for (const name of ["Theme", "Accent"]) {
+    expect(navRow(name, ".menu-sheet")).toBeFalsy();
   }
   expect(document.querySelector(".phone-runtime .sub-status-text").textContent).toBe(
     document.querySelector(".desktop-runtime .sub-status-text").textContent,
@@ -755,7 +817,7 @@ test("the phone header carries device controls and project links, and Menu carri
   expect(navRow("Support", ".menu-sheet").getAttribute("href")).toBe("https://ko-fi.com/brandonocasey");
   // Support is the one row that is not neutral; every other row shares one ink.
   const support = navRow("Support", ".menu-sheet");
-  const neutral = getComputedStyle(navRow("Storage", ".menu-sheet")).color;
+  const neutral = getComputedStyle(navRow("Docs", ".menu-sheet")).color;
   expect(getComputedStyle(support).color).not.toBe(neutral);
   expect(getComputedStyle(support.querySelector("svg")).color).toBe(getComputedStyle(support).color);
   for (const row of document.querySelectorAll(".menu-sheet .nav-row")) {
@@ -763,7 +825,7 @@ test("the phone header carries device controls and project links, and Menu carri
     expect(getComputedStyle(row).color).toBe(neutral);
   }
 
-  navRow("Accent", ".menu-sheet").click();
+  document.querySelector(".shell-head-tools .accent-tool").click();
   await expect.element(page.getByRole("radiogroup", { name: "Accent" })).toBeInTheDocument();
 
   const buildTag = document.querySelector(".build-tag");
@@ -779,8 +841,9 @@ test("the phone header carries device controls and project links, and Menu carri
   await page.viewport(1280, 900);
 });
 
-test("the Menu sheet stays on screen and scrolls on a short screen", async () => {
-  await page.viewport(320, 480);
+test("the Tools sheet stays on screen and scrolls on a short screen", async () => {
+  // Five tiles across fit every row at 320x480, so the overflow case needs a shorter screen.
+  await page.viewport(320, 400);
   mountWebappRoot({ settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
 
   const sheet = await openMenuSheet();
@@ -797,19 +860,16 @@ test("the Menu sheet stays on screen and scrolls on a short screen", async () =>
   body.scrollTop = 150;
   expect(body.getBoundingClientRect().top).toBe(bodyTop);
   expect(document.querySelector(".phone-runtime .sub-status-text")?.textContent?.trim()).not.toBe("");
-  expect(sheet.querySelector(".dock-find")).toBeNull();
+  expect(sheet.querySelector(".find-palette.is-embedded")).toBeTruthy();
 
-  navRow("Logs", ".menu-sheet").click();
+  document.querySelector(".dock-app").click();
   await expect.element(page.getByRole("dialog")).toBeInTheDocument();
   await page.viewport(1280, 900);
 });
 
 test("Theme and Accent float above the navigation without moving its rows", async () => {
-  for (const [width, height] of [
-    [320, 480],
-    [390, 664],
-    [1280, 900],
-  ]) {
+  // Only the sidebar carries them as rows; the phone keeps them in its header.
+  for (const [width, height] of [[1280, 900]]) {
     await page.viewport(width, height);
     mountWebappRoot();
     const scope = width < 1000 ? ".menu-sheet" : ".side-nav";
@@ -837,7 +897,7 @@ test("Theme and Accent float above the navigation without moving its rows", asyn
   await page.viewport(1280, 900);
 });
 
-test("the Menu sheet uses its content height and stays above the dock", async () => {
+test("the Tools sheet uses its content height and stays above the dock", async () => {
   await page.viewport(390, 1200);
   mountWebappRoot();
 
@@ -865,7 +925,7 @@ test("the Menu sheet uses its content height and stays above the dock", async ()
   expect(sheet.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
   expect(body.scrollHeight).toBe(body.clientHeight);
   expect(sheet.getBoundingClientRect().bottom).toBeCloseTo(dock.getBoundingClientRect().top, 1);
-  await page.viewport(390, 520);
+  await page.viewport(390, 420);
   expect(sheet.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
   expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
   expect(sheet.getBoundingClientRect().bottom).toBeCloseTo(dock.getBoundingClientRect().top, 1);

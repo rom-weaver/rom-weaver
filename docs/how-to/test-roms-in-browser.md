@@ -82,24 +82,24 @@ Export a save before you clear browser data or move to another browser.
 
 1. Load the ROM on the [Test page](https://rom-weaver.com/test).
 2. Create a save state or save the game's SRAM from the emulator menu.
-3. Open **Settings**, then select **Storage**.
+3. Open **Settings**, then select **Saves & storage**.
 4. Find the ROM under **Emulator saves**.
 5. Select **Export** and keep the downloaded ZIP file.
 
 Restore the save in a browser that has the same ROM:
 
-1. Open **Settings**, then select **Storage**.
+1. Open **Settings**, then select **Saves & storage**.
 2. Select **Import save**.
 3. Choose the exported rom-weaver ZIP file.
 4. Confirm that the ROM name and SHA-1 appear under **Emulator saves**.
 5. Load the same ROM on the Test page.
 6. Select **Load State** from the emulator menu.
 
-Storage also accepts the older uncompressed JSON export.
+**Saves & storage** also accepts the older uncompressed JSON export.
 
 To import a raw SRAM or save-state file:
 
-1. Open **Settings**, then select **Storage**.
+1. Open **Settings**, then select **Saves & storage**.
 2. Select **Import save**.
 3. Choose the file exported by the emulator settings.
 4. Select **SRAM** or **Save state**.
@@ -113,9 +113,9 @@ The import merges with any other save part for the same SHA-1. You can select **
 2. Clear **Store emulator saves on this device**.
 3. Select **Save**.
 
-New save states and SRAM are not stored while this setting is off. Existing saves remain in **Storage** until you delete them.
+New save states and SRAM are not stored while this setting is off. Existing saves remain in **Saves & storage** until you delete them.
 
-Use the **Delete** action in **Storage** to remove one game. Use your browser's site-data controls to remove all rom-weaver data.
+Use the **Delete** action in **Saves & storage** to remove one game. Use your browser's site-data controls to remove all rom-weaver data.
 
 ## Fix a game that does not start
 

@@ -303,7 +303,7 @@
   color: var(--thread-text);
 }
 .rw-app .sub-status[data-sw="installing"] svg {
-  animation: sw-spin 1.1s linear infinite;
+  animation: install-nudge 2.4s ease-in-out infinite;
 }
 .rw-app .sub-status[data-sw="installing"] svg.sw-progress-ring {
   animation: none;
@@ -311,8 +311,32 @@
 .rw-app .sub-status[data-sw="disabled"] {
   color: var(--ink-3);
 }
+/* The Offline app nav row shows the same live glyph in the same colors. */
+.rw-app .nav-runtime {
+  display: inline-flex;
+  flex: none;
+}
+.rw-app .nav-runtime[data-sw="active"] {
+  color: var(--offline-active);
+}
+.rw-app .nav-runtime[data-sw="update"] {
+  color: var(--care-text);
+}
+.rw-app .nav-runtime[data-sw="installing"] {
+  color: var(--thread-text);
+}
+.rw-app .nav-runtime[data-sw="disabled"] {
+  color: var(--ink-3);
+}
+.rw-app .nav-runtime[data-sw="update"] svg {
+  animation: update-nudge 2.4s ease-in-out infinite;
+}
+.rw-app .nav-runtime[data-sw="installing"] svg:not(.sw-progress-ring) {
+  animation: install-nudge 2.4s ease-in-out infinite;
+}
 @media (prefers-reduced-motion: reduce) {
-  .rw-app .sub-status[data-sw] svg {
+  .rw-app .sub-status[data-sw] svg,
+  .rw-app .nav-runtime[data-sw] svg {
     animation: none;
   }
 }
@@ -966,7 +990,8 @@
 }
 
 /* ── the phone dock ──
-   One row: the three workflows, Find, and Menu. */
+   One row: two workflows, Tools, the third workflow, then App, which opens the
+   settings console from that edge. */
 .rw-app .dock {
   position: fixed;
   inset-block-end: 0;
@@ -976,6 +1001,7 @@
   grid-template-columns: repeat(5, minmax(0, 1fr));
   row-gap: 0;
   padding: 3px max(var(--sp-s), var(--safe-r)) max(3px, var(--safe-b)) max(var(--sp-s), var(--safe-l));
+  touch-action: pan-y;
   background: color-mix(in oklab, var(--plate) 88%, transparent);
   border-block-start: 1px solid var(--seam-soft);
   -webkit-backdrop-filter: blur(10px);
@@ -1007,7 +1033,7 @@
   align-items: center;
   justify-content: center;
   min-height: 49px;
-  padding: 5px 2px;
+  padding: 3px 2px;
   font-family: inherit;
   font-size: 0.62rem;
   font-weight: 650;
@@ -1022,9 +1048,11 @@
   border-radius: var(--r-s);
 }
 
+/* Every phone icon - header, Menu tiles, dock - is 24px, so none reads as
+   more important than its neighbours. */
 .rw-app .dock-tab svg {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
 }
 .rw-app .dock-tab span {
   max-width: 100%;
@@ -1079,13 +1107,16 @@
   background: color-mix(in oklab, var(--chassis) 55%, transparent);
   border: 0;
 }
+/* --keyboard-inset is set while the sheet is open (masthead.tsx), so the sheet
+   and its Find box sit on the on-screen keyboard rather than behind it. */
 .rw-app .menu-sheet {
+  --sheet-floor: max(var(--dock-h), var(--keyboard-inset, 0px));
   position: fixed;
-  inset: auto 0 var(--dock-h);
+  inset: auto 0 var(--sheet-floor);
   z-index: 1001;
   display: none;
   flex-direction: column;
-  max-block-size: calc(100dvh - var(--dock-h));
+  max-block-size: calc(100dvh - var(--sheet-floor));
   background: var(--plate);
   border-block-start: 1px solid var(--seam-strong);
 }
@@ -1129,6 +1160,63 @@
 .rw-app .menu-sheet .nav-row {
   min-block-size: 41px;
   padding: 10px 8px;
+}
+.rw-app .menu-sheet .nav-row svg {
+  width: 24px;
+  height: 24px;
+}
+/* Tools: five tiles across, so every destination still fits above the
+   keyboard that opens with the sheet. */
+.rw-app #menu-sheet .nav-group-label {
+  padding-block: 6px 1px;
+}
+.rw-app #menu-sheet .nav-group-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 2px;
+}
+.rw-app #menu-sheet .nav-row {
+  position: relative;
+  flex-direction: column;
+  gap: 3px;
+  justify-content: center;
+  min-block-size: 50px;
+  padding: 6px 0;
+  font-size: 0.66rem;
+  text-align: center;
+}
+.rw-app #menu-sheet .nav-row-label {
+  max-inline-size: 100%;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+/* A solid tag on the icon's top-right corner: an outline chip there drew its
+   text across the icon's strokes. The ring in the sheet's colour cuts it off
+   the icon. */
+.rw-app #menu-sheet .nav-beta {
+  position: absolute;
+  inset-block-start: 1px;
+  inset-inline-start: calc(50% + 3px);
+  padding: 1px 4px;
+  margin: 0;
+  font-size: 0.5rem;
+  line-height: 1.2;
+  color: var(--thread-ink);
+  letter-spacing: 0.06em;
+  background: var(--thread);
+  border: 0;
+  box-shadow: 0 0 0 2px var(--plate);
+}
+.rw-app #menu-sheet .nav-row[aria-current="page"] .nav-beta {
+  color: var(--thread-ink);
+}
+@media (forced-colors: active) {
+  .rw-app #menu-sheet .nav-beta {
+    border: 1px solid CanvasText;
+  }
+}
+/* A query swaps the nav for Find's results, which stack upward from the box. */
+.rw-app #menu-sheet:has(.find-palette[data-has-query]) .menu-sheet-body {
+  display: none;
 }
 /* ── the layout threshold ──
    ▼ The single number that decides which of the two shells is on screen. */

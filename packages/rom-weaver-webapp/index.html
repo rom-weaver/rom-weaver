@@ -201,18 +201,19 @@
 
         // Same glyphs and wording as RuntimeGlyph/RUNTIME_MESSAGES in shell.tsx -
         // React hydrates against exactly what is written here.
+        // Four glyphs share Lucide's monitor; it is written once to keep the shell small.
+        const monitor =
+          '<rect width="20" height="14" x="2" y="3" rx="2"></rect><path d="M12 17v4"></path><path d="M8 21h8"></path>';
+        const checked = '<path d="m9 10 2 2 4-4"></path>' + monitor;
         const glyphs = {
-          active:
-            '<path d="m9 10 2 2 4-4"></path><rect width="20" height="14" x="2" y="3" rx="2"></rect><path d="M12 17v4"></path><path d="M8 21h8"></path>',
-          ready:
-            '<path d="m9 10 2 2 4-4"></path><rect width="20" height="14" x="2" y="3" rx="2"></rect><path d="M12 17v4"></path><path d="M8 21h8"></path>',
+          active: checked,
+          ready: checked,
           disabled:
             '<path d="M12 17v4"></path><path d="M17 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 1.184-1.826"></path><path d="m2 2 20 20"></path><path d="M8 21h8"></path><path d="M8.656 3H20a2 2 0 0 1 2 2v10a2 2 0 0 1-.293 1.042"></path>',
-          installing: '<path d="M21 12a9 9 0 1 1-6.219-8.56"></path>',
+          installing: '<path d="M12 13V7"></path><path d="m15 10-3 3-3-3"></path>' + monitor,
           online:
-            '<path d="M10.94 5.274A7 7 0 0 1 15.71 10h1.79a4.5 4.5 0 0 1 4.222 6.057"></path><path d="M18.796 18.81A4.5 4.5 0 0 1 17.5 19H9A7 7 0 0 1 5.79 5.78"></path><path d="m2 2 20 20"></path>',
-          update:
-            '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path><path d="M8 16H3v5"></path>',
+            '<circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path>',
+          update: '<path d="m9 10 3-3 3 3"></path><path d="M12 13V7"></path>' + monitor,
         };
         const wording = {
           active: "Offline active",
@@ -234,9 +235,9 @@
           active: "lucide-monitor-check",
           ready: "lucide-monitor-check",
           disabled: "lucide-monitor-off",
-          installing: "lucide-loader-circle",
-          online: "lucide-cloud-off",
-          update: "lucide-refresh-cw",
+          installing: "lucide-monitor-down",
+          online: "lucide-globe",
+          update: "lucide-monitor-up",
         };
         const serviceWorkerEnabled = document.documentElement.dataset.serviceWorkerEnabled === "true";
         // The wording above is the English source. In another locale React owns
@@ -244,6 +245,14 @@
         // early - both are locale-independent.
         const english = (document.documentElement.lang || "en").indexOf("en") === 0;
         const setRuntimeStatus = (state) => {
+          // The Offline app nav row wears the same live glyph as the chips.
+          for (const slot of document.querySelectorAll(".nav-runtime")) {
+            const icon = slot.querySelector("svg");
+            if (!icon) continue;
+            slot.dataset.sw = state;
+            icon.setAttribute("class", `lucide ${iconClasses[state]}`);
+            icon.innerHTML = glyphs[state];
+          }
           for (const slot of statusSlots) {
             slot.dataset.sw = state;
             const icon = slot.querySelector("svg");

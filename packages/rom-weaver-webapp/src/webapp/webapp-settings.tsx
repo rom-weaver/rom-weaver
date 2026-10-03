@@ -6,6 +6,7 @@ import { CompressInfoContent } from "../public/react/components/ds/compress-pane
 import { DropdownSelect } from "../public/react/components/ds/dropdown-select.tsx";
 import { COMPRESSION_PROFILE_FIELD_INFO } from "../public/react/compress-options.ts";
 import { ACCENTS } from "./accent.ts";
+import { setAdvancedSettings, useAdvancedSettings } from "./advanced-settings.ts";
 import { runAppearanceTransition } from "./appearance-transition.ts";
 import { InfoToggle } from "./components/info-toggle.tsx";
 import { useUiLocalizer } from "../public/react/settings-context.tsx";
@@ -13,6 +14,7 @@ import type { IdentifyPackGroupState } from "../platform/browser/identify-packs.
 import { useTheme, type ThemePreference } from "./theme.ts";
 import type { SettingsDraftState, SettingsFieldKey, SettingsUiState } from "./settings/settings-state.ts";
 import {
+  ADVANCED_SETTINGS_FIELDS,
   getDefaultThreads,
   getSettingsFieldDefaultValue,
   getSettingsFieldMax,
@@ -27,6 +29,7 @@ import {
   SETTINGS_FIELD_METADATA,
   SETTINGS_PANEL_SECTIONS,
   SETTINGS_PANEL_FIELD_ORDER,
+  settingsGroupId,
 } from "./settings/settings-state.ts";
 import type { ValidationState } from "./webapp-state-types.ts";
 
@@ -381,21 +384,25 @@ const SettingsRange = ({ fieldKey, draftSettings, uiState, validation, onDraftCh
 };
 
 const SettingsGroup = ({
+  advanced,
   section,
   draftSettings,
   uiState,
   validation,
   onDraftChange,
-}: { section: { fields: SettingsFieldKey[]; title: string } } & SettingsFieldShared) => {
+}: { advanced: boolean; section: { fields: SettingsFieldKey[]; title: string } } & SettingsFieldShared) => {
   const shared = { draftSettings, onDraftChange, uiState, validation };
   const fields = section.fields.filter(
-    (fieldKey) => SETTINGS_PANEL_FIELD_ORDER.includes(fieldKey) && SETTINGS_FIELD_METADATA[fieldKey].kind !== "hidden",
+    (fieldKey) =>
+      SETTINGS_PANEL_FIELD_ORDER.includes(fieldKey) &&
+      SETTINGS_FIELD_METADATA[fieldKey].kind !== "hidden" &&
+      (advanced || !ADVANCED_SETTINGS_FIELDS.has(fieldKey)),
   );
   if (!fields.length) return null;
   const toggles = fields.filter((fieldKey) => TOGGLE_KINDS.has(SETTINGS_FIELD_METADATA[fieldKey].kind));
   const rows = fields.filter((fieldKey) => !TOGGLE_KINDS.has(SETTINGS_FIELD_METADATA[fieldKey].kind));
   return (
-    <div className="setgroup">
+    <div className="setgroup" id={settingsGroupId(section.title)}>
       <div className="gtitle">{section.title}</div>
       {section.title === "Webapp" ? <ThemeSetting /> : null}
       {rows.map((fieldKey) =>
@@ -463,7 +470,7 @@ const IdentifyPackSettings = () => {
     }
   };
   return (
-    <div className="setgroup">
+    <div className="setgroup" id={settingsGroupId("ROM databases")}>
       <div className="gtitle">{localizer.message("ui.settings.identifyPacks")}</div>
       <p className="identify-pack-note">{localizer.message("ui.settings.identifyPacksNote")}</p>
       <div className="setchecks">
@@ -486,7 +493,15 @@ const IdentifyPackSettings = () => {
 };
 
 function SettingsPanel({ draftSettings, uiState, validation, onDraftChange }: SettingsPanelProps): ReactNode {
-  const shared = { draftSettings, onDraftChange, uiState: uiState ?? getSettingsUiState(draftSettings), validation };
+  const localizer = useUiLocalizer();
+  const advanced = useAdvancedSettings();
+  const shared = {
+    advanced,
+    draftSettings,
+    onDraftChange,
+    uiState: uiState ?? getSettingsUiState(draftSettings),
+    validation,
+  };
   const fullWidthSections = SETTINGS_PANEL_SECTIONS.filter((section) => !FORMAT_GROUP_TITLES.has(section.title));
   const gridSections = SETTINGS_PANEL_SECTIONS.filter((section) => FORMAT_GROUP_TITLES.has(section.title));
   return (
@@ -500,6 +515,14 @@ function SettingsPanel({ draftSettings, uiState, validation, onDraftChange }: Se
         ))}
       </div>
       <IdentifyPackSettings />
+      {advanced ? null : (
+        <p className="console-hidden-note">
+          <span>{localizer.message("ui.console.hiddenSettings")}</span>
+          <button className="console-hidden-show" onClick={() => setAdvancedSettings(true)} type="button">
+            {localizer.message("ui.console.showAdvanced")}
+          </button>
+        </p>
+      )}
       {validation.messages.length ? (
         <div aria-live="polite" className="validation bad" id="settings-validation-message" role="alert">
           {validation.messages.join(" ")}

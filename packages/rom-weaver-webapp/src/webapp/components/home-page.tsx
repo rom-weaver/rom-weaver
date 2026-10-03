@@ -3,16 +3,16 @@ import {
   Check,
   Copy,
   Download,
+  FileDiff,
   Footprints,
-  Gamepad2,
-  GitCompare,
+  Gamepad,
   Hash,
   ListChecks,
   Package,
   Server,
+  Stamp,
   Terminal,
 } from "lucide-react";
-import { ApplyBandaidIcon } from "../../public/react/components/apply-bandaid-icon.tsx";
 import { useClipboardCopy } from "../../public/react/components/ds/use-clipboard-copy.ts";
 import { HomeLoom } from "./home-loom.tsx";
 import { resolveGuidedSampleHref } from "../../public/react/guided-sample-start.ts";
@@ -65,7 +65,7 @@ const HomeCapabilities = ({ baseUrl, className, headingId }: HomeCapabilitiesPro
       <p className="home-blurb">{localizer.message("ui.home.workflowsDescription")}</p>
       <div className="home-actions">
         <a className="btn ghost" href={route("create-patch")}>
-          <GitCompare aria-hidden="true" />
+          <FileDiff aria-hidden="true" />
           {localizer.message("ui.home.flowCreate")}
         </a>
         <a className="btn ghost" href={route("bundle-patches")}>
@@ -73,7 +73,7 @@ const HomeCapabilities = ({ baseUrl, className, headingId }: HomeCapabilitiesPro
           {localizer.message("ui.home.flowBundle")}
         </a>
         <a className="btn ghost" href={route("test-rom")}>
-          <Gamepad2 aria-hidden="true" />
+          <Gamepad aria-hidden="true" />
           {localizer.message("ui.home.flowTest")}
         </a>
         <a className="btn ghost" href={route("checksum")}>
@@ -114,7 +114,7 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
             <p className="home-lede">{localizer.message("ui.home.lede")}</p>
             <div className="home-actions home-main-actions">
               <a className="btn primary lg" href={route("apply-patches")}>
-                <ApplyBandaidIcon />
+                <Stamp aria-hidden="true" />
                 {localizer.message("ui.home.applyPatchCta")}
               </a>
               <a className="btn ghost lg" href={`${route("docs")}/features`}>

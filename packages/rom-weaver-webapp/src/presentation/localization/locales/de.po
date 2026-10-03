@@ -210,6 +210,16 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.nav.groupDevice"
+#~ msgstr "Dieses Gerät"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.tools.menu"
+#~ msgstr "Menü"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", eine Ausgabe-Endung. Die Formatauswahl fügt die Endung hinzu; entferne sie, um einen doppelten Namen zu vermeiden."
 
@@ -350,6 +360,11 @@ msgstr "Über"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.console.about"
+msgstr "Info"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.about"
 msgstr "Über rom-weaver, seine Lizenz und seinen Datenschutz"
 
@@ -410,6 +425,11 @@ msgstr "Füge deine Patch-Dateien hinzu"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.console.advanced"
+msgstr "Erweitert"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.openSourceDescription"
 msgstr "Unter AGPL-3.0 lizenziert. Lies den Code, baue ihn selbst oder hoste die Webapp auf deiner eigenen Domain."
 
@@ -431,7 +451,7 @@ msgstr "App"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tools.app"
-msgstr "App"
+msgstr "Steuerung"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -620,6 +640,11 @@ msgstr "Zurück"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.backToTools"
+msgstr "Zurück zu den Werkzeugen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.basis.base"
 msgstr "Basis-ROM"
 
@@ -667,6 +692,11 @@ msgstr "Du brauchst"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.browse"
 msgstr "Durchsuchen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.docs.browse"
+msgstr "Doku durchsuchen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -765,11 +795,6 @@ msgstr "Die App wird für die Offline-Nutzung zwischengespeichert…"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.checksumDescription"
-msgstr "Wähle Prüfsummen für jede Datei. Die automatische Extraktion öffnet Archive und Container. Alles läuft lokal in deinem Browser."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.common.cancel"
 msgstr "Abbrechen"
 
@@ -817,6 +842,11 @@ msgstr "CD"
 #: src/presentation/localization/messages.ts
 msgid "settings.chdCreateCdCodecs"
 msgstr "CD-Codecs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.console.settingsDescription"
+msgstr "Änderungen gelten nach dem Speichern."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -875,13 +905,13 @@ msgstr "Prüfsumme {timing}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "error.CHECKSUM_MISMATCH"
-msgstr "Die Prüfsummen-Validierung ist fehlgeschlagen."
+msgid "ui.hero.checksumThesis"
+msgstr "Prüfsummen für jede Datei."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.checksumThesis"
-msgstr "Prüfsummen für jede Datei."
+msgid "error.CHECKSUM_MISMATCH"
+msgstr "Die Prüfsummen-Validierung ist fehlgeschlagen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -907,6 +937,11 @@ msgstr "Wähle eine Patch-Datei oder ein Archiv, um diesen Patch zu ersetzen."
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.bundleTutorial.safeBundle.title"
 msgstr "Sicheres Bundle wählen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.hero.checksumDescription"
+msgstr "Wähle Prüfsummen für jede Datei. Die automatische Extraktion öffnet Archive und Container. Alles läuft lokal in deinem Browser."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -970,8 +1005,18 @@ msgstr "Schließen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.docs.closeNavigation"
+msgstr "Navigation schließen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.settings.codec"
 msgstr "Codec"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.console.advancedHint"
+msgstr "Codecs, Threads, Rohdateilisten"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1240,23 +1285,8 @@ msgstr "Doku"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.docs.backToTools"
-msgstr "Zurück zu den Werkzeugen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.docs.title"
 msgstr "Dokumentation"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.docs.browse"
-msgstr "Doku durchsuchen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.docs.closeNavigation"
-msgstr "Navigation schließen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1412,6 +1442,11 @@ msgstr "Einen Spielstand bearbeiten."
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.embeddedOutput"
 msgstr "Eingebettete Ausgabeprüfungen: Einzelnes Patch-Ergebnis"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.console.storageDescription"
+msgstr "Emulator-Spielstände und die Dateien, die dieser Browser speichert."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1601,7 +1636,7 @@ msgstr "Suchen"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.find.placeholder"
-msgstr "Werkzeug, Anleitung oder Einstellung finden"
+msgstr "Spiele (nach Name/Prüfsumme), Werkzeuge, Anleitungen oder Einstellungen finden..."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1895,6 +1930,11 @@ msgstr "Gepackt lassen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.console.offlineDescription"
+msgstr "rom-weaver auch ohne Netzwerk nutzen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis"
 msgstr "Eine ROM trimmen."
 
@@ -1967,6 +2007,11 @@ msgstr "Stufe"
 #: src/presentation/localization/messages.ts
 msgid "settings.levelOverride"
 msgstr "Eigene Stufe"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.console.licenses"
+msgstr "Lizenzen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2082,11 +2127,6 @@ msgstr "passt zu deiner ROM ({variant})"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.condition.unsupported_media_profile"
 msgstr "Medienprofil nicht unterstützt"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.tools.menu"
-msgstr "Menü"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2312,6 +2352,11 @@ msgstr "Offline"
 #: src/presentation/localization/messages.ts
 msgid "ui.runtime.active"
 msgstr "Offline aktiv"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.console.offline"
+msgstr "Offline-App"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2597,6 +2642,11 @@ msgstr "Patch {position} von {total}. Sortieren nicht verfügbar."
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.actions"
 msgstr "Patch-Aktionen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.console.aboutTagline"
+msgstr "ROMs auf diesem Gerät patchen und komprimieren. Nichts wird hochgeladen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3000,6 +3050,11 @@ msgstr "Ersatz-Patch-Datei oder Archiv"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.console.reportIssue"
+msgstr "Problem melden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "settings.requireInputChecksumMatch"
 msgstr "Eingabe-Übereinstimmung erzwingen"
 
@@ -3145,6 +3200,11 @@ msgstr "{size} gespart"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.console.storage"
+msgstr "Spielstände & Speicher"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identify.search"
 msgstr "Suchen"
 
@@ -3257,6 +3317,11 @@ msgstr "Zeige {count} weitere {count, plural, one {Variante} other {Varianten}}"
 #: src/presentation/localization/messages.ts
 msgid "ui.output.showDetails"
 msgstr "Details zu {label} anzeigen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.console.showAdvanced"
+msgstr "Erweitert anzeigen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3465,6 +3530,11 @@ msgstr "Das Bundle enthält Anweisungen und Prüfdaten; rom-weaver wendet die Pa
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.console.hiddenCachedFiles"
+msgstr "Die Liste der zwischengespeicherten Dateien ist ausgeblendet."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.find.cliArchiveHint"
 msgstr "Die CLI kann Archive entpacken und komprimieren."
 
@@ -3532,6 +3602,11 @@ msgstr "Die Identifikationsdaten sind auf diesem Gerät nicht verfügbar, daher 
 #: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.before"
 msgstr "Der Name endet auf"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.console.hiddenOpfs"
+msgstr "Die OPFS-Dateiliste ist ausgeblendet."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3685,8 +3760,8 @@ msgstr "Dieser Build"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.nav.groupDevice"
-msgstr "Dieses Gerät"
+msgid "ui.console.aboutDescription"
+msgstr "Dieser Build, Neuigkeiten und Lizenzen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3707,6 +3782,11 @@ msgstr "Threads"
 #: src/presentation/localization/messages.ts
 msgid "settings.threads"
 msgstr "Threads"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.console.hiddenSettings"
+msgstr "Threads, Codecs und die RVZ-Blockgröße sind ausgeblendet."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3731,7 +3811,7 @@ msgstr "Tool"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tools.tools"
-msgstr "Werkzeuge"
+msgstr "Menü"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3941,6 +4021,11 @@ msgstr "Möchtest du eine eigene Kopie? Hoste sie selbst aus statischen Dateien 
 #: src/presentation/localization/messages.ts
 msgid "ui.home.webapp"
 msgstr "Web-App"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.console.logsDescription"
+msgstr "Was rom-weaver in diesem Tab getan hat."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

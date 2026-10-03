@@ -14,9 +14,11 @@ Use Settings to change app preferences, enable beta tools, and prepare local ass
 
 ## Change preferences
 
-Open **Settings** from the app navigation. Change the required values, then select **Save**.
+Open **Settings** from the app navigation. On a phone, select **Controls** at the right end of the bottom bar, or swipe the bar to the left. Change the required values, then select **Save**.
 
-The settings cover language, byte units, guided help, output defaults, compression, and worker threads. Leave automatic thread selection enabled unless you need to limit resource use.
+The settings cover language, byte units, guided help, output defaults, and compression. Turn on **Advanced** to show worker threads, codecs, and the RVZ block size. Leave automatic thread selection enabled unless you need to limit resource use.
+
+To leave Settings on a phone, select **Close** at the right end of the bottom bar, swipe the bottom bar to the right, or use your browser's back gesture.
 
 The separate **Theme** and **Accent** controls in the navigation apply changes immediately. Theme offers light, dark, and system appearance; Accent changes the highlight color.
 
@@ -47,7 +49,7 @@ Remote bundle links still need network access unless their required files are av
 
 Before clearing site data, [export emulator saves](test-roms-in-browser.md#export-and-restore-a-save).
 
-Use **Storage** to inspect emulator saves and working files. Clear an **Optional ROM databases** selection in Settings to remove that group's cached data.
+Use **Saves & storage** to inspect emulator saves. Turn on **Advanced** to list the working files too. Clear an **Optional ROM databases** selection in Settings to remove that group's cached data.
 
 Remove only data you no longer need. Browser site-data controls can remove the entire local app cache.
 

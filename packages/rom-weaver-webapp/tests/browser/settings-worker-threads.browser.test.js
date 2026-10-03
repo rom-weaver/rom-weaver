@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { getDefaultBrowserThreadCount, getDefaultThreadCount } from "../../src/platform/shared/compression-options.ts";
 import { getDefaultSettings, getSettingsUiState } from "../../src/webapp/settings/settings-state.ts";
+import { setAdvancedSettings } from "../../src/webapp/advanced-settings.ts";
 import { SettingsPanel } from "../../src/webapp/webapp-settings.tsx";
 import { createEmptyValidationState } from "../../src/webapp/webapp-state-types.ts";
 
@@ -53,11 +54,14 @@ test("browser auto thread default still falls back to one when threaded wasm is 
 });
 
 test("worker thread settings placeholder keeps auto and shows the resolved count", async () => {
+  // Threads is an Advanced setting.
+  setAdvancedSettings(true);
   mountSettingsPanel();
 
   await expect
     .element(page.getByRole("textbox", { name: "Threads" }))
     .toHaveAttribute("placeholder", `auto (${getDefaultBrowserThreadCount()})`);
+  setAdvancedSettings(false);
 });
 
 test("language selection lives in Settings", async () => {

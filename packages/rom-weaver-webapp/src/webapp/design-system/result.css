@@ -403,6 +403,10 @@
   font-stretch: 90%;
   color: #b594d6;
 }
+/* The source column is a debugging aid; it shows with Advanced settings on. */
+.rw-app .tracelog.no-caller .caller {
+  display: none;
+}
 :root[data-theme="light"] .tracelog .ts {
   color: #25677e;
 }

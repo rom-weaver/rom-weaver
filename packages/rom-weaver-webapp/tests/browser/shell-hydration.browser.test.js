@@ -132,7 +132,7 @@ test("hydrates the beta navigation in place when the persisted flag is enabled",
   });
 
   // The nav names every workflow, beta ones included; the dock keeps its three
-  // workflow slots, Find, and Menu. Everything else reaches the phone through
+  // workflow slots, Find, Menu, and the Settings link. Everything else reaches the phone through
   // that sheet.
   // The sheet itself is empty until it is first opened, so the shell ships one
   // copy of the rows rather than two.
@@ -168,12 +168,12 @@ const resolvedShellMarkup = () => {
   return renderToString(shell(8, null, false, READY_WARMUP));
 };
 
-/** What the resolver leaves behind: the desktop button and phone Menu indicator made current. */
+/** What the resolver leaves behind: the status chips and the Offline app nav glyph made current. */
 const applyResolver = (host, resolvedState) => {
   const target = document.createElement("div");
   target.innerHTML = renderToString(shell(8, resolvedState, false, READY_WARMUP));
-  const from = [...target.querySelectorAll(".sub-status")];
-  const into = [...host.querySelectorAll(".sub-status")];
+  const from = [...target.querySelectorAll(".sub-status, .nav-runtime")];
+  const into = [...host.querySelectorAll(".sub-status, .nav-runtime")];
   for (const [index, slot] of into.entries()) {
     for (const { name, value } of from[index].attributes) slot.setAttribute(name, value);
     slot.innerHTML = from[index].innerHTML;

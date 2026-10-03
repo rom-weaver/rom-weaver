@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, within } from "@testing-library/react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
@@ -9,7 +9,7 @@ import type { WorkflowTab } from "../../../src/webapp/components/shell.tsx";
 /**
  * App-shell contract: one description of the navigation rendered as the desktop
  * sidebar and as the phone Menu sheet, the dock's three workflow slots plus
- * Menu, the identity block's build/runtime controls, the top bar's
+ * Menu and Controls, the identity block's build/runtime controls, the top bar's
  * appearance and project tiles, and the update banner.
  */
 
@@ -110,7 +110,7 @@ describe("Masthead", () => {
       "Patches",
       "ROMs",
       "Files",
-      "This device",
+      "Controls",
     ]);
     expect(rowsOf(nav)).toEqual([
       "Home",
@@ -124,10 +124,10 @@ describe("Masthead", () => {
       "Test",
       "Trim",
       "Saves",
-      "Status",
-      "Storage",
-      "Logs",
       "Settings",
+      "Offline app",
+      "Saves & storage",
+      "Logs",
       "Theme",
       "Accent",
     ]);
@@ -165,7 +165,7 @@ describe("Masthead", () => {
     expect(onSelectTab).toHaveBeenCalledWith("creator");
   });
 
-  it("keeps mobile Status in the dock and other sidebar destinations in Menu", () => {
+  it("lists every sidebar destination in the phone Menu sheet, Controls last, with Find at its foot", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
     const sheet = container.querySelector(".menu-sheet") as HTMLElement;
     expect(sheet.getAttribute("aria-label")).toBe("Menu");
@@ -174,45 +174,53 @@ describe("Masthead", () => {
 
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
 
-    expect(rowsOf(sheet).toSorted()).toEqual(rowsOf(container.querySelector(".side-nav")).toSorted());
+    // Theme and accent stay in the phone header instead.
+    const appearance = ["Theme", "Accent"];
+    expect(rowsOf(sheet).toSorted()).toEqual(
+      rowsOf(container.querySelector(".side-nav"))
+        .filter((row) => !appearance.includes(row))
+        .toSorted(),
+    );
     expect(Array.from(sheet.querySelectorAll(".nav-group-label")).map((heading) => heading.textContent)).toEqual([
       "Patches",
       "ROMs",
       "Files",
-      "This device",
       "Project",
+      "Controls",
     ]);
+    // Opening Menu puts the cursor in its Find box, so the keyboard comes with it.
+    const find = sheet.querySelector(".find-palette.is-embedded .find-input");
+    expect(find).toBeTruthy();
+    expect(document.activeElement).toBe(find);
+    expect(sheet.querySelector(".find-empty")).toBeNull();
     expect(sheet.querySelector(".sub-status")).toBeNull();
     expect(container.querySelector(".phone-runtime .sub-status-text")?.textContent).toBe(
       container.querySelector(".desktop-runtime .sub-status-text")?.textContent,
     );
   });
 
-  it("docks three workflows plus Find and Menu", () => {
+  it("docks three workflows plus Menu and Controls", () => {
     const onSelectTab = vi.fn();
-    const { container } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
+    const onOpenSettings = vi.fn();
+    const { container } = render(
+      withSettings(<Masthead {...mastheadProps} onOpenSettings={onOpenSettings} onSelectTab={onSelectTab} />),
+    );
     const dockNav = container.querySelector(".dock") as HTMLElement;
     const slots = Array.from(dockNav.querySelectorAll(".dock-tab"));
-    expect(slots.map((slot) => slot.textContent)).toEqual(["Apply", "Create", "Find", "Test", "Menu"]);
+    expect(slots.map((slot) => slot.textContent)).toEqual(["Apply", "Create", "Menu", "Test", "Controls"]);
     expect(slots[0]?.getAttribute("aria-current")).toBe("page");
     expect(container.querySelector(".phone-runtime .sub-status")).toBeTruthy();
+    expect(container.querySelector(".dock-find")).toBeNull();
 
     const menu = container.querySelector(".dock-menu") as HTMLButtonElement;
-    const find = container.querySelector(".dock-find") as HTMLButtonElement;
     const sheet = container.querySelector(".menu-sheet") as HTMLElement;
-    expect(find.getAttribute("aria-controls")).toBe("find-palette");
-    expect(find.getAttribute("aria-expanded")).toBe("false");
-    fireEvent.click(find);
-    expect(find.getAttribute("aria-expanded")).toBe("true");
-    expect(container.querySelector(".find-palette")).toBeTruthy();
-    fireEvent.click(find);
-    expect(container.querySelector(".find-palette")).toBeNull();
+    expect(menu.getAttribute("aria-label")).toBe("Menu");
     expect(menu.getAttribute("aria-controls")).toBe(sheet.id);
     expect(menu.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(menu);
     expect(menu.getAttribute("aria-expanded")).toBe("true");
     expect(sheet.hidden).toBe(false);
-    // Clicking Menu again closes it; so does Escape.
+    // Clicking Tools again closes it; so does Escape.
     fireEvent.click(menu);
     expect(sheet.hidden).toBe(true);
     fireEvent.click(menu);
@@ -221,6 +229,24 @@ describe("Masthead", () => {
 
     fireEvent.click(dockNav.querySelector('[data-mode="test"]') as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("test");
+
+    // App closes the sheet and opens the console.
+    fireEvent.click(menu);
+    fireEvent.click(dockNav.querySelector(".dock-app") as HTMLButtonElement);
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+    expect(sheet.hidden).toBe(true);
+  });
+
+  it("opens the console on a leftward swipe across the dock, not on a vertical drag", () => {
+    const onOpenSettings = vi.fn();
+    const { container } = render(withSettings(<Masthead {...mastheadProps} onOpenSettings={onOpenSettings} />));
+    const dockNav = container.querySelector(".dock") as HTMLElement;
+    fireEvent.pointerDown(dockNav, { clientX: 300, clientY: 700, isPrimary: true });
+    fireEvent.pointerUp(dockNav, { clientX: 290, clientY: 600, isPrimary: true });
+    expect(onOpenSettings).not.toHaveBeenCalled();
+    fireEvent.pointerDown(dockNav, { clientX: 300, clientY: 700, isPrimary: true });
+    fireEvent.pointerUp(dockNav, { clientX: 180, clientY: 705, isPrimary: true });
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
 
   it("spends Escape on the sheet when the open popover is the chrome's, not the sheet's", () => {
@@ -236,29 +262,13 @@ describe("Masthead", () => {
     expect(sheet.hidden).toBe(true);
   });
 
-  it("spends Escape on the sheet's own popover before the sheet", () => {
-    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
-    fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
-    const sheet = container.querySelector(".menu-sheet") as HTMLElement;
-    fireEvent.click(sheet.querySelector(".nav-tool-anchor .accent-tool") as HTMLButtonElement);
-    expect(sheet.querySelector(".accent-tray")).toBeTruthy();
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(sheet.querySelector(".accent-tray")).toBeNull();
-    expect(sheet.hidden).toBe(false);
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(sheet.hidden).toBe(true);
-  });
-
   it("closes the Menu sheet when a row inside it routes", () => {
     const onSelectTab = vi.fn();
-    const onOpenStorage = vi.fn();
-    const { container } = render(
-      withSettings(<Masthead {...mastheadProps} onOpenStorage={onOpenStorage} onSelectTab={onSelectTab} />),
-    );
+    const { container } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
     const sheet = container.querySelector(".menu-sheet") as HTMLElement;
-    fireEvent.click(within(sheet).getByRole("button", { name: "Storage" }));
-    expect(onOpenStorage).toHaveBeenCalledTimes(1);
+    fireEvent.click(sheet.querySelector('.nav-row[href="trim"]') as HTMLAnchorElement);
+    expect(onSelectTab).toHaveBeenCalledWith("trim");
     expect(sheet.hidden).toBe(true);
   });
 
@@ -407,27 +417,45 @@ describe("Masthead", () => {
     });
     // One shared name would make the pickers one radio group and leave only one
     // of them able to show a choice.
-    expect(names.length).toBe(4);
-    expect(new Set(names).size).toBe(4);
+    // Desktop top bar, sidebar and phone header each carry one; the Menu sheet no longer does.
+    expect(names.length).toBe(3);
+    expect(new Set(names).size).toBe(3);
   });
 
-  it("puts theme and accent under This device in both navigation layouts", () => {
+  it("puts theme and accent under Controls in the sidebar, and none in the phone Menu sheet", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
     expect(container.querySelector(".nav-appearance")).toBeNull();
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
-    for (const scope of [".side-nav", ".menu-sheet"]) {
-      const device = Array.from(container.querySelectorAll(`${scope} .nav-group`)).find(
-        (group) => group.querySelector(".nav-group-label")?.textContent === "This device",
-      );
-      const expected = ["Status", "Storage", "Logs", "Settings", "Theme", "Accent"];
-      expect(Array.from(device?.querySelectorAll(".nav-row-label") ?? []).map((label) => label.textContent)).toEqual(
-        expected,
-      );
-    }
+    const device = Array.from(container.querySelectorAll(".side-nav .nav-group")).find(
+      (group) => group.querySelector(".nav-group-label")?.textContent === "Controls",
+    );
+    expect(Array.from(device?.querySelectorAll(".nav-row-label") ?? []).map((label) => label.textContent)).toEqual([
+      "Settings",
+      "Offline app",
+      "Saves & storage",
+      "Logs",
+      "Theme",
+      "Accent",
+    ]);
+    // The phone header keeps its own theme and accent tools.
+    expect(container.querySelector(".menu-sheet .accent-tool")).toBeNull();
+    expect(container.querySelector(".shell-head-tools .accent-tool")).not.toBeNull();
     expect(container.querySelector(".menu-sheet .sub-status")).toBeNull();
     expect(container.querySelector(".phone-runtime .sub-status-text")?.textContent).toBe(
       container.querySelector(".desktop-runtime .sub-status-text")?.textContent,
     );
+  });
+
+  it("ends the Controls group with About when the console can open it", () => {
+    const onOpenAbout = vi.fn();
+    const { container } = render(withSettings(<Masthead {...mastheadProps} onOpenAbout={onOpenAbout} />));
+    fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
+    const app = Array.from(container.querySelectorAll("#menu-sheet .nav-group")).find(
+      (group) => group.querySelector(".nav-group-label")?.textContent === "Controls",
+    );
+    expect(rowsOf(app ?? null)).toEqual(["Settings", "Offline app", "Saves & storage", "Logs", "About"]);
+    fireEvent.click(Array.from(app?.querySelectorAll<HTMLElement>(".nav-row") ?? []).at(-1) as HTMLElement);
+    expect(onOpenAbout).toHaveBeenCalledTimes(1);
   });
 
   it("commits an appearance choice from the phone header copy too", () => {
@@ -528,9 +556,9 @@ describe("Masthead", () => {
     );
     expect(container.querySelector(".sub-status")?.getAttribute("data-sw")).toBe("update");
     const statusRow = Array.from(container.querySelectorAll<HTMLButtonElement>(".side-nav button.nav-row")).find(
-      (row) => row.querySelector(".nav-row-label")?.firstChild?.textContent === "Status",
+      (row) => row.querySelector(".nav-row-label")?.firstChild?.textContent === "Offline app",
     ) as HTMLButtonElement;
-    expect(statusRow.querySelector(".nav-row-label")?.firstChild?.textContent).toBe("Status");
+    expect(statusRow.querySelector(".nav-row-label")?.firstChild?.textContent).toBe("Offline app");
     expect(statusRow.querySelector(".nav-row-state")).toBeNull();
     fireEvent.click(statusRow);
     expect(onOpenStatus).toHaveBeenCalledTimes(2);
@@ -609,7 +637,7 @@ describe("Masthead", () => {
     expect((container.querySelector(".channel-badge") as HTMLButtonElement).textContent).toBe("v1.2.3d+3*");
   });
 
-  it("preloads the Log dialog when Menu is about to open", () => {
+  it("preloads the Log dialog when Tools is about to open", () => {
     const onPreloadLog = vi.fn();
     const { container } = render(withSettings(<Masthead {...mastheadProps} onPreloadLog={onPreloadLog} />));
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);

@@ -236,28 +236,28 @@ describe("the unified dialog", () => {
     fireEvent.click(navRow(container, name));
   };
 
-  it("opens on Status from the More menu", async () => {
+  it("opens on Offline app from the sidebar", async () => {
     const { container } = await renderRoot();
 
-    openFromMore(container, "Status");
+    openFromMore(container, "Offline app");
 
     await waitFor(() => expect(container.querySelector("dialog.log-dlg")).not.toBeNull());
-    expect(container.querySelector('[data-logtab="status"]')?.getAttribute("aria-selected")).toBe("true");
+    expect(container.querySelector('[data-logtab="offline"]')?.getAttribute("aria-selected")).toBe("true");
   });
 
-  it("opens on Status while an update is waiting", async () => {
+  it("opens on Offline app while an update is waiting", async () => {
     const { container } = await renderRoot({ updateReady: true });
 
-    openFromMore(container, "Status");
+    openFromMore(container, "Offline app");
 
     await waitFor(() => expect(container.querySelector("dialog.log-dlg")).not.toBeNull());
-    expect(container.querySelector('[data-logtab="status"]')?.getAttribute("aria-selected")).toBe("true");
+    expect(container.querySelector('[data-logtab="offline"]')?.getAttribute("aria-selected")).toBe("true");
   });
 
   it("opens on Storage and on Logs", async () => {
     const { container } = await renderRoot();
 
-    openFromMore(container, "Storage");
+    openFromMore(container, "Saves & storage");
     await waitFor(() =>
       expect(container.querySelector('[data-logtab="storage"]')?.getAttribute("aria-selected")).toBe("true"),
     );
@@ -512,7 +512,7 @@ describe("the settings draft flow", () => {
 
   it("closes the dialog straight away when no draft is staged", async () => {
     const { called, container } = await renderRoot();
-    fireEvent.click(navRow(container, "Status"));
+    fireEvent.click(navRow(container, "Offline app"));
     const dialog = await waitFor(() => container.querySelector("dialog.log-dlg") as HTMLDialogElement);
 
     fireEvent.keyDown(dialog, { key: "Escape" });
@@ -586,14 +586,51 @@ describe("host ingest", () => {
   });
 });
 
-describe("the phone Menu sheet", () => {
-  it("opens the settings tab from the sheet's This device group", async () => {
+describe("console history", () => {
+  it("puts each section in history so Back walks through them and then closes", async () => {
+    window.history.replaceState(null, "", "/");
+    const { container } = await renderRoot();
+
+    fireEvent.click(navRow(container, "Offline app"));
+    await waitFor(() => expect(window.location.hash).toBe("#console-offline"));
+    fireEvent.click(container.querySelector('[data-logtab="logs"]') as HTMLButtonElement);
+    expect(window.location.hash).toBe("#console-logs");
+
+    window.history.back();
+    await waitFor(() =>
+      expect(container.querySelector('[data-logtab="offline"]')?.getAttribute("aria-selected")).toBe("true"),
+    );
+    window.history.back();
+    await waitFor(() => expect(container.querySelector("dialog.log-dlg")).toBeNull());
+    expect(window.location.hash).toBe("");
+  });
+
+  it("drops its entries when the console closes from inside", async () => {
+    window.history.replaceState(null, "", "/");
+    const { container } = await renderRoot();
+    const before = window.history.length;
+
+    fireEvent.click(navRow(container, "Offline app"));
+    fireEvent.click(container.querySelector('[data-logtab="about"]') as HTMLButtonElement);
+    await waitFor(() => expect(window.location.hash).toBe("#console-about"));
+    fireEvent.keyDown(container.querySelector("dialog.log-dlg") as HTMLDialogElement, { key: "Escape" });
+
+    await waitFor(() => expect(window.location.hash).toBe(""));
+    expect(container.querySelector("dialog.log-dlg")).toBeNull();
+    expect(window.history.length).toBe(before + 2);
+  });
+});
+
+describe("the phone dock", () => {
+  it("opens the settings console from the dock's App button", async () => {
     const { called, container } = await renderRoot();
 
-    fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
-    fireEvent.click(navRow(container, "Settings", ".menu-sheet"));
+    fireEvent.click(container.querySelector(".dock-app") as HTMLButtonElement);
 
     expect(called("onOpenSettings")).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(container.querySelector('[data-logtab="settings"]')?.getAttribute("aria-selected")).toBe("true"),
+    );
   });
 });
 
@@ -604,7 +641,7 @@ describe("development offline status", () => {
     window.history.replaceState(null, "", "/?offline-layout=title&offline-state=disabled");
     const { container, called } = await renderRoot({ settingsDialogOpen: true });
     fireEvent.click(navRow(container, "Settings"));
-    fireEvent.click(container.querySelector('[data-logtab="status"]') as HTMLButtonElement);
+    fireEvent.click(container.querySelector('[data-logtab="offline"]') as HTMLButtonElement);
     await waitFor(() => expect(container.querySelector("#dev-offline-state")).not.toBeNull());
     const select = container.querySelector("#dev-offline-state") as HTMLSelectElement;
     const actual = container.querySelector(".header-runtime .sub-status")?.getAttribute("data-sw");
@@ -624,7 +661,7 @@ describe("development offline status", () => {
     expect(container.querySelector(".header-runtime .sub-status")?.getAttribute("data-sw")).toBe(actual);
     expect(window.location.search).toBe("?offline-layout=title&offline-state=disabled");
     expect(called("onOfflineCopyEnabledChange")).not.toHaveBeenCalled();
-    fireEvent.click(container.querySelector('[data-logtab="status"]') as HTMLButtonElement);
+    fireEvent.click(container.querySelector('[data-logtab="offline"]') as HTMLButtonElement);
     fireEvent.click(navRow(container, "What’s new"));
     expect(called("onSelectView")).toHaveBeenCalledWith("whats-new");
   });
