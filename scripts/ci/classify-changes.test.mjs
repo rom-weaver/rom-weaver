@@ -56,12 +56,13 @@ test("every published guide builds the webapp, whatever folder it sits in", () =
     "docs/reference/cli.md",
     "docs/legal/privacy.md",
     "docs/development/ARCHITECTURE.md",
+    "docs/development/performance.md",
   ]) {
     assert.equal(classify(path).webapp, "true", `${path} is a published route`);
   }
 });
 test("unpublished maintainer docs do not build the webapp", () =>
-  assert.equal(classify("docs/development/performance.md").webapp, "false"));
+  assert.equal(classify("docs/development/ci.md").webapp, "false"));
 test("webapp changes reuse wasm and skip Rust", () => {
   const result = classify("packages/rom-weaver-webapp/src/index.tsx");
   assert.equal(result.webapp, "true");
