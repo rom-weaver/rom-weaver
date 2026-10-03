@@ -1090,10 +1090,6 @@
   border-radius: var(--r-s);
 }
 
-/* Crossfade same-origin navigations where supported. */
-@view-transition {
-  navigation: auto;
-}
 /* Snapshots MUST contain settled colors before the reveal starts. */
 html.vt-theme *,
 html.vt-accent *,
