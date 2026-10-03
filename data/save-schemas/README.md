@@ -2,7 +2,7 @@
 
 The application defines its save layouts and editing rules as typed Rust under [`crates/rom-weaver-core/src/save/schema/catalog/`](../../crates/rom-weaver-core/src/save/schema/catalog). This directory keeps the source attribution and license for those definitions. It does not contain runtime schema packs.
 
-The default registry includes the original seven game-family definitions and all 59 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. A profile selects one fixed region, slot, player, or storage variant.
+The default registry includes 129 profiles: the original seven game-family definitions and 107 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. A profile selects one fixed region, slot, player, or storage variant.
 
 | Original catalog module | Games |
 | --- | --- |
@@ -36,7 +36,27 @@ The default registry includes the original seven game-family definitions and all
 | `f_zero.rs` | 1 | 1 | 663 | Template only |
 | `game_and_watch_gallery_3.rs` | 1 | 1 | 10 | Template only |
 | `kirbys_adventure.rs` | 1 | 9 | 27 | Template only |
-| **Total** | **24** | **59** | **6,036** | **2 fresh profiles** |
+| `actraiser.rs` | 1 | 3 | 9 | Template only |
+| `capcom_gba_eeprom.rs` | 2 | 2 | 70 | Template only |
+| `chrono_trigger.rs` | 1 | 3 | 6 | Template only |
+| `diddy_kong_racing.rs` | 1 | 1 | 9 | Template only |
+| `donkey_kong_land.rs` | 1 | 1 | 15 | Template only |
+| `f_zero_maximum_velocity.rs` | 1 | 1 | 12 | Template only |
+| `f_zero_x.rs` | 1 | 1 | 5 | Template only |
+| `final_fantasy_vi.rs` | 1 | 3 | 9 | Template only |
+| `lylat_wars.rs` | 1 | 1 | 15 | Template only |
+| `mario_kart_64.rs` | 1 | 1 | 16 | Template only |
+| `mission_impossible.rs` | 1 | 1 | 16 | Template only |
+| `mystic_quest_legend.rs` | 1 | 3 | 9 | Template only |
+| `pokemon_trading_card_game.rs` | 1 | 1 | 14 | Template only |
+| `super_punch_out.rs` | 1 | 8 | 24 | Template only |
+| `wario_land_3.rs` | 1 | 1 | 6 | Template only |
+| `zelda_oracle_of_ages.rs` | 1 | 3 | 15 | Template only |
+| `zelda_oracle_of_seasons.rs` | 1 | 3 | 15 | Template only |
+| `sonic_3.rs` | 1 | 3 | 136 | Template only |
+| `shining_force.rs` | 1 | 3 | 54 | Template only |
+| `soleil.rs` | 1 | 5 | 84 | Template only |
+| **Total** | **45** | **107** | **6,575** | **2 fresh profiles** |
 
 Fresh creation uses a verified initializer. Template creation starts from an existing valid save and preserves bytes outside the requested edits and integrity repairs. A profile without an initializer cannot create a fresh save.
 
@@ -93,3 +113,37 @@ F-Zero, Game & Watch Gallery 3, and Kirby's Adventure derive from Game Tools Col
 | Kirby's Adventure | [Source](https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/kirby-s-adventure/saveEditor) | Current level in three slots and three region layouts; animation bytes and slot checksums repaired. Door and progression edits omitted. |
 
 These profiles require explicit selection and a game-made template. F-Zero accepts 2 KiB raw SRAM; the other two games accept 8 KiB. Edits preserve unrelated bytes.
+
+The additional handheld, Nintendo 64, and SNES profiles also require explicit selection and a game-made template. Their editable scope is limited to these fields:
+
+| Titles | Editable scope |
+| --- | --- |
+| ActRaiser | Master HP, level with its derived experience value, and MP in separate Europe, USA, and Japan profiles |
+| Final Fight One | Opponents defeated, options, character colors, and character/color values in five ranking records |
+| Super Street Fighter II Turbo Revival | VS points, options, and 13 challenge times |
+| Chrono Trigger | Gold in each of three slots; the first inventory item code is read-only |
+| Diddy Kong Racing | Adventure Two mode, Wizpig amulet pieces, and balloons in three occupied slots |
+| Donkey Kong Land | Progression, current level, and playtime in three slots |
+| F-Zero: Maximum Velocity | Championship clear counts and three unlocks in each slot |
+| F-Zero X | Four cup progression values and the Death Race time |
+| Final Fantasy VI | Money and battle speed in each slot; location code is read-only |
+| Lylat Wars / Star Fox 64 | Played, completion, and medal flags for Corneria, Meteo, and Sector Y |
+| Mario Kart 64 | Mario GP trophies for four cups in four classes |
+| Mission: Impossible | Music, sound-effects, audio-mode, and screen-ratio options in four records |
+| Mystic Quest Legend | Money, location code, and hero level in each slot |
+| Pokémon Trading Card Game | Playtime, position, location with both preview copies, and eight Master Medals with their total |
+| Super Punch-Out!! | Losses in eight profiles; wins and championship progression are read-only |
+| Wario Land 3 | Coins, language, encoded day/night, and the first three sequential power upgrades |
+| The Legend of Zelda: Oracle of Ages and Oracle of Seasons | Mode, health, maximum health, heart pieces, and rupees in three slots per title |
+
+These definitions derive from [Game Tools Collection commit `8fb075e7c130da9e72c3c46ec8efa447a252ad88`](https://github.com/RyudoSynbios/game-tools-collection/tree/8fb075e7c130da9e72c3c46ec8efa447a252ad88). Diddy Kong Racing also uses the checksum rules in [DavidSM64/Diddy-Kong-Racing `save_data.c`](https://github.com/DavidSM64/Diddy-Kong-Racing/blob/1339ad6304118207b342fe8669c500efb91969df/src/save_data.c).
+
+The Genesis definitions accept only their listed odd-byte SRAM dump sizes. They do not accept a contiguous logical save or an arbitrary padded dump.
+
+| Title | Accepted file sizes | Editable scope |
+| --- | --- | --- |
+| Sonic 3 | 604 B, 980 B, or 64 KiB | Character, zone, next special stage, and emerald count in six Sonic 3 slots; character, zone, lives, and continues in eight Sonic 3 & Knuckles slots when that block is present |
+| Shining Force | 16,381 B, 16,382 B, or 64 KiB | Chapter, gold, and the hero's level, experience, maximum HP, and current HP in each present slot |
+| Soleil (Crusader of Centy) | 512 B, 4,608 B, 8,704 B, 12,800 B, or 64 KiB | Current and maximum health, Malins, two equipped animals, and location in each present slot |
+
+The Genesis field offsets derive from [Game Tools Collection commit `8fb075e7c130da9e72c3c46ec8efa447a252ad88`](https://github.com/RyudoSynbios/game-tools-collection/tree/8fb075e7c130da9e72c3c46ec8efa447a252ad88). The Sonic 3 checksum and block layout also follow [jcfields/sonic3-save-editor `save format.md`](https://gitlab.com/jcfields/sonic3-save-editor/-/blob/8b740b670ff8e46f7c35ff8fac98169efccfe3b9/save%20format.md).

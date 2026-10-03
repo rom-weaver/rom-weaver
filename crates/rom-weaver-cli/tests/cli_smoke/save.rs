@@ -69,6 +69,31 @@ fn save_catalog_lists_compiled_games_and_generation_support() {
     assert!(game_ids.contains(&"kirbys-adventure-canada-slot-3"));
     assert!(game_ids.contains(&"zelda-a-link-to-the-past-file-1-schema"));
     assert!(game_ids.contains(&"zelda-a-link-to-the-past"));
+    for id in [
+        "actraiser-europe",
+        "chrono-trigger-slot-1",
+        "diddy-kong-racing",
+        "donkey-kong-land",
+        "f-zero-maximum-velocity",
+        "f-zero-x",
+        "final-fantasy-vi-slot-1",
+        "final-fight-one",
+        "lylat-wars",
+        "mario-kart-64",
+        "mission-impossible",
+        "mystic-quest-legend-slot-1",
+        "pokemon-trading-card-game",
+        "shining-force-16382",
+        "soleil-512",
+        "sonic-3-604",
+        "super-punch-out-slot-1",
+        "super-street-fighter-ii-turbo-revival",
+        "wario-land-3",
+        "zelda-oracle-of-ages-slot-1",
+        "zelda-oracle-of-seasons-slot-1",
+    ] {
+        assert!(game_ids.contains(&id), "missing game profile {id}");
+    }
     assert!(
         catalog["generation_games"]
             .as_array()
@@ -76,6 +101,83 @@ fn save_catalog_lists_compiled_games_and_generation_support() {
             .iter()
             .any(|game| game == "zelda-a-link-to-the-past")
     );
+}
+
+#[test]
+fn save_edits_rotating_gba_eeprom_without_changing_its_backup() {
+    let temp = setup_temp_dir();
+    let source = temp.child("final-fight.sav");
+    let output = temp.child("edited.sav");
+    let copy = temp.child("copy.sav");
+    let mut logical = vec![0u8; 512];
+    for (index, record) in logical.chunks_exact_mut(256).enumerate() {
+        record[..2].copy_from_slice(&(index as u16 + 1).to_le_bytes());
+        record[0x74..0x78].fill(0xe5);
+        let checksum = record[..254].chunks_exact(2).fold(0u16, |sum, word| {
+            sum.wrapping_sub(u16::from_le_bytes([word[0], word[1]]))
+        });
+        record[254..].copy_from_slice(&checksum.to_le_bytes());
+    }
+    let original: Vec<u8> = logical
+        .chunks_exact(8)
+        .flat_map(|word| word.iter().rev().copied())
+        .collect();
+    fs::write(source.path(), &original).unwrap();
+    run_single_json_event(
+        &[
+            "save",
+            "create",
+            "--template",
+            source.to_str().unwrap(),
+            "--game",
+            "final-fight-one",
+            "--output",
+            copy.to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(fs::read(copy.path()).unwrap(), original);
+    let report = run_single_json_event(
+        &[
+            "save",
+            "set",
+            source.to_str().unwrap(),
+            "opponents_defeated=4321",
+            "--game",
+            "final-fight-one",
+            "--output",
+            output.to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(report["status"], "succeeded");
+    let edited = fs::read(output.path()).unwrap();
+    assert_eq!(&edited[..256], &original[..256]);
+    let record: Vec<u8> = edited[256..]
+        .chunks_exact(8)
+        .flat_map(|word| word.iter().rev().copied())
+        .collect();
+    assert_eq!(&record[2..4], &4321u16.to_le_bytes());
+    assert_eq!(
+        record.chunks_exact(2).fold(0u16, |sum, word| {
+            sum.wrapping_add(u16::from_le_bytes([word[0], word[1]]))
+        }),
+        0
+    );
+    run_single_json_event(
+        &[
+            "save",
+            "inspect",
+            output.to_str().unwrap(),
+            "--game",
+            "final-fight-one",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(fs::read(source.path()).unwrap(), original);
 }
 
 #[test]
