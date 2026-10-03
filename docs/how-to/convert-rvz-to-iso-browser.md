@@ -30,3 +30,5 @@ Make sure the browser and destination have enough free space for the extracted I
 For other inputs, use [Extract files](extract-files-browser.md). [Choosing a compression format](../explanation/compression-formats.md) compares RVZ with other containers.
 
 To compress the ISO again, follow [Convert ISO to RVZ](convert-to-rvz-browser.md).
+
+[Compare online RVZ and CHD converters](../explanation/comparisons.md#online-rvz-to-iso-converters) for supported operations and local versus server processing.

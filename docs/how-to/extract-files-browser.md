@@ -34,3 +34,5 @@ To stop a long extraction, cancel it from the progress bar. Select **Extract aga
 The extracted files stay in this browser until you add another file or leave the page.
 
 The [container table](../reference/formats.md#container-and-compression-formats) lists the formats that can be read.
+
+[Compare online RVZ and CHD converters](../explanation/comparisons.md#online-chd-extraction-and-compression) for supported operations and local versus server processing.

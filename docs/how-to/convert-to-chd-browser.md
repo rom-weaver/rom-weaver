@@ -40,3 +40,5 @@ CHD can reduce disc storage while preserving the disc layout. Emulator support v
 The browser needs working space for the source, staged tracks, and output. Keep the source files until you test the CHD.
 
 Use [Extract files](extract-files-browser.md) to unpack an existing CHD. [Choosing a compression format](../explanation/compression-formats.md) compares CHD with RVZ and archives.
+
+[Compare online RVZ and CHD converters](../explanation/comparisons.md#online-chd-extraction-and-compression) for supported operations and local versus server processing.

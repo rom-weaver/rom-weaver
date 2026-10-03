@@ -1,6 +1,6 @@
-# Comparison with similar tools
+# ROM tool comparison: patching, RVZ and CHD
 
-The useful distinction is the job each tool handles: a single patch, an embedded patcher, a disc conversion, or a complete ROM workflow. Format counts alone do not show whether a tool fits that job.
+Compare rom-weaver with online RVZ to ISO converters, CHD extraction and compression websites, and ROM patchers. Compare supported output and local processing.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -10,6 +10,8 @@ The useful distinction is the job each tool handles: a single patch, an embedded
 - [Applying a patch](#applying-a-patch)
 - [Creating a patch](#creating-a-patch)
 - [Containers and disc images](#containers-and-disc-images)
+- [Online RVZ to ISO converters](#online-rvz-to-iso-converters)
+- [Online CHD extraction and compression](#online-chd-extraction-and-compression)
 - [Checksums](#checksums)
 - [Headers and byte order](#headers-and-byte-order)
 - [Patching features](#patching-features)
@@ -54,6 +56,33 @@ chdman and Dolphin tool handle disc conversion directly. rom-weaver combines sup
 
 Parity tests compare reconstructed payloads. They do not establish that every compressed container or patch stream is identical across tools. [Performance](../development/performance.md#benchmarks-in-this-repository) describes the parity harness.
 
+## Online RVZ to ISO converters
+
+RVZ extraction restores a GameCube or Wii disc image to ISO. A website can run the conversion locally or upload the image for server processing.
+
+| Website | RVZ extraction | Processing and trade-off |
+| --- | --- | --- |
+| [rom-weaver](https://rom-weaver.com/extract) | RVZ to ISO | Runs locally in browser workers without a ROM upload or account. Browser storage and device resources limit conversion. |
+| [RVZtoISO.com](https://rvztoiso.com/) | RVZ to ISO | Advertises server conversion with Dolphin, resumable uploads, paid credits, and expiring downloads. Requires uploading the source and downloading the result. |
+
+rom-weaver also supports ISO to RVZ compression. Its [RVZ to ISO guide](../how-to/convert-rvz-to-iso-browser.md) and [ISO to RVZ guide](../how-to/convert-to-rvz-browser.md) cover the browser workflows.
+
+## Online CHD extraction and compression
+
+CHD extraction output depends on the stored media. CD tracks can need BIN/CUE files; a single ISO cannot represent every CHD layout.
+
+| Website | CHD compression | CHD extraction | Processing and trade-off |
+| --- | --- | --- | --- |
+| [rom-weaver](https://rom-weaver.com/compress) | Compatible ISO, BIN/CUE, and GDI inputs | Supported CHD images through Extract; output depends on media | Local browser processing without a ROM upload or account. Needs local working space. |
+| [CHDman.com ROM Tools](https://chdman.com/) | Advertises CD/DVD image compression | Not established by the published compressor page | Browser CHDMAN tool with lossless FLAC and optional lossy FSLAC audio settings. Lossy audio changes the source data. |
+| [RVZtoISO.com](https://rvztoiso.com/iso-to-chd) | Advertises CD-based data-track ISO to CHD | Its [CHD to ISO page](https://rvztoiso.com/chd-to-iso) advertises CD-based data images; excludes hard disks and unsupported multi-track layouts | Server conversion with uploads and expiring downloads. Published size and payment limits apply. |
+
+The CHDman.com name refers to a website. MAME's [chdman](https://docs.mamedev.org/tools/chdman.html) is the reference command-line tool listed above.
+
+rom-weaver's [CHD compression guide](../how-to/convert-to-chd-browser.md) covers compatible inputs. Its [extraction guide](../how-to/extract-files-browser.md) covers unpacking existing CHD images. The [format reference](../reference/formats.md) lists supported CHD media and codecs.
+
+Local processing avoids the source upload and result download. Server processing moves conversion work off the device. Neither approach guarantees faster conversion; this page contains no cross-site benchmarks.
+
 ## Checksums
 
 A displayed checksum identifies the bytes a tool read. Validation compares those bytes with an expected value. These are different capabilities: an IPS patch, for example, contains no expected source checksum for a patcher to check.
@@ -83,3 +112,5 @@ Keep a tool that already handles your input and produces the result you need. Co
 ## How this page was checked
 
 The project descriptions above use the linked upstream repositories and official chdman documentation, checked on 2026-09-05. rom-weaver's details are checked against this repository's command, format, and parity-test implementations. The links are the source for current upstream capabilities.
+
+The website comparison was checked on 2026-10-02 against the linked RVZtoISO.com pages and CHDman.com’s published interface. Website capabilities are advertised claims, not independently tested conversions. Prices, limits, and support can change.
