@@ -1,7 +1,7 @@
 import { readDocLastmod } from "../docs-discovery.mjs";
 import { docSourcePath } from "../../src/webapp/docs-pages.mjs";
 import { DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
-import { SITE_ALTERNATE_NAMES, SITE_NAME } from "../../src/webapp/workflow-seo.mjs";
+import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
 import { repoRoot } from "./paths.mjs";
 
 export const createRobotsSource = (channel) =>
@@ -101,14 +101,9 @@ export const createNotFoundHtml = (html, channel, channelLabel) => {
 
 export const createSitemapSource = () => `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://rom-weaver.com/</loc></url>
-  <url><loc>https://rom-weaver.com/apply-patches</loc></url>
-  <url><loc>https://rom-weaver.com/bundle-patches</loc></url>
-  <url><loc>https://rom-weaver.com/checksum</loc></url>
-  <url><loc>https://rom-weaver.com/create-patch</loc></url>
-  <url><loc>https://rom-weaver.com/extract</loc></url>
-  <url><loc>https://rom-weaver.com/identify-rom</loc></url>
-  <url><loc>https://rom-weaver.com/test-rom</loc></url>
+${Object.values(WORKFLOW_SEO_ROUTES)
+  .map((route) => `  <url><loc>https://rom-weaver.com/${route.slug}</loc></url>`)
+  .join("\n")}
 ${DOC_SOURCES.map((source) => {
   const lastmod = readDocLastmod(docSourcePath(source), repoRoot);
   return `  <url><loc>https://rom-weaver.com/${source.slug}</loc>${lastmod ? `<lastmod>${lastmod}</lastmod>` : ""}</url>`;
