@@ -38,7 +38,7 @@ jobs:
       actions: read
       contents: read
     steps:
-      - name: Wait for successful CI push run
+      - name: Wait for successful main CI run
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -46,9 +46,9 @@ jobs:
         run: |
           set -euo pipefail
           for _ in {1..360}; do
-            response=$(gh api "repos/$REPOSITORY/actions/workflows/ci.yml/runs?event=push&head_sha=$TARGET_SHA&per_page=100")
+            response=$(gh api "repos/$REPOSITORY/actions/workflows/ci.yml/runs?branch=main&head_sha=$TARGET_SHA&per_page=100")
             IFS=$'\t' read -r run_state conclusion url <<< "$(
-              jq -r '[.workflow_runs[]] | sort_by(.created_at) | last // {} | [.status // "", .conclusion // "", .html_url // ""] | @tsv' <<< "$response"
+              jq --arg sha "$TARGET_SHA" -r '[.workflow_runs[] | select(.head_branch == "main" and .head_sha == $sha and (.event == "push" or .event == "workflow_dispatch"))] | sort_by(.created_at) | last // {} | [.status // "", .conclusion // "", .html_url // ""] | @tsv' <<< "$response"
             )"
 
             if [[ "$run_state" == completed ]]; then
@@ -63,7 +63,7 @@ jobs:
             if [[ -n "$run_state" ]]; then
               echo "CI for $TARGET_SHA is $run_state; waiting"
             else
-              echo "No push CI run found for $TARGET_SHA; waiting"
+              echo "No main CI run found for $TARGET_SHA; waiting"
             fi
             sleep 30
           done
