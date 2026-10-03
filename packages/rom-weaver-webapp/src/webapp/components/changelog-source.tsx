@@ -61,7 +61,7 @@ const fetchChangelog = async (): Promise<{ entries: ChangelogEntry[]; release?: 
 // Conventional-commit subject, the same shape release-please reads when it
 // writes CHANGELOG.md. The trailing `(#123)` is the squash-merge PR reference
 // GitHub appends, which becomes the entry's link.
-const COMMIT_SUBJECT_REGEX = /^(?<type>[a-z]+)(?:\((?<scope>[^)]+)\))?!?: +(?<summary>.+?)$/;
+const COMMIT_SUBJECT_REGEX = /^(?<type>[a-z][a-z0-9]*)(?:\((?<scope>[^)]+)\))?!?: +(?<summary>.+?)$/;
 const COMMIT_PR_REGEX = / +\(#(\d+)\)$/;
 // release-please's changelog-sections, in its order, so a nightly's groups are
 // titled and sorted exactly like the release notes they turn into. Types that

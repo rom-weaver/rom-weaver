@@ -283,12 +283,21 @@ describe("ChangelogPanel pending update", () => {
       { date: "", hash: "b", subject: "ux(webapp): shorten the download label" },
       { date: "", hash: "c", subject: "refactor(cli): split the runner" },
       { date: "", hash: "d", subject: "style: an old retired type" },
+      { date: "", hash: "e", subject: "a11y(webapp): label the swap control" },
+      { date: "", hash: "f", subject: "i18n: add French" },
     ]);
 
     const update = await renderUpdate();
 
     const headings = await update.findAllByRole("heading", { level: 3 });
-    expect(headings.map((heading) => heading.textContent)).toEqual(["User Experience", "Internal", "Other Changes"]);
+    expect(headings.map((heading) => heading.textContent)).toEqual([
+      "User Experience",
+      "Accessibility",
+      "Localization",
+      "Internal",
+      "Other Changes",
+    ]);
+    expect(update.getByText("label the swap control")).toBeTruthy();
     expect(update.getByText("cache compiler output")).toBeTruthy();
     expect(update.getByText("split the runner")).toBeTruthy();
   });
