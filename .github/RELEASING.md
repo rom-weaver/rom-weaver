@@ -2,7 +2,7 @@
 
 This is the release *decision* and its one-time setup. For the pipeline that executes it - workflows, jobs, caching, and the publish fan-out - see [`docs/development/ci.md`](../docs/development/ci.md).
 
-Start `release.yml` manually to open or refresh the Release Please pull request after CI succeeds for the exact `main` commit. Conventional `feat`, `fix`, and breaking-change commits update that pull request and `CHANGELOG.md`. Merging it creates a **draft** GitHub Release and starts the publish fan-out. The final job publishes the draft, which creates the `vX.Y.Z` tag and then triggers the crates.io publication. The release process publishes:
+Start `release.yml` manually to open or refresh the Release Please pull request after CI succeeds for the exact `main` commit. Conventional commits of every allowed type update that pull request and `CHANGELOG.md`; the [commit type table](../docs/development/commits.md#types) lists each type's release effect. Merging it creates a **draft** GitHub Release and starts the publish fan-out. The final job publishes the draft, which creates the `vX.Y.Z` tag and then triggers the crates.io publication. The release process publishes:
 
 - the Cargo workspace to crates.io;
 - 11 npm packages: `@rom-weaver/cli`, its nine `@rom-weaver/<platform>` binaries, and the unscoped `rom-weaver` alias that depends on the launcher;

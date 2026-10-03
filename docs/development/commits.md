@@ -43,7 +43,7 @@ ci: build multi-arch images on native runners instead of QEMU
 | `fix` | Behavior that did not work as intended, now repaired | Bug Fixes | Patch bump |
 | `security` | A closed vulnerability: injection, XSS, path traversal, unbounded allocation from untrusted input | Security | Patch bump |
 | `a11y` | Access for people with disabilities: screen readers, keyboard use, focus, contrast, reduced motion | Accessibility | Patch bump |
-| `i18n` | Translations, locale files, locale-aware formatting, or a new language | Localization | Patch bump |
+| `i18n` | Localizing text, locale files, locale-aware formatting, or a new language | Localization | Patch bump |
 | `perf` | Faster or smaller product with byte-identical output | Performance Improvements | Patch bump |
 | `revert` | Undoing an earlier commit | Reverts | Patch bump |
 | `docs` | Docs pages, README, code comments, and the docs nav, sitemap, and `llms.txt` entries | Documentation | Patch bump |
@@ -63,7 +63,7 @@ Release Please bumps the minor version for `feat` and the patch version for ever
 
 Choose by what the diff does for a user, not by how important it is or by its scope.
 
-- **Only docs, tests, CI, build, deps, or tooling files changed:** use that area's type, even for a fix. A docs typo fix is `docs`; a broken workflow fix is `ci`; a faster CI job is `ci`, not `perf`.
+- **Only docs, tests, CI, build, deps, or tooling files changed:** use that area's type, even for a fix. A docs typo fix is `docs`; a broken workflow fix is `ci`; a faster CI job is `ci`, not `perf`. The one exception: a dependency bump that fixes an advisory in code that ships is `security(deps)`. Dependabot titles every bump `deps:`, so retitle its security pull requests by hand.
 - **Mixed diffs:** the type of the main purpose wins. A docs page plus the 2-line route entry it needs is `docs`. A new tool with its docs page is `feat`.
 - **Product changes:** take the first match in this order: `revert`, `security`, `a11y`, `i18n`, `fix`, `perf`, `feat`, `ux`, `refactor`.
 - **`feat` or `ux`:** name what users can do now that they could not do before. If you can, it is `feat`; if the same things got easier or nicer, it is `ux`. Redesigns, merged panels, moved controls, shorter labels, and clearer messages are `ux`.
