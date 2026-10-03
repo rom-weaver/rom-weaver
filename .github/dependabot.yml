@@ -14,10 +14,15 @@
 # pushing to main and competing for the runner pool. Dependabot has no "only
 # between" window: `time` is the check time, and rebases or security updates
 # can still open at other hours.
+#
+# Every update uses the `deps` commit type (docs/development/commits.md).
+# Without `commit-message`, Dependabot copies the type from recent history.
 version: 2
 updates:
   - package-ecosystem: cargo
     directory: /
+    commit-message:
+      prefix: deps
     schedule:
       interval: daily
       time: "03:00"
@@ -42,6 +47,8 @@ updates:
   # the webapp itself. Dependabot needs one entry per lockfile.
   - package-ecosystem: npm
     directory: /
+    commit-message:
+      prefix: deps
     schedule:
       interval: daily
       time: "03:00"
@@ -54,6 +61,8 @@ updates:
 
   - package-ecosystem: npm
     directory: /packages/rom-weaver-webapp
+    commit-message:
+      prefix: deps
     schedule:
       interval: daily
       time: "03:00"
@@ -74,6 +83,8 @@ updates:
 
   - package-ecosystem: github-actions
     directory: /
+    commit-message:
+      prefix: deps
     schedule:
       interval: daily
       time: "03:00"

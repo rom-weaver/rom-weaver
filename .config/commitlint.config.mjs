@@ -17,10 +17,30 @@ export default {
     // config-conventional caps the header at 100 chars, which rejects grouped
     // dependabot titles ("bump the X group in /packages/... with N updates").
     "header-max-length": [2, "always", 150],
+    // `chore` stays only for automation: release-please titles its release
+    // PRs `chore(main): release X.Y.Z`, and the release and CLA bots commit
+    // as `chore(...)`. docs/development/commits.md tells people which type to use.
     "type-enum": [
       2,
       "always",
-      ["build", "chore", "ci", "docs", "dx", "feat", "fix", "perf", "refactor", "revert", "style", "test"],
+      [
+        "a11y",
+        "build",
+        "chore",
+        "ci",
+        "deps",
+        "docs",
+        "dx",
+        "feat",
+        "fix",
+        "i18n",
+        "perf",
+        "refactor",
+        "revert",
+        "security",
+        "test",
+        "ux",
+      ],
     ],
   },
 };

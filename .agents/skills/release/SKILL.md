@@ -18,13 +18,13 @@ git log "$last"..origin/main --format='%h %s'
 
 Stop if the log is empty: there is nothing to release.
 
-For every `feat`, `fix`, `perf`, or breaking (`!`) commit, read the pull request description for what the change means to a user:
+For every `feat`, `ux`, `fix`, `security`, `a11y`, `i18n`, `perf`, or breaking (`!`) commit, read the pull request description for what the change means to a user:
 
 ```bash
 gh pr view <number> --json title,body --jq '.title + "\n\n" + .body'
 ```
 
-Skip non-breaking `chore`, `build`, `ci`, `test`, `docs`, `style`, and `refactor` commits; they land in the collapsed `All changes` list automatically.
+Skip non-breaking `chore`, `build`, `ci`, `deps`, `dx`, `test`, `docs`, and `refactor` commits; they land in the collapsed `All changes` list automatically.
 
 ## 2. Draft the highlights
 

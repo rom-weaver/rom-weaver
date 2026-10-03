@@ -140,6 +140,10 @@ mode, and the folder names the mode.
 Releases are release-please driven; the global `npm version` / `changelog:all`
 instructions do **not** apply here.
 
+- **Pick the PR title type with `docs/development/commits.md#choosing-a-type`.**
+  The squash title becomes the commit Release Please reads. `feat` is only for
+  a new capability; a changed look or flow is `ux`, and docs-only work is
+  `docs`. Never write `chore` (automation only) or `style` (retired).
 - **Never hand-edit a version.** `release-please-config.json` owns every bump:
   the root/webapp package files and locks, the alias and all 9 platform
   `package.json`s, the `optionalDependencies` pins,

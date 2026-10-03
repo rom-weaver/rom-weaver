@@ -61,74 +61,69 @@ const fetchChangelog = async (): Promise<{ entries: ChangelogEntry[]; release?: 
 // Conventional-commit subject, the same shape release-please reads when it
 // writes CHANGELOG.md. The trailing `(#123)` is the squash-merge PR reference
 // GitHub appends, which becomes the entry's link.
-const COMMIT_SUBJECT_REGEX = /^(?<type>[a-z]+)(?:\((?<scope>[^)]+)\))?!?: +(?<summary>.+?)$/;
+const COMMIT_SUBJECT_REGEX = /^(?<type>[a-z][a-z0-9]*)(?:\((?<scope>[^)]+)\))?!?: +(?<summary>.+?)$/;
 const COMMIT_PR_REGEX = / +\(#(\d+)\)$/;
 // release-please's changelog-sections, in its order, so a nightly's groups are
-// titled and sorted exactly like the release notes they turn into. A type left
-// out here is one release-please hides from CHANGELOG.md; the views still show
-// it, under the catch-all, because a nightly has nothing else to show.
-const COMMIT_GROUP_TITLES: Record<string, string> = {
-  build: "Build System",
-  chore: "Miscellaneous Chores",
-  ci: "Continuous Integration",
-  docs: "Documentation",
-  feat: "Features",
-  fix: "Bug Fixes",
-  perf: "Performance Improvements",
-  refactor: "Code Refactoring",
-  revert: "Reverts",
-  style: "Styles",
-  test: "Tests",
-};
-const COMMIT_GROUP_ORDER = [
-  "feat",
-  "fix",
-  "perf",
-  "revert",
-  "docs",
-  "refactor",
-  "test",
-  "build",
-  "ci",
-  "style",
-  "chore",
+// titled and sorted exactly like the release notes they turn into. Types that
+// share a section share one group. A unit test keeps this list equal to
+// release-please-config.json. An unknown type goes to the catch-all, because a
+// nightly has nothing else to show.
+const COMMIT_SECTIONS: readonly (readonly [type: string, title: string])[] = [
+  ["feat", "Features"],
+  ["ux", "User Experience"],
+  ["fix", "Bug Fixes"],
+  ["security", "Security"],
+  ["a11y", "Accessibility"],
+  ["i18n", "Localization"],
+  ["perf", "Performance Improvements"],
+  ["revert", "Reverts"],
+  ["docs", "Documentation"],
+  ["dx", "Developer Experience"],
+  ["deps", "Dependencies"],
+  ["chore", "Internal"],
+  ["refactor", "Internal"],
+  ["test", "Internal"],
+  ["build", "Internal"],
+  ["ci", "Internal"],
 ];
+const COMMIT_GROUP_TITLES = new Map(COMMIT_SECTIONS);
+const COMMIT_GROUP_ORDER = [...new Set(COMMIT_SECTIONS.map(([, title]) => title))];
 const OTHER_GROUP_KEY = "";
 const OTHER_GROUP_TITLE = "Other Changes";
 
 // One commit subject as a CHANGELOG-style entry. A subject that is not a
 // conventional commit still gets shown verbatim under the catch-all group -
 // dropping it would silently hide a change from the list.
-const parseCommitEntry = (entry: ChangelogEntry): { entry: ReleaseEntry; type: string } => {
+const parseCommitEntry = (entry: ChangelogEntry): { entry: ReleaseEntry; title: string } => {
   const prMatch = COMMIT_PR_REGEX.exec(entry.subject);
   const subject = prMatch ? entry.subject.slice(0, prMatch.index) : entry.subject;
   const match = COMMIT_SUBJECT_REGEX.exec(subject);
   const reference = prMatch ? { pr: prMatch[1] } : { commit: entry.hash };
-  if (!match?.groups) return { entry: { ...reference, summary: subject }, type: OTHER_GROUP_KEY };
+  if (!match?.groups) return { entry: { ...reference, summary: subject }, title: OTHER_GROUP_KEY };
   const { scope, summary, type } = match.groups;
-  if (!(summary && type)) return { entry: { ...reference, summary: subject }, type: OTHER_GROUP_KEY };
+  if (!(summary && type)) return { entry: { ...reference, summary: subject }, title: OTHER_GROUP_KEY };
   return {
     entry: { ...reference, ...(scope ? { scope } : {}), summary },
-    type: type in COMMIT_GROUP_TITLES ? type : OTHER_GROUP_KEY,
+    title: COMMIT_GROUP_TITLES.get(type) ?? OTHER_GROUP_KEY,
   };
 };
 
 const commitGroups = (entries: ChangelogEntry[]): ReleaseGroup[] => {
-  const byType = new Map<string, ReleaseEntry[]>();
+  const byTitle = new Map<string, ReleaseEntry[]>();
   for (const entry of entries) {
-    const { entry: parsed, type } = parseCommitEntry(entry);
-    const bucket = byType.get(type);
+    const { entry: parsed, title } = parseCommitEntry(entry);
+    const bucket = byTitle.get(title);
     if (bucket) bucket.push(parsed);
-    else byType.set(type, [parsed]);
+    else byTitle.set(title, [parsed]);
   }
-  // Known types in release-please's order, then the catch-all last.
-  const types = [
-    ...COMMIT_GROUP_ORDER.filter((type) => byType.has(type)),
-    ...(byType.has(OTHER_GROUP_KEY) ? [OTHER_GROUP_KEY] : []),
+  // Known sections in release-please's order, then the catch-all last.
+  const titles = [
+    ...COMMIT_GROUP_ORDER.filter((title) => byTitle.has(title)),
+    ...(byTitle.has(OTHER_GROUP_KEY) ? [OTHER_GROUP_KEY] : []),
   ];
-  return types.map((type) => ({
-    entries: byType.get(type) ?? [],
-    title: COMMIT_GROUP_TITLES[type] ?? OTHER_GROUP_TITLE,
+  return titles.map((title) => ({
+    entries: byTitle.get(title) ?? [],
+    title: title || OTHER_GROUP_TITLE,
   }));
 };
 
@@ -178,5 +173,5 @@ const EntryGroups = ({
   </>
 );
 
-export { commitGroups, EntryGroups, fetchChangelog, releaseTagUrl, REPOSITORY_URL };
+export { COMMIT_SECTIONS, commitGroups, EntryGroups, fetchChangelog, releaseTagUrl, REPOSITORY_URL };
 export type { ChangelogEntry, ReleaseChangelog, ReleaseNote };
