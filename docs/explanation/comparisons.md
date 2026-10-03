@@ -12,6 +12,7 @@ Compare rom-weaver with online RVZ to ISO converters, CHD extraction and compres
 - [Containers and disc images](#containers-and-disc-images)
 - [Online RVZ to ISO converters](#online-rvz-to-iso-converters)
 - [Online CHD extraction and compression](#online-chd-extraction-and-compression)
+- [Threading and measured conversion speed](#threading-and-measured-conversion-speed)
 - [Checksums](#checksums)
 - [Headers and byte order](#headers-and-byte-order)
 - [Patching features](#patching-features)
@@ -81,7 +82,22 @@ The CHDman.com name refers to a website. MAME's [chdman](https://docs.mamedev.or
 
 rom-weaver's [CHD compression guide](../how-to/convert-to-chd-browser.md) covers compatible inputs. Its [extraction guide](../how-to/extract-files-browser.md) covers unpacking existing CHD images. The [format reference](../reference/formats.md) lists supported CHD media and codecs.
 
-Local processing avoids the source upload and result download. Server processing moves conversion work off the device. Neither approach guarantees faster conversion; this page contains no cross-site benchmarks.
+rom-weaver supports multithreaded RVZ and CHD extraction and compression in the browser and native CLI. Automatic thread selection uses available device resources. The [browser settings guide](../how-to/browser-settings.md) covers worker thread controls.
+
+Local processing avoids the source upload and result download. Server processing moves conversion work off the device. Cross-site browser timings have not been measured.
+
+## Threading and measured conversion speed
+
+The [recorded native benchmarks](../development/performance.md#results) compare rom-weaver with chdman and dolphin-tool at matched codec settings.
+
+| Operation | Reference tool | Recorded rom-weaver result |
+| --- | --- | --- |
+| CHD extraction | chdman 0.287 | 3.1–5.8× faster |
+| RVZ to ISO extraction | dolphin-tool | 1.6–2.0× faster |
+| CHD compression | chdman 0.287 | 8% slower to 20% faster |
+| ISO to RVZ compression | dolphin-tool | 1.2–1.3× faster |
+
+These timings cover rom-weaver 0.8.0 on a quiet 10-core arm64 machine, measured on 2026-07-26. Each command had one warmup and three timed runs. Results cover the tested discs and settings; they do not measure competing websites or guarantee the same gains in a browser.
 
 ## Checksums
 
