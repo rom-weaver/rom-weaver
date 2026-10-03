@@ -48,10 +48,7 @@ const useReadingProgress = (sections: readonly { id: string }[], active: boolean
       // The last section must be reachable even when the document ends before
       // its heading crosses the reading line.
       if (atLimit) activeIndex = sections.length - 1;
-      setProgress({
-        activeIndex: activeIndex < 0 ? 0 : activeIndex,
-        initializing: true,
-      });
+      setProgress({ activeIndex, initializing: true });
     };
 
     const schedule = () => {

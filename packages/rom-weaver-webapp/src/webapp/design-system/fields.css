@@ -558,9 +558,10 @@
   color: var(--thread-text);
   border-color: color-mix(in oklab, var(--thread) 45%, transparent);
 }
+/* The menu MUST clear both action buttons on the next compact patch card. */
 .rw-app .patch-menu-list {
   position: absolute;
-  inset-inline-end: 0;
+  inset-inline-end: calc(100% + var(--ctrl-h) + var(--sp-s));
   top: calc(100% + 5px);
   z-index: 70;
   display: flex;
@@ -576,11 +577,6 @@
 }
 .rw-app .patch-menu-list[hidden] {
   display: none;
-}
-@media (min-width: 641px) {
-  .rw-app .patch-menu-list {
-    inset-inline-end: calc(100% + 12px);
-  }
 }
 .rw-app .patch-menu-item {
   display: flex;

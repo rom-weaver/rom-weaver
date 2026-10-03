@@ -1,6 +1,6 @@
 import "./design-system/docs-route.css";
-import { ArrowUpToLine, ChevronLeft, ChevronRight, ListTree } from "lucide-react";
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { ArrowUpToLine, ChevronLeft, ChevronRight } from "lucide-react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { DOC_PAGE_LOADERS, DOC_ROUTES } from "virtual:rom-weaver-docs";
 import { copyToClipboard } from "../lib/clipboard.ts";
 import { createLogger } from "../lib/logging.ts";
@@ -10,6 +10,8 @@ import { useRomWeaverAssetBaseUrl } from "../public/react/settings-context.tsx";
 import { createDocsSeoMetadata, groupDocRoutes, readDocsSlugFromPathname } from "./docs-routing.mjs";
 import { findSearchToken } from "./docs-search.mjs";
 import { AUTHORED_SAMPLE_BASE, retargetSampleUrls } from "./docs-sample-origin.ts";
+import { DocsBar } from "./docs-bar.tsx";
+import { docShelfFor, docsLabelFor, useDocsAudience, type DocsAudience } from "./docs-navigation.tsx";
 import { GITHUB_URL } from "./project-links.ts";
 import { useReadingProgress } from "./use-reading-progress.ts";
 
@@ -159,13 +161,20 @@ const OutlineLink = ({
   href,
   label,
   onNavigate,
+  read,
 }: {
   current: boolean;
   href: string;
   label: string;
-  onNavigate?: () => void;
+  onNavigate?: (event: React.MouseEvent<HTMLAnchorElement>) => void;
+  read: boolean;
 }) => (
-  <a aria-current={current ? "true" : undefined} href={href} onClick={onNavigate}>
+  <a
+    aria-current={current ? "true" : undefined}
+    className={read ? "is-read" : undefined}
+    href={href}
+    onClick={onNavigate}
+  >
     <span aria-hidden="true" className="warp-pick" />
     {label}
   </a>
@@ -174,35 +183,42 @@ const OutlineLink = ({
 /**
  * The warp: the lengthwise threads a piece is woven on. A guide's section order
  * is its own structural axis, so the rail carries the outline and marks the
- * section being read with a weft pick crossing the warp line.
+ * section being read with a weft pick crossing the warp line. The introduction
+ * counts as the first part, the same way the phone docs bar counts it.
  */
 const SectionRail = ({
   activeIndex,
   initializing,
   route,
-  onNavigate,
 }: {
   activeIndex: number;
   initializing: boolean;
   route: DocRoute;
-  onNavigate?: () => void;
 }) => {
-  // The server cannot measure a restored scroll position. At the top of a
-  // freshly opened guide the first heading is the honest fallback, and using
-  // it here keeps the marker painted through hydration instead of flashing in
-  // after the first client measurement.
-  const initialIndex = activeIndex < 0 && route.sections.length > 0 ? 0 : activeIndex;
+  const parts = [{ id: null, label: "Introduction" }, ...route.sections];
   return (
     <nav aria-label="On this page" className={initializing ? "warp-rail is-initializing" : "warp-rail"}>
-      <span className="warp-rail-title">On this page</span>
+      <p className="warp-rail-title">
+        <span>{docShelfFor(route.slug)?.title ?? "On this page"}</span>
+        <span className="warp-rail-count">{`${activeIndex + 2} of ${parts.length}`}</span>
+      </p>
       <ol className="warp-rail-list">
-        {route.sections.map((section, index) => (
-          <li key={section.id}>
+        {parts.map((part, index) => (
+          <li key={part.id ?? "introduction"}>
             <OutlineLink
-              current={index === initialIndex}
-              href={`/${route.slug}#${section.id}`}
-              label={section.label}
-              onNavigate={onNavigate}
+              current={index - 1 === activeIndex}
+              href={part.id ? `/${route.slug}#${part.id}` : `/${route.slug}`}
+              label={part.label}
+              onNavigate={
+                part.id
+                  ? undefined
+                  : (event) => {
+                      // Scroll without changing the URL fragment; scrollTo honors the page scroll behavior.
+                      event.preventDefault();
+                      window.scrollTo({ top: 0 });
+                    }
+              }
+              read={index - 1 < activeIndex}
             />
           </li>
         ))}
@@ -278,79 +294,6 @@ const DocsFaqPreview = () => (
   </section>
 );
 
-const TrailRow = ({
-  buttonRef,
-  onToggle,
-  menuOpen,
-}: {
-  buttonRef: { current: HTMLButtonElement | null };
-  onToggle: () => void;
-  menuOpen: boolean;
-}) => (
-  <div className="docs-trail-row">
-    <button
-      aria-label="Contents"
-      aria-controls="docs-contents-menu"
-      aria-expanded={menuOpen}
-      className="docs-trail-menu"
-      onClick={onToggle}
-      ref={buttonRef}
-      type="button"
-    >
-      <ListTree aria-hidden="true" />
-    </button>
-  </div>
-);
-
-const TrailHead = ({
-  activeIndex,
-  initializing,
-  route,
-}: {
-  activeIndex: number;
-  initializing: boolean;
-  route: DocRoute;
-}) => {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const trailRef = useRef<HTMLDivElement | null>(null);
-  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
-  const closeMenu = useCallback(() => setMenuOpen(false), []);
-  const outlined = route.sections.length > 0;
-
-  useEffect(() => {
-    if (!menuOpen) return undefined;
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      closeMenu();
-      menuButtonRef.current?.focus();
-    };
-    const handlePointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Node && trailRef.current?.contains(event.target)) return;
-      closeMenu();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.removeEventListener("pointerdown", handlePointerDown);
-    };
-  }, [closeMenu, menuOpen]);
-
-  return (
-    <div className="docs-trail" ref={trailRef}>
-      <TrailRow buttonRef={menuButtonRef} onToggle={() => setMenuOpen((open) => !open)} menuOpen={menuOpen} />
-      {menuOpen ? (
-        <aside aria-label="Documentation contents" className="docs-contents-menu" id="docs-contents-menu">
-          {outlined ? (
-            <SectionRail activeIndex={activeIndex} initializing={initializing} onNavigate={closeMenu} route={route} />
-          ) : null}
-        </aside>
-      ) : null}
-    </div>
-  );
-};
-
 /** Reading order is route order, which is the order the shelves themselves list. */
 const docsNeighbour = (slug: string, step: -1 | 1) => {
   const index = DOC_ROUTES.findIndex((entry) => entry.slug === slug);
@@ -358,7 +301,15 @@ const docsNeighbour = (slug: string, step: -1 | 1) => {
 };
 
 /** One end-of-guide step: the direction it goes, and the page it lands on. */
-const OnwardLink = ({ direction, route }: { direction: "next" | "previous"; route: DocRoute }) => (
+const OnwardLink = ({
+  audience,
+  direction,
+  route,
+}: {
+  audience: DocsAudience;
+  direction: "next" | "previous";
+  route: DocRoute;
+}) => (
   <a
     aria-label={`${direction === "next" ? "Next" : "Previous"}: ${route.title}`}
     className="docs-step"
@@ -370,7 +321,7 @@ const OnwardLink = ({ direction, route }: { direction: "next" | "previous"; rout
     {direction === "previous" ? <ChevronLeft aria-hidden="true" /> : null}
     <span className="docs-step-copy">
       <small>{direction === "next" ? "Next" : "Previous"}</small>
-      <b>{route.label}</b>
+      <b>{docsLabelFor(route, audience)}</b>
     </span>
     {direction === "next" ? <ChevronRight aria-hidden="true" /> : null}
   </a>
@@ -386,18 +337,23 @@ const OnwardLink = ({ direction, route }: { direction: "next" | "previous"; rout
  */
 const ArticleEnd = ({ onSelectTab, slug }: { onSelectTab?: (id: string) => void; slug: string }) => {
   const route = findDocsRoute(slug);
+  const [audience] = useDocsAudience(slug);
   const previous = docsNeighbour(slug, -1);
   const next = docsNeighbour(slug, 1);
   return (
     <footer className="docs-footer">
       <nav aria-label="Guide pages" className="docs-onward">
-        {previous ? <OnwardLink direction="previous" route={previous} /> : <span className="docs-step-gap" />}
+        {previous ? (
+          <OnwardLink audience={audience} direction="previous" route={previous} />
+        ) : (
+          <span className="docs-step-gap" />
+        )}
         {/* Scroll without changing the URL fragment; scrollTo honors the page scroll behavior. */}
         <button className="docs-to-top" onClick={() => window.scrollTo({ top: 0 })} type="button">
           <ArrowUpToLine aria-hidden="true" />
           Back to top
         </button>
-        {next ? <OnwardLink direction="next" route={next} /> : <span className="docs-step-gap" />}
+        {next ? <OnwardLink audience={audience} direction="next" route={next} /> : <span className="docs-step-gap" />}
       </nav>
       <a
         className="docs-source-link"
@@ -502,7 +458,7 @@ const DocsPage = ({
   const route = targetHtml === undefined ? lastReadyRoute.current : targetRoute;
   const routeHtml = docsHtmlCache.get(route.slug) ?? "";
   const hub = route.slug === HUB_SLUG;
-  // One subscription for the page: the desktop rail and phone contents sheet
+  // One subscription for the page: the desktop rail and the phone docs bar
   // use the same active section.
   const { activeIndex, initializing } = useReadingProgress(route.sections, active);
   const pageTurned = useDocsPageTurned(route.slug);
@@ -601,11 +557,9 @@ const DocsPage = ({
   }, [active, html]);
   return (
     <div className="docs-workbench" id="main">
-      {/* Keyed on the route so moving to another guide closes the sheet with it,
-          rather than leaving it open over a guide it no longer describes. */}
-      {route.sections.length > 0 ? (
-        <TrailHead activeIndex={activeIndex} initializing={initializing} key={route.slug} route={route} />
-      ) : null}
+      {/* Keyed on the route so moving to another guide closes its overlays,
+          rather than leaving them open over a guide they no longer describe. */}
+      {active ? <DocsBar activeIndex={activeIndex} key={route.slug} route={route} /> : null}
       <div className={route.sections.length > 0 ? "docs-layout" : "docs-layout docs-layout-full"}>
         {route.sections.length > 0 ? (
           <div className="docs-rails">
@@ -613,6 +567,13 @@ const DocsPage = ({
           </div>
         ) : null}
         <section className="docs-panel">
+          {hub ? null : (
+            <nav aria-label="Breadcrumb" className="docs-crumb">
+              <a href={`/${HUB_SLUG}`}>Docs</a>
+              <span aria-hidden="true">/</span>
+              <span>{docShelfFor(route.slug)?.title}</span>
+            </nav>
+          )}
           {/* Keyed on the route so a guide switch remounts the article and
               replays its entrance - that animation IS the page transition. */}
           <article

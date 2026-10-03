@@ -1,15 +1,4 @@
-import {
-  ArrowLeft,
-  ChevronUp,
-  HardDrive,
-  Heart,
-  House,
-  Info,
-  Newspaper,
-  ScrollText,
-  Search,
-  Settings,
-} from "lucide-react";
+import { ArrowLeft, HardDrive, Heart, House, Info, Newspaper, ScrollText, Search, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { DocsNavigation } from "../docs-navigation.tsx";
@@ -121,11 +110,8 @@ const Masthead = ({
   };
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuMounted, setMenuMounted] = useState(false);
-  const [docsMenuOpen, setDocsMenuOpen] = useState(false);
-  const [docsMenuMounted, setDocsMenuMounted] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const docsMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
   /* Find opens from the top bar on desktop. The phone has no Find trigger:
      its Find box lives at the foot of the Menu sheet. */
   const findTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -154,21 +140,18 @@ const Masthead = ({
   const openTools = useCallback(() => {
     flushSync(() => {
       setFindOpen(false);
-      setDocsMenuOpen(false);
       setMenuMounted(true);
       setMenuOpen(true);
     });
     document.querySelector<HTMLInputElement>("#menu-sheet .find-input")?.focus();
   }, []);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
-  const closeDocsMenu = useCallback(() => setDocsMenuOpen(false), []);
   const menuRoute = useRef(`${currentTab}:${docsSlug}`);
   useEffect(() => {
     const route = `${currentTab}:${docsSlug}`;
     if (menuRoute.current === route) return;
     menuRoute.current = route;
     setMenuOpen(false);
-    setDocsMenuOpen(false);
   }, [currentTab, docsSlug]);
   useEffect(() => {
     if (currentTab !== "docs") return;
@@ -176,7 +159,6 @@ const Masthead = ({
     const closeDesktopMenu = () => {
       if (desktop.matches) {
         setMenuOpen(false);
-        setDocsMenuOpen(false);
       }
     };
     desktop.addEventListener("change", closeDesktopMenu);
@@ -441,7 +423,8 @@ const Masthead = ({
     tabs,
   ]);
 
-  const docsSections = (onNavigate?: () => void): NavSectionData[] => [
+  // Desktop only: phones reach the docs through the docs bar above the dock.
+  const docsSections: NavSectionData[] = [
     {
       id: "project",
       title: "",
@@ -456,15 +439,9 @@ const Masthead = ({
     },
     {
       id: "docs",
-      title: localizer.message("ui.docs.title"),
+      title: "",
       entries: [],
-      content: (
-        <DocsNavigation
-          currentSlug={docsSlug}
-          onNavigate={onNavigate}
-          overviewId={onNavigate ? undefined : "tab-docs"}
-        />
-      ),
+      content: <DocsNavigation currentSlug={docsSlug} overviewId="tab-docs" />,
     },
   ];
   // No beta workflow claims a dock slot, so the dock needs no reveal pass.
@@ -595,34 +572,13 @@ const Masthead = ({
               </div>
             </div>
           </div>
-          {currentTab === "docs" ? (
-            <div className="docs-mobile-toolbar">
-              <button
-                aria-controls="docs-menu-sheet"
-                aria-expanded={docsMenuOpen}
-                aria-haspopup="dialog"
-                className="docs-browse-trigger"
-                onClick={() => {
-                  setFindOpen(false);
-                  setMenuOpen(false);
-                  setDocsMenuMounted(true);
-                  setDocsMenuOpen((open) => !open);
-                }}
-                ref={docsMenuTriggerRef}
-                type="button"
-              >
-                {localizer.message("ui.docs.browse")}
-                <ChevronUp aria-hidden="true" />
-              </button>
-            </div>
-          ) : null}
           {/* Desktop: every destination the app has, named, in one column. */}
           <aside className="side-rail">
             <SideNav
               appearance={appearanceTiles("rail", true)}
               localizer={localizer}
               navLabel={navLabel}
-              sections={currentTab === "docs" ? docsSections() : sections}
+              sections={currentTab === "docs" ? docsSections : sections}
             />
           </aside>
         </div>
@@ -662,7 +618,7 @@ const Masthead = ({
         triggerRef={findTriggerRef}
       />
       {previewPhoneOverlay ? (
-        <span className="phone-overlay-runtime" data-sw={runtimeState} hidden={menuOpen || docsMenuOpen || findOpen}>
+        <span className="phone-overlay-runtime" data-sw={runtimeState} hidden={menuOpen || findOpen}>
           <StatusChip
             label={runtimeLabel}
             onOpenStatus={() => {
@@ -678,19 +634,17 @@ const Masthead = ({
       <PhoneDock
         appLabel={localizer.message("ui.tools.app")}
         current={currentTab}
-        menuLabel={localizer.message("ui.tools.tools")}
+        menuLabel={localizer.message("ui.tools.menu")}
         menuOpen={menuOpen}
         navLabel={navLabel}
         onOpenApp={() => {
           setFindOpen(false);
           setMenuOpen(false);
-          setDocsMenuOpen(false);
           onOpenSettings();
         }}
         onSelect={onSelectTab}
         onToggleMenu={() => {
           setFindOpen(false);
-          setDocsMenuOpen(false);
           onPreloadLog?.();
           if (menuOpen) setMenuOpen(false);
           else openTools();
@@ -700,19 +654,6 @@ const Masthead = ({
       />
       {/* The parser-time resolver runs here, after the identity slots exist. */}
       <span className="shell-identity" hidden />
-      {currentTab === "docs" ? (
-        <MenuSheet
-          documentation
-          appearance={null}
-          localizer={localizer}
-          onClose={closeDocsMenu}
-          open={docsMenuOpen}
-          opened={docsMenuMounted}
-          sections={docsSections(closeDocsMenu)}
-          toolOpen={false}
-          triggerRef={docsMenuTriggerRef}
-        />
-      ) : null}
       <MenuSheet
         appearance={null}
         localizer={localizer}

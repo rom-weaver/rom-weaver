@@ -231,62 +231,37 @@ test("Docs topic headings keep their width and wrapping when expanded", async ()
   mountWebappRoot({ initialView: "docs" });
   await expect.poll(() => document.querySelector(".side-nav .guide-nav")).toBeTruthy();
   await document.fonts.ready;
-  for (const [width, height, scope] of [
-    [1280, 1200, ".side-rail"],
-    [390, 844, "#docs-menu-sheet"],
-  ]) {
-    await page.viewport(width, height);
-    if (width < 1000) {
-      document.querySelector(".docs-browse-trigger").click();
-      await expect.poll(() => document.querySelector("#docs-menu-sheet")?.open).toBe(true);
-    }
-    const nav = document.querySelector(`${scope} .guide-nav`);
-    expect(nav.querySelectorAll(":scope > .guide-nav-list a")).toHaveLength(2);
-    expect(nav.querySelector(".guide-shelf-title")?.textContent).toBe("Browser guides");
-    const sizes = (headings) =>
-      headings.map((heading) => {
-        const bounds = heading.getBoundingClientRect();
-        return [bounds.width, bounds.height];
-      });
-    const checkHeadings = async (headings) => {
-      const before = sizes(headings);
-      for (const heading of headings) {
-        const wasOpen = heading.parentElement.open;
-        heading.click();
-        await expect.poll(() => heading.parentElement.open).toBe(!wasOpen);
-        expect(sizes(headings)).toEqual(before);
-        heading.click();
-        await expect.poll(() => heading.parentElement.open).toBe(wasOpen);
-      }
-    };
-    await checkHeadings([...nav.querySelectorAll(":scope > details > summary")]);
-    for (const branch of nav.querySelectorAll(".guide-branch")) {
-      branch.querySelector("summary").click();
-      await expect.poll(() => branch.open).toBe(true);
-      const branchHeading = branch.querySelector(".guide-shelf-title");
-      const topic = branch.querySelector(".guide-branch-topics summary");
-      const topicHeading = topic.querySelector(".guide-shelf-title");
-      expect(getComputedStyle(branchHeading).textTransform).toBe("uppercase");
-      expect(getComputedStyle(topicHeading).textTransform).toBe("none");
-      expect(getComputedStyle(branch.querySelector("summary")).backgroundColor).not.toBe(
-        getComputedStyle(topic).backgroundColor,
-      );
-      expect(getComputedStyle(topic, "::after").content).toBe('""');
-      expect(getComputedStyle(branch.querySelector("summary"), "::after").content).toBe('"−"');
-      await checkHeadings([...branch.querySelectorAll(".guide-branch-topics summary")]);
-      branch.querySelector("summary").click();
-      await expect.poll(() => branch.open).toBe(false);
-    }
+  await page.viewport(1280, 1200);
+  const nav = document.querySelector(".side-rail .guide-nav");
+  expect(nav.querySelectorAll(":scope > .guide-nav-list a")).toHaveLength(2);
+  expect(nav.querySelector(".guide-shelf-title")?.textContent).toBe("Walkthroughs");
+  // Shelf names read as sentence case, the same as the phone drawer rows.
+  expect(getComputedStyle(nav.querySelector(".guide-shelf-title")).textTransform).toBe("none");
+  expect(nav.querySelectorAll(".guide-branch")).toHaveLength(0);
+  const headings = [...nav.querySelectorAll(":scope > details > summary")];
+  const sizes = () =>
+    headings.map((heading) => {
+      const bounds = heading.getBoundingClientRect();
+      return [bounds.width, bounds.height];
+    });
+  const before = sizes();
+  for (const heading of headings) {
+    const wasOpen = heading.parentElement.open;
+    heading.click();
+    await expect.poll(() => heading.parentElement.open).toBe(!wasOpen);
+    expect(sizes()).toEqual(before);
+    heading.click();
+    await expect.poll(() => heading.parentElement.open).toBe(wasOpen);
   }
   await page.viewport(1280, 900);
 });
 
-test("mobile Docs keeps the workflow dock and owns a separate navigation dialog", async () => {
+test("mobile Docs docks one docs bar on the workflow dock and opens everything from it", async () => {
   await page.viewport(390, 844);
   mountWebappRoot({ initialView: "docs" });
-  await expect.poll(() => document.querySelector(".docs-browse-trigger")).toBeTruthy();
+  await expect.poll(() => document.querySelector(".docs-bar")).toBeTruthy();
   const dock = document.querySelector(".dock");
-  expect(dock).not.toBeNull();
+  const bar = document.querySelector(".docs-bar");
   expect([...dock.querySelectorAll(".dock-tab")].map((tab) => tab.textContent)).toEqual([
     "Apply",
     "Create",
@@ -294,58 +269,63 @@ test("mobile Docs keeps the workflow dock and owns a separate navigation dialog"
     "Test",
     "Controls",
   ]);
-  const trigger = document.querySelector(".docs-browse-trigger");
-  expect(document.querySelector(".docs-mobile-toolbar a")).toBeNull();
-  expect(getComputedStyle(trigger).position).toBe("fixed");
-  expect(trigger.getBoundingClientRect().height).toBe(36);
-  expect(trigger.getBoundingClientRect().bottom).toBeLessThanOrEqual(844);
-  expect(trigger.getBoundingClientRect().bottom).toBeLessThanOrEqual(dock.getBoundingClientRect().top);
-  expect(trigger.getBoundingClientRect().left).toBeLessThan(30);
-  expect(trigger.getAttribute("aria-haspopup")).toBe("dialog");
-  trigger.focus();
-  trigger.click();
-  await expect.poll(() => document.querySelector("#docs-menu-sheet:modal")).toBeTruthy();
-  const panel = document.querySelector("#docs-menu-sheet");
+  // Flush on the dock: part of the bottom chrome, never floating over the article.
+  expect(getComputedStyle(bar).position).toBe("fixed");
+  expect(Math.abs(bar.getBoundingClientRect().bottom - dock.getBoundingClientRect().top)).toBeLessThanOrEqual(1);
+  expect(bar.getBoundingClientRect().height).toBeLessThanOrEqual(60);
+  expect(document.querySelector(".docs-browse-trigger, .docs-trail, #docs-menu-sheet")).toBeNull();
+
+  const open = bar.querySelector(".docs-bar-open");
+  const drawer = document.querySelector("#docs-drawer");
+  expect(open.textContent).toBe("Docs");
+  open.focus();
+  open.click();
+  await expect.poll(() => drawer.hidden).toBe(false);
+  expect(open.textContent).toBe("Close");
+  // Polled: the drawer rises into place.
+  await expect
+    .poll(() => drawer.getBoundingClientRect().bottom - bar.getBoundingClientRect().top)
+    .toBeLessThanOrEqual(1);
+  expect(drawer.querySelector(".docs-row").getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  expect(drawer.querySelector('[aria-pressed="true"]')?.textContent).toBe("Browser");
+  drawer.querySelector(".docs-row").click();
+  await expect.poll(() => drawer.querySelector(".docs-drawer-back")).toBeTruthy();
+  drawer.querySelector(".docs-drawer-back").click();
+  await expect.poll(() => drawer.querySelector(".docs-drawer-back")).toBeNull();
+  // The bar stays above the scrim, so the same button closes the drawer.
+  open.click();
+  await expect.poll(() => drawer.hidden).toBe(true);
+  await expect.poll(() => document.activeElement).toBe(open);
+
+  const where = bar.querySelector(".docs-bar-where");
+  if (!where.disabled) {
+    const parts = document.querySelector("#docs-parts");
+    where.click();
+    await expect.poll(() => parts.hidden).toBe(false);
+    await expect
+      .poll(() => parts.getBoundingClientRect().bottom - bar.getBoundingClientRect().top)
+      .toBeLessThanOrEqual(1);
+    document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+    await expect.poll(() => parts.hidden).toBe(true);
+    await expect.poll(() => document.activeElement).toBe(where);
+  }
+
+  open.click();
+  await expect.poll(() => drawer.hidden).toBe(false);
+  const menu = document.querySelector(".dock-menu");
+  menu.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+  menu.click();
   const globalMenu = document.querySelector("#menu-sheet");
-  expect(globalMenu.hidden).toBe(true);
-  expect(document.querySelectorAll("#menu-sheet")).toHaveLength(1);
-  expect(document.querySelectorAll("#docs-menu-sheet")).toHaveLength(1);
-  const close = panel.querySelector('[aria-label="Close navigation"]');
-  expect(document.activeElement).toBe(close);
-  expect(panel.querySelectorAll(".nav-row")).toHaveLength(1);
-  expect(panel.querySelector(".nav-row")?.textContent).toBe("Back to tools");
-  expect(panel.querySelectorAll(".guide-nav a")).toHaveLength(63);
-  expect(panel.querySelector('a[href="/docs/checksum-roms-browser"]')?.getAttribute("aria-label")).toBe(
-    "Checksum files (browser)",
-  );
-  expect(panel.getBoundingClientRect().height).toBeLessThanOrEqual(844 * 0.6 + 1);
-  expect(panel.getBoundingClientRect().bottom).toBeLessThan(dock.getBoundingClientRect().top);
-  const body = panel.querySelector(".menu-sheet-body");
-  expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
-  expect(panel.querySelector(".guide-shelf > summary").getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
-  close.click();
-  await expect.poll(() => panel.open).toBe(false);
-  await expect.poll(() => document.activeElement).toBe(trigger);
-  document.querySelector(".dock-menu").focus();
-  document.querySelector(".dock-menu").click();
   await expect.poll(() => globalMenu.hidden).toBe(false);
-  expect(panel.open).toBe(false);
+  expect(drawer.hidden).toBe(true);
   expect(navRow("Docs", "#menu-sheet").closest(".nav-group")).toBe(navRow("Home", "#menu-sheet").closest(".nav-group"));
   expect(globalMenu.querySelector(".guide-nav")).toBeNull();
   document.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
   await expect.poll(() => globalMenu.hidden).toBe(true);
-  await expect.poll(() => document.activeElement).toBe(document.querySelector(".dock-menu"));
-  document.querySelector(".dock-menu").click();
-  await expect.poll(() => document.querySelector("#menu-sheet .find-palette")).toBeTruthy();
-  trigger.click();
-  await expect.poll(() => panel.open).toBe(true);
-  panel.dispatchEvent(new Event("cancel", { cancelable: true }));
-  await expect.poll(() => panel.open).toBe(false);
-  await expect.poll(() => document.activeElement).toBe(trigger);
-  trigger.click();
-  await expect.poll(() => panel.open).toBe(true);
+
   await page.viewport(1000, 844);
-  await expect.poll(() => panel.open).toBe(false);
+  // Desktop keeps the rails: the bar's layer leaves the layout entirely.
+  await expect.poll(() => bar.getClientRects().length).toBe(0);
   expect(document.querySelector('.side-nav a[href="/apply-patches"]')?.textContent).toBe("Back to tools");
   await page.viewport(1280, 900);
 });
@@ -776,7 +756,7 @@ test("a phone console swipe closes past a quarter of the width and springs back 
   await page.viewport(1280, 900);
 });
 
-test("the phone header carries the desktop tools, and Tools carries every destination", async () => {
+test("the phone header carries the desktop tools, and Menu carries every destination", async () => {
   await page.viewport(390, 844);
   mountWebappRoot();
 
@@ -841,7 +821,7 @@ test("the phone header carries the desktop tools, and Tools carries every destin
   await page.viewport(1280, 900);
 });
 
-test("the Tools sheet stays on screen and scrolls on a short screen", async () => {
+test("the Menu sheet stays on screen and scrolls on a short screen", async () => {
   // Five tiles across fit every row at 320x480, so the overflow case needs a shorter screen.
   await page.viewport(320, 400);
   mountWebappRoot({ settings: { ...getDefaultSettings(), betaToolsEnabled: true } });

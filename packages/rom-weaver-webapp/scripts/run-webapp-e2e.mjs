@@ -581,6 +581,28 @@ export const checkCssCoverage = (entries) => {
   process.stdout.write(`PASS CSS coverage: ${label}\n`);
 };
 
+// Samples MUST stay pending during loading audits: staging them can move
+// controls while axe measures their clickable bounds.
+const scanGuidedLoading = async (page, samplePattern, label, start) => {
+  const sampleFetch = Promise.withResolvers();
+  const pendingRequests = [];
+  const holdSample = (route) => {
+    const continued = sampleFetch.promise.then(() => route.continue());
+    pendingRequests.push(continued);
+    return continued;
+  };
+  await page.route(samplePattern, holdSample);
+  try {
+    await start();
+    await page.locator('.sample-tutorial-dialog[data-loading="true"]').waitFor({ state: "visible" });
+    await scanLiveApp(page, label);
+  } finally {
+    sampleFetch.resolve();
+    await Promise.all(pendingRequests);
+    await page.unroute(samplePattern, holdSample);
+  }
+};
+
 const runAccessibilityAudit = async (createContext, baseUrl) => {
   // Reduced motion keeps the guided tour's re-reveal scrolls instant. Its
   // smooth `scrollBy` otherwise glides the page while Playwright is hovering
@@ -715,7 +737,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.goto(new URL("apply", baseUrl).href, { waitUntil: "domcontentloaded" });
     await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
 
-    // On a mobile Docs reload the trail is already in the prerendered shell.
+    // On a mobile Docs reload the docs bar is already in the prerendered shell.
     // Its fixed position must be viewport-relative before hydration finishes;
     // WebKit otherwise treats the workflow body's entrance translate as its
     // containing block and leaves the bar below the article.
@@ -748,9 +770,9 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     if (guideChunkPattern.test(docsReloadHtml)) {
       throw new Error("Docs route document preloads the guide chunk whose article it already carries");
     }
-    const docsTrail = page.locator(".docs-trail");
-    await docsTrail.waitFor({ state: "attached" });
-    const trailGeometry = await docsTrail.evaluate((element) => {
+    const docsBar = page.locator(".docs-bar");
+    await docsBar.waitFor({ state: "attached" });
+    const trailGeometry = await docsBar.evaluate((element) => {
       const rect = element.getBoundingClientRect();
       return {
         bottom: rect.bottom,
@@ -761,22 +783,21 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     });
     const bottomGap = trailGeometry.viewportHeight - trailGeometry.bottom;
     if (trailGeometry.position !== "fixed" || bottomGap < -1 || bottomGap > 128 || trailGeometry.height <= 0) {
-      throw new Error(`Mobile Docs trail is not fixed to the viewport on reload: ${JSON.stringify(trailGeometry)}`);
+      throw new Error(`Mobile Docs bar is not fixed to the viewport on reload: ${JSON.stringify(trailGeometry)}`);
     }
     await page.locator(".docs-article h1").waitFor({ state: "visible" });
     await page.locator(".dock").waitFor({ state: "visible" });
     await page.locator(".dock-menu").waitFor({ state: "visible" });
     await page.locator(".dock-app").waitFor({ state: "visible" });
-    await page.getByRole("button", { name: "Browse docs" }).waitFor({ state: "visible" });
-    await page.getByRole("button", { name: "Browse docs" }).click();
-    await page.locator("#docs-menu-sheet:visible").waitFor({ state: "visible" });
-    await page
-      .locator("#docs-menu-sheet")
-      .getByRole("button", { name: "Close navigation" })
-      .waitFor({ state: "visible" });
-    await page.locator("#docs-menu-sheet").getByRole("link", { name: "Back to tools" }).waitFor({ state: "visible" });
-    if (await page.locator("#menu-sheet:visible").count()) throw new Error("Both mobile navigation dialogs are open");
-    await page.locator("#docs-menu-sheet").getByRole("button", { name: "Close navigation" }).click();
+    const docsOpen = page.locator(".docs-bar-open");
+    await docsOpen.waitFor({ state: "visible" });
+    await docsOpen.click();
+    await page.locator("#docs-drawer:visible").waitFor({ state: "visible" });
+    await page.locator("#docs-drawer .docs-row.is-here").waitFor({ state: "visible" });
+    if (await page.locator("#menu-sheet:visible").count()) throw new Error("Both mobile navigation layers are open");
+    // The same button closes the drawer, so it MUST stay above the drawer's scrim.
+    await page.locator(".docs-bar-open", { hasText: "Close" }).click();
+    await page.locator("#docs-drawer").waitFor({ state: "hidden" });
     page.off("request", recordGuideChunkRequest);
     if (guideChunkRequests.length > 0) {
       throw new Error(`Docs route refetched the article it was served: ${guideChunkRequests.join(", ")}`);
@@ -919,10 +940,10 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await onboardingChip.click();
     const guidedApply = page.getByRole("link", { name: "Start guided Apply" });
     await guidedApply.waitFor({ state: "visible", timeout: 60_000 });
-    await guidedApply.click();
     const tutorial = page.locator(".sample-tutorial-dialog");
-    await tutorial.waitFor({ state: "visible" });
-    await scanLiveApp(page, "guided Apply loading (desktop, light)");
+    await scanGuidedLoading(page, "**/first-weave.zip", "guided Apply loading (desktop, light)", () =>
+      guidedApply.click(),
+    );
     for (let step = 1; step <= 4; step += 1) {
       await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
       await scanVariants(`guided Apply ${step}/4`);
@@ -940,11 +961,11 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.locator("#rom-weaver-button-apply").waitFor({ state: "visible", timeout: 60_000 });
     await page.locator("#rom-weaver-button-test-emulator").waitFor({ state: "visible", timeout: 60_000 });
 
-    await page.goto(new URL("bundle?guide=bundle", baseUrl).href, { waitUntil: "domcontentloaded" });
-    await page.locator("#rom-weaver-input-file-unified-bundle").waitFor({ state: "attached" });
-    await installAuditTools();
-    await tutorial.waitFor({ state: "visible" });
-    await scanLiveApp(page, "guided Bundle loading (desktop, light)");
+    await scanGuidedLoading(page, "**/first-weave.zip", "guided Bundle loading (desktop, light)", async () => {
+      await page.goto(new URL("bundle?guide=bundle", baseUrl).href, { waitUntil: "domcontentloaded" });
+      await page.locator("#rom-weaver-input-file-unified-bundle").waitFor({ state: "attached" });
+      await installAuditTools();
+    });
     for (let step = 1; step <= 4; step += 1) {
       await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
       await scanVariants(`guided Bundle ${step}/4`);
@@ -1016,9 +1037,12 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await createOnboardingChip.click();
     const guidedCreate = page.getByRole("link", { name: "Start guided Create" });
     await guidedCreate.waitFor({ state: "visible" });
-    await guidedCreate.click();
-    await tutorial.waitFor({ state: "visible" });
-    await scanLiveApp(page, "guided Create loading (desktop, light)");
+    await scanGuidedLoading(
+      page,
+      /\/(?:hello-world|modified-world)\.nes$/,
+      "guided Create loading (desktop, light)",
+      () => guidedCreate.click(),
+    );
     for (let step = 1; step <= 4; step += 1) {
       await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
       await scanVariants(`guided Create ${step}/4`);

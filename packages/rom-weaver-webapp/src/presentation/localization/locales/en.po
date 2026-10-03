@@ -215,8 +215,23 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-#~ msgid "ui.tools.menu"
-#~ msgstr "Menu"
+#~ msgid "ui.docs.browse"
+#~ msgstr "Browse docs"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.docs.closeNavigation"
+#~ msgstr "Close navigation"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.docs.title"
+#~ msgstr "Documentation"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.docs.navigation"
+#~ msgstr "Documentation navigation"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -695,11 +710,6 @@ msgstr "Browse"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.docs.browse"
-msgstr "Browse docs"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.status.envWeb"
 msgstr "Browser tab"
 
@@ -1005,11 +1015,6 @@ msgstr "Close"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.docs.closeNavigation"
-msgstr "Close navigation"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.settings.codec"
 msgstr "Codec"
 
@@ -1282,16 +1287,6 @@ msgstr "Dismiss"
 #: src/presentation/localization/messages.ts
 msgid "ui.nav.docs"
 msgstr "Docs"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.docs.title"
-msgstr "Documentation"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.docs.navigation"
-msgstr "Documentation navigation"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2127,6 +2122,11 @@ msgstr "matches your ROM ({variant})"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.condition.unsupported_media_profile"
 msgstr "Media profile not supported"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.menu"
+msgstr "Menu"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

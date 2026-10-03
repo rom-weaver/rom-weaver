@@ -215,8 +215,23 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-#~ msgid "ui.tools.menu"
-#~ msgstr "Menü"
+#~ msgid "ui.docs.browse"
+#~ msgstr "Doku durchsuchen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.docs.closeNavigation"
+#~ msgstr "Navigation schließen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.docs.title"
+#~ msgstr "Dokumentation"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.docs.navigation"
+#~ msgstr "Dokumentationsnavigation"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -695,11 +710,6 @@ msgstr "Durchsuchen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.docs.browse"
-msgstr "Doku durchsuchen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.status.envWeb"
 msgstr "Browser-Tab"
 
@@ -1005,11 +1015,6 @@ msgstr "Schließen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.docs.closeNavigation"
-msgstr "Navigation schließen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.settings.codec"
 msgstr "Codec"
 
@@ -1282,16 +1287,6 @@ msgstr "Verwerfen"
 #: src/presentation/localization/messages.ts
 msgid "ui.nav.docs"
 msgstr "Doku"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.docs.title"
-msgstr "Dokumentation"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.docs.navigation"
-msgstr "Dokumentationsnavigation"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2127,6 +2122,11 @@ msgstr "passt zu deiner ROM ({variant})"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.condition.unsupported_media_profile"
 msgstr "Medienprofil nicht unterstützt"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.menu"
+msgstr "Menü"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

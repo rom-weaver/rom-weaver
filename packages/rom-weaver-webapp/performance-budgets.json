@@ -50,15 +50,15 @@
         "maxBrotliBytes": 11500
       },
       {
-        "_comment": "Raised for the patches-step cheat card layout and database picker added in the apply workflow.",
+        "_comment": "Raised for the patches-step cheat card layout and database picker added in the apply workflow. The mobile docs navigation measures 258,432 raw CSS bytes and 41,009 Brotli bytes; its approved limits are 260,000 and 42,000 bytes.",
         "name": "CSS",
         "directory": "assets",
         "extension": ".css",
         "requireBrotliMinBytes": 1024,
         "expectedRawBytes": 245000,
-        "maxRawBytes": 255000,
+        "maxRawBytes": 260000,
         "expectedBrotliBytes": 38600,
-        "maxBrotliBytes": 40100
+        "maxBrotliBytes": 42000
       },
       {
         "_comment": "The WASM module MUST include the 70 compiled save profiles. After sharing field constructors, the measured build uses 9,002,546 raw bytes and 2,249,483 Brotli bytes.",
