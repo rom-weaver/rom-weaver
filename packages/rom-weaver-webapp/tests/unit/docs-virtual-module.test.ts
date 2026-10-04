@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { docsVirtualModule } from "../../scripts/docs-virtual-module.mjs";
+import { createDocsSearchIndex, searchDocs } from "../../src/webapp/docs-search.mjs";
 import { DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
 
 const METADATA_ID = "\0virtual:rom-weaver-docs";
@@ -56,5 +57,47 @@ describe("docs virtual module escaping", () => {
     const source = generatePageSource(html);
     const loaded = await import(`data:text/javascript,${encodeURIComponent(source)}`);
     expect(loaded.html).toBe(html);
+  });
+});
+
+describe("docs virtual search module", () => {
+  const sampleRoute = {
+    description: "Patch a ROM safely",
+    html: '<h1>Guide</h1><p>Start here.</p><h2 id="checks">Checks</h2><p>Verify CRC32 &amp; SHA-256 before applying.</p>',
+    label: "Guide",
+    sections: [{ id: "checks", label: "Checks" }],
+    slug: "docs/guide",
+    title: "Patch guide",
+  };
+  const routes = [sampleRoute];
+
+  const sourceFor = (input = routes) =>
+    docsVirtualModule(input).load.handler.call(null, "\0virtual:rom-weaver-docs-search") as string;
+
+  it("reduces the generated search payload by at least ten percent", () => {
+    const manyRoutes = Array.from({ length: 100 }, (_, index) => ({ ...sampleRoute, slug: `docs/guide-${index}` }));
+    const plain = JSON.stringify(
+      Object.fromEntries(createDocsSearchIndex(manyRoutes).map((r) => [r.slug, r.searchEntries])),
+    );
+    expect(Buffer.byteLength(sourceFor(manyRoutes))).toBeLessThan(Buffer.byteLength(plain) * 0.9);
+  });
+
+  it("preserves all entries and search results after loading", async () => {
+    const loaded = await import(`data:text/javascript,${encodeURIComponent(sourceFor())}`);
+    const index = createDocsSearchIndex(routes);
+    expect(loaded.SEARCH_ENTRIES).toEqual(Object.fromEntries(index.map((r) => [r.slug, r.searchEntries])));
+    const restored = index.map((r) => ({ ...r, searchEntries: loaded.SEARCH_ENTRIES[r.slug] }));
+    expect(searchDocs(restored, "CRC32")).toEqual(searchDocs(index, "CRC32"));
+  });
+
+  it("preserves empty routes and escaped Unicode text", async () => {
+    const special = [{ ...sampleRoute, title: 'Quotes " <script> \u2028 \u2029 日本語' }];
+    for (const input of [[], special]) {
+      const source = sourceFor(input);
+      expect(source).not.toContain("<script>");
+      const loaded = await import(`data:text/javascript,${encodeURIComponent(source)}`);
+      const index = createDocsSearchIndex(input);
+      expect(loaded.SEARCH_ENTRIES).toEqual(Object.fromEntries(index.map((r) => [r.slug, r.searchEntries])));
+    }
   });
 });
