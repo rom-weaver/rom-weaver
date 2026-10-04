@@ -79,25 +79,20 @@ fn address_advances_with_lba() {
 }
 
 #[test]
-fn high_lba_minute_field_stays_valid_bcd() {
-    // A full-size GD-ROM high-density track runs past 99 minutes of MSF address
-    // (~LBA 445350). The single-byte minute field wraps modulo 100 to stay
-    // valid packed BCD; verify no nibble escapes 0..=9 and the EDC stays
-    // self-consistent over the encoded address.
+fn high_lba_minutes_use_extended_bcd() {
     let user = [0u8; USER_DATA_SIZE];
-    let lba = 549_000u32; // ~122 minutes -> minute wraps to 22
-    let sector = encode_mode1_sector(lba, &user);
-
-    for &b in &sector[12..15] {
-        assert!(b >> 4 <= 9, "high BCD nibble out of range: {b:#04x}");
-        assert!(b & 0x0F <= 9, "low BCD nibble out of range: {b:#04x}");
+    for (lba, address) in [
+        (449_849, [0x99, 0x59, 0x74]),
+        (449_850, [0xA0, 0x00, 0x00]),
+        (494_849, [0xA9, 0x59, 0x74]),
+        (494_850, [0xB0, 0x00, 0x00]),
+        (549_000, [0xC2, 0x02, 0x00]),
+    ] {
+        let sector = encode_mode1_sector(lba, &user);
+        assert_eq!(&sector[12..15], &address, "LBA {lba}");
+        let edc = reference_edc(&sector[0..2064]);
+        assert_eq!(&sector[2064..2068], &edc.to_le_bytes());
     }
-    // Minute wraps modulo 100: 122 -> 22 -> packed BCD 0x22.
-    assert_eq!(sector[12], 0x22);
-
-    // EDC over bytes 0..2064 (which include the address) stays self-consistent.
-    let edc = reference_edc(&sector[0..2064]);
-    assert_eq!(&sector[2064..2068], &edc.to_le_bytes());
 }
 
 #[test]

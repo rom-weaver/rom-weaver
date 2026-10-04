@@ -139,15 +139,15 @@ fn to_bcd(v: u8) -> u8 {
 
 /// Compute the 3-byte BCD MIN/SEC/FRAME address for an absolute `lba`.
 ///
-/// MSF minutes wrap modulo 100 because the field is one packed-BCD byte. EDC/ECC
-/// covers the resulting address bytes.
+/// GD-ROM minutes MUST continue into the high nibbles A..F beyond 99 minutes
+/// (100 encodes as 0xA0). EDC/ECC covers the resulting address bytes.
 fn address_bcd(lba: u32) -> [u8; 3] {
     let total_frames = lba.wrapping_add(ADDRESS_LBA_BIAS);
     let minute = total_frames / (75 * 60);
     let second = (total_frames / 75) % 60;
     let frame = total_frames % 75;
     [
-        to_bcd((minute % 100) as u8),
+        to_bcd(minute as u8),
         to_bcd(second as u8),
         to_bcd(frame as u8),
     ]
