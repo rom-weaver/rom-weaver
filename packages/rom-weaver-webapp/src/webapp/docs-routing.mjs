@@ -444,6 +444,7 @@ const HOW_TO_NAVIGATION_GROUPS = Object.freeze({
   "docs/install": "Setup & offline",
   "docs/search-rom-checksums": "ROM checks",
   "docs/test-roms": "ROM checks",
+  "docs/test-roms-cli": "ROM checks",
   "docs/trim-roms-browser": "ROM checks",
   "docs/undo-ppf-browser": "Patching & weaves",
   "docs/use-cheats": "Cheats",

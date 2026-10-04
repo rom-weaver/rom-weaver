@@ -311,6 +311,13 @@
           ]
         }
       ],
+      "patches": [
+        {
+          "path": "libretro/libretro.c",
+          "find": "#include <stdlib.h>",
+          "replace": "#ifdef __MINGW32__\n#define _CRT_RAND_S\n#endif\n#include <stdlib.h>"
+        }
+      ],
       "output": "mupen64plus_next_libretro.so",
       "licenses": [
         "LICENSE",

@@ -87,6 +87,19 @@ test("headless macOS source patches remove references to unavailable GUI drivers
   );
 });
 
+test("Mupen64Plus enables rand_s declarations for MinGW builds", () => {
+  const core = sources.cores.find(({ id }) => id === "mupen64plus_next");
+  const patch = core?.patches?.find(({ path }) => path === "libretro/libretro.c");
+  assert.ok(patch);
+
+  const source = `#include <stdio.h>\n${patch.find}\n`;
+  const patched = source.replace(patch.find, patch.replace);
+  assert.equal(
+    patched,
+    "#include <stdio.h>\n#ifdef __MINGW32__\n#define _CRT_RAND_S\n#endif\n#include <stdlib.h>\n",
+  );
+});
+
 test("PPSSPP uses each upstream platform directory and native architecture", () => {
   const ppsspp = sources.cores.find(({ id }) => id === "ppsspp");
   for (const [name, expected] of [

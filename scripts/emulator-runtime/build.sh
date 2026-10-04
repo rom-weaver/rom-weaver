@@ -24,22 +24,22 @@ case $(uname -s):$(uname -m) in
   Linux:x86_64)
     platform=linux-x64-gnu; cc=cc; cxx=c++; make_command='make'
     tar_command=tar; sha256_command=sha256sum; executable=retroarch
-    core_extension=so
+    core_extension=so; fceumm_platform=unix
     ;;
   Darwin:x86_64)
     platform=darwin-x64; cc=clang; cxx=clang++; make_command=gmake
     tar_command=gtar; sha256_command=gsha256sum; executable=retroarch
-    core_extension=dylib
+    core_extension=dylib; fceumm_platform=osx
     ;;
   Darwin:arm64)
     platform=darwin-arm64; cc=clang; cxx=clang++; make_command=gmake
     tar_command=gtar; sha256_command=gsha256sum; executable=retroarch
-    core_extension=dylib
+    core_extension=dylib; fceumm_platform=osx
     ;;
   MINGW*:x86_64|MSYS_NT*:x86_64)
     platform=win32-x64; cc=gcc; cxx=g++; make_command='make'
     tar_command=tar; sha256_command=sha256sum; executable=retroarch.exe
-    core_extension=dll
+    core_extension=dll; fceumm_platform=win
     configure_host=x86_64-w64-mingw32
     configure_windres=windres
     retroarch_ldflags="$retroarch_ldflags -lole32 -lcomdlg32 -lgdi32"
@@ -249,7 +249,7 @@ HAVE_COCOA=no HAVE_COCOA_METAL=no HAVE_CORELOCATION=no CC="$cc" CXX="$cxx" \
 
 cd "$build_dir/src/fceumm"
 "$make_command" -f Makefile.libretro -j"${JOBS:-2}" \
-  "platform=$(case "$platform" in linux-*) echo unix;; darwin-*) echo osx;; win32-*) echo win;; esac)" \
+  "platform=$fceumm_platform" \
   "CC=$cc" "CXX=$cxx"
 
 install -m 0755 "$build_dir/src/retroarch/$executable" \
