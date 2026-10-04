@@ -183,6 +183,19 @@ test("PPSSPP enables getauxval only for its Unix target", () => {
   });
 });
 
+test("PPSSPP builds Linux hardware capabilities only on supported targets", () => {
+  const ppsspp = sources.cores.find(({ id }) => id === "ppsspp");
+  const patch = ppsspp.patches.find(
+    ({ path, find }) => path === "libretro/Makefile.common" && find.includes("hwcaps.c"),
+  );
+  assert.deepEqual(patch, {
+    path: "libretro/Makefile.common",
+    find: "ifneq ($(PLATFORM_EXT), win32)\nSOURCES_C += \\\n\t$(EXTDIR)/cpu_features/src/hwcaps.c\nendif",
+    replace:
+      "ifeq ($(platform),unix)\nSOURCES_C += \\\n\t$(EXTDIR)/cpu_features/src/hwcaps.c\nelse ifeq ($(PLATFORM_EXT), android)\nSOURCES_C += \\\n\t$(EXTDIR)/cpu_features/src/hwcaps.c\nendif",
+  });
+});
+
 test("mGBA avoids untracked native dependencies outside Linux", () => {
   const mgba = sources.cores.find(({ id }) => id === "mgba");
   for (const platform of ["darwin-x64", "darwin-arm64", "win32-x64"]) {
