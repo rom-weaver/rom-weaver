@@ -1207,8 +1207,10 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
 }
 /* The view step lifts the whole panel heading: it is an absolute z-index layer,
    so a lift on the switch alone would stay trapped under the scrim. The heading
-   keeps its absolute placement, its other controls step back, and the switch -
-   bare text with no box - gets a ring that marks it without moving the row. */
+   keeps its absolute placement and its other controls step back. The switch is
+   bare text with no box, so lifted alone it would still show the dimmed,
+   blurred page through itself and read as disabled: it takes an opaque plate,
+   full-strength text, and a ring that marks it without moving the row. */
 .rw-app .workflow-panel-head.sample-tutorial-lift {
   position: absolute !important;
 }
@@ -1216,10 +1218,13 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   opacity: 0.35;
 }
 .rw-app .workflow-panel-head.sample-tutorial-lift .panel-view-toggle {
+  color: var(--ink);
+  background: var(--plate);
   border-radius: var(--r-s);
   box-shadow:
     0 0 0 6px var(--plate),
-    0 0 0 9px var(--thread);
+    0 0 0 9px var(--thread),
+    0 0 22px 6px color-mix(in oklab, var(--thread) 34%, transparent);
 }
 .rw-app .sample-tutorial-actions .sample-tutorial-end-hint {
   min-width: 0;

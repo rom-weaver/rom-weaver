@@ -127,6 +127,20 @@ const getViewTutorialStep = (localizer: ReturnType<typeof useUiLocalizer>, targe
   view: true,
 });
 
+/**
+ * The lifted control that belongs to the target's own workbench. Every visited
+ * workflow panel stays mounted (hidden), each with its own heading and switch,
+ * so a document-wide lookup can land on a hidden panel's copy: the nearest
+ * ancestor of the target that holds a match is the one the step means.
+ */
+const findLift = (target: HTMLElement, selector: string) => {
+  for (let scope = target.parentElement; scope; scope = scope.parentElement) {
+    const match = scope.querySelector<HTMLElement>(selector);
+    if (match) return match;
+  }
+  return null;
+};
+
 /** Step numbers in the workbench's own 0x01 notation. */
 const hexStep = (index: number) => `0x${(index + 1).toString(16).toUpperCase().padStart(2, "0")}`;
 
@@ -257,15 +271,19 @@ const guideTopLimit = () =>
  * viewport anchors from its top, so the card lands beside the header the step
  * is describing instead of hundreds of pixels below it - and when the pair
  * cannot fit at all, keeping the row's top on screen matters more than its tail.
+ * `below` pins the card under the row whatever its height: a step whose lifted
+ * control sits above the row would otherwise get the card dropped onto that
+ * control - the one the step asks the reader to use - once the row grows.
  */
-const shouldPlaceAbove = (rowHeight: number, prefer: "bottom" | "top") =>
-  prefer === "top" || rowHeight > window.innerHeight * GUIDE_TALL_ROW_RATIO;
+type GuideSide = "below" | "bottom" | "top";
+const shouldPlaceAbove = (rowHeight: number, prefer: GuideSide) =>
+  prefer === "top" || (prefer === "bottom" && rowHeight > window.innerHeight * GUIDE_TALL_ROW_RATIO);
 
 /**
  * Places the guide card against the row it describes, horizontally centred on
  * it and always kept inside the viewport.
  */
-const anchorToTarget = (rect: GuideRect, dialog: HTMLElement, prefer: "bottom" | "top") => {
+const anchorToTarget = (rect: GuideRect, dialog: HTMLElement, prefer: GuideSide) => {
   const { height, width } = dialog.getBoundingClientRect();
   const above = rect.top - GUIDE_GAP - height;
   const below = rect.bottom + GUIDE_GAP;
@@ -275,7 +293,7 @@ const anchorToTarget = (rect: GuideRect, dialog: HTMLElement, prefer: "bottom" |
   // can scroll it anywhere afterwards - take the other side rather than clamp
   // the card back over the row.
   const preferred = shouldPlaceAbove(rect.height, prefer);
-  const placeAbove = preferred ? fitsAbove || !fitsBelow : !(fitsBelow || !fitsAbove);
+  const placeAbove = prefer !== "below" && (preferred ? fitsAbove || !fitsBelow : !(fitsBelow || !fitsAbove));
   const top = placeAbove ? above : below;
   return {
     left: clampWithin(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - GUIDE_MARGIN),
@@ -675,7 +693,7 @@ const SampleTutorial = ({
         // The swap control lives between two rows, so no single target can hold
         // it. Lift its row, not the button: .swap-row sets a z-index of its own,
         // so a lift on the button would be scoped inside that stacking context.
-        lifted = document.querySelector<HTMLElement>(stepLift);
+        lifted = findLift(target, stepLift);
         lifted?.classList.add("sample-tutorial-lift");
       }
       if (stepCta) {
@@ -755,7 +773,12 @@ const SampleTutorial = ({
       if (!stepTarget) arrive();
       return;
     }
-    const prefer = stepPlacement ?? "bottom";
+    // A control lifted above the row keeps the card below it, never over it.
+    const liftedAbove = stepLift ? findLift(targetEl, stepLift)?.getBoundingClientRect() : undefined;
+    const prefer: GuideSide =
+      liftedAbove?.height && liftedAbove.bottom <= targetEl.getBoundingClientRect().top
+        ? "below"
+        : (stepPlacement ?? "bottom");
     const desktop = window.matchMedia(GUIDE_ANCHOR_QUERY);
     const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
     let settle = 0;
@@ -820,7 +843,7 @@ const SampleTutorial = ({
       const rect = targetEl.getBoundingClientRect();
       // The lifted control is part of the step - the view step's switch sits in
       // the panel heading above the row - so the reveal keeps it in view too.
-      const lifted = stepLift ? document.querySelector(stepLift)?.getBoundingClientRect() : undefined;
+      const lifted = stepLift ? findLift(targetEl, stepLift)?.getBoundingClientRect() : undefined;
       const reveal = unionRect(rect, lifted);
       const placeAbove = shouldPlaceAbove(rect.height, prefer);
       let top = 0;
@@ -828,12 +851,14 @@ const SampleTutorial = ({
       else if (!pairInView(reveal, dialog, placeAbove)) {
         top = scrollDeltaForPair(reveal, dialog, placeAbove);
         // When the lifted control, the row and the card cannot all fit, the
-        // row and its card win: scroll on until the card below clears the
-        // viewport floor, so it is never clamped back over the row.
+        // card below gets as much room as scrolling can give it without
+        // pushing the lifted control - the one the step asks the reader to
+        // use - or the row's top off the screen. Whatever is still short is
+        // the card overlapping the row's tail, never the control.
         if (!placeAbove) {
           const floor = window.innerHeight - GUIDE_MARGIN;
           const cardBottom = rect.bottom + GUIDE_GAP + dialog.getBoundingClientRect().height;
-          if (cardBottom - floor <= rect.top - guideTopLimit()) top = Math.max(top, cardBottom - floor);
+          top = Math.max(top, Math.min(cardBottom - floor, reveal.top - guideTopLimit()));
         }
       }
       // The page cannot scroll past either end, and a card placed for a scroll

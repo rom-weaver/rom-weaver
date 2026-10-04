@@ -549,6 +549,52 @@ describe("sample tutorial step card", () => {
     expect(screen.getByText(/Switch Detailed off/)).toBeTruthy();
   });
 
+  it("lifts the switch in the target's own panel, not a hidden panel's earlier copy", async () => {
+    // Visited workflows stay mounted but hidden, each with its own heading -
+    // a document-wide lookup would light up the first one, which is not on screen.
+    const ViewOnly = () => {
+      const localizer = useUiLocalizer();
+      return (
+        <SampleTutorial
+          loadingBody="Loading."
+          onClose={vi.fn()}
+          ready
+          steps={[getViewTutorialStep(localizer, "#tutorial-first")]}
+        />
+      );
+    };
+    render(
+      <RomWeaverSettingsProvider settings={{ detailedViewEnabled: false }}>
+        <div className="rw-app">
+          <section hidden id="panel-hidden">
+            <div className="workflow-panel-head">
+              <label className="panel-view-toggle">
+                <input type="checkbox" />
+                <span>Detailed</span>
+              </label>
+            </div>
+          </section>
+          <section id="panel-shown">
+            <div className="workflow-panel-head">
+              <label className="panel-view-toggle">
+                <input type="checkbox" />
+                <span>Detailed</span>
+              </label>
+            </div>
+            <TutorialSection id="tutorial-first" label="First drawer" />
+          </section>
+          <ViewOnly />
+        </div>
+      </RomWeaverSettingsProvider>,
+    );
+
+    const shown = document.querySelector("#panel-shown .workflow-panel-head") as HTMLElement;
+    await waitFor(() => expect(shown.classList.contains("sample-tutorial-lift")).toBe(true));
+    expect(
+      document.querySelector("#panel-hidden .workflow-panel-head")?.classList.contains("sample-tutorial-lift"),
+    ).toBe(false);
+  });
+
   it("leaves the view step out when the page has no Detailed switch", () => {
     render(viewWorkbench(false, false));
 
