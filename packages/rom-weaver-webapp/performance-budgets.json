@@ -27,16 +27,16 @@
         "maxBrotliBytes": 661000
       },
       {
-        "_comment": "Raised for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, which the search index includes. Raised again for the ISO to RVZ, Nintendo 3DS to Z3DS, and Extract Z3DS guides. Raised for the MCP client and browser agent setup guide. The published native benchmarks and expanded format guides measure 382,150 raw bytes and 100,419 Brotli bytes. The approved limits retain the existing 11,000-byte raw and 3,000-byte Brotli margins.",
+        "_comment": "The published native benchmarks and expanded format guides measure 382,150 raw bytes and 100,419 Brotli bytes. Guided practice runs and the Verify boot how-to are indexed here; together they measure 397,063 raw bytes and 103,877 Brotli bytes. Expected sizes round to 397,000 raw and 104,000 Brotli bytes, with the existing 11,000-byte raw and 3,000-byte Brotli headroom.",
         "name": "Documentation search JavaScript",
         "directory": "assets",
         "extension": ".js",
         "includePatterns": ["assets/_virtual_rom-weaver-docs-search-[^/]+\\.js$"],
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 383000,
-        "maxRawBytes": 394000,
-        "expectedBrotliBytes": 100500,
-        "maxBrotliBytes": 103500
+        "expectedRawBytes": 397000,
+        "maxRawBytes": 408000,
+        "expectedBrotliBytes": 104000,
+        "maxBrotliBytes": 107000
       },
       {
         "name": "Save Editor JavaScript",
