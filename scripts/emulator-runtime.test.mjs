@@ -125,6 +125,19 @@ test("Mupen64Plus leaves Apple's fdopen declaration intact", () => {
   });
 });
 
+test("Yabause leaves Apple's fdopen declaration intact", () => {
+  const core = sources.cores.find(({ id }) => id === "yabause");
+  const patch = core?.patches?.find(
+    ({ path }) => path === "yabause/src/libchdr/deps/zlib-1.2.11/zutil.h",
+  );
+  assert.deepEqual(patch, {
+    path: "yabause/src/libchdr/deps/zlib-1.2.11/zutil.h",
+    find: "#      ifndef fdopen\n#        define fdopen(fd,mode) NULL /* No fdopen() */",
+    replace:
+      "#      if !defined(fdopen) && !defined(__APPLE__)\n#        define fdopen(fd,mode) NULL /* No fdopen() */",
+  });
+});
+
 test("PPSSPP uses each upstream platform directory and native architecture", () => {
   const ppsspp = sources.cores.find(({ id }) => id === "ppsspp");
   for (const [name, expected] of [
