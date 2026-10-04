@@ -2,6 +2,7 @@ use std::{collections::HashMap, ffi::OsString, process::ExitCode, sync::Mutex};
 
 use rom_weaver_core::{
     OperationFamily, OperationReport, OperationStatus, ProgressEvent, ProgressSink,
+    RomWeaverErrorKind,
 };
 use serde_json::{Value, json};
 
@@ -92,6 +93,7 @@ impl JsonReporter {
 
 impl ProgressSink for JsonReporter {
     fn emit(&self, event: ProgressEvent) {
+        let event = normalize_event(event);
         if matches!(
             event.status,
             OperationStatus::Pending | OperationStatus::Running
@@ -135,6 +137,26 @@ impl ProgressSink for JsonReporter {
                 .push(event);
         }
     }
+}
+
+// Native streams MUST agree with the cancellation exit code even when a shared pipeline
+// reports a cancelled error through its generic failed-report path.
+fn normalize_event(mut event: ProgressEvent) -> ProgressEvent {
+    if event.status == OperationStatus::Failed
+        && event.error_kind == Some(RomWeaverErrorKind::Cancelled)
+    {
+        event.status = OperationStatus::Cancelled;
+        if let Some(error) = event
+            .details
+            .as_mut()
+            .and_then(|details| details.get_mut("error"))
+            .and_then(Value::as_object_mut)
+        {
+            error.insert("code".to_string(), json!("operation.cancelled"));
+            error.insert("exit_code".to_string(), json!(130));
+        }
+    }
+    event
 }
 
 fn document(reports: Vec<ProgressEvent>, exit_code: u8) -> Value {

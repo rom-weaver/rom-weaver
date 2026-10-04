@@ -453,3 +453,16 @@ fn checksum_rom_conflicts_with_checksum() {
     let stderr = String::from_utf8_lossy(&assert.get_output().stderr).into_owned();
     assert!(stderr.contains("cannot be used with"), "{stderr}");
 }
+
+#[test]
+fn formats_jsonl_uses_a_terminal_event_and_preserves_the_catalog() {
+    let catalog: Value =
+        serde_json::from_slice(&command_stdout(&["formats", "--json"], 0)).expect("JSON catalog");
+    let stdout = command_stdout(&["formats", "--jsonl"], 0);
+    let text = String::from_utf8(stdout).expect("UTF-8 events");
+    assert_eq!(text.lines().count(), 1);
+    let event: Value = serde_json::from_str(&text).expect("terminal event");
+    assert_eq!(event["command"], "formats");
+    assert_eq!(event["status"], "succeeded");
+    assert_eq!(event["details"], catalog);
+}

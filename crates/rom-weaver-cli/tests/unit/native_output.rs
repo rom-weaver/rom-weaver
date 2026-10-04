@@ -89,3 +89,34 @@ fn cancellation_after_a_result_preserves_the_result_and_reports_cancellation() {
     assert_eq!(output["error"]["message"], "operation cancelled");
     assert_eq!(output["reports"][0]["label"], "member extracted");
 }
+
+#[test]
+fn native_cancellation_normalizes_failed_pipeline_events_without_losing_context() {
+    let mut event = error_event("checksum", "checksum", "operation.failed", "cancelled", 1);
+    event.error_kind = Some(RomWeaverErrorKind::Cancelled);
+    let event = normalize_event(event);
+    assert_eq!(event.status, OperationStatus::Cancelled);
+    assert_eq!(event.command, "checksum");
+    assert_eq!(event.stage, "checksum");
+    assert_eq!(event.error_kind, Some(RomWeaverErrorKind::Cancelled));
+    assert_eq!(event.details.as_ref().unwrap()["error"]["exit_code"], 130);
+    assert_eq!(
+        event.details.as_ref().unwrap()["error"]["code"],
+        "operation.cancelled"
+    );
+    let output = document(vec![event], 130);
+    assert_eq!(output["status"], "cancelled");
+    assert_eq!(output["exit_code"], 130);
+    assert_eq!(output["error"]["exit_code"], 130);
+    assert_eq!(output["error"]["code"], "operation.cancelled");
+}
+
+#[test]
+fn native_cancellation_does_not_reclassify_other_failures_or_successes() {
+    let event = error_event("checksum", "checksum", "operation.failed", "cannot read", 1);
+    assert_eq!(normalize_event(event).status, OperationStatus::Failed);
+    assert_eq!(
+        normalize_event(result_event("checksum", "checksum", "ok", None)).status,
+        OperationStatus::Succeeded
+    );
+}

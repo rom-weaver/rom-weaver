@@ -113,7 +113,7 @@ struct Cli {
             global = true,
             conflicts_with = "no_progress",
             help_heading = GLOBAL_HELP_HEADING,
-            help = "Show progress on stderr (off by default; JSONL includes progress)"
+            help = "Show progress on stderr (automatic on terminals; JSONL includes progress)"
         )
     )]
     progress: bool,
@@ -326,7 +326,12 @@ impl Cli {
             json: self.output_mode().is_json(),
             progress: Some(
                 !self.quiet
-                    && progress_override(self.progress, self.no_progress).unwrap_or(self.jsonl),
+                    && progress_override(self.progress, self.no_progress).unwrap_or(
+                        default_progress(
+                            self.output_mode(),
+                            crate::render::terminal_supports_progress(),
+                        ),
+                    ),
             ),
             log_level: log_level_override(self.log_level, self.verbose, self.debug, self.quiet)
                 .or_else(|| {
@@ -362,6 +367,15 @@ fn log_level_override(
         1 => Some(LogLevel::Warn),
         2 => Some(LogLevel::Debug),
         _ => Some(LogLevel::Trace),
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn default_progress(mode: OutputMode, stderr_supports_progress: bool) -> bool {
+    match mode {
+        OutputMode::Human => stderr_supports_progress,
+        OutputMode::Json => false,
+        OutputMode::JsonLines => true,
     }
 }
 
@@ -468,7 +482,20 @@ fn run_native_command(cli: &Cli, mode: OutputMode, command: &str) -> ExitCode {
         if cli.dry_run {
             return print_native_dry_run_plan("formats", Vec::new(), mode);
         }
-        print_formats(mode.is_json());
+        if mode == OutputMode::JsonLines {
+            native_output::print_event(
+                mode,
+                native_output::result_event(
+                    "formats",
+                    "formats",
+                    "listed supported formats",
+                    Some(crate::formats_command::report()),
+                ),
+                0,
+            );
+        } else {
+            print_formats(mode.is_json());
+        }
         if cli.verbose > 0 && !cli.quiet {
             native_output::diagnostic(
                 mode.is_json(),
@@ -923,8 +950,9 @@ pub fn main_entry() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::{Cli, cli_command, color_override, progress_override};
-    use clap::FromArgMatches;
+    use super::{Cli, cli_command, color_override, default_progress, progress_override};
+    use crate::native_output::OutputMode;
+    use clap::{FromArgMatches, Parser};
     use rom_weaver_app::{LogLevel, RomWeaverRunOutputOptions, RunCommandOptions};
 
     #[test]
@@ -1143,6 +1171,23 @@ mod tests {
         assert!(RunCommandOptions::from_output(output(false, None), true).emit_progress_events);
         assert!(!RunCommandOptions::from_output(output(false, None), false).emit_progress_events);
         assert!(RunCommandOptions::from_output(output(true, None), false).emit_progress_events);
+    }
+
+    #[test]
+    fn native_progress_defaults_use_stderr_without_enabling_json_diagnostics() {
+        assert!(default_progress(OutputMode::Human, true));
+        assert!(!default_progress(OutputMode::Human, false));
+        assert!(!default_progress(OutputMode::Json, true));
+        assert!(!default_progress(OutputMode::Json, false));
+        assert!(default_progress(OutputMode::JsonLines, false));
+        for flag in ["--quiet", "--no-progress"] {
+            let cli =
+                Cli::try_parse_from(["rom-weaver", "--jsonl", flag, "formats"]).expect("valid CLI");
+            assert_eq!(cli.output_options(false).progress, Some(false));
+        }
+        let cli = Cli::try_parse_from(["rom-weaver", "--progress", "--quiet", "formats"])
+            .expect("valid CLI");
+        assert_eq!(cli.output_options(false).progress, Some(false));
     }
 
     #[test]

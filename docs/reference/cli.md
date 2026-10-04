@@ -99,9 +99,9 @@ Codecs are stricter. Each format accepts only the codec names in its own row of 
 
 Every command accepts these global flags, listed under `Global options` in its help:
 
-- `--json` prints one complete JSON result document to stdout. It contains `schema_version: 1`, `exit_code`, `error`, `warnings`, and the usual report fields and `details`. Asset generators put their result in `details`; `formats --json` keeps its compatible top-level catalog object. `bundle schema`, `completions`, and `man` without `--install` use that asset result. `man --install --json` reports the installed page count and output directory.
+- `--json` prints one complete JSON result document to stdout. It contains `schema_version: 1`, `exit_code`, `error`, `warnings`, and the usual report fields and `details`. Asset generators put their result in `details`; `formats --json` keeps its compatible top-level catalog object; `formats --jsonl` emits one succeeded event with the catalog in `details`. `bundle schema`, `completions`, and `man` without `--install` use that asset result. `man --install --json` reports the installed page count and output directory.
 - `--jsonl` keeps the JSON event stream: it writes one event per line to stdout and includes progress by default. Use `--no-progress` or `--quiet` to suppress running events.
-- `--progress` writes progress to stderr. It is off by default in human and `--json` output. With `--json`, progress events and diagnostics are JSON lines on stderr. `--no-progress` hides progress.
+- `--progress` writes progress to stderr. Human output enables progress automatically when stderr is a capable terminal; redirected stderr and `--json` output keep it off by default. With `--json`, progress events and diagnostics are JSON lines on stderr. `--no-progress` hides progress.
 - `--log-level off|error|warn|info|debug|trace` sets how much rom-weaver logs to stderr. The default level is `warn`. Logging is separate from the normal output.
 - `-v`/`--verbose` writes concise command summaries to stderr. It is independent of `--progress`. `-vv` enables debug logging, and `-vvv` enables trace logging.
 - `--debug` logs developer diagnostics, including command configuration and internal trace events. It is equivalent to `--log-level trace`. It conflicts with `--verbose`, `--quiet`, and `--log-level`.
