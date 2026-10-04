@@ -196,6 +196,20 @@ test("PPSSPP builds Linux hardware capabilities only on supported targets", () =
   });
 });
 
+test("PPSSPP links ARM64 libpng NEON intrinsics", () => {
+  const ppsspp = sources.cores.find(({ id }) => id === "ppsspp");
+  const patch = ppsspp.patches.find(
+    ({ path, find }) =>
+      path === "libretro/Makefile.common" && find.includes("DYNAFLAGS"),
+  );
+  assert.deepEqual(patch, {
+    path: "libretro/Makefile.common",
+    find: "else ifeq ($(TARGET_ARCH),arm64)\n      DYNAFLAGS += -D_ARCH_64",
+    replace:
+      "else ifeq ($(TARGET_ARCH),arm64)\n      DYNAFLAGS += -D_ARCH_64\n      SOURCES_C += $(EXTDIR)/libpng17/arm/arm_init.c \\\n                   $(EXTDIR)/libpng17/arm/filter_neon_intrinsics.c",
+  });
+});
+
 test("mGBA avoids untracked native dependencies outside Linux", () => {
   const mgba = sources.cores.find(({ id }) => id === "mgba");
   for (const platform of ["darwin-x64", "darwin-arm64", "win32-x64"]) {
