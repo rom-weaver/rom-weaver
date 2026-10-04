@@ -138,6 +138,45 @@ test("Yabause leaves Apple's fdopen declaration intact", () => {
   });
 });
 
+test("Beetle PCE cores leave Apple's fdopen declaration intact", () => {
+  for (const id of ["beetle_pce_fast", "beetle_supergrafx"]) {
+    const core = sources.cores.find((candidate) => candidate.id === id);
+    assert.deepEqual(
+      core?.patches?.map(({ path }) => path),
+      [
+        "deps/zlib-1.2.11/zutil.h",
+        "libretro-common/include/compat/zutil.h",
+      ],
+      id,
+    );
+    for (const patch of core.patches) {
+      assert.deepEqual(
+        patch,
+        {
+          path: patch.path,
+          find: "#      ifndef fdopen\n#        define fdopen(fd,mode) NULL /* No fdopen() */",
+          replace:
+            "#      if !defined(fdopen) && !defined(__APPLE__)\n#        define fdopen(fd,mode) NULL /* No fdopen() */",
+        },
+        `${id}/${patch.path}`,
+      );
+    }
+  }
+});
+
+test("Stella leaves Apple's fdopen declaration intact", () => {
+  const core = sources.cores.find(({ id }) => id === "stella");
+  const patch = core?.patches?.find(
+    ({ path }) => path === "src/lib/zlib/zutil.h",
+  );
+  assert.deepEqual(patch, {
+    path: "src/lib/zlib/zutil.h",
+    find: "#      ifndef fdopen\n#        define fdopen(fd,mode) NULL /* No fdopen() */",
+    replace:
+      "#      if !defined(fdopen) && !defined(__APPLE__)\n#        define fdopen(fd,mode) NULL /* No fdopen() */",
+  });
+});
+
 test("PPSSPP uses each upstream platform directory and native architecture", () => {
   const ppsspp = sources.cores.find(({ id }) => id === "ppsspp");
   for (const [name, expected] of [
