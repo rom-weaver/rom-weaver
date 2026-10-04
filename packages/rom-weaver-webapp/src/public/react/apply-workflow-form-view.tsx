@@ -22,7 +22,12 @@ import {
 import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { GhostSteps } from "./components/ds/ghost-steps.tsx";
 import { InfoPopover, NeedsInput } from "./components/ds/layout.tsx";
-import { SampleTutorial, type SampleTutorialStep, useGuidedSampleStart } from "./components/ds/sample-tutorial.tsx";
+import {
+  getViewTutorialStep,
+  SampleTutorial,
+  type SampleTutorialStep,
+  useGuidedSampleStart,
+} from "./components/ds/sample-tutorial.tsx";
 import { skipSourceIdentification } from "../../lib/input/input-identification-policy.ts";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
@@ -81,12 +86,14 @@ const getApplySampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer
     openDrawers: true,
     target: "#rom-weaver-row-file-rom",
     title: localizer.message("ui.apply.tutorial.rom.title"),
+    tryIt: localizer.message("ui.apply.tutorial.rom.tryIt"),
   },
+  getViewTutorialStep(localizer, "#rom-weaver-row-file-rom"),
   {
     actions: [
+      ["toggle", localizer.message("ui.apply.tutorial.toggle")],
       ["reorder", localizer.message("ui.apply.tutorial.moveUp")],
       ["reorder", localizer.message("ui.apply.tutorial.moveDown")],
-      ["toggle", localizer.message("ui.apply.tutorial.toggle")],
       ["header", localizer.message("ui.apply.tutorial.header")],
       ["checks", localizer.message("ui.apply.tutorial.checks")],
       ["replace", localizer.message("ui.apply.tutorial.replacePatch")],
@@ -97,6 +104,7 @@ const getApplySampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer
     openMenu: true,
     target: "#rom-weaver-row-patch-stack",
     title: localizer.message("ui.apply.tutorial.patches.title"),
+    tryIt: localizer.message("ui.apply.tutorial.patches.tryIt"),
   },
   {
     actions: [
@@ -106,20 +114,23 @@ const getApplySampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer
     body: localizer.message("ui.apply.tutorial.addFiles.body"),
     target: "#rom-weaver-row-unified-drop",
     title: localizer.message("ui.apply.tutorial.addFiles.title"),
+    tryIt: localizer.message("ui.apply.tutorial.addFiles.tryIt"),
   },
   {
     actions: [
-      ["menu", "Add cheats to the patch order"],
-      ["toggle", "On or off"],
+      ["menu", localizer.message("ui.apply.tutorial.addCheats")],
+      ["toggle", localizer.message("ui.apply.tutorial.toggle")],
     ],
-    body: "Optional: add a practice cheat to the same stack. Leave the cheats off to keep the sample bundle's expected output.",
+    body: localizer.message("ui.apply.tutorial.cheats.body"),
     openDrawers: true,
     target: "#rom-weaver-row-patch-stack",
-    title: "Try the practice cheat menu",
+    title: localizer.message("ui.apply.tutorial.cheats.title"),
+    tryIt: localizer.message("ui.apply.tutorial.cheats.tryIt"),
   },
   {
     actions: [
-      ["options", localizer.message("ui.apply.tutorial.options")],
+      ["options", localizer.message("ui.apply.tutorial.outputName")],
+      ["options", localizer.message("ui.apply.tutorial.format")],
       ["apply", localizer.message("ui.apply.tutorial.applyDownload")],
     ],
     body: localizer.message("ui.apply.tutorial.output.body"),
@@ -128,6 +139,7 @@ const getApplySampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer
     placement: "top",
     target: "#rom-weaver-row-output-file-name",
     title: localizer.message("ui.apply.tutorial.output.title"),
+    tryIt: localizer.message("ui.apply.tutorial.output.tryIt"),
   },
 ];
 

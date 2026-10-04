@@ -94,9 +94,55 @@ type SampleTutorialStep = {
   openDrawers?: boolean;
   openMenu?: boolean;
   placement?: "bottom" | "top";
+  /** Document-level selector the step depends on. A step whose selector
+      matches nothing when the guide opens is left out, so hosts without that
+      control never count a step they cannot show. */
+  requires?: string;
   target?: string;
   title: string;
+  /** The one thing the reader should do on this step. */
+  tryIt?: string;
+  /** The Simple/Detailed step: its copy follows the live view setting, so the
+      guide supplies body, Try it, and the comparison itself. */
+  view?: boolean;
 };
+
+const VIEW_TOGGLE_SELECTOR = ".panel-view-toggle";
+/** The switch's heading, not the switch: the heading is its own z-index layer,
+    so a lift on the switch alone would stay under the scrim. */
+const VIEW_TOGGLE_HEAD_SELECTOR = ".workflow-panel-head";
+
+/**
+ * The step that explains the Simple and Detailed views on the card it frames.
+ * The panel heading's switch is lifted beside the card so flipping it shows the
+ * card gain or lose its drawers. Embeds without the switch skip the step.
+ */
+const getViewTutorialStep = (localizer: ReturnType<typeof useUiLocalizer>, target: string): SampleTutorialStep => ({
+  body: "",
+  lift: VIEW_TOGGLE_HEAD_SELECTOR,
+  openDrawers: true,
+  requires: VIEW_TOGGLE_SELECTOR,
+  target,
+  title: localizer.message("ui.tutorial.view.title"),
+  view: true,
+});
+
+/**
+ * The lifted control that belongs to the target's own workbench. Every visited
+ * workflow panel stays mounted (hidden), each with its own heading and switch,
+ * so a document-wide lookup can land on a hidden panel's copy: the nearest
+ * ancestor of the target that holds a match is the one the step means.
+ */
+const findLift = (target: HTMLElement, selector: string) => {
+  for (let scope = target.parentElement; scope; scope = scope.parentElement) {
+    const match = scope.querySelector<HTMLElement>(selector);
+    if (match) return match;
+  }
+  return null;
+};
+
+/** Step numbers in the workbench's own 0x01 notation. */
+const hexStep = (index: number) => `0x${(index + 1).toString(16).toUpperCase().padStart(2, "0")}`;
 
 const ACTION_ICONS: Record<SampleTutorialAction, ComponentType<{ className?: string }>> = {
   apply: Stamp,
@@ -132,6 +178,8 @@ const GUIDE_SETTLE_MS = 360;
 const GUIDE_REVEALS = 3;
 /** Above this share of the viewport a row is anchored from its top edge. */
 const GUIDE_TALL_ROW_RATIO = 0.45;
+/** A reveal scroll that has not moved the page by now never will. */
+const GUIDE_SCROLL_START_MS = 150;
 /** How far the ring sits outside the row it frames. */
 const GUIDE_RING_INSET = 7;
 
@@ -223,15 +271,19 @@ const guideTopLimit = () =>
  * viewport anchors from its top, so the card lands beside the header the step
  * is describing instead of hundreds of pixels below it - and when the pair
  * cannot fit at all, keeping the row's top on screen matters more than its tail.
+ * `below` pins the card under the row whatever its height: a step whose lifted
+ * control sits above the row would otherwise get the card dropped onto that
+ * control - the one the step asks the reader to use - once the row grows.
  */
-const shouldPlaceAbove = (rowHeight: number, prefer: "bottom" | "top") =>
-  prefer === "top" || rowHeight > window.innerHeight * GUIDE_TALL_ROW_RATIO;
+type GuideSide = "below" | "bottom" | "top";
+const shouldPlaceAbove = (rowHeight: number, prefer: GuideSide) =>
+  prefer === "top" || (prefer === "bottom" && rowHeight > window.innerHeight * GUIDE_TALL_ROW_RATIO);
 
 /**
  * Places the guide card against the row it describes, horizontally centred on
  * it and always kept inside the viewport.
  */
-const anchorToTarget = (rect: GuideRect, dialog: HTMLElement, prefer: "bottom" | "top") => {
+const anchorToTarget = (rect: GuideRect, dialog: HTMLElement, prefer: GuideSide) => {
   const { height, width } = dialog.getBoundingClientRect();
   const above = rect.top - GUIDE_GAP - height;
   const below = rect.bottom + GUIDE_GAP;
@@ -241,7 +293,7 @@ const anchorToTarget = (rect: GuideRect, dialog: HTMLElement, prefer: "bottom" |
   // can scroll it anywhere afterwards - take the other side rather than clamp
   // the card back over the row.
   const preferred = shouldPlaceAbove(rect.height, prefer);
-  const placeAbove = preferred ? fitsAbove || !fitsBelow : !(fitsBelow || !fitsAbove);
+  const placeAbove = prefer !== "below" && (preferred ? fitsAbove || !fitsBelow : !(fitsBelow || !fitsAbove));
   const top = placeAbove ? above : below;
   return {
     left: clampWithin(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - GUIDE_MARGIN),
@@ -252,14 +304,58 @@ const anchorToTarget = (rect: GuideRect, dialog: HTMLElement, prefer: "bottom" |
 /**
  * How far to scroll so the row and its card sit together, centred as a pair
  * when the viewport can hold them. A row too tall to fit alongside the card
- * gives up its bottom edge rather than its top.
+ * gives up its bottom edge rather than its top. `rect` is what has to stay in
+ * view - the row plus any control lifted with it - while the side the card
+ * takes is still decided by the row alone, as the anchoring does.
  */
-const scrollDeltaForPair = (rect: GuideRect, dialog: HTMLElement | null, prefer: "bottom" | "top") => {
+const scrollDeltaForPair = (rect: GuideRect, dialog: HTMLElement | null, placeAbove: boolean) => {
   const cardHeight = dialog?.getBoundingClientRect().height ?? 0;
   const pair = rect.height + GUIDE_GAP + cardHeight;
   const slack = Math.max(GUIDE_MARGIN, (window.innerHeight - pair) / 2);
-  const desiredTop = shouldPlaceAbove(rect.height, prefer) ? slack + cardHeight + GUIDE_GAP : slack;
+  const desiredTop = placeAbove ? slack + cardHeight + GUIDE_GAP : slack;
   return rect.top - desiredTop;
+};
+
+/**
+ * How far to scroll on a phone, where the card is pinned to a screen edge rather
+ * than beside the row: the row is centred in the band the card and the dock
+ * leave free, or parked at that band's top when it is taller than the band.
+ * Returns 0 when the row already sits inside the band, so a step whose row is
+ * on screen never moves the page.
+ */
+const scrollDeltaForPinned = (rect: GuideRect, dialog: HTMLElement) => {
+  const card = dialog.getBoundingClientRect();
+  // `.dock-pad` is the in-flow spacer that carries the dock's height.
+  const dock = document.querySelector(".rw-app .dock-pad")?.getBoundingClientRect().height ?? 0;
+  const pinnedTop = card.top + card.height / 2 < window.innerHeight / 2;
+  const bandTop = pinnedTop ? card.bottom + GUIDE_GAP : GUIDE_MARGIN;
+  const bandBottom = pinnedTop ? window.innerHeight - dock - GUIDE_MARGIN : card.top - GUIDE_GAP;
+  const room = bandBottom - bandTop;
+  if (rect.height <= room && rect.top >= bandTop && rect.bottom <= bandBottom) return 0;
+  const desiredTop = rect.height <= room ? bandTop + (room - rect.height) / 2 : bandTop;
+  return rect.top - desiredTop;
+};
+
+/**
+ * Whether the row and its anchored card are already fully on screen, below the
+ * top chrome - then the reveal leaves the page where the reader has it.
+ */
+const pairInView = (rect: GuideRect, dialog: HTMLElement, placeAbove: boolean) => {
+  const cardHeight = dialog.getBoundingClientRect().height;
+  const top = placeAbove ? rect.top - GUIDE_GAP - cardHeight : rect.top;
+  const bottom = placeAbove ? rect.bottom : rect.bottom + GUIDE_GAP + cardHeight;
+  return top >= guideTopLimit() && bottom <= window.innerHeight - GUIDE_MARGIN;
+};
+
+/** The row and the control lifted with it, as one box to keep on screen. */
+const unionRect = (rect: GuideRect, other: GuideRect | undefined): GuideRect => {
+  // A hidden or `display: contents` lift reports an empty box and adds nothing.
+  if (!other?.height) return rect;
+  const top = Math.min(rect.top, other.top);
+  const bottom = Math.max(rect.bottom, other.bottom);
+  const left = Math.min(rect.left, other.left);
+  const width = Math.max(rect.left + rect.width, other.left + other.width) - left;
+  return { bottom, height: bottom - top, left, top, width };
 };
 
 const SampleTutorialStart = ({
@@ -433,7 +529,7 @@ const SampleTutorial = ({
   loadingBody,
   onClose,
   ready,
-  steps,
+  steps: allSteps,
 }: {
   loadingBody: string;
   onClose: () => void;
@@ -441,9 +537,26 @@ const SampleTutorial = ({
   steps: readonly SampleTutorialStep[];
 }) => {
   const localizer = useUiLocalizer();
+  const { detailedViewEnabled = false } = useRomWeaverSettings();
   const instructionsLabel = localizer.message("ui.tutorial.instructions");
+  const actionsLabelId = useId();
   const bodyId = useId();
   const titleId = useId();
+  // Decided once, when the guide opens: a control appearing or vanishing
+  // mid-run must not renumber the steps under the reader. Measured after the
+  // first commit, since the guide can mount in the same pass as the control,
+  // and before paint, so a skipped step is never drawn.
+  const [missingRequirements, setMissingRequirements] = useState<ReadonlySet<string>>(() => new Set());
+  const initialStepsRef = useRef(allSteps);
+  useLayoutEffect(() => {
+    const selectors = initialStepsRef.current.flatMap((candidate) => (candidate.requires ? [candidate.requires] : []));
+    const missing = selectors.filter((selector) => !document.querySelector(selector));
+    if (missing.length) setMissingRequirements(new Set(missing));
+  }, []);
+  const steps = useMemo(
+    () => allSteps.filter((candidate) => !(candidate.requires && missingRequirements.has(candidate.requires))),
+    [allSteps, missingRequirements],
+  );
   const dialogRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
   const [stepIndex, setStepIndex] = useState(0);
@@ -580,7 +693,7 @@ const SampleTutorial = ({
         // The swap control lives between two rows, so no single target can hold
         // it. Lift its row, not the button: .swap-row sets a z-index of its own,
         // so a lift on the button would be scoped inside that stacking context.
-        lifted = document.querySelector<HTMLElement>(stepLift);
+        lifted = findLift(target, stepLift);
         lifted?.classList.add("sample-tutorial-lift");
       }
       if (stepCta) {
@@ -660,12 +773,30 @@ const SampleTutorial = ({
       if (!stepTarget) arrive();
       return;
     }
-    const prefer = stepPlacement ?? "bottom";
+    // A control lifted above the row keeps the card below it, never over it.
+    const liftedAbove = stepLift ? findLift(targetEl, stepLift)?.getBoundingClientRect() : undefined;
+    const prefer: GuideSide =
+      liftedAbove?.height && liftedAbove.bottom <= targetEl.getBoundingClientRect().top
+        ? "below"
+        : (stepPlacement ?? "bottom");
     const desktop = window.matchMedia(GUIDE_ANCHOR_QUERY);
     const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
     let settle = 0;
+    let scrollStart = 0;
     let revealsLeft = GUIDE_REVEALS;
     let rowHeight = targetEl.getBoundingClientRect().height;
+    let cardHeight = dialog.getBoundingClientRect().height;
+    // Where the running reveal scroll will land, while it runs. A placement made
+    // mid-scroll - the card resizing as its new copy lands, say - MUST aim at
+    // that viewport too: clamped to the one being scrolled away from, the card
+    // rides off screen with it.
+    let revealTo: number | null = null;
+    const pendingShift = () => {
+      if (revealTo === null) return 0;
+      const left = revealTo - window.scrollY;
+      if (Math.abs(left) < 1) revealTo = null;
+      return revealTo === null ? 0 : left;
+    };
     // Only when moving between steps - see the glide rules in dropzone.css.
     const setGlide = (element: HTMLElement, glide: boolean) => {
       if (glide) element.dataset.glide = "true";
@@ -706,11 +837,50 @@ const SampleTutorial = ({
     };
     // Park the row and its card together, and place them for where that scroll
     // is headed - once placed they ride the page, so this is the only chance.
+    // The guide does the scrolling: the reader never has to go looking for the
+    // row a step describes.
     const placeAndReveal = (glide: boolean) => {
-      const top = scrollDeltaForPair(targetEl.getBoundingClientRect(), dialog, prefer);
-      const shift = Math.abs(top) > 1 ? top : 0;
+      const rect = targetEl.getBoundingClientRect();
+      // The lifted control is part of the step - the view step's switch sits in
+      // the panel heading above the row - so the reveal keeps it in view too.
+      const lifted = stepLift ? findLift(targetEl, stepLift)?.getBoundingClientRect() : undefined;
+      const reveal = unionRect(rect, lifted);
+      const placeAbove = shouldPlaceAbove(rect.height, prefer);
+      let top = 0;
+      if (!desktop.matches) top = scrollDeltaForPinned(reveal, dialog);
+      else if (!pairInView(reveal, dialog, placeAbove)) {
+        top = scrollDeltaForPair(reveal, dialog, placeAbove);
+        // When the lifted control, the row and the card cannot all fit, the
+        // card below gets as much room as scrolling can give it without
+        // pushing the lifted control - the one the step asks the reader to
+        // use - or the row's top off the screen. Whatever is still short is
+        // the card overlapping the row's tail, never the control.
+        if (!placeAbove) {
+          const floor = window.innerHeight - GUIDE_MARGIN;
+          const cardBottom = rect.bottom + GUIDE_GAP + dialog.getBoundingClientRect().height;
+          top = Math.max(top, Math.min(cardBottom - floor, reveal.top - guideTopLimit()));
+        }
+      }
+      // The page cannot scroll past either end, and a card placed for a scroll
+      // that falls short would miss its row by the difference. A page that
+      // reports no scrollable height is left to the start check below.
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      const reachable = maxScroll > 0 ? Math.min(Math.max(top, -window.scrollY), maxScroll - window.scrollY) : top;
+      const shift = Math.abs(reachable) > 1 ? reachable : 0;
+      const from = window.scrollY;
+      revealTo = shift ? from + shift : null;
       place(glide, shift);
-      if (shift) window.scrollBy({ behavior, top: shift });
+      if (!shift) return;
+      window.scrollBy({ behavior, top: shift });
+      // Placed for a viewport the page never reaches, the card would sit off
+      // its row: a scroll that has not started gets the card re-placed where
+      // the page actually is.
+      window.clearTimeout(scrollStart);
+      scrollStart = window.setTimeout(() => {
+        if (revealTo === null || Math.abs(window.scrollY - from) >= 1) return;
+        revealTo = null;
+        place(false);
+      }, GUIDE_SCROLL_START_MS);
     };
     const track = () => place(false);
     // A re-reveal that lands while the user is scrolling fights them for the
@@ -719,17 +889,28 @@ const SampleTutorial = ({
     // re-reveals; the opening one has already run by then.
     const yieldToUser = () => {
       revealsLeft = 0;
+      revealTo = null;
       window.clearTimeout(settle);
+    };
+    // The reveal has landed: settle the pair against the viewport it reached.
+    const onScrollEnd = () => {
+      if (revealTo === null) return;
+      revealTo = null;
+      place(false);
     };
     // The row grows as its drawers expand, so re-reveal once each size change
     // has stopped - otherwise the card ends up sitting over the row it explains.
-    // Gated on the row's own height: the card reflowing, or mobile browser
-    // chrome collapsing as the user scrolls, must not scroll the page out from
-    // under them.
+    // On a phone the pinned card's own height sets the room the row gets, so a
+    // card that grows with its new copy re-reveals too. Gated on those heights:
+    // mobile browser chrome collapsing as the user scrolls must not scroll the
+    // page out from under them.
     const onResize = () => {
-      place(false);
+      place(false, pendingShift());
       const height = targetEl.getBoundingClientRect().height;
-      if (height === rowHeight) return;
+      const card = dialog.getBoundingClientRect().height;
+      const cardMoved = !desktop.matches && card !== cardHeight;
+      cardHeight = card;
+      if (height === rowHeight && !cardMoved) return;
       rowHeight = height;
       if (revealsLeft <= 0) return;
       window.clearTimeout(settle);
@@ -747,24 +928,34 @@ const SampleTutorial = ({
     window.addEventListener("wheel", yieldToUser, { passive: true });
     window.addEventListener("touchmove", yieldToUser, { passive: true });
     window.addEventListener("keydown", yieldToUser);
+    window.addEventListener("scrollend", onScrollEnd);
     desktop.addEventListener("change", track);
     return () => {
       window.clearTimeout(settle);
+      window.clearTimeout(scrollStart);
       observer.disconnect();
       window.removeEventListener("resize", track);
       window.removeEventListener("wheel", yieldToUser);
       window.removeEventListener("touchmove", yieldToUser);
       window.removeEventListener("keydown", yieldToUser);
+      window.removeEventListener("scrollend", onScrollEnd);
       desktop.removeEventListener("change", track);
       // The card is deliberately left where it is: clearing it here would make
       // the next step's placement measure from the CSS-pinned bar and glide
       // across the screen instead of from the card the user is looking at.
     };
-  }, [stepPlacement, stepTarget, targetEl]);
+  }, [stepLift, stepPlacement, stepTarget, targetEl]);
 
   if (!(portalTarget && step)) return null;
   const finalStep = live && stepIndex === steps.length - 1;
   const copyKey = live ? stepIndex : "loading";
+  const stepBody = step.view
+    ? localizer.message(detailedViewEnabled ? "ui.tutorial.view.detailedBody" : "ui.tutorial.view.simpleBody")
+    : step.body;
+  const stepTryIt = step.view
+    ? localizer.message(detailedViewEnabled ? "ui.tutorial.view.detailedTryIt" : "ui.tutorial.view.simpleTryIt")
+    : step.tryIt;
+  const currentLabel = localizer.message("ui.tutorial.view.current");
   const layer = (
     <div className="sample-tutorial-layer">
       <div aria-hidden="true" className="sample-tutorial-scrim" />
@@ -795,7 +986,7 @@ const SampleTutorial = ({
           <X aria-hidden="true" />
         </button>
         <span aria-hidden="true" className="sample-tutorial-beacon">
-          0x
+          {live ? hexStep(stepIndex) : "0x"}
         </span>
         {/* The live region has to outlive the step copy: a region inserted
             together with its content is never announced, so only the copy
@@ -804,13 +995,49 @@ const SampleTutorial = ({
         <section aria-label={instructionsLabel} className="sample-tutorial-copy-area" tabIndex={0}>
           <div aria-live="polite" className="sample-tutorial-live">
             <div className="sample-tutorial-copy" key={copyKey}>
-              <span className="sample-tutorial-kicker mono">
-                {live
-                  ? localizer.message("ui.tutorial.step", { step: stepIndex + 1, total: steps.length })
-                  : localizer.message("ui.tutorial.preparing")}
-              </span>
+              <div className="sample-tutorial-kicker-row">
+                <span className="sample-tutorial-kicker mono">
+                  {live
+                    ? localizer.message("ui.tutorial.step", { step: stepIndex + 1, total: steps.length })
+                    : localizer.message("ui.tutorial.preparing")}
+                </span>
+                {live ? (
+                  <span aria-hidden="true" className="sample-tutorial-pips">
+                    {steps.map((candidate, index) => (
+                      <i
+                        data-state={index < stepIndex ? "done" : index === stepIndex ? "current" : undefined}
+                        key={candidate.title}
+                      />
+                    ))}
+                  </span>
+                ) : null}
+              </div>
               <h2 id={titleId}>{live ? step.title : localizer.message("ui.tutorial.loadingTitle")}</h2>
-              <p id={bodyId}>{live ? step.body : loadingBody}</p>
+              <p id={bodyId}>{live ? stepBody : loadingBody}</p>
+              {live && step.view ? (
+                <div className="sample-tutorial-compare">
+                  <p data-current={detailedViewEnabled ? undefined : "true"}>
+                    <strong>
+                      {localizer.message("ui.tutorial.view.simple")}
+                      {detailedViewEnabled ? null : <em className="mono">{currentLabel}</em>}
+                    </strong>
+                    {localizer.message("ui.tutorial.view.simpleSummary")}
+                  </p>
+                  <p data-current={detailedViewEnabled ? "true" : undefined}>
+                    <strong>
+                      {localizer.message("ui.view.detailed")}
+                      {detailedViewEnabled ? <em className="mono">{currentLabel}</em> : null}
+                    </strong>
+                    {localizer.message("ui.tutorial.view.detailedSummary")}
+                  </p>
+                </div>
+              ) : null}
+              {live && stepTryIt ? (
+                <p className="sample-tutorial-try">
+                  <b className="mono">{localizer.message("ui.tutorial.tryIt")}</b>
+                  <span>{stepTryIt}</span>
+                </p>
+              ) : null}
               {live ? null : (
                 <div
                   aria-label={localizer.message("ui.tutorial.loadingProgress")}
@@ -822,7 +1049,12 @@ const SampleTutorial = ({
                 </div>
               )}
               {live && step.actions?.length ? (
-                <ul aria-label={localizer.message("ui.tutorial.actions")} className="sample-tutorial-action-list">
+                <span className="sample-tutorial-action-label mono" id={actionsLabelId}>
+                  {localizer.message("ui.tutorial.actions")}
+                </span>
+              ) : null}
+              {live && step.actions?.length ? (
+                <ul aria-labelledby={actionsLabelId} className="sample-tutorial-action-list">
                   {step.actions.map(([action, label]) => {
                     const Icon = ACTION_ICONS[action];
                     return (
@@ -838,7 +1070,6 @@ const SampleTutorial = ({
               ) : null}
             </div>
           </div>
-          {live ? <p className="sample-tutorial-end-hint">{localizer.message("ui.tutorial.endHint")}</p> : null}
         </section>
         <div className="sample-tutorial-actions">
           {live ? (
@@ -854,6 +1085,9 @@ const SampleTutorial = ({
               {localizer.message("ui.tutorial.back")}
             </button>
           ) : null}
+          {/* Sits between the buttons rather than on a line of its own, so it
+              costs the card no height; phones drop it for the ✕ alone. */}
+          {live ? <p className="sample-tutorial-end-hint">{localizer.message("ui.tutorial.endHint")}</p> : null}
           {live ? (
             <button
               className="btn primary slim"
@@ -876,4 +1110,4 @@ const SampleTutorial = ({
   return createPortal(layer, portalTarget);
 };
 
-export { SampleTutorial, SampleTutorialStart, type SampleTutorialStep, useGuidedSampleStart };
+export { getViewTutorialStep, SampleTutorial, SampleTutorialStart, type SampleTutorialStep, useGuidedSampleStart };

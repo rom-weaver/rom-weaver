@@ -450,7 +450,8 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     labelId: "settings.detailedViewEnabled",
     labelDataLocalize: "Show detailed file information",
     layout: "large",
-    suggestion: "Shows extraction, identification, and disc details in separate drawers.",
+    suggestion:
+      "Adds Files, Identify, and disc-sheet drawers to every file card, plus timings. Same as the Detailed switch.",
   },
   fixChecksum: {
     defaultValue: false,

@@ -465,7 +465,7 @@ describe("apply workflow view - empty bench", () => {
 
     fireEvent.click(container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement);
     fireEvent.click(container.querySelector(".sample-tutorial-start-primary") as HTMLButtonElement);
-    expect(document.querySelector(".sample-tutorial-dialog")?.textContent).toContain("Loading the practice files");
+    expect(document.querySelector(".sample-tutorial-dialog")?.textContent).toContain("Loading the sample files");
 
     await vi.waitFor(() => expect(onUnifiedDrop).toHaveBeenCalledOnce());
     const [files] = onUnifiedDrop.mock.calls[0] as [File[]];
@@ -487,7 +487,7 @@ describe("apply workflow view - empty bench", () => {
 
     renderView({ onUnifiedDrop, ui: createEmptyPatcherUiState() });
 
-    expect(document.querySelector(".sample-tutorial-dialog")?.textContent).toContain("Loading the practice files");
+    expect(document.querySelector(".sample-tutorial-dialog")?.textContent).toContain("Loading the sample files");
     await vi.waitFor(() => expect(onUnifiedDrop).toHaveBeenCalledOnce());
   });
 
@@ -505,7 +505,7 @@ describe("apply workflow view - empty bench", () => {
     act(() => requestGuidedSampleStart("apply"));
 
     await vi.waitFor(() => expect(onUnifiedDrop).toHaveBeenCalledOnce());
-    expect(document.querySelector(".sample-tutorial-dialog")?.textContent).toContain("Loading the practice files");
+    expect(document.querySelector(".sample-tutorial-dialog")?.textContent).toContain("Loading the sample files");
 
     act(() => notifyGuidedSampleView("docs"));
     expect(document.querySelector(".sample-tutorial-dialog")).toBeNull();
@@ -558,7 +558,7 @@ describe("apply workflow view - empty bench", () => {
     );
 
     expect(setBundlePackage).toHaveBeenCalledWith("patches");
-    expect(document.querySelector(".sample-tutorial-dialog")?.textContent).toContain("Loading the practice files");
+    expect(document.querySelector(".sample-tutorial-dialog")?.textContent).toContain("Loading the sample files");
     await vi.waitFor(() => expect(onUnifiedDrop).toHaveBeenCalledOnce());
   });
 

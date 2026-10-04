@@ -34,13 +34,14 @@ rom-weaver loads a tiny homebrew NES ROM and two patches written for this guide.
 
 ## Step 2: look at what loaded
 
-The guide points at five parts of the Apply page. Use **Continue** to read each tip, then **Done** to close the guide.
+The guide points at six parts of the Apply page. Each tip has a **Try it** line with one thing to do. Use **Continue** to move on, then **Done** to close the guide.
 
 1. The **ROM** card shows the starting file and its checksums.
-2. The **Patches** cards show two independent changes. One changes `HELLO` to `ROM`. The other changes `WORLD` to `WEAVER`.
-3. **Add files** is where more ROMs, patches, archives, or bundles would go. You do not need it here.
-4. **Try the practice cheat menu** points to **Add cheats to the patch order**. Leave every cheat off to preserve this tutorial's expected output.
-5. **Apply** controls the output.
+2. **Choose how much to see** lifts the **Detailed** switch beside the ROM card. Turn it on and the card gains **Files** and **Identify** drawers; turn it off to keep one **Checks** drawer per file. Either view works for this tutorial.
+3. The **Patches** cards show two independent changes. One changes `HELLO` to `ROM`. The other changes `WORLD` to `WEAVER`.
+4. **Add files** is where more ROMs, patches, archives, or bundles would go. You do not need it here.
+5. **Optional: add a practice cheat** points to **Add cheats to the patch order**. Leave every cheat off to preserve this tutorial's expected output.
+6. **Apply** controls the output.
 
 ## Step 3: apply the patches
 

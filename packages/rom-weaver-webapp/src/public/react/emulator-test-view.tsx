@@ -54,22 +54,23 @@ import { WORKFLOW_GUIDES } from "./workflow-guides.ts";
 const WEBGL2_ERROR = "EmulatorJS testing requires a browser with WebGL 2.";
 const TEST_SAMPLE_ASSET = "hello-world.nes";
 
-const TEST_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
+const getTestSampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer>): readonly SampleTutorialStep[] => [
   {
     actions: [
-      ["drop", "Choose another ROM"],
-      ["remove", "Stop and unload"],
+      ["drop", localizer.message("ui.test.tutorial.chooseRom")],
+      ["remove", localizer.message("ui.test.tutorial.unload")],
     ],
-    body: "The sample is a tiny homebrew NES ROM. Test also accepts your local ROMs and supported archives.",
+    body: localizer.message("ui.test.tutorial.load.body"),
     target: ".emulator-test-view .unified-drop-step",
-    title: "Load a game",
+    title: localizer.message("ui.test.tutorial.load.title"),
   },
   {
-    actions: [["play", "Emulator controls"]],
-    body: "Start the game inside the player. Use its menu for controls, save states, and SRAM saves.",
+    actions: [["play", localizer.message("ui.test.tutorial.controls")]],
+    body: localizer.message("ui.test.tutorial.play.body"),
     placement: "top",
     target: "#emulator-test-player",
-    title: "Play the sample",
+    title: localizer.message("ui.test.tutorial.play.title"),
+    tryIt: localizer.message("ui.test.tutorial.play.tryIt"),
   },
 ];
 
@@ -629,7 +630,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
           loadingBody="RomWeaver is loading a tiny homebrew NES ROM for the Test guide."
           onClose={closeTestSample}
           ready={sampleTutorialReady}
-          steps={TEST_SAMPLE_TUTORIAL_STEPS}
+          steps={getTestSampleTutorialSteps(localizer)}
         />
       ) : null}
       <UnifiedDropZone

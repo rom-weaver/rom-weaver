@@ -20,6 +20,7 @@ import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { InfoPopover, NeedsInput } from "./components/ds/layout.tsx";
 import { ConfirmDialog } from "./components/ds/modal.tsx";
 import {
+  getViewTutorialStep,
   SampleTutorial,
   SampleTutorialStart,
   type SampleTutorialStep,
@@ -304,59 +305,65 @@ const CREATE_SAMPLE_ASSETS = [
 ] as const;
 // The pair as one download; the guided path fetches the two ROMs individually.
 const CREATE_SAMPLE_ARCHIVE = "first-create.zip";
-const CREATE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
+const getCreateSampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer>): readonly SampleTutorialStep[] => [
   {
     actions: [
-      ["checks", "Checks"],
-      ["remove", "Remove"],
+      ["checks", localizer.message("ui.apply.tutorial.checks")],
+      ["remove", localizer.message("ui.apply.tutorial.remove")],
     ],
-    body: "The Original card keeps the starting file's name, remove control, and checksums together.",
+    body: localizer.message("ui.create.tutorial.original.body"),
     openDrawers: true,
     target: "#patch-builder-row-original",
-    title: "Start with the original",
+    title: localizer.message("ui.create.tutorial.original.title"),
+    tryIt: localizer.message("ui.create.tutorial.original.tryIt"),
   },
+  getViewTutorialStep(localizer, "#patch-builder-row-original"),
   {
     actions: [
-      ["swap", "Swap"],
-      ["checks", "Checks"],
-      ["remove", "Remove"],
+      ["swap", localizer.message("ui.create.tutorial.swap")],
+      ["checks", localizer.message("ui.apply.tutorial.checks")],
+      ["remove", localizer.message("ui.apply.tutorial.remove")],
     ],
-    body: "Modified is the version the new patch should reproduce. Dropped them the wrong way round? Swap trades the two in one click.",
+    body: localizer.message("ui.create.tutorial.modified.body"),
     lift: ".swap-row",
     openDrawers: true,
     target: "#patch-builder-row-modified",
-    title: "Compare the modified ROM",
+    title: localizer.message("ui.create.tutorial.modified.title"),
+    tryIt: localizer.message("ui.create.tutorial.modified.tryIt"),
   },
   {
     actions: [
-      ["drop", "Drop files"],
-      ["drop", "Browse"],
+      ["drop", localizer.message("ui.apply.tutorial.dropFiles")],
+      ["drop", localizer.message("ui.apply.tutorial.browse")],
     ],
-    body: "The compact 0x01 row stays available after setup for adding files by drag and drop or the file picker.",
+    body: localizer.message("ui.create.tutorial.addFiles.body"),
     target: "#patch-builder-row-unified-drop",
-    title: "Add files at any time",
+    title: localizer.message("ui.apply.tutorial.addFiles.title"),
+    tryIt: localizer.message("ui.apply.tutorial.addFiles.tryIt"),
   },
   {
     actions: [
-      ["toggle", "Cheat codes"],
-      ["menu", "Pick from the cheat database"],
+      ["toggle", localizer.message("ui.create.tutorial.cheatCodes")],
+      ["menu", localizer.message("ui.create.tutorial.pickCheats")],
     ],
-    body: "Optional: switch to Cheat codes to browse practice cheats and build the patch from selected codes. Keep Modified ROM selected for the original sample output.",
+    body: localizer.message("ui.create.tutorial.cheats.body"),
     target: "#patch-builder-row-modified",
-    title: "Try the practice cheat menu",
+    title: localizer.message("ui.create.tutorial.cheats.title"),
+    tryIt: localizer.message("ui.create.tutorial.cheats.tryIt"),
   },
   {
     actions: [
-      ["options", "Options"],
-      ["archive", "Archive"],
-      ["create", "Create & download"],
+      ["options", localizer.message("ui.apply.tutorial.outputName")],
+      ["archive", localizer.message("ui.create.tutorial.archive")],
+      ["create", localizer.message("ui.create.tutorial.createDownload")],
     ],
-    body: "Choose the patch name, format, archive, and compression settings. Then press CREATE & DOWNLOAD PATCH.",
+    body: localizer.message("ui.create.tutorial.output.body"),
     cta: ".btn.run",
     openDrawers: true,
     placement: "top",
     target: "#patch-builder-row-output",
-    title: "Create the patch",
+    title: localizer.message("ui.create.tutorial.output.title"),
+    tryIt: localizer.message("ui.create.tutorial.output.tryIt"),
   },
 ];
 
@@ -1330,7 +1337,11 @@ function CreatePatchForm(props: CreatePatchFormProps) {
             }
             onClose={closeSampleTutorial}
             ready={sampleTutorialReady}
-            steps={sampleTutorial === "create-cheats" ? CREATE_CHEATS_TUTORIAL_STEPS : CREATE_SAMPLE_TUTORIAL_STEPS}
+            steps={
+              sampleTutorial === "create-cheats"
+                ? CREATE_CHEATS_TUTORIAL_STEPS
+                : getCreateSampleTutorialSteps(localizer)
+            }
           />
         ) : null}
       </>

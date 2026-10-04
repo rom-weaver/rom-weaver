@@ -991,8 +991,10 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   gap: var(--sp-l);
   align-items: start;
   width: min(720px, calc(100vw - 2 * var(--gutter)));
-  max-height: min(320px, calc(100dvh - 36px));
-  padding: calc(var(--sp-l) + 18px) var(--sp-l) var(--sp-l);
+  /* Room for the Try it row and the view comparison; the copy area scrolls
+     past this. */
+  max-height: min(380px, calc(100dvh - 36px));
+  padding: var(--sp-l);
   margin-inline: auto;
   overflow: hidden;
   color: var(--ink);
@@ -1078,7 +1080,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   width: 48px;
   height: 48px;
   font-family: var(--mono);
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   font-weight: 850;
   color: var(--thread-text);
   letter-spacing: -0.04em;
@@ -1097,9 +1099,36 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
 .rw-app .sample-tutorial-live {
   min-width: 0;
 }
+.rw-app .sample-tutorial-kicker-row {
+  /* The ✕ sits in the corner this row and the title share, so the card needs
+     no strip of padding above them. */
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-xs) var(--sp-m);
+  align-items: center;
+  /* The ✕ sits in the corner this row and the title share, so the card needs
+     no strip of padding above them. */
+  padding-inline-end: 32px;
+  margin-block-end: var(--sp-xs);
+}
+.rw-app .sample-tutorial-pips {
+  display: flex;
+  gap: 3px;
+}
+.rw-app .sample-tutorial-pips i {
+  width: 14px;
+  height: 4px;
+  background: var(--seam-strong);
+  border-radius: 2px;
+}
+.rw-app .sample-tutorial-pips i[data-state="done"] {
+  background: color-mix(in oklab, var(--thread) 55%, var(--seam-strong));
+}
+.rw-app .sample-tutorial-pips i[data-state="current"] {
+  background: var(--thread);
+}
 .rw-app .sample-tutorial-kicker {
   display: block;
-  margin-block-end: var(--sp-xs);
   font-size: 0.68rem;
   font-weight: 800;
   color: var(--thread-text);
@@ -1119,10 +1148,90 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   line-height: 1.5;
   color: var(--ink-2);
 }
-.rw-app .sample-tutorial-copy-area .sample-tutorial-end-hint {
+.rw-app .sample-tutorial-copy .sample-tutorial-try {
+  display: flex;
+  gap: var(--sp-s);
+  align-items: baseline;
+  padding: var(--sp-s) var(--sp-m);
   margin-block-start: var(--sp-s);
+  color: var(--ink);
+  background: color-mix(in oklab, var(--thread) 10%, var(--well));
+  border-radius: var(--r-s);
+}
+.rw-app .sample-tutorial-try b,
+.rw-app .sample-tutorial-action-label,
+.rw-app .sample-tutorial-compare em {
+  flex: none;
+  font-size: 0.64rem;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.rw-app .sample-tutorial-try b {
+  color: var(--thread-text);
+}
+.rw-app .sample-tutorial-action-label {
+  display: block;
+  margin-block-start: var(--sp-s);
+  color: var(--ink-3);
+}
+.rw-app .sample-tutorial-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-s);
+  margin-block-start: var(--sp-s);
+}
+.rw-app .sample-tutorial-copy .sample-tutorial-compare p {
+  display: grid;
+  gap: var(--sp-2xs);
+  align-content: start;
+  padding: var(--sp-s) var(--sp-m);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  border: 1px solid var(--seam);
+  border-radius: var(--r-s);
+}
+.rw-app .sample-tutorial-copy .sample-tutorial-compare p[data-current="true"] {
+  background: color-mix(in oklab, var(--thread) 8%, transparent);
+  border-color: var(--thread);
+}
+.rw-app .sample-tutorial-compare strong {
+  display: flex;
+  gap: var(--sp-s);
+  align-items: baseline;
+  color: var(--ink);
+}
+.rw-app .sample-tutorial-compare em {
+  color: var(--thread-text);
+}
+/* The view step lifts the whole panel heading: it is an absolute z-index layer,
+   so a lift on the switch alone would stay trapped under the scrim. The heading
+   keeps its absolute placement and its other controls step back. The switch is
+   bare text with no box, so lifted alone it would still show the dimmed,
+   blurred page through itself and read as disabled: it takes an opaque plate,
+   full-strength text, and a ring that marks it without moving the row. */
+.rw-app .workflow-panel-head.sample-tutorial-lift {
+  position: absolute !important;
+}
+.rw-app .workflow-panel-head.sample-tutorial-lift > :not(.panel-view-toggle) {
+  opacity: 0.35;
+}
+.rw-app .workflow-panel-head.sample-tutorial-lift .panel-view-toggle {
+  color: var(--ink);
+  background: var(--plate);
+  border-radius: var(--r-s);
+  box-shadow:
+    0 0 0 6px var(--plate),
+    0 0 0 9px var(--thread),
+    0 0 22px 6px color-mix(in oklab, var(--thread) 34%, transparent);
+}
+.rw-app .sample-tutorial-actions .sample-tutorial-end-hint {
+  min-width: 0;
+  margin: 0;
   font-size: 0.74rem;
   color: var(--ink-3);
+  text-align: center;
 }
 .rw-app .sample-tutorial-progress {
   height: 7px;
@@ -1146,7 +1255,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   flex-wrap: wrap;
   gap: var(--sp-xs);
   padding: 0;
-  margin: var(--sp-s) 0 0;
+  margin: var(--sp-xs) 0 0;
   list-style: none;
 }
 .rw-app .sample-tutorial-action-list li {
@@ -1227,11 +1336,12 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   .rw-app .sample-tutorial-dialog {
     inset-inline: 10px;
     bottom: calc(var(--dock-h, max(0px, env(safe-area-inset-bottom))) + 10px);
-    grid-template-columns: 38px minmax(0, 1fr);
-    gap: var(--sp-m);
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-s);
     width: calc(100vw - 20px);
-    max-height: min(360px, calc(100dvh - 20px));
-    padding: calc(var(--sp-m) + 18px) var(--sp-m) var(--sp-m);
+    /* Leaves at least half the screen for the row; the copy scrolls inside. */
+    max-height: min(320px, 48dvh);
+    padding: var(--sp-m);
   }
   .rw-app .sample-tutorial-dialog[data-placement="top"] {
     top: max(10px, env(safe-area-inset-top));
@@ -1242,10 +1352,28 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
     bottom: auto;
     max-height: calc(100dvh - 20px);
   }
-  .rw-app .sample-tutorial-beacon {
-    width: 38px;
-    height: 38px;
+  /* The phone bar shares the screen with the row it explains, so it keeps
+     only what the step needs: the kicker already numbers the step, the
+     highlighted row shows its own controls, and the ✕ says how to leave. The
+     view comparison goes too - the body names the current view and what the
+     other one adds. What remains is the title, the body, and the Try it row. */
+  .rw-app .sample-tutorial-beacon,
+  .rw-app .sample-tutorial-action-label,
+  .rw-app .sample-tutorial-action-list,
+  .rw-app .sample-tutorial-actions .sample-tutorial-end-hint,
+  .rw-app .sample-tutorial-compare {
+    display: none;
+  }
+  .rw-app .sample-tutorial-copy-area {
+    grid-column: 1;
+  }
+  .rw-app .sample-tutorial-copy h2 {
+    padding-inline-end: 32px;
     font-size: 1rem;
+  }
+  .rw-app .sample-tutorial-copy p {
+    font-size: 0.82rem;
+    line-height: 1.45;
   }
   .rw-app .sample-tutorial-actions {
     grid-column: 1 / -1;

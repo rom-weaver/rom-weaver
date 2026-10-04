@@ -544,9 +544,13 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.postTest": msg({ id: "ui.apply.postTest", message: "Post Apply Test" }),
   "ui.apply.tutorial.addFiles.body": msg({
     id: "ui.apply.tutorial.addFiles.body",
-    message: "The compact add-files row stays available after setup for more ROMs, patches, bundles, or archives.",
+    message:
+      "Drop ROMs, patches, archives or bundles here, or press Browse. rom-weaver works out what each file is and puts it on the right card.",
   }),
-  "ui.apply.tutorial.addFiles.title": msg({ id: "ui.apply.tutorial.addFiles.title", message: "Add files at any time" }),
+  "ui.apply.tutorial.addFiles.title": msg({
+    id: "ui.apply.tutorial.addFiles.title",
+    message: "Add more files any time",
+  }),
   "ui.apply.tutorial.applyDownload": msg({ id: "ui.apply.tutorial.applyDownload", message: "Apply & download" }),
   "ui.apply.tutorial.browse": msg({ id: "ui.apply.tutorial.browse", message: "Browse" }),
   "ui.apply.tutorial.checks": msg({ id: "ui.apply.tutorial.checks", message: "Checks" }),
@@ -559,37 +563,148 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.tutorial.header": msg({ id: "ui.apply.tutorial.header", message: "Header options" }),
   "ui.apply.tutorial.loading": msg({
     id: "ui.apply.tutorial.loading",
-    message: "RomWeaver is unpacking one tiny ROM and two patches, then checking what each file is.",
+    message: "Unpacking a tiny ROM and two patches, then checking each one. Nothing leaves your browser.",
   }),
   "ui.apply.tutorial.moveDown": msg({ id: "ui.apply.tutorial.moveDown", message: "Move down" }),
   "ui.apply.tutorial.moveUp": msg({ id: "ui.apply.tutorial.moveUp", message: "Move up" }),
-  "ui.apply.tutorial.options": msg({ id: "ui.apply.tutorial.options", message: "Options" }),
   "ui.apply.tutorial.output.body": msg({
     id: "ui.apply.tutorial.output.body",
     message:
-      "Choose the output name, format, compression, and header. Then press Apply & download to apply both patches.",
+      "Choose a name and a format. .nes downloads the patched ROM itself; ZIP or 7z wraps it in an archive. Your original file is not changed.",
   }),
-  "ui.apply.tutorial.output.title": msg({ id: "ui.apply.tutorial.output.title", message: "Apply both patches" }),
+  "ui.apply.tutorial.output.title": msg({ id: "ui.apply.tutorial.output.title", message: "Apply and download" }),
   "ui.apply.tutorial.patchDetails": msg({ id: "ui.apply.tutorial.patchDetails", message: "Patch details" }),
   "ui.apply.tutorial.patches.body": msg({
     id: "ui.apply.tutorial.patches.body",
     message:
-      "Both IPS patches target the original ROM, so either order works. Turn either patch off to apply only one change. Use Move up and Move down to change the order, header options for header handling, Checks for checksums, Replace patch for a new file, and Patch details to edit metadata or remove it.",
+      "One patch turns HELLO into ROM, the other turns WORLD into WEAVER. Both were made for the original ROM, so their order doesn't matter here.",
   }),
-  "ui.apply.tutorial.patches.title": msg({ id: "ui.apply.tutorial.patches.title", message: "Build the patch stack" }),
+  "ui.apply.tutorial.patches.title": msg({
+    id: "ui.apply.tutorial.patches.title",
+    message: "Two patches, two changes",
+  }),
   "ui.apply.tutorial.remove": msg({ id: "ui.apply.tutorial.remove", message: "Remove" }),
   "ui.apply.tutorial.replacePatch": msg({ id: "ui.apply.tutorial.replacePatch", message: "Replace patch" }),
   "ui.apply.tutorial.rom.body": msg({
     id: "ui.apply.tutorial.rom.body",
-    message: "The ROM card keeps its name, source files, checksums, and file controls together.",
+    message:
+      "hello-world.nes is a tiny homebrew NES game made for this guide. A patch only works on the exact ROM it was written for, so the card lists its checksums.",
   }),
-  "ui.apply.tutorial.rom.title": msg({ id: "ui.apply.tutorial.rom.title", message: "Start with the ROM" }),
+  "ui.apply.tutorial.rom.title": msg({ id: "ui.apply.tutorial.rom.title", message: "This is your starting ROM" }),
   "ui.apply.tutorial.sampleLoadFailed": msg({
     id: "ui.apply.tutorial.sampleLoadFailed",
     message: "Could not load the sample. Try again.",
   }),
   "ui.apply.tutorial.startApply": msg({ id: "ui.apply.tutorial.startApply", message: "Start guided Apply" }),
-  "ui.apply.tutorial.toggle": msg({ id: "ui.apply.tutorial.toggle", message: "Toggle On / Off" }),
+  "ui.apply.tutorial.toggle": msg({ id: "ui.apply.tutorial.toggle", message: "On / Off" }),
+  "ui.apply.tutorial.rom.tryIt": msg({
+    id: "ui.apply.tutorial.rom.tryIt",
+    message: "Open Checks to see the CRC32, MD5 and SHA-1.",
+  }),
+  "ui.apply.tutorial.patches.tryIt": msg({
+    id: "ui.apply.tutorial.patches.tryIt",
+    message: "Switch a patch off to apply only the other change.",
+  }),
+  "ui.apply.tutorial.addFiles.tryIt": msg({
+    id: "ui.apply.tutorial.addFiles.tryIt",
+    message: "Nothing to add for this run. Continue.",
+  }),
+  "ui.apply.tutorial.cheats.title": msg({
+    id: "ui.apply.tutorial.cheats.title",
+    message: "Optional: add a practice cheat",
+  }),
+  "ui.apply.tutorial.cheats.body": msg({
+    id: "ui.apply.tutorial.cheats.body",
+    message:
+      "Cheats join the patch list and apply like any other patch. Leave them off if you want the expected ROM WEAVER result.",
+  }),
+  "ui.apply.tutorial.cheats.tryIt": msg({
+    id: "ui.apply.tutorial.cheats.tryIt",
+    message: "Open the cheat menu to look at the practice catalog.",
+  }),
+  "ui.apply.tutorial.addCheats": msg({ id: "ui.apply.tutorial.addCheats", message: "Add cheats to the patch order" }),
+  "ui.apply.tutorial.output.tryIt": msg({
+    id: "ui.apply.tutorial.output.tryIt",
+    message: "Press Apply & download. The guide closes when the download starts.",
+  }),
+  "ui.apply.tutorial.outputName": msg({ id: "ui.apply.tutorial.outputName", message: "Output name" }),
+  "ui.apply.tutorial.format": msg({ id: "ui.apply.tutorial.format", message: "Format" }),
+  "ui.create.tutorial.original.title": msg({
+    id: "ui.create.tutorial.original.title",
+    message: "Start from the original ROM",
+  }),
+  "ui.create.tutorial.original.body": msg({
+    id: "ui.create.tutorial.original.body",
+    message: "This is the unchanged game. The patch you make records every byte that differs from it.",
+  }),
+  "ui.create.tutorial.original.tryIt": msg({
+    id: "ui.create.tutorial.original.tryIt",
+    message: "Open Checks to see its checksums.",
+  }),
+  "ui.create.tutorial.modified.title": msg({ id: "ui.create.tutorial.modified.title", message: "Add the changed ROM" }),
+  "ui.create.tutorial.modified.body": msg({
+    id: "ui.create.tutorial.modified.body",
+    message:
+      "Modified is the result you want the patch to produce. If the two files landed in the wrong slots, Swap trades them.",
+  }),
+  "ui.create.tutorial.modified.tryIt": msg({
+    id: "ui.create.tutorial.modified.tryIt",
+    message: "Press Swap twice to see it flip and flip back.",
+  }),
+  "ui.create.tutorial.addFiles.body": msg({
+    id: "ui.create.tutorial.addFiles.body",
+    message: "Drop files here or press Browse to replace either ROM.",
+  }),
+  "ui.create.tutorial.cheats.title": msg({
+    id: "ui.create.tutorial.cheats.title",
+    message: "Optional: build from cheat codes",
+  }),
+  "ui.create.tutorial.cheats.body": msg({
+    id: "ui.create.tutorial.cheats.body",
+    message:
+      "Cheat codes replaces the modified ROM as the source of changes. Switch back to Modified ROM for the sample's expected patch.",
+  }),
+  "ui.create.tutorial.cheats.tryIt": msg({
+    id: "ui.create.tutorial.cheats.tryIt",
+    message: "Switch to Cheat codes and open the practice catalog.",
+  }),
+  "ui.create.tutorial.cheatCodes": msg({ id: "ui.create.tutorial.cheatCodes", message: "Cheat codes" }),
+  "ui.create.tutorial.pickCheats": msg({
+    id: "ui.create.tutorial.pickCheats",
+    message: "Pick from the cheat database",
+  }),
+  "ui.create.tutorial.output.title": msg({
+    id: "ui.create.tutorial.output.title",
+    message: "Create and download the patch",
+  }),
+  "ui.create.tutorial.output.body": msg({
+    id: "ui.create.tutorial.output.body",
+    message: "Pick a name and a patch format. Your two ROMs are not changed.",
+  }),
+  "ui.create.tutorial.output.tryIt": msg({
+    id: "ui.create.tutorial.output.tryIt",
+    message: "Press Create & download. The guide closes when the download starts.",
+  }),
+  "ui.create.tutorial.swap": msg({ id: "ui.create.tutorial.swap", message: "Swap" }),
+  "ui.create.tutorial.archive": msg({ id: "ui.create.tutorial.archive", message: "Archive" }),
+  "ui.create.tutorial.createDownload": msg({ id: "ui.create.tutorial.createDownload", message: "Create & download" }),
+  "ui.test.tutorial.load.title": msg({ id: "ui.test.tutorial.load.title", message: "A game is loaded" }),
+  "ui.test.tutorial.load.body": msg({
+    id: "ui.test.tutorial.load.body",
+    message: "The sample is a tiny homebrew NES game. You can also drop your own ROMs or archives here.",
+  }),
+  "ui.test.tutorial.chooseRom": msg({ id: "ui.test.tutorial.chooseRom", message: "Choose another ROM" }),
+  "ui.test.tutorial.unload": msg({ id: "ui.test.tutorial.unload", message: "Stop and unload" }),
+  "ui.test.tutorial.play.title": msg({ id: "ui.test.tutorial.play.title", message: "Play it" }),
+  "ui.test.tutorial.play.body": msg({
+    id: "ui.test.tutorial.play.body",
+    message: "The game runs in your browser. The player menu has controls, save states and in-game saves.",
+  }),
+  "ui.test.tutorial.play.tryIt": msg({
+    id: "ui.test.tutorial.play.tryIt",
+    message: "Start the game, then open the player menu.",
+  }),
+  "ui.test.tutorial.controls": msg({ id: "ui.test.tutorial.controls", message: "Emulator controls" }),
   "ui.apply.validation.conflictingChecksum": msg({
     id: "ui.apply.validation.conflictingChecksum",
     message: "Patch {index} {side} {algorithm} conflicts with the checksum built into the patch",
@@ -834,29 +949,51 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Choose the ROM that this patch was made for, or use the override in 0x04.",
   }),
   "ui.patch.version": msg({ id: "ui.patch.version", message: "Version" }),
-  "ui.tutorial.actions": msg({ id: "ui.tutorial.actions", message: "Available actions" }),
+  "ui.tutorial.actions": msg({ id: "ui.tutorial.actions", message: "On this card" }),
   "ui.tutorial.back": msg({ id: "ui.tutorial.back", message: "Back" }),
   "ui.tutorial.continue": msg({ id: "ui.tutorial.continue", message: "Continue" }),
-  "ui.tutorial.dismiss": msg({ id: "ui.tutorial.dismiss", message: "Don't show this again" }),
-  "ui.tutorial.reenable": msg({ id: "ui.tutorial.reenable", message: "Re-enable in Settings" }),
+  "ui.tutorial.dismiss": msg({ id: "ui.tutorial.dismiss", message: "Hide this button" }),
+  "ui.tutorial.reenable": msg({ id: "ui.tutorial.reenable", message: "Bring it back in Settings" }),
   "ui.tutorial.done": msg({ id: "ui.tutorial.done", message: "Done" }),
-  "ui.tutorial.endHint": msg({
-    id: "ui.tutorial.endHint",
-    message: "The top-right X exits; the final action button also ends the tutorial.",
-  }),
-  "ui.tutorial.exit": msg({ id: "ui.tutorial.exit", message: "Exit tutorial" }),
+  "ui.tutorial.endHint": msg({ id: "ui.tutorial.endHint", message: "Esc or ✕ leaves the guide." }),
+  "ui.tutorial.exit": msg({ id: "ui.tutorial.exit", message: "Leave the guide" }),
   "ui.tutorial.instructions": msg({ id: "ui.tutorial.instructions", message: "Tutorial instructions" }),
-  "ui.tutorial.loading": msg({ id: "ui.tutorial.loading", message: "Loading practice files…" }),
-  "ui.tutorial.loadingProgress": msg({ id: "ui.tutorial.loadingProgress", message: "Loading practice files" }),
-  "ui.tutorial.loadingTitle": msg({ id: "ui.tutorial.loadingTitle", message: "Loading the practice files" }),
+  "ui.tutorial.loading": msg({ id: "ui.tutorial.loading", message: "Loading sample files…" }),
+  "ui.tutorial.loadingProgress": msg({ id: "ui.tutorial.loadingProgress", message: "Loading sample files" }),
+  "ui.tutorial.loadingTitle": msg({ id: "ui.tutorial.loadingTitle", message: "Loading the sample files" }),
   "ui.tutorial.new": msg({ id: "ui.tutorial.new", message: "New here?" }),
-  "ui.tutorial.preparing": msg({ id: "ui.tutorial.preparing", message: "Preparing workbench…" }),
-  "ui.tutorial.preparingProgress": msg({
-    id: "ui.tutorial.preparingProgress",
-    message: "Preparing the guided workbench",
+  "ui.tutorial.preparing": msg({ id: "ui.tutorial.preparing", message: "Getting the sample ready…" }),
+  "ui.tutorial.preparingProgress": msg({ id: "ui.tutorial.preparingProgress", message: "Getting the sample ready" }),
+  "ui.tutorial.start": msg({ id: "ui.tutorial.start", message: "Practice with sample files" }),
+  "ui.tutorial.step": msg({ id: "ui.tutorial.step", message: "Practice run · Step {step} of {total}" }),
+  "ui.tutorial.tryIt": msg({ id: "ui.tutorial.tryIt", message: "Try it" }),
+  "ui.tutorial.view.title": msg({ id: "ui.tutorial.view.title", message: "Choose how much to see" }),
+  "ui.tutorial.view.simpleBody": msg({
+    id: "ui.tutorial.view.simpleBody",
+    message: "You're in Simple view: one Checks drawer per file.",
   }),
-  "ui.tutorial.start": msg({ id: "ui.tutorial.start", message: "Get started" }),
-  "ui.tutorial.step": msg({ id: "ui.tutorial.step", message: "Guided workbench · {step}/{total}" }),
+  "ui.tutorial.view.detailedBody": msg({
+    id: "ui.tutorial.view.detailedBody",
+    message: "You're in Detailed view: Files and Identify drawers on every file, plus timings.",
+  }),
+  "ui.tutorial.view.simpleTryIt": msg({
+    id: "ui.tutorial.view.simpleTryIt",
+    message: "Switch Detailed on and watch the highlighted card change. Your choice is saved.",
+  }),
+  "ui.tutorial.view.detailedTryIt": msg({
+    id: "ui.tutorial.view.detailedTryIt",
+    message: "Switch Detailed off to go back to one drawer per file. Your choice is saved.",
+  }),
+  "ui.tutorial.view.simple": msg({ id: "ui.tutorial.view.simple", message: "Simple" }),
+  "ui.tutorial.view.simpleSummary": msg({
+    id: "ui.tutorial.view.simpleSummary",
+    message: "One Checks drawer per file: console, identified or not, checksums.",
+  }),
+  "ui.tutorial.view.detailedSummary": msg({
+    id: "ui.tutorial.view.detailedSummary",
+    message: "Adds Files, Identify and disc-sheet drawers, plus timings.",
+  }),
+  "ui.tutorial.view.current": msg({ id: "ui.tutorial.view.current", message: "Now" }),
   "candidate.warningCount": msg({ id: "candidate.warningCount", message: "{count} warning(s)" }),
   "error.AMBIGUOUS_SELECTION": msg({ id: "error.AMBIGUOUS_SELECTION", message: "Multiple matching files were found." }),
   "error.CANCELLED": msg({ id: "error.CANCELLED", message: "Workflow was cancelled." }),

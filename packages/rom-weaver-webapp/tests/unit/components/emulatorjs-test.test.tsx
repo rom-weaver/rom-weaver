@@ -272,7 +272,7 @@ describe("EmulatorTestView", () => {
     expect(emulatorAudioMocks.prepareEmulatorAudioContext).toHaveBeenCalledWith("b".repeat(40));
     expect(screen.getByText("hello-world.nes", { selector: ".emulator-player-copy .ck-v" })).toBeTruthy();
     expect(screen.getByText("b".repeat(40))).toBeTruthy();
-    await waitFor(() => expect(screen.getByRole("dialog", { name: "Load a game" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "A game is loaded" })).toBeTruthy());
     expect(screen.getByTitle("EmulatorJS test for hello-world.nes")).toBeTruthy();
   });
 
@@ -327,7 +327,7 @@ describe("EmulatorTestView", () => {
     render(withSettings(<EmulatorTestView />));
     fireEvent.click(screen.getByRole("button", { name: /New here\?/ }));
     fireEvent.click(screen.getByRole("link", { name: "Start guided Test" }));
-    fireEvent.click(screen.getByRole("button", { name: "Exit tutorial" }));
+    fireEvent.click(screen.getByRole("button", { name: "Leave the guide" }));
     fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {
       target: { files: [new File(["local"], "local.nes")] },
     });
@@ -363,7 +363,7 @@ describe("EmulatorTestView", () => {
 
     await waitFor(() => expect(getEmulatorSessionState().entries[0]?.fileName).toBe("hello-world.nes"));
     expect(emulatorAudioMocks.prepareEmulatorAudioContext).not.toHaveBeenCalled();
-    await waitFor(() => expect(screen.getByRole("dialog", { name: "Load a game" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "A game is loaded" })).toBeTruthy());
   });
 
   it("shows an actionable error and restores the hero for an unsupported file", async () => {
