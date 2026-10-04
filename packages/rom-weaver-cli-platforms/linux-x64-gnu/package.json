@@ -1,6 +1,6 @@
 {
   "name": "@rom-weaver/linux-x64-gnu",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "description": "Linux x64 glibc binary for rom-weaver",
   "keywords": [
     "chd",
