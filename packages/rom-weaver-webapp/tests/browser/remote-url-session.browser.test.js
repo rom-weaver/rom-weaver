@@ -242,6 +242,14 @@ test("url-session files fetched from same-origin urls flow through the drop pipe
   await Promise.all(fetched.map((entry) => entry.cleanup()));
 });
 
+// Guided Apply opens on the empty drop zone and loads nothing until the reader
+// asks: the practice files arrive from the guide card's own button.
+const startPracticeFiles = async () => {
+  await expect.poll(() => document.querySelector(".sample-tutorial-practice button")).toBeInstanceOf(HTMLButtonElement);
+  expect(getInputStackRows()).toHaveLength(0);
+  document.querySelector(".sample-tutorial-practice button").click();
+};
+
 test("sample action applies with one patch disabled", async () => {
   mount(createElement(ApplyPatchForm));
   const href = location.href;
@@ -250,6 +258,7 @@ test("sample action applies with one patch disabled", async () => {
   await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLAnchorElement);
   document.querySelector(".sample-tutorial-start-primary").click();
   expect(location.href).toBe(href);
+  await startPracticeFiles();
 
   await expect.poll(() => getInputStackRows().length, { timeout: 30000 }).toBe(1);
   await expect
@@ -276,6 +285,7 @@ test("sample base patches apply after their order changes", async () => {
   await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLAnchorElement);
   document.querySelector(".sample-tutorial-start-primary").click();
   expect(location.href).toBe(href);
+  await startPracticeFiles();
 
   await expect.poll(() => getInputStackRows().length, { timeout: 30000 }).toBe(1);
   await expect
