@@ -44,7 +44,7 @@
 
   .rw-app .sample-tutorial-start-chip {
     gap: 3px;
-    padding-inline: 2px;
+    padding-inline: 7px;
     font-size: var(--hero-help-font, 0.82rem);
     white-space: nowrap;
   }
