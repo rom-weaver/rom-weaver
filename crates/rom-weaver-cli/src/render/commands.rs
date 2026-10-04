@@ -132,7 +132,9 @@ pub(super) fn render_verbose(surface: &Surface, event: &ProgressEvent) {
             let kind = codec.map(|codec| format!(", {codec}")).unwrap_or_default();
             diagnostics.line(&format!("{}: wrote {path} ({size}{kind})", event.command));
         }
-    } else if !event.label.is_empty() {
+    } else if !event.label.is_empty()
+        && !matches!(event.command.as_str(), "trim" | "save-set" | "save-create")
+    {
         diagnostics.line(&format!("{}: {}", event.command, event.label));
     }
     if event.command == "probe" {

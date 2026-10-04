@@ -424,3 +424,52 @@ fn human_results_trim_and_empty_database_queries_explain_empty_results() {
         "an empty database still has a status"
     );
 }
+
+#[test]
+fn human_results_verbose_no_write_explanations_appear_once_with_elapsed_time() {
+    let temp = setup_temp_dir();
+    let input = temp.child("unsupported.txt");
+    input.write_str("unsupported input").expect("fixture");
+    let save = temp.child("fresh.srm");
+    let save_path = save.path().to_str().expect("save path");
+    command_stdout(
+        &[
+            "save",
+            "create",
+            "--game",
+            "super-mario-world",
+            "-o",
+            save_path,
+        ],
+        0,
+    );
+    for (args, explanation) in [
+        (
+            vec![
+                "trim",
+                "-i",
+                input.path().to_str().expect("path"),
+                "--verbose",
+            ],
+            "no trim-eligible inputs found",
+        ),
+        (
+            vec![
+                "save",
+                "set",
+                save_path,
+                "slot_1.progress.exits_completed=0",
+                "--game",
+                "super-mario-world",
+                "--verbose",
+            ],
+            "The requested values already match the save",
+        ),
+    ] {
+        let output = command_output_with_env(&args, &[], 0);
+        assert!(output.stdout.is_empty());
+        let stderr = String::from_utf8(output.stderr).expect("UTF-8");
+        assert_eq!(stderr.matches(explanation).count(), 1, "{stderr}");
+        assert!(stderr.contains("finished in"), "{stderr}");
+    }
+}
