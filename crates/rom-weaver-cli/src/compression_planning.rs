@@ -328,13 +328,22 @@ impl CliApp {
         output: &Path,
         extension_source: &Path,
     ) -> Result<PatchApplyCompressionOptions> {
-        let mut options = Self::parse_patch_apply_compression_options(
+        let options = Self::parse_patch_apply_compression_options(
             no_compress,
             compress_format,
             compress_codec,
             compress_level,
         )?;
-        if no_compress {
+        self.resolve_patch_apply_output_options(options, output, extension_source)
+    }
+
+    pub(super) fn resolve_patch_apply_output_options(
+        &self,
+        mut options: PatchApplyCompressionOptions,
+        output: &Path,
+        extension_source: &Path,
+    ) -> Result<PatchApplyCompressionOptions> {
+        if !options.enabled {
             return Ok(options);
         }
         if options.requested_format.is_some()
@@ -543,7 +552,7 @@ impl CliApp {
         };
 
         if let Some(warning) = resolution.warning.as_deref() {
-            warn!(
+            debug!(
                 command = "patch-apply",
                 format = %resolved_format,
                 output = %output_path.display(),

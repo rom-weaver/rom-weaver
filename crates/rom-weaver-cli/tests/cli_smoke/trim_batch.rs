@@ -1023,6 +1023,10 @@ fn trim_skips_non_nds_inputs() {
     let terminal = parse_single_json_line(&output);
     assert_eq!(terminal["command"], "trim");
     assert_eq!(terminal["status"], "succeeded");
+    assert_eq!(terminal["details"]["processed"], 0);
+    assert_eq!(terminal["details"]["trimmed"], 0);
+    assert_eq!(terminal["details"]["already_target"], 0);
+    assert_eq!(terminal["details"]["skipped_unsupported"], 1);
     assert!(
         terminal["label"]
             .as_str()

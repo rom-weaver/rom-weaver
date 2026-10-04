@@ -3448,8 +3448,54 @@ impl CliApp {
         compression_options: &PatchApplyCompressionOptions,
         thread_execution: Option<ThreadExecution>,
     ) -> OperationReport {
+        let explicit_compression = compression_options.requested_format.is_some()
+            || compression_options.codec.is_some()
+            || compression_options.level_explicit;
+        let unresolved_source = self.containers.probe(input).is_some()
+            || input
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| {
+                    ext.eq_ignore_ascii_case("cue") || ext.eq_ignore_ascii_case("gdi")
+                });
+        if compression_options.enabled
+            && !explicit_compression
+            && unresolved_source
+            && self.containers.find_by_output_extension(output).is_none()
+        {
+            let mut report =
+                Self::patch_apply_dry_run_report(input, patches, output, None, thread_execution);
+            report.label = format!(
+                "dry run: would apply {} patch(es) and write `{}`; output format awaits source selection; nothing written",
+                patches.len(),
+                output.display(),
+            );
+            if let Some(details) = report.details.as_mut() {
+                details["format"] = json!("unresolved");
+                details["notes"].as_array_mut().expect("plan notes").push(json!(
+                    "raw output extension is not validated until the archive member or disc payload is selected"
+                ));
+            }
+            return report;
+        }
+        let compression_options = match self.resolve_patch_apply_output_options(
+            compression_options.clone(),
+            output,
+            input,
+        ) {
+            Ok(options) => options,
+            Err(error) => {
+                return OperationReport::failed_with_error(
+                    OperationFamily::Patch,
+                    None,
+                    "validate",
+                    error,
+                    thread_execution,
+                );
+            }
+        };
         let planned_output = if compression_options.enabled {
-            match self.resolve_patch_apply_compression_plan(output, input, compression_options) {
+            match self.resolve_patch_apply_compression_plan(output, input, &compression_options) {
                 Ok(plan) => Some(plan),
                 Err(error) => {
                     return OperationReport::failed_with_error(
@@ -3511,6 +3557,9 @@ impl CliApp {
                 details.insert("format".to_string(), json!(plan.format));
                 details.insert("codec".to_string(), json!(plan.codec));
                 details.insert("level".to_string(), json!(plan.level));
+                if let Some(warning) = &plan.warning {
+                    details.insert("warnings".to_string(), json!([warning]));
+                }
             }
             None => {
                 details.insert("format".to_string(), json!("raw"));

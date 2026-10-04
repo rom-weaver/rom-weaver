@@ -50,6 +50,7 @@ fn compress_explicit_destination_is_silent_but_keeps_format_warning() {
     let stderr = String::from_utf8(output.stderr).expect("UTF-8 diagnostic");
     assert!(stderr.contains("warning:"), "{stderr}");
     assert!(stderr.contains("extension"), "{stderr}");
+    assert_eq!(stderr.matches("does not match").count(), 1, "{stderr}");
     assert!(destination.path().exists());
 }
 
