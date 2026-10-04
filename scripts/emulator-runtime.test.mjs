@@ -112,6 +112,19 @@ test("Mupen64Plus avoids the removed classic Mac fp.h on Darwin", () => {
   });
 });
 
+test("Mupen64Plus leaves Apple's fdopen declaration intact", () => {
+  const core = sources.cores.find(({ id }) => id === "mupen64plus_next");
+  const patch = core?.patches?.find(
+    ({ path }) => path === "custom/dependencies/libzlib/zutil.h",
+  );
+  assert.deepEqual(patch, {
+    path: "custom/dependencies/libzlib/zutil.h",
+    find: "#      ifndef fdopen\n#        define fdopen(fd,mode) NULL /* No fdopen() */",
+    replace:
+      "#      if !defined(fdopen) && !defined(__APPLE__)\n#        define fdopen(fd,mode) NULL /* No fdopen() */",
+  });
+});
+
 test("PPSSPP uses each upstream platform directory and native architecture", () => {
   const ppsspp = sources.cores.find(({ id }) => id === "ppsspp");
   for (const [name, expected] of [
