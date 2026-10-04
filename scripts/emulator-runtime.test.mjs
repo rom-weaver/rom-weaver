@@ -100,6 +100,18 @@ test("Mupen64Plus enables rand_s declarations for MinGW builds", () => {
   );
 });
 
+test("Mupen64Plus avoids the removed classic Mac fp.h on Darwin", () => {
+  const core = sources.cores.find(({ id }) => id === "mupen64plus_next");
+  const patch = core?.patches?.find(
+    ({ path }) => path === "custom/dependencies/libpng/pngpriv.h",
+  );
+  assert.deepEqual(patch, {
+    path: "custom/dependencies/libpng/pngpriv.h",
+    find: "defined(THINK_C) || defined(__SC__) || defined(TARGET_OS_MAC)",
+    replace: "defined(THINK_C) || defined(__SC__)",
+  });
+});
+
 test("PPSSPP uses each upstream platform directory and native architecture", () => {
   const ppsspp = sources.cores.find(({ id }) => id === "ppsspp");
   for (const [name, expected] of [

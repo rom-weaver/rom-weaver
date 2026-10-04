@@ -316,6 +316,11 @@
           "path": "libretro/libretro.c",
           "find": "#include <stdlib.h>",
           "replace": "#ifdef __MINGW32__\n#define _CRT_RAND_S\n#endif\n#include <stdlib.h>"
+        },
+        {
+          "path": "custom/dependencies/libpng/pngpriv.h",
+          "find": "defined(THINK_C) || defined(__SC__) || defined(TARGET_OS_MAC)",
+          "replace": "defined(THINK_C) || defined(__SC__)"
         }
       ],
       "output": "mupen64plus_next_libretro.so",
