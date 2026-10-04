@@ -29,7 +29,14 @@ Never done this before? [Your first patch in the browser](../tutorials/first-pat
 
 ## What do you need?
 
-You need the patch and your own copy of the exact game release it was made for. Keep the patch author's notes open. Look for:
+You need the patch and your own copy of the exact game release it was made for. The files have different roles:
+
+- **Original ROM:** the starting game file named by the patch author. Add it to Apply alongside the patch. Keep a clean copy.
+- **Patch:** a file such as `.bps`, `.ips`, or `.xdelta` that describes changes to the original ROM.
+- **Archive:** a ZIP, 7z, or RAR that can contain a ROM, a patch, or both. Its extension identifies the archive, not the patch format.
+- **Output ROM:** the new game file created by applying the patch. This is the result you download and use in a compatible emulator or on supported hardware.
+
+Keep the patch author's notes open. Look for:
 
 - region, such as USA, Japan, or Europe;
 - revision, such as Rev 0 or Rev 1;
@@ -62,9 +69,15 @@ For a practice run, open the [guided Apply cheats tour](https://rom-weaver.com/a
 
 ## Apply a BPS patch
 
-A BPS patch records the checksum of the ROM it was made for. Add the `.bps` file and your clean ROM together. rom-weaver reads the BPS check and stops if the ROM does not match.
+To apply a BPS patch to a ROM:
 
-Read the patch author's required region and revision before you add the files. When the checks match, set the output name and choose **APPLY & DOWNLOAD**. For headers, patch order, or a failed check, use the relevant steps in this guide. The [CLI Apply guide](cli-apply.md) has the terminal command for the same BPS workflow.
+1. Open [Apply](https://rom-weaver.com/apply-patches).
+2. Add the `.bps` patch and the clean ROM named by its author to **0x01 Inputs**. You can add them together, including inside a supported archive.
+3. Wait for the files to be read. Check the ROM's region and revision against the author's notes, then open **Checks** to inspect the patch's source check. BPS records the expected source checksum; if it fails, follow [Fix a source ROM checksum mismatch](fix-checksum-errors.md).
+4. Set the output name. Choose a plain output file unless your emulator or the patch author requires a compressed format.
+5. Choose **APPLY & DOWNLOAD** after the checks match. Use the downloaded output ROM and keep your clean original for future patches.
+
+For several patches, follow [Put several patches in order](#put-several-patches-in-order). The [CLI Apply guide](cli-apply.md) has the terminal command for the same BPS workflow.
 
 ## Apply an IPS or IPS32 patch
 

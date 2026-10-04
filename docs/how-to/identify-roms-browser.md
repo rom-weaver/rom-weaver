@@ -1,6 +1,8 @@
 # Identify and check a ROM in the browser
 
-Use Identify to find a game's known name, region, revision, and checksums. Your file stays on your device.
+Identify a ROM by checksum to find its known game name, region, and revision in the available identification data. Your file stays on your device.
+
+Choose [Checksum](checksum-roms-browser.md) to calculate a file's hash and compare it with a published value. Choose [Test](test-roms-in-browser.md) to run a supported game in an emulator; successful playback does not establish that it is the exact ROM a patch requires.
 
 <!-- START doctoc -->
 ## Table of contents

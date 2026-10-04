@@ -19,7 +19,7 @@ If you need a practice file, open [guided Test](https://rom-weaver.com/test-rom?
 
 ## Load a ROM
 
-1. Open [Test](https://rom-weaver.com/test).
+1. Open [Test](https://rom-weaver.com/test-rom).
 2. Drop a ROM onto **0x01 Load a game**, or choose **Choose a ROM file**.
 3. If the player shows **START GAME**, select it. Touch devices can require this tap before playback starts.
 4. Use the controls inside the emulator player.
@@ -80,7 +80,7 @@ Use the fullscreen button above the player to enter or leave fullscreen. On iPho
 
 Export a save before you clear browser data or move to another browser.
 
-1. Load the ROM on the [Test page](https://rom-weaver.com/test).
+1. Load the ROM on the [Test page](https://rom-weaver.com/test-rom).
 2. Create a save state or save the game's SRAM from the emulator menu.
 3. Open **Settings**, then select **Saves & storage**.
 4. Find the ROM under **Emulator saves**.
