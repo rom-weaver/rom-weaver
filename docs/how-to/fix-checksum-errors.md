@@ -1,8 +1,8 @@
 # Fix a ROM checksum mismatch in the browser
 
-Use this guide when Apply shows **Not the expected ROM** or **The patch checks did not match this ROM.**
+Fix a source ROM checksum mismatch by checking the starting ROM, its region and revision, and any required header or patch order. The mismatch means the checked bytes do not match the expected checksum.
 
-Check the required region, revision, header, and patch order before you retry.
+Use these steps when Apply shows **Not the expected ROM** or **The patch checks did not match this ROM.** Bypassing verification does not repair the input.
 
 Use [Identify](identify-roms-browser.md) to check an unknown file. Return to [Apply](apply-rom-patches.md) after the expected and actual checks match.
 
