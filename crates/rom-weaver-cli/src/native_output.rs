@@ -53,16 +53,17 @@ impl JsonReporter {
     }
 
     pub(crate) fn finish(&self, status: ExitCode) -> ExitCode {
-        if self.mode != OutputMode::Json {
-            return status;
-        }
         let reports = std::mem::take(
             &mut *self
                 .reports
                 .lock()
                 .unwrap_or_else(|error| error.into_inner()),
         );
-        write_json(&document(reports, exit_code(status)));
+        if self.mode == OutputMode::Json {
+            write_json(&document(reports, exit_code(status)));
+        } else if let Some(event) = stream_exit_event(reports.last(), exit_code(status)) {
+            write_json(&event);
+        }
         status
     }
 
@@ -130,13 +131,38 @@ impl ProgressSink for JsonReporter {
         }
         if self.mode == OutputMode::JsonLines {
             write_json(&event);
-        } else {
-            self.reports
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .push(event);
         }
+        let mut reports = self
+            .reports
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if self.mode == OutputMode::JsonLines {
+            reports.clear();
+        }
+        reports.push(event);
     }
+}
+
+fn stream_exit_event(last: Option<&ProgressEvent>, exit_code: u8) -> Option<ProgressEvent> {
+    if exit_code == 0
+        || last.is_some_and(|event| {
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("error")?.get("exit_code")?.as_u64())
+                .unwrap_or(u64::from(event.status.exit_code()))
+                == u64::from(exit_code)
+        })
+    {
+        return None;
+    }
+    let command = last.map_or("cli", |event| event.command.as_str());
+    let (stage, code, message) = if exit_code == 130 {
+        ("cancel", "operation.cancelled", "operation cancelled")
+    } else {
+        ("complete", "operation.failed", "command failed")
+    };
+    Some(error_event(command, stage, code, message, exit_code))
 }
 
 // Native streams MUST agree with the cancellation exit code even when a shared pipeline

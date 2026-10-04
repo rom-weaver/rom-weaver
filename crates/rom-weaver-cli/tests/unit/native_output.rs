@@ -159,3 +159,33 @@ fn native_terminal_failures_always_have_structured_error_details() {
     );
     assert_eq!(event.details.as_ref().unwrap()["error"]["exit_code"], 2);
 }
+
+#[test]
+fn jsonl_final_event_agrees_with_cancelled_or_failed_exit() {
+    let success = result_event("compress", "create", "created output", None);
+    let cancelled = stream_exit_event(Some(&success), 130).expect("cancellation event");
+    assert_eq!(cancelled.command, "compress");
+    assert_eq!(cancelled.status, OperationStatus::Cancelled);
+    assert_eq!(
+        cancelled.details.as_ref().unwrap()["error"]["exit_code"],
+        130
+    );
+    assert!(stream_exit_event(Some(&cancelled), 130).is_none());
+    assert!(stream_exit_event(Some(&success), 0).is_none());
+    assert_eq!(
+        stream_exit_event(None, 130).unwrap().status,
+        OperationStatus::Cancelled
+    );
+    assert_eq!(
+        stream_exit_event(Some(&success), 1).unwrap().status,
+        OperationStatus::Failed
+    );
+    let usage = error_event(
+        "cli",
+        "arguments",
+        "cli.invalid_arguments",
+        "bad argument",
+        2,
+    );
+    assert!(stream_exit_event(Some(&usage), 2).is_none());
+}
