@@ -488,7 +488,11 @@ describe("sample tutorial step card", () => {
       />
     );
   };
-  const viewWorkbench = (detailedViewEnabled: boolean, withToggle = true) => (
+  const viewWorkbench = (
+    detailedViewEnabled: boolean,
+    withToggle = true,
+    steps?: (localizer: ReturnType<typeof useUiLocalizer>) => readonly SampleTutorialStep[],
+  ) => (
     <RomWeaverSettingsProvider settings={{ detailedViewEnabled }}>
       <div className="rw-app">
         <div className="workflow-panel-head">
@@ -501,10 +505,24 @@ describe("sample tutorial step card", () => {
         </div>
         <TutorialSection id="tutorial-first" label="First drawer" />
         <TutorialSection id="tutorial-second" label="Second drawer" />
-        <ViewGuide />
+        {steps ? <BuiltGuide steps={steps} /> : <ViewGuide />}
       </div>
     </RomWeaverSettingsProvider>
   );
+  const BuiltGuide = ({
+    steps,
+  }: {
+    steps: (localizer: ReturnType<typeof useUiLocalizer>) => readonly SampleTutorialStep[];
+  }) => <ViewGuide steps={steps(useUiLocalizer())} />;
+  const mergedViewSteps = (localizer: ReturnType<typeof useUiLocalizer>) => [
+    getViewTutorialStep(localizer, "#tutorial-first", {
+      body: "Check the first section.",
+      target: "#tutorial-first",
+      title: "First section",
+      tryIt: "Open the first drawer.",
+    }),
+    STEPS[1] as SampleTutorialStep,
+  ];
 
   it("numbers the step in the beacon and kicker and shows its Try it action", () => {
     render(
@@ -601,5 +619,65 @@ describe("sample tutorial step card", () => {
     expect(screen.queryByRole("heading", { name: "Choose how much to see" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Second section" })).toBeTruthy();
     expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run · Step 1 of 1");
+  });
+
+  it("folds the view explanation into a card's own step", async () => {
+    render(viewWorkbench(false, true, mergedViewSteps));
+
+    expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy();
+    expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run · Step 1 of 2");
+    expect(screen.getByText(/^Check the first section\. You're in Simple view/)).toBeTruthy();
+    expect(document.querySelector(".sample-tutorial-compare")).toBeTruthy();
+    expect(screen.getByText(/Switch Detailed on/)).toBeTruthy();
+    const head = document.querySelector(".workflow-panel-head") as HTMLElement;
+    await waitFor(() => expect(head.classList.contains("sample-tutorial-lift")).toBe(true));
+  });
+
+  it("keeps a folded view step as a plain step when the page has no Detailed switch", () => {
+    render(viewWorkbench(false, false, mergedViewSteps));
+
+    expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy();
+    expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run · Step 1 of 2");
+    expect(screen.getByText("Check the first section.")).toBeTruthy();
+    expect(screen.queryByText(/You're in Simple view/)).toBeNull();
+    expect(document.querySelector(".sample-tutorial-compare")).toBeNull();
+    expect(document.querySelector(".sample-tutorial-try")?.textContent).toBe("Try itOpen the first drawer.");
+  });
+
+  it("holds Continue on a locked step and shows the step's own controls", async () => {
+    const workbench = (locked: boolean) => (
+      <div className="rw-app">
+        <TutorialSection id="tutorial-first" label="First drawer" />
+        <TutorialSection id="tutorial-second" label="Second drawer" />
+        <SampleTutorial
+          loadingBody="Loading."
+          onClose={vi.fn()}
+          ready
+          steps={[
+            {
+              ...(STEPS[0] as SampleTutorialStep),
+              aside: locked ? <button type="button">Use the practice files</button> : undefined,
+              locked,
+            },
+            STEPS[1] as SampleTutorialStep,
+          ]}
+        />
+      </div>
+    );
+    const { rerender } = render(workbench(true));
+
+    const next = screen.getByRole("button", { name: "Continue" });
+    expect(next.getAttribute("aria-disabled")).toBe("true");
+    expect(
+      screen.getByRole("button", { name: "Use the practice files" }).closest(".sample-tutorial-aside"),
+    ).toBeTruthy();
+    fireEvent.click(next);
+    expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy();
+
+    rerender(workbench(false));
+    expect(next.getAttribute("aria-disabled")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Use the practice files" })).toBeNull();
+    fireEvent.click(next);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Second section" })).toBeTruthy());
   });
 });

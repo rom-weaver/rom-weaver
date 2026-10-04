@@ -17,7 +17,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import type { ComponentType, MouseEvent } from "react";
+import type { ComponentType, MouseEvent, ReactNode } from "react";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createLogger } from "../../../../lib/logging.ts";
@@ -43,6 +43,7 @@ type SampleTutorialAction =
   | "archive"
   | "checks"
   | "create"
+  | "download"
   | "drop"
   | "header"
   | "menu"
@@ -85,15 +86,24 @@ const useGuidedSampleStart = (guide: GuidedSample, onStart: () => void, onDismis
 
 type SampleTutorialStep = {
   actions?: readonly (readonly [action: SampleTutorialAction, label: string])[];
+  /** Controls the card itself offers on this step, below Try it - the add-files
+      step's practice files, say. Unlike the chip list it stays on phones. */
+  aside?: ReactNode;
   body: string;
   /** Selector, within the target, for the button this step asks you to press. */
   cta?: string;
   /** Document-level selector for a control that sits outside the target but
       belongs to the step - it is lifted clear of the scrim alongside it. */
   lift?: string;
+  /** Continue waits while this is set: the step needs the reader to do
+      something first, such as adding the files every later step looks at. */
+  locked?: boolean;
   openDrawers?: boolean;
   openMenu?: boolean;
-  placement?: "bottom" | "top";
+  /** `below` keeps the card under the row however tall the row is, for a row
+      whose own controls - a drop zone's Add files button - the card must not
+      cover. */
+  placement?: "below" | "bottom" | "top";
   /** Document-level selector the step depends on. A step whose selector
       matches nothing when the guide opens is left out, so hosts without that
       control never count a step they cannot show. */
@@ -103,7 +113,9 @@ type SampleTutorialStep = {
   /** The one thing the reader should do on this step. */
   tryIt?: string;
   /** The Simple/Detailed step: its copy follows the live view setting, so the
-      guide supplies body, Try it, and the comparison itself. */
+      guide supplies the view sentence, Try it, and the comparison itself. A
+      step with a body of its own keeps it ahead of the view sentence, and in
+      hosts without the switch it stays as a plain step. */
   view?: boolean;
 };
 
@@ -116,16 +128,26 @@ const VIEW_TOGGLE_HEAD_SELECTOR = ".workflow-panel-head";
  * The step that explains the Simple and Detailed views on the card it frames.
  * The panel heading's switch is lifted beside the card so flipping it shows the
  * card gain or lose its drawers. Embeds without the switch skip the step.
+ *
+ * Given a `base` step for the same card, the view explanation joins that step
+ * instead of taking one of its own; without the switch, `base` is what remains.
  */
-const getViewTutorialStep = (localizer: ReturnType<typeof useUiLocalizer>, target: string): SampleTutorialStep => ({
-  body: "",
-  lift: VIEW_TOGGLE_HEAD_SELECTOR,
-  openDrawers: true,
-  requires: VIEW_TOGGLE_SELECTOR,
-  target,
-  title: localizer.message("ui.tutorial.view.title"),
-  view: true,
-});
+const getViewTutorialStep = (
+  localizer: ReturnType<typeof useUiLocalizer>,
+  target: string,
+  base?: SampleTutorialStep,
+): SampleTutorialStep =>
+  base
+    ? { ...base, lift: VIEW_TOGGLE_HEAD_SELECTOR, openDrawers: true, target, view: true }
+    : {
+        body: "",
+        lift: VIEW_TOGGLE_HEAD_SELECTOR,
+        openDrawers: true,
+        requires: VIEW_TOGGLE_SELECTOR,
+        target,
+        title: localizer.message("ui.tutorial.view.title"),
+        view: true,
+      };
 
 /**
  * The lifted control that belongs to the target's own workbench. Every visited
@@ -149,6 +171,7 @@ const ACTION_ICONS: Record<SampleTutorialAction, ComponentType<{ className?: str
   archive: Archive,
   checks: ListChecks,
   create: FileDiff,
+  download: Download,
   drop: Upload,
   header: Scissors,
   menu: EllipsisVertical,
@@ -549,12 +572,22 @@ const SampleTutorial = ({
   const [missingRequirements, setMissingRequirements] = useState<ReadonlySet<string>>(() => new Set());
   const initialStepsRef = useRef(allSteps);
   useLayoutEffect(() => {
-    const selectors = initialStepsRef.current.flatMap((candidate) => (candidate.requires ? [candidate.requires] : []));
+    const selectors = initialStepsRef.current.flatMap((candidate) => [
+      ...(candidate.requires ? [candidate.requires] : []),
+      ...(candidate.view ? [VIEW_TOGGLE_SELECTOR] : []),
+    ]);
     const missing = selectors.filter((selector) => !document.querySelector(selector));
     if (missing.length) setMissingRequirements(new Set(missing));
   }, []);
   const steps = useMemo(
-    () => allSteps.filter((candidate) => !(candidate.requires && missingRequirements.has(candidate.requires))),
+    () =>
+      allSteps
+        .filter((candidate) => !(candidate.requires && missingRequirements.has(candidate.requires)))
+        .map((candidate) =>
+          candidate.view && missingRequirements.has(VIEW_TOGGLE_SELECTOR)
+            ? { ...candidate, lift: undefined, view: false }
+            : candidate,
+        ),
     [allSteps, missingRequirements],
   );
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -949,9 +982,11 @@ const SampleTutorial = ({
   if (!(portalTarget && step)) return null;
   const finalStep = live && stepIndex === steps.length - 1;
   const copyKey = live ? stepIndex : "loading";
-  const stepBody = step.view
-    ? localizer.message(detailedViewEnabled ? "ui.tutorial.view.detailedBody" : "ui.tutorial.view.simpleBody")
-    : step.body;
+  const viewBody = localizer.message(
+    detailedViewEnabled ? "ui.tutorial.view.detailedBody" : "ui.tutorial.view.simpleBody",
+  );
+  const stepBody = step.view ? [step.body, viewBody].filter(Boolean).join(" ") : step.body;
+  const locked = live && !!step.locked;
   const stepTryIt = step.view
     ? localizer.message(detailedViewEnabled ? "ui.tutorial.view.detailedTryIt" : "ui.tutorial.view.simpleTryIt")
     : step.tryIt;
@@ -1038,6 +1073,7 @@ const SampleTutorial = ({
                   <span>{stepTryIt}</span>
                 </p>
               ) : null}
+              {live && step.aside ? <div className="sample-tutorial-aside">{step.aside}</div> : null}
               {live ? null : (
                 <div
                   aria-label={localizer.message("ui.tutorial.loadingProgress")}
@@ -1090,11 +1126,12 @@ const SampleTutorial = ({
           {live ? <p className="sample-tutorial-end-hint">{localizer.message("ui.tutorial.endHint")}</p> : null}
           {live ? (
             <button
+              aria-disabled={locked ? "true" : undefined}
               className="btn primary slim"
               onClick={() => {
                 // A second press mid-handoff would cancel the exit the first one
                 // started, stranding the card invisible on a step it never left.
-                if (moving) return;
+                if (moving || locked) return;
                 if (finalStep) endGuide();
                 else beginMove(() => setStepIndex((current) => current + 1));
               }}

@@ -240,6 +240,21 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.apply.tutorial.cheats.body"
+#~ msgstr "Los trucos se suman a la lista de parches y se aplican como cualquier otro parche. Déjalos desactivados si quieres el resultado esperado, ROM WEAVER."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.apply.tutorial.cheats.tryIt"
+#~ msgstr "Abre el menú de trucos para ver el catálogo de práctica."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.apply.tutorial.cheats.title"
+#~ msgstr "Opcional: añade un truco de práctica"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", una extensión de salida. El selector de formato agrega la extensión; elimínala para evitar un nombre duplicado."
 
@@ -350,6 +365,11 @@ msgstr "Un parche en el formato que elijas, lo bastante pequeño para compartir.
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.tutorial.rom.body"
+msgstr "Un parche solo funciona con la ROM exacta para la que se hizo, así que esta tarjeta muestra las sumas de comprobación de la ROM. La ROM de práctica, hello-world.nes, es un pequeño juego homebrew hecho para esta guía."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.masthead.slogan"
 msgstr "Kit de herramientas ROM y parches"
 
@@ -415,6 +435,11 @@ msgstr "Añadir una ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.tutorial.addFiles.tryIt"
+msgstr "Añade una ROM y al menos un parche, o usa los archivos de práctica de abajo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.testDescription"
 msgstr "Añade una ROM compatible, sin comprimir o en un archivo comprimido, para probar el juego en el emulador del navegador."
 
@@ -430,13 +455,13 @@ msgstr "Añadir comprobación"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.drop.addFiles"
+msgid "ui.apply.tutorial.browse"
 msgstr "Añadir archivos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.addFiles.title"
-msgstr "Añade más archivos cuando quieras"
+msgid "ui.drop.addFiles"
+msgstr "Añadir archivos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -447,6 +472,11 @@ msgstr "Añade la ROM modificada"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.add.romOrPatches"
 msgstr "Agrega la ROM o los parches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.tutorial.addFiles.title"
+msgstr "Añade tus archivos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -725,11 +755,6 @@ msgstr "Vuelve a mostrarlo en Ajustes"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.browse"
-msgstr "Examinar"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.status.envWeb"
 msgstr "Pestaña del navegador"
 
@@ -905,13 +930,13 @@ msgstr "Trucos como parche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.cheats.body"
-msgstr "Los trucos se suman a la lista de parches y se aplican como cualquier otro parche. Déjalos desactivados si quieres el resultado esperado, ROM WEAVER."
+msgid "ui.apply.bundleTutorial.rom.title"
+msgstr "Comprueba la ROM inicial"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.bundleTutorial.rom.title"
-msgstr "Comprueba la ROM inicial"
+msgid "ui.apply.tutorial.rom.title"
+msgstr "Revisa tu ROM de partida"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -971,7 +996,7 @@ msgstr "Sumas de verificación"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.output.body"
-msgstr "Elige un nombre y un formato. .nes descarga la ROM parcheada tal cual; ZIP o 7z la guardan en un archivo comprimido. Tu archivo original no cambia."
+msgstr "Elige un nombre y un formato. El formato propio de la ROM, como .nes, descarga la ROM parcheada tal cual; ZIP o 7z la empaqueta en un archivo. Tu archivo original no cambia."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1400,6 +1425,11 @@ msgstr "Descargar un paquete de prueba"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.tutorial.downloadPractice"
+msgstr "Descargar first-weave.zip"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.runtime.downloadOffline"
 msgstr "Descargar copia sin conexión"
 
@@ -1430,13 +1460,18 @@ msgstr "Arrastra para reordenar · haz clic para editar la posición · teclas d
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.dropFiles"
-msgstr "Soltar archivos"
+msgid "ui.apply.tutorial.addFiles.body"
+msgstr "Suelta aquí una ROM y sus parches: archivos sueltos, una carpeta entera, un archivo ZIP o 7z, o un paquete. O pulsa Añadir archivos para elegirlos. rom-weaver averigua qué es cada archivo y lo coloca en la tarjeta correcta. Nada sale de tu navegador."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.addFiles.body"
 msgstr "Suelta archivos aquí o pulsa Examinar para sustituir cualquiera de las ROM."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.tutorial.dropFiles"
+msgstr "Soltar archivos o una carpeta"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1447,11 +1482,6 @@ msgstr "Suelta archivos para comprimirlos"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.drop.hero"
 msgstr "Suelta o haz clic para agregar ROM, parches, paquetes o archivos"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.addFiles.body"
-msgstr "Suelta aquí ROMs, parches, archivos comprimidos o paquetes, o pulsa Examinar. rom-weaver averigua qué es cada archivo y lo coloca en la tarjeta correcta."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1797,11 +1827,6 @@ msgstr "ROM con cabecera"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.header.stripInfo"
 msgstr "Sin encabezado: la salida parcheada no tiene encabezado de ROM."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.rom.body"
-msgstr "hello-world.nes es un pequeño juego casero de NES creado para esta guía. Un parche solo funciona con la ROM exacta para la que se escribió, por eso la tarjeta muestra sus sumas de verificación."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2370,6 +2395,11 @@ msgstr "No se encontró un parche compatible."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.tutorial.noFiles"
+msgstr "¿No tienes archivos a mano?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identify.nameNoMatch"
 msgstr "Ningún juego en los datos de identificación tiene ese nombre."
 
@@ -2427,11 +2457,6 @@ msgstr "¿No es la ROM que buscaba?"
 #: src/presentation/localization/messages.ts
 msgid "ui.find.empty"
 msgstr "Nada coincide"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.addFiles.tryIt"
-msgstr "En esta práctica no hace falta añadir nada. Continúa."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2525,11 +2550,6 @@ msgstr "Una sola pasada, sin descomprimir a mano ni archivos intermedios. Guárd
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.patches.body"
-msgstr "Un parche convierte HELLO en ROM y el otro WORLD en WEAVER. Ambos se hicieron para la ROM original, así que aquí el orden no importa."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis2"
 msgstr "Un solo kit de herramientas."
 
@@ -2585,11 +2605,6 @@ msgstr "Abre el archivo comprimido."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.cheats.tryIt"
-msgstr "Abre el menú de trucos para ver el catálogo de práctica."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.related.hintGuide"
 msgstr "Abre la guía"
 
@@ -2602,11 +2617,6 @@ msgstr "opcional"
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.identifyPacks"
 msgstr "Bases de datos de ROM opcionales"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.cheats.title"
-msgstr "Opcional: añade un truco de práctica"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2865,6 +2875,16 @@ msgstr "Parches y trucos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.tutorial.patches.title"
+msgstr "Parches y trucos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.tutorial.patches.body"
+msgstr "Los parches se aplican de arriba abajo; desactiva uno para dejarlo fuera. Los parches de práctica convierten HELLO en ROM y WORLD en WEAVER, y ambos se hicieron para la ROM original, así que su orden no importa. Los trucos entran en esta misma lista y se aplican como cualquier otro parche; déjalos desactivados si quieres el resultado esperado ROM WEAVER."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.drop.patchesIgnored"
 msgstr "Los parches corresponden a Aplicar y se ignoraron."
 
@@ -2932,6 +2952,11 @@ msgstr "Prueba después de aplicar"
 #: src/presentation/localization/messages.ts
 msgid "settings.postApplyTestBehavior"
 msgstr "Prueba después de aplicar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.tutorial.practiceFiles"
+msgstr "Archivos de práctica"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3651,7 +3676,7 @@ msgstr "Intercambiar"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.patches.tryIt"
-msgstr "Desactiva un parche para aplicar solo el otro cambio."
+msgstr "Desactiva un parche o abre su menú para añadir un truco de práctica."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3975,11 +4000,6 @@ msgstr "Este es el juego sin cambios. El parche que crees registrará cada byte 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.rom.title"
-msgstr "Esta es tu ROM de partida"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.expectedMismatchDetails"
 msgstr "El nombre o las comprobaciones de esta ROM no coinciden con lo que espera esta ejecución. Consulta las filas de Esperado a continuación."
 
@@ -4075,11 +4095,6 @@ msgstr "Instrucciones del tutorial"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.patches.title"
-msgstr "Dos parches, dos cambios"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.output.type"
 msgstr "Tipo"
 
@@ -4171,6 +4186,11 @@ msgstr "Usar ROM duplicadas"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.duplicateTitle"
 msgstr "¿Usar ROM duplicadas?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.tutorial.usePractice"
+msgstr "Usar los archivos de práctica"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4334,6 +4354,11 @@ msgstr "Tu colección es tuya. La herramienta debe actuar como tal."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.apply.tutorial.addFiles.readyTryIt"
+msgstr "Tus archivos ya están. Pulsa Continuar para verlos."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.compress.local"
 msgstr "Tus archivos permanecen en este navegador. Los archivos comprimidos y las imágenes de disco comprimidas se abren para que elijas los archivos que contienen."
 
@@ -4356,3 +4381,8 @@ msgstr "ZIP"
 #: src/presentation/localization/messages.ts
 msgid "settings.zipCodec"
 msgstr "Códec ZIP"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.tutorial.archives"
+msgstr "ZIP, 7z y paquetes"
