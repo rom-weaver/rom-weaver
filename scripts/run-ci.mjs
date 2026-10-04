@@ -18,4 +18,5 @@ runMain(() => {
   run([...WEBAPP, "run", "test:browser"]);
   run([...WEBAPP, "run", "test:e2e:webapp"]);
   run([...WEBAPP, "run", "build"]);
+  run([...WEBAPP, "run", "check:size"]);
 });
