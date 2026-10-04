@@ -19,7 +19,12 @@ import {
   type ManualCheatResult,
 } from "../../../lib/cheats/index.ts";
 import { getCheatPatchStatus } from "../cheat-patch-export-model.ts";
-import { CHEAT_KIND_OPTIONS } from "../create-cheat-codes-model.ts";
+import {
+  CHEAT_KIND_OPTIONS,
+  formatCheatWrite,
+  getCheatCodeWrites,
+  getCheatCompareLabel,
+} from "../create-cheat-codes-model.ts";
 import { CheatGameSearch, countLabel, getCheatGameSearchStep } from "./cheat-game-search.tsx";
 import { useCheatDatabaseRecords } from "./use-cheat-database-records.ts";
 import { Drawer } from "./ds/drawer.tsx";
@@ -370,6 +375,18 @@ const CheatCodeDetails = ({ entry }: { entry: ClassifiedCheatRecord | CheatDatab
             <dd>{CHEAT_KIND_LABELS[kind]}</dd>
           </div>
         ) : null}
+        {getCheatCodeWrites(entry).map((write) => {
+          const compareLabel = getCheatCompareLabel(write);
+          return (
+            <div key={`${write.offset}:${write.value}`}>
+              <dt>Write</dt>
+              <dd className="mono">
+                {formatCheatWrite(write)}
+                {compareLabel ? ` · ${compareLabel}` : ""}
+              </dd>
+            </div>
+          );
+        })}
         {entry.resolution.type === "unsupported" ? (
           <div>
             <dt>Support</dt>
