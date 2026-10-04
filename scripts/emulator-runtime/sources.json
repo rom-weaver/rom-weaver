@@ -582,6 +582,11 @@
           "path": "libretro/Makefile.common",
           "find": "ifeq ($(TARGET_ARCH),arm64)\nSOURCES_CXX += \\\n\t  $(EXTDIR)/libadrenotools/src/driver.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/android_linker_ns.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/elf_soname_patcher.cpp\nendif",
           "replace": "ifeq ($(PLATFORM_EXT), android)\nifeq ($(TARGET_ARCH),arm64)\nSOURCES_CXX += \\\n\t  $(EXTDIR)/libadrenotools/src/driver.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/android_linker_ns.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/elf_soname_patcher.cpp\nendif\nendif"
+        },
+        {
+          "path": "libretro/Makefile.common",
+          "find": "ifeq ($(PLATFORM_EXT), android)\nCOREFLAGS += -DHAVE_DLFCN_H\nelse ifneq ($(PLATFORM_EXT), win32)\nCOREFLAGS += -DHAVE_STRONG_GETAUXVAL\nendif",
+          "replace": "ifeq ($(PLATFORM_EXT), android)\nCOREFLAGS += -DHAVE_DLFCN_H\nelse ifneq ($(PLATFORM_EXT), win32)\nifeq ($(platform),unix)\nCOREFLAGS += -DHAVE_STRONG_GETAUXVAL\nendif\nendif"
         }
       ]
     },
