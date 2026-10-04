@@ -597,9 +597,12 @@ test.each([
   expect(document.querySelector(".sample-tutorial-start-pop")).toBeNull();
 
   chip.click();
-  await expect.poll(() => document.querySelectorAll(".sample-tutorial-start-action").length).toBe(4);
+  const secondaryHref = initialView === "patcher" ? "/apply-patches?guide=apply-cheats" : null;
+  await expect
+    .poll(() => document.querySelectorAll(".sample-tutorial-start-action").length)
+    .toBe(secondaryHref ? 5 : 4);
   expect(document.querySelector(".sample-tutorial-start-primary")?.getAttribute("href")).toBe(guideHref);
-  expect(document.querySelector(".sample-tutorial-start-secondary")).toBeNull();
+  expect(document.querySelector(".sample-tutorial-start-secondary")?.getAttribute("href") ?? null).toBe(secondaryHref);
   expect(document.querySelector(".sample-tutorial-start-guide")?.pathname).toBe(docsPath);
   expect(document.querySelector(".hero-guide")?.pathname).toBe(docsPath);
   expect(document.querySelector(".sample-tutorial-start-download").hasAttribute("download")).toBe(true);
