@@ -9,6 +9,7 @@ import { docsVirtualModule } from "./scripts/docs-virtual-module.mjs";
 import { revisionUnhashedAssets } from "./scripts/precache-revisions.mjs";
 import { getBuildInfo, getVersionBranch } from "./scripts/version.mjs";
 import { writeBrotliSidecars } from "./scripts/vite-config/brotli-sidecars.mjs";
+import { chunkFileNames } from "./scripts/vite-config/chunk-file-names.mjs";
 import { serveChangelogAsset, writeChangelogAsset } from "./scripts/vite-config/changelog.mjs";
 import { resolveAppChannel, stampChannelIdentity } from "./scripts/vite-config/channel.mjs";
 import { deferDevHotUpdates, runtimeScratchIgnorePatterns } from "./scripts/vite-config/dev-hot-updates.mjs";
@@ -67,6 +68,7 @@ export default defineConfig(({ command, mode }) => {
       rollupOptions: {
         input: path.resolve(rootDir, "index.html"),
         output: {
+          chunkFileNames,
           // Splitting the workflow forms into route chunks (workflow-routes.tsx)
           // strands their shared leaves in a long tail of sub-kB chunks. Each
           // chunk is its own brotli stream with its own window, so that tail

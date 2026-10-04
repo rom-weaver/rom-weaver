@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
+import {
+  patchConfiguration,
+  patchDarwinFrontend,
+  patchVideoDriver,
+} from "./emulator-runtime/patch-headless-darwin.mjs";
+import { pathForTar } from "./emulator-runtime/tar-path.mjs";
 import { coreRecipe, platformConfig, platforms } from "./emulator-runtime/platform.mjs";
 import {
   parseDarwinDependencies,
@@ -44,6 +50,41 @@ for (const [name, platform] of Object.entries(platforms)) {
 
 test("unsupported platforms fail closed", () => {
   assert.throws(() => platformConfig("freebsd-x64"), /unsupported/);
+});
+
+test("Windows paths are converted before passing them to MSYS tar", () => {
+  assert.equal(
+    pathForTar("D:\\a\\rom-weaver\\source.tar.gz", "win32", (filename) =>
+      filename.replaceAll("\\", "/"),
+    ),
+    "D:/a/rom-weaver/source.tar.gz",
+  );
+  assert.equal(pathForTar("/home/runner/source.tar.gz", "linux"), "/home/runner/source.tar.gz");
+});
+
+test("headless macOS source patches remove references to unavailable GUI drivers", () => {
+  const frontend = patchDarwinFrontend(
+    `static bool frontend_darwin_accessibility_speak(int speed,\n      const char* speak_text, int priority)\n{\n   speak();\n#if defined(OSX)\n   return accessibility_speak_macos(speed, speak_text, priority);\n#else\n   return false;\n#endif\n}`,
+  );
+  assert.match(frontend, /#if defined\(HAVE_ACCESSIBILITY\)[\s\S]*speak\(\);/);
+  assert.match(
+    frontend,
+    /#else\n   \(void\)speed;\n   \(void\)speak_text;\n   \(void\)priority;\n   return false;\n#endif/,
+  );
+
+  const configuration = patchConfiguration(
+    `#if __APPLE__\n   configuration_set_bool(settings,\n         settings->bools.accessibility_enable, RAIsVoiceOverRunning());\n#endif`,
+  );
+  assert.match(configuration, /defined\(HAVE_ACCESSIBILITY\).*defined\(HAVE_COCOA\)/);
+
+  const videoDriver = patchVideoDriver(
+    `#elif defined(__APPLE__)\n         current_display_server = &dispserv_apple;\n#else\n         current_display_server = &dispserv_null;`,
+  );
+  assert.match(videoDriver, /#elif defined\(__APPLE__\) &&[\s\S]*dispserv_apple/);
+  assert.match(
+    videoDriver,
+    /#elif defined\(__APPLE__\)\n         current_display_server = &dispserv_null;/,
+  );
 });
 
 test("PPSSPP uses each upstream platform directory and native architecture", () => {

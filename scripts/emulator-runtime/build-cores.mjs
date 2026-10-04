@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { coreRecipe, platformConfig } from "./platform.mjs";
+import { pathForTar } from "./tar-path.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const buildDirectory = path.resolve(process.argv[2]);
@@ -29,6 +30,10 @@ const run = (command, cwd = buildDirectory, capture = false) =>
     stdio: capture ? ["ignore", "pipe", "inherit"] : "inherit",
     encoding: "utf8",
   });
+const tarPath = (filename) =>
+  pathForTar(filename, process.platform, (windowsPath) =>
+    run(["cygpath", "-u", windowsPath], buildDirectory, true).trim(),
+  );
 const digest = (filename) => createHash("sha256").update(fs.readFileSync(filename)).digest("hex");
 const inside = (root, relative) => {
   assert.ok(relative && !path.isAbsolute(relative), `expected relative path: ${relative}`);
@@ -54,7 +59,15 @@ const unpack = (source, destination) => {
   assert.equal(digest(archive), source.sha256, `source checksum mismatch: ${source.archive}`);
   copyFile(archive, path.join(sourcePackage, "archives", source.archive));
   fs.mkdirSync(destination, { recursive: true });
-  run(["tar", "--force-local", "-xzf", archive, "-C", destination, "--strip-components=1"]);
+  run([
+    "tar",
+    "--force-local",
+    "-xzf",
+    tarPath(archive),
+    "-C",
+    tarPath(destination),
+    "--strip-components=1",
+  ]);
 };
 
 for (const core of sources.cores.filter((core) => core.id !== "fceumm")) {
