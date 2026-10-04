@@ -233,7 +233,7 @@ impl CliApp {
         let resolved_format = resolution.format;
         let format_warning = resolution.warning;
         if let Some(warning) = format_warning.as_deref() {
-            warn!(
+            debug!(
                 command = "compress",
                 format = %resolved_format,
                 output = %output.display(),
@@ -622,17 +622,20 @@ impl CliApp {
             Some(100.0),
             thread_execution,
         );
+        let mut details = json!({
+            "processed": 0,
+            "trimmed": 0,
+            "already_target": 0,
+            "skipped_unsupported": skipped_unsupported,
+        });
         if dry_run {
-            report.details = Some(json!({
-                "dry_run": true,
-                "command": "trim",
-                "writes": [],
-                "downloads": [],
-                "read_only": false,
-                "processed": 0,
-                "skipped_unsupported": skipped_unsupported,
-            }));
+            details["dry_run"] = json!(true);
+            details["command"] = json!("trim");
+            details["writes"] = json!([]);
+            details["downloads"] = json!([]);
+            details["read_only"] = json!(false);
         }
+        report.details = Some(details);
         report
     }
 

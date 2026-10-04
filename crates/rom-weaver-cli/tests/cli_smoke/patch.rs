@@ -88,6 +88,186 @@ fn patch_apply_dry_run_does_not_emit_bundle_or_create_output_directory() {
     assert_eq!(fs::read(source.path()).expect("source"), b"source bytes");
 }
 
+#[test]
+fn patch_apply_dry_run_resolves_raw_rom_extension() {
+    let temp = setup_temp_dir();
+    let source = temp.child("source.nes");
+    source.write_str("source bytes").expect("fixture");
+    let patch = temp.child("change.ips");
+    patch.write_str("PATCHEOF").expect("patch fixture");
+    let destination = temp.child("missing/patched.nes");
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            destination.path().to_str().expect("path"),
+            "--dry-run",
+            "--json",
+        ],
+        0,
+    );
+    let terminal = parse_json_lines(&output).pop().expect("terminal report");
+    assert_eq!(terminal["details"]["format"], "raw");
+    assert_eq!(terminal["details"]["dry_run"], true);
+    assert!(!temp.child("missing").path().exists());
+}
+
+#[test]
+fn patch_apply_dry_run_defers_archive_leaf_extension() {
+    let temp = setup_temp_dir();
+    let source = temp.child("source.nes");
+    source.write_str("source bytes").expect("fixture");
+    let archive = temp.child("source.zip");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            source.path().to_str().expect("path"),
+            "--output",
+            archive.path().to_str().expect("path"),
+        ],
+        0,
+    );
+    let patch = temp.child("change.ips");
+    patch.write_str("PATCHEOF").expect("patch fixture");
+    let destination = temp.child("missing/patched.nes");
+    let output = command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            destination.path().to_str().expect("path"),
+            "--dry-run",
+            "--json",
+        ],
+        0,
+    );
+    let terminal = parse_json_lines(&output).pop().expect("terminal report");
+    assert_eq!(terminal["details"]["format"], "unresolved");
+    assert!(
+        terminal["details"]["notes"]
+            .to_string()
+            .contains("until the archive member")
+    );
+    assert!(!temp.child("missing").path().exists());
+}
+
+#[test]
+fn patch_create_format_warning_is_emitted_once() {
+    let temp = setup_temp_dir();
+    let original = temp.child("source.nes");
+    original.write_str("source bytes").expect("fixture");
+    let modified = temp.child("modified.nes");
+    modified.write_str("modified bytes").expect("fixture");
+    for (name, flags) in [
+        ("human", vec![]),
+        ("json", vec!["--json"]),
+        ("jsonl", vec!["--jsonl"]),
+    ] {
+        let destination = temp.child(format!("{name}.ips"));
+        let output = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args([
+                "patch",
+                "create",
+                "--original",
+                original.path().to_str().expect("path"),
+                "--modified",
+                modified.path().to_str().expect("path"),
+                "--output",
+                destination.path().to_str().expect("path"),
+                "--format",
+                "bps",
+            ])
+            .args(&flags)
+            .assert()
+            .success()
+            .get_output()
+            .clone();
+        let stderr = String::from_utf8(output.stderr).expect("diagnostic");
+        assert_eq!(
+            stderr.matches("does not match").count(),
+            1,
+            "{name}: {stderr}"
+        );
+        if !flags.is_empty() {
+            let report = parse_json_lines(&output.stdout)
+                .pop()
+                .expect("terminal report");
+            assert_eq!(
+                report["details"]["warnings"]
+                    .as_array()
+                    .expect("warnings")
+                    .len(),
+                1
+            );
+        }
+    }
+}
+
+#[test]
+fn patch_apply_format_warning_is_emitted_once_and_retained_in_dry_run() {
+    let temp = setup_temp_dir();
+    let (source, patch) = make_bps_patch_fixture(&temp);
+    for (name, flags) in [
+        ("human", vec![]),
+        ("json", vec!["--json"]),
+        ("jsonl", vec!["--jsonl"]),
+        ("dry", vec!["--json", "--dry-run"]),
+        ("quiet", vec!["--quiet"]),
+    ] {
+        let destination = temp.child(format!("{name}.7z"));
+        let output = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args([
+                "patch",
+                "apply",
+                "--input",
+                source.path().to_str().expect("path"),
+                "--patch",
+                patch.path().to_str().expect("path"),
+                "--output",
+                destination.path().to_str().expect("path"),
+                "--compress-format",
+                "zip",
+                "--no-color",
+            ])
+            .args(&flags)
+            .assert()
+            .success()
+            .get_output()
+            .clone();
+        let stderr = String::from_utf8(output.stderr).expect("diagnostic");
+        assert_eq!(
+            stderr.matches("does not match").count(),
+            1,
+            "{name}: {stderr}"
+        );
+        if flags.contains(&"--json") || flags.contains(&"--jsonl") {
+            let report = parse_json_lines(&output.stdout)
+                .pop()
+                .expect("terminal report");
+            assert_eq!(
+                report["details"]["warnings"]
+                    .as_array()
+                    .expect("warnings")
+                    .len(),
+                1
+            );
+        }
+        assert_eq!(destination.path().exists(), name != "dry");
+    }
+}
+
 // Table-driven per-format smoke tests.
 //
 // Shared runners cover create/apply/probe/ignore-checksum orchestration; unique

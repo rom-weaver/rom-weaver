@@ -561,7 +561,7 @@ impl CliApp {
             ));
         }
         if let Some(warning) = format_warning.as_deref() {
-            warn!(
+            debug!(
                 command = "patch-create",
                 format = %requested_format,
                 output = %output.display(),
