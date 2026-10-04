@@ -20,7 +20,8 @@ export async function ensureCacheRule({ zoneId, token, fetchImpl = globalThis.fe
   for (let attempt = 0; attempt < 3; attempt += 1) {
     read = await fetchImpl(api, { headers, signal: AbortSignal.timeout(30000) });
     if (read.status < 500 || read.status > 599 || attempt === 2) break;
-    await read.body?.cancel();
+    // Discarding a failed body MUST NOT prevent retrying after an upstream disconnect.
+    await read.body?.cancel().catch(() => undefined);
     const delay = 1000 * (attempt + 1);
     process.stderr.write(`Cloudflare cache ruleset read returned HTTP ${read.status}; retrying in ${delay} ms\n`);
     await sleep(delay);

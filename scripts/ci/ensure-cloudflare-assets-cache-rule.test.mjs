@@ -99,3 +99,18 @@ test("does not repeat writes after an ambiguous server error", async () => {
   );
   assert.deepEqual(methods, ["GET", "PUT"]);
 });
+
+
+test("retries even when the failed response body has already errored", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    if (calls === 1) {
+      const body = new ReadableStream({ start(controller) { controller.error(new Error("upstream body terminated")); } });
+      return new Response(body, { status: 503 });
+    }
+    return Response.json({ success: true, result: { rules: [cacheRule()] } });
+  };
+  assert.equal(await ensureCacheRule({ zoneId: "zone", token: "token", fetchImpl, sleep: async () => {} }), "exists");
+  assert.equal(calls, 2);
+});
