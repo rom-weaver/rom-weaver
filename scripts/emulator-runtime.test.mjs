@@ -158,13 +158,29 @@ test("PPSSPP limits Adreno sources to Android and stages Windows tar link target
     "ext/vulkan/libvulkan.so.1",
   ]);
   assert.deepEqual(
-    ppsspp.patches.find(({ path }) => path === "libretro/Makefile.common"),
+    ppsspp.patches.find(
+      ({ path, find }) => path === "libretro/Makefile.common" && find.includes("libadrenotools"),
+    ),
     {
       path: "libretro/Makefile.common",
       find: "ifeq ($(TARGET_ARCH),arm64)\nSOURCES_CXX += \\\n\t  $(EXTDIR)/libadrenotools/src/driver.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/android_linker_ns.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/elf_soname_patcher.cpp\nendif",
       replace: "ifeq ($(PLATFORM_EXT), android)\nifeq ($(TARGET_ARCH),arm64)\nSOURCES_CXX += \\\n\t  $(EXTDIR)/libadrenotools/src/driver.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/android_linker_ns.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/elf_soname_patcher.cpp\nendif\nendif",
     },
   );
+});
+
+test("PPSSPP enables getauxval only for its Unix target", () => {
+  const ppsspp = sources.cores.find(({ id }) => id === "ppsspp");
+  const patch = ppsspp.patches.find(
+    ({ path, find }) =>
+      path === "libretro/Makefile.common" && find.includes("HAVE_STRONG_GETAUXVAL"),
+  );
+  assert.deepEqual(patch, {
+    path: "libretro/Makefile.common",
+    find: "ifeq ($(PLATFORM_EXT), android)\nCOREFLAGS += -DHAVE_DLFCN_H\nelse ifneq ($(PLATFORM_EXT), win32)\nCOREFLAGS += -DHAVE_STRONG_GETAUXVAL\nendif",
+    replace:
+      "ifeq ($(PLATFORM_EXT), android)\nCOREFLAGS += -DHAVE_DLFCN_H\nelse ifneq ($(PLATFORM_EXT), win32)\nifeq ($(platform),unix)\nCOREFLAGS += -DHAVE_STRONG_GETAUXVAL\nendif\nendif",
+  });
 });
 
 test("mGBA avoids untracked native dependencies outside Linux", () => {
