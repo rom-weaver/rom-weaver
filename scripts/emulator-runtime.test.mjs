@@ -210,6 +210,10 @@ test("PPSSPP limits Adreno sources to Android and stages Windows tar link target
     "ext/vulkan/libvulkan.so.1",
   ]);
   assert.deepEqual(
+    ppsspp.dependencies.find(({ path }) => path === "ext/zstd").extractFirst,
+    ["tests/cli-tests/bin/zstd"],
+  );
+  assert.deepEqual(
     ppsspp.patches.find(
       ({ path, find }) => path === "libretro/Makefile.common" && find.includes("libadrenotools"),
     ),

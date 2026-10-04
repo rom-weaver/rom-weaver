@@ -426,7 +426,8 @@
           "revision": "f8745da6ff1ad1e7bab384bd1f9d742439278e99",
           "url": "https://github.com/facebook/zstd/archive/f8745da6ff1ad1e7bab384bd1f9d742439278e99.tar.gz",
           "archive": "zstd-f8745da6ff1ad1e7bab384bd1f9d742439278e99.tar.gz",
-          "sha256": "4b0bd1f0cfb25e61b9103c35f27395530ff5b4c0d2513a00fd745849e85ea52c"
+          "sha256": "4b0bd1f0cfb25e61b9103c35f27395530ff5b4c0d2513a00fd745849e85ea52c",
+          "extractFirst": ["tests/cli-tests/bin/zstd"]
         },
         {
           "path": "ext/aemu_postoffice",
