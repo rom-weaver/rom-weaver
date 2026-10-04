@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { PRACTICE_CHEAT_SHARD } from "../../src/public/react/guided-cheat-sample.ts";
 import { createBrowserWasiThreadWorkerPool } from "../../src/wasm/browser-wasi-thread-pool.ts";
 import { createRomWeaverBrowserOpfs } from "../../src/wasm/rom-weaver-browser-opfs-api.ts";
 import { createRomWeaverCommand } from "../../src/wasm/rom-weaver-command.ts";
@@ -340,6 +341,57 @@ describe("rom-weaver-wasm browser runner parity", () => {
       const classified = result.events.at(-1)?.details?.cheats?.records?.[0];
       expect(classified?.resolution?.type).toBe("unsupported");
       expect(classified?.resolution?.reason).toBe("the code targets runtime memory");
+    });
+  });
+
+  it("bakes the guided NES cheat and round-trips its created patch through real WASM", async () => {
+    await withTempFixture(async ({ dir, worker, opfsHandle }) => {
+      const originalPath = joinGuestPath(dir, "practice.nes");
+      const directPath = joinGuestPath(dir, "practice-direct.nes");
+      const patchPath = joinGuestPath(dir, "practice-cheat.ips");
+      const roundTripPath = joinGuestPath(dir, "practice-round-trip.nes");
+      const sampleResponse = await fetch(new URL("../fixtures/cheats/hello-world.nes", import.meta.url));
+      expect(sampleResponse.ok).toBe(true);
+      const original = new Uint8Array(await sampleResponse.arrayBuffer());
+      await writeGuestFile(opfsHandle, originalPath, original);
+
+      const cheatRecords = PRACTICE_CHEAT_SHARD.games[0].cheats;
+      const direct = await runJsonFromWorker(worker)(
+        createRomWeaverCommand("patch-apply", {
+          cheat_records: cheatRecords,
+          input: originalPath,
+          no_compress: true,
+          output: directPath,
+        }),
+      );
+      assertRunJsonSucceeded(direct, { command: "patch-apply" });
+      const directBytes = await readGuestFile(opfsHandle, directPath);
+      const expected = original.slice();
+      expected[0xa7] = 0x0d;
+      expected[0x87] = 0x30;
+      expect(directBytes).toEqual(expected);
+
+      const created = await runJsonFromWorker(worker)(
+        createRomWeaverCommand("patch-create", {
+          code_kind: "pro-action-replay",
+          codes: cheatRecords.map((record) => record.rawCode),
+          format: "ips",
+          original: originalPath,
+          output: patchPath,
+        }),
+      );
+      assertRunJsonSucceeded(created, { command: "patch-create" });
+
+      const applied = await runJsonFromWorker(worker)(
+        createRomWeaverCommand("patch-apply", {
+          input: originalPath,
+          no_compress: true,
+          output: roundTripPath,
+          patches: [patchPath],
+        }),
+      );
+      assertRunJsonSucceeded(applied, { command: "patch-apply" });
+      expect(await readGuestFile(opfsHandle, roundTripPath)).toEqual(directBytes);
     });
   });
 

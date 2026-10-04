@@ -17,6 +17,7 @@ Apply BPS, IPS, UPS, xdelta, PPF, and other supported ROM patches locally in you
 - [Dreamcast DCP patches need the CLI](#dreamcast-dcp-patches-need-the-cli)
 - [Read the ROM and patch cards](#read-the-rom-and-patch-cards)
 - [Put several patches in order](#put-several-patches-in-order)
+- [Add cheats to the patch order](#add-cheats-to-the-patch-order)
 - [Choose the output and apply](#choose-the-output-and-apply)
 - [Open a bundle](#open-a-bundle)
 - [If the ROM does not match](#if-the-rom-does-not-match)
@@ -56,6 +57,8 @@ You can add [supported archives](../reference/formats.md#container-and-compressi
 The page changes after the files are understood. **ROM** holds the game, **Patches & Cheats** holds the ordered steps, and **Apply** controls the new file.
 
 Use [cheats](use-browser-cheats.md) to add supported codes to that order. To change only the container, follow [Convert a ROM](convert-roms-browser.md).
+
+For a practice run, open the [guided Apply cheats tour](https://rom-weaver.com/apply-patches?guide=apply-cheats). It loads a supplied homebrew ROM and a working sample code.
 
 ## Apply a BPS patch
 
@@ -150,6 +153,16 @@ For example, suppose a project supplies `translation.bps` and `translation-fix.b
 5. Choose the output format, select **APPLY & DOWNLOAD**, and save the result.
 
 This example is hypothetical. Use the order and input states from your patch author's notes.
+
+## Add cheats to the patch order
+
+1. Add the original ROM and any patches it needs.
+2. In **Patches & Cheats**, select **Add cheats to the patch order**.
+3. Add compatible entries from the database, or select **Add code manually**.
+4. Put each cheat where it must run in the ordered patch stack.
+5. Resolve any unsupported-code or write-conflict message before you apply.
+
+A cheat changes the bytes produced by the steps above it. Check the game and revision when the database match is based on a title instead of exact checksums. [Use cheats in the browser](use-browser-cheats.md) covers manual-code checks, patch export, and offline use.
 
 ## Choose the output and apply
 

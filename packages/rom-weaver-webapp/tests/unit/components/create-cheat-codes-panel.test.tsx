@@ -217,6 +217,16 @@ describe("CreateCheatCodesPanel", () => {
     expect(onValueChange).toHaveBeenCalledWith("SXIOPO");
   });
 
+  it("appends a manually entered code through the shared picker", async () => {
+    const { onValueChange, view } = renderPanel("");
+    fireEvent.click(view.getByRole("button", { name: /Pick from the cheat database/u }));
+    fireEvent.click(await view.findByRole("button", { name: "Add code manually" }));
+    fireEvent.change(view.getByLabelText("Cheat code"), { target: { value: "SXIOPO" } });
+    fireEvent.click(view.getByRole("button", { name: "Check code" }));
+    fireEvent.click(await view.findByRole("button", { name: "Add this cheat" }));
+    expect(onValueChange).toHaveBeenCalledWith("SXIOPO");
+  });
+
   // Check membership per decoded code so a multi-code row cannot be added repeatedly.
   it("adds every code a multi-code row carries, then offers Remove", async () => {
     const { onValueChange, view } = renderPanel("");

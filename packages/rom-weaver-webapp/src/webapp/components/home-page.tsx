@@ -127,6 +127,10 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
               <a href={resolveGuidedSampleHref(baseUrl, "apply")}>{localizer.message("ui.home.tryLink")}</a>
               {localizer.message("ui.home.tryAfter")}
             </p>
+            <p className="home-try">
+              Practice cheat codes with the guided <a href={resolveGuidedSampleHref(baseUrl, "apply-cheats")}>Apply</a>{" "}
+              or <a href={resolveGuidedSampleHref(baseUrl, "create-cheats")}>Create</a> tour.
+            </p>
             <HomeCapabilities
               baseUrl={baseUrl}
               className="home-hero-capabilities"

@@ -138,12 +138,14 @@ export const ApplySampleStart = ({
   bundlePage,
   downloadHref,
   onLoadApplySample,
+  onLoadApplyCheatsSample,
   onLoadBundleSample,
   sampleError,
   sampleLoading,
 }: {
   bundlePage: boolean;
   onLoadApplySample: () => void;
+  onLoadApplyCheatsSample: () => void;
   onLoadBundleSample: () => void;
   downloadHref: string;
   sampleError: string;
@@ -163,6 +165,14 @@ export const ApplySampleStart = ({
       label={localizer.message(bundlePage ? "ui.apply.tutorial.createBundle" : "ui.apply.tutorial.startApply")}
       loading={sampleLoading}
       onStart={bundlePage ? onLoadBundleSample : onLoadApplySample}
+      {...(bundlePage
+        ? {}
+        : {
+            onSecondaryStart: onLoadApplyCheatsSample,
+            secondaryAction: "toggle" as const,
+            secondaryHref: resolveGuidedSampleHref(assetBaseUrl, "apply-cheats"),
+            secondaryLabel: "Apply cheats to a ROM",
+          })}
       startAction={bundlePage ? "package" : "apply"}
     />
   );

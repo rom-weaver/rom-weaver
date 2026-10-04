@@ -62,7 +62,27 @@ test("generated first-create and first-weave archives contain a runnable NES pat
   );
   assert.equal(createEntries.get("hello-world.nes")?.subarray(0, 4).toString("hex"), "4e45531a");
   assert.deepEqual(createEntries.get("hello-world.nes"), assets.originalRom);
+  assert.deepEqual(
+    fs.readFileSync(new URL("../packages/rom-weaver-webapp/tests/fixtures/cheats/hello-world.nes", import.meta.url)),
+    assets.originalRom,
+  );
   assert.deepEqual(createEntries.get("modified-world.nes"), assets.modifiedRom);
+  assert.equal(assets.originalRom[0xa7], 0x00);
+  assert.equal(assets.greetingCheatRom[0xa7], 0x0d);
+  assert.equal(assets.originalRom[0x87], 0x0f);
+  assert.equal(assets.colorCheatRom[0x87], 0x30);
+  assert.deepEqual(
+    Array.from(assets.originalRom.keys()).filter(
+      (offset) => assets.originalRom[offset] !== assets.greetingCheatRom[offset],
+    ),
+    [0xa7],
+  );
+  assert.deepEqual(
+    Array.from(assets.originalRom.keys()).filter(
+      (offset) => assets.originalRom[offset] !== assets.colorCheatRom[offset],
+    ),
+    [0x87],
+  );
   assert.deepEqual(
     applyIps(assets.originalRom, weaveEntries.get("hello-to-rom.ips")),
     assets.firstPatchResult,
@@ -86,7 +106,10 @@ test("generated first-create and first-weave archives contain a runnable NES pat
     manifest.patches.map((patch) => patch.path),
     ["hello-to-rom.ips", "world-to-weaver.ips"],
   );
-  assert.deepEqual(manifest.patches.map((patch) => patch.basis), ["base", "base"]);
+  assert.deepEqual(
+    manifest.patches.map((patch) => patch.basis),
+    ["base", "base"],
+  );
   assert.equal(manifest.patches[0].inputChecks, undefined);
   assert.equal(manifest.patches[1].inputChecks, undefined);
   assert.equal(manifest.patches[0].outputChecks, undefined);

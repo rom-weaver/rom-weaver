@@ -10,6 +10,8 @@ const PRG_SIZE = 16 * 1024;
 const CHR_SIZE = 8 * 1024;
 const CPU_BASE = 0x8000;
 const MESSAGE_LENGTH = 15;
+const PRACTICE_GREETING_OFFSET = 0xa7;
+const PRACTICE_COLOR_OFFSET = 0x87;
 
 const invariant = (condition, message) => {
   if (!condition) throw new Error(message);
@@ -314,6 +316,11 @@ const createFirstSampleAssets = () => {
       2,
     )}\n`,
   );
+  const greetingCheatRom = Buffer.from(original.rom);
+  greetingCheatRom[PRACTICE_GREETING_OFFSET] = 0x0d;
+  const colorCheatRom = Buffer.from(original.rom);
+  invariant(colorCheatRom[PRACTICE_COLOR_OFFSET] === 0x0f, "practice color compare byte must match");
+  colorCheatRom[PRACTICE_COLOR_OFFSET] = 0x30;
 
   return {
     firstCreateZip: createZip([
@@ -327,6 +334,8 @@ const createFirstSampleAssets = () => {
       ["world-to-weaver.ips", worldToWeaverPatch],
     ]),
     firstPatchResult: firstPatchResult.rom,
+    colorCheatRom,
+    greetingCheatRom,
     helloToRomPatch,
     modifiedRom: modified.rom,
     originalRom: original.rom,

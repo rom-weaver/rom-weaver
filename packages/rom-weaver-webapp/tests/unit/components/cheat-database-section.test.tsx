@@ -300,6 +300,8 @@ describe("CheatDatabaseSection", () => {
     await openDialog(view);
     expect((addButton(view, "Infinite health") as HTMLButtonElement).disabled).toBe(true);
     expect(view.getAllByText("N/A")).toHaveLength(1);
+    fireEvent.click(view.getAllByText("Code details")[1] as HTMLElement);
+    expect(view.getByText("the code targets runtime memory")).toBeTruthy();
   });
 
   it("keeps a card when its switch goes off and drops it when removed", async () => {

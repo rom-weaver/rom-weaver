@@ -26,6 +26,7 @@ import {
   useGuidedSampleStart,
 } from "./components/ds/sample-tutorial.tsx";
 import { resolveGuidedSampleHref } from "./guided-sample-start.ts";
+import { getPracticeCheatCatalog } from "./guided-cheat-sample.ts";
 import { WORKFLOW_GUIDES } from "./workflow-guides.ts";
 import { OutputRunAction } from "./components/ds/workflow-output-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
@@ -65,7 +66,6 @@ import {
   toCreateWorkflowSettings,
   useCreateSettings,
   useRomWeaverAssetBaseUrl,
-  useRomWeaverSettings,
   useUiLocalizer,
 } from "./settings-context.tsx";
 import {
@@ -338,6 +338,15 @@ const CREATE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   },
   {
     actions: [
+      ["toggle", "Cheat codes"],
+      ["menu", "Pick from the cheat database"],
+    ],
+    body: "Optional: switch to Cheat codes to browse practice cheats and build the patch from selected codes. Keep Modified ROM selected for the original sample output.",
+    target: "#patch-builder-row-modified",
+    title: "Try the practice cheat menu",
+  },
+  {
+    actions: [
       ["options", "Options"],
       ["archive", "Archive"],
       ["create", "Create & download"],
@@ -348,6 +357,37 @@ const CREATE_SAMPLE_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
     placement: "top",
     target: "#patch-builder-row-output",
     title: "Create the patch",
+  },
+];
+
+const CREATE_CHEATS_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
+  {
+    actions: [["checks", "Checks"]],
+    body: "This legal practice ROM is the unchanged source for the cheat patch.",
+    openDrawers: true,
+    target: "#patch-builder-row-original",
+    title: "Start with the original ROM",
+  },
+  {
+    actions: [["toggle", "Cheat codes"]],
+    body: "Cheat codes replaces the modified ROM. Pick a practice cheat or enter a supported code.",
+    target: "#patch-builder-row-modified",
+    title: "Build from cheat codes",
+  },
+  {
+    actions: [["menu", "Pick from the cheat database"]],
+    body: "The practice catalog appears only for this bundled ROM. Add a code, then inspect the ROM write it creates.",
+    target: ".create-cheat-codes",
+    title: "Choose and inspect a cheat",
+  },
+  {
+    actions: [["create", "Create & download"]],
+    body: "Choose the patch format, then create a normal patch containing the selected cheat writes.",
+    cta: ".btn.run",
+    openDrawers: true,
+    placement: "top",
+    target: "#patch-builder-row-output",
+    title: "Create the cheat patch",
   },
 ];
 
@@ -395,7 +435,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     [createPatchFormatCandidatesOverride],
   );
   const providerSettings = useCreateSettings();
-  const cheatsEnabled = useRomWeaverSettings().betaToolsEnabled === true;
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
   const localizer = useUiLocalizer();
   const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;
@@ -418,7 +457,9 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     useState<CreatePatchFormatCandidateState | null>(null);
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleError, setSampleError] = useState("");
-  const [sampleTutorialActive, setSampleTutorialActive] = useState(false);
+  const [sampleTutorial, setSampleTutorial] = useState<"create" | "create-cheats" | null>(null);
+  const [practiceCheatSession, setPracticeCheatSession] = useState(false);
+  const sampleLoadGenerationRef = useRef(0);
   const [busy, setBusy] = useState(false);
   const [createQueued, setCreateQueued] = useState(false);
   const [stagingRole, setStagingRole] = useState<"modified" | "original" | null>(null);
@@ -491,8 +532,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   });
   const uploadDisabled = !!props.disabled || busy;
   const outputDisabled = !!props.disabled || busy;
-  // Cheat codes are a beta tool; turning beta tools off falls back to the ROM input.
-  const codesMode = cheatsEnabled && modifiedMode === "codes";
+  const codesMode = modifiedMode === "codes";
   const cheatCodes = useMemo(
     () => (codesMode ? splitCheatCodes(cheatCodesText, cheatSystem, cheatCodeKind) : []),
     [cheatCodeKind, cheatCodesText, cheatSystem, codesMode],
@@ -585,7 +625,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         : null,
     [cheatPlatform, displayedOriginalFileName, original, originalSourceKey, originalState?.checksums],
   );
-  const cheatSystemUnsupported = useUnsupportedCheatSystem(cheatRom, cheatsEnabled);
+  const practiceCheatCatalog = practiceCheatSession ? getPracticeCheatCatalog(originalState?.checksums) : {};
+  const cheatSystemUnsupported = useUnsupportedCheatSystem(cheatRom, true);
   const displayedModifiedFileName = displayedModifiedInfo?.fileName || modifiedFileName;
   const settingsLanguage = (settings as { language?: string }).language;
   const clearWorkflowMessage = useCallback(() => {
@@ -601,13 +642,13 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     setProgress,
     setQueued: setCreateQueued,
   });
-  // A patch built from cheat codes MUST NOT stay on screen once beta tools turn
-  // off or the original ROM's system turns out to have no cheat support.
+  // A patch built from cheat codes MUST NOT stay on screen once the original
+  // ROM's system turns out to have no cheat support.
   useEffect(() => {
-    if ((cheatsEnabled && !cheatSystemUnsupported) || modifiedMode !== "codes") return;
+    if (!cheatSystemUnsupported || modifiedMode !== "codes") return;
     setModifiedMode("rom");
     resetWorkflowOutput();
-  }, [cheatSystemUnsupported, cheatsEnabled, modifiedMode, resetWorkflowOutput]);
+  }, [cheatSystemUnsupported, modifiedMode, resetWorkflowOutput]);
   const setWorkflowMessage = useCallback(
     (placement: CreateMessagePlacement, error: Error) => {
       const code = getErrorCode(error);
@@ -781,7 +822,13 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     }
     applyRoutedDrop(routed);
   };
-  const handleUnifiedDrop = (files: File[]) => {
+  const handleUnifiedDrop = (files: File[], practiceSample = false) => {
+    if (!practiceSample) {
+      sampleLoadGenerationRef.current += 1;
+      setSampleLoading(false);
+      setSampleTutorial(null);
+      setPracticeCheatSession(false);
+    }
     const slotFilled = [!!original, !!modified];
     const routed = routeByOrder(files, slotFilled);
     const emptySlotCount = slotFilled.filter((filled) => !filled).length;
@@ -801,32 +848,63 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     }
     commitRoutedDrop(routed);
   };
-  const loadCreateSample = async () => {
+  const closeSampleTutorial = () => {
+    sampleLoadGenerationRef.current += 1;
+    setSampleLoading(false);
+    setSampleTutorial(null);
+  };
+  useEffect(
+    () => () => {
+      sampleLoadGenerationRef.current += 1;
+    },
+    [],
+  );
+  const loadCreateSample = async (guide: "create" | "create-cheats") => {
+    const generation = ++sampleLoadGenerationRef.current;
     setSampleLoading(true);
     setSampleError("");
     try {
       const files = await Promise.all(
-        CREATE_SAMPLE_ASSETS.map(async ([asset, name]) => {
+        CREATE_SAMPLE_ASSETS.slice(0, guide === "create-cheats" ? 1 : undefined).map(async ([asset, name]) => {
           const response = await fetch(resolveAssetUrl(resolvedAssetBaseUrl, asset));
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           return new File([await response.blob()], name, { type: "application/octet-stream" });
         }),
       );
-      handleUnifiedDrop(files);
+      if (generation !== sampleLoadGenerationRef.current) return;
+      if (guide === "create-cheats") {
+        updateModified(null);
+        setCheatCodesText("");
+        setCheatCodeEntries([]);
+        setModifiedMode("codes");
+      } else {
+        setModifiedMode("rom");
+      }
+      handleUnifiedDrop(files, true);
+      setPracticeCheatSession(true);
     } catch {
-      setSampleTutorialActive(false);
+      if (generation !== sampleLoadGenerationRef.current) return;
+      closeSampleTutorial();
       setSampleError("Could not load the sample. Try again.");
     } finally {
-      setSampleLoading(false);
+      if (generation === sampleLoadGenerationRef.current) setSampleLoading(false);
     }
   };
   useGuidedSampleStart(
     "create",
     () => {
-      setSampleTutorialActive(true);
-      void loadCreateSample();
+      setSampleTutorial("create");
+      void loadCreateSample("create");
     },
-    () => setSampleTutorialActive(false),
+    closeSampleTutorial,
+  );
+  useGuidedSampleStart(
+    "create-cheats",
+    () => {
+      setSampleTutorial("create-cheats");
+      void loadCreateSample("create-cheats");
+    },
+    closeSampleTutorial,
   );
   const swapCreateSources = () => {
     const workflow = stagedCreateWorkflowRef.current;
@@ -1207,7 +1285,10 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const createFileInputAccept = getFileInputAcceptAttributes();
   const createSourcesActuallyEmpty = !(original || modified || createPreparationPending);
   const createSourcesEmpty = useFlatTransitionFlag(createSourcesActuallyEmpty);
-  const sampleTutorialReady = createSourcesReady && !createPreparationPending;
+  const sampleTutorialReady =
+    sampleTutorial === "create-cheats"
+      ? originalState?.status === "ready" && !stagingRole
+      : createSourcesReady && !createPreparationPending;
   // The selvage status strip mirrors this workflow's job state.
   useWorkbenchActivity(workflowIdRef.current, { busy, completed: !!completedOutput, queued: createQueued });
 
@@ -1240,12 +1321,16 @@ function CreatePatchForm(props: CreatePatchFormProps) {
             title={localizer.message("ui.drop.duplicateTitle")}
           />
         ) : null}
-        {sampleTutorialActive ? (
+        {sampleTutorial ? (
           <SampleTutorial
-            loadingBody="RomWeaver is loading two tiny ROMs, then fingerprinting the untouched and edited versions."
-            onClose={() => setSampleTutorialActive(false)}
+            loadingBody={
+              sampleTutorial === "create-cheats"
+                ? "RomWeaver is loading and fingerprinting a tiny legal practice ROM."
+                : "RomWeaver is loading two tiny ROMs, then fingerprinting the untouched and edited versions."
+            }
+            onClose={closeSampleTutorial}
             ready={sampleTutorialReady}
-            steps={CREATE_SAMPLE_TUTORIAL_STEPS}
+            steps={sampleTutorial === "create-cheats" ? CREATE_CHEATS_TUTORIAL_STEPS : CREATE_SAMPLE_TUTORIAL_STEPS}
           />
         ) : null}
       </>
@@ -1281,8 +1366,15 @@ function CreatePatchForm(props: CreatePatchFormProps) {
           startAction="create"
           loading={sampleLoading}
           onStart={() => {
-            setSampleTutorialActive(true);
-            void loadCreateSample();
+            setSampleTutorial("create");
+            void loadCreateSample("create");
+          }}
+          secondaryAction="toggle"
+          secondaryHref={resolveGuidedSampleHref(resolvedAssetBaseUrl, "create-cheats")}
+          secondaryLabel="Create a patch from cheats"
+          onSecondaryStart={() => {
+            setSampleTutorial("create-cheats");
+            void loadCreateSample("create-cheats");
           }}
         />
       ) : null,
@@ -1308,6 +1400,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
                 <CreateCheatCodesPanel
                   classifyDatabaseCheats={classifyDatabaseCheats}
                   classifyManualCode={classifyManualCode}
+                  {...practiceCheatCatalog}
                   disabled={outputDisabled}
                   kind={cheatCodeKind}
                   onClassifyingChange={setCheatCodesClassifying}
@@ -1333,7 +1426,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
             ),
           }
         : {}),
-      ...(cheatsEnabled && cheatSystemUnsupported
+      ...(cheatSystemUnsupported
         ? {
             afterItems: (
               <p className="create-cheat-codes-unsupported" id="patch-builder-cheat-codes-unsupported">
@@ -1351,7 +1444,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
               </NeedsInput>
             ),
           }),
-      headerExtra: cheatsEnabled ? (
+      headerExtra: (
         <fieldset className="seg">
           <legend className="sr-only">How the modification is supplied</legend>
           {(["rom", "codes"] as const).map((mode) => (
@@ -1374,7 +1467,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
             </button>
           ))}
         </fieldset>
-      ) : undefined,
+      ),
     },
     originalStep: renderSourceStep({
       checksumProgress: getSourceChecksumProgress("original"),

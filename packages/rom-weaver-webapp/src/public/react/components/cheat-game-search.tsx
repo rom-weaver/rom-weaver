@@ -63,6 +63,7 @@ type CheatGameSearchInput = {
   database: CheatDatabaseRecordsState;
   /** Offer the game list even after an exact checksum match that has ROM cheats. */
   alwaysBrowseGames?: boolean;
+  inspection?: boolean;
 };
 
 const hasNoRomCheats = (database: CheatDatabaseRecordsState): boolean =>
@@ -133,7 +134,7 @@ const SystemSearch = ({ database }: { database: CheatDatabaseRecordsState }) => 
   );
 };
 
-const gameWarning = (database: CheatDatabaseRecordsState): string => {
+const gameWarning = (database: CheatDatabaseRecordsState, inspection = false): string => {
   const { entry, game, match, records, referenceRom } = database;
   if (referenceRom && entry && !game && database.shard) {
     return `The cheat database has no game record for ${referenceRom.title}. Search for another release or browse this system's cheat records below.`;
@@ -141,7 +142,7 @@ const gameWarning = (database: CheatDatabaseRecordsState): string => {
   if (match.kind === "none" && entry) {
     return `No game in the ${entry.platform} cheat database matches this ROM. Identify the game above. A game you choose by hand may not match this ROM's revision.`;
   }
-  if (game && hasNoRomCheats(database)) {
+  if (game && !inspection && hasNoRomCheats(database)) {
     const found = records.length ? "no cheats that can be baked into the ROM" : "no cheats";
     return `The cheat database has ${found} for ${game.title}. If this ROM was matched wrongly, identify a different game above.`;
   }
@@ -224,7 +225,7 @@ export const CheatGameSearch = (input: CheatGameSearchInput) => {
         {changeSystem}
       </>
     );
-  const warning = gameWarning(database);
+  const warning = gameWarning(database, input.inspection);
   return (
     <>
       {identify}

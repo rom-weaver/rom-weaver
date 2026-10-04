@@ -46,6 +46,7 @@ const searchChecksum = async (container: HTMLElement, hash: string) => {
   expect(container.querySelector("#identify-container-expected-rom")).toBeNull();
   fireEvent.click(choice);
   await waitFor(() => expect(container.querySelector("#identify-container-expected-rom")).not.toBeNull());
+  expect(container.querySelector(".identify-cheat-inspect")?.textContent).toContain("View cheats");
 };
 
 const stageRom = async (container: HTMLElement) => {

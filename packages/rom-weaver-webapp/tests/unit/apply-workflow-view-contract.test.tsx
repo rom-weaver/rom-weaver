@@ -254,9 +254,13 @@ describe("apply workflow view - empty bench", () => {
     const { container } = renderView({ mode, ui: createEmptyPatcherUiState() });
     fireEvent.click(container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement);
     const actions = container.querySelectorAll(".sample-tutorial-start-action");
-    expect(actions).toHaveLength(4);
+    expect(actions).toHaveLength(mode === "apply" ? 5 : 4);
     expect(actions[0].getAttribute("href")).toBe(href);
     expect(actions[0].textContent).toContain(label);
+    if (mode === "apply") {
+      expect(actions[1].getAttribute("href")).toBe("/apply-patches?guide=apply-cheats");
+      expect(actions[1].textContent).toContain("Apply cheats to a ROM");
+    }
     expect(container.querySelector(".sample-tutorial-start-guide")?.getAttribute("href")).toBe(docsHref);
     expect(container.querySelector(".sample-tutorial-start-guide")?.textContent).toContain(docsLabel);
     expect(container.querySelector(".hero-guide")?.getAttribute("href")).toBe(docsHref);

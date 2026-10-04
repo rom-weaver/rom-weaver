@@ -7,6 +7,7 @@ Use Identify to find a game's known name, region, revision, and checksums. Your 
 
 - [Identify a file](#identify-a-file)
 - [Search without a file](#search-without-a-file)
+- [Inspect known cheats](#inspect-known-cheats)
 - [Compare a checksum](#compare-a-checksum)
 
 <!-- END doctoc -->
@@ -48,6 +49,15 @@ If several records share the checksums, read every candidate. If identification 
 4. Read the expected ROM's details. Add your file to compare it with that expectation.
 
 Search finds database records. It does not download a game. A name match alone does not prove that you have the right revision.
+
+## Inspect known cheats
+
+1. Add a ROM or archive and wait for Identify to finish.
+2. Select **View cheats** on the matching result or expected-ROM candidate.
+3. Search the matched game's known codes.
+4. Open **Code details** for original database fields and import warnings.
+
+This view is for inspection. It includes checksum-only matches and candidates found inside archives, even when rom-weaver has not verified that a code is compatible with those exact bytes. Open [Apply cheats](https://rom-weaver.com/apply-patches?guide=apply-cheats) or [Create a cheat patch](https://rom-weaver.com/create-patch?guide=create-cheats) to classify and use a code.
 
 ## Compare a checksum
 

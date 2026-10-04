@@ -63,7 +63,7 @@ Patching support, emulator support, cheat support, and save editing support are 
 | --- | --- |
 | Offline use | Cached app files, databases, and emulator cores work offline. Remote links and uncached assets need a connection. [Offline setup](../how-to/browser-settings.md#prepare-for-offline-use). |
 | Browser preferences | Theme, accent, language, byte units, guided help, output defaults, compression settings, and worker threads. [Settings](../how-to/browser-settings.md). |
-| Beta tools | Trim, PPF Undo, Save Editor, and cheat-code creation in Create are behind the browser's beta setting. Apply cheat steps are available without it. |
+| Beta tools | Trim, PPF Undo, and Save Editor are behind the browser's beta setting. Cheat tools in Apply, Create, and Identify are available without it. |
 | Scripts and pipelines | The CLI has file selection, dry runs, standard input/output, JSON results, JSON event streams, shell completions, and man pages. [CLI reference](cli.md). |
 | Hosting and integration | Static or Docker hosting, subpaths, URL-loaded ROMs and patches, bundles, and same-origin file integration. [Hosting](../hosting/self-hosting.md), [integration](../hosting/webapp-integration.md). |
 
