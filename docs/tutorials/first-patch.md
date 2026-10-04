@@ -28,7 +28,7 @@ That is all you need to know to start. [How patching works](../explanation/how-p
 
 ## Step 1: open the guide and add the practice files
 
-Open [guided Apply Patches](https://rom-weaver.com/apply-patches?guide=apply).
+Open [guided Apply Patches](https://rom-weaver.com/apply-patches?guide=apply). On the plain [Apply Patches](https://rom-weaver.com/apply-patches) page, the same guide is **New here?** › **Start guided Apply** under the empty drop zone.
 
 The guide opens on **Add your files**, the drop area every file goes through. It lists the ways in: drop files or a whole folder, drop a ZIP, 7z, or bundle, or choose **Add files** to pick them. **Continue** waits until a ROM and at least one patch are in.
 
@@ -90,7 +90,7 @@ The same practice files drive two more guided runs:
 - [Guided Create](https://rom-weaver.com/create-patch?guide=create) makes a patch from two homebrew ROMs.
 - [Guided Bundle Patches](https://rom-weaver.com/bundle-patches?guide=bundle) turns the Apply Patches sample into a patch-only release archive.
 
-These are optional follow-up exercises.
+These are optional follow-up exercises. [Guided practice runs](../reference/guided-runs.md) lists every guided run, its steps, and its files.
 
 ## Step 6: try a cheat-code sample
 

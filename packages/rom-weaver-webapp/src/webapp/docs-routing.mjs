@@ -223,6 +223,7 @@ const DOC_SOURCES = Object.freeze([
     slug: "docs/supported-formats",
   }),
   Object.freeze({ file: "reference/cheat-database.md", label: "Cheat database", slug: "docs/cheat-database" }),
+  Object.freeze({ file: "reference/guided-runs.md", label: "Guided practice runs", slug: "docs/guided-runs" }),
   Object.freeze({
     file: "explanation/how-patching-works.md",
     label: "How patching works",

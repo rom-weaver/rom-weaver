@@ -465,6 +465,11 @@ msgstr "Add files"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.create.tutorial.addFiles.title"
+msgstr "Add more files any time"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.modified.title"
 msgstr "Add the changed ROM"
 
@@ -1466,7 +1471,7 @@ msgstr "Drop a ROM and its patches here: single files, a whole folder, a ZIP or 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.addFiles.body"
-msgstr "Drop files here or press Browse to replace either ROM."
+msgstr "Drop files here or press Add files to replace either ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2457,6 +2462,11 @@ msgstr "Not the ROM you meant?"
 #: src/presentation/localization/messages.ts
 msgid "ui.find.empty"
 msgstr "Nothing matches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.create.tutorial.addFiles.tryIt"
+msgstr "Nothing to add for this run. Continue."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

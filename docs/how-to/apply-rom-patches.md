@@ -25,7 +25,7 @@ Apply BPS, IPS, UPS, xdelta, PPF, and other supported ROM patches locally in you
 
 <!-- END doctoc -->
 
-Never done this before? [Your first patch in the browser](../tutorials/first-patch.md) walks the same workflow with homebrew practice files first.
+Never done this before? [Your first patch in the browser](../tutorials/first-patch.md) walks the same workflow with homebrew practice files first, using [guided Apply](https://rom-weaver.com/apply-patches?guide=apply).
 
 ## What do you need?
 
@@ -55,7 +55,7 @@ Keep one clean original somewhere safe. rom-weaver writes a separate result, but
 ## Add the files
 
 1. Open [Apply](https://rom-weaver.com/apply-patches).
-2. Drag the ROM and patch onto **0x01 Inputs**, or choose **Add files**. You may add both at once.
+2. Drag the ROM and patch onto **0x01 Inputs**, or choose **Add files**. You may add both at once, or drop the folder that holds them.
 3. Wait while the temporary cards say **Reading** or **Checksumming**.
 4. If an archive contains several possible files, choose the entry the patch author named.
 
@@ -65,7 +65,7 @@ The page changes after the files are understood. **ROM** holds the game, **Patch
 
 Use [cheats](use-browser-cheats.md) to add supported codes to that order. To change only the container, follow [Convert a ROM](convert-roms-browser.md).
 
-For a practice run, open the [guided Apply cheats tour](https://rom-weaver.com/apply-patches?guide=apply-cheats). It loads a supplied homebrew ROM and a working sample code.
+For a practice run, open [guided Apply](https://rom-weaver.com/apply-patches?guide=apply). It starts on this drop zone and waits for you to add files; choose **Use the practice files** on its card if you have none. The [guided Apply cheats tour](https://rom-weaver.com/apply-patches?guide=apply-cheats) loads a supplied homebrew ROM and a working sample code. [Ways files get into Apply](../reference/guided-runs.md#ways-files-get-into-apply) lists every route in one table.
 
 ## Apply a BPS patch
 

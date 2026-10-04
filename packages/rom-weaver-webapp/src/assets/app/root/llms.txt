@@ -13,6 +13,7 @@
 - [Documentation](https://rom-weaver.com/docs): Tutorials, how-to guides, reference tables, and explanation, for the browser app and the CLI.
 - [Use MCP and browser agents](https://rom-weaver.com/docs/use-mcp): Connect an MCP client for public documentation and formats, or use WebMCP workflows with browser approval.
 - [What rom-weaver supports](https://rom-weaver.com/docs/features): Plain-language feature map, browser and CLI availability, and links to exact support limits.
+- [Guided practice runs](https://rom-weaver.com/docs/guided-runs): Every guided browser run, its steps and practice files, where each starts, and every way files get into Apply.
 - [Identify ROMs in the browser](https://rom-weaver.com/docs/identify-roms-browser): Look up files, search names or checksums, and compare fingerprints.
 - [Checksum files in the browser](https://rom-weaver.com/docs/checksum-roms-browser): Calculate and compare any file's checksums locally.
 - [Extract files in the browser](https://rom-weaver.com/docs/extract-files-browser): Take files out of an archive or disc image and download them singly or as one ZIP.

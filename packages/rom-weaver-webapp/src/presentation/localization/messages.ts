@@ -646,7 +646,15 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.create.tutorial.addFiles.body": msg({
     id: "ui.create.tutorial.addFiles.body",
-    message: "Drop files here or press Browse to replace either ROM.",
+    message: "Drop files here or press Add files to replace either ROM.",
+  }),
+  "ui.create.tutorial.addFiles.title": msg({
+    id: "ui.create.tutorial.addFiles.title",
+    message: "Add more files any time",
+  }),
+  "ui.create.tutorial.addFiles.tryIt": msg({
+    id: "ui.create.tutorial.addFiles.tryIt",
+    message: "Nothing to add for this run. Continue.",
   }),
   "ui.create.tutorial.cheats.title": msg({
     id: "ui.create.tutorial.cheats.title",

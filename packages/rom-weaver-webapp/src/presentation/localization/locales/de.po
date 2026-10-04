@@ -465,6 +465,11 @@ msgstr "Dateien hinzufügen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.create.tutorial.addFiles.title"
+msgstr "Jederzeit weitere Dateien hinzufügen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.modified.title"
 msgstr "Das geänderte ROM hinzufügen"
 
@@ -1466,7 +1471,7 @@ msgstr "Lege hier ein ROM und seine Patches ab: einzelne Dateien, einen ganzen O
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.addFiles.body"
-msgstr "Lege hier Dateien ab oder wähle Durchsuchen, um eines der ROMs zu ersetzen."
+msgstr "Lege hier Dateien ab oder wähle Dateien hinzufügen, um eines der ROMs zu ersetzen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2457,6 +2462,11 @@ msgstr "Nicht das gemeinte ROM?"
 #: src/presentation/localization/messages.ts
 msgid "ui.find.empty"
 msgstr "Nichts passt"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.create.tutorial.addFiles.tryIt"
+msgstr "Für diesen Durchlauf musst du nichts hinzufügen. Weiter."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
