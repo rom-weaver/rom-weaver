@@ -85,7 +85,7 @@ Your ROM and patches are read locally. A patch-only bundle carries the ROM's che
 
 Test the archive you will publish, not only the loose files used to make it:
 
-1. Open a fresh [Apply](https://rom-weaver.com/apply) page.
+1. Open a fresh [Apply](https://rom-weaver.com/apply-patches) page.
 2. Add the downloaded bundle archive.
 3. For a patch-only bundle, add a fresh copy of the documented Original.
 4. Confirm the displayed patch order, names, required switches, and optional switches match the release.

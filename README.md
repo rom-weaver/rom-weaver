@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://rom-weaver.com/apply">
+  <a href="https://rom-weaver.com/apply-patches">
     <picture>
       <source media="(max-width: 600px) and (prefers-color-scheme: dark)" srcset="packages/rom-weaver-webapp/design/readme-banner-mobile-dark.svg">
       <source media="(max-width: 600px)" srcset="packages/rom-weaver-webapp/design/readme-banner-mobile.svg">
@@ -61,7 +61,13 @@ Open [rom-weaver.com/apply-patches](https://rom-weaver.com/apply-patches). Add y
 
 For offline use, first cache the app and any needed identify packs, cheat databases, and emulator cores. Remote files still need a connection. See [offline behavior](docs/explanation/local-first.md#offline) and [privacy](docs/legal/privacy.md).
 
-Start with [your first patch](docs/tutorials/first-patch.md) to practise on supplied homebrew files. Use the [task chooser](docs/README.md#choose-a-task) for the other browser workflows.
+Start with [your first patch](docs/tutorials/first-patch.md) to practise on supplied homebrew files. For your own files:
+
+- [Apply a BPS, IPS, UPS, or xdelta patch](docs/how-to/apply-rom-patches.md).
+- [Compare ROM compression formats](docs/explanation/compression-formats.md).
+- [Identify a ROM by checksum](docs/how-to/identify-roms-browser.md).
+
+Use the [task chooser](docs/README.md#choose-a-task) for the other browser workflows.
 
 ## Self-hosting
 

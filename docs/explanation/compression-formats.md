@@ -1,6 +1,6 @@
-# Choosing a compression format
+# ROM compression formats: CHD, RVZ, Z3DS, ZIP and 7z
 
-CHD, RVZ, Z3DS, 7z, ZIP. This page explains which compressed format fits which console, when trimming beats compressing, and what compression does to your checksums.
+Compare ROM compression formats by their inputs, emulator compatibility, and extraction requirements: CHD and RVZ for disc images, Z3DS for Nintendo 3DS files, and ZIP or 7z for general archives.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -63,11 +63,18 @@ A compressed file does not hash the same as the dump inside it, so a `.chd` will
 
 ## Which format should I choose?
 
-- **CD/DVD console:** CHD when your emulator supports it.
-- **GameCube or Wii:** RVZ for Dolphin and compatible tools.
-- **Nintendo 3DS ROMs:** Z3DS for Azahar 2123 or later.
-- **Cartridge ROMs you play:** ZIP when your emulator reads it directly, or a trimmed file where padding dominates.
-- **Cold storage:** 7z when smaller general-purpose archives matter more than broad direct support.
-- **Already in GCZ, WIA, WBFS, or CSO:** extract and create a supported modern format when your emulator can read it.
+| Format | Intended input | Playback and extraction |
+| --- | --- | --- |
+| CHD | Supported CD/DVD and other disc images | Compatible emulators read CHD directly; others need an extracted image. |
+| RVZ | GameCube and Wii disc images | Dolphin reads RVZ directly; tools requiring ISO need extraction. |
+| Z3DS | Supported Nintendo 3DS payloads | Azahar 2123 and later support Z3DS; other tools may require the extracted payload. |
+| ZIP | Any file, including cartridge ROMs | Some emulators load ROMs from ZIP; others need the member extracted first. |
+| 7z | Any file, including ROMs and disc images | Direct emulator support is less common than ZIP; extraction is often needed. |
+
+CHD versus 7z is a choice between a disc container that compatible emulators can read and a general archive. Neither converts a cartridge game into a disc-platform game. CHD and RVZ also target different disc workflows; there is no single size winner for every input and compression setting.
+
+ZIP versus 7z trades broader direct support for the potential of smaller archives. Compression ratio and time depend on the input and settings. For 3DS, Z3DS preserves the payload type; putting a file in ZIP or 7z does not turn it into a `.3ds` ROM.
+
+The browser procedures cover [CHD conversion](../how-to/convert-to-chd-browser.md), [RVZ conversion](../how-to/convert-to-rvz-browser.md), and [3DS compression](../how-to/convert-to-z3ds-browser.md). The [CLI archive guide](../how-to/work-with-archives.md) covers terminal workflows.
 
 The [Supported formats](../reference/formats.md#container-and-compression-formats) reference is the authoritative table of every container, extension, and codec, including the `--codec` values each output accepts. Back to the [guide index](../README.md).

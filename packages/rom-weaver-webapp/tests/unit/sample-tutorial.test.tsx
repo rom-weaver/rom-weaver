@@ -161,6 +161,16 @@ it("removes the guide query when the tutorial ends", () => {
 });
 
 describe("sample tutorial", () => {
+  it("exposes the live step independently of translated copy", async () => {
+    renderGuidedWorkbench();
+    const guide = screen.getByRole("dialog");
+    expect(guide.getAttribute("data-step")).toBe("1");
+    expect(guide.getAttribute("data-step-count")).toBe("2");
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(guide.getAttribute("data-step")).toBe("2"));
+    expect(guide.getAttribute("data-step-count")).toBe("2");
+  });
+
   it("centers an announced progress bar while the guided workbench is preparing", () => {
     render(
       <div className="rw-app">
@@ -171,6 +181,8 @@ describe("sample tutorial", () => {
     const guide = screen.getByRole("dialog", { name: "Loading the sample files" });
     expect(guide.getAttribute("aria-busy")).toBe("true");
     expect(guide.getAttribute("data-loading")).toBe("true");
+    expect(guide.hasAttribute("data-step")).toBe(false);
+    expect(guide.hasAttribute("data-step-count")).toBe(false);
     expect(screen.getByRole("progressbar", { name: "Loading sample files" }).getAttribute("aria-valuetext")).toBe(
       "Getting the sample ready",
     );

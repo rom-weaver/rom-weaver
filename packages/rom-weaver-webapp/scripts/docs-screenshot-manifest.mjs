@@ -5,7 +5,6 @@ const DOCS_SCREENSHOT_CASES = [
     name: "apply-patches",
     route: "/apply-patches?guide=apply",
     target: "#rom-weaver-row-patch-stack",
-    waitFor: "Changes HELLO to ROM in the message displayed by the NES ROM.",
   },
   {
     dismissGuide: true,
@@ -13,7 +12,6 @@ const DOCS_SCREENSHOT_CASES = [
     name: "apply-output",
     route: "/apply-patches?guide=apply",
     target: "#rom-weaver-row-output-file-name",
-    waitFor: "Changes HELLO to ROM in the message displayed by the NES ROM.",
   },
   {
     dismissGuide: true,
@@ -21,7 +19,6 @@ const DOCS_SCREENSHOT_CASES = [
     name: "create-inputs",
     route: "/create-patch?guide=create",
     target: "#patch-builder-row-original, .swap-row, #patch-builder-row-modified",
-    waitFor: "Start with the original",
   },
   {
     dismissGuide: true,
@@ -29,7 +26,6 @@ const DOCS_SCREENSHOT_CASES = [
     name: "create-output",
     route: "/create-patch?guide=create",
     target: "#patch-builder-row-output",
-    waitFor: "Start with the original",
   },
   {
     dismissGuide: true,
@@ -37,21 +33,18 @@ const DOCS_SCREENSHOT_CASES = [
     name: "bundle-output",
     route: "/bundle-patches?guide=bundle",
     target: "#rom-weaver-bundle-job",
-    waitFor: "Changes HELLO to ROM in the message displayed by the NES ROM.",
   },
   {
     docsRoute: "docs/identify-roms-browser",
     name: "identify-checks",
     route: "/identify-rom",
     target: "#identify-container",
-    waitFor: "Identify by checksum or game name",
   },
   {
     docsRoute: "docs/edit-gen3-saves",
     name: "save-editor",
     route: "/save-editor",
     target: "#save-editor-container",
-    waitFor: "New save",
   },
   {
     dismissGuide: true,
@@ -59,7 +52,6 @@ const DOCS_SCREENSHOT_CASES = [
     name: "test-player",
     route: "/test-rom?guide=test",
     target: "#emulator-test-player",
-    waitFor: "Stop",
   },
   {
     dismissGuide: true,
@@ -67,9 +59,16 @@ const DOCS_SCREENSHOT_CASES = [
     name: "cheat-step",
     route: "/apply-patches?guide=apply",
     target: "#rom-weaver-row-patch-stack",
-    waitFor: "Changes HELLO to ROM in the message displayed by the NES ROM.",
   },
 ];
+const waitForDocsScreenshotReady = async (page, captureCase) => {
+  await page.locator("body").waitFor({ state: "visible" });
+  if (captureCase.dismissGuide) {
+    await page.locator('.sample-tutorial-dialog[aria-busy="false"]').waitFor({ state: "visible" });
+  }
+  await page.locator(captureCase.target).first().waitFor({ state: "visible" });
+};
+
 const DOCS_SCREENSHOT_VIEWPORTS = [
   { name: "desktop", viewport: { width: 1164, height: 900 }, deviceScaleFactor: 2, isMobile: false },
   { name: "mobile", viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
@@ -102,6 +101,7 @@ const DOCS_SCREENSHOT_NAMES = [
 ];
 
 export {
+  waitForDocsScreenshotReady,
   DOCS_SCREENSHOT_CASES,
   DOCS_SCREENSHOT_FORMATS,
   DOCS_SCREENSHOT_NAMES,

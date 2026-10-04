@@ -35,19 +35,19 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   // The apex. An empty slug is deliberate: the canonical URL is the bare origin.
   home: Object.freeze({
     description:
-      "Patch ROMs in your browser. Open archives, apply patches in order, bake supported cheat codes, and choose your output format. No uploads or account required.",
+      "Patch ROMs in your browser, including files inside ZIP, 7z, and RAR archives. Apply patches in order and bake supported cheat codes. No uploads or account required.",
     slug: "",
     title: `Patch ROMs in your browser | ${SITE_NAME}`,
   }),
   identify: Object.freeze({
     description:
-      "Identify a ROM's game, region, revision, and known dump name by checksum, then inspect known cheat codes. Everything stays in your browser.",
+      "Identify a ROM by checksum: look up its game, region, revision, and known dump name, then inspect known cheat codes. Your file stays in your browser.",
     slug: "identify-rom",
     title: `${SITE_NAME}: Identify ROMs online`,
   }),
   patcher: Object.freeze({
     description:
-      "Apply BPS, IPS, IPS32, UPS, xdelta, PPF, APS, RUP, and other ROM patches online. Add supported cheat codes to the patch order. No uploads.",
+      "Apply BPS, IPS, UPS, xdelta, and other ROM patches online, including files in ZIP, 7z, or RAR archives. Add supported cheat codes. Process files locally with no uploads.",
     slug: "apply-patches",
     title: `ROM Patcher Online: BPS, IPS, UPS, xdelta & PPF | ${SITE_NAME}`,
   }),

@@ -18,6 +18,7 @@ import {
   resolveE2EBuild,
   resolveE2EShard,
   runAuditPhases,
+  runE2EScenario,
   sha256,
   shouldRejectUnauthorized,
 } from "./run-webapp-e2e.mjs";
@@ -296,5 +297,67 @@ describe("checkCssCoverage", () => {
     const unusedText = `.unused{${"a".repeat(200_000)}:1}`;
     const entries = [cssEntry("https://example.test/app.css", unusedText, [{ end: 1, start: 0 }])];
     assert.throws(() => checkCssCoverage(entries), /CSS coverage budget failed/);
+  });
+});
+
+describe("runE2EScenario", () => {
+  it("retries a disconnected browser without replaying completed scenarios", async () => {
+    const calls = [];
+    const reports = [];
+    await runE2EScenario(
+      "first",
+      async () => calls.push("first"),
+      (line) => reports.push(line),
+    );
+    let attempt = 0;
+    await runE2EScenario(
+      "second",
+      async () => {
+        calls.push("second");
+        if (++attempt === 1) throw new Error("browserType.launch: Target page, context or browser has been closed");
+      },
+      (line) => reports.push(line),
+    );
+    assert.deepEqual(calls, ["first", "second", "second"]);
+    assert.ok(reports.some((line) => /TIMING second attempt=1 status=failed durationMs=/.test(line)));
+    assert.ok(reports.some((line) => /TIMING second attempt=2 status=passed durationMs=/.test(line)));
+    assert.ok(reports.some((line) => line.includes("browser has been closed")));
+  });
+
+  it("does not retry assertions or locator timeouts", async () => {
+    for (const message of ["accessibility violations", "locator.waitFor: Timeout 60000ms exceeded."]) {
+      let attempts = 0;
+      const failure = new Error(message);
+      await assert.rejects(
+        () =>
+          runE2EScenario(
+            "audit",
+            async () => {
+              attempts += 1;
+              throw failure;
+            },
+            () => undefined,
+          ),
+        (error) => error === failure,
+      );
+      assert.equal(attempts, 1);
+    }
+  });
+
+  it("fails after the second infrastructure failure", async () => {
+    let attempts = 0;
+    await assert.rejects(
+      () =>
+        runE2EScenario(
+          "audit",
+          async () => {
+            attempts += 1;
+            throw new Error("browser has been closed");
+          },
+          () => undefined,
+        ),
+      /browser has been closed/,
+    );
+    assert.equal(attempts, 2);
   });
 });
