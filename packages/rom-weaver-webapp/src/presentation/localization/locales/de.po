@@ -4315,12 +4315,12 @@ msgstr "Du kannst fortfahren, aber das Ergebnis kann von der Absicht des Autors 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.view.detailedBody"
-msgstr "Du bist in der detaillierten Ansicht: Jede Datei hat zusätzlich die Schubladen Dateien und Identifizieren, und Prüfungen zeigt, wie lange das Hashen gedauert hat."
+msgstr "Du bist in der detaillierten Ansicht: Schubladen für Dateien und Identifizieren an jeder Datei, dazu Zeitangaben."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.view.simpleBody"
-msgstr "Du bist in der einfachen Ansicht: Jede Datei hat eine Prüfungen-Schublade mit kurzer Zusammenfassung. Detailliert ergänzt Schubladen dazu, woher die Datei stammt und welches Spiel sie ist."
+msgstr "Du bist in der einfachen Ansicht: eine Prüfungen-Schublade pro Datei."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -4315,12 +4315,12 @@ msgstr "Aún puedes continuar, pero el resultado puede diferir de lo que pretend
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.view.detailedBody"
-msgstr "Estás en la vista Detallada: cada archivo tiene además los cajones Archivos e Identificar, y Comprobaciones muestra cuánto tardó el cálculo de hashes."
+msgstr "Estás en la vista Detallada: cajones de Archivos e Identificar en cada archivo, además de tiempos."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.view.simpleBody"
-msgstr "Estás en la vista Simple: cada archivo tiene un cajón de Comprobaciones con un resumen breve. Detallada añade cajones que muestran de dónde viene el archivo y qué juego es."
+msgstr "Estás en la vista Simple: un cajón de Comprobaciones por archivo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

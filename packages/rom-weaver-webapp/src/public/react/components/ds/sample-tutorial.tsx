@@ -164,6 +164,8 @@ const GUIDE_SETTLE_MS = 360;
 const GUIDE_REVEALS = 3;
 /** Above this share of the viewport a row is anchored from its top edge. */
 const GUIDE_TALL_ROW_RATIO = 0.45;
+/** A reveal scroll that has not moved the page by now never will. */
+const GUIDE_SCROLL_START_MS = 150;
 /** How far the ring sits outside the row it frames. */
 const GUIDE_RING_INSET = 7;
 
@@ -294,6 +296,37 @@ const scrollDeltaForPair = (rect: GuideRect, dialog: HTMLElement | null, placeAb
   const slack = Math.max(GUIDE_MARGIN, (window.innerHeight - pair) / 2);
   const desiredTop = placeAbove ? slack + cardHeight + GUIDE_GAP : slack;
   return rect.top - desiredTop;
+};
+
+/**
+ * How far to scroll on a phone, where the card is pinned to a screen edge rather
+ * than beside the row: the row is centred in the band the card and the dock
+ * leave free, or parked at that band's top when it is taller than the band.
+ * Returns 0 when the row already sits inside the band, so a step whose row is
+ * on screen never moves the page.
+ */
+const scrollDeltaForPinned = (rect: GuideRect, dialog: HTMLElement) => {
+  const card = dialog.getBoundingClientRect();
+  // `.dock-pad` is the in-flow spacer that carries the dock's height.
+  const dock = document.querySelector(".rw-app .dock-pad")?.getBoundingClientRect().height ?? 0;
+  const pinnedTop = card.top + card.height / 2 < window.innerHeight / 2;
+  const bandTop = pinnedTop ? card.bottom + GUIDE_GAP : GUIDE_MARGIN;
+  const bandBottom = pinnedTop ? window.innerHeight - dock - GUIDE_MARGIN : card.top - GUIDE_GAP;
+  const room = bandBottom - bandTop;
+  if (rect.height <= room && rect.top >= bandTop && rect.bottom <= bandBottom) return 0;
+  const desiredTop = rect.height <= room ? bandTop + (room - rect.height) / 2 : bandTop;
+  return rect.top - desiredTop;
+};
+
+/**
+ * Whether the row and its anchored card are already fully on screen, below the
+ * top chrome - then the reveal leaves the page where the reader has it.
+ */
+const pairInView = (rect: GuideRect, dialog: HTMLElement, placeAbove: boolean) => {
+  const cardHeight = dialog.getBoundingClientRect().height;
+  const top = placeAbove ? rect.top - GUIDE_GAP - cardHeight : rect.top;
+  const bottom = placeAbove ? rect.bottom : rect.bottom + GUIDE_GAP + cardHeight;
+  return top >= guideTopLimit() && bottom <= window.innerHeight - GUIDE_MARGIN;
 };
 
 /** The row and the control lifted with it, as one box to keep on screen. */
@@ -726,8 +759,21 @@ const SampleTutorial = ({
     const desktop = window.matchMedia(GUIDE_ANCHOR_QUERY);
     const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
     let settle = 0;
+    let scrollStart = 0;
     let revealsLeft = GUIDE_REVEALS;
     let rowHeight = targetEl.getBoundingClientRect().height;
+    let cardHeight = dialog.getBoundingClientRect().height;
+    // Where the running reveal scroll will land, while it runs. A placement made
+    // mid-scroll - the card resizing as its new copy lands, say - MUST aim at
+    // that viewport too: clamped to the one being scrolled away from, the card
+    // rides off screen with it.
+    let revealTo: number | null = null;
+    const pendingShift = () => {
+      if (revealTo === null) return 0;
+      const left = revealTo - window.scrollY;
+      if (Math.abs(left) < 1) revealTo = null;
+      return revealTo === null ? 0 : left;
+    };
     // Only when moving between steps - see the glide rules in dropzone.css.
     const setGlide = (element: HTMLElement, glide: boolean) => {
       if (glide) element.dataset.glide = "true";
@@ -768,15 +814,48 @@ const SampleTutorial = ({
     };
     // Park the row and its card together, and place them for where that scroll
     // is headed - once placed they ride the page, so this is the only chance.
+    // The guide does the scrolling: the reader never has to go looking for the
+    // row a step describes.
     const placeAndReveal = (glide: boolean) => {
       const rect = targetEl.getBoundingClientRect();
       // The lifted control is part of the step - the view step's switch sits in
       // the panel heading above the row - so the reveal keeps it in view too.
       const lifted = stepLift ? document.querySelector(stepLift)?.getBoundingClientRect() : undefined;
-      const top = scrollDeltaForPair(unionRect(rect, lifted), dialog, shouldPlaceAbove(rect.height, prefer));
-      const shift = Math.abs(top) > 1 ? top : 0;
+      const reveal = unionRect(rect, lifted);
+      const placeAbove = shouldPlaceAbove(rect.height, prefer);
+      let top = 0;
+      if (!desktop.matches) top = scrollDeltaForPinned(reveal, dialog);
+      else if (!pairInView(reveal, dialog, placeAbove)) {
+        top = scrollDeltaForPair(reveal, dialog, placeAbove);
+        // When the lifted control, the row and the card cannot all fit, the
+        // row and its card win: scroll on until the card below clears the
+        // viewport floor, so it is never clamped back over the row.
+        if (!placeAbove) {
+          const floor = window.innerHeight - GUIDE_MARGIN;
+          const cardBottom = rect.bottom + GUIDE_GAP + dialog.getBoundingClientRect().height;
+          if (cardBottom - floor <= rect.top - guideTopLimit()) top = Math.max(top, cardBottom - floor);
+        }
+      }
+      // The page cannot scroll past either end, and a card placed for a scroll
+      // that falls short would miss its row by the difference. A page that
+      // reports no scrollable height is left to the start check below.
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      const reachable = maxScroll > 0 ? Math.min(Math.max(top, -window.scrollY), maxScroll - window.scrollY) : top;
+      const shift = Math.abs(reachable) > 1 ? reachable : 0;
+      const from = window.scrollY;
+      revealTo = shift ? from + shift : null;
       place(glide, shift);
-      if (shift) window.scrollBy({ behavior, top: shift });
+      if (!shift) return;
+      window.scrollBy({ behavior, top: shift });
+      // Placed for a viewport the page never reaches, the card would sit off
+      // its row: a scroll that has not started gets the card re-placed where
+      // the page actually is.
+      window.clearTimeout(scrollStart);
+      scrollStart = window.setTimeout(() => {
+        if (revealTo === null || Math.abs(window.scrollY - from) >= 1) return;
+        revealTo = null;
+        place(false);
+      }, GUIDE_SCROLL_START_MS);
     };
     const track = () => place(false);
     // A re-reveal that lands while the user is scrolling fights them for the
@@ -785,17 +864,28 @@ const SampleTutorial = ({
     // re-reveals; the opening one has already run by then.
     const yieldToUser = () => {
       revealsLeft = 0;
+      revealTo = null;
       window.clearTimeout(settle);
+    };
+    // The reveal has landed: settle the pair against the viewport it reached.
+    const onScrollEnd = () => {
+      if (revealTo === null) return;
+      revealTo = null;
+      place(false);
     };
     // The row grows as its drawers expand, so re-reveal once each size change
     // has stopped - otherwise the card ends up sitting over the row it explains.
-    // Gated on the row's own height: the card reflowing, or mobile browser
-    // chrome collapsing as the user scrolls, must not scroll the page out from
-    // under them.
+    // On a phone the pinned card's own height sets the room the row gets, so a
+    // card that grows with its new copy re-reveals too. Gated on those heights:
+    // mobile browser chrome collapsing as the user scrolls must not scroll the
+    // page out from under them.
     const onResize = () => {
-      place(false);
+      place(false, pendingShift());
       const height = targetEl.getBoundingClientRect().height;
-      if (height === rowHeight) return;
+      const card = dialog.getBoundingClientRect().height;
+      const cardMoved = !desktop.matches && card !== cardHeight;
+      cardHeight = card;
+      if (height === rowHeight && !cardMoved) return;
       rowHeight = height;
       if (revealsLeft <= 0) return;
       window.clearTimeout(settle);
@@ -813,14 +903,17 @@ const SampleTutorial = ({
     window.addEventListener("wheel", yieldToUser, { passive: true });
     window.addEventListener("touchmove", yieldToUser, { passive: true });
     window.addEventListener("keydown", yieldToUser);
+    window.addEventListener("scrollend", onScrollEnd);
     desktop.addEventListener("change", track);
     return () => {
       window.clearTimeout(settle);
+      window.clearTimeout(scrollStart);
       observer.disconnect();
       window.removeEventListener("resize", track);
       window.removeEventListener("wheel", yieldToUser);
       window.removeEventListener("touchmove", yieldToUser);
       window.removeEventListener("keydown", yieldToUser);
+      window.removeEventListener("scrollend", onScrollEnd);
       desktop.removeEventListener("change", track);
       // The card is deliberately left where it is: clearing it here would make
       // the next step's placement measure from the CSS-pinned bar and glide
@@ -950,7 +1043,6 @@ const SampleTutorial = ({
               ) : null}
             </div>
           </div>
-          {live ? <p className="sample-tutorial-end-hint">{localizer.message("ui.tutorial.endHint")}</p> : null}
         </section>
         <div className="sample-tutorial-actions">
           {live ? (
@@ -966,6 +1058,9 @@ const SampleTutorial = ({
               {localizer.message("ui.tutorial.back")}
             </button>
           ) : null}
+          {/* Sits between the buttons rather than on a line of its own, so it
+              costs the card no height; phones drop it for the ✕ alone. */}
+          {live ? <p className="sample-tutorial-end-hint">{localizer.message("ui.tutorial.endHint")}</p> : null}
           {live ? (
             <button
               className="btn primary slim"

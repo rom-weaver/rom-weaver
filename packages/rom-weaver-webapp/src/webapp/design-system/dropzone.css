@@ -994,7 +994,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   /* Room for the Try it row and the view comparison; the copy area scrolls
      past this. */
   max-height: min(380px, calc(100dvh - 36px));
-  padding: calc(var(--sp-l) + 18px) var(--sp-l) var(--sp-l);
+  padding: var(--sp-l);
   margin-inline: auto;
   overflow: hidden;
   color: var(--ink);
@@ -1100,10 +1100,15 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   min-width: 0;
 }
 .rw-app .sample-tutorial-kicker-row {
+  /* The ✕ sits in the corner this row and the title share, so the card needs
+     no strip of padding above them. */
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-xs) var(--sp-m);
   align-items: center;
+  /* The ✕ sits in the corner this row and the title share, so the card needs
+     no strip of padding above them. */
+  padding-inline-end: 32px;
   margin-block-end: var(--sp-xs);
 }
 .rw-app .sample-tutorial-pips {
@@ -1216,10 +1221,12 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
     0 0 0 6px var(--plate),
     0 0 0 9px var(--thread);
 }
-.rw-app .sample-tutorial-copy-area .sample-tutorial-end-hint {
-  margin-block-start: var(--sp-s);
+.rw-app .sample-tutorial-actions .sample-tutorial-end-hint {
+  min-width: 0;
+  margin: 0;
   font-size: 0.74rem;
   color: var(--ink-3);
+  text-align: center;
 }
 .rw-app .sample-tutorial-progress {
   height: 7px;
@@ -1324,11 +1331,12 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   .rw-app .sample-tutorial-dialog {
     inset-inline: 10px;
     bottom: calc(var(--dock-h, max(0px, env(safe-area-inset-bottom))) + 10px);
-    grid-template-columns: 38px minmax(0, 1fr);
-    gap: var(--sp-m);
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-s);
     width: calc(100vw - 20px);
-    max-height: min(360px, calc(100dvh - 20px));
-    padding: calc(var(--sp-m) + 18px) var(--sp-m) var(--sp-m);
+    /* Leaves at least half the screen for the row; the copy scrolls inside. */
+    max-height: min(320px, 48dvh);
+    padding: var(--sp-m);
   }
   .rw-app .sample-tutorial-dialog[data-placement="top"] {
     top: max(10px, env(safe-area-inset-top));
@@ -1339,16 +1347,28 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
     bottom: auto;
     max-height: calc(100dvh - 20px);
   }
-  .rw-app .sample-tutorial-beacon {
-    width: 38px;
-    height: 38px;
-    /* Four characters (0x01) have to fit the narrower tile. */
-    font-size: 0.74rem;
-  }
-  /* The phone bar has no room for both: the body already names the current
-     view and what the other one adds, so the Try it row keeps its place. */
+  /* The phone bar shares the screen with the row it explains, so it keeps
+     only what the step needs: the kicker already numbers the step, the
+     highlighted row shows its own controls, and the ✕ says how to leave. The
+     view comparison goes too - the body names the current view and what the
+     other one adds. What remains is the title, the body, and the Try it row. */
+  .rw-app .sample-tutorial-beacon,
+  .rw-app .sample-tutorial-action-label,
+  .rw-app .sample-tutorial-action-list,
+  .rw-app .sample-tutorial-actions .sample-tutorial-end-hint,
   .rw-app .sample-tutorial-compare {
     display: none;
+  }
+  .rw-app .sample-tutorial-copy-area {
+    grid-column: 1;
+  }
+  .rw-app .sample-tutorial-copy h2 {
+    padding-inline-end: 32px;
+    font-size: 1rem;
+  }
+  .rw-app .sample-tutorial-copy p {
+    font-size: 0.82rem;
+    line-height: 1.45;
   }
   .rw-app .sample-tutorial-actions {
     grid-column: 1 / -1;

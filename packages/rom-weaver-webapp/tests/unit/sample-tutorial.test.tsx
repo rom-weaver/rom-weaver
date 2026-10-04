@@ -373,16 +373,21 @@ describe("sample tutorial", () => {
         vi.advanceTimersByTime(700);
       };
 
-      // A drawer opening still re-reveals the row it just made taller.
+      // Growth that still leaves the row and its card on screen moves nothing:
+      // 200 + 300 + 14 + 200 clears the 768px viewport's 12px floor.
       scrollBy.mockClear();
       grow(300);
+      expect(scrollBy).not.toHaveBeenCalled();
+
+      // A drawer opening that pushes the card off screen re-reveals the row.
+      grow(450);
       expect(scrollBy).toHaveBeenCalled();
 
       // Once the user scrolls, the page is theirs - later growth re-places the
       // card but never scrolls out from under them.
       fireEvent.wheel(window);
       scrollBy.mockClear();
-      grow(500);
+      grow(520);
       expect(scrollBy).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();

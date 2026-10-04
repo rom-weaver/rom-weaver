@@ -4315,12 +4315,12 @@ msgstr "You can still continue, but the result may differ from what the expectat
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.view.detailedBody"
-msgstr "You're in Detailed view: each file also has Files and Identify drawers, and Checks shows how long hashing took."
+msgstr "You're in Detailed view: Files and Identify drawers on every file, plus timings."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.view.simpleBody"
-msgstr "You're in Simple view: each file has one Checks drawer with a short summary. Detailed adds drawers for where the file came from and which game it is."
+msgstr "You're in Simple view: one Checks drawer per file."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

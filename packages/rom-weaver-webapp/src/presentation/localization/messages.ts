@@ -970,13 +970,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.tutorial.view.title": msg({ id: "ui.tutorial.view.title", message: "Choose how much to see" }),
   "ui.tutorial.view.simpleBody": msg({
     id: "ui.tutorial.view.simpleBody",
-    message:
-      "You're in Simple view: each file has one Checks drawer with a short summary. Detailed adds drawers for where the file came from and which game it is.",
+    message: "You're in Simple view: one Checks drawer per file.",
   }),
   "ui.tutorial.view.detailedBody": msg({
     id: "ui.tutorial.view.detailedBody",
-    message:
-      "You're in Detailed view: each file also has Files and Identify drawers, and Checks shows how long hashing took.",
+    message: "You're in Detailed view: Files and Identify drawers on every file, plus timings.",
   }),
   "ui.tutorial.view.simpleTryIt": msg({
     id: "ui.tutorial.view.simpleTryIt",
