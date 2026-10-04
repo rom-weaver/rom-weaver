@@ -76,8 +76,14 @@ const createMetadataModuleSource = (routes) => {
 
 /** @param {readonly import("../src/webapp/docs-content.mjs").DocRoute[]} routes */
 const createSearchModuleSource = (routes) => {
-  const entries = Object.fromEntries(createDocsSearchIndex(routes).map((route) => [route.slug, route.searchEntries]));
-  return `export const SEARCH_ENTRIES = ${serializeIntoCode(entries)};\n`;
+  const entries = Object.fromEntries(
+    createDocsSearchIndex(routes).map((route) => [
+      route.slug,
+      route.searchEntries.map(({ id, label, text }) => [id, label, text]),
+    ]),
+  );
+  // The downloaded index MUST retain every entry without repeating field names per section.
+  return `export const SEARCH_ENTRIES = Object.fromEntries(Object.entries(${serializeIntoCode(entries)}).map(([slug, entries]) => [slug, entries.map(([id, label, text]) => ({ id, label, text }))]));\n`;
 };
 
 /** Serves the rendered guides to the app as `virtual:rom-weaver-docs*` modules. */
