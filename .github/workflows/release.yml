@@ -283,6 +283,7 @@ jobs:
       # capture:screenshots loads first-weave.zip and the first-create sample
       # assets, so the published guides show reproducible, copyright-safe data.
       - name: Capture docs screenshots from bundled samples
+        id: screenshot-capture
         if: steps.release-pr.outputs.found == 'true'
         env:
           ROM_WEAVER_SYSTEM_CHROME: "1"
@@ -304,6 +305,17 @@ jobs:
             exit 1
           fi
           npm --prefix packages/rom-weaver-webapp run capture:screenshots
+
+      - name: Upload screenshot failure diagnostics
+        if: failure() && steps.screenshot-capture.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: screenshot-failure-diagnostics
+          path: |
+            docs/screenshots/*-failure.png
+            screenshot-server.log
+          retention-days: 7
+          if-no-files-found: warn
 
       - name: Commit docs screenshots
         if: steps.release-pr.outputs.found == 'true'

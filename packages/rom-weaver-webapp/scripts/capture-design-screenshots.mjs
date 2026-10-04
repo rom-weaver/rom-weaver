@@ -14,6 +14,7 @@ import {
   DOCS_SCREENSHOT_FORMATS,
   DOCS_SCREENSHOT_THEMES,
   DOCS_SCREENSHOT_VIEWPORTS,
+  waitForDocsScreenshotReady,
 } from "./docs-screenshot-manifest.mjs";
 
 const PACKAGE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -140,7 +141,7 @@ const capture = async () => {
     ),
   );
   const launchOptions = process.env.ROM_WEAVER_SYSTEM_CHROME === "1" ? { channel: "chrome" } : {};
-  const browser = await chromium.launch({ ...launchOptions, args: ["--mute-audio"] });
+  const browser = await chromium.launch({ ...launchOptions, headless: true, args: ["--mute-audio"] });
   try {
     for (const viewport of DOCS_SCREENSHOT_VIEWPORTS) {
       for (const theme of DOCS_SCREENSHOT_THEMES) {
@@ -154,43 +155,71 @@ const capture = async () => {
             viewport: viewport.viewport,
           });
           const page = await context.newPage();
-          await page.goto(pageUrl(captureCase.route), { waitUntil: "domcontentloaded" });
-          await page.locator("body").waitFor({ state: "visible" });
-          await page.getByText(captureCase.waitFor, { exact: true }).last().waitFor({ state: "visible" });
-          if (captureCase.dismissGuide) {
-            const exitGuide = page.getByRole("button", { name: "Exit tutorial", exact: true });
-            await exitGuide.evaluate((button) => button.click());
-            await exitGuide.waitFor({ state: "detached" });
-          }
-          await prepareScreenshot(page, captureCase.name);
-          await waitForStableContent(page);
-          await assertNoDevBadge(page);
-          await page.locator(".skip-link").evaluate((element) => element.setAttribute("hidden", ""));
-          await page.locator(".dock").evaluate((element) => {
-            element.style.visibility = "hidden";
-          });
           const outputName = `${captureCase.name}-${viewport.name}-${theme}`;
-          const { crop, shot } = await captureRegion(page, captureCase.target);
-          const cropped = execFileSync(IMAGE_MAGICK, ["png:-", "-crop", crop, "+repage", "-depth", "8", "PNG24:-"], {
-            input: shot,
-            maxBuffer: 64 * 1024 * 1024,
+          const startedAt = performance.now();
+          const diagnostics = [];
+          const recordDiagnostic = (message) => {
+            diagnostics.push(message.slice(0, 1000));
+            if (diagnostics.length > 20) diagnostics.shift();
+          };
+          page.on("pageerror", (error) => recordDiagnostic(`Page error: ${error.message}`));
+          page.on("console", (message) => {
+            if (message.type() === "error") recordDiagnostic(`Console error: ${message.text()}`);
           });
-          for (const { extension } of DOCS_SCREENSHOT_FORMATS) {
-            const image =
-              extension === "avif"
-                ? Buffer.from(await avifEncode(decodeRgba(cropped), { quality: 80 }))
-                : execFileSync(
-                    IMAGE_MAGICK,
-                    ["png:-", "-define", "webp:lossless=true", "-define", "webp:method=6", "webp:-"],
-                    { input: cropped, maxBuffer: 64 * 1024 * 1024 },
-                  );
-            if (!image.length) throw new Error(`Screenshot encoder returned no ${extension} data for ${outputName}`);
-            fs.writeFileSync(path.join(OUTPUT_DIR, `${outputName}.${extension}`), image);
+          console.log(`Capturing ${outputName}: ${pageUrl(captureCase.route)}`);
+          try {
+            await page.goto(pageUrl(captureCase.route), { waitUntil: "domcontentloaded" });
+            await waitForDocsScreenshotReady(page, captureCase);
+            if (captureCase.dismissGuide) {
+              const exitGuide = page.getByRole("button", { name: "Exit tutorial", exact: true });
+              await exitGuide.evaluate((button) => button.click());
+              await exitGuide.waitFor({ state: "detached" });
+            }
+            await prepareScreenshot(page, captureCase.name);
+            await waitForStableContent(page);
+            await assertNoDevBadge(page);
+            await page.locator(".skip-link").evaluate((element) => element.setAttribute("hidden", ""));
+            await page.locator(".dock").evaluate((element) => {
+              element.style.visibility = "hidden";
+            });
+            const { crop, shot } = await captureRegion(page, captureCase.target);
+            const cropped = execFileSync(IMAGE_MAGICK, ["png:-", "-crop", crop, "+repage", "-depth", "8", "PNG24:-"], {
+              input: shot,
+              maxBuffer: 64 * 1024 * 1024,
+            });
+            for (const { extension } of DOCS_SCREENSHOT_FORMATS) {
+              const image =
+                extension === "avif"
+                  ? Buffer.from(await avifEncode(decodeRgba(cropped), { quality: 80 }))
+                  : execFileSync(
+                      IMAGE_MAGICK,
+                      ["png:-", "-define", "webp:lossless=true", "-define", "webp:method=6", "webp:-"],
+                      { input: cropped, maxBuffer: 64 * 1024 * 1024 },
+                    );
+              if (!image.length) throw new Error(`Screenshot encoder returned no ${extension} data for ${outputName}`);
+              fs.writeFileSync(path.join(OUTPUT_DIR, `${outputName}.${extension}`), image);
+            }
+            console.log(
+              `Captured ${path.relative(PACKAGE_DIR, path.join(OUTPUT_DIR, outputName))}.{${CAPTURE_EXTENSION_LIST}} in ${Math.round(performance.now() - startedAt)}ms`,
+            );
+          } catch (error) {
+            const failurePath = path.join(OUTPUT_DIR, `${outputName}-failure.png`);
+            const results = await Promise.allSettled([
+              page.screenshot({ path: failurePath, animations: "disabled", timeout: 5000 }),
+              page.locator("body").innerText({ timeout: 2000 }),
+            ]);
+            const [screenshot, body] = results;
+            process.stderr.write(
+              `Capture failed: ${outputName} after ${Math.round(performance.now() - startedAt)}ms\n` +
+                `URL: ${page.url()}\nTarget: ${captureCase.target}\n` +
+                `Screenshot: ${screenshot.status === "fulfilled" ? failurePath : String(screenshot.reason).slice(0, 1000)}\n` +
+                `Body: ${body.status === "fulfilled" ? body.value.slice(0, 4000) : String(body.reason).slice(0, 1000)}\n` +
+                `${diagnostics.join("\n")}\n`,
+            );
+            throw error;
+          } finally {
+            await context.close();
           }
-          await context.close();
-          console.log(
-            `Captured ${path.relative(PACKAGE_DIR, path.join(OUTPUT_DIR, outputName))}.{${CAPTURE_EXTENSION_LIST}}`,
-          );
         }
       }
     }
