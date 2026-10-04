@@ -148,6 +148,22 @@ const patchedSource = [
 fs.writeFileSync(file, patchedSource);
 NODE
 
+if [ "$platform" = darwin-arm64 ] || [ "$platform" = darwin-x64 ]; then
+  # With Cocoa disabled, RetroArch misses OSX in this file's include guard
+  # while still compiling its sysctlbyname fallback.
+  node - "$build_dir/src/retroarch/frontend/drivers/platform_darwin.m" <<'NODE'
+const fs = require("fs");
+const file = process.argv[2];
+const source = fs.readFileSync(file, "utf8");
+const probe = "#include <sys/utsname.h>\n";
+const sysctlIncludes = source.match(/^#include <sys\/sysctl\.h>$/gm) ?? [];
+if (!source.includes(probe) || sysctlIncludes.length !== 2) {
+  throw new Error("RetroArch Darwin sysctl include changed");
+}
+fs.writeFileSync(file, source.replace(probe, `${probe}#include <sys/sysctl.h>\n`));
+NODE
+fi
+
 # RetroArch has no configure switch for xkbcommon. The runtime MUST retain only
 # its null display path, so prevent the optional host library from being found.
 node - "$build_dir/src/retroarch/qb/config.libs.sh" <<'NODE'
