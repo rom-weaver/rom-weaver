@@ -53,6 +53,14 @@ Use `docs/development/reproduce-ci-locally.md#prevent-repeat-failures` for the
 commands and the additional checks for UI changes. Investigate unexpected
 growth before proposing a budget increase; never raise a limit just to pass CI.
 
+Codex and Claude use this same pre-push gate (`CLAUDE.md` imports this file).
+Select browser test files using the guide's behavior-to-test table; use the full
+suite when shared behavior makes the affected files unclear. Run webapp script
+tests for build/tooling changes. The CI-script hook checks classifier and runtime
+dependency changes; it does not replace browser tests. Build once in production,
+check sizes before browser/E2E work, and reuse that current bundle for E2E as
+documented. Report which checks passed and any checks that could not run.
+
 ## Hard rules
 
 - **Byte-identical parity.** Compression/patch output is validated against

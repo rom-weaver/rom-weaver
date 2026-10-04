@@ -31,6 +31,7 @@ npm test                                                     # repository toolin
 npm run docs:lint                                            # owned Markdown
 npm --prefix packages/rom-weaver-webapp run lint             # webapp lint fan-out
 npm --prefix packages/rom-weaver-webapp run icons:channels:check
+npm --prefix packages/rom-weaver-webapp run test:scripts
 npm --prefix packages/rom-weaver-webapp run test:unit
 npm --prefix packages/rom-weaver-webapp run test:browser:wasm
 npm --prefix packages/rom-weaver-webapp run test:browser
@@ -58,6 +59,33 @@ Before pushing webapp or published-doc changes, check the generated bundle, even
 3. Investigate unexpected growth using the failing asset group and its raw/Brotli measurements. Remove accidental imports or duplicated assets before considering a budget change. For intentional growth, explain the cost and propose the corresponding budget update in the same change; do not raise limits just to silence a failure.
 4. For UI changes, also run the affected browser tests and `test:e2e:a11y`. Run `test:e2e:webapp:webkit` for Safari-sensitive behavior. Reproduce failures against the same production channel as CI. When changing tutorial steps, Settings controls, or navigation, check the browser assertions, E2E locators, and screenshot targets together. Prefer stable state attributes for readiness; keep assertions for intended step counts and content.
 
+Choose browser test files from the behavior you changed. These are starting points, not an exhaustive dependency map; include other affected tests and run the full browser suite when shared behavior makes the selection unclear. Paths below are relative to `packages/rom-weaver-webapp/tests/browser/`.
+
+| Changed behavior | Browser test files |
+| --- | --- |
+| Docs navigation, tutorial entry points, app shell | `webapp.browser.test.js` |
+| Remote URL imports and restoring imported files | `remote-url-session.browser.test.js` |
+| Create source selection, swapping, and queues | `create-form-queue.browser.test.js` |
+| Settings state and persistence | `settings-context.browser.test.js`, `settings-persistence.browser.test.js` |
+| Codec menu interactions | `codec-combobox.browser.test.js` |
+
+From the webapp directory, pass one or more files to the existing runner. For example:
+
+```bash
+cd packages/rom-weaver-webapp
+npm run test:browser -- tests/browser/webapp.browser.test.js
+```
+
+After the production build and size check above, reuse that bundle for accessibility or E2E checks, also from the webapp directory:
+
+```bash
+ROM_WEAVER_CHANNEL=prod ROM_WEAVER_E2E_USE_PREBUILT_DIST=1 npm run test:e2e:a11y
+```
+
+Use `test:e2e:webapp` for all Chromium E2E scenarios or `test:e2e:webapp:webkit` for WebKit with the same environment. Rebuild and recheck sizes after changes to build inputs; the prebuilt option validates the channel and required files, not source freshness. Do not reuse a bundle from an earlier revision. Running E2E without these variables builds again and defaults to the development channel.
+
+For webapp build or tooling changes, run `npm run test:scripts` from the webapp directory. From the repository root, `node --test scripts/ci/*.test.mjs` checks the change classifier and its WASM dependency coverage without compiling Rust or launching browsers. The pre-commit hook runs these CI script tests when CI files, webapp JavaScript/TypeScript, or fixture trees change, including runtime imports outside `src/wasm`.
+
 If the final `Webapp` job reports `webapp-size=failure`, open **Build WASM module + webapp → Asset size gates** and its size summary. The build job can be green because that step deliberately continues on error; the final aggregate still blocks the change. `gh run view --log-failed` alone can miss the size diagnostics in that successful job. Read the build job's full log.
 
 Retry browser crashes or connection failures only after checking the first error. A repeated missing locator, changed count, accessibility violation, or size-budget failure needs a fix; increasing timeouts or rerunning the same assertions does not address it.
@@ -78,7 +106,7 @@ After the matching check passes, run the complete local gate:
 mise run ci
 ```
 
-The pre-commit hooks select lint checks from staged paths. CI uses the same tasks, then adds tests, builds, publishability checks, and macOS and Windows Rust jobs. `mise run ci` includes the asset-size gate after the webapp build. It does not reproduce those other operating systems or run every hosted check: run Lighthouse separately with `test:performance`, and use the matching commands above for publishability checks.
+The pre-commit hooks select lint and CI script checks from staged paths. CI uses the same tasks, then adds tests, builds, publishability checks, and macOS and Windows Rust jobs. `mise run ci` runs repository tests, webapp script tests, lint, and unit tests, then builds the production webapp once and checks its asset sizes before browser suites run. E2E reuses that same production bundle. It does not reproduce those other operating systems or run every hosted check: run Lighthouse separately with `test:performance`, and use the matching commands above for publishability checks.
 
 ## Still red in CI but green locally?
 
