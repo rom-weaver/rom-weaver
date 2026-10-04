@@ -151,9 +151,12 @@ test("PPSSPP uses each upstream platform directory and native architecture", () 
   assert.equal(arm.patches.length, 1);
 });
 
-test("PPSSPP limits Adreno sources to Android and stages the Windows tar link target", () => {
+test("PPSSPP limits Adreno sources to Android and stages Windows tar link targets", () => {
   const ppsspp = sources.cores.find(({ id }) => id === "ppsspp");
-  assert.deepEqual(ppsspp.extractFirst, ["ext/vulkan/libvulkan.so.1.3.236"]);
+  assert.deepEqual(ppsspp.extractFirst, [
+    "ext/vulkan/libvulkan.so.1.3.236",
+    "ext/vulkan/libvulkan.so.1",
+  ]);
   assert.deepEqual(
     ppsspp.patches.find(({ path }) => path === "libretro/Makefile.common"),
     {

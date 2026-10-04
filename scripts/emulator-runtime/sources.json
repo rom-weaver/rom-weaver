@@ -353,7 +353,10 @@
       "url": "https://github.com/hrydgard/ppsspp/archive/cae623f4e6c197f45662358ffc4605e3fb97298e.tar.gz",
       "archive": "ppsspp-cae623f4e6c197f45662358ffc4605e3fb97298e.tar.gz",
       "sha256": "abcf0053cb4e9324445f2d7639871f168fa285658c99d8d704757033aa6f1038",
-      "extractFirst": ["ext/vulkan/libvulkan.so.1.3.236"],
+      "extractFirst": [
+        "ext/vulkan/libvulkan.so.1.3.236",
+        "ext/vulkan/libvulkan.so.1"
+      ],
       "dependencies": [
         {
           "path": "libretro/libretro-common",
