@@ -2,6 +2,7 @@ use std::{collections::HashMap, ffi::OsString, process::ExitCode, sync::Mutex};
 
 use rom_weaver_core::{
     OperationFamily, OperationReport, OperationStatus, ProgressEvent, ProgressSink,
+    RomWeaverErrorKind,
 };
 use serde_json::{Value, json};
 
@@ -52,16 +53,17 @@ impl JsonReporter {
     }
 
     pub(crate) fn finish(&self, status: ExitCode) -> ExitCode {
-        if self.mode != OutputMode::Json {
-            return status;
-        }
         let reports = std::mem::take(
             &mut *self
                 .reports
                 .lock()
                 .unwrap_or_else(|error| error.into_inner()),
         );
-        write_json(&document(reports, exit_code(status)));
+        if self.mode == OutputMode::Json {
+            write_json(&document(reports, exit_code(status)));
+        } else if let Some(event) = stream_exit_event(reports.last(), exit_code(status)) {
+            write_json(&event);
+        }
         status
     }
 
@@ -92,6 +94,7 @@ impl JsonReporter {
 
 impl ProgressSink for JsonReporter {
     fn emit(&self, event: ProgressEvent) {
+        let event = normalize_event(event);
         if matches!(
             event.status,
             OperationStatus::Pending | OperationStatus::Running
@@ -128,13 +131,66 @@ impl ProgressSink for JsonReporter {
         }
         if self.mode == OutputMode::JsonLines {
             write_json(&event);
-        } else {
-            self.reports
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .push(event);
+        }
+        let mut reports = self
+            .reports
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if self.mode == OutputMode::JsonLines {
+            reports.clear();
+        }
+        reports.push(event);
+    }
+}
+
+fn stream_exit_event(last: Option<&ProgressEvent>, exit_code: u8) -> Option<ProgressEvent> {
+    if exit_code == 0
+        || last.is_some_and(|event| {
+            event
+                .details
+                .as_ref()
+                .and_then(|details| details.get("error")?.get("exit_code")?.as_u64())
+                .unwrap_or(u64::from(event.status.exit_code()))
+                == u64::from(exit_code)
+        })
+    {
+        return None;
+    }
+    let command = last.map_or("cli", |event| event.command.as_str());
+    let (stage, code, message) = if exit_code == 130 {
+        ("cancel", "operation.cancelled", "operation cancelled")
+    } else {
+        ("complete", "operation.failed", "command failed")
+    };
+    Some(error_event(command, stage, code, message, exit_code))
+}
+
+// Native streams MUST agree with the cancellation exit code even when a shared pipeline
+// reports a cancelled error through its generic failed-report path.
+fn normalize_event(mut event: ProgressEvent) -> ProgressEvent {
+    if event.status == OperationStatus::Failed
+        && event.error_kind == Some(RomWeaverErrorKind::Cancelled)
+    {
+        event.status = OperationStatus::Cancelled;
+        if let Some(error) = event
+            .details
+            .as_mut()
+            .and_then(|details| details.get_mut("error"))
+            .and_then(Value::as_object_mut)
+        {
+            error.insert("code".to_string(), json!("operation.cancelled"));
+            error.insert("exit_code".to_string(), json!(130));
         }
     }
+    let exit_code = event.status.exit_code();
+    if exit_code != 0 {
+        let error = report_error(&event, exit_code);
+        let details = event.details.get_or_insert_with(|| json!({}));
+        if let Some(details) = details.as_object_mut() {
+            details.insert("error".to_string(), error);
+        }
+    }
+    event
 }
 
 fn document(reports: Vec<ProgressEvent>, exit_code: u8) -> Value {

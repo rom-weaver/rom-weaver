@@ -46,7 +46,7 @@ fn codecs_for_format(format: &str) -> Vec<&'static str> {
     codecs
 }
 
-fn report() -> Value {
+pub(crate) fn report() -> Value {
     let containers = container_format_metadata()
         .into_iter()
         .map(|format| {
