@@ -198,6 +198,29 @@ const CreateCheatCodesPanel = ({
     );
   };
 
+  const addPickedRecord = (record: ClassifiedCheatRecord) => {
+    const recordKind = record.record.codeKind ?? record.detectedKind ?? undefined;
+    const autoEntriesMatch =
+      kind === "auto" && entries.length > 0 && entries.every((entry) => entry.record?.detectedKind === recordKind);
+    if (recordKind && value.trim() && kind !== recordKind && !autoEntriesMatch) {
+      setKindConflict("Create a separate patch for codes with a different code type.");
+      return;
+    }
+    setKindConflict("");
+    if (recordKind && kind !== recordKind) onKindChange(recordKind);
+    onValueChange(appendCodes(value, recordCodes(record, manualSystem), manualSystem, recordKind ?? kind));
+  };
+
+  const manualSystems = [
+    ...(database.activeIndex?.entries ?? []).map((entry) => ({
+      label: entry.platform,
+      value: entry.cheatSystem as CheatManualSystem,
+    })),
+    ...(manualSystem && !(database.activeIndex?.entries ?? []).some((entry) => entry.cheatSystem === manualSystem)
+      ? [{ label: manualSystem === "playstation" ? "PlayStation" : manualSystem, value: manualSystem }]
+      : []),
+  ];
+
   return (
     <div className="create-cheat-codes">
       {detected ? (
@@ -304,20 +327,17 @@ const CreateCheatCodesPanel = ({
         addedIds={addedIds}
         emptyPrompt={searchStep ? `Choose a ${searchStep} above.` : undefined}
         gamePicker={<CheatGameSearch alwaysBrowseGames database={database} rom={rom} />}
-        onAdd={(record) => {
-          const recordKind = record.record.codeKind ?? record.detectedKind ?? undefined;
-          const autoEntriesMatch =
-            kind === "auto" &&
-            entries.length > 0 &&
-            entries.every((entry) => entry.record?.detectedKind === recordKind);
-          if (recordKind && value.trim() && kind !== recordKind && !autoEntriesMatch) {
-            setKindConflict("Create a separate patch for codes with a different code type.");
-            return;
-          }
-          setKindConflict("");
-          if (recordKind && kind !== recordKind) onKindChange(recordKind);
-          onValueChange(appendCodes(value, recordCodes(record, manualSystem), manualSystem, recordKind ?? kind));
-        }}
+        manualEntry={
+          manualSystem
+            ? {
+                classifier: classifyManualCode,
+                defaultSystem: manualSystem,
+                onAdd: (result) => addPickedRecord(result.record),
+                systems: manualSystems.filter(({ value }) => value === manualSystem),
+              }
+            : undefined
+        }
+        onAdd={addPickedRecord}
         onClose={() => setDialogOpen(false)}
         onRemove={(record) => {
           const dropped = new Set(recordCodes(record, manualSystem).map((code) => code.toUpperCase()));

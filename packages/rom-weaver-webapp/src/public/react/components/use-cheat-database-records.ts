@@ -29,7 +29,9 @@ type CheatDatabaseRecordsInput = {
   catalog?: IdentifyCatalog;
   shard?: CheatSystemShard;
   client?: CheatDatabaseClient;
-  classifyDatabaseCheats: DatabaseCheatClassifier;
+  classifyDatabaseCheats?: DatabaseCheatClassifier;
+  /** Load and match raw rows without asking the ROM decoder to classify them. */
+  inspectOnly?: boolean;
 };
 
 export type CheatDatabaseRecordsState = {
@@ -105,6 +107,7 @@ const useCheatDatabaseRecords = ({
   shard: suppliedShard,
   client: suppliedClient,
   classifyDatabaseCheats,
+  inspectOnly = false,
 }: CheatDatabaseRecordsInput): CheatDatabaseRecordsState => {
   const [loadedShard, setLoadedShard] = useState<CheatSystemShard>();
   const [loadedIndex, setLoadedIndex] = useState<CheatDatabaseIndex>();
@@ -232,10 +235,14 @@ const useCheatDatabaseRecords = ({
   const game = matchGame(match);
 
   useEffect(() => {
-    if (!(game && system)) {
+    if (!(game && system) || inspectOnly) {
       setClassifying(false);
       setClassificationError("");
       setRecords([]);
+      return;
+    }
+    if (!classifyDatabaseCheats) {
+      setClassificationError("The cheat classifier is unavailable.");
       return;
     }
     let active = true;
@@ -260,7 +267,7 @@ const useCheatDatabaseRecords = ({
     return () => {
       active = false;
     };
-  }, [classifyDatabaseCheats, game, system]);
+  }, [classifyDatabaseCheats, game, inspectOnly, system]);
 
   return {
     ...(activeCatalog ? { activeCatalog } : {}),

@@ -29,7 +29,9 @@ import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { useRomLookup, type RomLookupResult, type RomLookupSelection } from "../../public/react/use-rom-lookup.ts";
 import { identifyRecordChecks } from "../../lib/identify/identify-record-checks.ts";
 import type { ParsedIdentifyCandidate, ParsedIdentifyResult } from "../../types/identify.ts";
+import type { CheatRomIdentity } from "../../lib/cheats/index.ts";
 import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registry.ts";
+import { IdentifyCheatInspection } from "./identify-cheat-inspection.tsx";
 
 const IDENTIFY_ACTIVITY_KEY = "identify";
 
@@ -62,6 +64,19 @@ const CandidateStatusChip = ({ status }: { status: ParsedIdentifyCandidate["stat
       <span>{mark.label}</span>
     </span>
   );
+};
+
+const candidateCheatIdentity = (candidate: ParsedIdentifyCandidate): CheatRomIdentity => {
+  const match = candidate.matches[0];
+  return {
+    key: `identify:${candidate.path}:${candidate.checksums.sha1 || candidate.checksums.md5 || candidate.checksums.crc32 || "unknown"}`,
+    checksums: candidate.checksums,
+    fileName: candidate.path,
+    ...(candidate.detectedPlatform || match?.platform
+      ? { platform: candidate.detectedPlatform || match?.platform }
+      : {}),
+    ...(match?.name ? { title: match.name } : {}),
+  };
 };
 
 /**
@@ -116,6 +131,7 @@ const CandidateResult = ({
           ...(expected ? { expected } : {}),
         }}
       />
+      <IdentifyCheatInspection identity={candidateCheatIdentity(candidate)} label={candidate.path} />
     </>
   );
 };
@@ -279,6 +295,17 @@ const IdentifyForm = ({
      then compared against it. */
   const expectation: RomExpectation | undefined = romLookup.result
     ? { checks: romLookup.result.checks, source: romLookupSource(romLookup.result.foundBy) }
+    : undefined;
+  const expectationMatch = romLookup.result?.identification.matches[0];
+  const expectationCheatIdentity: CheatRomIdentity | undefined = romLookup.result
+    ? {
+        key: `identify:checksum:${Object.entries(romLookup.result.checks.checksums || {})
+          .map(([algorithm, value]) => `${algorithm}:${value}`)
+          .join(",")}`,
+        checksums: romLookup.result.checks.checksums,
+        ...(expectationMatch?.platform ? { platform: expectationMatch.platform } : {}),
+        ...(expectationMatch?.name ? { title: expectationMatch.name } : {}),
+      }
     : undefined;
   const expectationChecks = expectation?.checks;
   const hadExpectationRef = useRef(false);
@@ -486,6 +513,7 @@ const IdentifyForm = ({
                 onRemove={romLookup.clear}
                 removeLabel="Clear the expected ROM"
               />
+              {expectationCheatIdentity ? <IdentifyCheatInspection identity={expectationCheatIdentity} /> : null}
               <RomSearch idPrefix={containerId} localizer={localizer} lookup={romLookup} variant="compact" />
             </>
           }

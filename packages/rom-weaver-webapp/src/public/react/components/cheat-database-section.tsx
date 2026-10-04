@@ -6,6 +6,7 @@ import {
   filterCheats,
   isSelectableCheat,
   type CheatDatabaseClient,
+  type CheatDatabaseRecord,
   type CheatDatabaseIndex,
   type CheatManualOnlySystem,
   type CheatManualSystem,
@@ -18,7 +19,12 @@ import {
   type ManualCheatResult,
 } from "../../../lib/cheats/index.ts";
 import { getCheatPatchStatus } from "../cheat-patch-export-model.ts";
-import { CHEAT_KIND_OPTIONS } from "../create-cheat-codes-model.ts";
+import {
+  CHEAT_KIND_OPTIONS,
+  formatCheatWrite,
+  getCheatCodeWrites,
+  getCheatCompareLabel,
+} from "../create-cheat-codes-model.ts";
 import { CheatGameSearch, countLabel, getCheatGameSearchStep } from "./cheat-game-search.tsx";
 import { useCheatDatabaseRecords } from "./use-cheat-database-records.ts";
 import { Drawer } from "./ds/drawer.tsx";
@@ -48,6 +54,14 @@ const CHEAT_KIND_LABELS = Object.fromEntries(CHEAT_KIND_OPTIONS.map(({ value, la
   NonNullable<ClassifiedCheatRecord["detectedKind"]>,
   string
 >;
+
+const rawFieldEntries = (record: CheatDatabaseRecord): Array<{ name: string; value: string }> =>
+  Array.isArray(record.rawFields)
+    ? record.rawFields
+    : Object.entries(record.rawFields).map(([name, value]) => ({ name, value }));
+
+const isClassifiedCheat = (record: ClassifiedCheatRecord | CheatDatabaseRecord): record is ClassifiedCheatRecord =>
+  "record" in record;
 
 /** Why cheats are off for a ROM whose platform no shard and no decoder covers. */
 export const getUnsupportedCheatSystemMessage = (platform: string | undefined): string =>
@@ -350,41 +364,103 @@ const ManualCodeForm = ({ defaultSystem, systems, classifier, onAdd }: ManualCod
   );
 };
 
-type AddCheatsDialogProps = {
+const CheatCodeDetails = ({ entry }: { entry: ClassifiedCheatRecord | CheatDatabaseRecord }) => {
+  if (isClassifiedCheat(entry)) {
+    const kind = entry.detectedKind ?? entry.record.codeKind;
+    return (
+      <dl>
+        {kind ? (
+          <div>
+            <dt>Type</dt>
+            <dd>{CHEAT_KIND_LABELS[kind]}</dd>
+          </div>
+        ) : null}
+        {getCheatCodeWrites(entry).map((write) => {
+          const compareLabel = getCheatCompareLabel(write);
+          return (
+            <div key={`${write.offset}:${write.value}`}>
+              <dt>Write</dt>
+              <dd className="mono">
+                {formatCheatWrite(write)}
+                {compareLabel ? ` · ${compareLabel}` : ""}
+              </dd>
+            </div>
+          );
+        })}
+        {entry.resolution.type === "unsupported" ? (
+          <div>
+            <dt>Support</dt>
+            <dd>{entry.resolution.reason}</dd>
+          </div>
+        ) : null}
+      </dl>
+    );
+  }
+  return (
+    <>
+      <dl>
+        {entry.codeKind ? (
+          <div>
+            <dt>Type</dt>
+            <dd>{CHEAT_KIND_LABELS[entry.codeKind]}</dd>
+          </div>
+        ) : null}
+        {rawFieldEntries(entry).map(({ name, value }) => (
+          <div key={name}>
+            <dt>{name}</dt>
+            <dd className="mono">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {entry.importWarnings?.length ? (
+        <div className="cheat-import-warnings" role="note">
+          <strong>Import warnings</strong>
+          <ul>
+            {entry.importWarnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </>
+  );
+};
+
+type AddCheatsDialogCommonProps = {
   open: boolean;
   onClose: () => void;
   title: string;
-  records: ClassifiedCheatRecord[];
   addedIds: ReadonlySet<string>;
   stackCount: number;
-  onAdd: (record: ClassifiedCheatRecord) => void;
-  onRemove: (record: ClassifiedCheatRecord) => void;
   /** Replaces the list while the shard loads or classifies, or when either failed. */
   status?: { text: string; error?: boolean };
   gamePicker?: ReactNode;
   emptyPrompt?: string;
   extras?: ReactNode;
+  manualEntry?: ManualCodeFormProps;
 };
+
+type AddCheatsDialogProps = AddCheatsDialogCommonProps &
+  (
+    | {
+        inspection: true;
+        records: CheatDatabaseRecord[];
+      }
+    | {
+        inspection?: false;
+        records: ClassifiedCheatRecord[];
+        onAdd: (record: ClassifiedCheatRecord) => void;
+        onRemove: (record: ClassifiedCheatRecord) => void;
+      }
+  );
 
 /**
  * The cheat picker: one paginated page of the game's cheats at a time, filtered
  * by description or raw code, with the manual-code entry point below the list.
  * Rows added here become cards in the step.
  */
-export const AddCheatsDialog = ({
-  open,
-  onClose,
-  title,
-  records,
-  addedIds,
-  stackCount,
-  onAdd,
-  onRemove,
-  status,
-  gamePicker,
-  emptyPrompt,
-  extras,
-}: AddCheatsDialogProps) => {
+export const AddCheatsDialog = (props: AddCheatsDialogProps) => {
+  const { open, onClose, title, addedIds, stackCount, status, gamePicker, emptyPrompt, extras, manualEntry } = props;
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
@@ -405,7 +481,14 @@ export const AddCheatsDialog = ({
     }
   }, [open]);
 
-  const visible = useMemo(() => filterCheats(records, query), [query, records]);
+  const visible = useMemo(() => {
+    if (!props.inspection) return filterCheats(props.records, query);
+    const needle = query.trim().toLocaleLowerCase();
+    if (!needle) return props.records;
+    return props.records.filter((source) =>
+      `${source.description}\n${source.rawCode || ""}`.toLocaleLowerCase().includes(needle),
+    );
+  }, [props.inspection, props.records, query]);
   const pageCount = Math.max(1, Math.ceil(visible.length / DIALOG_PAGE_SIZE));
   const currentPage = Math.min(page, pageCount - 1);
   const rows = visible.slice(currentPage * DIALOG_PAGE_SIZE, currentPage * DIALOG_PAGE_SIZE + DIALOG_PAGE_SIZE);
@@ -457,42 +540,50 @@ export const AddCheatsDialog = ({
             ) : rows.length ? (
               <ul className="cheat-pick-list">
                 {rows.map((entry) => {
-                  const source = entry.record;
-                  const delivery = deliveryCopy(entry);
+                  const source = isClassifiedCheat(entry) ? entry.record : entry;
+                  const classified = isClassifiedCheat(entry) ? entry : null;
+                  const delivery = classified ? deliveryCopy(classified) : null;
                   const added = addedIds.has(source.id);
                   return (
                     <li className={added ? "cheat-pick is-added" : "cheat-pick"} key={source.id}>
-                      <span className="cheat-pick-text">
+                      <div className="cheat-pick-text">
                         <span className="cheat-pick-name">{source.description}</span>
                         <span className="cheat-pick-badges">
                           {source.rawCode ? <span className="rb mono">{source.rawCode}</span> : null}
-                          <span className="rb">{delivery.short}</span>
+                          {delivery ? <span className="rb">{delivery.short}</span> : null}
                         </span>
-                      </span>
-                      <button
-                        aria-label={`${added ? "Remove" : "Add"} ${source.description}`}
-                        className={added ? "btn slim cheat-pick-btn is-added" : "btn slim cheat-pick-btn"}
-                        disabled={!(added || isSelectableCheat(entry))}
-                        onClick={() => (added ? onRemove(entry) : onAdd(entry))}
-                        type="button"
-                      >
-                        {added ? <X aria-hidden="true" /> : <Plus aria-hidden="true" />}
-                        <span className="cheat-pick-btn-label">{added ? "Remove" : "Add"}</span>
-                      </button>
+                        <details className="cheat-inspection-details">
+                          <summary>Code details</summary>
+                          <CheatCodeDetails entry={entry} />
+                        </details>
+                      </div>
+                      {!props.inspection && classified ? (
+                        <button
+                          aria-label={`${added ? "Remove" : "Add"} ${source.description}`}
+                          className={added ? "btn slim cheat-pick-btn is-added" : "btn slim cheat-pick-btn"}
+                          disabled={!(added || isSelectableCheat(classified))}
+                          onClick={() => (added ? props.onRemove(classified) : props.onAdd(classified))}
+                          type="button"
+                        >
+                          {added ? <X aria-hidden="true" /> : <Plus aria-hidden="true" />}
+                          <span className="cheat-pick-btn-label">{added ? "Remove" : "Add"}</span>
+                        </button>
+                      ) : null}
                     </li>
                   );
                 })}
               </ul>
             ) : (
               <p className="cheat-pick-empty" role="status">
-                {query ? "No cheats match this search." : (emptyPrompt ?? "No cheats available.")} Add a code manually
-                below.
+                {query ? "No cheats match this search." : (emptyPrompt ?? "No cheats available.")}
+                {props.inspection ? "" : " Add a code manually below."}
               </p>
             )}
-            {records.length ? (
+            {props.records.length ? (
               <div className="cheat-pick-foot">
                 <span className="cheat-pick-count">
-                  {visible.length} of {countLabel(records.length, "cheat")} · {stackCount} in the stack
+                  {visible.length} of {countLabel(props.records.length, "cheat")}
+                  {props.inspection ? "" : ` · ${stackCount} in the stack`}
                 </span>
                 <span className="cheat-pager">
                   <button
@@ -518,6 +609,7 @@ export const AddCheatsDialog = ({
               </div>
             ) : null}
             {extras}
+            {manualEntry ? <ManualCodeForm {...manualEntry} /> : null}
           </div>
         </div>
       ) : null}
@@ -852,17 +944,22 @@ export const CheatDatabaseSection = ({
       <AddCheatsDialog
         addedIds={addedIds}
         emptyPrompt={searchStep ? `Choose a ${searchStep} above.` : undefined}
-        extras={
-          manualSystem ? (
-            <ManualCodeForm
-              classifier={classifyManualCode}
-              defaultSystem={manualSystem}
-              onAdd={addManualRecord}
-              systems={systems}
-            />
-          ) : null
+        gamePicker={
+          <>
+            {game ? <p className="cheat-pick-empty">{game.title}</p> : null}
+            <CheatGameSearch {...searchInput} />
+          </>
         }
-        gamePicker={<CheatGameSearch {...searchInput} />}
+        manualEntry={
+          manualSystem
+            ? {
+                classifier: classifyManualCode,
+                defaultSystem: manualSystem,
+                onAdd: addManualRecord,
+                systems,
+              }
+            : undefined
+        }
         onAdd={addRecord}
         onClose={() => setDialogOpen(false)}
         onRemove={dropRecord}

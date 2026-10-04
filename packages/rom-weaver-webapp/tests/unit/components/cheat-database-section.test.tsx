@@ -300,6 +300,22 @@ describe("CheatDatabaseSection", () => {
     await openDialog(view);
     expect((addButton(view, "Infinite health") as HTMLButtonElement).disabled).toBe(true);
     expect(view.getAllByText("N/A")).toHaveLength(1);
+    fireEvent.click(view.getAllByText("Code details")[1] as HTMLElement);
+    expect(view.getByText("the code targets runtime memory")).toBeTruthy();
+  });
+
+  it("shows each resolved ROM write and its compare byte in the picker details", async () => {
+    const withWrites: ClassifiedCheatRecord[] = [
+      {
+        ...(records[0] as ClassifiedCheatRecord),
+        resolution: { type: "romBakeable", writes: [{ offset: 0x87, value: 0x30, width: 1, compare: 0x0f }] },
+      },
+      records[1] as ClassifiedCheatRecord,
+    ];
+    const view = render(<CheatDatabaseSection {...props} classifyDatabaseCheats={makeClassifier(withWrites)} />);
+    await openDialog(view);
+    fireEvent.click(view.getAllByText("Code details")[0] as HTMLElement);
+    expect(view.getByText("$000087 ← $30 · compare $0F found")).toBeTruthy();
   });
 
   it("keeps a card when its switch goes off and drops it when removed", async () => {

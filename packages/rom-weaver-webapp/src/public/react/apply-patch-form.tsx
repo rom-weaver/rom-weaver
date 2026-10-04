@@ -22,6 +22,7 @@ import { waitForPatchStackReady } from "./wait-for-patch-stack-ready.ts";
 import type { StagedInputInfo } from "./apply-session-types.ts";
 import { ApplyWorkflowFormView } from "./apply-workflow-form-view.tsx";
 import { CheatDatabaseSection } from "./components/cheat-database-section.tsx";
+import { getPracticeCheatCatalog } from "./guided-cheat-sample.ts";
 import {
   type ApplyWorkflowPrepareHandlers,
   type ApplyWorkflowSessionInput,
@@ -234,6 +235,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   // Mirrors the cheat card's On switches so the header controls in 0x03 and 0x04 can refuse a strip.
   const [cheatsOn, setCheatsOn] = useState(false);
   const [cheatNames, setCheatNames] = useState<string[]>([]);
+  const [practiceCheatSample, setPracticeCheatSample] = useState(false);
   const preparedWorkflowRef = useRef<ApplyWorkflow | null>(null);
   const bundleSourcesRef = useRef<ApplyWorkflowBundleSources | null>(null);
   const workflowSyncRef = useRef<ApplyWorkflowSyncState>({
@@ -1595,6 +1597,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       setCompletedOutput,
       workflowHandle,
     });
+  const practiceCheatCatalog = practiceCheatSample ? getPracticeCheatCatalog(cheatRom?.checksums) : {};
 
   const { bundleExport, changeBundlePackage } = useApplyBundleExport({
     bundleMetaById,
@@ -1770,6 +1773,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           <CheatDatabaseSection
             classifyDatabaseCheats={classifyDatabaseCheats}
             classifyManualCode={classifyManualCode}
+            {...practiceCheatCatalog}
             onSaveAsPatch={saveCheatsAsPatch}
             onSelectionChange={handleCheatSelection}
             outputSummary={completedCheats}
@@ -1779,6 +1783,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           />
         )}
         cheatsOn={cheatsOn}
+        onPracticeCheatSampleChange={setPracticeCheatSample}
         emulatorOutput={completedOutput}
         bundleExport={bundleExport}
         bundleMetaById={bundleMetaById}

@@ -7,6 +7,7 @@ Give rom-weaver a clean ROM and your edited version. It creates a patch that des
 
 - [Prepare a clean release pair](#prepare-a-clean-release-pair)
 - [Add Original and Modified](#add-original-and-modified)
+- [Use cheat codes instead of a Modified ROM](#use-cheat-codes-instead-of-a-modified-rom)
 - [Choose a patch format](#choose-a-patch-format)
 - [Create and download the patch](#create-and-download-the-patch)
 - [Test the downloaded patch](#test-the-downloaded-patch)
@@ -31,7 +32,7 @@ Write down the region, revision, and header state now. The Create cards will sho
 
 ## Add Original and Modified
 
-1. Open [Create](https://rom-weaver.com/create).
+1. Open [Create](https://rom-weaver.com/create-patch).
 2. Drop both files onto **0x01 Inputs**, or choose **Add files** and select them. If more ROM candidates are available than Create can use, choose the Original and Modified files from the list. Extra files are not staged after you choose. If both files appear to be the same ROM, confirm before using them as a pair. Add patches on **Apply** instead.
 3. Check the labels on **0x02 Original** and **0x03 Modified**.
 4. If they landed backwards, choose **Swap** between the two cards.
@@ -56,6 +57,19 @@ Each card shows the selected file, size, detected system, and checksums. Open **
 </figure>
 
 If rom-weaver asks you to choose a file from an archive, stop and make sure you are comparing the ROM entries, not readmes, save files, or different disc tracks.
+
+## Use cheat codes instead of a Modified ROM
+
+Create can turn supported ROM cheat codes into a patch without a separate Modified file. The [guided Create cheats tour](https://rom-weaver.com/create-patch?guide=create-cheats) demonstrates this with the supplied homebrew ROM and a working practice code.
+
+1. Add the clean ROM as **Original**.
+2. Select **Cheat codes** on the **Modified** step.
+3. Enter a code, or select **Pick from the cheat database**.
+4. Use **Add code manually** in the picker when you need system and code-type controls.
+5. Check the detected system, code type, ROM writes, and compare values.
+6. Remove or correct any code that cannot become ROM writes.
+
+The cheat picker uses the same database and manual entry as Apply. The patch contains the selected byte changes, so the person who applies it does not need a cheat engine. See [Use cheats in the browser](use-browser-cheats.md) for supported-code limits.
 
 ## Choose a patch format
 
@@ -95,7 +109,7 @@ The browser reads both ROMs and creates the patch locally. None of those files a
 
 Your Modified file working does not prove the downloaded patch works. Test the artifact another person will receive:
 
-1. Open a fresh [Apply](https://rom-weaver.com/apply) page.
+1. Open a fresh [Apply](https://rom-weaver.com/apply-patches) page.
 2. Add a fresh copy of the documented Original.
 3. Add the patch you just downloaded.
 4. Confirm the card accepts the Original without a checksum warning.

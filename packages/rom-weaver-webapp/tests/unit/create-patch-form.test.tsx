@@ -261,16 +261,11 @@ describe("CreatePatchForm", () => {
   const findButton = (container: HTMLElement, text: string) =>
     Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.trim() === text);
 
-  it("hides cheat codes mode and prompts for the modified ROM while beta tools are off", async () => {
+  it("offers cheat codes mode without beta tools", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 404 }));
     const { container } = await stageOriginalOnly({});
 
-    expect(findButton(container, "Cheat codes")).toBeUndefined();
-    const prompt = container.querySelector(".needs-input") as HTMLButtonElement;
-    expect(prompt.textContent).toContain("Add your modified ROM");
-    const picker = container.querySelector("#patch-builder-input-file-unified") as HTMLInputElement;
-    const pickerClick = vi.spyOn(picker, "click");
-    fireEvent.click(prompt);
-    expect(pickerClick).toHaveBeenCalledOnce();
+    expect(findButton(container, "Cheat codes")).toBeTruthy();
   });
 
   it("offers cheat codes mode when beta tools are on", async () => {
@@ -347,7 +342,7 @@ describe("CreatePatchForm", () => {
     expect(container.textContent).toContain("Add your modified ROM");
   });
 
-  it("returns to modified ROM mode when beta tools turn off", async () => {
+  it("keeps cheat codes mode when beta tools turn off", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 404 }));
     const { container, rerender } = await stageOriginalOnly({ betaToolsEnabled: true });
     await act(async () => {
@@ -361,10 +356,10 @@ describe("CreatePatchForm", () => {
         </RomWeaverSettingsProvider>,
       );
     await act(async () => rerenderWithBeta(false));
-    expect(container.textContent).toContain("Add your modified ROM");
+    expect(findButton(container, "Cheat codes")?.getAttribute("aria-pressed")).toBe("true");
 
     await act(async () => rerenderWithBeta(true));
-    expect(findButton(container, "Modified ROM")?.getAttribute("aria-pressed")).toBe("true");
+    expect(findButton(container, "Cheat codes")?.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("reports duplicate drops and allows the user to confirm them", async () => {

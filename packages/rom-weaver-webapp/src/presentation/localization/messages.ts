@@ -895,7 +895,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "settings.betaToolsEnabled": msg({
     id: "settings.betaToolsEnabled",
-    message: "Enable beta tools (Trim, PPF undo, Save Editor, and cheats)",
+    message: "Enable beta tools (Trim, PPF undo, and Save Editor)",
   }),
   "settings.accent": msg({ id: "settings.accent", message: "Accent" }),
   "settings.bundlePackage": msg({ id: "settings.bundlePackage", message: "Bundle" }),

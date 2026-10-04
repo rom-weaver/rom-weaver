@@ -1,7 +1,9 @@
 const GUIDED_SAMPLE_VIEWS = {
   apply: "patcher",
+  "apply-cheats": "patcher",
   bundle: "bundle",
   create: "creator",
+  "create-cheats": "creator",
   test: "test",
 } as const;
 
@@ -9,8 +11,10 @@ type GuidedSample = keyof typeof GUIDED_SAMPLE_VIEWS;
 
 const GUIDED_SAMPLE_HREFS = {
   apply: "/apply-patches?guide=apply",
+  "apply-cheats": "/apply-patches?guide=apply-cheats",
   bundle: "/bundle-patches?guide=bundle",
   create: "/create-patch?guide=create",
+  "create-cheats": "/create-patch?guide=create-cheats",
   test: "/test-rom?guide=test",
 } as const;
 

@@ -13,6 +13,7 @@ The sample files download automatically when you open the guide.
 - [Step 3: apply the patches](#step-3-apply-the-patches)
 - [Step 4: check that you got the right bytes](#step-4-check-that-you-got-the-right-bytes)
 - [Step 5: try the other two samples](#step-5-try-the-other-two-samples)
+- [Step 6: try a cheat-code sample](#step-6-try-a-cheat-code-sample)
 - [If something looked different](#if-something-looked-different)
 - [What you learned](#what-you-learned)
 - [Next](#next)
@@ -33,12 +34,13 @@ rom-weaver loads a tiny homebrew NES ROM and two patches written for this guide.
 
 ## Step 2: look at what loaded
 
-The guide points at four parts of the Apply page. Use **Continue** to read each tip, then **Done** to close the guide.
+The guide points at five parts of the Apply page. Use **Continue** to read each tip, then **Done** to close the guide.
 
 1. The **ROM** card shows the starting file and its checksums.
 2. The **Patches** cards show two independent changes. One changes `HELLO` to `ROM`. The other changes `WORLD` to `WEAVER`.
 3. **Add files** is where more ROMs, patches, archives, or bundles would go. You do not need it here.
-4. **Apply** controls the output.
+4. **Try the practice cheat menu** points to **Add cheats to the patch order**. Leave every cheat off to preserve this tutorial's expected output.
+5. **Apply** controls the output.
 
 ## Step 3: apply the patches
 
@@ -89,6 +91,15 @@ The same practice files drive two more guided runs:
 - [Guided Bundle Patches](https://rom-weaver.com/bundle-patches?guide=bundle) turns the Apply Patches sample into a patch-only release archive.
 
 These are optional follow-up exercises.
+
+## Step 6: try a cheat-code sample
+
+The supplied homebrew ROM also has guided cheat-code exercises:
+
+- [Guided Apply cheats](https://rom-weaver.com/apply-patches?guide=apply-cheats) adds a working practice code to the patch order.
+- [Guided Create cheats](https://rom-weaver.com/create-patch?guide=create-cheats) turns a working practice code into a patch.
+
+These guides label the sample as practice. The checksum above is still the result of the two-patch tutorial. A cheat changes the output bytes, so do not expect that checksum after you select one.
 
 ## If something looked different
 

@@ -1451,7 +1451,7 @@ msgstr "EmulatorJS: {name}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Activar herramientas beta (Recortar, Deshacer PPF, Editor de partidas y trucos)"
+msgstr "Activar herramientas beta (Recortar, Deshacer PPF y Editor de partidas)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

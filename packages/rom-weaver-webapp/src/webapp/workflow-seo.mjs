@@ -10,7 +10,7 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
   creator: Object.freeze({
     description:
-      "Create BPS, IPS, IPS32, UPS, xdelta, VCDIFF, PPF, and other supported ROM patches online. Build patch bundles locally in your browser. No uploads.",
+      "Create BPS, IPS, IPS32, UPS, xdelta, VCDIFF, PPF, and other ROM patches online from modified ROMs or supported cheat codes. No uploads.",
     slug: "create-patch",
     title: `${SITE_NAME}: Create ROM patches online`,
   }),
@@ -35,19 +35,19 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   // The apex. An empty slug is deliberate: the canonical URL is the bare origin.
   home: Object.freeze({
     description:
-      "Patch ROMs in your browser. Open archives, apply patches in order, and choose your output format. Your files stay on your device. No uploads or account required.",
+      "Patch ROMs in your browser. Open archives, apply patches in order, bake supported cheat codes, and choose your output format. No uploads or account required.",
     slug: "",
     title: `Patch ROMs in your browser | ${SITE_NAME}`,
   }),
   identify: Object.freeze({
     description:
-      "Identify a ROM's game, region, revision, and known dump name by checksum, locally in your browser. Nothing is uploaded.",
+      "Identify a ROM's game, region, revision, and known dump name by checksum, then inspect known cheat codes. Everything stays in your browser.",
     slug: "identify-rom",
     title: `${SITE_NAME}: Identify ROMs online`,
   }),
   patcher: Object.freeze({
     description:
-      "Apply BPS, IPS, IPS32, UPS, xdelta, PPF, APS, RUP, and other supported ROM patches online. Check and chain patches on your device. No uploads.",
+      "Apply BPS, IPS, IPS32, UPS, xdelta, PPF, APS, RUP, and other ROM patches online. Add supported cheat codes to the patch order. No uploads.",
     slug: "apply-patches",
     title: `ROM Patcher Online: BPS, IPS, UPS, xdelta & PPF | ${SITE_NAME}`,
   }),

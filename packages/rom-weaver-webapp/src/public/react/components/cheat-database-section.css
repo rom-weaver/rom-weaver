@@ -274,6 +274,44 @@
     overflow-wrap: anywhere;
   }
 
+  .rw-app .cheat-inspection-details {
+    margin-block-start: var(--sp-xs);
+    font-size: 0.82rem;
+    color: var(--ink-3);
+  }
+
+  .rw-app .cheat-inspection-details summary {
+    width: fit-content;
+    cursor: pointer;
+  }
+
+  .rw-app .cheat-inspection-details dl {
+    display: grid;
+    gap: var(--sp-xs);
+    margin: var(--sp-xs) 0 0;
+  }
+
+  .rw-app .cheat-inspection-details dl > div {
+    display: grid;
+    grid-template-columns: minmax(5rem, auto) minmax(0, 1fr);
+    gap: var(--sp-s);
+  }
+
+  .rw-app .cheat-inspection-details :is(dt, dd) {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .rw-app .cheat-import-warnings {
+    margin-block-start: var(--sp-s);
+    color: var(--warning);
+  }
+
+  .rw-app .cheat-import-warnings ul {
+    margin-block: var(--sp-xs) 0;
+  }
+
   .rw-app .cheat-pick-badges {
     display: flex;
     flex-wrap: wrap;
@@ -476,7 +514,7 @@
       padding: var(--sp-xs) var(--sp-s);
     }
 
-    .rw-app .btn.cheat-pick-btn {
+    .rw-app .btn.slim.cheat-pick-btn {
       width: var(--ctrl-h);
       min-width: 0;
       padding: 0;

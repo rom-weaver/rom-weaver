@@ -109,6 +109,16 @@ const getApplySampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer
   },
   {
     actions: [
+      ["menu", "Add cheats to the patch order"],
+      ["toggle", "On or off"],
+    ],
+    body: "Optional: add a practice cheat to the same stack. Leave the cheats off to keep the sample bundle's expected output.",
+    openDrawers: true,
+    target: "#rom-weaver-row-patch-stack",
+    title: "Try the practice cheat menu",
+  },
+  {
+    actions: [
       ["options", localizer.message("ui.apply.tutorial.options")],
       ["apply", localizer.message("ui.apply.tutorial.applyDownload")],
     ],
@@ -118,6 +128,44 @@ const getApplySampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer
     placement: "top",
     target: "#rom-weaver-row-output-file-name",
     title: localizer.message("ui.apply.tutorial.output.title"),
+  },
+];
+
+const APPLY_CHEATS_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
+  {
+    actions: [["checks", "Checks"]],
+    body: "This checksum-matched homebrew ROM unlocks a small practice catalog for this guide.",
+    openDrawers: true,
+    target: "#rom-weaver-row-file-rom",
+    title: "Start with the practice ROM",
+  },
+  {
+    actions: [["menu", "Add cheats to the patch order"]],
+    body: "Open the cheat picker, add practice cheats, and inspect the address, value, and optional compare byte.",
+    openDrawers: true,
+    target: "#rom-weaver-row-patch-stack",
+    title: "Choose cheats",
+  },
+  {
+    actions: [
+      ["toggle", "On or off"],
+      ["reorder", "Change order"],
+      ["menu", "Details"],
+    ],
+    body: "Cheats share the patch stack. Switch them on, inspect their writes, and place them in execution order.",
+    openDrawers: true,
+    openMenu: true,
+    target: "#rom-weaver-row-patch-stack",
+    title: "Review the stack",
+  },
+  {
+    actions: [["apply", "Apply & download"]],
+    body: "Apply the stack to bake the selected cheats into a new ROM.",
+    cta: ".btn.run",
+    openDrawers: true,
+    placement: "top",
+    target: "#rom-weaver-row-output-file-name",
+    title: "Apply the cheats",
   },
 ];
 
@@ -249,43 +297,76 @@ const useGuidedSampleLoader = (input: {
   mode: "apply" | "bundle";
   onDrop: (files: File[]) => void;
   onStartBundle: () => void;
+  onPracticeCheatSampleChange?: (active: boolean) => void;
 }) => {
   const localizer = useUiLocalizer();
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleError, setSampleError] = useState("");
-  const [sampleTutorial, setSampleTutorial] = useState<"apply" | "bundle" | null>(null);
-  const loadFirstWeave = async () => {
+  const [sampleTutorial, setSampleTutorial] = useState<"apply" | "apply-cheats" | "bundle" | null>(null);
+  const loadGenerationRef = useRef(0);
+  const closeSampleTutorial = () => {
+    loadGenerationRef.current += 1;
+    setSampleLoading(false);
+    setSampleTutorial(null);
+  };
+  useEffect(
+    () => () => {
+      loadGenerationRef.current += 1;
+    },
+    [],
+  );
+  const loadFirstWeave = async (guide: "apply" | "apply-cheats" | "bundle") => {
+    const generation = ++loadGenerationRef.current;
     setSampleLoading(true);
     setSampleError("");
     try {
-      const response = await fetch(resolveAssetUrl(input.assetBaseUrl, FIRST_WEAVE_ASSET));
+      const sampleAsset = guide === "apply-cheats" ? "hello-world.nes" : FIRST_WEAVE_ASSET;
+      const response = await fetch(resolveAssetUrl(input.assetBaseUrl, sampleAsset));
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const blob = await response.blob();
-      const sample = new File([blob], "first-weave.zip", { type: "application/zip" });
+      if (generation !== loadGenerationRef.current) return;
+      const sample = new File([blob], sampleAsset, {
+        type: guide === "apply-cheats" ? "application/octet-stream" : "application/zip",
+      });
       // The generated homebrew ROM is not in the public identify database. The
       // tutorial MUST become ready without downloading and staging that data.
       skipSourceIdentification(sample);
       input.onDrop([sample]);
+      input.onPracticeCheatSampleChange?.(true);
     } catch {
+      if (generation !== loadGenerationRef.current) return;
       setSampleTutorial(null);
+      input.onPracticeCheatSampleChange?.(false);
       setSampleError(localizer.message("ui.apply.tutorial.sampleLoadFailed"));
     } finally {
-      setSampleLoading(false);
+      if (generation === loadGenerationRef.current) setSampleLoading(false);
     }
   };
   const startApplySample = () => {
     setSampleTutorial("apply");
-    void loadFirstWeave();
+    void loadFirstWeave("apply");
+  };
+  const startApplyCheatsSample = () => {
+    setSampleTutorial("apply-cheats");
+    void loadFirstWeave("apply-cheats");
   };
   const startBundleSample = () => {
     input.onStartBundle();
     setSampleTutorial("bundle");
-    void loadFirstWeave();
+    void loadFirstWeave("bundle");
   };
-  useGuidedSampleStart("apply", startApplySample, () => setSampleTutorial(null), input.mode === "apply");
-  useGuidedSampleStart("bundle", startBundleSample, () => setSampleTutorial(null), input.mode === "bundle");
-  const closeSampleTutorial = () => setSampleTutorial(null);
-  return { closeSampleTutorial, sampleError, sampleLoading, sampleTutorial, startApplySample, startBundleSample };
+  useGuidedSampleStart("apply", startApplySample, closeSampleTutorial, input.mode === "apply");
+  useGuidedSampleStart("apply-cheats", startApplyCheatsSample, closeSampleTutorial, input.mode === "apply");
+  useGuidedSampleStart("bundle", startBundleSample, closeSampleTutorial, input.mode === "bundle");
+  return {
+    closeSampleTutorial,
+    sampleError,
+    sampleLoading,
+    sampleTutorial,
+    startApplyCheatsSample,
+    startApplySample,
+    startBundleSample,
+  };
 };
 
 /** The selvage status strip mirrors the apply job's lifecycle, newest state first. */
@@ -350,6 +431,7 @@ function ApplyWorkflowFormView({
   onBundleMetaBulkChange,
   onSelectTab,
   onSelectView,
+  onPracticeCheatSampleChange,
   onUnifiedDrop,
   mode = "apply",
   patchEnablement,
@@ -395,6 +477,7 @@ function ApplyWorkflowFormView({
   onSelectView?: (view: "test") => void;
   onTrace?: (message: string, details?: Record<string, unknown>) => void;
   onUnifiedDrop?: (files: File[], onSettled?: () => void) => void;
+  onPracticeCheatSampleChange?: (active: boolean) => void;
   mode?: "apply" | "bundle";
   patchEnablement?: PatchEnablement;
   patchInputBasis?: PatchInputBasis;
@@ -602,16 +685,26 @@ function ApplyWorkflowFormView({
   // "identifying" placeholder until its ROM-vs-patch bucket is classified.
   const handleUnifiedDrop = onUnifiedDrop ?? (() => undefined);
   const handleUnifiedDropFiles = (files: File[]) => {
+    closeSampleTutorial();
+    onPracticeCheatSampleChange?.(false);
     handleUnifiedDrop(files, () => setDropStarted(false));
   };
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
-  const { closeSampleTutorial, sampleError, sampleLoading, sampleTutorial, startApplySample, startBundleSample } =
-    useGuidedSampleLoader({
-      assetBaseUrl,
-      mode,
-      onDrop: handleUnifiedDrop,
-      onStartBundle: () => bundleTools?.setBundlePackage("patches"),
-    });
+  const {
+    closeSampleTutorial,
+    sampleError,
+    sampleLoading,
+    sampleTutorial,
+    startApplyCheatsSample,
+    startApplySample,
+    startBundleSample,
+  } = useGuidedSampleLoader({
+    assetBaseUrl,
+    mode,
+    onDrop: handleUnifiedDrop,
+    onPracticeCheatSampleChange,
+    onStartBundle: () => bundleTools?.setBundlePackage("patches"),
+  });
   // Start the hero morph at the gesture, not after a large input finishes enough
   // staging to publish its first row. This is presentation-only; Rust ingestion
   // continues on its existing schedule behind the transition.
@@ -619,7 +712,7 @@ function ApplyWorkflowFormView({
   const workflowHasContent = romInputs.length > 0 || patches.length > 0 || pendingDrops.length > 0 || inputsStaging;
   const sampleTutorialReady =
     romInputs.length > 0 &&
-    patches.length > 0 &&
+    (sampleTutorial === "apply-cheats" || patches.length > 0) &&
     pendingDrops.length === 0 &&
     !inputsStaging &&
     romInputs.every((input) => !input.progress) &&
@@ -797,6 +890,7 @@ function ApplyWorkflowFormView({
               bundlePage={bundlePage}
               downloadHref={resolveAssetUrl(assetBaseUrl, FIRST_WEAVE_ASSET)}
               onLoadApplySample={startApplySample}
+              onLoadApplyCheatsSample={startApplyCheatsSample}
               onLoadBundleSample={startBundleSample}
               sampleError={sampleError}
               sampleLoading={sampleLoading}
@@ -981,7 +1075,9 @@ function ApplyWorkflowFormView({
           steps={
             sampleTutorial === "bundle"
               ? getBundleSampleTutorialSteps(localizer)
-              : getApplySampleTutorialSteps(localizer)
+              : sampleTutorial === "apply-cheats"
+                ? APPLY_CHEATS_TUTORIAL_STEPS
+                : getApplySampleTutorialSteps(localizer)
           }
         />
       ) : null}
