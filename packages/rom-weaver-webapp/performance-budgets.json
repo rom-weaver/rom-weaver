@@ -12,7 +12,7 @@
         "maxBrotliBytes": 10900
       },
       {
-        "_comment": "Raised for the Extract workflow route and its browser archive selection UI. Raised again for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, whose rendered pages ship as docs route chunks. Raised again for the ISO to RVZ, Nintendo 3DS to Z3DS, and Extract Z3DS guides, whose route chunks add about 11 KiB raw and 3 KiB Brotli. Raised again for the Pro Action Rocky, Gold Finger, and GBA GameShark/Action Replay code types and the create form's code type picker. Raised for the WebMCP tools and eleven browser workflow adapters. Raised for the published native benchmarks and expanded format guides. The CI bundle measures 2,496,524 raw bytes and 639,096 Brotli bytes; the approved limits retain 70,000 raw and 9,000 Brotli bytes above the baseline. Raised again for guided Apply's add-files step and the Guided practice runs reference page: main measured 632.7 KiB Brotli, 1.1 KiB under the old 649,000-byte limit, and the change adds 3.2 KiB (the new page's route chunk is 1.5 KiB of it, the rest is the guide, its de/es copy, and the linking doc edits), bringing the bundle to 635.9 KiB. The Brotli limit rises by 5,000 bytes to keep about 2.8 KiB of headroom; the raw limit is unchanged.",
+        "_comment": "Raised for the Extract workflow route and its browser archive selection UI. Raised again for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, whose rendered pages ship as docs route chunks. Raised again for the ISO to RVZ, Nintendo 3DS to Z3DS, and Extract Z3DS guides, whose route chunks add about 11 KiB raw and 3 KiB Brotli. Raised again for the Pro Action Rocky, Gold Finger, and GBA GameShark/Action Replay code types and the create form's code type picker. Raised for the WebMCP tools and eleven browser workflow adapters. Raised for the published native benchmarks and expanded format guides. The latest main CI bundle measures 2,473.6 KiB raw and 632.7 KiB Brotli; Verify boot adds about 15.1 KiB raw and 4.0 KiB Brotli. The expected sizes include this feature, and the approved limits retain 70,000 raw and 9,000 Brotli bytes above expected.",
         "name": "JavaScript",
         "directory": "assets",
         "extension": ".js",
@@ -21,10 +21,10 @@
           "assets/(?:browser-save-api|edit-gen3-saves|save-editor)-[^/]+\\.js$"
         ],
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 2500000,
-        "maxRawBytes": 2570000,
-        "expectedBrotliBytes": 640000,
-        "maxBrotliBytes": 654000
+        "expectedRawBytes": 2550000,
+        "maxRawBytes": 2620000,
+        "expectedBrotliBytes": 652000,
+        "maxBrotliBytes": 661000
       },
       {
         "_comment": "Raised for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, which the search index includes. Raised again for the ISO to RVZ, Nintendo 3DS to Z3DS, and Extract Z3DS guides. Raised for the MCP client and browser agent setup guide. The published native benchmarks and expanded format guides measure 382,150 raw bytes and 100,419 Brotli bytes. The approved limits retain the existing 11,000-byte raw and 3,000-byte Brotli margins.",
@@ -50,13 +50,13 @@
         "maxBrotliBytes": 11500
       },
       {
-        "_comment": "Raised for the patches-step cheat card layout and database picker added in the apply workflow. The mobile docs navigation measures 258,432 raw CSS bytes and 41,009 Brotli bytes; its approved limits are 260,000 and 42,000 bytes. The shared cheat picker and read-only inspection add about 0.7 KiB raw CSS; the approved raw limit is 262,000 bytes. The guided Simple/Detailed step on Apply and Create brings the PR bundle to 262,498 raw and 41,446 Brotli bytes; the approved limits of 264,500 raw and 42,300 Brotli bytes retain about 2 KiB and 0.8 KiB of headroom.",
+        "_comment": "Raised for the patches-step cheat card layout and database picker added in the apply workflow. The mobile docs navigation measures 258,432 raw CSS bytes and 41,009 Brotli bytes; its approved limits are 260,000 and 42,000 bytes. The shared cheat picker and read-only inspection add about 0.7 KiB raw CSS; the approved raw limit is 262,000 bytes. The guided Simple/Detailed step on Apply and Create brings the PR bundle to 262,498 raw and 41,446 Brotli bytes; the approved limits of 264,500 raw and 42,300 Brotli bytes retain about 2 KiB and 0.8 KiB of headroom. Verify boot adds about 0.7 KiB raw CSS; the 267,000-byte raw limit keeps about 2 KiB of headroom on the rebased build.",
         "name": "CSS",
         "directory": "assets",
         "extension": ".css",
         "requireBrotliMinBytes": 1024,
         "expectedRawBytes": 245000,
-        "maxRawBytes": 264500,
+        "maxRawBytes": 267000,
         "expectedBrotliBytes": 38600,
         "maxBrotliBytes": 42300
       },
