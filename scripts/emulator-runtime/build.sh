@@ -151,6 +151,8 @@ fs.writeFileSync(file, patchedSource);
 NODE
 
 if [ "$platform" = darwin-arm64 ] || [ "$platform" = darwin-x64 ]; then
+  node "$script_dir/patch-headless-darwin.mjs" "$build_dir/src/retroarch"
+
   # New Apple Clang versions define TARGET_OS_MAC as a built-in macro. Old
   # bundled zlib treats that as classic Mac OS and hides the POSIX fdopen API.
   node - "$build_dir/src/retroarch/deps/libz/zutil.h" <<'NODE'
@@ -215,7 +217,7 @@ NODE
 cd "$build_dir/src/retroarch"
 # Cocoa selects NSApplicationMain even with null video. These probes have no
 # configure switches; their environment values keep the command-line entry point.
-HAVE_COCOA=no HAVE_COCOA_METAL=no CC="$cc" CXX="$cxx" \
+HAVE_COCOA=no HAVE_COCOA_METAL=no HAVE_CORELOCATION=no CC="$cc" CXX="$cxx" \
   WINDRES="$configure_windres" \
   LDFLAGS="$retroarch_ldflags" sh ./configure \
   ${configure_host:+"--host=$configure_host"} \
@@ -273,6 +275,7 @@ printf '%s  %s\n' "$runtime_digest" "$(basename "$runtime_archive")" \
   >"$runtime_archive.sha256"
 
 cp "$script_dir/build.sh" "$script_dir/build-cores.mjs" \
+  "$script_dir/patch-headless-darwin.mjs" "$script_dir/tar-path.mjs" \
   "$script_dir/inspect-core.py" "$script_dir/smoke.sh" \
   "$script_dir/verify-runtime.mjs" "$script_dir/sources.json" \
   "$script_dir/verify-dependencies.mjs" "$script_dir/platform.mjs" \
