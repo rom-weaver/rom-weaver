@@ -112,10 +112,41 @@ fetch_source fceumm
 retroarch_archive=$(read_source retroarch archive)
 fceumm_archive=$(read_source fceumm archive)
 mkdir -p "$build_dir/src/retroarch" "$build_dir/src/fceumm"
-tar -xzf "$build_dir/downloads/$retroarch_archive" \
-  -C "$build_dir/src/retroarch" --strip-components=1
+if [ "$platform" = win32-x64 ]; then
+  # The headless build disables Metal, so Windows does not need this Apple
+  # framework bundle. Its versioned symlinks cannot be created by MSYS2 tar.
+  "$tar_command" -xzf "$build_dir/downloads/$retroarch_archive" \
+    --exclude='*/pkg/apple/Frameworks/MoltenVK.xcframework' \
+    -C "$build_dir/src/retroarch" --strip-components=1
+else
+  "$tar_command" -xzf "$build_dir/downloads/$retroarch_archive" \
+    -C "$build_dir/src/retroarch" --strip-components=1
+fi
 tar -xzf "$build_dir/downloads/$fceumm_archive" \
   -C "$build_dir/src/fceumm" --strip-components=1
+
+# Apple provides the MD5 API through CommonCrypto, which lrc_hash.h selects on
+# macOS. Skip RetroArch's bundled implementation there: it expects its own
+# MD5_CTX layout and cannot compile against CommonCrypto's context type.
+node - "$build_dir/src/retroarch/libretro-common/utils/md5.c" <<'NODE'
+const fs = require("fs");
+const file = process.argv[2];
+const source = fs.readFileSync(file, "utf8");
+const start = source.indexOf("#define MD5_F(x, y, z)");
+const end = source.lastIndexOf("memset(ctx, 0, sizeof(*ctx));\n}");
+if (start < 0 || end < start || source.indexOf("#define MD5_F(x, y, z)", start + 1) !== -1) {
+  throw new Error("RetroArch MD5 implementation changed");
+}
+const endOfImplementation = end + "memset(ctx, 0, sizeof(*ctx));\n}".length;
+const patchedSource = [
+  source.slice(0, start),
+  "#ifndef __APPLE__\n",
+  source.slice(start, endOfImplementation),
+  "\n#endif\n",
+  source.slice(endOfImplementation),
+].join("");
+fs.writeFileSync(file, patchedSource);
+NODE
 
 # RetroArch has no configure switch for xkbcommon. The runtime MUST retain only
 # its null display path, so prevent the optional host library from being found.
