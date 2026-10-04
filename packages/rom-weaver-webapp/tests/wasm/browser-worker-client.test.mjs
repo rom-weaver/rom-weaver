@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { PRACTICE_CHEAT_SHARD } from "../../src/public/react/guided-cheat-sample.ts";
 import { createBrowserWasiThreadWorkerPool } from "../../src/wasm/browser-wasi-thread-pool.ts";
 import { createRomWeaverBrowserOpfs } from "../../src/wasm/rom-weaver-browser-opfs-api.ts";
 import { createRomWeaverCommand } from "../../src/wasm/rom-weaver-command.ts";
@@ -355,7 +354,18 @@ describe("rom-weaver-wasm browser runner parity", () => {
       const original = new Uint8Array(await sampleResponse.arrayBuffer());
       await writeGuestFile(opfsHandle, originalPath, original);
 
-      const cheatRecords = PRACTICE_CHEAT_SHARD.games[0].cheats;
+      const cheatRecords = ["80970D", "8077300F"].map((rawCode, sourceIndex) => ({
+        codeKind: "pro-action-replay",
+        description: `Practice cheat ${sourceIndex + 1}`,
+        gameId: "rom-weaver-practice",
+        id: `practice-${sourceIndex}`,
+        rawCode,
+        rawFields: { code: rawCode },
+        sourceFile: "rom-weaver-practice",
+        sourceIndex,
+        sourceRevision: "rom-weaver-practice-v1",
+        system: "nes",
+      }));
       const direct = await runJsonFromWorker(worker)(
         createRomWeaverCommand("patch-apply", {
           cheat_records: cheatRecords,
