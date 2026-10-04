@@ -59,9 +59,17 @@ impl CliApp {
         args: &CheatSelectionArgs,
         context: &OperationContext,
     ) -> Result<ResolvedCheats> {
-        let system =
-            self.cheat_system_for(rom_path, args.cheat_system.as_deref(), "--cheat-system")?;
-        let rom = fs::read(rom_path)?;
+        let system = self
+            .cheat_system_for(rom_path, args.cheat_system.as_deref(), "--cheat-system")
+            .map_err(|error| match error {
+                RomWeaverError::Io(source) => {
+                    RomWeaverError::io_path(rom_weaver_core::IoOp::Open, rom_path, source)
+                }
+                error => error,
+            })?;
+        let rom = fs::read(rom_path).map_err(|error| {
+            RomWeaverError::io_path(rom_weaver_core::IoOp::Open, rom_path, error)
+        })?;
         trace!(
             rom = %rom_path.display(),
             system = system.id(),

@@ -406,7 +406,7 @@ SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for it
 | `--from FILE`, `--from -` | Reads a specification from a file or stdin. File paths resolve against the spec directory, or the current directory for stdin. Explicit CLI values override the spec: `--patch` replaces the spec's patch chain and `--cheat` replaces its `cheats` array, in both cases wholesale. |
 | `--cheat ID_OR_DESCRIPTION` | Records a cheat selection in the bundle's `cheats` array. Needs `--input`. Takes the same selection flags as `patch apply`. |
 
-Patch metadata options bind to the preceding `--patch`. `--from` preserves an existing `$schema`. For `bundle create --from`, a ROM entry needs a local `path` or a `url`; a URL-only ROM supplies `--rom-url`. Patch entries need local paths unless explicit CLI patches replace the spec chain. Checks-only ROM entries are rejected by `--from`, but remain valid in bundles read by `bundle parse` and `patch apply`.
+Patch metadata options bind to the preceding `--patch`; options before the first patch bind to that first patch. Metadata can be omitted independently for each patch. `--from` preserves an existing `$schema`. For `bundle create --from`, a ROM entry needs a local `path` or a `url`; a URL-only ROM supplies `--rom-url`. Patch entries need local paths unless explicit CLI patches replace the spec chain. Checks-only ROM entries are rejected by `--from`, but remain valid in bundles read by `bundle parse` and `patch apply`.
 
 ### Bundle cheats
 

@@ -3,7 +3,7 @@
 
 use flate2::{Compression as GzCompression, write::GzEncoder};
 
-use super::bundle_parse::{bundle_file_name_codec, parse_bundle_bytes};
+use super::bundle_parse::{bundle_file_name_codec, is_bundle_json_candidate, parse_bundle_bytes};
 #[cfg(not(target_arch = "wasm32"))]
 use super::bundle_schema::BUNDLE_JSON_SCHEMA_V1_URL;
 use super::*;
@@ -912,9 +912,11 @@ fn write_bundle_create_output(
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or_default();
-    if bundle_file_name_codec(output_base_name).is_none() {
+    if bundle_file_name_codec(output_base_name).is_none()
+        && !is_bundle_json_candidate(output_base_name)
+    {
         warnings.push(format!(
-            "bundle written as `{output_base_name}`: apply auto-detection only recognizes rom-weaver-bundle.json / rom-weaver-bundle.json.<codec> names"
+            "bundle written as `{output_base_name}`: apply auto-detection requires a plain .json filename or rom-weaver-bundle.json.<codec>; pass this file with --bundle"
         ));
     }
     write_bundle_bytes(&args.output, &bytes)?;

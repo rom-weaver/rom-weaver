@@ -257,9 +257,9 @@ macro_rules! patch_adjacency_long_help {
     ($help:literal) => {
         concat!(
             $help,
-            "\n\nThis flag must follow the --patch it describes. Give it once per --patch, ",
-            "in the same order, or leave it out entirely - a partial list is an error. ",
-            "An occurrence before any --patch has nothing to bind to.\n\n  ",
+            "\n\nThis flag describes the most recent preceding --patch. ",
+            "Before the first --patch, it describes that first patch. ",
+            "You may leave metadata out for any patch.\n\n  ",
             "--patch a.bps --patch-name \"First\" --patch b.ups --patch-name \"Second\""
         )
     };

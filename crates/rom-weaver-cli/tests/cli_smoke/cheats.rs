@@ -1422,3 +1422,18 @@ fn human_results_cheat_list_keeps_title_count_and_attribution_when_empty() {
     assert!(output.contains("0 cheat(s) for Test Game"), "{output}");
     assert!(output.contains("CC-BY-SA-4.0"), "{output}");
 }
+
+#[test]
+fn cheat_list_names_the_missing_rom_and_preserves_io_kind() {
+    let temp = setup_temp_dir();
+    let input = temp.child("missing.nes");
+    let input_s = input.path().to_str().expect("path");
+    for system_args in [vec![], vec!["--cheat-system", "nes"]] {
+        let mut args = vec!["cheat", "list", "--input", input_s, "--jsonl"];
+        args.extend(system_args);
+        let report = parse_single_json_line(&command_stdout(&args, 1));
+        let label = report["label"].as_str().expect("label");
+        assert!(label.contains(input_s), "{label}");
+        assert_eq!(report["error_kind"], "io");
+    }
+}
