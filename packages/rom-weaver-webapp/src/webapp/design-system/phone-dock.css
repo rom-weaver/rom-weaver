@@ -43,7 +43,10 @@
   }
 
   .rw-app .sample-tutorial-start-chip {
-    font-size: 0.74rem;
+    gap: 3px;
+    padding-inline: 7px;
+    font-size: var(--hero-help-font, 0.82rem);
+    white-space: nowrap;
   }
   /* 16px is the iOS floor: a smaller focused input makes Safari zoom the page
      and leave it clipped on the right. */
