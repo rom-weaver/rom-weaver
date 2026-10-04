@@ -333,7 +333,7 @@ const CreateCheatCodesPanel = ({
                 classifier: classifyManualCode,
                 defaultSystem: manualSystem,
                 onAdd: (result) => addPickedRecord(result.record),
-                systems: manualSystems,
+                systems: manualSystems.filter(({ value }) => value === manualSystem),
               }
             : undefined
         }

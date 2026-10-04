@@ -217,6 +217,21 @@ describe("CreateCheatCodesPanel", () => {
     expect(onValueChange).toHaveBeenCalledWith("SXIOPO");
   });
 
+  it("keeps manual entry on the same system used to create the patch", async () => {
+    const otherSystemIndex = {
+      ...index,
+      entries: [
+        ...index.entries,
+        { ...index.entries[0], cheatSystem: "gb", platform: "Nintendo Game Boy", slug: "game-boy" },
+      ],
+    };
+    const { view } = renderPanel("", { index: otherSystemIndex });
+    fireEvent.click(view.getByRole("button", { name: /Pick from the cheat database/u }));
+    fireEvent.click(await view.findByRole("button", { name: "Add code manually" }));
+    const selector = view.getByLabelText("System") as HTMLSelectElement;
+    expect(Array.from(selector.options).map(({ value }) => value)).toEqual(["nes"]);
+  });
+
   it("appends a manually entered code through the shared picker", async () => {
     const { onValueChange, view } = renderPanel("");
     fireEvent.click(view.getByRole("button", { name: /Pick from the cheat database/u }));
