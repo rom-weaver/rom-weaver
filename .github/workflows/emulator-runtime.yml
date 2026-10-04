@@ -87,20 +87,28 @@ jobs:
 
       - name: Set up Windows runtime build tools
         if: runner.os == 'Windows'
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: UCRT64
-          update: true
-          install: >-
-            make diffutils patch tar gzip curl
-            mingw-w64-ucrt-x86_64-gcc
-            mingw-w64-ucrt-x86_64-cmake
-            mingw-w64-ucrt-x86_64-ninja
-            mingw-w64-ucrt-x86_64-nasm
-            mingw-w64-ucrt-x86_64-pkgconf
-            mingw-w64-ucrt-x86_64-python
-            mingw-w64-ucrt-x86_64-nodejs
-            mingw-w64-ucrt-x86_64-zlib
+        shell: pwsh
+        run: |
+          $msys2 = 'C:\msys64'
+          $pacman = Join-Path $msys2 'usr\bin\pacman.exe'
+          if (-not (Test-Path $pacman)) { throw 'The Windows 2025 runner image does not contain MSYS2.' }
+
+          & $pacman -Syu --noconfirm
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $packages = @(
+            'make', 'diffutils', 'patch', 'tar', 'gzip', 'curl',
+            'mingw-w64-ucrt-x86_64-gcc',
+            'mingw-w64-ucrt-x86_64-cmake',
+            'mingw-w64-ucrt-x86_64-ninja',
+            'mingw-w64-ucrt-x86_64-nasm',
+            'mingw-w64-ucrt-x86_64-pkgconf',
+            'mingw-w64-ucrt-x86_64-python',
+            'mingw-w64-ucrt-x86_64-nodejs',
+            'mingw-w64-ucrt-x86_64-zlib'
+          )
+          & $pacman -S --noconfirm --needed @packages
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build emulator runtime
         if: runner.os != 'Windows'
@@ -111,7 +119,11 @@ jobs:
 
       - name: Build Windows emulator runtime
         if: runner.os == 'Windows'
-        shell: msys2 {0}
+        shell: C:\msys64\usr\bin\bash.exe --login -e -o pipefail {0}
+        env:
+          MSYSTEM: UCRT64
+          CHERE_INVOKING: 1
+          MSYS2_PATH_TYPE: inherit
         run: >-
           scripts/emulator-runtime/build.sh
           --output-dir target/emulator-artifacts
