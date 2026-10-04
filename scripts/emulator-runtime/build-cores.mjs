@@ -59,6 +59,23 @@ const unpack = (source, destination) => {
   assert.equal(digest(archive), source.sha256, `source checksum mismatch: ${source.archive}`);
   copyFile(archive, path.join(sourcePackage, "archives", source.archive));
   fs.mkdirSync(destination, { recursive: true });
+  for (const member of source.extractFirst ?? []) {
+    const memberPath = inside(destination, member);
+    const archiveMember = `${path.basename(source.archive, ".tar.gz")}/${path
+      .relative(destination, memberPath)
+      .split(path.sep)
+      .join("/")}`;
+    run([
+      "tar",
+      "--force-local",
+      "-xzf",
+      tarPath(archive),
+      "-C",
+      tarPath(destination),
+      "--strip-components=1",
+      archiveMember,
+    ]);
+  }
   run([
     "tar",
     "--force-local",

@@ -127,17 +127,6 @@ test("Mupen64Plus leaves Apple's fdopen declaration intact", () => {
 
 test("PPSSPP uses each upstream platform directory and native architecture", () => {
   const ppsspp = sources.cores.find(({ id }) => id === "ppsspp");
-  assert.deepEqual(
-    ppsspp.dependencies.find(({ path }) => path === "ext/libadrenotools"),
-    {
-      path: "ext/libadrenotools",
-      revision: "8fae8ce254dfc1344527e05301e43f37dea2df80",
-      url: "https://github.com/bylaws/libadrenotools/archive/8fae8ce254dfc1344527e05301e43f37dea2df80.tar.gz",
-      archive: "libadrenotools-8fae8ce254dfc1344527e05301e43f37dea2df80.tar.gz",
-      sha256: "ceffce971676d4cfdf348a082df06fc92a1dca6d95bea892a480d63f200961cb",
-    },
-  );
-  assert.ok(ppsspp.licenses.includes("ext/libadrenotools/LICENSE"));
   for (const [name, expected] of [
     ["linux-x64-gnu", "--prefix=./linux/x86_64"],
     ["darwin-x64", "--prefix=./macosx/universal"],
@@ -160,6 +149,19 @@ test("PPSSPP uses each upstream platform directory and native architecture", () 
   assert.ok(arm.build.at(-1).command.includes("TARGET_ARCH=arm64"));
   assert.ok(arm.build.at(-1).command.includes("ARCHFLAGS=-arch arm64"));
   assert.equal(arm.patches.length, 1);
+});
+
+test("PPSSPP limits Adreno sources to Android and stages the Windows tar link target", () => {
+  const ppsspp = sources.cores.find(({ id }) => id === "ppsspp");
+  assert.deepEqual(ppsspp.extractFirst, ["ext/vulkan/libvulkan.so.1.3.236"]);
+  assert.deepEqual(
+    ppsspp.patches.find(({ path }) => path === "libretro/Makefile.common"),
+    {
+      path: "libretro/Makefile.common",
+      find: "ifeq ($(TARGET_ARCH),arm64)\nSOURCES_CXX += \\\n\t  $(EXTDIR)/libadrenotools/src/driver.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/android_linker_ns.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/elf_soname_patcher.cpp\nendif",
+      replace: "ifeq ($(PLATFORM_EXT), android)\nifeq ($(TARGET_ARCH),arm64)\nSOURCES_CXX += \\\n\t  $(EXTDIR)/libadrenotools/src/driver.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/android_linker_ns.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/elf_soname_patcher.cpp\nendif\nendif",
+    },
+  );
 });
 
 test("mGBA avoids untracked native dependencies outside Linux", () => {

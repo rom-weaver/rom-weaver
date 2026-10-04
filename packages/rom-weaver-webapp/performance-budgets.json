@@ -12,7 +12,7 @@
         "maxBrotliBytes": 10900
       },
       {
-        "_comment": "Raised for the Extract workflow route and its browser archive selection UI. Raised again for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, whose rendered pages ship as docs route chunks. Raised again for the ISO to RVZ, Nintendo 3DS to Z3DS, and Extract Z3DS guides, whose route chunks add about 11 KiB raw and 3 KiB Brotli. Raised again for the Pro Action Rocky, Gold Finger, and GBA GameShark/Action Replay code types and the create form's code type picker. Raised for the WebMCP tools and eleven browser workflow adapters. Raised for the published native benchmarks and expanded format guides. The CI bundle measures 2,496,524 raw bytes and 639,096 Brotli bytes; the approved limits retain 70,000 raw and 9,000 Brotli bytes above the baseline. Raised again for guided Apply's add-files step and the Guided practice runs reference page: main measured 632.7 KiB Brotli, 1.1 KiB under the old 649,000-byte limit, and the change adds 3.2 KiB (the new page's route chunk is 1.5 KiB of it, the rest is the guide, its de/es copy, and the linking doc edits), bringing the bundle to 635.9 KiB. The Brotli limit rises by 5,000 bytes to keep about 2.8 KiB of headroom; the raw limit is unchanged.",
+        "_comment": "Raised for the Extract workflow route and its browser archive selection UI. Raised again for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, whose rendered pages ship as docs route chunks. Raised again for the ISO to RVZ, Nintendo 3DS to Z3DS, and Extract Z3DS guides, whose route chunks add about 11 KiB raw and 3 KiB Brotli. Raised again for the Pro Action Rocky, Gold Finger, and GBA GameShark/Action Replay code types and the create form's code type picker. Raised for the WebMCP tools and eleven browser workflow adapters. Raised for the published native benchmarks and expanded format guides. The CI bundle measures 2,496,524 raw bytes and 639,096 Brotli bytes; the approved limits retain 70,000 raw and 9,000 Brotli bytes above the baseline. Raised again for guided Apply's add-files step and the Guided practice runs reference page: main measured 632.7 KiB Brotli, 1.1 KiB under the old 649,000-byte limit, and the change adds 3.2 KiB (the new page's route chunk is 1.5 KiB of it, the rest is the guide, its de/es copy, and the linking doc edits), bringing the bundle to 635.9 KiB. The Brotli limit rises by 5,000 bytes to keep about 2.8 KiB of headroom; the raw limit is unchanged. The CLI ROM testing and native emulator runtime guides raise the measured bundle to 2,587,352 raw and 660,516 Brotli bytes; the limits retain 70,000 raw and 14,000 Brotli bytes of headroom.",
         "name": "JavaScript",
         "directory": "assets",
         "extension": ".js",
@@ -21,22 +21,22 @@
           "assets/(?:browser-save-api|edit-gen3-saves|save-editor)-[^/]+\\.js$"
         ],
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 2500000,
-        "maxRawBytes": 2570000,
-        "expectedBrotliBytes": 640000,
-        "maxBrotliBytes": 654000
+        "expectedRawBytes": 2588000,
+        "maxRawBytes": 2658000,
+        "expectedBrotliBytes": 661000,
+        "maxBrotliBytes": 675000
       },
       {
-        "_comment": "Raised for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, which the search index includes. Raised again for the ISO to RVZ, Nintendo 3DS to Z3DS, and Extract Z3DS guides. Raised for the MCP client and browser agent setup guide. The published native benchmarks and expanded format guides measure 382,150 raw bytes and 100,419 Brotli bytes. The approved limits retain the existing 11,000-byte raw and 3,000-byte Brotli margins.",
+        "_comment": "Raised for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, which the search index includes. Raised again for the ISO to RVZ, Nintendo 3DS to Z3DS, and Extract Z3DS guides. Raised for the MCP client and browser agent setup guide. The published native benchmarks and expanded format guides measure 382,150 raw bytes and 100,419 Brotli bytes. The approved limits retain the existing 11,000-byte raw and 3,000-byte Brotli margins. The ROM testing and runtime guides raise this to 405,987 raw and 106,930 Brotli bytes; the limits retain those margins.",
         "name": "Documentation search JavaScript",
         "directory": "assets",
         "extension": ".js",
         "includePatterns": ["assets/_virtual_rom-weaver-docs-search-[^/]+\\.js$"],
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 383000,
-        "maxRawBytes": 394000,
-        "expectedBrotliBytes": 100500,
-        "maxBrotliBytes": 103500
+        "expectedRawBytes": 406000,
+        "maxRawBytes": 417000,
+        "expectedBrotliBytes": 107000,
+        "maxBrotliBytes": 110000
       },
       {
         "name": "Save Editor JavaScript",
