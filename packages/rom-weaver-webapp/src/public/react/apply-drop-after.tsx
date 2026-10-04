@@ -1,4 +1,4 @@
-import { Archive, Disc3, ListChecks } from "lucide-react";
+import { Archive, Disc3, Download, ListChecks, Upload } from "lucide-react";
 import { useLayoutEffect, useRef } from "react";
 import { PendingIdentifyDrawer } from "../../webapp/components/identify-drawer.tsx";
 import { Drawer, DrawerReadout } from "./components/ds/drawer.tsx";
@@ -175,5 +175,46 @@ export const ApplySampleStart = ({
           })}
       startAction={bundlePage ? "package" : "apply"}
     />
+  );
+};
+
+/**
+ * The guided Apply card's way in for readers without files of their own: load
+ * the practice files straight onto the bench, or download them and add the ZIP
+ * the way any other file goes in. Shown only until the bench is ready.
+ */
+export const ApplyTutorialPractice = ({
+  downloadHref,
+  error,
+  loading,
+  onLoad,
+}: {
+  downloadHref: string;
+  error: string;
+  loading: boolean;
+  onLoad: () => void;
+}) => {
+  const localizer = useUiLocalizer();
+  return (
+    <div className="sample-tutorial-practice">
+      <span>{localizer.message("ui.apply.tutorial.noFiles")}</span>
+      <button
+        aria-busy={loading || undefined}
+        aria-disabled={loading || undefined}
+        className="btn slim"
+        onClick={() => {
+          if (!loading) onLoad();
+        }}
+        type="button"
+      >
+        <Upload aria-hidden="true" />
+        {localizer.message(loading ? "ui.tutorial.loading" : "ui.apply.tutorial.usePractice")}
+      </button>
+      <a className="btn ghost slim" download={FIRST_WEAVE_ASSET} href={downloadHref}>
+        <Download aria-hidden="true" />
+        {localizer.message("ui.apply.tutorial.downloadPractice")}
+      </a>
+      {error ? <span role="status">{error}</span> : null}
+    </div>
   );
 };

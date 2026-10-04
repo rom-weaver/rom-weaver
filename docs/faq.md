@@ -59,7 +59,7 @@ Find the guide that answers your question.
 
 ### Can I try it without a game file?
 
-[Your first patch with supplied homebrew files](tutorials/first-patch.md).
+[Your first patch with supplied homebrew files](tutorials/first-patch.md), or any of the [guided practice runs](reference/guided-runs.md).
 
 ### Where are Trim, PPF Undo, and the Save Editor?
 

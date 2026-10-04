@@ -28,7 +28,7 @@ The browser presents file details and workflow choices together:
 
 - **It explains what it found.** Cards show checksums, expected names, header state, and archive contents before you commit to anything.
 - **It needs no install.** The app runs from a web address.
-- **It has guided samples.** You can learn the workflow on homebrew files before touching a real ROM.
+- **It has guided samples.** You can learn the workflow on homebrew files before touching a real ROM. [Guided practice runs](../reference/guided-runs.md) lists them.
 - **It works on phones and tablets**, within their memory limits.
 
 These properties suit learning and occasional patching, where visible checks help explain a mismatch.

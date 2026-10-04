@@ -922,15 +922,23 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     const guidedApply = page.getByRole("link", { name: "Start guided Apply" });
     await guidedApply.waitFor({ state: "visible", timeout: 60_000 });
     const tutorial = page.locator(".sample-tutorial-dialog");
-    await scanGuidedLoading(page, ["first-weave.zip"], "guided Apply loading (desktop, light)", () =>
-      guidedApply.click(),
-    );
-    for (let step = 1; step <= 6; step += 1) {
+    // Guided Apply opens on the drop zone and loads nothing until asked, so its
+    // first step is scanned waiting for files, then fed the practice files.
+    await guidedApply.click();
+    await page
+      .locator('.sample-tutorial-dialog[data-step="1"][data-step-count="4"]:not([data-moving])')
+      .waitFor({ state: "visible", timeout: 60_000 });
+    await scanVariants("guided Apply 1/4 (waiting for files)");
+    await tutorial.getByRole("button", { name: "Use the practice files" }).click();
+    await tutorial
+      .locator('.sample-tutorial-actions .btn.primary:not([aria-disabled="true"])')
+      .waitFor({ state: "visible", timeout: 60_000 });
+    for (let step = 1; step <= 4; step += 1) {
       await page
-        .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="6"]:not([data-moving])`)
+        .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="4"]:not([data-moving])`)
         .waitFor({ state: "visible", timeout: 60_000 });
-      await scanVariants(`guided Apply ${step}/6`);
-      if (step === 6) {
+      await scanVariants(`guided Apply ${step}/4`);
+      if (step === 4) {
         const [download] = await Promise.all([
           page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
           page.locator("#rom-weaver-button-apply").click(),

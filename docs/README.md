@@ -33,7 +33,7 @@ Start in the browser. No account, installation, or commercial game is needed for
 
 Prefer the terminal? Start with [Install the CLI](how-to/install-cli.md), then [your first CLI apply](tutorials/cli-first-weave.md).
 
-Guided app samples: [Apply](https://rom-weaver.com/apply-patches?guide=apply), [Create](https://rom-weaver.com/create-patch?guide=create), and [Bundle](https://rom-weaver.com/bundle-patches?guide=bundle).
+Guided runs in the app: [Apply](https://rom-weaver.com/apply-patches?guide=apply), [Create](https://rom-weaver.com/create-patch?guide=create), [Bundle](https://rom-weaver.com/bundle-patches?guide=bundle), and [Test](https://rom-weaver.com/test-rom?guide=test), plus cheat runs for [Apply](https://rom-weaver.com/apply-patches?guide=apply-cheats) and [Create](https://rom-weaver.com/create-patch?guide=create-cheats). Guided Apply waits for you to add files and offers the practice files when you want them. [Guided practice runs](reference/guided-runs.md) lists what each run covers and where it starts.
 
 ## Choose a task
 
@@ -123,6 +123,7 @@ Facts to look up. No advice, no steps.
 - [Supported formats](reference/formats.md): the full patch, container, codec, checksum, trim, and header support tables.
 - [What rom-weaver supports](reference/features.md): every feature in plain words, browser and CLI availability, and links to exact limits.
 - [Cheat database](reference/cheat-database.md): supported systems, delivery classes, matching, storage, and licensing.
+- [Guided practice runs](reference/guided-runs.md): every guided browser run, its steps and practice files, where it starts, and every way files get into Apply.
 - [CLI reference](reference/cli.md): every command, global flag, patching flag, JSON output, exit code, and permission check.
 - [Save Editor support](reference/save-editor.md): supported games, editable fields, recognition rules, and integrity checks.
 - [Man pages](reference/cli.md#man-pages): generate `rom-weaver(1)` and one page per visible command from Clap.

@@ -171,7 +171,7 @@ const capture = async () => {
             await page.goto(pageUrl(captureCase.route), { waitUntil: "domcontentloaded" });
             await waitForDocsScreenshotReady(page, captureCase);
             if (captureCase.dismissGuide) {
-              const exitGuide = page.getByRole("button", { name: "Exit tutorial", exact: true });
+              const exitGuide = page.getByRole("button", { name: "Leave the guide", exact: true });
               await exitGuide.evaluate((button) => button.click());
               await exitGuide.waitFor({ state: "detached" });
             }

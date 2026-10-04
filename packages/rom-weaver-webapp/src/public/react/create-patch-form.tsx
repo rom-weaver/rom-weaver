@@ -338,8 +338,8 @@ const getCreateSampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalize
     ],
     body: localizer.message("ui.create.tutorial.addFiles.body"),
     target: "#patch-builder-row-unified-drop",
-    title: localizer.message("ui.apply.tutorial.addFiles.title"),
-    tryIt: localizer.message("ui.apply.tutorial.addFiles.tryIt"),
+    title: localizer.message("ui.create.tutorial.addFiles.title"),
+    tryIt: localizer.message("ui.create.tutorial.addFiles.tryIt"),
   },
   {
     actions: [

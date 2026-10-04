@@ -73,11 +73,49 @@ import {
 } from "./apply-output-fields.tsx";
 import { type RomRowDeps, groupRomInputs, renderRomInputRow, renderDiscGroup } from "./apply-rom-input-rows.tsx";
 import { SectionNotice } from "./apply-section-notice.tsx";
-import { FIRST_WEAVE_ASSET, usePendingCardMorph, ApplyDropAfter, ApplySampleStart } from "./apply-drop-after.tsx";
+import {
+  FIRST_WEAVE_ASSET,
+  usePendingCardMorph,
+  ApplyDropAfter,
+  ApplySampleStart,
+  ApplyTutorialPractice,
+} from "./apply-drop-after.tsx";
 import { WORKFLOW_GUIDES } from "./workflow-guides.ts";
 
-const getApplySampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer>): readonly SampleTutorialStep[] => [
+/** What the add-files step needs from the form: whether the bench is ready to
+    tour, and the practice files the reader can choose instead of their own. */
+type ApplyTutorialInputs = {
+  practice: ReactNode;
+  ready: boolean;
+};
+
+/**
+ * The guided Apply run. It starts on the empty drop zone and waits there: the
+ * reader adds files by any of the real routes - their own, or the practice
+ * files from the card - so nothing appears on the bench they did not put there.
+ */
+const getApplySampleTutorialSteps = (
+  localizer: ReturnType<typeof useUiLocalizer>,
+  inputs: ApplyTutorialInputs,
+): readonly SampleTutorialStep[] => [
   {
+    actions: [
+      ["drop", localizer.message("ui.apply.tutorial.dropFiles")],
+      ["drop", localizer.message("ui.apply.tutorial.browse")],
+      ["archive", localizer.message("ui.apply.tutorial.archives")],
+      ["download", localizer.message("ui.apply.tutorial.practiceFiles")],
+    ],
+    aside: inputs.ready ? undefined : inputs.practice,
+    body: localizer.message("ui.apply.tutorial.addFiles.body"),
+    locked: !inputs.ready,
+    placement: "below",
+    target: "#rom-weaver-row-unified-drop",
+    title: localizer.message("ui.apply.tutorial.addFiles.title"),
+    tryIt: localizer.message(
+      inputs.ready ? "ui.apply.tutorial.addFiles.readyTryIt" : "ui.apply.tutorial.addFiles.tryIt",
+    ),
+  },
+  getViewTutorialStep(localizer, "#rom-weaver-row-file-rom", {
     actions: [
       ["checks", localizer.message("ui.apply.tutorial.checks")],
       ["remove", localizer.message("ui.apply.tutorial.remove")],
@@ -87,8 +125,7 @@ const getApplySampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer
     target: "#rom-weaver-row-file-rom",
     title: localizer.message("ui.apply.tutorial.rom.title"),
     tryIt: localizer.message("ui.apply.tutorial.rom.tryIt"),
-  },
-  getViewTutorialStep(localizer, "#rom-weaver-row-file-rom"),
+  }),
   {
     actions: [
       ["toggle", localizer.message("ui.apply.tutorial.toggle")],
@@ -98,6 +135,7 @@ const getApplySampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer
       ["checks", localizer.message("ui.apply.tutorial.checks")],
       ["replace", localizer.message("ui.apply.tutorial.replacePatch")],
       ["menu", localizer.message("ui.apply.tutorial.patchDetails")],
+      ["menu", localizer.message("ui.apply.tutorial.addCheats")],
     ],
     body: localizer.message("ui.apply.tutorial.patches.body"),
     openDrawers: true,
@@ -105,27 +143,6 @@ const getApplySampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer
     target: "#rom-weaver-row-patch-stack",
     title: localizer.message("ui.apply.tutorial.patches.title"),
     tryIt: localizer.message("ui.apply.tutorial.patches.tryIt"),
-  },
-  {
-    actions: [
-      ["drop", localizer.message("ui.apply.tutorial.dropFiles")],
-      ["drop", localizer.message("ui.apply.tutorial.browse")],
-    ],
-    body: localizer.message("ui.apply.tutorial.addFiles.body"),
-    target: "#rom-weaver-row-unified-drop",
-    title: localizer.message("ui.apply.tutorial.addFiles.title"),
-    tryIt: localizer.message("ui.apply.tutorial.addFiles.tryIt"),
-  },
-  {
-    actions: [
-      ["menu", localizer.message("ui.apply.tutorial.addCheats")],
-      ["toggle", localizer.message("ui.apply.tutorial.toggle")],
-    ],
-    body: localizer.message("ui.apply.tutorial.cheats.body"),
-    openDrawers: true,
-    target: "#rom-weaver-row-patch-stack",
-    title: localizer.message("ui.apply.tutorial.cheats.title"),
-    tryIt: localizer.message("ui.apply.tutorial.cheats.tryIt"),
   },
   {
     actions: [
@@ -354,8 +371,15 @@ const useGuidedSampleLoader = (input: {
       if (generation === loadGenerationRef.current) setSampleLoading(false);
     }
   };
+  // Guided Apply opens on the empty drop zone; the practice files load only
+  // when the reader asks for them from the guide card.
   const startApplySample = () => {
+    loadGenerationRef.current += 1;
+    setSampleLoading(false);
+    setSampleError("");
     setSampleTutorial("apply");
+  };
+  const loadApplyPractice = () => {
     void loadFirstWeave("apply");
   };
   const startApplyCheatsSample = () => {
@@ -372,6 +396,7 @@ const useGuidedSampleLoader = (input: {
   useGuidedSampleStart("bundle", startBundleSample, closeSampleTutorial, input.mode === "bundle");
   return {
     closeSampleTutorial,
+    loadApplyPractice,
     sampleError,
     sampleLoading,
     sampleTutorial,
@@ -697,13 +722,19 @@ function ApplyWorkflowFormView({
   // "identifying" placeholder until its ROM-vs-patch bucket is classified.
   const handleUnifiedDrop = onUnifiedDrop ?? (() => undefined);
   const handleUnifiedDropFiles = (files: File[]) => {
-    closeSampleTutorial();
-    onPracticeCheatSampleChange?.(false);
+    // Guided Apply asks for exactly this: the reader's own drop or pick is
+    // how its first step fills the bench. Every other guide runs on its
+    // sample, which the reader's files replace. The practice catalog stays
+    // checksum-gated, so it only ever unlocks for the practice ROM.
+    const guidedApply = sampleTutorial === "apply";
+    if (!guidedApply) closeSampleTutorial();
+    onPracticeCheatSampleChange?.(guidedApply);
     handleUnifiedDrop(files, () => setDropStarted(false));
   };
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
   const {
     closeSampleTutorial,
+    loadApplyPractice,
     sampleError,
     sampleLoading,
     sampleTutorial,
@@ -1083,13 +1114,23 @@ function ApplyWorkflowFormView({
         <SampleTutorial
           loadingBody={localizer.message("ui.apply.tutorial.loading")}
           onClose={closeSampleTutorial}
-          ready={sampleTutorialReady}
+          ready={sampleTutorial === "apply" || sampleTutorialReady}
           steps={
             sampleTutorial === "bundle"
               ? getBundleSampleTutorialSteps(localizer)
               : sampleTutorial === "apply-cheats"
                 ? APPLY_CHEATS_TUTORIAL_STEPS
-                : getApplySampleTutorialSteps(localizer)
+                : getApplySampleTutorialSteps(localizer, {
+                    practice: (
+                      <ApplyTutorialPractice
+                        downloadHref={resolveAssetUrl(assetBaseUrl, FIRST_WEAVE_ASSET)}
+                        error={sampleError}
+                        loading={sampleLoading}
+                        onLoad={loadApplyPractice}
+                      />
+                    ),
+                    ready: sampleTutorialReady,
+                  })
           }
         />
       ) : null}

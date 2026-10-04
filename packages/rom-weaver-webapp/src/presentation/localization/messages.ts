@@ -545,21 +545,18 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.tutorial.addFiles.body": msg({
     id: "ui.apply.tutorial.addFiles.body",
     message:
-      "Drop ROMs, patches, archives or bundles here, or press Browse. rom-weaver works out what each file is and puts it on the right card.",
+      "Drop a ROM and its patches here: single files, a whole folder, a ZIP or 7z archive, or a bundle. Or press Add files to pick them. rom-weaver works out what each file is and puts it on the right card. Nothing leaves your browser.",
   }),
-  "ui.apply.tutorial.addFiles.title": msg({
-    id: "ui.apply.tutorial.addFiles.title",
-    message: "Add more files any time",
-  }),
+  "ui.apply.tutorial.addFiles.title": msg({ id: "ui.apply.tutorial.addFiles.title", message: "Add your files" }),
   "ui.apply.tutorial.applyDownload": msg({ id: "ui.apply.tutorial.applyDownload", message: "Apply & download" }),
-  "ui.apply.tutorial.browse": msg({ id: "ui.apply.tutorial.browse", message: "Browse" }),
+  "ui.apply.tutorial.browse": msg({ id: "ui.apply.tutorial.browse", message: "Add files" }),
   "ui.apply.tutorial.checks": msg({ id: "ui.apply.tutorial.checks", message: "Checks" }),
   "ui.apply.tutorial.createBundle": msg({ id: "ui.apply.tutorial.createBundle", message: "Start guided bundle" }),
   "ui.apply.tutorial.downloadTestBundle": msg({
     id: "ui.apply.tutorial.downloadTestBundle",
     message: "Download a test bundle",
   }),
-  "ui.apply.tutorial.dropFiles": msg({ id: "ui.apply.tutorial.dropFiles", message: "Drop files" }),
+  "ui.apply.tutorial.dropFiles": msg({ id: "ui.apply.tutorial.dropFiles", message: "Drop files or a folder" }),
   "ui.apply.tutorial.header": msg({ id: "ui.apply.tutorial.header", message: "Header options" }),
   "ui.apply.tutorial.loading": msg({
     id: "ui.apply.tutorial.loading",
@@ -570,27 +567,24 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.tutorial.output.body": msg({
     id: "ui.apply.tutorial.output.body",
     message:
-      "Choose a name and a format. .nes downloads the patched ROM itself; ZIP or 7z wraps it in an archive. Your original file is not changed.",
+      "Choose a name and a format. The ROM's own format, such as .nes, downloads the patched ROM itself; ZIP or 7z wraps it in an archive. Your original file is not changed.",
   }),
   "ui.apply.tutorial.output.title": msg({ id: "ui.apply.tutorial.output.title", message: "Apply and download" }),
   "ui.apply.tutorial.patchDetails": msg({ id: "ui.apply.tutorial.patchDetails", message: "Patch details" }),
   "ui.apply.tutorial.patches.body": msg({
     id: "ui.apply.tutorial.patches.body",
     message:
-      "One patch turns HELLO into ROM, the other turns WORLD into WEAVER. Both were made for the original ROM, so their order doesn't matter here.",
+      "Patches apply from the top of the list down; switch one off to leave it out. The practice patches turn HELLO into ROM and WORLD into WEAVER, and both were made for the original ROM, so their order doesn't matter. Cheats join this list and apply like any other patch; leave them off for the expected ROM WEAVER result.",
   }),
-  "ui.apply.tutorial.patches.title": msg({
-    id: "ui.apply.tutorial.patches.title",
-    message: "Two patches, two changes",
-  }),
+  "ui.apply.tutorial.patches.title": msg({ id: "ui.apply.tutorial.patches.title", message: "Patches and cheats" }),
   "ui.apply.tutorial.remove": msg({ id: "ui.apply.tutorial.remove", message: "Remove" }),
   "ui.apply.tutorial.replacePatch": msg({ id: "ui.apply.tutorial.replacePatch", message: "Replace patch" }),
   "ui.apply.tutorial.rom.body": msg({
     id: "ui.apply.tutorial.rom.body",
     message:
-      "hello-world.nes is a tiny homebrew NES game made for this guide. A patch only works on the exact ROM it was written for, so the card lists its checksums.",
+      "A patch only works on the exact ROM it was made for, so this card lists the ROM's checksums. The practice ROM, hello-world.nes, is a tiny homebrew game made for this guide.",
   }),
-  "ui.apply.tutorial.rom.title": msg({ id: "ui.apply.tutorial.rom.title", message: "This is your starting ROM" }),
+  "ui.apply.tutorial.rom.title": msg({ id: "ui.apply.tutorial.rom.title", message: "Check your starting ROM" }),
   "ui.apply.tutorial.sampleLoadFailed": msg({
     id: "ui.apply.tutorial.sampleLoadFailed",
     message: "Could not load the sample. Try again.",
@@ -603,24 +597,23 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.apply.tutorial.patches.tryIt": msg({
     id: "ui.apply.tutorial.patches.tryIt",
-    message: "Switch a patch off to apply only the other change.",
+    message: "Switch a patch off, or open its menu to add a practice cheat.",
   }),
   "ui.apply.tutorial.addFiles.tryIt": msg({
     id: "ui.apply.tutorial.addFiles.tryIt",
-    message: "Nothing to add for this run. Continue.",
+    message: "Add a ROM and at least one patch, or use the practice files below.",
   }),
-  "ui.apply.tutorial.cheats.title": msg({
-    id: "ui.apply.tutorial.cheats.title",
-    message: "Optional: add a practice cheat",
+  "ui.apply.tutorial.addFiles.readyTryIt": msg({
+    id: "ui.apply.tutorial.addFiles.readyTryIt",
+    message: "Your files are in. Continue to look at them.",
   }),
-  "ui.apply.tutorial.cheats.body": msg({
-    id: "ui.apply.tutorial.cheats.body",
-    message:
-      "Cheats join the patch list and apply like any other patch. Leave them off if you want the expected ROM WEAVER result.",
-  }),
-  "ui.apply.tutorial.cheats.tryIt": msg({
-    id: "ui.apply.tutorial.cheats.tryIt",
-    message: "Open the cheat menu to look at the practice catalog.",
+  "ui.apply.tutorial.archives": msg({ id: "ui.apply.tutorial.archives", message: "ZIP, 7z and bundles" }),
+  "ui.apply.tutorial.practiceFiles": msg({ id: "ui.apply.tutorial.practiceFiles", message: "Practice files" }),
+  "ui.apply.tutorial.noFiles": msg({ id: "ui.apply.tutorial.noFiles", message: "No files handy?" }),
+  "ui.apply.tutorial.usePractice": msg({ id: "ui.apply.tutorial.usePractice", message: "Use the practice files" }),
+  "ui.apply.tutorial.downloadPractice": msg({
+    id: "ui.apply.tutorial.downloadPractice",
+    message: "Download first-weave.zip",
   }),
   "ui.apply.tutorial.addCheats": msg({ id: "ui.apply.tutorial.addCheats", message: "Add cheats to the patch order" }),
   "ui.apply.tutorial.output.tryIt": msg({
@@ -653,7 +646,15 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.create.tutorial.addFiles.body": msg({
     id: "ui.create.tutorial.addFiles.body",
-    message: "Drop files here or press Browse to replace either ROM.",
+    message: "Drop files here or press Add files to replace either ROM.",
+  }),
+  "ui.create.tutorial.addFiles.title": msg({
+    id: "ui.create.tutorial.addFiles.title",
+    message: "Add more files any time",
+  }),
+  "ui.create.tutorial.addFiles.tryIt": msg({
+    id: "ui.create.tutorial.addFiles.tryIt",
+    message: "Nothing to add for this run. Continue.",
   }),
   "ui.create.tutorial.cheats.title": msg({
     id: "ui.create.tutorial.cheats.title",

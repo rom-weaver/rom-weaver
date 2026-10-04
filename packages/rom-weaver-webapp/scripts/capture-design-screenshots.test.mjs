@@ -7,6 +7,7 @@ test("guided captures wait for loaded sample data independently of tutorial copy
   const page = {
     locator: (selector) => {
       const locator = {
+        click: async () => calls.push([selector, "click"]),
         first: () => locator,
         waitFor: async (options) => calls.push([selector, options.state]),
       };
@@ -19,6 +20,7 @@ test("guided captures wait for loaded sample data independently of tutorial copy
     assert.deepEqual(calls, [
       ["body", "visible"],
       ...(captureCase.dismissGuide ? [['.sample-tutorial-dialog[aria-busy="false"]', "visible"]] : []),
+      ...(captureCase.practiceFiles ? [[".sample-tutorial-practice button", "click"]] : []),
       [captureCase.target, "visible"],
     ]);
     assert.equal("waitFor" in captureCase, false);
