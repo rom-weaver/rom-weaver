@@ -353,6 +353,7 @@
       "url": "https://github.com/hrydgard/ppsspp/archive/cae623f4e6c197f45662358ffc4605e3fb97298e.tar.gz",
       "archive": "ppsspp-cae623f4e6c197f45662358ffc4605e3fb97298e.tar.gz",
       "sha256": "abcf0053cb4e9324445f2d7639871f168fa285658c99d8d704757033aa6f1038",
+      "extractFirst": ["ext/vulkan/libvulkan.so.1.3.236"],
       "dependencies": [
         {
           "path": "libretro/libretro-common",
@@ -402,13 +403,6 @@
           "url": "https://github.com/rtissera/libchdr/archive/8bba7745d758627258b315997a860039244cedaf.tar.gz",
           "archive": "libchdr-8bba7745d758627258b315997a860039244cedaf.tar.gz",
           "sha256": "169e3d2edf86d5501434301fa2505319ebd40aae83d4a5eedf05f6becbf13a3b"
-        },
-        {
-          "path": "ext/libadrenotools",
-          "revision": "8fae8ce254dfc1344527e05301e43f37dea2df80",
-          "url": "https://github.com/bylaws/libadrenotools/archive/8fae8ce254dfc1344527e05301e43f37dea2df80.tar.gz",
-          "archive": "libadrenotools-8fae8ce254dfc1344527e05301e43f37dea2df80.tar.gz",
-          "sha256": "ceffce971676d4cfdf348a082df06fc92a1dca6d95bea892a480d63f200961cb"
         },
         {
           "path": "ext/lua",
@@ -554,7 +548,6 @@
         "ext/cpu_features/LICENSE",
         "ext/rcheevos/LICENSE",
         "ext/libchdr/LICENSE.txt",
-        "ext/libadrenotools/LICENSE",
         "ext/lua/README.md",
         "ext/miniupnp/LICENSE",
         "ext/zstd/LICENSE",
@@ -581,6 +574,11 @@
           "path": "libretro/libretro.cpp",
           "find": "      BootState state = PSP_InitUpdate(&g_bootErrorString);",
           "replace": "      // Headless frame budgets MUST exclude asynchronous boot polling.\n      BootState state;\n      do {\n         state = PSP_InitUpdate(&g_bootErrorString);\n         if (state == BootState::Booting)\n            sleep_ms(5, \"libretro-init-poll\");\n      } while (state == BootState::Booting);"
+        },
+        {
+          "path": "libretro/Makefile.common",
+          "find": "ifeq ($(TARGET_ARCH),arm64)\nSOURCES_CXX += \\\n\t  $(EXTDIR)/libadrenotools/src/driver.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/android_linker_ns.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/elf_soname_patcher.cpp\nendif",
+          "replace": "ifeq ($(PLATFORM_EXT), android)\nifeq ($(TARGET_ARCH),arm64)\nSOURCES_CXX += \\\n\t  $(EXTDIR)/libadrenotools/src/driver.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/android_linker_ns.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/elf_soname_patcher.cpp\nendif\nendif"
         }
       ]
     },
