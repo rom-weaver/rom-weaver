@@ -531,6 +531,7 @@ const waitForStableBox = async (page, locator) => {
 };
 
 const scanLiveApp = async (page, label) => {
+  const started = performance.now();
   await settleAnimations(page);
   const violations = await page.evaluate(async (tags) => {
     const results = await window.axe.run(document, {
@@ -567,7 +568,7 @@ const scanLiveApp = async (page, label) => {
     }));
   }, A11Y_TAGS);
   if (violations.length) throw new Error(`${label} accessibility violations:\n${JSON.stringify(violations, null, 2)}`);
-  process.stdout.write(`PASS accessibility ${label}\n`);
+  process.stdout.write(`PASS accessibility ${label} (${Math.round(performance.now() - started)}ms)\n`);
 };
 
 export const checkCssCoverage = (entries) => {
@@ -925,7 +926,9 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       guidedApply.click(),
     );
     for (let step = 1; step <= 5; step += 1) {
-      await tutorial.getByText(`Guided workbench · ${step}/5`).waitFor({ state: "visible", timeout: 60_000 });
+      await page
+        .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="5"]:not([data-moving])`)
+        .waitFor({ state: "visible", timeout: 60_000 });
       await scanVariants(`guided Apply ${step}/5`);
       if (step === 5) {
         const [download] = await Promise.all([
@@ -947,7 +950,9 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       await installAuditTools();
     });
     for (let step = 1; step <= 4; step += 1) {
-      await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
+      await page
+        .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="4"]:not([data-moving])`)
+        .waitFor({ state: "visible", timeout: 60_000 });
       await scanVariants(`guided Bundle ${step}/4`);
       if (step === 4) {
         const createBundleButton = page.getByRole("button", { name: "Share bundle", exact: true });
@@ -1024,7 +1029,9 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       () => guidedCreate.click(),
     );
     for (let step = 1; step <= 5; step += 1) {
-      await tutorial.getByText(`Guided workbench · ${step}/5`).waitFor({ state: "visible", timeout: 60_000 });
+      await page
+        .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="5"]:not([data-moving])`)
+        .waitFor({ state: "visible", timeout: 60_000 });
       await scanVariants(`guided Create ${step}/5`);
       if (step === 5) {
         await page.locator("#patch-builder-button-create").click();
@@ -1337,36 +1344,46 @@ const main = async () => {
       const unlistedStatus = await requestStatus(`${devBaseUrl}__rom_weaver_corpus__/files/not-listed.zip`);
       if (unlistedStatus !== 404) throw new Error(`unlisted corpus file returned ${unlistedStatus}, expected 404`);
     }
-    const { browser, createContext, persistentContextDirs } = await createBrowserContextFactory(
-      browserType,
-      browserName,
-    );
-    try {
-      if (RUN_AUDITS) {
-        await runAuditPhases(
-          () => runHydrationAudit(createContext, previewBaseUrl),
-          () => runAccessibilityAudit(createContext, previewBaseUrl),
-          browserName === "webkit",
+    const scenario = (name, run) =>
+      runE2EScenario(name, async () => {
+        const { browser, createContext, persistentContextDirs } = await createBrowserContextFactory(
+          browserType,
+          browserName,
         );
-      }
-      if (RUN_LINK_AUDIT) await runLinkAudit(createContext, devBaseUrl);
-      if (RUN_RAW_JOURNEY) {
-        await runApplyJourney(createContext, previewBaseUrl, "raw apply/download", [
+        try {
+          await run(createContext);
+        } finally {
+          await browser?.close();
+          for (const userDataDir of persistentContextDirs) fs.rmSync(userDataDir, { force: true, recursive: true });
+        }
+      });
+    if (RUN_AUDITS) {
+      await runAuditPhases(
+        () => scenario("hydration", (createContext) => runHydrationAudit(createContext, previewBaseUrl)),
+        () => scenario("accessibility", (createContext) => runAccessibilityAudit(createContext, previewBaseUrl)),
+        browserName === "webkit",
+      );
+    }
+    if (RUN_LINK_AUDIT) await scenario("links", (createContext) => runLinkAudit(createContext, devBaseUrl));
+    if (RUN_RAW_JOURNEY) {
+      await scenario("raw apply/download", (createContext) =>
+        runApplyJourney(createContext, previewBaseUrl, "raw apply/download", [
           "archive_sources/game.bin",
           "archive_sources/change.ips",
-        ]);
-      }
-      if (RUN_ARCHIVE_JOURNEY) {
-        await runApplyJourney(createContext, previewBaseUrl, "archive routing/apply/download", [
+        ]),
+      );
+    }
+    if (RUN_ARCHIVE_JOURNEY) {
+      await scenario("archive routing/apply/download", (createContext) =>
+        runApplyJourney(createContext, previewBaseUrl, "archive routing/apply/download", [
           "archives/one-rom.zip",
           "archives/one-patch.7z",
-        ]);
-        // The stress page MUST use the dev server because it is not a production entry point.
-        if (browserName === "chromium" && corpusDir) await runArchiveStressSmoke(createContext, devBaseUrl);
+        ]),
+      );
+      // The stress page MUST use the dev server because it is not a production entry point.
+      if (browserName === "chromium" && corpusDir) {
+        await scenario("archive worker reuse", (createContext) => runArchiveStressSmoke(createContext, devBaseUrl));
       }
-    } finally {
-      await browser?.close();
-      for (const userDataDir of persistentContextDirs) fs.rmSync(userDataDir, { force: true, recursive: true });
     }
   } catch (error) {
     const serverOutput = [preview.output(), dev.output()].filter((output) => output.trim()).join("\n");
@@ -1379,7 +1396,33 @@ const main = async () => {
   }
 };
 
-const runWithRetry = async () => {
+export const runE2EScenario = async (name, run, report = (line) => process.stdout.write(`${line}\n`)) => {
+  for (let attempt = 1; attempt <= E2E_ATTEMPTS; attempt += 1) {
+    const started = performance.now();
+    let status = "failed";
+    try {
+      await run();
+      status = "passed";
+      return;
+    } catch (error) {
+      const message = error?.message || String(error);
+      // Assertions and locator timeouts MUST fail immediately; replaying them hides deterministic regressions.
+      const infrastructureFailure =
+        /browser has been closed|browser.*disconnected|Target crashed|ECONNRESET|ECONNREFUSED|net::ERR_CONNECTION_(?:RESET|CLOSED)/i.test(
+          message,
+        );
+      report(`FAIL ${name} attempt=${attempt}: ${error?.stack || message}`);
+      if (attempt === E2E_ATTEMPTS || !infrastructureFailure) throw error;
+      report(`RETRY ${name} with a fresh browser`);
+    } finally {
+      report(
+        `TIMING ${name} attempt=${attempt} status=${status} durationMs=${Math.round(performance.now() - started)}`,
+      );
+    }
+  }
+};
+
+const run = async () => {
   const build = resolveE2EBuild(process.env);
   if (build.source === "prebuilt") {
     assertPrebuiltWebappDist((file) => fs.readFileSync(path.join(PACKAGE_DIR, "dist", file), "utf8"));
@@ -1390,17 +1433,7 @@ const runWithRetry = async () => {
       stdio: "inherit",
     });
   }
-  for (let attempt = 1; attempt <= E2E_ATTEMPTS; attempt += 1) {
-    try {
-      await main();
-      return;
-    } catch (error) {
-      if (attempt === E2E_ATTEMPTS) throw error;
-      process.stderr.write(
-        `Webapp E2E attempt ${attempt} failed; retrying once with a fresh browser:\n${error?.message || error}\n`,
-      );
-    }
-  }
+  await main();
 };
 
 // Guards direct execution (`node scripts/run-webapp-e2e.mjs`, or via the
@@ -1408,7 +1441,7 @@ const runWithRetry = async () => {
 // unit tests in run-webapp-e2e.test.mjs import this file for its exported
 // pure helpers and must not trigger a full browser E2E run as a side effect.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  runWithRetry().catch((error) => {
+  run().catch((error) => {
     process.stderr.write(`${error?.stack || String(error)}\n`);
     process.exitCode = 1;
   });
