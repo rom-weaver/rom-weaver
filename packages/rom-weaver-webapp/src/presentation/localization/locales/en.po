@@ -465,11 +465,6 @@ msgstr "App"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tools.app"
-msgstr "Controls"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.tools.appearance"
 msgstr "Appearance"
 
@@ -971,7 +966,7 @@ msgstr "Choose the output name, format, compression, and header. Then press Appl
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.validationMismatchOverride"
-msgstr "Choose the ROM that this patch was made for, or use the override in 0x05."
+msgstr "Choose the ROM that this patch was made for, or use the override in 0x04."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1107,6 +1102,11 @@ msgstr "Containers"
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.continue"
 msgstr "Continue"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.app"
+msgstr "Controls"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1431,7 +1431,7 @@ msgstr "Edit patch position, currently {position} of {total}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.saveThesis"
-msgstr "Edit a game save."
+msgstr "Edit trainer names, money, badges, hearts, and gear in a game save,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1931,7 +1931,7 @@ msgstr "Keep rom-weaver working without a network."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis"
-msgstr "Trim a ROM."
+msgstr "Keep the game."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1951,7 +1951,7 @@ msgstr "Keeps this selection"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyThesis"
-msgstr "Identify a ROM."
+msgstr "Know your ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2126,6 +2126,11 @@ msgstr "Media profile not supported"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tools.menu"
+msgstr "Menu"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.tools"
 msgstr "Menu"
 
 #. js-lingui-explicit-id
@@ -3810,11 +3815,6 @@ msgstr "Tool"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tools.tools"
-msgstr "Menu"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.total"
 msgstr "TOTAL"
 
@@ -3851,7 +3851,7 @@ msgstr "Trim tool"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis"
-msgstr "Test a ROM."
+msgstr "Try your ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3890,7 +3890,7 @@ msgstr "Unchanged"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.toolsThesis"
-msgstr "Undo a PPF patch."
+msgstr "Undo the patch."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
