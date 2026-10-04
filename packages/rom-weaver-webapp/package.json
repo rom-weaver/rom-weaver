@@ -59,7 +59,7 @@
     "format:css": "biome format --write . && biome check --write --only=assist/source/useSortedProperties .",
     "format:css:check": "biome check --only=assist/source/useSortedProperties .",
     "i18n:compile": "lingui compile --typescript --output-prefix \"\"",
-    "i18n:extract": "lingui extract",
+    "i18n:extract": "lingui extract --overwrite",
     "icons:channels": "npm run brand:check && node scripts/generate-channel-icons.mjs --output-dir ../../dist/generated-assets",
     "icons:channels:check": "npm run brand:check && node scripts/generate-channel-icons.mjs --output-dir ../../dist/generated-assets --check",
     "icons:optimize": "npm run icons:channels && run-s icons:optimize:png icons:optimize:ico",

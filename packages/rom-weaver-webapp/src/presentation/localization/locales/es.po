@@ -465,11 +465,6 @@ msgstr "App"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tools.app"
-msgstr "Controles"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.tools.appearance"
 msgstr "Apariencia"
 
@@ -971,7 +966,7 @@ msgstr "Elige el nombre, formato, compresión y encabezado de salida. Luego puls
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.validationMismatchOverride"
-msgstr "Elige la ROM para la que se creó este parche o usa la anulación en 0x05."
+msgstr "Elige la ROM para la que se creó este parche o usa la anulación en 0x04."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1107,6 +1102,11 @@ msgstr "Contenedores"
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.continue"
 msgstr "Continuar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.app"
+msgstr "Controles"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1431,7 +1431,7 @@ msgstr "Editar posición del parche, actualmente {position} de {total}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.saveThesis"
-msgstr "Edita una partida guardada."
+msgstr "Edita nombres de entrenador, dinero, medallas, corazones y equipo en una partida guardada,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1636,7 +1636,7 @@ msgstr "Buscar juegos (por nombre/suma de verificación), herramientas, guías o
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyThesis2"
-msgstr "por suma de verificación, aquí mismo en este navegador."
+msgstr "Encuentra su coincidencia exacta."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1931,7 +1931,7 @@ msgstr "Usa rom-weaver sin conexión a la red."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis"
-msgstr "Recorta una ROM."
+msgstr "Conserva el juego."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1951,7 +1951,7 @@ msgstr "Conserva esta selección"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyThesis"
-msgstr "Identifica una ROM."
+msgstr "Conoce tu ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2066,7 +2066,7 @@ msgstr "Buscando esta ROM en la base de datos de títulos. Las filas se completa
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.trimThesis2"
-msgstr "y redúcelos para almacenarlos."
+msgstr "Quita el relleno."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2126,6 +2126,11 @@ msgstr "Perfil de medio no compatible"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tools.menu"
+msgstr "Menú"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tools.tools"
 msgstr "Menú"
 
 #. js-lingui-explicit-id
@@ -2941,7 +2946,7 @@ msgstr "Lista"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.toolsThesis2"
-msgstr "usando los datos de deshacer del propio parche."
+msgstr "Recupera el original."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3231,7 +3236,7 @@ msgstr "Ver formatos compatibles"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis2"
-msgstr "con partidas guardadas que permanecen en este dispositivo."
+msgstr "Mira tus cambios en acción."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3810,11 +3815,6 @@ msgstr "Herramienta"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tools.tools"
-msgstr "Menú"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.total"
 msgstr "TOTAL"
 
@@ -3851,7 +3851,7 @@ msgstr "Herramienta Recortar"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis"
-msgstr "Prueba una ROM."
+msgstr "Prueba tu ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3890,7 +3890,7 @@ msgstr "Sin cambios"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.toolsThesis"
-msgstr "Deshaz un parche PPF."
+msgstr "Deshaz el parche."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
