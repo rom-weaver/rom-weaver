@@ -3,10 +3,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { type ReactNode, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  getViewTutorialStep,
   SampleTutorial,
   SampleTutorialStart,
   type SampleTutorialStep,
 } from "../../src/public/react/components/ds/sample-tutorial.tsx";
+import { RomWeaverSettingsProvider, useUiLocalizer } from "../../src/public/react/settings-context.tsx";
 
 const STEPS: readonly SampleTutorialStep[] = [
   {
@@ -153,7 +155,7 @@ it("removes the guide query when the tutorial ends", () => {
     </div>,
   );
 
-  fireEvent.click(screen.getByRole("button", { name: "Exit tutorial" }));
+  fireEvent.click(screen.getByRole("button", { name: "Leave the guide" }));
   expect(window.location.search).toBe("");
   expect(onClose).toHaveBeenCalledOnce();
 });
@@ -166,11 +168,11 @@ describe("sample tutorial", () => {
       </div>,
     );
 
-    const guide = screen.getByRole("dialog", { name: "Loading the practice files" });
+    const guide = screen.getByRole("dialog", { name: "Loading the sample files" });
     expect(guide.getAttribute("aria-busy")).toBe("true");
     expect(guide.getAttribute("data-loading")).toBe("true");
-    expect(screen.getByRole("progressbar", { name: "Loading practice files" }).getAttribute("aria-valuetext")).toBe(
-      "Preparing the guided workbench",
+    expect(screen.getByRole("progressbar", { name: "Loading sample files" }).getAttribute("aria-valuetext")).toBe(
+      "Getting the sample ready",
     );
   });
 
@@ -188,14 +190,14 @@ describe("sample tutorial", () => {
     await waitFor(() => expect(first.classList.contains("sample-tutorial-target")).toBe(true));
     expect(screen.getByRole("button", { name: "First drawer" }).getAttribute("aria-expanded")).toBe("true");
     expect(first.querySelector(".patch-menu-btn")?.getAttribute("aria-expanded")).toBe("true");
-    const actions = screen.getByRole("list", { name: "Available actions" });
+    const actions = screen.getByRole("list", { name: "On this card" });
     expect(actions.textContent).toContain("Checks");
     expect(actions.querySelector("svg")).toBeTruthy();
-    expect(screen.getByText("The top-right X exits; the final action button also ends the tutorial.")).toBeTruthy();
+    expect(screen.getByText("Esc or ✕ leaves the guide.")).toBeTruthy();
     const back = screen.getByRole("button", { name: "Back" }) as HTMLButtonElement;
     expect(back.disabled).toBe(false);
     expect(back.getAttribute("aria-disabled")).toBe("true");
-    expect(document.querySelector("[aria-live]")?.textContent).not.toContain("top-right X");
+    expect(document.querySelector("[aria-live]")?.textContent).not.toContain("leaves the guide");
     fireEvent.click(first);
     expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -454,5 +456,87 @@ describe("sample tutorial", () => {
     await waitFor(() => expect(drawer.getAttribute("aria-expanded")).toBe("true"));
     endGuide();
     expect(drawer.getAttribute("aria-expanded")).toBe("false");
+  });
+});
+
+describe("sample tutorial step card", () => {
+  const ViewGuide = ({ steps }: { steps?: readonly SampleTutorialStep[] }) => {
+    const localizer = useUiLocalizer();
+    return (
+      <SampleTutorial
+        loadingBody="Loading."
+        onClose={vi.fn()}
+        ready
+        steps={steps ?? [getViewTutorialStep(localizer, "#tutorial-first"), STEPS[1] as SampleTutorialStep]}
+      />
+    );
+  };
+  const viewWorkbench = (detailedViewEnabled: boolean, withToggle = true) => (
+    <RomWeaverSettingsProvider settings={{ detailedViewEnabled }}>
+      <div className="rw-app">
+        <div className="workflow-panel-head">
+          {withToggle ? (
+            <label className="panel-view-toggle">
+              <input type="checkbox" />
+              <span>Detailed</span>
+            </label>
+          ) : null}
+        </div>
+        <TutorialSection id="tutorial-first" label="First drawer" />
+        <TutorialSection id="tutorial-second" label="Second drawer" />
+        <ViewGuide />
+      </div>
+    </RomWeaverSettingsProvider>
+  );
+
+  it("numbers the step in the beacon and kicker and shows its Try it action", () => {
+    render(
+      <div className="rw-app">
+        <TutorialSection id="tutorial-first" label="First drawer" />
+        <TutorialSection id="tutorial-second" label="Second drawer" />
+        <SampleTutorial
+          loadingBody="Loading."
+          onClose={vi.fn()}
+          ready
+          steps={[
+            { ...(STEPS[0] as SampleTutorialStep), tryIt: "Open the first drawer." },
+            STEPS[1] as SampleTutorialStep,
+          ]}
+        />
+      </div>,
+    );
+
+    expect(document.querySelector(".sample-tutorial-beacon")?.textContent).toBe("0x01");
+    expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run · Step 1 of 2");
+    expect(document.querySelectorAll(".sample-tutorial-pips i")).toHaveLength(2);
+    expect(document.querySelector(".sample-tutorial-pips [data-state='current']")).toBe(
+      document.querySelector(".sample-tutorial-pips i"),
+    );
+    const tryIt = document.querySelector(".sample-tutorial-try");
+    expect(tryIt?.textContent).toBe("Try itOpen the first drawer.");
+  });
+
+  it("describes the current view and follows the Detailed setting while the step is open", async () => {
+    const { rerender } = render(viewWorkbench(false));
+
+    expect(screen.getByRole("heading", { name: "Choose how much to see" })).toBeTruthy();
+    expect(screen.getByText(/You're in Simple view/)).toBeTruthy();
+    expect(document.querySelector(".sample-tutorial-compare [data-current='true']")?.textContent).toContain("Simple");
+    expect(screen.getByText(/Switch Detailed on/)).toBeTruthy();
+    const head = document.querySelector(".workflow-panel-head") as HTMLElement;
+    await waitFor(() => expect(head.classList.contains("sample-tutorial-lift")).toBe(true));
+
+    rerender(viewWorkbench(true));
+    expect(screen.getByText(/You're in Detailed view/)).toBeTruthy();
+    expect(document.querySelector(".sample-tutorial-compare [data-current='true']")?.textContent).toContain("Detailed");
+    expect(screen.getByText(/Switch Detailed off/)).toBeTruthy();
+  });
+
+  it("leaves the view step out when the page has no Detailed switch", () => {
+    render(viewWorkbench(false, false));
+
+    expect(screen.queryByRole("heading", { name: "Choose how much to see" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Second section" })).toBeTruthy();
+    expect(document.querySelector(".sample-tutorial-kicker")?.textContent).toBe("Practice run · Step 1 of 1");
   });
 });

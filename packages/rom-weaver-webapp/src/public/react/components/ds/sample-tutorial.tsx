@@ -94,9 +94,41 @@ type SampleTutorialStep = {
   openDrawers?: boolean;
   openMenu?: boolean;
   placement?: "bottom" | "top";
+  /** Document-level selector the step depends on. A step whose selector
+      matches nothing when the guide opens is left out, so hosts without that
+      control never count a step they cannot show. */
+  requires?: string;
   target?: string;
   title: string;
+  /** The one thing the reader should do on this step. */
+  tryIt?: string;
+  /** The Simple/Detailed step: its copy follows the live view setting, so the
+      guide supplies body, Try it, and the comparison itself. */
+  view?: boolean;
 };
+
+const VIEW_TOGGLE_SELECTOR = ".panel-view-toggle";
+/** The switch's heading, not the switch: the heading is its own z-index layer,
+    so a lift on the switch alone would stay under the scrim. */
+const VIEW_TOGGLE_HEAD_SELECTOR = ".workflow-panel-head";
+
+/**
+ * The step that explains the Simple and Detailed views on the card it frames.
+ * The panel heading's switch is lifted beside the card so flipping it shows the
+ * card gain or lose its drawers. Embeds without the switch skip the step.
+ */
+const getViewTutorialStep = (localizer: ReturnType<typeof useUiLocalizer>, target: string): SampleTutorialStep => ({
+  body: "",
+  lift: VIEW_TOGGLE_HEAD_SELECTOR,
+  openDrawers: true,
+  requires: VIEW_TOGGLE_SELECTOR,
+  target,
+  title: localizer.message("ui.tutorial.view.title"),
+  view: true,
+});
+
+/** Step numbers in the workbench's own 0x01 notation. */
+const hexStep = (index: number) => `0x${(index + 1).toString(16).toUpperCase().padStart(2, "0")}`;
 
 const ACTION_ICONS: Record<SampleTutorialAction, ComponentType<{ className?: string }>> = {
   apply: Stamp,
@@ -252,14 +284,27 @@ const anchorToTarget = (rect: GuideRect, dialog: HTMLElement, prefer: "bottom" |
 /**
  * How far to scroll so the row and its card sit together, centred as a pair
  * when the viewport can hold them. A row too tall to fit alongside the card
- * gives up its bottom edge rather than its top.
+ * gives up its bottom edge rather than its top. `rect` is what has to stay in
+ * view - the row plus any control lifted with it - while the side the card
+ * takes is still decided by the row alone, as the anchoring does.
  */
-const scrollDeltaForPair = (rect: GuideRect, dialog: HTMLElement | null, prefer: "bottom" | "top") => {
+const scrollDeltaForPair = (rect: GuideRect, dialog: HTMLElement | null, placeAbove: boolean) => {
   const cardHeight = dialog?.getBoundingClientRect().height ?? 0;
   const pair = rect.height + GUIDE_GAP + cardHeight;
   const slack = Math.max(GUIDE_MARGIN, (window.innerHeight - pair) / 2);
-  const desiredTop = shouldPlaceAbove(rect.height, prefer) ? slack + cardHeight + GUIDE_GAP : slack;
+  const desiredTop = placeAbove ? slack + cardHeight + GUIDE_GAP : slack;
   return rect.top - desiredTop;
+};
+
+/** The row and the control lifted with it, as one box to keep on screen. */
+const unionRect = (rect: GuideRect, other: GuideRect | undefined): GuideRect => {
+  // A hidden or `display: contents` lift reports an empty box and adds nothing.
+  if (!other?.height) return rect;
+  const top = Math.min(rect.top, other.top);
+  const bottom = Math.max(rect.bottom, other.bottom);
+  const left = Math.min(rect.left, other.left);
+  const width = Math.max(rect.left + rect.width, other.left + other.width) - left;
+  return { bottom, height: bottom - top, left, top, width };
 };
 
 const SampleTutorialStart = ({
@@ -433,7 +478,7 @@ const SampleTutorial = ({
   loadingBody,
   onClose,
   ready,
-  steps,
+  steps: allSteps,
 }: {
   loadingBody: string;
   onClose: () => void;
@@ -441,9 +486,26 @@ const SampleTutorial = ({
   steps: readonly SampleTutorialStep[];
 }) => {
   const localizer = useUiLocalizer();
+  const { detailedViewEnabled = false } = useRomWeaverSettings();
   const instructionsLabel = localizer.message("ui.tutorial.instructions");
+  const actionsLabelId = useId();
   const bodyId = useId();
   const titleId = useId();
+  // Decided once, when the guide opens: a control appearing or vanishing
+  // mid-run must not renumber the steps under the reader. Measured after the
+  // first commit, since the guide can mount in the same pass as the control,
+  // and before paint, so a skipped step is never drawn.
+  const [missingRequirements, setMissingRequirements] = useState<ReadonlySet<string>>(() => new Set());
+  const initialStepsRef = useRef(allSteps);
+  useLayoutEffect(() => {
+    const selectors = initialStepsRef.current.flatMap((candidate) => (candidate.requires ? [candidate.requires] : []));
+    const missing = selectors.filter((selector) => !document.querySelector(selector));
+    if (missing.length) setMissingRequirements(new Set(missing));
+  }, []);
+  const steps = useMemo(
+    () => allSteps.filter((candidate) => !(candidate.requires && missingRequirements.has(candidate.requires))),
+    [allSteps, missingRequirements],
+  );
   const dialogRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
   const [stepIndex, setStepIndex] = useState(0);
@@ -707,7 +769,11 @@ const SampleTutorial = ({
     // Park the row and its card together, and place them for where that scroll
     // is headed - once placed they ride the page, so this is the only chance.
     const placeAndReveal = (glide: boolean) => {
-      const top = scrollDeltaForPair(targetEl.getBoundingClientRect(), dialog, prefer);
+      const rect = targetEl.getBoundingClientRect();
+      // The lifted control is part of the step - the view step's switch sits in
+      // the panel heading above the row - so the reveal keeps it in view too.
+      const lifted = stepLift ? document.querySelector(stepLift)?.getBoundingClientRect() : undefined;
+      const top = scrollDeltaForPair(unionRect(rect, lifted), dialog, shouldPlaceAbove(rect.height, prefer));
       const shift = Math.abs(top) > 1 ? top : 0;
       place(glide, shift);
       if (shift) window.scrollBy({ behavior, top: shift });
@@ -760,11 +826,18 @@ const SampleTutorial = ({
       // the next step's placement measure from the CSS-pinned bar and glide
       // across the screen instead of from the card the user is looking at.
     };
-  }, [stepPlacement, stepTarget, targetEl]);
+  }, [stepLift, stepPlacement, stepTarget, targetEl]);
 
   if (!(portalTarget && step)) return null;
   const finalStep = live && stepIndex === steps.length - 1;
   const copyKey = live ? stepIndex : "loading";
+  const stepBody = step.view
+    ? localizer.message(detailedViewEnabled ? "ui.tutorial.view.detailedBody" : "ui.tutorial.view.simpleBody")
+    : step.body;
+  const stepTryIt = step.view
+    ? localizer.message(detailedViewEnabled ? "ui.tutorial.view.detailedTryIt" : "ui.tutorial.view.simpleTryIt")
+    : step.tryIt;
+  const currentLabel = localizer.message("ui.tutorial.view.current");
   const layer = (
     <div className="sample-tutorial-layer">
       <div aria-hidden="true" className="sample-tutorial-scrim" />
@@ -793,7 +866,7 @@ const SampleTutorial = ({
           <X aria-hidden="true" />
         </button>
         <span aria-hidden="true" className="sample-tutorial-beacon">
-          0x
+          {live ? hexStep(stepIndex) : "0x"}
         </span>
         {/* The live region has to outlive the step copy: a region inserted
             together with its content is never announced, so only the copy
@@ -802,13 +875,49 @@ const SampleTutorial = ({
         <section aria-label={instructionsLabel} className="sample-tutorial-copy-area" tabIndex={0}>
           <div aria-live="polite" className="sample-tutorial-live">
             <div className="sample-tutorial-copy" key={copyKey}>
-              <span className="sample-tutorial-kicker mono">
-                {live
-                  ? localizer.message("ui.tutorial.step", { step: stepIndex + 1, total: steps.length })
-                  : localizer.message("ui.tutorial.preparing")}
-              </span>
+              <div className="sample-tutorial-kicker-row">
+                <span className="sample-tutorial-kicker mono">
+                  {live
+                    ? localizer.message("ui.tutorial.step", { step: stepIndex + 1, total: steps.length })
+                    : localizer.message("ui.tutorial.preparing")}
+                </span>
+                {live ? (
+                  <span aria-hidden="true" className="sample-tutorial-pips">
+                    {steps.map((candidate, index) => (
+                      <i
+                        data-state={index < stepIndex ? "done" : index === stepIndex ? "current" : undefined}
+                        key={candidate.title}
+                      />
+                    ))}
+                  </span>
+                ) : null}
+              </div>
               <h2 id={titleId}>{live ? step.title : localizer.message("ui.tutorial.loadingTitle")}</h2>
-              <p id={bodyId}>{live ? step.body : loadingBody}</p>
+              <p id={bodyId}>{live ? stepBody : loadingBody}</p>
+              {live && step.view ? (
+                <div className="sample-tutorial-compare">
+                  <p data-current={detailedViewEnabled ? undefined : "true"}>
+                    <strong>
+                      {localizer.message("ui.tutorial.view.simple")}
+                      {detailedViewEnabled ? null : <em className="mono">{currentLabel}</em>}
+                    </strong>
+                    {localizer.message("ui.tutorial.view.simpleSummary")}
+                  </p>
+                  <p data-current={detailedViewEnabled ? "true" : undefined}>
+                    <strong>
+                      {localizer.message("ui.view.detailed")}
+                      {detailedViewEnabled ? <em className="mono">{currentLabel}</em> : null}
+                    </strong>
+                    {localizer.message("ui.tutorial.view.detailedSummary")}
+                  </p>
+                </div>
+              ) : null}
+              {live && stepTryIt ? (
+                <p className="sample-tutorial-try">
+                  <b className="mono">{localizer.message("ui.tutorial.tryIt")}</b>
+                  <span>{stepTryIt}</span>
+                </p>
+              ) : null}
               {live ? null : (
                 <div
                   aria-label={localizer.message("ui.tutorial.loadingProgress")}
@@ -820,7 +929,12 @@ const SampleTutorial = ({
                 </div>
               )}
               {live && step.actions?.length ? (
-                <ul aria-label={localizer.message("ui.tutorial.actions")} className="sample-tutorial-action-list">
+                <span className="sample-tutorial-action-label mono" id={actionsLabelId}>
+                  {localizer.message("ui.tutorial.actions")}
+                </span>
+              ) : null}
+              {live && step.actions?.length ? (
+                <ul aria-labelledby={actionsLabelId} className="sample-tutorial-action-list">
                   {step.actions.map(([action, label]) => {
                     const Icon = ACTION_ICONS[action];
                     return (
@@ -874,4 +988,4 @@ const SampleTutorial = ({
   return createPortal(layer, portalTarget);
 };
 
-export { SampleTutorial, SampleTutorialStart, type SampleTutorialStep, useGuidedSampleStart };
+export { getViewTutorialStep, SampleTutorial, SampleTutorialStart, type SampleTutorialStep, useGuidedSampleStart };
