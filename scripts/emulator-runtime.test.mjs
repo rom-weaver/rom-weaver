@@ -127,6 +127,17 @@ test("Mupen64Plus leaves Apple's fdopen declaration intact", () => {
 
 test("PPSSPP uses each upstream platform directory and native architecture", () => {
   const ppsspp = sources.cores.find(({ id }) => id === "ppsspp");
+  assert.deepEqual(
+    ppsspp.dependencies.find(({ path }) => path === "ext/libadrenotools"),
+    {
+      path: "ext/libadrenotools",
+      revision: "8fae8ce254dfc1344527e05301e43f37dea2df80",
+      url: "https://github.com/bylaws/libadrenotools/archive/8fae8ce254dfc1344527e05301e43f37dea2df80.tar.gz",
+      archive: "libadrenotools-8fae8ce254dfc1344527e05301e43f37dea2df80.tar.gz",
+      sha256: "ceffce971676d4cfdf348a082df06fc92a1dca6d95bea892a480d63f200961cb",
+    },
+  );
+  assert.ok(ppsspp.licenses.includes("ext/libadrenotools/LICENSE"));
   for (const [name, expected] of [
     ["linux-x64-gnu", "--prefix=./linux/x86_64"],
     ["darwin-x64", "--prefix=./macosx/universal"],
