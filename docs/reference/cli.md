@@ -254,6 +254,8 @@ The internal `ingest` command also identifies each ROM asset. It identifies a pa
 
 `checksum` computes CRC32, MD5, and SHA-1 when `--algo` is omitted. Passing `--algo` replaces that default set; repeat the flag or separate values with commas to compute multiple algorithms.
 
+Human checksum output includes the primary digests and each applicable variant digest. `--probe` also reports the detected platform or disc format and ROM header details.
+
 Native `checksum --digest --algo ALGO` prints only the primary checksum in lowercase, followed by one newline. It requires exactly one algorithm. It prints no filename, label, variant checksums, color, or elapsed time. `--quiet` retains the digest; progress and errors use stderr. A failed operation prints no digest. `--digest` conflicts with `--json`, `--jsonl`, and `--dry-run`.
 
 `--digest` retains the normal input semantics: archives open automatically, `--no-extract` hashes the archive bytes, and `--start`/`--length` select a byte range. It is not a checksum-file verification mode.
@@ -262,7 +264,9 @@ Native `checksum --digest --algo ALGO` prints only the primary checksum in lower
 
 `save identify`, `inspect`, `get`, `set`, and `export-schema` take a save path. `identify`, `inspect`, `get`, and `export-schema` do not write a file. `get` also takes one field ID.
 
-`save set` takes one or more `FIELD=VALUE` assignments. It checks all assignments before it changes a copy. `-n` or `--dry-run` returns the change preview and writes nothing.
+`save export-schema` requires a save path, including when `--game` selects the handler.
+
+`save set` takes one or more `FIELD=VALUE` assignments. It checks all assignments before it changes a copy. `-n` or `--dry-run` returns the change preview and writes nothing. Human output reports on stderr when the requested values already match the save; `--quiet` retains this explanation.
 
 Without `-o` or `--output`, `save set` writes a free sibling name such as `game-edited.sav`. It adds a number when that name exists. An explicit output path must not exist unless `--force` is present. The output path must not name the source file.
 
@@ -270,7 +274,7 @@ Without `-o` or `--output`, `save set` writes a free sibling name such as `game-
 
 [Save Editor support](save-editor.md) lists the accepted game IDs, input layouts, and fields.
 
-`save list-games` returns all supported game definitions and fresh-generation game IDs. `save create` accepts `--game`, `--template`, optional `FIELD=VALUE` assignments, `--output`, `--dry-run`, and `--force`. Without a template, `--game` selects a supported fresh initializer. Output is required unless `--dry-run` is set. [Create saves with the CLI](../how-to/create-game-saves-cli.md) gives the procedures.
+`save list-games` returns all supported game definitions and fresh-generation game IDs. `save create` accepts `--game`, `--template`, optional `FIELD=VALUE` assignments, `--output`, `--dry-run`, and `--force`. Without a template, `--game` selects a supported fresh initializer. Output is required unless `--dry-run` is set. Human dry-run output shows field changes and a no-write notice. [Create saves with the CLI](../how-to/create-game-saves-cli.md) gives the procedures.
 
 The application includes every supported save definition. `save list-games` reports the complete registry. Adding game support requires an application update.
 

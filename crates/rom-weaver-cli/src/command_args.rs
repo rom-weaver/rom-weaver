@@ -3845,7 +3845,7 @@ pub struct SaveExportSchemaCommand {
         not(target_arch = "wasm32"),
         arg(
             value_name = "SAVE",
-            help = "Save file to read. Omit it and pass --game instead"
+            help = "Save file to validate and read the field schema from"
         )
     )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]

@@ -521,3 +521,37 @@ fn every_success_shape_renders_with_its_expected_details() {
         render_success(&surface, &shape, &OutputSelection::default());
     }
 }
+
+#[test]
+fn created_save_preview_is_not_a_completed_write() {
+    let preview = ProgressEvent {
+        stage: "preview".to_string(),
+        ..event("save-create", "Save edit preview is valid", None)
+    };
+    assert!(is_save_preview(&preview));
+    assert!(!is_save_preview(&ProgressEvent {
+        stage: "create".to_string(),
+        ..preview
+    }));
+}
+
+#[test]
+fn checksum_variant_results_keep_each_nonraw_digest_and_label() {
+    let checksum = event(
+        "checksum",
+        "",
+        Some(json!({
+            "checksum_variants": [
+                { "id": "raw", "label": "Raw", "checksums": { "crc32": "primary" } },
+                { "id": "remove_header", "label": "Remove header", "checksums": { "crc32": "headerless", "sha1": "headerless-sha1" } },
+            ],
+        })),
+    );
+    assert_eq!(
+        checksum_variant_pairs(&checksum),
+        vec![
+            ("Remove header / CRC32".into(), "headerless".into()),
+            ("Remove header / SHA1".into(), "headerless-sha1".into()),
+        ]
+    );
+}

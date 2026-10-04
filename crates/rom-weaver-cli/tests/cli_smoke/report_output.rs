@@ -338,3 +338,89 @@ fn report_output_sidecar_warning_escapes_controls_and_prints_once() {
         }
     }
 }
+
+#[test]
+fn human_results_save_lists_previews_and_unchanged_values() {
+    let temp = setup_temp_dir();
+    let save = temp.child("fresh.srm");
+    let path = save.path().to_str().expect("save path");
+    let list = String::from_utf8(command_stdout(&["save", "list-games"], 0)).expect("UTF-8");
+    assert!(list.lines().count() > 1, "{list}");
+    assert!(!list.contains("\\n"), "{list}");
+    let preview = String::from_utf8(command_stdout(
+        &[
+            "save",
+            "create",
+            "--game",
+            "super-mario-world",
+            "slot_1.progress.exits_completed=1",
+            "--dry-run",
+            "--quiet",
+        ],
+        0,
+    ))
+    .expect("UTF-8");
+    assert!(preview.contains("0 -> 1"), "{preview}");
+    assert!(preview.contains("no files written"), "{preview}");
+    assert!(!save.path().exists());
+    assert!(
+        command_stdout(
+            &["save", "create", "--game", "super-mario-world", "-o", path],
+            0
+        )
+        .is_empty()
+    );
+    let unchanged = command_output_with_env(
+        &[
+            "save",
+            "set",
+            path,
+            "slot_1.progress.exits_completed=0",
+            "--game",
+            "super-mario-world",
+            "--quiet",
+        ],
+        &[],
+        0,
+    );
+    assert!(unchanged.stdout.is_empty());
+    let explanation = String::from_utf8(unchanged.stderr).expect("UTF-8");
+    assert!(explanation.contains("already match"), "{explanation}");
+}
+
+#[test]
+fn human_results_trim_and_empty_database_queries_explain_empty_results() {
+    let temp = setup_temp_dir();
+    let input = temp.child("unsupported.txt");
+    input.write_str("unsupported input").expect("fixture");
+    let trim = command_output_with_env(
+        &[
+            "trim",
+            "-i",
+            input.path().to_str().expect("path"),
+            "--quiet",
+        ],
+        &[],
+        0,
+    );
+    assert!(trim.stdout.is_empty());
+    let explanation = String::from_utf8(trim.stderr).expect("UTF-8");
+    assert!(
+        explanation.contains("no trim-eligible inputs found"),
+        "{explanation}"
+    );
+    let database = temp.child("database");
+    let status = command_stdout_with_env(
+        &["identify", "database", "status"],
+        &[(
+            "ROM_WEAVER_DATA_DIR",
+            database.path().to_str().expect("database path"),
+        )],
+        0,
+    );
+    let status = String::from_utf8(status).expect("UTF-8");
+    assert!(
+        !status.trim().is_empty(),
+        "an empty database still has a status"
+    );
+}

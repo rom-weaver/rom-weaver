@@ -1395,3 +1395,30 @@ fn explicit_code_kind_survives_bundle_snapshot_replay() {
     rom[16 + 0x1123] = 0xBD;
     assert_eq!(fs::read(replay.path()).unwrap(), rom);
 }
+
+#[test]
+fn human_results_cheat_list_keeps_title_count_and_attribution_when_empty() {
+    let temp = setup_temp_dir();
+    let rom = nes_rom();
+    let database = write_cheat_database(&temp, &rom);
+    let input = temp.child("unrelated-dump.nes");
+    fs::write(input.path(), &rom).expect("fixture");
+    let shard = Path::new(&database).join("nintendo-nintendo-entertainment-system.json");
+    let mut data: Value = serde_json::from_slice(&fs::read(&shard).expect("shard")).expect("JSON");
+    data["games"][0]["cheats"] = serde_json::json!([]);
+    fs::write(&shard, serde_json::to_vec(&data).expect("JSON")).expect("empty shard");
+    let output = String::from_utf8(command_stdout(
+        &[
+            "cheat",
+            "list",
+            "-i",
+            input.path().to_str().expect("path"),
+            "--cheat-database",
+            &database,
+        ],
+        0,
+    ))
+    .expect("UTF-8");
+    assert!(output.contains("0 cheat(s) for Test Game"), "{output}");
+    assert!(output.contains("CC-BY-SA-4.0"), "{output}");
+}
