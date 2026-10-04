@@ -924,10 +924,10 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await scanGuidedLoading(page, ["first-weave.zip"], "guided Apply loading (desktop, light)", () =>
       guidedApply.click(),
     );
-    for (let step = 1; step <= 5; step += 1) {
-      await tutorial.getByText(`Guided workbench · ${step}/5`).waitFor({ state: "visible", timeout: 60_000 });
-      await scanVariants(`guided Apply ${step}/5`);
-      if (step === 5) {
+    for (let step = 1; step <= 6; step += 1) {
+      await tutorial.getByText(`Practice run · Step ${step} of 6`).waitFor({ state: "visible", timeout: 60_000 });
+      await scanVariants(`guided Apply ${step}/6`);
+      if (step === 6) {
         const [download] = await Promise.all([
           page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
           page.locator("#rom-weaver-button-apply").click(),
@@ -947,7 +947,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       await installAuditTools();
     });
     for (let step = 1; step <= 4; step += 1) {
-      await tutorial.getByText(`Guided workbench · ${step}/4`).waitFor({ state: "visible", timeout: 60_000 });
+      await tutorial.getByText(`Practice run · Step ${step} of 4`).waitFor({ state: "visible", timeout: 60_000 });
       await scanVariants(`guided Bundle ${step}/4`);
       if (step === 4) {
         const createBundleButton = page.getByRole("button", { name: "Share bundle", exact: true });
@@ -1023,10 +1023,10 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       "guided Create loading (desktop, light)",
       () => guidedCreate.click(),
     );
-    for (let step = 1; step <= 5; step += 1) {
-      await tutorial.getByText(`Guided workbench · ${step}/5`).waitFor({ state: "visible", timeout: 60_000 });
-      await scanVariants(`guided Create ${step}/5`);
-      if (step === 5) {
+    for (let step = 1; step <= 6; step += 1) {
+      await tutorial.getByText(`Practice run · Step ${step} of 6`).waitFor({ state: "visible", timeout: 60_000 });
+      await scanVariants(`guided Create ${step}/6`);
+      if (step === 6) {
         await page.locator("#patch-builder-button-create").click();
       } else {
         await tutorial.getByRole("button", { name: "Continue" }).click();
