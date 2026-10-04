@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.19.0](https://github.com/rom-weaver/rom-weaver/compare/v0.18.0...v0.19.0) (2026-10-04)
+
+
+### Features
+
+* **cheats:** add inspection and guided samples ([#966](https://github.com/rom-weaver/rom-weaver/issues/966)) ([962e30e](https://github.com/rom-weaver/rom-weaver/commit/962e30ef9b7c7775b4f8c5833dbb7d863df4e31a))
+* **save:** add 21 more game editors ([#947](https://github.com/rom-weaver/rom-weaver/issues/947)) ([3f3e5ed](https://github.com/rom-weaver/rom-weaver/commit/3f3e5edcdce29ac9932662e29b304f2840e641e7))
+* **save:** add six more game editors ([#954](https://github.com/rom-weaver/rom-weaver/issues/954)) ([0d0ac51](https://github.com/rom-weaver/rom-weaver/commit/0d0ac51c6b8c7b039317db3ebb8f555c8528ebff))
+
 ## [0.18.0](https://github.com/rom-weaver/rom-weaver/compare/v0.17.0...v0.18.0) (2026-10-03)
 
 ### Highlights
