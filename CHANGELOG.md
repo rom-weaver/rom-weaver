@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.19.1](https://github.com/rom-weaver/rom-weaver/compare/v0.19.0...v0.19.1) (2026-10-04)
+
+
+### User Experience
+
+* **seo:** clarify ROM workflows and discovery ([#970](https://github.com/rom-weaver/rom-weaver/issues/970)) ([a10c9b4](https://github.com/rom-weaver/rom-weaver/commit/a10c9b4b4bd580a371156d46f8f78951fc59f573))
+* **webapp:** explain Simple and Detailed views in the guided workbench ([#968](https://github.com/rom-weaver/rom-weaver/issues/968)) ([2752cfe](https://github.com/rom-weaver/rom-weaver/commit/2752cfef16fbee30846fb7e607a060dc26ff3c83))
+* **webapp:** let guided Apply wait for the reader's files ([#978](https://github.com/rom-weaver/rom-weaver/issues/978)) ([9db4338](https://github.com/rom-weaver/rom-weaver/commit/9db43389bc9c40539ec81fe1ebd1978b3a698cef))
+* **webapp:** put hero help links on one line and emphasise "New here?" ([#972](https://github.com/rom-weaver/rom-weaver/issues/972)) ([09dcb31](https://github.com/rom-weaver/rom-weaver/commit/09dcb31ce24c93316a35a892feb411d2e098b49b))
+
+
+### Bug Fixes
+
+* **cli:** align transform plans and feedback ([#973](https://github.com/rom-weaver/rom-weaver/issues/973)) ([6f1fb94](https://github.com/rom-weaver/rom-weaver/commit/6f1fb949c179b2e35f638bddde45947dad699e8d))
+* **cli:** make output contracts consistent ([#974](https://github.com/rom-weaver/rom-weaver/issues/974)) ([7bcb48b](https://github.com/rom-weaver/rom-weaver/commit/7bcb48bda5dc74a7b509f7721668cf3bdc966c75))
+* **cli:** retain requested human results ([#975](https://github.com/rom-weaver/rom-weaver/issues/975)) ([803201a](https://github.com/rom-weaver/rom-weaver/commit/803201aca27d259da406dc33c354b0655c698f0f))
+* **gdrom:** preserve extended sector addresses ([#977](https://github.com/rom-weaver/rom-weaver/issues/977)) ([1c00c88](https://github.com/rom-weaver/rom-weaver/commit/1c00c88481e34ae10a5df70658f0f5e004b648b4))
+* **webapp:** fit docs search within its budget ([#980](https://github.com/rom-weaver/rom-weaver/issues/980)) ([960c510](https://github.com/rom-weaver/rom-weaver/commit/960c5101f239dd260624591c7dab588e071e1480))
+
+
+### Localization
+
+* **webapp:** ship reworded English copy and keep en.po in sync ([#969](https://github.com/rom-weaver/rom-weaver/issues/969)) ([4e6dd6e](https://github.com/rom-weaver/rom-weaver/commit/4e6dd6e4889e395f39de21c3c2b814f33f391b03))
+
+
+### Developer Experience
+
+* catch asset size failures in local ci ([#976](https://github.com/rom-weaver/rom-weaver/issues/976)) ([14d7493](https://github.com/rom-weaver/rom-weaver/commit/14d7493ad6a918bc019f25f1705befef41d6190c))
+* catch CI failures before browser checks ([#979](https://github.com/rom-weaver/rom-weaver/issues/979)) ([5b22495](https://github.com/rom-weaver/rom-weaver/commit/5b224956271a40128cd304efbd9d5dbb1fb859c8))
+
+
+### Internal
+
+* harden browser checks and captures ([#971](https://github.com/rom-weaver/rom-weaver/issues/971)) ([bee4659](https://github.com/rom-weaver/rom-weaver/commit/bee46593b2883b832518bc323ac559491227fde2))
+
 ## [0.19.0](https://github.com/rom-weaver/rom-weaver/compare/v0.18.0...v0.19.0) (2026-10-04)
 
 ### Highlights
