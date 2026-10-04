@@ -9,6 +9,7 @@ usage() {
 output_dir=
 build_dir=
 configure_host=
+configure_windres=
 retroarch_ldflags=${LDFLAGS:-}
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -40,6 +41,7 @@ case $(uname -s):$(uname -m) in
     tar_command=tar; sha256_command=sha256sum; executable=retroarch.exe
     core_extension=dll
     configure_host=x86_64-w64-mingw32
+    configure_windres=windres
     retroarch_ldflags="$retroarch_ldflags -lole32 -lcomdlg32 -lgdi32"
     ;;
   *) echo "unsupported emulator runtime host: $(uname -s):$(uname -m)" >&2; exit 1 ;;
@@ -149,6 +151,20 @@ fs.writeFileSync(file, patchedSource);
 NODE
 
 if [ "$platform" = darwin-arm64 ] || [ "$platform" = darwin-x64 ]; then
+  # New Apple Clang versions define TARGET_OS_MAC as a built-in macro. Old
+  # bundled zlib treats that as classic Mac OS and hides the POSIX fdopen API.
+  node - "$build_dir/src/retroarch/deps/libz/zutil.h" <<'NODE'
+const fs = require("fs");
+const file = process.argv[2];
+const source = fs.readFileSync(file, "utf8");
+const probe = "#if defined(MACOS) || defined(TARGET_OS_MAC)";
+const replacement = "#if (defined(MACOS) || defined(TARGET_OS_MAC)) && !defined(__APPLE__)";
+if (source.split(probe).length !== 2) {
+  throw new Error("RetroArch bundled zlib platform guard changed");
+}
+fs.writeFileSync(file, source.replace(probe, replacement));
+NODE
+
   # With Cocoa disabled, RetroArch misses OSX in this file's include guard
   # while still compiling its sysctlbyname fallback.
   node - "$build_dir/src/retroarch/frontend/drivers/platform_darwin.m" <<'NODE'
@@ -200,6 +216,7 @@ cd "$build_dir/src/retroarch"
 # Cocoa selects NSApplicationMain even with null video. These probes have no
 # configure switches; their environment values keep the command-line entry point.
 HAVE_COCOA=no HAVE_COCOA_METAL=no CC="$cc" CXX="$cxx" \
+  WINDRES="$configure_windres" \
   LDFLAGS="$retroarch_ldflags" sh ./configure \
   ${configure_host:+"--host=$configure_host"} \
   --disable-bluetooth --enable-rgui --disable-materialui \
