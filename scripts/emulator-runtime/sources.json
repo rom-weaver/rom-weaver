@@ -321,6 +321,11 @@
           "path": "custom/dependencies/libpng/pngpriv.h",
           "find": "defined(THINK_C) || defined(__SC__) || defined(TARGET_OS_MAC)",
           "replace": "defined(THINK_C) || defined(__SC__)"
+        },
+        {
+          "path": "custom/dependencies/libzlib/zutil.h",
+          "find": "#      ifndef fdopen\n#        define fdopen(fd,mode) NULL /* No fdopen() */",
+          "replace": "#      if !defined(fdopen) && !defined(__APPLE__)\n#        define fdopen(fd,mode) NULL /* No fdopen() */"
         }
       ],
       "output": "mupen64plus_next_libretro.so",
