@@ -187,7 +187,7 @@ Native identify performs no network access.
 - `--title-index JSON` selects a `rom-weaver-identify-title-index-v1` file for `--name`. It returns base titles, pack slugs, and scores under `details.identifyTitles.matches` in JSON output. It cannot be combined with `--database`, `--system`, or `--size`.
 - `--limit N` caps the number of matches `--name` returns. The default is 50. `N` must be at least 1, and `--limit` without `--name` is an error.
 - `--system NAME` searches only one system's pack. It takes a canonical platform name or a common alias (`snes`, `psx`). An unknown name is an error.
-- `--database-dir DIR` names the directory of installed packs (`*.pack` plus an optional `catalog.json`).
+- `--database-dir DIR` names the directory of installed packs (`*.pack` plus an optional `catalog.json`, or the `full-v1/` tree installed by `setup`).
 - `--exhaustive-database-search` searches every installed pack instead of only the packs the detected platform routes to.
 - `--offline` asserts that identify performs no network access. Natively it never does; the flag records the guarantee in the log.
 
@@ -197,11 +197,13 @@ Installed packs live in one directory. The default is the per-user data director
 
 ### `setup`
 
-`rom-weaver setup` installs the identify packs and the cheat shards into the directory above, downloading them from this version's GitHub release. It is for installs that ship only the executable - `cargo install`, `cargo binstall`, and `mise`; Homebrew, scoop, npm, the install scripts, and the Docker image place that data beside the binary already, and `setup` only reports on those.
+`rom-weaver setup` installs the identify packs and the cheat shards into the directory above, downloading them from this version's GitHub release. It is for installs that ship only the executable - `cargo install`, `cargo binstall`, and `mise`; Homebrew, scoop, npm, the install scripts, and the Docker image place that data beside the binary already. `setup` checks the user-installed `full-v1/` database; data beside the executable does not satisfy that check.
 
 - `--database-dir DIR` installs somewhere other than the per-user data directory.
 - `--from ARCHIVE` installs a local `rom-weaver-identify-data.tar.br` and makes no network request. Its packs are verified against the index it carries. This check does not establish that the archive came from the same release as the CLI.
 - `--force` downloads again even when the database is already installed.
+
+Human output confirms installation or an existing database on stderr; `--quiet` suppresses that confirmation.
 
 Without `--force` an installed database is reported, not re-downloaded, so the command is safe to repeat. `--from` states the intent to install that archive, so it replaces an installed database the way `--force` does. JSON output carries `packs`, `downloaded`, and `database_dir`; `downloaded` is `false` for a `--from` install.
 
@@ -214,12 +216,14 @@ Native builds only; the browser build reports them as unsupported. Every subcomm
 | `list` | List every catalog platform, its source, and whether its pack is installed. |
 | `status` | List the installed pack files: slug, format, size, and sha256. |
 | `path` | Print the identify database directory. |
-| `remove <SYSTEM>` | Remove one system's installed pack. |
+| `remove <SYSTEM>` | Remove one system's installed packs and cheat shards from the user database directory. |
 | `install-all` | Install the default database for this rom-weaver version. |
 | `install-group <GROUP> [--from <ARCHIVE>]` | Download or import one optional pack group. |
 | `import-redump <ZIP>` | Build a pack from a local Redump DAT ZIP. |
 | `install <SYSTEM> [--from <ZIP>]` | Install one Redump system pack. Without `--from`, download the DAT from Redump. |
 | `update [SYSTEM] [--from <ZIP>]` | Update one or all installed Redump packs. Without `--from`, download current DAT files. |
+
+`status` includes raw packs in the database directory and compressed packs under `full-v1/packs/`. Size and SHA-256 describe the stored file bytes, including compression. When both copies exist for one slug, the raw pack takes precedence. `remove` deletes both copies and their cheat shards; it does not delete data packaged beside the executable.
 
 `<SYSTEM>` is a canonical platform name or alias. Platforms that OpenGood covers stay built in and do not install from Redump.
 

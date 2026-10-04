@@ -173,7 +173,9 @@ impl HumanReporter {
         }
         match event.status {
             OperationStatus::Succeeded => {
-                commands::render_success(&self.surface, event, &self.selection);
+                if event.command != "setup" || !self.quiet {
+                    commands::render_success(&self.surface, event, &self.selection);
+                }
                 if self.verbose {
                     commands::render_verbose(&self.surface, event);
                 }

@@ -93,7 +93,7 @@ pub(super) fn render_success(
             render_database(surface, event);
         }
         "identify" => render_identify(surface, event),
-        "setup" => {}
+        "setup" => label_line(&surface.diagnostics(), event),
         "cheat" => render_cheat_list(surface, event),
         "save-identify" => render_save_identify(surface, event),
         "save-inspect" => render_save_inspect(surface, event),
@@ -133,7 +133,10 @@ pub(super) fn render_verbose(surface: &Surface, event: &ProgressEvent) {
             diagnostics.line(&format!("{}: wrote {path} ({size}{kind})", event.command));
         }
     } else if !event.label.is_empty()
-        && !matches!(event.command.as_str(), "trim" | "save-set" | "save-create")
+        && !matches!(
+            event.command.as_str(),
+            "trim" | "save-set" | "save-create" | "setup"
+        )
     {
         diagnostics.line(&format!("{}: {}", event.command, event.label));
     }
