@@ -162,6 +162,18 @@ if (!source.includes(probe) || sysctlIncludes.length !== 2) {
 }
 fs.writeFileSync(file, source.replace(probe, `${probe}#include <sys/sysctl.h>\n`));
 NODE
+
+  node - "$build_dir/src/retroarch/menu/menu_displaylist.c" <<'NODE'
+const fs = require("fs");
+const file = process.argv[2];
+const source = fs.readFileSync(file, "utf8");
+const probe = "#include <stddef.h>\n";
+const include = "#include <CoreFoundation/CFBundle.h>\n";
+if (!source.includes(probe) || source.includes(include)) {
+  throw new Error("RetroArch CoreFoundation include changed");
+}
+fs.writeFileSync(file, source.replace(probe, `${probe}\n#ifdef __APPLE__\n${include}#endif\n`));
+NODE
 fi
 
 # RetroArch has no configure switch for xkbcommon. The runtime MUST retain only
