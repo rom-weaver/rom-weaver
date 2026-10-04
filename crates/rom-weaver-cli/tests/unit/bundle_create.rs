@@ -827,7 +827,7 @@ fn a_patch_with_a_source_url_carries_no_path_entry() {
 }
 
 #[test]
-fn an_unrecognized_bundle_file_name_warns_about_auto_detection() {
+fn a_plain_json_bundle_file_name_needs_no_auto_detection_warning() {
     let dir = scratch_dir("odd-name");
     let patch = write_fixture(&dir, "a.ips", &ips_patch_bytes());
     let app = test_app();
@@ -838,11 +838,27 @@ fn an_unrecognized_bundle_file_name_warns_about_auto_detection() {
     };
     let context = app.context(args.threads);
     let result = app.bundle_create_inner(&args, &context).expect("create");
+    assert!(result.warnings.is_empty(), "{:?}", result.warnings);
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn an_alternate_compressed_bundle_name_explains_explicit_selection() {
+    let dir = scratch_dir("odd-compressed-name");
+    let patch = write_fixture(&dir, "a.ips", &ips_patch_bytes());
+    let app = test_app();
+    let args = BundleCreateCommand {
+        patch: vec![patch],
+        output: dir.join("my-bundle.json.gz"),
+        ..Default::default()
+    };
+    let context = app.context(args.threads);
+    let result = app.bundle_create_inner(&args, &context).expect("create");
     assert!(
         result
             .warnings
             .iter()
-            .any(|warning| warning.contains("apply auto-detection only recognizes")),
+            .any(|warning| warning.contains("pass this file with --bundle")),
         "{:?}",
         result.warnings
     );

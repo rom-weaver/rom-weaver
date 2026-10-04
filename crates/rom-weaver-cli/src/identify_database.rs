@@ -10,6 +10,7 @@ use rom_weaver_checksum::identify_catalog::{IdentifyCatalog, IdentifyPlatformCat
 #[cfg(not(target_arch = "wasm32"))]
 use rom_weaver_checksum::identify_catalog::{
     IdentifySource, import_platform_aliases as curated_aliases, normalize_platform_name,
+    platform_aliases,
 };
 use rom_weaver_checksum::identify_pack::IdentifyPackFile;
 #[cfg(not(target_arch = "wasm32"))]
@@ -531,7 +532,12 @@ fn canonical_redump_platform(name: &str) -> Option<&'static str> {
     let normalized = normalize_platform_name(name);
     REDUMP_SYSTEMS
         .iter()
-        .find(|(canonical, _)| normalize_platform_name(canonical) == normalized)
+        .find(|(canonical, _)| {
+            normalize_platform_name(canonical) == normalized
+                || platform_aliases(canonical)
+                    .iter()
+                    .any(|alias| normalize_platform_name(alias) == normalized)
+        })
         .map(|(canonical, _)| *canonical)
 }
 
@@ -1105,38 +1111,36 @@ fn identify_database_status(args: IdentifyDatabaseDirCommand) -> Result<Operatio
     let provider = IdentifyPackProvider::new(args.database_dir)?;
     let mut packs = Vec::new();
     let dir = provider.database_dir();
-    if dir.is_dir() {
-        let mut names: Vec<String> = fs::read_dir(dir)
-            .map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "failed to read identify database dir `{}`: {error}",
-                    dir.display()
-                ))
-            })?
-            .filter_map(|entry| entry.ok())
-            .map(|entry| entry.file_name().to_string_lossy().into_owned())
-            .filter(|name| name.ends_with(".pack"))
-            .collect();
-        names.sort();
-        for name in names {
-            let path = dir.join(&name);
-            let bytes = fs::read(&path).map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "failed to read ROM identify pack `{}`: {error}",
-                    path.display()
-                ))
-            })?;
-            let format = match IdentifyPackFile::parse(&bytes) {
-                Ok(IdentifyPackFile::V1(_)) => "RWFP1",
-                Err(_) => "invalid",
-            };
-            packs.push(json!({
-                "slug": name.trim_end_matches(".pack"),
-                "format": format,
-                "bytes": bytes.len(),
-                "sha256": sha256_hex(&bytes),
-            }));
-        }
+    for slug in super::identify_builtin::user_pack_slugs(dir)? {
+        let Some(path) = super::identify_builtin::user_pack_paths(dir, &slug)
+            .into_iter()
+            .next()
+        else {
+            continue;
+        };
+        let bytes = fs::read(&path).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "failed to read ROM identify pack `{}`: {error}",
+                path.display()
+            ))
+        })?;
+        let decoded;
+        let pack_bytes = if path.extension().is_some_and(|extension| extension == "br") {
+            decoded = super::identify_builtin::decompress(&path);
+            decoded.as_deref().unwrap_or_default()
+        } else {
+            bytes.as_slice()
+        };
+        let format = match IdentifyPackFile::parse(pack_bytes) {
+            Ok(IdentifyPackFile::V1(_)) => "RWFP1",
+            Err(_) => "invalid",
+        };
+        packs.push(json!({
+            "slug": slug,
+            "format": format,
+            "bytes": bytes.len(),
+            "sha256": sha256_hex(&bytes),
+        }));
     }
     let mut report = OperationReport::succeeded(
         OperationFamily::Command,
@@ -1178,30 +1182,37 @@ fn identify_database_remove(args: IdentifyDatabaseSystemCommand) -> Result<Opera
             args.system
         ))
     })?;
-    let path = provider
-        .database_dir()
-        .join(format!("{}.pack", entry.pack_slug));
-    if !path.is_file() {
+    let paths = super::identify_builtin::user_pack_paths(provider.database_dir(), &entry.pack_slug);
+    let Some(path) = paths.first() else {
         return Err(RomWeaverError::Validation(format!(
             "no installed pack for `{}` at `{}`",
             entry.canonical_platform,
-            path.display()
+            provider.database_dir().display()
         )));
-    }
-    fs::remove_file(&path).map_err(|error| {
-        RomWeaverError::Validation(format!("failed to remove `{}`: {error}", path.display()))
-    })?;
-    // The platform's cheat shard installs beside its pack and leaves with it.
-    // Its index row stays, as the pack's own `systems` row does: nothing
-    // native reads the rows, and a reinstall replaces them by slug.
-    let shard = provider
-        .database_dir()
-        .join("cheats")
-        .join(format!("{}.json.br", entry.pack_slug));
-    if shard.is_file() {
-        fs::remove_file(&shard).map_err(|error| {
-            RomWeaverError::Validation(format!("failed to remove `{}`: {error}", shard.display()))
+    };
+    for path in &paths {
+        fs::remove_file(path).map_err(|error| {
+            RomWeaverError::Validation(format!("failed to remove `{}`: {error}", path.display()))
         })?;
+        // Cheat shards MUST leave with their pack; metadata remains for reinstall.
+        let root = if path.extension().is_some_and(|extension| extension == "br") {
+            path.parent()
+                .and_then(Path::parent)
+                .expect("full database root")
+        } else {
+            provider.database_dir()
+        };
+        let shard = root
+            .join("cheats")
+            .join(format!("{}.json.br", entry.pack_slug));
+        if shard.is_file() {
+            fs::remove_file(&shard).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "failed to remove `{}`: {error}",
+                    shard.display()
+                ))
+            })?;
+        }
     }
     let mut report = OperationReport::succeeded(
         OperationFamily::Command,

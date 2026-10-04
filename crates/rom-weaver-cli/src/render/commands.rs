@@ -29,6 +29,10 @@ impl OutputSelection {
                 selection.suppress_files = args.in_place;
                 args.output.clone()
             }
+            Commands::Checksum(args) => {
+                selection.probe = args.probe;
+                None
+            }
             Commands::Extract(args) => {
                 selection.probe = args.probe;
                 None
@@ -67,6 +71,7 @@ pub(super) fn render_success(
     }
     match event.command.as_str() {
         "probe" => render_container_or_patch(surface, event),
+        "trim" if !has_emitted_files(event) => render_no_write(surface, event),
         "extract" | "compress" | "patch-apply" | "trim" | "bundle-create" | "tools-ppf-undo" => {
             render_emitted_files(surface, event, selection);
         }
@@ -83,17 +88,19 @@ pub(super) fn render_success(
             }
         }
         "patch-validate" => label_line(surface, event),
-        "checksum" => render_checksum(surface, event),
+        "checksum" => render_checksum(surface, event, selection.probe),
         "identify" if event.format.as_deref() == Some("identify-database") => {
             render_database(surface, event);
         }
         "identify" => render_identify(surface, event),
-        "setup" => {}
+        "setup" => label_line(&surface.diagnostics(), event),
         "cheat" => render_cheat_list(surface, event),
         "save-identify" => render_save_identify(surface, event),
         "save-inspect" => render_save_inspect(surface, event),
-        "save-get" | "save-list-games" => label_line(surface, event),
+        "save-list-games" => render_save_games(surface, event),
+        "save-get" => label_line(surface, event),
         "save-set" | "save-create" if is_save_preview(event) => render_save_result(surface, event),
+        "save-set" | "save-create" if !has_emitted_files(event) => render_no_write(surface, event),
         "save-set" | "save-create" => render_emitted_files(surface, event, selection),
         "save-export-schema" => render_save_schema(surface, event),
         _ => render_details_or_label(surface, event),
@@ -125,7 +132,12 @@ pub(super) fn render_verbose(surface: &Surface, event: &ProgressEvent) {
             let kind = codec.map(|codec| format!(", {codec}")).unwrap_or_default();
             diagnostics.line(&format!("{}: wrote {path} ({size}{kind})", event.command));
         }
-    } else if !event.label.is_empty() {
+    } else if !event.label.is_empty()
+        && !matches!(
+            event.command.as_str(),
+            "trim" | "save-set" | "save-create" | "setup"
+        )
+    {
         diagnostics.line(&format!("{}: {}", event.command, event.label));
     }
     if event.command == "probe" {
@@ -183,6 +195,9 @@ fn render_database(surface: &Surface, event: &ProgressEvent) {
         }
         "status" => {
             if let Some(packs) = details.get("packs").and_then(Value::as_array) {
+                if packs.is_empty() {
+                    return label_line(surface, event);
+                }
                 let rows = packs
                     .iter()
                     .map(|pack| {
@@ -203,6 +218,31 @@ fn render_database(surface: &Surface, event: &ProgressEvent) {
 
 fn save_editor_details(event: &ProgressEvent) -> Option<&Value> {
     event.details.as_ref()?.get("save_editor")
+}
+
+fn render_save_games(surface: &Surface, event: &ProgressEvent) {
+    let Some(save) = save_editor_details(event) else {
+        return label_line(surface, event);
+    };
+    let Some(games) = save.get("games").and_then(Value::as_array) else {
+        return label_line(surface, event);
+    };
+    let generation = save.get("generation_games").and_then(Value::as_array);
+    for game in games {
+        let identity = &game["identity"];
+        let id = string_field(identity, "id");
+        let support = if generation
+            .is_some_and(|games| games.iter().any(|game| game.as_str() == Some(&id)))
+        {
+            "fresh or template"
+        } else {
+            "template"
+        };
+        surface.line(&format!(
+            "{id}: {} ({support})",
+            string_field(identity, "name")
+        ));
+    }
 }
 
 fn render_save_identify(surface: &Surface, event: &ProgressEvent) {
@@ -359,7 +399,7 @@ fn render_save_result(surface: &Surface, event: &ProgressEvent) {
 }
 
 fn is_save_preview(event: &ProgressEvent) -> bool {
-    event.command == "save-set" && event.stage == "preview"
+    matches!(event.command.as_str(), "save-set" | "save-create") && event.stage == "preview"
 }
 
 fn render_save_schema(surface: &Surface, event: &ProgressEvent) {
@@ -506,6 +546,21 @@ fn render_container(surface: &Surface, event: &ProgressEvent, container: &Value)
     surface.rows(&rows);
 }
 
+fn render_no_write(surface: &Surface, event: &ProgressEvent) {
+    surface
+        .diagnostics()
+        .line(&format!("{}: {}", event.command, event.label));
+}
+
+fn has_emitted_files(event: &ProgressEvent) -> bool {
+    event
+        .details
+        .as_ref()
+        .and_then(|details| details.get("emitted_files"))
+        .and_then(Value::as_array)
+        .is_some_and(|files| !files.is_empty())
+}
+
 fn render_emitted_files(surface: &Surface, event: &ProgressEvent, selection: &OutputSelection) {
     let Some(files) = event
         .details
@@ -617,12 +672,22 @@ fn append_plan_targets(label: &str, value: Option<&Value>, pairs: &mut Vec<(Stri
 }
 
 /// Structured digests MUST take precedence over labels, which can contain contextual suffixes.
-fn render_checksum(surface: &Surface, event: &ProgressEvent) {
+fn render_checksum(surface: &Surface, event: &ProgressEvent, probe: bool) {
     let digests = checksum_pairs(event);
     if digests.is_empty() {
         return render_details_or_label(surface, event);
     }
     surface.key_values(&digests);
+    surface.key_values(&checksum_variant_pairs(event));
+    if probe && let Some(details) = &event.details {
+        let mut identity = Vec::new();
+        for key in ["platform", "disc_format", "rom_header"] {
+            if let Some(value) = details.get(key) {
+                collect_value(key, value, &mut identity);
+            }
+        }
+        surface.key_values(&identity);
+    }
     for token in checksum_label(event).split_whitespace() {
         let Some((key, value)) = token.split_once('=') else {
             continue;
@@ -631,6 +696,39 @@ fn render_checksum(surface: &Surface, event: &ProgressEvent) {
             surface.key_values(&[("Range".to_string(), value.to_string())]);
         }
     }
+}
+
+fn checksum_variant_pairs(event: &ProgressEvent) -> Vec<(String, String)> {
+    let Some(variants) = event
+        .details
+        .as_ref()
+        .and_then(|details| details.get("checksum_variants"))
+        .and_then(Value::as_array)
+    else {
+        return Vec::new();
+    };
+    let mut pairs = Vec::new();
+    for variant in variants {
+        if variant.get("id").and_then(Value::as_str) == Some("raw") {
+            continue;
+        }
+        let label = variant
+            .get("label")
+            .and_then(Value::as_str)
+            .or_else(|| variant.get("id").and_then(Value::as_str))
+            .unwrap_or("Variant");
+        if let Some(checksums) = variant.get("checksums").and_then(Value::as_object) {
+            for (algorithm, digest) in checksums {
+                if let Some(digest) = digest.as_str() {
+                    pairs.push((
+                        format!("{label} / {}", algorithm.to_uppercase()),
+                        digest.to_string(),
+                    ));
+                }
+            }
+        }
+    }
+    pairs
 }
 
 fn checksum_label(event: &ProgressEvent) -> &str {
@@ -704,6 +802,7 @@ fn render_cheat_list(surface: &Surface, event: &ProgressEvent) {
     else {
         return render_details_or_label(surface, event);
     };
+    label_line(surface, event);
     let text = |key: &str| list.get(key).and_then(Value::as_str).unwrap_or("");
     surface.line(&format!(
         "system {}, matched by {}{}",

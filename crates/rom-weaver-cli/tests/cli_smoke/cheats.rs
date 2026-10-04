@@ -1395,3 +1395,45 @@ fn explicit_code_kind_survives_bundle_snapshot_replay() {
     rom[16 + 0x1123] = 0xBD;
     assert_eq!(fs::read(replay.path()).unwrap(), rom);
 }
+
+#[test]
+fn human_results_cheat_list_keeps_title_count_and_attribution_when_empty() {
+    let temp = setup_temp_dir();
+    let rom = nes_rom();
+    let database = write_cheat_database(&temp, &rom);
+    let input = temp.child("unrelated-dump.nes");
+    fs::write(input.path(), &rom).expect("fixture");
+    let shard = Path::new(&database).join("nintendo-nintendo-entertainment-system.json");
+    let mut data: Value = serde_json::from_slice(&fs::read(&shard).expect("shard")).expect("JSON");
+    data["games"][0]["cheats"] = serde_json::json!([]);
+    fs::write(&shard, serde_json::to_vec(&data).expect("JSON")).expect("empty shard");
+    let output = String::from_utf8(command_stdout(
+        &[
+            "cheat",
+            "list",
+            "-i",
+            input.path().to_str().expect("path"),
+            "--cheat-database",
+            &database,
+        ],
+        0,
+    ))
+    .expect("UTF-8");
+    assert!(output.contains("0 cheat(s) for Test Game"), "{output}");
+    assert!(output.contains("CC-BY-SA-4.0"), "{output}");
+}
+
+#[test]
+fn cheat_list_names_the_missing_rom_and_preserves_io_kind() {
+    let temp = setup_temp_dir();
+    let input = temp.child("missing.nes");
+    let input_s = input.path().to_str().expect("path");
+    for system_args in [vec![], vec!["--cheat-system", "nes"]] {
+        let mut args = vec!["cheat", "list", "--input", input_s, "--jsonl"];
+        args.extend(system_args);
+        let report = parse_single_json_line(&command_stdout(&args, 1));
+        let label = report["label"].as_str().expect("label");
+        assert!(label.contains(input_s), "{label}");
+        assert_eq!(report["error_kind"], "io");
+    }
+}

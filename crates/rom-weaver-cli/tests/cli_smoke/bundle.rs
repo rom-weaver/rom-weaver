@@ -3665,3 +3665,18 @@ fn bundle_target_lane_endpoint_checks_run_before_a_later_lane() {
             .contains("output checksum mismatch")
     );
 }
+
+#[test]
+fn bundle_metadata_help_describes_native_binding() {
+    let help =
+        String::from_utf8(command_stdout(&["bundle", "create", "--help"], 0)).expect("UTF-8 help");
+    assert!(
+        help.contains("Before the first --patch, it describes that first patch"),
+        "{help}"
+    );
+    assert!(
+        help.contains("You may leave metadata out for any patch"),
+        "{help}"
+    );
+    assert!(!help.contains("a partial list is an error"), "{help}");
+}

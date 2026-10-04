@@ -237,3 +237,41 @@ fn checksum_digest_positional_input_ignores_color() {
     );
     assert_eq!(output, format!("{HELLO_WORLD_SHA256}\n").as_bytes());
 }
+
+#[test]
+fn human_results_checksum_shows_probe_identity_and_variant_digests() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.nes");
+    let mut bytes = vec![0_u8; 16 + 16_384];
+    bytes[..4].copy_from_slice(b"NES\x1a");
+    bytes[4] = 1;
+    fs::write(input.path(), bytes).expect("NES fixture");
+    let path = input.path().to_str().expect("path");
+    let report: Value = serde_json::from_slice(&command_stdout(
+        &[
+            "checksum", "-i", path, "--algo", "crc32", "--probe", "--json",
+        ],
+        0,
+    ))
+    .expect("JSON report");
+    let output = String::from_utf8(command_stdout(
+        &["checksum", "-i", path, "--algo", "crc32", "--probe"],
+        0,
+    ))
+    .expect("UTF-8");
+    assert!(
+        output.contains("Platform")
+            && output.contains(report["details"]["platform"].as_str().expect("platform")),
+        "{output}"
+    );
+    let variants = report["details"]["checksum_variants"]
+        .as_array()
+        .expect("variants");
+    assert!(variants.len() > 1);
+    for variant in variants {
+        assert!(
+            output.contains(variant["checksums"]["crc32"].as_str().expect("digest")),
+            "{output}"
+        );
+    }
+}

@@ -63,6 +63,47 @@ pub(super) fn data_roots(_database_dir: &Path) -> Vec<PathBuf> {
     Vec::new()
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn user_pack_paths(database_dir: &Path, slug: &str) -> Vec<PathBuf> {
+    [
+        database_dir.join(format!("{slug}.pack")),
+        database_dir
+            .join(USER_FULL_DATA_DIR)
+            .join("packs")
+            .join(format!("{slug}.pack.br")),
+    ]
+    .into_iter()
+    .filter(|path| path.is_file())
+    .collect()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn user_pack_slugs(database_dir: &Path) -> Result<Vec<String>> {
+    let mut slugs = Vec::new();
+    for (dir, suffix) in [
+        (database_dir.to_path_buf(), ".pack"),
+        (
+            database_dir.join(USER_FULL_DATA_DIR).join("packs"),
+            ".pack.br",
+        ),
+    ] {
+        if !dir.is_dir() {
+            continue;
+        }
+        for entry in fs::read_dir(&dir)? {
+            let entry = entry?;
+            if entry.path().is_file()
+                && let Some(slug) = entry.file_name().to_string_lossy().strip_suffix(suffix)
+            {
+                slugs.push(slug.to_string());
+            }
+        }
+    }
+    slugs.sort();
+    slugs.dedup();
+    Ok(slugs)
+}
+
 /// The `catalog.json` of the first data tree that has one. The generated
 /// catalog names the slugs the packaged packs actually use, so a build that
 /// ships data MUST prefer it over the built-in fallback catalog.

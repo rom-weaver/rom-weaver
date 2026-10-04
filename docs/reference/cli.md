@@ -187,7 +187,7 @@ Native identify performs no network access.
 - `--title-index JSON` selects a `rom-weaver-identify-title-index-v1` file for `--name`. It returns base titles, pack slugs, and scores under `details.identifyTitles.matches` in JSON output. It cannot be combined with `--database`, `--system`, or `--size`.
 - `--limit N` caps the number of matches `--name` returns. The default is 50. `N` must be at least 1, and `--limit` without `--name` is an error.
 - `--system NAME` searches only one system's pack. It takes a canonical platform name or a common alias (`snes`, `psx`). An unknown name is an error.
-- `--database-dir DIR` names the directory of installed packs (`*.pack` plus an optional `catalog.json`).
+- `--database-dir DIR` names the directory of installed packs (`*.pack` plus an optional `catalog.json`, or the `full-v1/` tree installed by `setup`).
 - `--exhaustive-database-search` searches every installed pack instead of only the packs the detected platform routes to.
 - `--offline` asserts that identify performs no network access. Natively it never does; the flag records the guarantee in the log.
 
@@ -197,11 +197,13 @@ Installed packs live in one directory. The default is the per-user data director
 
 ### `setup`
 
-`rom-weaver setup` installs the identify packs and the cheat shards into the directory above, downloading them from this version's GitHub release. It is for installs that ship only the executable - `cargo install`, `cargo binstall`, and `mise`; Homebrew, scoop, npm, the install scripts, and the Docker image place that data beside the binary already, and `setup` only reports on those.
+`rom-weaver setup` installs the identify packs and the cheat shards into the directory above, downloading them from this version's GitHub release. It is for installs that ship only the executable - `cargo install`, `cargo binstall`, and `mise`; Homebrew, scoop, npm, the install scripts, and the Docker image place that data beside the binary already. `setup` checks the user-installed `full-v1/` database; data beside the executable does not satisfy that check.
 
 - `--database-dir DIR` installs somewhere other than the per-user data directory.
 - `--from ARCHIVE` installs a local `rom-weaver-identify-data.tar.br` and makes no network request. Its packs are verified against the index it carries. This check does not establish that the archive came from the same release as the CLI.
 - `--force` downloads again even when the database is already installed.
+
+Human output confirms installation or an existing database on stderr; `--quiet` suppresses that confirmation.
 
 Without `--force` an installed database is reported, not re-downloaded, so the command is safe to repeat. `--from` states the intent to install that archive, so it replaces an installed database the way `--force` does. JSON output carries `packs`, `downloaded`, and `database_dir`; `downloaded` is `false` for a `--from` install.
 
@@ -214,12 +216,14 @@ Native builds only; the browser build reports them as unsupported. Every subcomm
 | `list` | List every catalog platform, its source, and whether its pack is installed. |
 | `status` | List the installed pack files: slug, format, size, and sha256. |
 | `path` | Print the identify database directory. |
-| `remove <SYSTEM>` | Remove one system's installed pack. |
+| `remove <SYSTEM>` | Remove one system's installed packs and cheat shards from the user database directory. |
 | `install-all` | Install the default database for this rom-weaver version. |
 | `install-group <GROUP> [--from <ARCHIVE>]` | Download or import one optional pack group. |
 | `import-redump <ZIP>` | Build a pack from a local Redump DAT ZIP. |
 | `install <SYSTEM> [--from <ZIP>]` | Install one Redump system pack. Without `--from`, download the DAT from Redump. |
 | `update [SYSTEM] [--from <ZIP>]` | Update one or all installed Redump packs. Without `--from`, download current DAT files. |
+
+`status` includes raw packs in the database directory and compressed packs under `full-v1/packs/`. Size and SHA-256 describe the stored file bytes, including compression. When both copies exist for one slug, the raw pack takes precedence. `remove` deletes both copies and their cheat shards; it does not delete data packaged beside the executable.
 
 `<SYSTEM>` is a canonical platform name or alias. Platforms that OpenGood covers stay built in and do not install from Redump.
 
@@ -254,6 +258,8 @@ The internal `ingest` command also identifies each ROM asset. It identifies a pa
 
 `checksum` computes CRC32, MD5, and SHA-1 when `--algo` is omitted. Passing `--algo` replaces that default set; repeat the flag or separate values with commas to compute multiple algorithms.
 
+Human checksum output includes the primary digests and each applicable variant digest. `--probe` also reports the detected platform or disc format and ROM header details.
+
 Native `checksum --digest --algo ALGO` prints only the primary checksum in lowercase, followed by one newline. It requires exactly one algorithm. It prints no filename, label, variant checksums, color, or elapsed time. `--quiet` retains the digest; progress and errors use stderr. A failed operation prints no digest. `--digest` conflicts with `--json`, `--jsonl`, and `--dry-run`.
 
 `--digest` retains the normal input semantics: archives open automatically, `--no-extract` hashes the archive bytes, and `--start`/`--length` select a byte range. It is not a checksum-file verification mode.
@@ -262,7 +268,9 @@ Native `checksum --digest --algo ALGO` prints only the primary checksum in lower
 
 `save identify`, `inspect`, `get`, `set`, and `export-schema` take a save path. `identify`, `inspect`, `get`, and `export-schema` do not write a file. `get` also takes one field ID.
 
-`save set` takes one or more `FIELD=VALUE` assignments. It checks all assignments before it changes a copy. `-n` or `--dry-run` returns the change preview and writes nothing.
+`save export-schema` requires a save path, including when `--game` selects the handler.
+
+`save set` takes one or more `FIELD=VALUE` assignments. It checks all assignments before it changes a copy. `-n` or `--dry-run` returns the change preview and writes nothing. Human output reports on stderr when the requested values already match the save; `--quiet` retains this explanation.
 
 Without `-o` or `--output`, `save set` writes a free sibling name such as `game-edited.sav`. It adds a number when that name exists. An explicit output path must not exist unless `--force` is present. The output path must not name the source file.
 
@@ -270,7 +278,7 @@ Without `-o` or `--output`, `save set` writes a free sibling name such as `game-
 
 [Save Editor support](save-editor.md) lists the accepted game IDs, input layouts, and fields.
 
-`save list-games` returns all supported game definitions and fresh-generation game IDs. `save create` accepts `--game`, `--template`, optional `FIELD=VALUE` assignments, `--output`, `--dry-run`, and `--force`. Without a template, `--game` selects a supported fresh initializer. Output is required unless `--dry-run` is set. [Create saves with the CLI](../how-to/create-game-saves-cli.md) gives the procedures.
+`save list-games` returns all supported game definitions and fresh-generation game IDs. `save create` accepts `--game`, `--template`, optional `FIELD=VALUE` assignments, `--output`, `--dry-run`, and `--force`. Without a template, `--game` selects a supported fresh initializer. Output is required unless `--dry-run` is set. Human dry-run output shows field changes and a no-write notice. [Create saves with the CLI](../how-to/create-game-saves-cli.md) gives the procedures.
 
 The application includes every supported save definition. `save list-games` reports the complete registry. Adding game support requires an application update.
 
@@ -398,7 +406,7 @@ SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for it
 | `--from FILE`, `--from -` | Reads a specification from a file or stdin. File paths resolve against the spec directory, or the current directory for stdin. Explicit CLI values override the spec: `--patch` replaces the spec's patch chain and `--cheat` replaces its `cheats` array, in both cases wholesale. |
 | `--cheat ID_OR_DESCRIPTION` | Records a cheat selection in the bundle's `cheats` array. Needs `--input`. Takes the same selection flags as `patch apply`. |
 
-Patch metadata options bind to the preceding `--patch`. `--from` preserves an existing `$schema`. For `bundle create --from`, a ROM entry needs a local `path` or a `url`; a URL-only ROM supplies `--rom-url`. Patch entries need local paths unless explicit CLI patches replace the spec chain. Checks-only ROM entries are rejected by `--from`, but remain valid in bundles read by `bundle parse` and `patch apply`.
+Patch metadata options bind to the preceding `--patch`; options before the first patch bind to that first patch. Metadata can be omitted independently for each patch. `--from` preserves an existing `$schema`. For `bundle create --from`, a ROM entry needs a local `path` or a `url`; a URL-only ROM supplies `--rom-url`. Patch entries need local paths unless explicit CLI patches replace the spec chain. Checks-only ROM entries are rejected by `--from`, but remain valid in bundles read by `bundle parse` and `patch apply`.
 
 ### Bundle cheats
 

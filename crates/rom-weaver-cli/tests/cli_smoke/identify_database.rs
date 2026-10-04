@@ -1131,3 +1131,174 @@ fn import_redump_builds_packs_and_identify_uses_them() {
     assert!(identify["evidence"].get("missing_components").is_none());
     assert!(identify["evidence"].get("unexpected_components").is_none());
 }
+
+fn full_database_fixture(temp: &TempDir) -> PathBuf {
+    let dir = temp.child("identify-db").path().to_path_buf();
+    let archive = temp.child("full.tar.br");
+    fs::write(
+        archive.path(),
+        identify_data_archive(&[("Sony PlayStation", "sony-playstation")]),
+    )
+    .expect("archive");
+    command_stdout(
+        &[
+            "setup",
+            "--database-dir",
+            dir.to_str().expect("dir"),
+            "--from",
+            archive.path().to_str().expect("archive"),
+            "--json",
+        ],
+        0,
+    );
+    dir
+}
+
+#[test]
+fn database_status_reports_setup_packs() {
+    let temp = setup_temp_dir();
+    let dir = full_database_fixture(&temp);
+    let json = parse_single_json_line(&command_stdout(
+        &[
+            "identify",
+            "database",
+            "status",
+            "--database-dir",
+            dir.to_str().expect("dir"),
+            "--json",
+        ],
+        0,
+    ));
+    let packs = json["details"]["packs"].as_array().expect("packs");
+    assert_eq!(packs.len(), 1);
+    assert_eq!(packs[0]["slug"], "sony-playstation");
+    assert_eq!(packs[0]["format"], "RWFP1");
+    assert_eq!(
+        packs[0]["bytes"],
+        fs::metadata(dir.join("full-v1/packs/sony-playstation.pack.br"))
+            .expect("pack metadata")
+            .len()
+    );
+}
+
+#[test]
+fn database_remove_removes_setup_packs_and_cheats() {
+    let temp = setup_temp_dir();
+    let dir = full_database_fixture(&temp);
+    let root_pack = dir.join("sony-playstation.pack");
+    fs::write(
+        &root_pack,
+        pack_v1("Sony PlayStation", "nointro-single-image-v1", &[]),
+    )
+    .expect("root pack");
+    let full_pack = dir.join("full-v1/packs/sony-playstation.pack.br");
+    for root in [dir.clone(), dir.join("full-v1")] {
+        fs::create_dir_all(root.join("cheats")).expect("cheats dir");
+        fs::write(root.join("cheats/sony-playstation.json.br"), b"cheats").expect("cheats");
+    }
+    command_stdout(
+        &[
+            "identify",
+            "database",
+            "remove",
+            "sony-playstation",
+            "--database-dir",
+            dir.to_str().expect("dir"),
+            "--json",
+        ],
+        0,
+    );
+    assert!(!root_pack.exists());
+    assert!(!full_pack.exists());
+    assert!(!dir.join("cheats/sony-playstation.json.br").exists());
+    assert!(!dir.join("full-v1/cheats/sony-playstation.json.br").exists());
+}
+
+#[test]
+fn setup_reports_completion_with_an_implicit_destination() {
+    let temp = setup_temp_dir();
+    let archive = temp.child("full.tar.br");
+    fs::write(
+        archive.path(),
+        identify_data_archive(&[("Sony PlayStation", "sony-playstation")]),
+    )
+    .expect("archive");
+    let data_home = temp.child("data");
+    for mode in [None, Some("-v"), Some("--quiet")] {
+        let mut args = vec!["setup", "--from", archive.path().to_str().expect("archive")];
+        if let Some(mode) = mode {
+            args.push(mode);
+        }
+        let output = command_output_with_env(
+            &args,
+            &[(
+                "ROM_WEAVER_DATA_DIR",
+                data_home.path().to_str().expect("data"),
+            )],
+            0,
+        );
+        assert!(
+            output.stdout.is_empty(),
+            "setup stdout: {:?}",
+            output.stdout
+        );
+        let text = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(
+            text.matches("installed 1 identify pack(s)").count(),
+            usize::from(mode != Some("--quiet")),
+            "completion count for {mode:?}: {text}"
+        );
+    }
+    let output = command_output_with_env(
+        &["setup"],
+        &[(
+            "ROM_WEAVER_DATA_DIR",
+            data_home.path().to_str().expect("data"),
+        )],
+        0,
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("already installed (1 pack(s))"));
+}
+
+#[test]
+fn install_accepts_a_redump_alias_in_a_fresh_database() {
+    let temp = setup_temp_dir();
+    let dat = redump_dat(&[("PlayStation Game", b"playstation")]);
+    let zip = temp.child("redump.zip");
+    fs::write(zip.path(), store_zip(&[("Sony - PlayStation.dat", &dat)])).expect("zip");
+    let dir = temp.child("fresh-db");
+    command_stdout(
+        &[
+            "identify",
+            "database",
+            "install",
+            "psx",
+            "--from",
+            zip.path().to_str().expect("zip"),
+            "--database-dir",
+            dir.path().to_str().expect("dir"),
+            "--json",
+        ],
+        0,
+    );
+    assert!(dir.path().join("sony-playstation.pack").is_file());
+}
+
+#[test]
+fn database_remove_accepts_a_setup_only_pack() {
+    let temp = setup_temp_dir();
+    let dir = full_database_fixture(&temp);
+    command_stdout(
+        &[
+            "identify",
+            "database",
+            "remove",
+            "sony-playstation",
+            "--database-dir",
+            dir.to_str().expect("dir"),
+            "--json",
+        ],
+        0,
+    );
+    assert!(!dir.join("full-v1/packs/sony-playstation.pack.br").exists());
+}
