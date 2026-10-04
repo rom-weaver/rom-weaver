@@ -120,3 +120,42 @@ fn native_cancellation_does_not_reclassify_other_failures_or_successes() {
         OperationStatus::Succeeded
     );
 }
+
+#[test]
+fn native_terminal_failures_always_have_structured_error_details() {
+    for (status, code, exit) in [
+        (OperationStatus::Failed, "operation.failed", 1),
+        (OperationStatus::Unsupported, "operation.unsupported", 2),
+        (OperationStatus::Cancelled, "operation.cancelled", 130),
+    ] {
+        let mut event = result_event("probe", "validate", "cannot read input", None);
+        event.status = status;
+        let event = normalize_event(event);
+        assert_eq!(
+            event.details.as_ref().expect("error details")["error"],
+            json!({"code": code, "exit_code": exit, "message": "cannot read input"})
+        );
+    }
+    let mut event = result_event(
+        "probe",
+        "validate",
+        "cannot read input",
+        Some(json!({"path": "a.nes"})),
+    );
+    event.status = OperationStatus::Failed;
+    let event = normalize_event(event);
+    assert_eq!(event.details.as_ref().unwrap()["path"], "a.nes");
+    assert_eq!(event.details.as_ref().unwrap()["error"]["exit_code"], 1);
+    let event = normalize_event(error_event(
+        "cli",
+        "arguments",
+        "cli.invalid_arguments",
+        "bad argument",
+        2,
+    ));
+    assert_eq!(
+        event.details.as_ref().unwrap()["error"]["code"],
+        "cli.invalid_arguments"
+    );
+    assert_eq!(event.details.as_ref().unwrap()["error"]["exit_code"], 2);
+}

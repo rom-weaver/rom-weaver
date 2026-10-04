@@ -156,6 +156,14 @@ fn normalize_event(mut event: ProgressEvent) -> ProgressEvent {
             error.insert("exit_code".to_string(), json!(130));
         }
     }
+    let exit_code = event.status.exit_code();
+    if exit_code != 0 {
+        let error = report_error(&event, exit_code);
+        let details = event.details.get_or_insert_with(|| json!({}));
+        if let Some(details) = details.as_object_mut() {
+            details.insert("error".to_string(), error);
+        }
+    }
     event
 }
 
