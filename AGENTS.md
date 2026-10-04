@@ -47,6 +47,12 @@ still runs over its full owning workspace. CI adds tests and builds according to
 its change classification. `docs/development/ci.md` maps every workflow, the
 shared actions, caching, and the release fan-out.
 
+Before pushing webapp or published-doc changes, run a production webapp build
+and `check:size`; lint and pre-commit hooks do not cover generated asset sizes.
+Use `docs/development/reproduce-ci-locally.md#prevent-repeat-failures` for the
+commands and the additional checks for UI changes. Investigate unexpected
+growth before proposing a budget increase; never raise a limit just to pass CI.
+
 ## Hard rules
 
 - **Byte-identical parity.** Compression/patch output is validated against
