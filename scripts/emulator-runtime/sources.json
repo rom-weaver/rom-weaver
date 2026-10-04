@@ -639,6 +639,18 @@
       "url": "https://github.com/libretro/beetle-pce-fast-libretro/archive/1c693c630121366f0b819d785762f1ce5b3a68d0.tar.gz",
       "archive": "beetle_pce_fast-1c693c630121366f0b819d785762f1ce5b3a68d0.tar.gz",
       "sha256": "8b427af5f0dcb07067f69699eab5f37386fed757cf373216c62ea20e75fb1e02",
+      "patches": [
+        {
+          "path": "deps/zlib-1.2.11/zutil.h",
+          "find": "#      ifndef fdopen\n#        define fdopen(fd,mode) NULL /* No fdopen() */",
+          "replace": "#      if !defined(fdopen) && !defined(__APPLE__)\n#        define fdopen(fd,mode) NULL /* No fdopen() */"
+        },
+        {
+          "path": "libretro-common/include/compat/zutil.h",
+          "find": "#      ifndef fdopen\n#        define fdopen(fd,mode) NULL /* No fdopen() */",
+          "replace": "#      if !defined(fdopen) && !defined(__APPLE__)\n#        define fdopen(fd,mode) NULL /* No fdopen() */"
+        }
+      ],
       "build": [
         {
           "cwd": ".",
@@ -665,6 +677,18 @@
       "url": "https://github.com/libretro/beetle-supergrafx-libretro/archive/3c6fcd3deded54ebecd69408f108407ac03d11b5.tar.gz",
       "archive": "beetle_supergrafx-3c6fcd3deded54ebecd69408f108407ac03d11b5.tar.gz",
       "sha256": "87c5355089ad3d60befd76c2227062e48d6db5a33ab46e4b3efd680cb55a9ee9",
+      "patches": [
+        {
+          "path": "deps/zlib-1.2.11/zutil.h",
+          "find": "#      ifndef fdopen\n#        define fdopen(fd,mode) NULL /* No fdopen() */",
+          "replace": "#      if !defined(fdopen) && !defined(__APPLE__)\n#        define fdopen(fd,mode) NULL /* No fdopen() */"
+        },
+        {
+          "path": "libretro-common/include/compat/zutil.h",
+          "find": "#      ifndef fdopen\n#        define fdopen(fd,mode) NULL /* No fdopen() */",
+          "replace": "#      if !defined(fdopen) && !defined(__APPLE__)\n#        define fdopen(fd,mode) NULL /* No fdopen() */"
+        }
+      ],
       "build": [
         {
           "cwd": ".",
@@ -745,6 +769,13 @@
       "url": "https://github.com/libretro/stella/archive/ba52c43b9eda950eb0c0eec69cda9b17dee8c39b.tar.gz",
       "archive": "stella-ba52c43b9eda950eb0c0eec69cda9b17dee8c39b.tar.gz",
       "sha256": "1f3425b0ddab23dad3c46d08780cc01cb919c47cc04b3b1318e798e0c22c03c5",
+      "patches": [
+        {
+          "path": "src/lib/zlib/zutil.h",
+          "find": "#      ifndef fdopen\n#        define fdopen(fd,mode) NULL /* No fdopen() */",
+          "replace": "#      if !defined(fdopen) && !defined(__APPLE__)\n#        define fdopen(fd,mode) NULL /* No fdopen() */"
+        }
+      ],
       "build": [
         {
           "cwd": "src/os/libretro",
