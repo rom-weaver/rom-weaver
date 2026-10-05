@@ -331,6 +331,20 @@ test("Handy statically links MinGW runtime libraries on Windows", () => {
   assert.deepEqual(coreRecipe(handy, "linux-x64-gnu").patches, []);
 });
 
+test("melonDS statically links MinGW runtime libraries on Windows", () => {
+  const melonds = sources.cores.find(({ id }) => id === "melonds");
+  const windows = coreRecipe(melonds, "win32-x64");
+  assert.deepEqual(windows.patches, [
+    {
+      path: "Makefile",
+      find: "SHARED := -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined",
+      replace:
+        "SHARED := -shared -static -static-libgcc -static-libstdc++ -s -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined",
+    },
+  ]);
+  assert.deepEqual(coreRecipe(melonds, "linux-x64-gnu").patches, []);
+});
+
 test("Windows dependency inspection rejects toolchain libraries", () => {
   const imports = parseWindowsDependencies(`
     DLL Name: KERNEL32.dll
