@@ -77,6 +77,14 @@ export const coreRecipe = (core, platformName) => {
       replace: "SHARED := -shared -static -static-libgcc -static-libstdc++ -Wl,-no-undefined",
     });
   }
+  if (core.id === "melonds" && platformName === "win32-x64") {
+    patches.push({
+      path: "Makefile",
+      find: "SHARED := -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined",
+      replace:
+        "SHARED := -shared -static -static-libgcc -static-libstdc++ -s -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined",
+    });
+  }
   if (core.id === "ppsspp" && platformName === "darwin-arm64") {
     patches.push({
       path: "libretro/Makefile",
