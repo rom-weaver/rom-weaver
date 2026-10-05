@@ -64,6 +64,8 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
 
 The default branch uses a squash merge queue. Both required workflows handle `merge_group.checks_requested`. CI classifies the changes from the merge group's base SHA and tests the combined commit. Queue runs never plan a webapp deployment or publish Docker images; those publications remain on the existing PR, main-push, tag, and manual paths.
 
+The `main merge queue` ruleset builds one queued PR at a time and merges one PR per group, preserving each PR title as its squash commit subject. The minimum group size is one with no batching delay. All required checks must pass (`ALLGREEN`), with a 60-minute timeout for check completion. The existing main protection ruleset still owns the five required checks and has no bypass actors.
+
 On a merge group, `pull-request.yml` reads the queue through GitHub's API and verifies the latest `PR Title Lint` and `CLA Signed` statuses on every included PR head. Both must be successful statuses from GitHub Actions before the same contexts become successful on the group SHA. Missing entries, incomplete queue data, API failures, and missing or unsuccessful statuses fail both group gates. The script comes from the merge group's base commit, and this path cannot record CLA signatures.
 
 The title job runs commitlint on the pull request title. Squash merges use that title as the commit subject. [Commit conventions](commits.md) owns the title format.
