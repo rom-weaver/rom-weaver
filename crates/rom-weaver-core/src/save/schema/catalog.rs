@@ -72,6 +72,8 @@ impl FieldScope {
             ..FieldDefinition::new(self.id(id), label.into(), self.offset(offset, 0), storage)
         }
     }
+    // Bit fields MUST share the offset and bit initialization to bound WASM size.
+    #[inline(never)]
     fn bit_field(&self, id: &str, label: &str, offset: usize, bit: u8) -> FieldDefinition {
         let mut field = self.field(id, label, offset, Storage::Bit);
         field.offset = self.offset(offset, bit);
@@ -309,6 +311,8 @@ pub(in crate::save) fn all() -> Vec<SchemaSaveHandler> {
         .clone()
 }
 
+// Catalog choices MUST share this allocation loop to bound WASM size.
+#[inline(never)]
 fn choices(entries: &[(&str, i64)]) -> Vec<FieldChoice> {
     entries
         .iter()
