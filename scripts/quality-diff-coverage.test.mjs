@@ -7,6 +7,7 @@ import {
   diffCoverage,
   coverageInputs,
   readCoverageReports,
+  parseBranches,
 } from "./quality-diff-coverage.mjs";
 const diff =
   "--- a/crates/sample.rs\n+++ b/crates/sample.rs\n@@ -1,2 +1,3 @@\n+covered\n+uncovered\n+unmeasured\n";
@@ -113,4 +114,18 @@ test("sharded browser directories aggregate every report and reject empty select
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }
+});
+
+test("V8 negative branch counts remain unknown, never covered", () => {
+  const result = diffCoverage(
+    "+++ b/packages/rom-weaver-webapp/src/decision.ts\n@@ -7 +7 @@\n+decision\n",
+    ["SF:src/decision.ts\nDA:7,1\nBRDA:7,0,0,-1\nBRDA:7,0,1,-5\n"],
+  );
+  assert.deepEqual(result.branches.unknown, [
+    "packages/rom-weaver-webapp/src/decision.ts:7:0:0",
+    "packages/rom-weaver-webapp/src/decision.ts:7:0:1",
+  ]);
+  assert.deepEqual(result.branches.covered, []);
+  assert.deepEqual(result.branches.uncovered, []);
+  assert.throws(() => parseBranches("SF:src/decision.ts\nBRDA:7,0,0,invalid\n"), /Invalid branch/);
 });

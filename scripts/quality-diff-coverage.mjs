@@ -36,11 +36,12 @@ export function parseBranches(report, sourceRoot) {
     if (line.startsWith("SF:"))
       source = [...parseLcov(`${line}\nDA:1,0\n`, sourceRoot).keys()][0].slice(0, -2);
     if (!line.startsWith("BRDA:")) continue;
-    const match = /^BRDA:(\d+),(\d+),(\d+),(\d+|-)$/u.exec(line);
+    const match = /^BRDA:(\d+),(\d+),(\d+),(-?\d+|-)$/u.exec(line);
     if (!match || !source) throw new Error(`Invalid branch record: ${line}`);
+    // V8 shard LCOV can contain negative counts; they provide no coverage evidence.
     branches.set(
       `${source}:${match[1]}:${match[2]}:${match[3]}`,
-      match[4] === "-" ? null : Number(match[4]),
+      match[4] === "-" || Number(match[4]) < 0 ? null : Number(match[4]),
     );
   }
   return branches;
