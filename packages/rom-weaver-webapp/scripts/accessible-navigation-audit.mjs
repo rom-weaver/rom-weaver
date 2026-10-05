@@ -1,11 +1,15 @@
 import { expect } from "playwright/test";
 
+// macOS WebKit MUST use Option+Tab to include links with the default keyboard preferences.
+// https://bugs.webkit.org/show_bug.cgi?id=161394
+const tabKey = process.platform === "darwin" && process.env.ROM_WEAVER_BROWSER === "webkit" ? "Alt+Tab" : "Tab";
+
 // Keyboard journeys MUST reach controls through the tab order, without locator.focus().
 export const tabTo = async (page, target) => {
   await target.waitFor({ state: "attached" });
   for (let step = 0; step < 100; step += 1) {
     if (await target.evaluate((element) => element === document.activeElement)) return;
-    await page.keyboard.press("Tab");
+    await page.keyboard.press(tabKey);
   }
   throw new Error(
     `Keyboard could not reach ${target} within 100 Tab presses\n${await page.locator("body").ariaSnapshot()}`,
@@ -13,8 +17,14 @@ export const tabTo = async (page, target) => {
 };
 
 export const chooseFilesByKeyboard = async (page, input, files) => {
-  await tabTo(page, input);
-  const [chooser] = await Promise.all([page.waitForEvent("filechooser"), page.keyboard.press("Enter")]);
+  // Interception MUST start before traversal, or native activation can race its subscription.
+  const [chooser] = await Promise.all([
+    page.waitForEvent("filechooser"),
+    (async () => {
+      await tabTo(page, input);
+      await page.keyboard.press("Enter");
+    })(),
+  ]);
   expect(chooser.isMultiple(), "The keyboard file picker must accept ROMs and patches together").toBe(true);
   await chooser.setFiles(files);
 };
@@ -29,7 +39,7 @@ const auditDialogKeyboard = async (page, trigger, dialog) => {
   await expect(dialog).toBeVisible();
   await expectFocusInside(dialog);
   // Reverse traversal from the initial dialog focus exercises the end of the tab order.
-  for (const key of ["Shift+Tab", "Tab", "Tab", "Shift+Tab"]) {
+  for (const key of [`Shift+${tabKey}`, tabKey, tabKey, `Shift+${tabKey}`]) {
     await page.keyboard.press(key);
     // Native dialogs MAY yield focus to browser chrome, but never to background page controls.
     await expect
@@ -67,7 +77,7 @@ export const runAccessibleNavigationAudit = async (createContext, baseUrl) => {
       const main = page.getByRole("main");
       await expect(main).toHaveCount(1);
       const skip = page.getByRole("link", { name: "Skip to main content", exact: true });
-      await page.keyboard.press("Tab");
+      await page.keyboard.press(tabKey);
       await expect(skip).toBeFocused();
       const workflowUrl = new URL(page.url());
       await page.keyboard.press("Enter");
