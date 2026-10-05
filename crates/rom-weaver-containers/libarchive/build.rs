@@ -481,6 +481,11 @@ fn build_lzma_sdk(
     if env::var("CARGO_CFG_TARGET_OS").ok().as_deref() == Some("linux") {
         build.define("_GNU_SOURCE", None);
     }
+    // The encoder bridge MUST expose Vista condition-variable declarations before
+    // the forced SDK Precomp.h selects its older x86 Windows API minimum.
+    if env::var("CARGO_CFG_TARGET_OS").ok().as_deref() == Some("windows") {
+        build.define("_WIN32_WINNT", Some("0x0600"));
+    }
     let unaligned_header = glue_dir.join("rom_weaver_unaligned.h");
     println!("cargo:rerun-if-changed={}", unaligned_header.display());
     if build.get_compiler().is_like_msvc() {
