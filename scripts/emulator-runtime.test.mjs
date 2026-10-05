@@ -365,6 +365,58 @@ test("melonDS statically links MinGW runtime libraries on Windows", () => {
   assert.deepEqual(coreRecipe(melonds, "linux-x64-gnu").patches, []);
 });
 
+test("remaining Windows C++ cores statically link MinGW runtime libraries", () => {
+  const expected = new Map([
+    [
+      "beetle_supergrafx",
+      {
+        path: "Makefile",
+        find: "LDFLAGS += -static-libgcc -static-libstdc++ -lwinmm",
+        replace: "LDFLAGS += -static -static-libgcc -static-libstdc++ -lwinmm",
+      },
+    ],
+    [
+      "beetle_vb",
+      {
+        path: "Makefile",
+        find: "# Windows\nelse\n   TARGET := $(TARGET_NAME)_libretro.dll\n   CC ?= gcc\n   CXX ?= g++\n   SHARED := -shared -Wl,--no-undefined -Wl,--version-script=link.T\n   LDFLAGS += -static-libgcc -static-libstdc++",
+        replace:
+          "# Windows\nelse\n   TARGET := $(TARGET_NAME)_libretro.dll\n   CC ?= gcc\n   CXX ?= g++\n   SHARED := -shared -Wl,--no-undefined -Wl,--version-script=link.T\n   LDFLAGS += -static -static-libgcc -static-libstdc++",
+      },
+    ],
+    [
+      "beetle_ngp",
+      {
+        path: "Makefile",
+        find: "LDFLAGS += -static-libgcc -static-libstdc++ -lwinmm",
+        replace: "LDFLAGS += -static -static-libgcc -static-libstdc++ -lwinmm",
+      },
+    ],
+    [
+      "stella",
+      {
+        path: "src/os/libretro/Makefile",
+        find: "SHARED := -shared -static-libgcc -static-libstdc++ -Wl,--version-script=link.T",
+        replace:
+          "SHARED := -shared -static -static-libgcc -static-libstdc++ -Wl,--version-script=link.T",
+      },
+    ],
+    [
+      "beetle_wswan",
+      {
+        path: "Makefile",
+        find: "LDFLAGS += -static-libgcc -lwinmm",
+        replace: "LDFLAGS += -static -static-libgcc -lwinmm",
+      },
+    ],
+  ]);
+  for (const [id, patch] of expected) {
+    const core = sources.cores.find((candidate) => candidate.id === id);
+    assert.deepEqual(coreRecipe(core, "win32-x64").patches, [patch], id);
+    assert.deepEqual(coreRecipe(core, "linux-x64-gnu").patches, [], id);
+  }
+});
+
 test("Windows dependency inspection rejects toolchain libraries", () => {
   const imports = parseWindowsDependencies(`
     DLL Name: KERNEL32.dll

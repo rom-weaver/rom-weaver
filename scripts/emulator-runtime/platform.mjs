@@ -32,6 +32,36 @@ export const platformConfig = (name) => {
   return platforms[name];
 };
 
+const windowsRuntimeStaticLinkPatches = {
+  beetle_supergrafx: {
+    path: "Makefile",
+    find: "LDFLAGS += -static-libgcc -static-libstdc++ -lwinmm",
+    replace: "LDFLAGS += -static -static-libgcc -static-libstdc++ -lwinmm",
+  },
+  beetle_vb: {
+    path: "Makefile",
+    find: "# Windows\nelse\n   TARGET := $(TARGET_NAME)_libretro.dll\n   CC ?= gcc\n   CXX ?= g++\n   SHARED := -shared -Wl,--no-undefined -Wl,--version-script=link.T\n   LDFLAGS += -static-libgcc -static-libstdc++",
+    replace:
+      "# Windows\nelse\n   TARGET := $(TARGET_NAME)_libretro.dll\n   CC ?= gcc\n   CXX ?= g++\n   SHARED := -shared -Wl,--no-undefined -Wl,--version-script=link.T\n   LDFLAGS += -static -static-libgcc -static-libstdc++",
+  },
+  beetle_ngp: {
+    path: "Makefile",
+    find: "LDFLAGS += -static-libgcc -static-libstdc++ -lwinmm",
+    replace: "LDFLAGS += -static -static-libgcc -static-libstdc++ -lwinmm",
+  },
+  stella: {
+    path: "src/os/libretro/Makefile",
+    find: "SHARED := -shared -static-libgcc -static-libstdc++ -Wl,--version-script=link.T",
+    replace:
+      "SHARED := -shared -static -static-libgcc -static-libstdc++ -Wl,--version-script=link.T",
+  },
+  beetle_wswan: {
+    path: "Makefile",
+    find: "LDFLAGS += -static-libgcc -lwinmm",
+    replace: "LDFLAGS += -static -static-libgcc -lwinmm",
+  },
+};
+
 export const coreRecipe = (core, platformName) => {
   const platform = platformConfig(platformName);
   const build = structuredClone(core.build ?? []);
@@ -63,6 +93,9 @@ export const coreRecipe = (core, platformName) => {
     build.at(-1).command.push("MSYSTEM=MINGW64");
   }
   const patches = [];
+  if (platformName === "win32-x64" && Object.hasOwn(windowsRuntimeStaticLinkPatches, core.id)) {
+    patches.push(windowsRuntimeStaticLinkPatches[core.id]);
+  }
   if (["gambatte", "snes9x"].includes(core.id) && platformName === "win32-x64") {
     patches.push({
       path: core.id === "snes9x" ? "libretro/Makefile" : "Makefile.libretro",
