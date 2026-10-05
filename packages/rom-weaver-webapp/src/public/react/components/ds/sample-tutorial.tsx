@@ -17,7 +17,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import type { ComponentType, MouseEvent, ReactNode } from "react";
+import type { ComponentType, MouseEvent } from "react";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createLogger } from "../../../../lib/logging.ts";
@@ -86,10 +86,9 @@ const useGuidedSampleStart = (guide: GuidedSample, onStart: () => void, onDismis
 
 type SampleTutorialStep = {
   actions?: readonly (readonly [action: SampleTutorialAction, label: string])[];
-  /** Controls the card itself offers on this step, below Try it - the add-files
-      step's practice files, say. Unlike the chip list it stays on phones. */
-  aside?: ReactNode;
   body: string;
+  /** The step's own Continue work is under way - the practice files loading. */
+  busy?: boolean;
   /** Selector, within the target, for the button this step asks you to press. */
   cta?: string;
   /** Document-level selector for a control that sits outside the target but
@@ -98,6 +97,9 @@ type SampleTutorialStep = {
   /** Continue waits while this is set: the step needs the reader to do
       something first, such as adding the files every later step looks at. */
   locked?: boolean;
+  /** What Continue does on a locked step instead of waiting - loading the
+      practice files, say. The guide moves on by itself once the step unlocks. */
+  onContinue?: () => void;
   openDrawers?: boolean;
   openMenu?: boolean;
   /** `below` keeps the card under the row however tall the row is, for a row
@@ -148,6 +150,20 @@ const getViewTutorialStep = (
         title: localizer.message("ui.tutorial.view.title"),
         view: true,
       };
+
+/**
+ * The match for a step's selector that is actually on screen. Every visited
+ * workflow panel stays mounted (hidden), and Apply and Bundle render the same
+ * form, so a document-wide lookup can land on a hidden panel's copy of the row:
+ * the ring would then frame an empty box and the row the reader sees would stay
+ * under the scrim.
+ */
+const findShown = (selector: string) => {
+  for (const match of document.querySelectorAll<HTMLElement>(selector)) {
+    if (!match.closest("[hidden]")) return match;
+  }
+  return null;
+};
 
 /**
  * The lifted control that belongs to the target's own workbench. Every visited
@@ -549,11 +565,18 @@ const SampleTutorialStart = ({
 };
 
 const SampleTutorial = ({
+  download,
+  error = "",
   loadingBody,
   onClose,
   ready,
   steps: allSteps,
 }: {
+  /** The guide's practice files, offered on its first step for readers who
+      want their own copy - to add by hand, or to keep. */
+  download?: { href: string; name: string };
+  /** Why the practice files did not load; shown on the card. */
+  error?: string;
   loadingBody: string;
   onClose: () => void;
   ready: boolean;
@@ -576,7 +599,7 @@ const SampleTutorial = ({
       ...(candidate.requires ? [candidate.requires] : []),
       ...(candidate.view ? [VIEW_TOGGLE_SELECTOR] : []),
     ]);
-    const missing = selectors.filter((selector) => !document.querySelector(selector));
+    const missing = selectors.filter((selector) => !findShown(selector));
     if (missing.length) setMissingRequirements(new Set(missing));
   }, []);
   const steps = useMemo(
@@ -593,6 +616,8 @@ const SampleTutorial = ({
   const dialogRef = useRef<HTMLDivElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
   const [stepIndex, setStepIndex] = useState(0);
+  // The step whose Continue started its own work and is waiting to unlock.
+  const [advanceFrom, setAdvanceFrom] = useState<number | null>(null);
   const [targetEl, setTargetEl] = useState<HTMLElement | null>(null);
   // Whether the guide is showing steps yet. Lags the `ready` prop by one exit
   // animation so the loading copy is gone before the card leaves the bottom bar.
@@ -674,6 +699,21 @@ const SampleTutorial = ({
 
   useEffect(() => () => motionRef.current?.cancel(), []);
 
+  // A Continue that started the step's own work - loading the practice files -
+  // finishes the press once that work unlocks the step. A failed load leaves
+  // the step where it is, with the reason on the card.
+  const stepLocked = !!step?.locked;
+  useEffect(() => {
+    if (advanceFrom === null) return;
+    if (advanceFrom !== stepIndex || error) {
+      setAdvanceFrom(null);
+      return;
+    }
+    if (!live || stepLocked) return;
+    setAdvanceFrom(null);
+    beginMove(() => setStepIndex((current) => Math.min(current + 1, steps.length - 1)));
+  }, [advanceFrom, beginMove, error, live, stepIndex, stepLocked, steps.length]);
+
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
@@ -704,7 +744,7 @@ const SampleTutorial = ({
     let frame = 0;
     const connect = () => {
       if (target) return true;
-      target = document.querySelector<HTMLElement>(targetSelector);
+      target = findShown(targetSelector);
       if (!target) return false;
       stage = target.closest<HTMLElement>(".step");
       setTargetEl(target);
@@ -987,6 +1027,7 @@ const SampleTutorial = ({
   );
   const stepBody = step.view ? [step.body, viewBody].filter(Boolean).join(" ") : step.body;
   const locked = live && !!step.locked;
+  const busy = live && (!!step.busy || advanceFrom === stepIndex);
   const stepTryIt = step.view
     ? localizer.message(detailedViewEnabled ? "ui.tutorial.view.detailedTryIt" : "ui.tutorial.view.simpleTryIt")
     : step.tryIt;
@@ -1073,7 +1114,20 @@ const SampleTutorial = ({
                   <span>{stepTryIt}</span>
                 </p>
               ) : null}
-              {live && step.aside ? <div className="sample-tutorial-aside">{step.aside}</div> : null}
+              {live && stepIndex === 0 && download ? (
+                <p className="sample-tutorial-practice">
+                  <span>{localizer.message("ui.tutorial.practiceFiles")}</span>
+                  <a className="btn ghost slim" download={download.name} href={download.href}>
+                    <Download aria-hidden="true" />
+                    {localizer.message("ui.tutorial.downloadPractice", { file: download.name })}
+                  </a>
+                </p>
+              ) : null}
+              {error ? (
+                <p className="sample-tutorial-error" role="status">
+                  {error}
+                </p>
+              ) : null}
               {live ? null : (
                 <div
                   aria-label={localizer.message("ui.tutorial.loadingProgress")}
@@ -1126,18 +1180,29 @@ const SampleTutorial = ({
           {live ? <p className="sample-tutorial-end-hint">{localizer.message("ui.tutorial.endHint")}</p> : null}
           {live ? (
             <button
-              aria-disabled={locked ? "true" : undefined}
+              aria-busy={busy || undefined}
+              aria-disabled={busy || (locked && !step.onContinue) ? "true" : undefined}
               className="btn primary slim"
               onClick={() => {
                 // A second press mid-handoff would cancel the exit the first one
                 // started, stranding the card invisible on a step it never left.
-                if (moving || locked) return;
+                if (moving || busy) return;
+                if (locked) {
+                  if (!step.onContinue) return;
+                  setAdvanceFrom(stepIndex);
+                  step.onContinue();
+                  return;
+                }
                 if (finalStep) endGuide();
                 else beginMove(() => setStepIndex((current) => current + 1));
               }}
               type="button"
             >
-              {finalStep ? localizer.message("ui.tutorial.done") : localizer.message("ui.tutorial.continue")}
+              {busy
+                ? localizer.message("ui.tutorial.loading")
+                : finalStep
+                  ? localizer.message("ui.tutorial.done")
+                  : localizer.message("ui.tutorial.continue")}
             </button>
           ) : null}
         </div>

@@ -601,7 +601,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.apply.tutorial.addFiles.tryIt": msg({
     id: "ui.apply.tutorial.addFiles.tryIt",
-    message: "Add a ROM and at least one patch, or use the practice files below.",
+    message: "Add a ROM and at least one patch, or press Continue to use the practice files.",
   }),
   "ui.apply.tutorial.addFiles.readyTryIt": msg({
     id: "ui.apply.tutorial.addFiles.readyTryIt",
@@ -609,12 +609,6 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.apply.tutorial.archives": msg({ id: "ui.apply.tutorial.archives", message: "ZIP, 7z and bundles" }),
   "ui.apply.tutorial.practiceFiles": msg({ id: "ui.apply.tutorial.practiceFiles", message: "Practice files" }),
-  "ui.apply.tutorial.noFiles": msg({ id: "ui.apply.tutorial.noFiles", message: "No files handy?" }),
-  "ui.apply.tutorial.usePractice": msg({ id: "ui.apply.tutorial.usePractice", message: "Use the practice files" }),
-  "ui.apply.tutorial.downloadPractice": msg({
-    id: "ui.apply.tutorial.downloadPractice",
-    message: "Download first-weave.zip",
-  }),
   "ui.apply.tutorial.addCheats": msg({ id: "ui.apply.tutorial.addCheats", message: "Add cheats to the patch order" }),
   "ui.apply.tutorial.output.tryIt": msg({
     id: "ui.apply.tutorial.output.tryIt",
@@ -963,6 +957,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.tutorial.loadingProgress": msg({ id: "ui.tutorial.loadingProgress", message: "Loading sample files" }),
   "ui.tutorial.loadingTitle": msg({ id: "ui.tutorial.loadingTitle", message: "Loading the sample files" }),
   "ui.tutorial.new": msg({ id: "ui.tutorial.new", message: "New here?" }),
+  "ui.tutorial.practiceFiles": msg({ id: "ui.tutorial.practiceFiles", message: "Practice files:" }),
+  "ui.tutorial.downloadPractice": msg({ id: "ui.tutorial.downloadPractice", message: "Download {file}" }),
   "ui.tutorial.preparing": msg({ id: "ui.tutorial.preparing", message: "Getting the sample ready…" }),
   "ui.tutorial.preparingProgress": msg({ id: "ui.tutorial.preparingProgress", message: "Getting the sample ready" }),
   "ui.tutorial.start": msg({ id: "ui.tutorial.start", message: "Practice with sample files" }),

@@ -1330,6 +1330,13 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         ) : null}
         {sampleTutorial ? (
           <SampleTutorial
+            download={{
+              href: resolveAssetUrl(
+                resolvedAssetBaseUrl,
+                sampleTutorial === "create-cheats" ? "hello-world.nes" : CREATE_SAMPLE_ARCHIVE,
+              ),
+              name: sampleTutorial === "create-cheats" ? "hello-world.nes" : CREATE_SAMPLE_ARCHIVE,
+            }}
             loadingBody={
               sampleTutorial === "create-cheats"
                 ? "RomWeaver is loading and fingerprinting a tiny legal practice ROM."

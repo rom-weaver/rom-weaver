@@ -1272,22 +1272,21 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
     0 0 0 9px var(--thread),
     0 0 22px 6px color-mix(in oklab, var(--thread) 34%, transparent);
 }
-/* The card's own controls for a step - the practice files on the add-files
-   step. They are the one way forward for a reader without files, so unlike the
-   chip list they stay on phones. */
+/* The first step's download of the guide's practice files, for a reader who
+   wants their own copy. Unlike the chip list it stays on phones. */
 .rw-app .sample-tutorial-practice {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-s);
   align-items: center;
-  margin-block-start: var(--sp-s);
+  margin: var(--sp-s) 0 0;
 }
 .rw-app .sample-tutorial-practice > span {
   font-size: 0.78rem;
   color: var(--ink-3);
 }
-.rw-app .sample-tutorial-practice > [role="status"] {
-  flex-basis: 100%;
+.rw-app .sample-tutorial-error {
+  margin: var(--sp-s) 0 0;
   color: var(--fault);
 }
 .rw-app .sample-tutorial-actions .sample-tutorial-end-hint {

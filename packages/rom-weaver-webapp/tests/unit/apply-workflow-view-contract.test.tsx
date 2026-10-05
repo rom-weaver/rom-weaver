@@ -454,7 +454,7 @@ describe("apply workflow view - empty bench", () => {
     expect(forms[0]?.classList.contains("identify-search--compact")).toBe(true);
   });
 
-  it("opens guided Apply on the drop zone and loads the practice files only when asked", async () => {
+  it("opens guided Apply on the drop zone and loads the practice files only on Continue", async () => {
     const onUnifiedDrop = vi.fn();
     const fetchMock = vi.fn().mockResolvedValue({
       blob: () => Promise.resolve(new Blob(["sample"], { type: "application/zip" })),
@@ -472,21 +472,38 @@ describe("apply workflow view - empty bench", () => {
     // Nothing reaches the bench the reader did not put there.
     expect(fetchMock).not.toHaveBeenCalled();
     expect(onUnifiedDrop).not.toHaveBeenCalled();
-    // Continue waits for files; the guide stays on the add-files step.
-    const next = within(dialog).getByRole("button", { name: "Continue" });
-    expect(next.getAttribute("aria-disabled")).toBe("true");
-    fireEvent.click(next);
-    expect(dialog.dataset.step).toBe("1");
+    // The practice files are offered as a download to add by hand...
     expect(within(dialog).getByRole("link", { name: "Download first-weave.zip" }).getAttribute("href")).toBe(
       "/first-weave.zip",
     );
-
-    fireEvent.click(within(dialog).getByRole("button", { name: "Use the practice files" }));
+    // ...or Continue, with no files in, loads them onto the bench.
+    const next = within(dialog).getByRole("button", { name: "Continue" });
+    expect(next.getAttribute("aria-disabled")).toBeNull();
+    fireEvent.click(next);
+    expect(dialog.dataset.step).toBe("1");
     await vi.waitFor(() => expect(onUnifiedDrop).toHaveBeenCalledOnce());
     const [files] = onUnifiedDrop.mock.calls[0] as [File[]];
     expect(fetchMock).toHaveBeenCalledWith("/first-weave.zip");
     expect(files[0]?.name).toBe("first-weave.zip");
     expect(shouldIdentifySource(files[0])).toBe(false);
+  });
+
+  it("keeps guided Apply on its add-files step when the practice files fail to load", async () => {
+    const onUnifiedDrop = vi.fn();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 503 }));
+    renderView({ onUnifiedDrop, ui: createEmptyPatcherUiState() });
+
+    act(() => requestGuidedSampleStart("apply"));
+    const dialog = document.querySelector(".sample-tutorial-dialog") as HTMLElement;
+    fireEvent.click(within(dialog).getByRole("button", { name: "Continue" }));
+
+    await vi.waitFor(() =>
+      expect(within(dialog).getByRole("status").textContent).toBe("Could not load the sample. Try again."),
+    );
+    expect(document.querySelector(".sample-tutorial-dialog")).toBe(dialog);
+    expect(dialog.dataset.step).toBe("1");
+    expect(within(dialog).getByRole("button", { name: "Continue" }).getAttribute("aria-busy")).toBeNull();
+    expect(onUnifiedDrop).not.toHaveBeenCalled();
   });
 
   it("keeps guided Apply open when the reader adds their own files", () => {

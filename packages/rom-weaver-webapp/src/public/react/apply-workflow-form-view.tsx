@@ -73,26 +73,21 @@ import {
 } from "./apply-output-fields.tsx";
 import { type RomRowDeps, groupRomInputs, renderRomInputRow, renderDiscGroup } from "./apply-rom-input-rows.tsx";
 import { SectionNotice } from "./apply-section-notice.tsx";
-import {
-  FIRST_WEAVE_ASSET,
-  usePendingCardMorph,
-  ApplyDropAfter,
-  ApplySampleStart,
-  ApplyTutorialPractice,
-} from "./apply-drop-after.tsx";
+import { FIRST_WEAVE_ASSET, usePendingCardMorph, ApplyDropAfter, ApplySampleStart } from "./apply-drop-after.tsx";
 import { WORKFLOW_GUIDES } from "./workflow-guides.ts";
 
 /** What the add-files step needs from the form: whether the bench is ready to
-    tour, and the practice files the reader can choose instead of their own. */
+    tour, and the practice files Continue loads when the reader has none. */
 type ApplyTutorialInputs = {
-  practice: ReactNode;
+  loadPractice: () => void;
+  loading: boolean;
   ready: boolean;
 };
 
 /**
  * The guided Apply run. It starts on the empty drop zone and waits there: the
- * reader adds files by any of the real routes - their own, or the practice
- * files from the card - so nothing appears on the bench they did not put there.
+ * reader adds files by any of the real routes, or presses Continue to use the
+ * practice files - so nothing appears on the bench they did not ask for.
  */
 const getApplySampleTutorialSteps = (
   localizer: ReturnType<typeof useUiLocalizer>,
@@ -105,9 +100,10 @@ const getApplySampleTutorialSteps = (
       ["archive", localizer.message("ui.apply.tutorial.archives")],
       ["download", localizer.message("ui.apply.tutorial.practiceFiles")],
     ],
-    aside: inputs.ready ? undefined : inputs.practice,
     body: localizer.message("ui.apply.tutorial.addFiles.body"),
+    busy: !inputs.ready && inputs.loading,
     locked: !inputs.ready,
+    onContinue: inputs.loadPractice,
     placement: "below",
     target: "#rom-weaver-row-unified-drop",
     title: localizer.message("ui.apply.tutorial.addFiles.title"),
@@ -364,7 +360,9 @@ const useGuidedSampleLoader = (input: {
       input.onPracticeCheatSampleChange?.(true);
     } catch {
       if (generation !== loadGenerationRef.current) return;
-      setSampleTutorial(null);
+      // Guided Apply stays on its add-files step, where the card shows why
+      // and the reader can still add files of their own; the others close.
+      if (guide !== "apply") setSampleTutorial(null);
       input.onPracticeCheatSampleChange?.(false);
       setSampleError(localizer.message("ui.apply.tutorial.sampleLoadFailed"));
     } finally {
@@ -1112,6 +1110,14 @@ function ApplyWorkflowFormView({
 
       {sampleTutorial ? (
         <SampleTutorial
+          download={{
+            href: resolveAssetUrl(
+              assetBaseUrl,
+              sampleTutorial === "apply-cheats" ? "hello-world.nes" : FIRST_WEAVE_ASSET,
+            ),
+            name: sampleTutorial === "apply-cheats" ? "hello-world.nes" : FIRST_WEAVE_ASSET,
+          }}
+          error={sampleTutorial === "apply" ? sampleError : ""}
           loadingBody={localizer.message("ui.apply.tutorial.loading")}
           onClose={closeSampleTutorial}
           ready={sampleTutorial === "apply" || sampleTutorialReady}
@@ -1121,14 +1127,8 @@ function ApplyWorkflowFormView({
               : sampleTutorial === "apply-cheats"
                 ? APPLY_CHEATS_TUTORIAL_STEPS
                 : getApplySampleTutorialSteps(localizer, {
-                    practice: (
-                      <ApplyTutorialPractice
-                        downloadHref={resolveAssetUrl(assetBaseUrl, FIRST_WEAVE_ASSET)}
-                        error={sampleError}
-                        loading={sampleLoading}
-                        onLoad={loadApplyPractice}
-                      />
-                    ),
+                    loadPractice: loadApplyPractice,
+                    loading: sampleLoading,
                     ready: sampleTutorialReady,
                   })
           }

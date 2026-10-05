@@ -65,7 +65,7 @@ The page changes after the files are understood. **ROM** holds the game, **Patch
 
 Use [cheats](use-browser-cheats.md) to add supported codes to that order. To change only the container, follow [Convert a ROM](convert-roms-browser.md).
 
-For a practice run, open [guided Apply](https://rom-weaver.com/apply-patches?guide=apply). It starts on this drop zone and waits for you to add files; choose **Use the practice files** on its card if you have none. The [guided Apply cheats tour](https://rom-weaver.com/apply-patches?guide=apply-cheats) loads a supplied homebrew ROM and a working sample code. [Ways files get into Apply](../reference/guided-runs.md#ways-files-get-into-apply) lists every route in one table.
+For a practice run, open [guided Apply](https://rom-weaver.com/apply-patches?guide=apply). It starts on this drop zone and waits for you to add files; choose **Continue** on its card to use the practice files if you have none. The [guided Apply cheats tour](https://rom-weaver.com/apply-patches?guide=apply-cheats) loads a supplied homebrew ROM and a working sample code. [Ways files get into Apply](../reference/guided-runs.md#ways-files-get-into-apply) lists every route in one table.
 
 ## Apply a BPS patch
 

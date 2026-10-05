@@ -255,6 +255,21 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.apply.tutorial.downloadPractice"
+#~ msgstr "first-weave.zip herunterladen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.apply.tutorial.noFiles"
+#~ msgstr "Keine Dateien zur Hand?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.apply.tutorial.usePractice"
+#~ msgstr "Übungsdateien verwenden"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", eine Ausgabe-Endung. Die Formatauswahl fügt die Endung hinzu; entferne sie, um einen doppelten Namen zu vermeiden."
 
@@ -436,7 +451,7 @@ msgstr "ROM hinzufügen"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.addFiles.tryIt"
-msgstr "Füge ein ROM und mindestens einen Patch hinzu oder nimm die Übungsdateien unten."
+msgstr "Füge ein ROM und mindestens einen Patch hinzu oder drücke Weiter, um die Übungsdateien zu verwenden."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1410,6 +1425,11 @@ msgstr "Herunterladen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tutorial.downloadPractice"
+msgstr "{file} herunterladen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.download"
 msgstr "{format}-Bundle herunterladen"
 
@@ -1427,11 +1447,6 @@ msgstr "{name} herunterladen"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.downloadTestBundle"
 msgstr "Test-Bundle herunterladen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.downloadPractice"
-msgstr "first-weave.zip herunterladen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2400,11 +2415,6 @@ msgstr "Kein kompatibler Patch gefunden."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.noFiles"
-msgstr "Keine Dateien zur Hand?"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.identify.nameNoMatch"
 msgstr "Kein Spiel in den Identifikationsdaten hat diesen Namen."
 
@@ -2967,6 +2977,11 @@ msgstr "Test nach Anwenden"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.practiceFiles"
 msgstr "Übungsdateien"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.practiceFiles"
+msgstr "Übungsdateien:"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4196,11 +4211,6 @@ msgstr "Doppelte ROMs verwenden"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.duplicateTitle"
 msgstr "Doppelte ROMs verwenden?"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.usePractice"
-msgstr "Übungsdateien verwenden"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
