@@ -882,7 +882,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     const logDialog = page.locator("dialog.log-dlg");
     await logDialog.waitFor({ state: "visible" });
     await scanVariants("log dialog");
-    await logDialog.locator(".console-close").click();
+    await logDialog.locator(".console-close:visible, .dlg-x:visible").click();
 
     await page.locator(".reset-btn:visible").click();
     const resetConfirmation = page.locator(".rw-modal .confirm-card:visible");

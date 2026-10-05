@@ -135,6 +135,7 @@ const NavRow = ({
       className={rowClass}
       data-nav={navId}
       hidden={entry.hidden}
+      id={idPrefix ? `${idPrefix}${entry.id}` : undefined}
       onClick={() => {
         onNavigate?.();
         entry.onSelect?.();

@@ -451,7 +451,7 @@ for (const route of DOC_ROUTES) {
     throw new Error(`${route.slug} has ${currentGuideLinks.length} current guide links; expected 1`);
   assertIncludes(
     docsHtml,
-    '<button aria-expanded="false" aria-label="Theme: Match system" class="tool"',
+    '<button aria-expanded="false" aria-label="Theme: Match system" class="tool theme-tool"',
     `${route.slug} React theme control`,
   );
   assertIncludes(docsHtml, '<base href="/" />', `${route.slug} asset base`);
