@@ -184,9 +184,18 @@ test("PPSSPP uses each upstream platform directory and native architecture", () 
     windows.build
       .at(-1)
       .command.includes(
-        "FFMPEGLDFLAGS=-L../ffmpeg/Windows/x86_64/lib -lavformat -lavcodec -lavutil -lswresample -lswscale",
+        "FFMPEGLDFLAGS=-L../ffmpeg/Windows/x86_64/lib -lavformat -lavcodec -lavutil -lswresample -lswscale -Wl,-Bstatic -liconv -Wl,-Bdynamic",
       ),
   );
+  const makefilePatch = windows.patches.find(({ path }) => path === "libretro/Makefile");
+  assert.match(makefilePatch.replace, /-lversion -liphlpapi$/);
+  const zstdPatch = windows.patches.find(({ path }) => path === "libretro/Makefile.common");
+  assert.match(zstdPatch.replace, /CFLAGS \+= -DZSTD_DISABLE_ASM/);
+  const workflow = fs.readFileSync(
+    new URL("../.github/workflows/emulator-runtime.yml", import.meta.url),
+    "utf8",
+  );
+  assert.match(workflow, /mingw-w64-ucrt-x86_64-libiconv/);
   const arm = coreRecipe(ppsspp, "darwin-arm64");
   assert.ok(arm.build[0].command.includes("--arch=aarch64"));
   assert.ok(arm.build.at(-1).command.includes("TARGET_ARCH=arm64"));
@@ -204,6 +213,8 @@ test("PPSSPP wraps Windows libzip callbacks with compatible pointer signatures",
       "ext/libzip/zip_source_file_win32_utf16.c",
       "ext/libzip/zip_source_file_win32_utf16.c",
       "ext/libzip/zip_source_file_win32_utf16.c",
+      "libretro/Makefile",
+      "libretro/Makefile.common",
     ],
   );
   assert.match(windows.patches[0].find, /CreateFileA,[\s\S]*DeleteFileA/);
@@ -313,10 +324,12 @@ test("Windows dependency inspection rejects toolchain libraries", () => {
     DLL Name: api-ms-win-crt-runtime-l1-1-0.dll
     DLL Name: libwinpthread-1.dll
     DLL Name: libstdc++-6.dll
+    DLL Name: libiconv-2.dll
   `);
   assert.deepEqual(unexpectedWindowsDependencies(imports), [
     "libwinpthread-1.dll",
     "libstdc++-6.dll",
+    "libiconv-2.dll",
   ]);
 });
 

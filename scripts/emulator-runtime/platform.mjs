@@ -197,11 +197,23 @@ utf16_set_file_attributes_callback(const void *name, DWORD attributes) {
     utf16_move_file_callback,
     utf16_set_file_attributes_callback,`,
       },
+      {
+        path: "libretro/Makefile",
+        find: "LDFLAGS += -shared -Wl,--no-undefined -static-libgcc -static-libstdc++ -Wl,--version-script=link.T -lwinmm -lgdi32 -lwsock32 -lws2_32",
+        replace:
+          "LDFLAGS += -shared -Wl,--no-undefined -static-libgcc -static-libstdc++ -Wl,--version-script=link.T -lwinmm -lgdi32 -lwsock32 -lws2_32 -lversion -liphlpapi",
+      },
+      {
+        path: "libretro/Makefile.common",
+        find: "# zstd only uses asm for Linux/macOS and GNUC.\nifneq ($(PLATFORM_EXT), win32)",
+        replace:
+          "# zstd only uses asm for Linux/macOS and GNUC.\nifeq ($(PLATFORM_EXT), win32)\nCFLAGS += -DZSTD_DISABLE_ASM\nendif\n\nifneq ($(PLATFORM_EXT), win32)",
+      },
     );
     build
       .at(-1)
       .command.push(
-        "FFMPEGLDFLAGS=-L../ffmpeg/Windows/x86_64/lib -lavformat -lavcodec -lavutil -lswresample -lswscale",
+        "FFMPEGLDFLAGS=-L../ffmpeg/Windows/x86_64/lib -lavformat -lavcodec -lavutil -lswresample -lswscale -Wl,-Bstatic -liconv -Wl,-Bdynamic",
       );
   }
   return { build, output, patches };
