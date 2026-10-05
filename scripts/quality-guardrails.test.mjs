@@ -13,6 +13,23 @@ for (const source of [
 }
 test("comments and strings are not executable focus", () =>
   assert.deepEqual(syntaxSignals("test.ts", '// test.only("x")\nconst x="test.only()"'), []));
+test("quoted lint directives are data, while real block directives are checked", () => {
+  assert.deepEqual(
+    syntaxSignals("test.ts", 'const example = "// eslint-disable-next-line no-alert";'),
+    [],
+  );
+  assert.equal(inspectChange("test.ts", "", "/* @ts-ignore */\nalert(1)")[0].severity, "error");
+});
+test("quoted justification cannot approve a test suppression", () => {
+  assert.equal(
+    inspectChange(
+      "test.ts",
+      "",
+      'const example = "quality-reason: unavailable browser capability";\ntest.skip("x",()=>{})',
+    )[0].severity,
+    "error",
+  );
+});
 test("skip needs meaningful adjacent reason", () => {
   assert.equal(inspectChange("test.ts", "", 'test.skip("x",()=>{})')[0].severity, "error");
   assert.equal(

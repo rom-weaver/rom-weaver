@@ -84,14 +84,26 @@ export function syntaxSignals(path, source) {
       }
     };
     visit(tree);
+    for (const comment of parsed.comments) {
+      if (/(?:eslint|oxlint|biome|@ts)-?(?:ignore|disable|expect-error)/.test(comment.value))
+        add(
+          "suppression",
+          source.slice(0, comment.start).split("\n").length,
+          source.slice(comment.start, comment.end),
+        );
+    }
   }
   source.split("\n").forEach((line, index) => {
     if (
-      /^\s*#\s*\[\s*ignore(?:\s*=.*)?\s*\]/.test(line) ||
-      /(?:eslint|oxlint|biome|@ts)-?(?:ignore|disable|expect-error)/.test(line)
+      (path.endsWith(".rs") && /^\s*#\s*\[\s*ignore(?:\s*=.*)?\s*\]/.test(line)) ||
+      (/\.(?:rs|css|jsonc)$/.test(path) &&
+        /(?:eslint|oxlint|biome|@ts)-?(?:ignore|disable|expect-error)/.test(line))
     )
       add("suppression", index + 1, line.trim());
-    if (/\b(?:assert|assert_eq|assert_ne|debug_assert)(?:_eq|_ne)?!\s*\(/.test(line))
+    if (
+      path.endsWith(".rs") &&
+      /\b(?:assert|assert_eq|assert_ne|debug_assert)(?:_eq|_ne)?!\s*\(/.test(line)
+    )
       add("assertion", index + 1, line.trim());
   });
   return signals;
@@ -143,13 +155,25 @@ export function inspectChange(path, before, after) {
   const findings = configurationChanges(path, before, after);
   const old = syntaxSignals(path, before);
   const current = syntaxSignals(path, after);
-  const hasReason = (source, signal) =>
-    /quality-reason:\s*\S.{9,}|#\s*\[\s*ignore\s*=\s*"[^"\n]{10,}"/.test(
+  const reasons = new Map();
+  const hasReason = (source, signal) => {
+    if (/\.[cm]?[jt]sx?$/.test(path)) {
+      if (!reasons.has(source))
+        reasons.set(
+          source,
+          parseSync(path, source)
+            .comments.filter((comment) => /quality-reason:\s*\S.{9,}/.test(comment.value))
+            .map((comment) => source.slice(0, comment.start).split("\n").length),
+        );
+      return reasons.get(source).some((line) => line >= signal.line - 2 && line <= signal.line + 1);
+    }
+    return /quality-reason:\s*\S.{9,}|#\s*\[\s*ignore\s*=\s*"[^"\n]{10,}"/.test(
       source
         .split("\n")
         .slice(Math.max(0, signal.line - 3), signal.line + 1)
         .join("\n"),
     );
+  };
   const remaining = new Map();
   for (const signal of old)
     remaining.set(
@@ -174,11 +198,7 @@ export function inspectChange(path, before, after) {
       continue;
     }
     if (signal.kind === "assertion") continue;
-    const adjacent = after
-      .split("\n")
-      .slice(Math.max(0, signal.line - 3), signal.line + 1)
-      .join("\n");
-    const reason = /quality-reason:\s*\S.{9,}|#\s*\[\s*ignore\s*=\s*"[^"\n]{10,}"/.test(adjacent);
+    const reason = hasReason(after, signal);
     findings.push({
       path,
       ...signal,
