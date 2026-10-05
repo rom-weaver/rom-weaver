@@ -63,9 +63,9 @@ export const coreRecipe = (core, platformName) => {
     build.at(-1).command.push("MSYSTEM=MINGW64");
   }
   const patches = [];
-  if (core.id === "gambatte" && platformName === "win32-x64") {
+  if (["gambatte", "snes9x"].includes(core.id) && platformName === "win32-x64") {
     patches.push({
-      path: "Makefile.libretro",
+      path: core.id === "snes9x" ? "libretro/Makefile" : "Makefile.libretro",
       find: "SHARED := -shared -static-libgcc -static-libstdc++",
       replace: "SHARED := -shared -static -static-libgcc -static-libstdc++",
     });
