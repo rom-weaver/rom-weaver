@@ -68,10 +68,11 @@ jobs:
       deploy_targets: ${{ steps.plan.outputs.targets }}
       preview_branch: ${{ steps.plan.outputs.preview_branch }}
     steps:
+      # Shallow on purpose: every other job waits on this one, and the
+      # classifier needs only the base and head trees for a two-dot diff, not
+      # the history between them. The base is fetched by SHA below.
       - name: Checkout
         uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
 
       # A matrix can only be fed by an upstream job's output, so the shared
       # target list is resolved here rather than in the job that consumes it.
@@ -96,6 +97,17 @@ jobs:
           echo "sha=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml
           --event schedule --branch main --status success --limit 1
           --json headSha --jq '.[0].headSha // ""')" >> "$GITHUB_OUTPUT"
+
+      # A base that cannot be fetched (a force-pushed `before`) is left
+      # missing; the classifier then selects everything, as it always has.
+      - name: Fetch the diff base
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || steps.last-nightly.outputs.sha || '' }}
+        run: |
+          if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            git fetch --no-tags --depth=1 origin "$BASE_SHA" ||
+              echo "::warning::base $BASE_SHA could not be fetched"
+          fi
 
       - name: Classify changed paths
         id: classify
@@ -738,8 +750,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          # The whitespace check below diffs against the PR base.
-          fetch-depth: 0
+          # The whitespace check below diffs HEAD against the base, which is
+          # fetched by SHA in its own step. Depth 2 keeps HEAD's parent for
+          # the no-base fallback (dispatch), which diffs HEAD against it.
+          fetch-depth: 2
 
       - uses: ./.github/actions/setup-build-env
         with:
@@ -762,6 +776,15 @@ jobs:
 
       - name: CLI man page manifests
         run: cargo run --locked -p rom-weaver-cli --example generate_manpages -- --check-manifests
+
+      - name: Fetch the diff base
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+        run: |
+          if [ -n "$BASE_SHA" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            git fetch --no-tags --depth=1 origin "$BASE_SHA" ||
+              echo "::warning::base $BASE_SHA could not be fetched"
+          fi
 
       - name: Whitespace
         env:
