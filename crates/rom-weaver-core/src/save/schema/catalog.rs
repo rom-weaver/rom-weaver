@@ -121,6 +121,8 @@ struct FieldAddress {
 }
 
 impl FieldAddress {
+    // Catalog scalars MUST share their address and mask calculations to bound WASM size.
+    #[inline(never)]
     fn scalar(self, offset: usize, storage: Storage, mask: Option<u32>) -> rules::Scalar {
         let bit = if self.bit_stride {
             let mask = mask.expect("bit arrays require a mask");
