@@ -26,6 +26,9 @@ inputs:
   cargo-cache:
     description: Restore/save the cargo build cache. Set to false for jobs that never compile Rust.
     default: "true"
+  cargo-cache-targets:
+    description: Cache Cargo target artifacts. Set to false when the caller manages a separate target cache.
+    default: "true"
   ccache:
     description: >-
       Install ccache and cache its object store. Only worth it for jobs that
@@ -223,6 +226,7 @@ runs:
       with:
         # Save failed jobs because the key covers the toolchain and Cargo.lock.
         cache-on-failure: true
+        cache-targets: ${{ inputs.cargo-cache-targets }}
         # Restore on every ref but save only from main to avoid branch-local cache waste.
         save-if: ${{ github.ref == 'refs/heads/main' && inputs.cache-save == 'true' }}
 
