@@ -74,6 +74,31 @@ describe("PPF Undo input replacement", () => {
     },
   );
 
+  it("uses a bin extension for an extensionless ROM", async () => {
+    mocks.ingest.mockImplementation(async ({ fileName }) => ({
+      outputs: [],
+      patchOutputs: [],
+      result: fileName.endsWith(".ppf")
+        ? { assets: [], patches: [{ fileName, format: "ppf", isValidPatch: true }] }
+        : { assets: [{ fileName }], patches: [] },
+    }));
+    const output = { fileName: "game-restored.bin", saveAs: vi.fn(), dispose: vi.fn(), size: 3 };
+    mocks.undo.mockResolvedValue(output);
+    const view = render(
+      <RomWeaverSettingsProvider settings={{ defaultCompression: "none" }}>
+        <PpfUndoForm onSessionChange={vi.fn()} />
+      </RomWeaverSettingsProvider>,
+    );
+    const picker = view.container.querySelector("#ppf-undo-input-picker");
+    if (!picker) throw new Error("Missing input picker");
+    fireEvent.change(picker, { target: { files: [new File(["ROM"], "game"), new File(["PPF"], "valid.ppf")] } });
+    const button = await view.findByRole("button", { name: "Restore original ROM" });
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(button);
+    await waitFor(() => expect(output.saveAs).toHaveBeenCalledOnce());
+    expect(mocks.undo).toHaveBeenCalledWith(expect.objectContaining({ outputName: "game-restored.bin" }));
+  });
+
   it("clears a prior patch after invalid replacement, stays disabled after filename editing, and recovers", async () => {
     mocks.ingest.mockImplementation(async ({ fileName }) => ({
       outputs: [],

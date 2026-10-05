@@ -41,6 +41,7 @@ describe("PPF Undo ingestion", () => {
     const onInputs = vi.fn();
     const { result, unmount } = renderHook(() => usePpfUndoInputs(onInputs, vi.fn()));
     await act(async () => result.current.stage([new File(["zip"], "input.zip")]));
+    expect(mocks.ingest).toHaveBeenCalledWith(expect.objectContaining({ select: ["**"] }));
     const [rom, selectedPatch] = onInputs.mock.calls[0];
     expect(result.current.getPrepared(rom)?.output).toBe(second);
     expect(result.current.getPrepared(selectedPatch)?.output).toBe(ppf);
@@ -71,38 +72,45 @@ describe("PPF Undo ingestion", () => {
     ]);
   });
 
-  it("selects a disc track instead of sheet text and retains the sheet and companion tracks", async () => {
-    const sheet = output("/disc.cue", "FILE track.bin BINARY");
-    const track = output("/track.bin", "track");
-    const audio = output("/audio.bin", "audio");
-    mocks.ingest.mockResolvedValue({
-      result: {
-        assets: [
-          { ...asset(sheet.path), kind: "cue", discGroupId: "disc" },
-          { ...asset(track.path), kind: "bin", discGroupId: "disc" },
-          { ...asset(audio.path), kind: "bin", discGroupId: "disc" },
-        ],
-        patches: [],
-      },
-      outputs: [sheet, track, audio],
-      patchOutputs: [],
-    });
-    mocks.select.mockResolvedValue({ id: "0" });
-    const onInputs = vi.fn();
-    const { result } = renderHook(() => usePpfUndoInputs(onInputs, vi.fn()));
-    await act(async () => result.current.stage([new File(["zip"], "disc.zip")]));
-    const [rom] = onInputs.mock.calls[0];
-    expect(rom.name).toBe("track.bin");
-    expect(
-      mocks.select.mock.calls[0][0].candidates.map((candidate: { fileName: string }) => candidate.fileName),
-    ).toEqual(["track.bin", "audio.bin"]);
-    expect(result.current.getPrepared(rom)?.output).toBe(sheet);
-    expect(result.current.getPrepared(rom)?.target).toBe("track.bin");
-    expect(result.current.getPrepared(rom)?.companions).toEqual([track, audio]);
-    expect(audio.dispose).not.toHaveBeenCalled();
-    act(() => result.current.release(rom));
-    for (const entry of [sheet, track, audio]) expect(entry.dispose).toHaveBeenCalledOnce();
-  });
+  it.each([
+    { sheetPath: "/disc/disc.cue", trackPath: "/disc/tracks/track.bin", target: "tracks/track.bin" },
+    { sheetPath: "/disc/sheets/disc.cue", trackPath: "/disc/tracks/track.bin", target: "../tracks/track.bin" },
+    { sheetPath: "/disc.cue", trackPath: "/track.bin", target: "track.bin" },
+  ])(
+    "retains disc companions and selects the track relative to $sheetPath",
+    async ({ sheetPath, trackPath, target }) => {
+      const sheet = output(sheetPath, `FILE ${target} BINARY`);
+      const track = output(trackPath, "track");
+      const audio = output("/disc/audio.bin", "audio");
+      mocks.ingest.mockResolvedValue({
+        result: {
+          assets: [
+            { ...asset(sheet.path), kind: "cue", discGroupId: "disc" },
+            { ...asset(track.path), kind: "bin", discGroupId: "disc" },
+            { ...asset(audio.path), kind: "bin", discGroupId: "disc" },
+          ],
+          patches: [],
+        },
+        outputs: [sheet, track, audio],
+        patchOutputs: [],
+      });
+      mocks.select.mockResolvedValue({ id: "0" });
+      const onInputs = vi.fn();
+      const { result } = renderHook(() => usePpfUndoInputs(onInputs, vi.fn()));
+      await act(async () => result.current.stage([new File(["zip"], "disc.zip")]));
+      const [rom] = onInputs.mock.calls[0];
+      expect(rom.name).toBe("track.bin");
+      expect(
+        mocks.select.mock.calls[0][0].candidates.map((candidate: { fileName: string }) => candidate.fileName),
+      ).toEqual(["track.bin", "audio.bin"]);
+      expect(result.current.getPrepared(rom)?.output).toBe(sheet);
+      expect(result.current.getPrepared(rom)?.target).toBe(target);
+      expect(result.current.getPrepared(rom)?.companions).toEqual([track, audio]);
+      expect(audio.dispose).not.toHaveBeenCalled();
+      act(() => result.current.release(rom));
+      for (const entry of [sheet, track, audio]) expect(entry.dispose).toHaveBeenCalledOnce();
+    },
+  );
 
   it("disposes extracted files when candidate selection is cancelled and permits a later replacement", async () => {
     const first = output("/one.bin", "one");

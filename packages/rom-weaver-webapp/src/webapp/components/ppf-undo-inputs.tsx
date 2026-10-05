@@ -72,7 +72,7 @@ const usePpfUndoInputs = (
             source,
             fileName: name,
             identify: false,
-            select: ["*"],
+            select: ["**"],
             interactiveSelectionEnabled: false,
             signal: abort.signal,
           });
@@ -100,6 +100,13 @@ const usePpfUndoInputs = (
               : [];
             if (sheet && !sheetOutput)
               throw new Error("Disc sheet is unavailable; add the disc and its tracks together in an archive.");
+            const trackPath = (asset.path || asset.fileName).split("/");
+            const sheetDirectory = sheet?.path.split("/").slice(0, -1) || [];
+            while (sheetDirectory.length && sheetDirectory[0] === trackPath[0]) {
+              sheetDirectory.shift();
+              trackPath.shift();
+            }
+            const target = [...sheetDirectory.map(() => ".."), ...trackPath].join("/");
             candidates.push({
               file: await asFile(output, asset.fileName),
               kind: "rom",
@@ -110,7 +117,7 @@ const usePpfUndoInputs = (
                 format: asset.discFormat || sheet?.discFormat,
                 cuePath: sheetOutput?.path,
               },
-              ...(sheet ? { target: asset.fileName.replace(/[[*?]/g, (character) => `[${character}]`) } : {}),
+              ...(sheet ? { target: target.replace(/[[*?]/g, (character) => `[${character}]`) } : {}),
             });
           }
           for (const patch of ingested.result.patches) {
