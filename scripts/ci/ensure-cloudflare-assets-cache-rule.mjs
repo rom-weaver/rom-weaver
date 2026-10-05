@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import process from "node:process";
+import { setTimeout } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 
@@ -11,11 +12,20 @@ export function cacheRule() {
   return { description: CACHE_RULE_DESCRIPTION, expression: CACHE_RULE_EXPRESSION, action: "set_cache_settings", action_parameters: { cache: true, edge_ttl: { mode: "respect_origin", status_code_ttl: [{ status_code_range: { from: 300, to: 599 }, value: -1 }] } }, enabled: true };
 }
 
-export async function ensureCacheRule({ zoneId, token, fetchImpl = globalThis.fetch }) {
+export async function ensureCacheRule({ zoneId, token, fetchImpl = globalThis.fetch, sleep = setTimeout }) {
   if (!zoneId) return "skipped";
   const api = `https://api.cloudflare.com/client/v4/zones/${zoneId}/rulesets/phases/http_request_cache_settings/entrypoint`;
   const headers = { Authorization: `Bearer ${token}` };
-  const read = await fetchImpl(api, { headers });
+  let read;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    read = await fetchImpl(api, { headers, signal: AbortSignal.timeout(30000) });
+    if (read.status < 500 || read.status > 599 || attempt === 2) break;
+    // Discarding a failed body MUST NOT prevent retrying after an upstream disconnect.
+    await read.body?.cancel().catch(() => undefined);
+    const delay = 1000 * (attempt + 1);
+    process.stderr.write(`Cloudflare cache ruleset read returned HTTP ${read.status}; retrying in ${delay} ms\n`);
+    await sleep(delay);
+  }
   if (read.status === 404) return installRule(api, headers, [], fetchImpl);
   const body = await read.json();
   if (read.status !== 200) throw new Error(`Cloudflare cache ruleset read returned HTTP ${read.status}\n${JSON.stringify(body, null, 2)}`);
