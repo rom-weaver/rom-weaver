@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { MARKDOWN_ROUTES } from "../functions/markdown-routes.js";
 import { DOC_ROUTES } from "../src/webapp/docs-pages.mjs";
 import {
   API_CATALOG_CONTENT_TYPE,
@@ -82,6 +83,33 @@ assertIncludes(
   `Content-Signal: ai-train=${production ? "yes" : "no"}, search=${production ? "yes" : "no"}, ai-input=${production ? "yes" : "no"}`,
   "robots.txt content signals",
 );
+
+for (const { path: routePath, markdownPath } of MARKDOWN_ROUTES) {
+  const htmlPath = routePath === "/" ? "index.html" : `${routePath.slice(1)}.html`;
+  const markdown = read(markdownPath);
+  assertIncludes(markdown, `Canonical: ${SITE_ORIGIN}${routePath}`, `${markdownPath} canonical`);
+  assertIncludes(read(htmlPath), `type="text/markdown" href="${markdownPath}"`, `${htmlPath} Markdown discovery`);
+  const markdownResponseHeaders = matchPagesHeaders(parsePagesHeaders(headers), markdownPath);
+  assertIncludes(
+    markdownResponseHeaders["Content-Type"] ?? "",
+    "text/markdown; charset=utf-8",
+    `${markdownPath} content type`,
+  );
+}
+for (const route of Object.values(WORKFLOW_SEO_ROUTES)) {
+  const pageLinks = matchPagesHeaders(parsePagesHeaders(headers), `/${route.slug}`).Link?.join(", ") ?? "";
+  assertIncludes(
+    pageLinks,
+    `</${route.slug || "index"}.md>; rel="alternate"; type="text/markdown"`,
+    `${route.slug || "home"} Markdown header discovery`,
+  );
+
+  assertIncludes(
+    read(`${route.slug || "index"}.md`),
+    route.description,
+    `${route.slug || "home"} Markdown description`,
+  );
+}
 
 for (const route of DOC_ROUTES) {
   assertIncludes(read(`${route.slug}.md`), `Canonical: https://rom-weaver.com/${route.slug}`, "Markdown canonical");
@@ -194,6 +222,31 @@ assertExcludes(headers, "/assets/identify-index", "identify manifest cache rule"
 assertExcludes(headers, "/rom-weaver-service-worker.js\n  ! Cache-Control", "service worker cache rule");
 assertIncludes(read("_routes.json"), '"/assets/identify-*"', "identify assets Function route");
 const routes = read("_routes.json");
+const functionRoutes = JSON.parse(routes);
+const matchesFunctionRoute = (pathname, patterns) =>
+  patterns.some((pattern) =>
+    new RegExp(
+      `^${pattern
+        .split("*")
+        .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+        .join(".*")}$`,
+    ).test(pathname),
+  );
+if (functionRoutes.include.length + functionRoutes.exclude.length > 100)
+  throw new Error("Pages Function routes exceed the 100-rule limit");
+for (const { path: routePath, markdownPath } of MARKDOWN_ROUTES) {
+  if (
+    !matchesFunctionRoute(routePath, functionRoutes.include) ||
+    matchesFunctionRoute(routePath, functionRoutes.exclude)
+  )
+    throw new Error(`Markdown negotiation is not routed through Functions: ${routePath}`);
+  if (
+    matchesFunctionRoute(markdownPath, functionRoutes.include) &&
+    !matchesFunctionRoute(markdownPath, functionRoutes.exclude)
+  )
+    throw new Error(`Direct Markdown unnecessarily invokes Functions: ${markdownPath}`);
+}
+
 assertExcludes(routes, '"/assets/offline-chunk-*"', "offline download chunks Function route");
 const generatedDownloadFiles = fs
   .readdirSync(distDir)

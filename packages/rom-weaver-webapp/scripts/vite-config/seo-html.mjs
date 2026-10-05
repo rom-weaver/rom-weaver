@@ -27,7 +27,10 @@ export const createWorkflowRouteHtml = (html, route, channel, channelLabel) => {
   ]) {
     routeHtml = replaceMetaContent(routeHtml, attribute, name, content);
   }
-  return routeHtml;
+  return routeHtml.replace(
+    "</head>",
+    `  <link rel="alternate" type="text/markdown" href="/${route.slug || "index"}.md" />\n</head>`,
+  );
 };
 
 // Describe both the site name and free browser tool in one graph. alternateName
@@ -109,3 +112,6 @@ ${DOC_SOURCES.map((source) => {
 }).join("\n")}
 </urlset>
 `;
+
+export const createWorkflowMarkdown = (route) =>
+  `Canonical: https://rom-weaver.com/${route.slug}\n\n# ${route.title}\n\n${route.description}\n\n[Open in browser](https://rom-weaver.com/${route.slug})\n\n[Documentation](https://rom-weaver.com/docs.md)\n`;

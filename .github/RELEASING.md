@@ -92,7 +92,9 @@ Production is CI-gated by construction: only a release pull request whose requir
 
 Required repository secrets: `CLOUDFLARE_API_TOKEN` (needs **Account - Cloudflare Pages - Edit**, plus **Zone - DNS - Edit** to attach custom domains) and `CLOUDFLARE_ACCOUNT_ID`.
 
-The optional `CLOUDFLARE_ZONE_ID` secret enables the `/assets/*` zone Cache Rule. When it is set, the API token also needs **Zone - Cache Rules - Edit**.
+The optional `CLOUDFLARE_ZONE_ID` secret enables zone Cache Rules for immutable `/assets/*` and the exact published homepage, tool, and documentation routes. When it is set, the API token also needs **Zone - Cache Rules - Edit** and **Zone - Cache Purge - Purge** ([Cloudflare API permission](https://developers.cloudflare.com/api/resources/cache/methods/purge/)). The nightly deployment provisions both rules for all three custom domains; deploy nightly before manually deploying another channel for the first time.
+
+Negotiated pages respect the Function's origin TTL (`s-maxage=3600`) and vary on the raw `Accept` header. After each successful custom-domain deployment, CI purges only the published HTML and Markdown URLs; Cloudflare URL purges clear all Vary variants. Immutable assets are never purged. A purge failure fails the deployment step; the one-hour edge TTL bounds stale negotiated pages if invalidation fails. Without the zone secret, CI skips rule provisioning and purge, and origin cache headers remain authoritative. Pages preview domains have no zone rules.
 
 The workflow creates its own Pages project on first run for a channel, so there is no manual bootstrap and no local `wrangler login` - which matters because `wrangler login` needs a localhost OAuth callback and cannot complete on a headless machine. An API token is the only credential this setup requires.
 
