@@ -27,8 +27,17 @@ test("coverage includes feature gated examples, accumulates profiles and records
         args.includes("rom-weaver-typegen"),
     ),
   );
-  assert.equal(calls.filter((args) => args.includes("--no-report")).length, 2);
+  assert.equal(calls.filter((args) => args.includes("--no-report")).length, 4);
   assert.equal(calls.filter((args) => args[0] === "llvm-cov" && args[1] === "clean").length, 1);
+  const discovery = calls.filter((args) => args.includes("--list"));
+  assert.equal(discovery.length, 2);
+  for (const args of discovery) {
+    assert.equal(args[0], "llvm-cov");
+    assert.ok(args.includes("--no-report"));
+    assert.ok(
+      calls.some((execution) => JSON.stringify(execution) === JSON.stringify(args.slice(0, -2))),
+    );
+  }
   const report = JSON.parse(readFileSync(`${output}/selection.json`));
   assert.equal(report.suites[1].ignored, 2);
   assert.equal(report.doctests.instrumented, false);
@@ -54,7 +63,7 @@ test("branch mode instruments every selected test run rather than just relabelin
   );
   assert.equal(
     calls.filter((args) => args.includes("--no-report") && args.includes("--branch")).length,
-    2,
+    4,
   );
   assert.equal(
     JSON.parse(readFileSync(`${output}/selection.json`)).branchCoverage,
