@@ -11,14 +11,17 @@ struct Scratch(PathBuf);
 
 impl Scratch {
     fn new() -> Self {
-        let root = std::env::var_os("XDG_CACHE_HOME")
-            .map(PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))
-            .or_else(|| std::env::var_os("LOCALAPPDATA").map(PathBuf::from))
-            .or_else(|| {
-                std::env::var_os("USERPROFILE").map(|profile| PathBuf::from(profile).join(".cache"))
-            })
-            .unwrap_or_else(|| std::env::current_dir().expect("current directory"));
+        let root = std::env::var_os("XDG_CACHE_HOME").map_or_else(
+            || {
+                PathBuf::from(
+                    std::env::var_os("HOME")
+                        .or_else(|| std::env::var_os("USERPROFILE"))
+                        .expect("HOME or USERPROFILE"),
+                )
+                .join(".cache")
+            },
+            PathBuf::from,
+        );
         let path = root.join("agents/scratch/patch-properties").join(format!(
             "{}-{}",
             std::process::id(),
