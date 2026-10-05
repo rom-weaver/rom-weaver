@@ -318,6 +318,19 @@ test("Mupen selects its 64-bit MinGW recipe under UCRT64", () => {
   assert.ok(recipe.build[0].command.includes("MSYSTEM=MINGW64"));
 });
 
+test("Handy statically links MinGW runtime libraries on Windows", () => {
+  const handy = sources.cores.find(({ id }) => id === "handy");
+  const windows = coreRecipe(handy, "win32-x64");
+  assert.deepEqual(windows.patches, [
+    {
+      path: "Makefile",
+      find: "SHARED := -shared -static-libgcc -static-libstdc++ -Wl,-no-undefined",
+      replace: "SHARED := -shared -static -static-libgcc -static-libstdc++ -Wl,-no-undefined",
+    },
+  ]);
+  assert.deepEqual(coreRecipe(handy, "linux-x64-gnu").patches, []);
+});
+
 test("Windows dependency inspection rejects toolchain libraries", () => {
   const imports = parseWindowsDependencies(`
     DLL Name: KERNEL32.dll
