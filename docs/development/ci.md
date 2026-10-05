@@ -32,6 +32,7 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
   - [Prerelease routing](#prerelease-routing)
   - [Build provenance](#build-provenance)
     - [Testing it without cutting a release](#testing-it-without-cutting-a-release)
+- [Automatic PR branch updates](#automatic-pr-branch-updates)
 - [Actions cache budget](#actions-cache-budget)
   - [Why the Docker build cache is not in this budget](#why-the-docker-build-cache-is-not-in-this-budget)
 - [Secrets](#secrets)
@@ -45,6 +46,7 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
 | --- | --- | --- | --- |
 | `ci.yml` | PR, merge group, push to `main`, `v*` tags, nightly 05:41 UTC, manual | **Yes** | Build, lint, test, deploy the webapp; the nightly builds the full native matrix |
 | `pull-request.yml` | PR (open/reopen/sync/edit), PR comment, merge group | **Yes** | The required `CLA Signed` and `PR Title Lint` checks |
+| `update-auto-merge-prs.yml` | Push to `main`, auto-merge enabled/ready/sync PR events, every 30 min, manual | No | Merge current `main` into eligible auto-merge PR branches and trigger fresh CI |
 | `dependabot-auto-merge.yml` | Dependabot PR open/reopen/sync | No | Arm native squash auto-merge for patch and minor updates after required checks pass |
 | `codeql.yml` | source push to `main`, weekly, manual | No | Static analysis into the Security tab |
 | `coverage.yml` | weekly Sunday 06:43 UTC, manual | No | Rust + React coverage reports |
@@ -488,6 +490,12 @@ The attest steps run only during a release, which is the one moment their failur
 It is dispatch only because every run writes a permanent public attestation record; firing it per push would be noise in the repository's attestation list.
 
 The installers' fallback is duplicated into that workflow rather than invoked, because `install.sh` verifies only an asset it downloaded from a release and the dry run's subject is not one. `scripts/install.test.mjs` covers the same code against a captured real API response (`tests/fixtures/attestations-response.json`), so the duplication is checked from both ends: the fixture proves the shell agrees with GitHub's response shape, and the dry run proves it agrees with a live attestation.
+
+## Automatic PR branch updates
+
+`update-auto-merge-prs.yml` keeps same-repository PRs targeting `main` current when they have auto-merge enabled. It skips drafts, closed PRs, forks, branches already current, conflicts, and pending mergeability. Updates use GitHub's branch-update API to merge the base into the PR branch without rewriting its commits; the expected head SHA rejects concurrent pushes. Squash merging keeps the final main-branch history unchanged.
+
+The workflow runs trusted `main` code with `RELEASE_PLEASE_TOKEN`, which allows the resulting PR update to trigger CI automatically. It does not enable auto-merge or bypass required checks. Failed updates appear in the workflow log, and other eligible PRs are still processed. Skipped conflicts need manual resolution; a subsequent PR synchronize event retries selection. A half-hourly fallback catches delayed mergeability and auto-merge events suppressed by other automation. Manual runs default to a read-only dry run.
 
 ## Actions cache budget
 
