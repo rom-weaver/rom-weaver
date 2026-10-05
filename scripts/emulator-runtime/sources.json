@@ -598,6 +598,11 @@
           "path": "libretro/Makefile.common",
           "find": "else ifeq ($(TARGET_ARCH),arm64)\n      DYNAFLAGS += -D_ARCH_64",
           "replace": "else ifeq ($(TARGET_ARCH),arm64)\n      DYNAFLAGS += -D_ARCH_64\n      SOURCES_C += $(EXTDIR)/libpng17/arm/arm_init.c \\\n                   $(EXTDIR)/libpng17/arm/filter_neon_intrinsics.c"
+        },
+        {
+          "path": "ffmpeg/libavcodec/dxva2_internal.h",
+          "find": "#define DXVA_CONTEXT_SURFACE(avctx, ctx, i)     (avctx->pix_fmt == AV_PIX_FMT_D3D11VA_VLD ? ctx->d3d11va.surface[i] : ctx->dxva2.surface[i])",
+          "replace": "#define DXVA_CONTEXT_SURFACE(avctx, ctx, i)     (avctx->pix_fmt == AV_PIX_FMT_D3D11VA_VLD ? (void *)ctx->d3d11va.surface[i] : (void *)ctx->dxva2.surface[i])"
         }
       ]
     },
