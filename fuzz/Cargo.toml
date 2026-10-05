@@ -1,0 +1,38 @@
+[package]
+name = "rom-weaver-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+license = "AGPL-3.0-or-later"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+members = ["."]
+
+[dependencies]
+libfuzzer-sys = "=0.4.13"
+rom-weaver-core = { path = "../crates/rom-weaver-core" }
+rom-weaver-patches = { path = "../crates/rom-weaver-patches" }
+
+[[bin]]
+name = "ips_apply"
+path = "fuzz_targets/ips_apply.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "save_parse"
+path = "fuzz_targets/save_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "disc_sheet"
+path = "fuzz_targets/disc_sheet.rs"
+test = false
+doc = false
+bench = false

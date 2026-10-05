@@ -61,6 +61,16 @@ dependency changes; it does not replace browser tests. Build once in production,
 check sizes before browser/E2E work, and reuse that current bundle for E2E as
 documented. Report which checks passed and any checks that could not run.
 
+## Additional correctness checks
+
+Run `mise run quality-architecture` and `mise run quality-selection` for source, manifest, protocol, worker or test-selection changes. Run `mise run quality-guardrails <base-ref>` before committing; inspect review findings as well as blocking errors. New skips/suppressions need adjacent `quality-reason:` with a concrete reason; never add focused tests. These checks do not replace thread guards or typegen.
+
+For changed core/checksum/patch algorithms run the relevant edge/property tests and `mise run quality-mutation diff <base-ref>`. For parser changes run `mise run quality-fuzz smoke`; relevant native extraction changes also run `mise run quality-reference` after building the CLI. Mutation survivors, timeouts and build failures are different findings; none may be relabeled automatically.
+
+For bug fixes, use `quality-regression-proof` where practical and report the exact base/candidate behavioral test evidence. Compile/setup/zero-test failures do not prove a regression caught the bug. For worker lifecycle changes run the seeded lifecycle tests and real OPFS resource assertions. See `docs/development/reproduce-ci-locally.md#additional-correctness-checks`.
+
+Exclusion, oracle, budget and verification-script changes require explicit review. Keep generated fuzz corpus growth, solver/build output and crashes out of commits. Deep sanitizer/Miri/Kani lanes have documented limited scopes; never claim they prove whole-workspace correctness or instrument untested/uninstrumented paths.
+
 ## Hard rules
 
 - **Byte-identical parity.** Compression/patch output is validated against

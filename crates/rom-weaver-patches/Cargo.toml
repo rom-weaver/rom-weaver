@@ -34,3 +34,6 @@ ignored = ["md-5"]
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+proptest = "1.6.0"

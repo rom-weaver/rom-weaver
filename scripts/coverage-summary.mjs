@@ -10,10 +10,10 @@ const COVERAGE_ROOT = path.join(REPO_ROOT, "dist", "coverage");
 const WEBAPP_ROOT = path.join(REPO_ROOT, "packages", "rom-weaver-webapp");
 
 const SUITES = [
-  { name: "Rust", directory: "rust", sourceRoot: REPO_ROOT },
+  { name: "Rust native", directory: "rust", sourceRoot: REPO_ROOT },
   { name: "React unit", directory: "react-unit", sourceRoot: WEBAPP_ROOT },
   { name: "React UI", directory: "react-browser", sourceRoot: WEBAPP_ROOT },
-  { name: "React WASM", directory: "react-wasm", sourceRoot: WEBAPP_ROOT },
+  { name: "Browser WASM host TS (not guest Rust)", directory: "react-wasm", sourceRoot: WEBAPP_ROOT },
 ];
 
 const findLcovFiles = (directory) => {

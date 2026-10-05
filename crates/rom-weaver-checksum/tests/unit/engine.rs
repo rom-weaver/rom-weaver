@@ -1802,3 +1802,66 @@ fn a_pooled_plan_traces_its_pooled_completion() {
         "algorithm_count=2",
     ]);
 }
+
+fn edge_checksum_bytes() -> impl Strategy<Value = Vec<u8>> {
+    prop_oneof![
+        Just(Vec::new()),
+        any::<u8>().prop_map(|byte| vec![byte]),
+        (
+            any::<u8>(),
+            prop::sample::select(vec![
+                127, 128, 129, 255, 256, 257, 4095, 4096, 4097, 65535, 65536, 65537
+            ]),
+        )
+            .prop_map(|(byte, len)| vec![byte; len]),
+        prop::collection::vec(any::<u8>(), 0..4097),
+    ]
+}
+
+fn bitwise_crc(bytes: &[u8], polynomial: u32, initial: u32, final_xor: u32) -> u32 {
+    let mut crc = initial;
+    for byte in bytes {
+        crc ^= u32::from(*byte);
+        for _ in 0..8 {
+            crc = (crc >> 1) ^ if crc & 1 == 0 { 0 } else { polynomial };
+        }
+    }
+    crc ^ final_xor
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: std::env::var("PROPTEST_CASES").map_or(32, |value| value.parse::<u32>().ok().filter(|cases| *cases > 0).expect("positive PROPTEST_CASES")),
+        ..ProptestConfig::default()
+    })]
+
+    #[test]
+    fn edge_checksum_chunking_matches_independent_bitwise_oracles(
+        data in edge_checksum_bytes(),
+        split_hints in prop::collection::vec(any::<u16>(), 0..32),
+    ) {
+        let boundaries = chunk_boundaries(data.len(), &split_hints);
+        let mut crc32c_parts = vec![Ok((crc32c_append(0, &[]), 0))];
+        let mut crc16_parts = vec![Ok((0, 0))];
+        let mut adler_parts = vec![Ok((1, 0))];
+        for window in boundaries.windows(2) {
+            let bytes = &data[window[0]..window[1]];
+            crc32c_parts.push(Ok((crc32c_append(0, bytes), bytes.len())));
+            let mut crc16 = Crc16State::<ARC>::new();
+            crc16.update(bytes);
+            crc16_parts.push(Ok((crc16.get(), bytes.len())));
+            adler_parts.push(Ok((adler32_checksum(bytes), bytes.len())));
+        }
+        let crc32c_reference = bitwise_crc(&data, 0x82f6_3b78, u32::MAX, u32::MAX);
+        let crc16_reference = bitwise_crc(&data, 0xa001, 0, 0) as u16;
+        let mut a = 1_u32;
+        let mut b = 0_u32;
+        for byte in &data {
+            a = (a + u32::from(*byte)) % 65521;
+            b = (b + a) % 65521;
+        }
+        prop_assert_eq!(combine_crc32c_partials(crc32c_parts).expect("combine"), crc32c_reference);
+        prop_assert_eq!(combine_crc16_partials(crc16_parts).expect("combine"), crc16_reference);
+        prop_assert_eq!(combine_adler32_partials(adler_parts).expect("combine"), (b << 16) | a);
+    }
+}

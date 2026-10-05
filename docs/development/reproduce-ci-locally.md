@@ -10,6 +10,8 @@ Use the failed job name to choose a local check. Use the broad gate when you nee
 - [Reproduce the Docker jobs](#reproduce-the-docker-jobs)
 - [Check the complete change](#check-the-complete-change)
 - [Still red in CI but green locally?](#still-red-in-ci-but-green-locally)
+- [Additional correctness checks](#additional-correctness-checks)
+  - [Prove a bug-fix regression test](#prove-a-bug-fix-regression-test)
 
 <!-- END doctoc -->
 
@@ -111,3 +113,97 @@ The pre-commit hooks select lint and CI script checks from staged paths. CI uses
 ## Still red in CI but green locally?
 
 Check the [CI constraints](ci.md#gotchas), including Cargo target-flag replacement and the publishability check for packages with `publish = false`. Compare the failed job's toolchain, environment variables, and command with the local run.
+
+## Additional correctness checks
+
+Install dependencies with the worktree setup helper before invoking the AST guards. Tools are pinned in `.config/mise.toml`; expensive analyses have independent entry points. Run the fast checks from the repository root:
+
+```bash
+mise run quality-architecture
+mise run quality-selection
+mise run quality-guardrails main
+node --test scripts/quality-*.test.mjs scripts/coverage-rust.test.mjs
+```
+
+Review the JSON guardrail findings even when the command succeeds: `review` means intentional/uncertain evaluation changes need attention; `error` blocks the gate. Use a fetched target ref or exact base SHA. Missing merge-base history is an error, not an empty successful diff. Local guardrail comparison includes tracked working changes; stage new files so Git can include them in the comparison.
+
+Run focused or broad mutation evidence:
+
+```bash
+mise run quality-mutation diff main
+mise run quality-mutation broad
+mise run quality-mutation broad 0/64
+mise run quality-mutation list
+```
+
+Inspect `.agent/quality-mutation/summary.json` and `mutants.out` for surviving locations, build failures and timeouts. A timeout or failure to compile is not a test catch. Investigate an apparent equivalent survivor before proposing a narrow documented exclusion. Do not relax limits merely to make a run green.
+
+Run the independent property checks:
+
+```bash
+cargo test -p rom-weaver-patches --test behavior_properties
+cargo test -p rom-weaver-checksum edge_checksum_chunking
+cargo test -p rom-weaver-core single_money_edit_preserves
+```
+
+Set `PROPTEST_CASES=256` for deeper runs. Preserve a reported proptest regression seed when fixing failures. The patch suite includes boundary sizes, independent streaming apply paths, thread budgets and an explicit UPS scan/chunk boundary matrix.
+
+Run worker lifecycle and OPFS resource checks from the webapp package after preparing the current WASM artifact:
+
+```bash
+npm run test:unit -- worker-lifecycle-properties.test.ts
+npm run test:browser:wasm -- browser-opfs-many-entries.test.mjs
+```
+
+Compare live/peak handles and buffered bytes at fixed concurrency as entry counts increase. Worker counts include the documented pool headroom. These are deterministic resource assertions, not wall-clock performance budgets.
+
+Prepare the pinned nightly toolchain for fuzz, sanitizer and Miri lanes:
+
+```bash
+rustup toolchain install nightly-2026-08-25 --component rust-src,miri
+mise run quality-fuzz smoke
+mise run quality-fuzz deep
+mise run quality-sanitizer
+mise run quality-miri
+mise run quality-kani
+```
+
+Fuzz artifacts live under `fuzz/artifacts/<target>/`. Replay one with the pinned `cargo +nightly-2026-08-25 fuzz run <target> <crash-path>`. Minimize with the same command's `tmin` subcommand. Promote the minimized bytes into an ordinary test that checks the intended behavioral error, preferably expressing small inputs directly rather than adding binary blobs. The empty-filename CUE/GDI regression is an example. Do not commit generated corpus growth, target directories or crash artifacts. Miri/sanitizer discovery and instrumentation records live under the matching `.agent/quality-*` directory; Kani retains its solver log and bounded assumptions.
+
+Build the native candidate and verify the frozen reference:
+
+```bash
+cargo build --locked -p rom-weaver-cli --bin rom-weaver
+mise run quality-reference
+```
+
+The command reports tool provenance and hashes. It never rewrites the frozen oracle. Use the existing live parity workflow separately for current upstream compatibility.
+
+Run coverage or opt into nightly branch coverage (also install `llvm-tools-preview` for that nightly):
+
+```bash
+mise run coverage-rust
+mise run coverage-rust-branch
+mise run quality-diff-coverage main dist/coverage/rust/lcov.info
+```
+
+Use only LCOV produced from the current candidate. `changed-lines.json` separates covered, zero-hit, and not-measured lines and branch records; not-measured includes comments and unsupported/instrumentation-omitted code. The stable Rust lane has no branch instrumentation; browser LCOV may have decision records. Check selection logs before interpreting percentages.
+
+### Prove a bug-fix regression test
+
+Invoke `quality-regression-proof` with a base ref, package, integration test target, exact test name, a specific behavioral diagnostic and one or more `--test-file` paths. It archives the merge base into task scratch, overlays only Rust tests, and builds base/candidate into separate target directories. Production files and manifests cannot be overlaid. Required fixture/data dependencies must already be available; their absence is an unproven setup failure, not proof.
+
+For the CUE regression added by fuzzing, the arguments are:
+
+```text
+--base main
+--package rom-weaver-core
+--target disc_sheet_regressions
+--test empty_quoted_disc_sheet_filename_is_rejected
+--diagnostic "empty filename must be a validation error"
+--test-file crates/rom-weaver-core/tests/disc_sheet_regressions.rs
+```
+
+Pass them together to `mise run quality-regression-proof`. An optional `--features` argument selects required features. The tool requires the exact named test to fail with the supplied diagnostic and `0 passed; 1 failed` at base, then pass with `1 passed; 0 failed` at candidate. Compile errors, unrelated failures, timeouts and zero-test runs produce `unproven` evidence and a nonzero exit. A new manifest/feature needed by the test may make this mechanism inappropriate; report that limitation rather than transplanting the fix into the base.
+
+An agent's report should name the base SHA, candidate SHA plus uncommitted state if applicable, exact command/test, expected assertion, both outcomes, and the `proof.json`/log paths. Do not simply say “red then green.” Preserve needed evidence before cleaning disposable task scratch.

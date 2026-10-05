@@ -36,6 +36,8 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
   - [Why the Docker build cache is not in this budget](#why-the-docker-build-cache-is-not-in-this-budget)
 - [Secrets](#secrets)
 - [Gotchas](#gotchas)
+- [Additional correctness evidence](#additional-correctness-evidence)
+  - [Interpretation and exclusions](#interpretation-and-exclusions)
 
 <!-- END doctoc -->
 
@@ -525,3 +527,50 @@ Permissions are declared per workflow and widened per job rather than granted wo
 - **A glob of `*[bot]` does not match a bot login.** In a bash `[[ ]]` pattern `[bot]` is a character class, so it matches a trailing b, o or t - never the literal `[bot]` every GitHub App account ends with. `cla-gate.mjs` escapes the brackets before matching; any new glob-matching code needs the same.
 - **The root `package-lock.json` needs generated `@rom-weaver/*` optional entries.** The scope is not fully published when Release Please opens a new release PR, so `scripts/sync-version.mjs` writes local platform-package lock entries without registry `resolved`/`integrity` fields. A lefthook `root-lock-sync` hook guards this.
 - **`COPY --chmod` silently drops the sticky bit.** It takes the low nine bits only, so `--chmod=1777` yields `drwxrwxrwx`, not `drwxrwxrwt`. Naming a directory as the COPY *source* does not preserve its mode either - only its contents are contributed, and the destination is recreated 0755. The CLI image needs a sticky-writable `/work` and has no shell to `mkdir` with, so it builds the directory in a throwaway stage and copies the **parent**, which does preserve the mode of everything inside. Verify with `ls -ld /work` from a shell-bearing stage; `drwxrwxrwt` is the passing result.
+
+## Additional correctness evidence
+
+The independent signals below target plausible incorrect implementations and changes that weaken evaluation. They are evidence, not an AI quality score. Each signal has its own command, status, and artifacts.
+
+| Signal | Tier | Detects | Does not establish |
+| --- | --- | --- | --- |
+| Architecture | Required via existing `Rust` aggregate, every non-tag run | Cargo reverse dependencies, competing domain errors, direct OPFS/worker API and generated-name ownership violations | Transitive worker reachability or a complete Rust syntax proof |
+| Verification diff | Required via `Rust`, every non-tag run | Focused tests; unjustified new skips/suppressions; removed justifications | Approval of intentional weakening; review findings still need a human |
+| Test selection | Required via `Rust` | Missing feature-gated example selection and empty/changed browser suite patterns | That statically discovered tests passed |
+| Frozen reference | Required via `Rust`, relevant changes | ZIP extraction mismatch against immutable Info-ZIP 3.0 bytes/input hashes | Every encoder/container's reference parity |
+| Properties | Ordinary Rust/unit/WASM tests; heavier weekly/manual Rust cases | Edge-heavy patch round trips, independent checksum chunking, thread determinism, save edit isolation, lifecycle/resource invariants | Correctness for arbitrary inputs or shared round-trip bugs |
+| Mutation | Advisory relevant-change PR lane; broad weekly/manual | Plausible alterations not caught by the selected tests | Test sufficiency; timeouts/build failures are not catches |
+| Fuzz | Advisory relevant-change smoke; weekly/manual long runs | Structured IPS apply disagreement, malformed saves, CUE/GDI impossible successful states | Exhaustive input coverage, correctness, or general resource bounds |
+| Regression proof | Selective manual/CI invocation | Exact new test fails behaviorally at merge base and passes at candidate | Compile/setup/discovery failure as evidence |
+| Coverage | Existing weekly/manual coverage workflow | Instrumented Rust/example and browser-host source execution; ignored/filtered test counts | Correctness, Rust guest coverage from V8, or worker-context coverage from page V8 |
+| Changed coverage | Manual, supplied current LCOV plus merge base | Changed measured lines/branches with zero hits, separately from unmeasured lines | That comments/uninstrumented code are uncovered executable code |
+| Native sanitizers | Weekly/manual deep lane | ASan in selected Rust tests; ASan/UBSan in verified vendored libarchive objects | UBSan for Rust, assembly, all linked system libraries, or every native path |
+| Miri | Weekly/manual deep lane | Compatible core chunk-planner and ordered-writer ownership/byte operations at seeds 0 and 1 | Soundness of the workspace, FFI, browser code, or all executions |
+| Bounded model checking | Weekly/manual deep lane | Full-u64 single-chunk production planner arithmetic with explicit assumptions | Unbounded partitions or arbitrary vector sizes |
+| Live reference | Existing nightly `parity.yml` | Compatibility with current external tools | A stable oracle independent of upstream changes |
+
+`quality-fast` produces separate architecture, selection, and verification findings. The existing stable required check name `Rust` includes this job even for a docs-only change: a skipped new gate cannot accidentally satisfy branch protection. The selected pinned-reference job is also checked by the aggregate. Mutation and fuzz are initially advisory because baseline survivors and platform/tool cost need observation before a required policy is justified. Their failures stay visible; `continue-on-error` applies only to these separate advisory jobs, not the existing required tests. No existing budgets were raised.
+
+`quality-plan.mjs` selects mutation for core/checksum/patch changes, fuzz for Rust and fuzz target changes, and reference for core/container/CLI changes. Shared manifests, configuration and quality orchestration select all lanes. Its tests exercise these boundaries. Fast guards always run independently of changed paths. An empty analysis matrix is explicitly not selected; an empty broad mutation run, Miri selection, sanitizer selection, or model-checking proof is an error. A diff mutation run with no selected mutants explicitly reports no mutation evidence.
+
+`quality-deep.yml` runs weekly and by dispatch, with independent jobs and timeouts: a rotating zero-based 1-of-64 broad mutation shard, 15-minute-per-target fuzzing, native sanitizers, Miri, Kani, and 256-case Rust properties. The mutation shard is explicit in its command/report: a scheduled green shard covers only its selected mutants, not all 64 shards. Dispatch can select `i/n` or `all`; full broad runs can exceed the workflow timeout. Ordinary property tests default to 32 cases. Browser lifecycle sequences print fixed seeds; the real OPFS sweep compares entry counts at fixed budgets using live/peak handles, buffers, and worker counts, allowing the existing worker-pool headroom. Existing many-entry checks remain intact.
+
+### Interpretation and exclusions
+
+Mutation artifacts retain outcome locations, diffs and logs. `CaughtMutant`, `MissedMutant`, `Timeout` and `Unviable` are reported separately; baseline failures invalidate the run. There are no equivalent-mutant claims. The initial core scope is a positive list of pure/low-I/O modules; codecs, OS I/O and generated schema catalogs are not measured by this lane. The only explicit source exclusion is patch `test_support.rs`, which constructs tests rather than shipped behavior. Cargo-mutants respects gitignore so build trees and agent scratch cannot recursively enter the sandbox. Add a narrow exclusion with its reason in `.config/mutants.toml`; the verification-diff checker surfaces changes for review.
+
+Verification findings distinguish blocking errors from review signals. Added `.only`/focused tests fail. New skips, `.todo`, conditional skips and disable comments require an adjacent `quality-reason: <specific reason>` (at least ten characters), or a descriptive Rust `#[ignore = "reason"]`. A reason does not approve the exclusion: it turns the finding into review evidence. JSON policy changes are analyzed structurally; JSONC/TOML/YAML configuration, snapshots, fixtures, assertion removal and checker changes are conservatively surfaced for review. The trusted runner executes the merge-base guardrail implementation when it exists; first introduction is explicitly a bootstrap. Workflow changes still require review; this does not protect against a reviewer approving removal of the check itself.
+
+Architecture allowances name exact existing storage/root owners and the synchronous worker owners, with reasons in `quality-architecture.mjs`. Fourteen existing browser presentation/enriched type declarations are grandfathered by path and name; new protocol duplicates fail. Vendored nod/xdvdfs domain errors and the central core error module are outside the domain-error scan. Rust derives/implementations use narrow syntax analysis, not a complete Rust AST. JavaScript/TypeScript checks use the lockfile-pinned existing Oxc parser. Generated drift still uses `typegen-check`. Existing thread/CSS/touch checks remain separate and unchanged.
+
+The frozen ZIP oracle is `scripts/quality-reference-fixture.json`: Info-ZIP Zip 3.0, `-X -9`, a mathematical 8,193-byte input and fixed timestamp. Both input and archive hashes are validated; the verifier only extracts and compares and cannot regenerate answers. No external reference tool/network is needed in this lane. Fixture changes are explicit review signals. Live/latest parity remains a separate compatibility job and may change when upstream changes.
+
+Fuzz corpus seeds are generated from redistributable structured examples; crashes are uploaded, never added automatically to tests. The IPS target has an independent literal/RLE interpreter and bounded output; saves start valid before mutation, and CUE/GDI seeds reach metadata handling. Smoke runs use a fixed seed and 15 seconds per target; deep runs use 900 seconds. RSS, input and per-case time limits are fuzzer bounds, not proofs of parser complexity. Bundle/manifest, additional patch formats and filesystem metadata are not covered by these initial targets.
+
+Sanitizers require Linux x86_64 and pinned nightly Rust plus Ubuntu clang-18/compiler-rt packages. The distro patch version is recorded rather than claimed immutable. The selected libarchive tests must actually be discovered, and `nm` must find both ASan and UBSan symbols in the built archive before the lane runs. Native dependencies are compiled in a separate target directory with C/C++ sanitizer flags. This verifies vendored libarchive instrumentation, not every system library. Miri deliberately filters compatible pure core helpers; codecs/FFI/platform/browser tests are excluded rather than forced through unsupported calls.
+
+Kani 0.68.0 uses its bundled compiler/CBMC. The single-chunk proof covers full-u64 lengths with positive chunk size at least length and unwind 3, and checks empty/single-chunk offsets, index, exact length and overflow safety. Multi-chunk attempts bounded at 64 and then 8 bytes exhausted local solver memory; those attempts are not proofs and their harnesses are not retained. Compiler wrappers are cleared for Kani because sccache cannot recognize `kani-compiler`.
+
+Rust coverage now runs both feature-gated example targets with `typescript-types,wasm-app`, retaining earlier profiles. Artifacts contain discovery lists, execution logs, and `selection.json` with passed/ignored/filtered counts. Doctests are executed but stable llvm-cov does not instrument them; that distinction is explicit. Opt-in `coverage-rust-branch` uses pinned nightly branch instrumentation. The V8 suites measure TypeScript host code; they do not measure WASM guest Rust, native C, or claim complete worker isolate coverage. The summary labels that limit.
+
+See [local reproduction](reproduce-ci-locally.md#additional-correctness-checks) for commands and regression-proof reporting.

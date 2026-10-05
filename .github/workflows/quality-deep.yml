@@ -1,0 +1,96 @@
+name: Deep quality signals
+on:
+  workflow_dispatch:
+    inputs:
+      mutation_shard:
+        description: Zero-based i/n shard, or all (full run may exceed timeout)
+        type: string
+        default: "0/64"
+  schedule:
+    - cron: "17 7 * * 1"
+permissions:
+  contents: read
+concurrency:
+  group: quality-deep-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  assurance:
+    name: Deep quality (${{ matrix.signal }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        signal: [mutation, fuzz, sanitizer, miri, kani, properties]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tools: node rust ${{ matrix.signal == 'mutation' && 'cargo-mutants' || matrix.signal == 'fuzz' && 'cargo-fuzz' || matrix.signal == 'kani' && 'kani-verifier' || '' }}
+          apt-packages: cmake ninja-build pkg-config clang-18 libclang-18-dev libclang-rt-18-dev
+          identify-data-cache: "true"
+          cache-save: "false"
+      - name: Install pinned nightly components
+        if: matrix.signal == 'fuzz' || matrix.signal == 'sanitizer' || matrix.signal == 'miri'
+        run: rustup toolchain install nightly-2026-08-25 --profile minimal --component rust-src,miri
+      - name: Mutation testing
+        id: mutation
+        if: matrix.signal == 'mutation'
+        env:
+          QUALITY_SHARD: ${{ inputs.mutation_shard || '' }}
+        run: |
+          shard="$QUALITY_SHARD"
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            index=$(node -e 'process.stdout.write(String(Math.floor(Date.now()/604800000)%64))')
+            shard="$index/64"
+          fi
+          if [ "$shard" = "all" ]; then
+            mise run quality-mutation broad
+          else
+            mise run quality-mutation broad "${shard:-0/64}"
+          fi
+      - name: Long fuzzing
+        id: fuzz
+        if: matrix.signal == 'fuzz'
+        run: mise run quality-fuzz deep
+      - name: Native sanitizers and instrumentation proof
+        id: sanitizer
+        if: matrix.signal == 'sanitizer'
+        run: mise run quality-sanitizer
+      - name: Miri with two seeds
+        id: miri
+        if: matrix.signal == 'miri'
+        run: mise run quality-miri
+      - name: Bounded model checking
+        id: kani
+        if: matrix.signal == 'kani'
+        run: mise run quality-kani
+      - name: Heavy property testing
+        id: properties
+        if: matrix.signal == 'properties'
+        env:
+          PROPTEST_CASES: "256"
+        run: |
+          cargo test --locked -p rom-weaver-patches --test behavior_properties
+          cargo test --locked -p rom-weaver-checksum --lib edge_checksum_chunking_matches_independent_bitwise_oracles
+      - name: Report selected signal
+        if: ${{ !cancelled() }}
+        env:
+          OUTCOME: ${{ matrix.signal == 'mutation' && steps.mutation.outcome || matrix.signal == 'fuzz' && steps.fuzz.outcome || matrix.signal == 'sanitizer' && steps.sanitizer.outcome || matrix.signal == 'miri' && steps.miri.outcome || matrix.signal == 'kani' && steps.kani.outcome || steps.properties.outcome }}
+          SIGNAL: ${{ matrix.signal }}
+        run: node scripts/quality-summary.mjs "$SIGNAL=$OUTCOME"
+      - name: Upload evidence and counterexamples
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: deep-quality-${{ matrix.signal }}
+          include-hidden-files: true
+          path: |
+            .agent/quality-mutation/summary.json
+            .agent/quality-mutation/mutants.out/**
+            .agent/quality-fuzz/*.json
+            .agent/quality-sanitizer/*.json
+            .agent/quality-miri/*.json
+            .agent/quality-kani/*.json
+            fuzz/artifacts/**
+          if-no-files-found: ignore

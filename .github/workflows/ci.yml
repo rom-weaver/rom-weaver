@@ -280,6 +280,165 @@ jobs:
       - name: Markdown
         run: mise run docs-lint
 
+  quality-fast:
+    name: Quality (architecture and verification)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    if: github.ref_type != 'tag'
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      reference: ${{ steps.plan.outputs.reference }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tools: node rust
+          cargo-cache: "false"
+          webapp-deps: "true"
+      - name: Prepare signal artifacts
+        run: mkdir -p .agent/quality-signals
+      - name: Plan relevant assurance lanes
+        id: plan
+        env:
+          QUALITY_BASE: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+        run: |
+          if [ -n "$QUALITY_BASE" ] && [ "$QUALITY_BASE" != "0000000000000000000000000000000000000000" ]; then
+            node scripts/quality-plan.mjs "$QUALITY_BASE" > .agent/quality-signals/selection.json
+          else
+            node scripts/quality-plan.mjs > .agent/quality-signals/selection.json
+          fi
+      - name: Checker failure-injection tests
+        run: node --test scripts/quality-*.test.mjs scripts/coverage-rust.test.mjs
+      - name: Architecture invariants
+        id: architecture
+        if: ${{ !cancelled() }}
+        run: node scripts/quality-architecture.mjs > .agent/quality-signals/architecture.json
+      - name: Test selection correctness
+        id: selection
+        if: ${{ !cancelled() }}
+        run: node scripts/quality-test-selection.mjs > .agent/quality-signals/test-selection.txt
+      - name: Verification weakening diff
+        id: guardrails
+        if: ${{ !cancelled() }}
+        env:
+          QUALITY_BASE: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+        run: |
+          base="$QUALITY_BASE"
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            base=HEAD
+          fi
+          node scripts/quality-trusted-guardrails.mjs "$base" > .agent/quality-signals/guardrails.json
+      - name: Quality signal summary
+        if: ${{ !cancelled() }}
+        run: >-
+          node scripts/quality-summary.mjs
+          architecture=${{ steps.architecture.outcome }}
+          test-selection=${{ steps.selection.outcome }}
+          verification-guardrails=${{ steps.guardrails.outcome }}
+      - name: Upload quality findings
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-fast
+          include-hidden-files: true
+          path: .agent/quality-signals/*
+          if-no-files-found: error
+
+  quality-analysis:
+    name: Quality signal (${{ matrix.signal }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    needs: quality-fast
+    if: >-
+      github.ref_type != 'tag' && needs.quality-fast.outputs.matrix != ''
+      && needs.quality-fast.outputs.matrix != '[]'
+    # Initially advisory: baseline mutation survivors and fuzz/tool costs must be observed before gating.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.quality-fast.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tools: node rust ${{ matrix.signal == 'mutation' && 'cargo-mutants' || matrix.signal == 'fuzz' && 'cargo-fuzz' || '' }}
+          apt-packages: cmake ninja-build pkg-config clang libclang-dev
+          identify-data-cache: "true"
+          cache-save: "false"
+      - name: Install pinned fuzz toolchain
+        if: matrix.signal == 'fuzz'
+        run: rustup toolchain install nightly-2026-08-25 --profile minimal --component rust-src
+      - name: Diff mutation evidence
+        id: mutation
+        if: matrix.signal == 'mutation'
+        env:
+          QUALITY_BASE: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+        run: |
+          if [ -n "$QUALITY_BASE" ] && [ "$QUALITY_BASE" != "0000000000000000000000000000000000000000" ]; then
+            mise run quality-mutation diff "$QUALITY_BASE"
+          else
+            mise run quality-mutation broad
+          fi
+      - name: Fuzz smoke
+        id: fuzz
+        if: matrix.signal == 'fuzz'
+        run: mise run quality-fuzz smoke
+      - name: Report selected signal
+        if: ${{ !cancelled() }}
+        run: >-
+          node scripts/quality-summary.mjs
+          ${{ matrix.signal }}=${{ matrix.signal == 'mutation' && steps.mutation.outcome || steps.fuzz.outcome || 'not-run' }}
+      - name: Upload analysis evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-${{ matrix.signal }}
+          include-hidden-files: true
+          path: |
+            .agent/quality-mutation/summary.json
+            .agent/quality-mutation/mutants.out/**
+            .agent/quality-fuzz/**
+            fuzz/artifacts/**
+          if-no-files-found: ignore
+
+  quality-reference:
+    name: Quality (pinned reference)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: quality-fast
+    if: github.ref_type != 'tag' && needs.quality-fast.outputs.reference == 'true'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tools: node rust
+          apt-packages: cmake ninja-build pkg-config clang libclang-dev
+          identify-data-cache: "true"
+          cache-save: "false"
+      - name: Build native candidate
+        run: cargo build --locked -p rom-weaver-cli --bin rom-weaver
+      - name: Pinned reference evidence
+        id: reference
+        run: |
+          mkdir -p .agent/quality-signals
+          mise run quality-reference > .agent/quality-signals/reference.json
+      - name: Reference summary
+        if: ${{ !cancelled() }}
+        run: node scripts/quality-summary.mjs pinned-reference=${{ steps.reference.outcome }}
+      - name: Upload reference evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-pinned-reference
+          include-hidden-files: true
+          path: .agent/quality-signals/reference.json
+          if-no-files-found: ignore
+
   # Build selected images on native runners to check the source-build paths without emulation.
   # The shared identify tree and optional cached WASM module avoid duplicate builds.
   docker:
@@ -1125,11 +1284,26 @@ jobs:
     name: Rust
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs: [changes, rust-host, rust-lint, cli-platforms, cli-linux-arm64, rust-macos, rust-windows]
+    needs: [changes, quality-fast, quality-reference, rust-host, rust-lint, cli-platforms, cli-linux-arm64, rust-macos, rust-windows]
     if: ${{ !cancelled() && github.ref_type != 'tag' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Verify required quality checks
+        run: >-
+          node scripts/ci/assert-jobs.mjs
+          '${{ needs.changes.result }}'
+          'true'
+          'quality-fast=${{ needs.quality-fast.result }}'
+
+      - name: Verify selected pinned reference
+        if: ${{ !cancelled() }}
+        run: >-
+          node scripts/ci/assert-jobs.mjs
+          '${{ needs.changes.result }}'
+          '${{ needs.quality-fast.outputs.reference }}'
+          'quality-reference=${{ needs.quality-reference.result }}'
 
       - name: Verify Rust jobs
         run: >-
