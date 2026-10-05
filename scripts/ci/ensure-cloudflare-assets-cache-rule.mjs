@@ -28,6 +28,9 @@ export function pageCacheRule() {
         mode: "respect_origin",
         status_code_ttl: [{ status_code_range: { from: 300, to: 599 }, value: -1 }],
       },
+      // Browsers MUST revalidate stable page URLs because zone purges cannot clear browser caches.
+      // https://developers.cloudflare.com/cache/how-to/cache-rules/settings/#browser-ttl
+      browser_ttl: { mode: "respect_origin" },
       // Accept MUST remain unchanged because quality values select the representation.
       // https://developers.cloudflare.com/cache/concepts/vary/
       vary: {
