@@ -203,6 +203,17 @@ test("PPSSPP uses each upstream platform directory and native architecture", () 
   assert.equal(arm.patches.length, 1);
 });
 
+test("PPSSPP casts FFmpeg DirectX surfaces to a common pointer type", () => {
+  const ppsspp = sources.cores.find(({ id }) => id === "ppsspp");
+  const patch = ppsspp?.patches.find(({ path }) => path === "ffmpeg/libavcodec/dxva2_internal.h");
+  assert.deepEqual(patch, {
+    path: "ffmpeg/libavcodec/dxva2_internal.h",
+    find: "#define DXVA_CONTEXT_SURFACE(avctx, ctx, i)     (avctx->pix_fmt == AV_PIX_FMT_D3D11VA_VLD ? ctx->d3d11va.surface[i] : ctx->dxva2.surface[i])",
+    replace:
+      "#define DXVA_CONTEXT_SURFACE(avctx, ctx, i)     (avctx->pix_fmt == AV_PIX_FMT_D3D11VA_VLD ? (void *)ctx->d3d11va.surface[i] : (void *)ctx->dxva2.surface[i])",
+  });
+});
+
 test("PPSSPP limits Adreno sources to Android and stages Windows tar link targets", () => {
   const ppsspp = sources.cores.find(({ id }) => id === "ppsspp");
   assert.deepEqual(ppsspp.extractFirst, [
