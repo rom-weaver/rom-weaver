@@ -1,0 +1,51 @@
+name: Update auto-merge branches
+
+on:
+  push:
+    branches: [main]
+  pull_request_target:
+    branches: [main]
+    types: [auto_merge_enabled, ready_for_review, synchronize]
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Preview eligible updates without changing branches
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-auto-merge-branches
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      # Privileged automation MUST execute only trusted base-branch code.
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/heads/main
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Update eligible pull request branches
+        env:
+          # This token MUST trigger CI without GITHUB_TOKEN's approval prompt.
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = true ]; then
+            node scripts/ci/update-auto-merge-prs.mjs --dry-run
+          else
+            node scripts/ci/update-auto-merge-prs.mjs
+          fi
