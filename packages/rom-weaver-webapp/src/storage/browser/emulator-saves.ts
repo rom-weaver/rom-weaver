@@ -310,18 +310,57 @@ const updatePart = async (
   update: EmulatorSaveUpdate,
   { preserveMetadata = false }: { preserveMetadata?: boolean } = {},
 ): Promise<EmulatorSaveRecord> => {
-  const previous = await readEmulatorSave(update.gameId);
-  const next: EmulatorSaveRecord = {
-    gameId: update.gameId,
-    gameName: preserveMetadata && previous ? previous.gameName : update.gameName,
-    label: preserveMetadata && previous ? previous.label : update.label,
-    ...(previous?.state ? { state: previous.state } : {}),
-    ...(previous?.sram ? { sram: previous.sram } : {}),
-    [kind]: copyBytes(update.data),
-    updatedAt: Date.now(),
-  };
-  await writeRecord(next);
-  return copyRecord(next);
+  const database = await openDatabase();
+  return new Promise((resolve, reject) => {
+    let transaction: IDBTransaction;
+    let next: EmulatorSaveRecord | undefined;
+    let failure: Error | undefined;
+    try {
+      transaction = database.transaction(STORE_NAME, "readwrite");
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.get(update.gameId);
+      request.onerror = () => {
+        failure = requestError(request);
+      };
+      request.onsuccess = () => {
+        try {
+          const previous = normalizeRecord(request.result);
+          next = {
+            gameId: update.gameId,
+            gameName: preserveMetadata && previous ? previous.gameName : update.gameName,
+            label: preserveMetadata && previous ? previous.label : update.label,
+            ...(previous?.state ? { state: previous.state } : {}),
+            ...(previous?.sram ? { sram: previous.sram } : {}),
+            [kind]: copyBytes(update.data),
+            updatedAt: Date.now(),
+          };
+          store.put(copyRecord(next), update.gameId);
+        } catch (error) {
+          failure = error instanceof Error ? error : new Error(String(error));
+          transaction.abort();
+        }
+      };
+    } catch (error) {
+      database.close();
+      reject(error instanceof Error ? error : new Error(String(error)));
+      return;
+    }
+    transaction.onerror = () => {
+      failure ||= transaction.error || new Error("Emulator save transaction failed.");
+    };
+    transaction.onabort = () => {
+      database.close();
+      reject(failure || transaction.error || new Error("Emulator save transaction was aborted."));
+    };
+    transaction.oncomplete = () => {
+      database.close();
+      if (!next) {
+        reject(new Error("Emulator save transaction completed without a record."));
+        return;
+      }
+      resolve(copyRecord(next));
+    };
+  });
 };
 
 const listEmulatorSaves = async (): Promise<EmulatorSaveRecord[]> => {

@@ -43,6 +43,7 @@ type FakeCursorRequest = {
 type FakeTransaction = {
   abort: () => void;
   aborted: boolean;
+  pendingRequests: number;
   error: Error | null;
   onabort: (() => void) | null;
   oncomplete: (() => void) | null;
@@ -112,10 +113,12 @@ class FakeObjectStore {
       onupgradeneeded: null,
       result: undefined,
     };
+    this.transaction.pendingRequests += 1;
     queueMicrotask(() => {
       request.result = result();
       request.onsuccess?.();
-      if (!this.transaction.aborted) this.transaction.oncomplete?.();
+      this.transaction.pendingRequests -= 1;
+      if (!this.transaction.aborted && this.transaction.pendingRequests === 0) this.transaction.oncomplete?.();
     });
     return request;
   }
@@ -147,6 +150,7 @@ class FakeDatabase {
     const transaction = {} as FakeTransaction;
     transaction.error = null;
     transaction.aborted = false;
+    transaction.pendingRequests = 0;
     transaction.abort = () => {
       transaction.aborted = true;
       queueMicrotask(() => transaction.onabort?.());

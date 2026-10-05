@@ -2002,6 +2002,56 @@ mod tests {
     }
 
     #[test]
+    fn xiso_extract_rejects_source_output_aliases_without_changing_source() {
+        let temp_dir = temp_dir_path("xiso-aliases");
+        let tree = temp_dir.join("tree");
+        fs::create_dir_all(&tree).unwrap();
+        fs::write(tree.join("payload.bin"), b"source payload").unwrap();
+        let source = temp_dir.join("game.iso");
+        let mut image = File::create(&source).unwrap();
+        let mut source_fs = crate::xdvdfs::write::fs::StdFilesystem::create(&tree);
+        crate::xdvdfs::write::img::create_xdvdfs_image(&mut source_fs, &mut image, |_| {}).unwrap();
+        drop(image);
+        let original = fs::read(&source).unwrap();
+        let hardlink_dir = temp_dir.join("hardlink");
+        fs::create_dir_all(&hardlink_dir).unwrap();
+        fs::hard_link(&source, hardlink_dir.join("game.iso")).unwrap();
+        #[cfg(unix)]
+        let symlink_dir = {
+            let symlink_dir = temp_dir.join("symlink");
+            fs::create_dir_all(&symlink_dir).unwrap();
+            std::os::unix::fs::symlink(&source, symlink_dir.join("game.iso")).unwrap();
+            Some(symlink_dir)
+        };
+        #[cfg(not(unix))]
+        let symlink_dir = None;
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("xiso").unwrap();
+        for out_dir in [Some(temp_dir.clone()), Some(hardlink_dir), symlink_dir]
+            .into_iter()
+            .flatten()
+        {
+            let result = handler.extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: source.clone(),
+                    out_dir,
+                    selections: Vec::new(),
+                    kind_filter: Default::default(),
+                    containing_archive: None,
+                    split_bin: false,
+                    ignore_common_files: false,
+                    overwrite: true,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 1),
+            );
+            assert!(result.is_err(), "aliased output must fail");
+            assert_eq!(fs::read(&source).unwrap(), original);
+        }
+        fs::remove_dir_all(&temp_dir).unwrap();
+    }
+
+    #[test]
     fn xiso_capabilities_allow_extract_but_disable_create() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("xiso").expect("xiso handler");

@@ -1,6 +1,75 @@
 use super::shared::*;
 
 #[test]
+fn patch_create_rejects_input_output_aliases_with_force() {
+    let temp = setup_temp_dir();
+    let original = temp.child("original.bin");
+    let modified = temp.child("modified.bin");
+    let original_bytes = b"original ROM bytes";
+    let modified_bytes = b"modified ROM bytes";
+    fs::write(original.path(), original_bytes).expect("original fixture");
+    fs::write(modified.path(), modified_bytes).expect("modified fixture");
+    let nested = temp.child("nested");
+    fs::create_dir(nested.path()).expect("nested directory");
+
+    for input in [original.path(), modified.path()] {
+        let hardlink = temp.child("alias.ips");
+        fs::hard_link(input, hardlink.path()).expect("hard link");
+        let mut aliases = vec![
+            input.to_path_buf(),
+            nested.path().join("..").join(input.file_name().unwrap()),
+            hardlink.path().to_path_buf(),
+        ];
+        #[cfg(unix)]
+        let symlink = temp.child("symlink.ips");
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(input, symlink.path()).expect("symlink");
+            aliases.push(symlink.path().to_path_buf());
+        }
+        for output in aliases {
+            let event = run_single_json_event(
+                &[
+                    "patch",
+                    "create",
+                    "--original",
+                    original.path().to_str().expect("original path"),
+                    "--modified",
+                    modified.path().to_str().expect("modified path"),
+                    "--format",
+                    "ips",
+                    "--output",
+                    output.to_str().expect("output path"),
+                    "--force",
+                    "--jsonl",
+                ],
+                1,
+            );
+            assert_eq!(event["stage"], "validate", "{event}");
+            assert_eq!(event["error_kind"], "validation", "{event}");
+            assert!(
+                event["label"]
+                    .as_str()
+                    .expect("label")
+                    .contains("input and output resolve to the same file"),
+                "{event}"
+            );
+            assert_eq!(
+                fs::read(original.path()).expect("original remains"),
+                original_bytes
+            );
+            assert_eq!(
+                fs::read(modified.path()).expect("modified remains"),
+                modified_bytes
+            );
+        }
+        fs::remove_file(hardlink.path()).expect("remove hard link");
+        #[cfg(unix)]
+        fs::remove_file(symlink.path()).expect("remove symlink");
+    }
+}
+
+#[test]
 fn patch_apply_chain_transition_preserves_contextual_error_kind() {
     let temp = setup_temp_dir();
     let input = temp.child("base.z64");

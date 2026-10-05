@@ -169,6 +169,8 @@ Not every command takes all five. `extract` has no `--no-extract`, since unpacki
 
 `extract` also unpacks archives found inside the input, up to eight levels deep; `--no-nested-extract` stops after the first layer. If any output file already exists, extraction stops before writing anything, unless `--force` is given. While extracting it can hash what it writes (`--checksum ALGO`, or `--checksum-rom ALGO` for the ROMs only) and report each file's format and platform (`--probe`).
 
+XISO extraction rejects an output that refers to its source file, including symbolic links and native hard links, even with `--force`.
+
 ## Identify
 
 `identify` computes CRC32, MD5, and SHA-1. It searches the raw ROM and common checksum variants.
@@ -380,6 +382,8 @@ A named producer must be selected and precede its consumer. Member selection app
 - `--independent` checks each patch separately against the original ROM. It reports every verdict instead of stopping at the first failure.
 
 ## Patch creation metadata
+
+`patch create` rejects an output that refers to either input file, including symbolic links and native hard links, even with `--force`.
 
 SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for its three-string header. Any of `--solid-version`, `--solid-author`, `--solid-contact`, or `--solid-comment` selects the seven-string extended header. `--solid-extended` selects the extended header with empty extra fields. When `--code` supplies the changes and the extended header has no `--solid-comment`, the comment records the codes. These options require SOLID output and cannot be combined with `--plan`.
 

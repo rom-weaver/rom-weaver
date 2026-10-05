@@ -113,6 +113,21 @@ impl ContainerHandlerOperations for XisoContainerHandler {
             fs::create_dir_all(parent)?;
         }
 
+        let same_path = request.source == output_path
+            || matches!(
+                (fs::canonicalize(&request.source), fs::canonicalize(&output_path)),
+                (Ok(source), Ok(output)) if source == output
+            );
+        #[cfg(not(target_arch = "wasm32"))]
+        let same_path =
+            same_path || same_file::is_same_file(&request.source, &output_path).unwrap_or(false);
+        if same_path {
+            return Err(RomWeaverError::Validation(format!(
+                "xiso input and output resolve to the same file: `{}`",
+                output_path.display()
+            )));
+        }
+
         let output_file = create_extract_output_file(&output_path, request.overwrite)?;
         let mut output = BufWriter::new(output_file);
         let extract_progress_label = format!("extracting `{}`", XISO.name);

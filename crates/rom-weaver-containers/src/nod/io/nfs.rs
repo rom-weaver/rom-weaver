@@ -114,8 +114,8 @@ impl BlockReader for BlockReaderNFS {
         // Calculate physical sector
         let phys_sector = self.header.phys_sector(sector);
         if phys_sector == u32::MAX {
-            // Logical zero sector
-            return Ok(Block::sector(sector, BlockKind::Raw));
+            out.fill(0);
+            return Ok(Block::sector(sector, BlockKind::Zero));
         }
 
         // Read sector

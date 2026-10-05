@@ -362,6 +362,7 @@ impl CliApp {
         };
         let create_output = match self.patch_create_output_path(
             &args,
+            &modified_path,
             handler.descriptor().name,
             output,
             &context,
@@ -653,6 +654,7 @@ impl CliApp {
     fn patch_create_output_path(
         &self,
         args: &PatchCreateCommand,
+        modified: &Path,
         format_name: &str,
         output: PathBuf,
         context: &OperationContext,
@@ -697,6 +699,15 @@ impl CliApp {
                 }
                 create_output = embedded;
             }
+        }
+
+        if super::patch_apply::paths_refer_to_same_file(&args.original, &create_output)
+            || super::patch_apply::paths_refer_to_same_file(modified, &create_output)
+        {
+            return Err(fail_error(RomWeaverError::Validation(
+                "patch create input and output resolve to the same file; choose a different --output path"
+                    .to_string(),
+            )));
         }
 
         // Guarded after --checksum-name has settled the final file name, so the
