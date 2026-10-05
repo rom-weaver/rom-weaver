@@ -85,6 +85,14 @@ export const coreRecipe = (core, platformName) => {
         "SHARED := -shared -static -static-libgcc -static-libstdc++ -s -Wl,--version-script=$(CORE_DIR)/link.T -Wl,--no-undefined",
     });
   }
+  if (core.id === "mupen64plus_next" && platformName === "win32-x64") {
+    patches.push({
+      path: "Makefile",
+      find: "LDFLAGS += -shared -static-libgcc -static-libstdc++ -Wl,--version-script=$(LIBRETRO_DIR)/link.T #-static",
+      replace:
+        "LDFLAGS += -shared -static -static-libgcc -static-libstdc++ -Wl,--version-script=$(LIBRETRO_DIR)/link.T #-static",
+    });
+  }
   if (core.id === "ppsspp" && platformName === "darwin-arm64") {
     patches.push({
       path: "libretro/Makefile",
