@@ -82,7 +82,10 @@ runs:
     # ls-tree resolves the PR merge tree, unlike hashFiles.
     # Test targets never enter this production build, so exclude them instead
     # of making a test-only edit rebuild the ~6.5-minute module. Inline
-    # #[cfg(test)] blocks remain part of their source file's hash.
+    # #[cfg(test)] blocks remain part of their source file's hash. Standalone
+    # script tests and the WASM README MUST NOT invalidate the module cache.
+    # Keep setup-build-env hashed in full: its SDK pins and system tool setup
+    # can affect compiled output.
     - name: Compute wasm cache key
       id: key
       shell: bash
@@ -93,8 +96,9 @@ runs:
         basis=$(
           {
             git ls-tree -r HEAD -- \
-              Cargo.lock Cargo.toml .cargo scripts/wasm \
-              .github/actions/setup-build-env
+              Cargo.lock Cargo.toml .cargo scripts/wasm crates \
+              .github/actions/setup-build-env | \
+              node scripts/wasm/wasm-compiler-inputs.mjs --cache-inputs
             printf 'mise-wasm-config\n'
             git show HEAD:.config/mise.toml | awk '
               /^\[tools\]/ { section = "tools"; next }
@@ -104,8 +108,6 @@ runs:
               section == "env" && /^(WASI_|CC_|CXX_|AR_|RANLIB_|CFLAGS_|CXXFLAGS_|CARGO_INCREMENTAL)/ { print }
               (section == "[tasks.build-wasm]" || section == "[tasks.build-wasm-prod]") && /^(env\.|run =)/ { print }
             '
-            git ls-tree -r HEAD -- crates |
-              node scripts/wasm/wasm-compiler-inputs.mjs
           }
         )
         if [ -z "$basis" ]; then
