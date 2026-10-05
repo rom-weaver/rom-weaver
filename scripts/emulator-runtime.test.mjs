@@ -102,9 +102,7 @@ test("Mupen64Plus enables rand_s declarations for MinGW builds", () => {
 
 test("Mupen64Plus avoids the removed classic Mac fp.h on Darwin", () => {
   const core = sources.cores.find(({ id }) => id === "mupen64plus_next");
-  const patch = core?.patches?.find(
-    ({ path }) => path === "custom/dependencies/libpng/pngpriv.h",
-  );
+  const patch = core?.patches?.find(({ path }) => path === "custom/dependencies/libpng/pngpriv.h");
   assert.deepEqual(patch, {
     path: "custom/dependencies/libpng/pngpriv.h",
     find: "defined(THINK_C) || defined(__SC__) || defined(TARGET_OS_MAC)",
@@ -114,9 +112,7 @@ test("Mupen64Plus avoids the removed classic Mac fp.h on Darwin", () => {
 
 test("Mupen64Plus leaves Apple's fdopen declaration intact", () => {
   const core = sources.cores.find(({ id }) => id === "mupen64plus_next");
-  const patch = core?.patches?.find(
-    ({ path }) => path === "custom/dependencies/libzlib/zutil.h",
-  );
+  const patch = core?.patches?.find(({ path }) => path === "custom/dependencies/libzlib/zutil.h");
   assert.deepEqual(patch, {
     path: "custom/dependencies/libzlib/zutil.h",
     find: "#      ifndef fdopen\n#        define fdopen(fd,mode) NULL /* No fdopen() */",
@@ -143,10 +139,7 @@ test("Beetle PCE cores leave Apple's fdopen declaration intact", () => {
     const core = sources.cores.find((candidate) => candidate.id === id);
     assert.deepEqual(
       core?.patches?.map(({ path }) => path),
-      [
-        "deps/zlib-1.2.11/zutil.h",
-        "libretro-common/include/compat/zutil.h",
-      ],
+      ["deps/zlib-1.2.11/zutil.h", "libretro-common/include/compat/zutil.h"],
       id,
     );
     for (const patch of core.patches) {
@@ -166,9 +159,7 @@ test("Beetle PCE cores leave Apple's fdopen declaration intact", () => {
 
 test("Stella leaves Apple's fdopen declaration intact", () => {
   const core = sources.cores.find(({ id }) => id === "stella");
-  const patch = core?.patches?.find(
-    ({ path }) => path === "src/lib/zlib/zutil.h",
-  );
+  const patch = core?.patches?.find(({ path }) => path === "src/lib/zlib/zutil.h");
   assert.deepEqual(patch, {
     path: "src/lib/zlib/zutil.h",
     find: "#      ifndef fdopen\n#        define fdopen(fd,mode) NULL /* No fdopen() */",
@@ -203,6 +194,28 @@ test("PPSSPP uses each upstream platform directory and native architecture", () 
   assert.equal(arm.patches.length, 1);
 });
 
+test("PPSSPP wraps Windows libzip callbacks with compatible pointer signatures", () => {
+  const ppsspp = sources.cores.find(({ id }) => id === "ppsspp");
+  const windows = coreRecipe(ppsspp, "win32-x64");
+  assert.deepEqual(
+    windows.patches.map(({ path }) => path),
+    [
+      "ext/libzip/zip_source_file_win32_ansi.c",
+      "ext/libzip/zip_source_file_win32_utf16.c",
+      "ext/libzip/zip_source_file_win32_utf16.c",
+      "ext/libzip/zip_source_file_win32_utf16.c",
+    ],
+  );
+  assert.match(windows.patches[0].find, /CreateFileA,[\s\S]*DeleteFileA/);
+  assert.match(windows.patches[0].replace, /ansi_create_file_callback/);
+  assert.match(windows.patches[0].replace, /const void \*name/);
+  assert.match(windows.patches[1].replace, /utf16_create_file_callback/);
+  assert.match(windows.patches[2].find, /GetFileAttributesW/);
+  assert.match(windows.patches[2].replace, /utf16_get_file_attributes_callback/);
+  assert.match(windows.patches[3].find, /GetFileAttributesExW/);
+  assert.match(windows.patches[3].replace, /utf16_get_file_attributes_ex_callback/);
+});
+
 test("PPSSPP casts FFmpeg DirectX surfaces to a common pointer type", () => {
   const ppsspp = sources.cores.find(({ id }) => id === "ppsspp");
   const patch = ppsspp?.patches.find(({ path }) => path === "ffmpeg/libavcodec/dxva2_internal.h");
@@ -220,10 +233,9 @@ test("PPSSPP limits Adreno sources to Android and stages Windows tar link target
     "ext/vulkan/libvulkan.so.1.3.236",
     "ext/vulkan/libvulkan.so.1",
   ]);
-  assert.deepEqual(
-    ppsspp.dependencies.find(({ path }) => path === "ext/zstd").extractFirst,
-    ["tests/cli-tests/bin/zstd"],
-  );
+  assert.deepEqual(ppsspp.dependencies.find(({ path }) => path === "ext/zstd").extractFirst, [
+    "tests/cli-tests/bin/zstd",
+  ]);
   assert.deepEqual(
     ppsspp.patches.find(
       ({ path, find }) => path === "libretro/Makefile.common" && find.includes("libadrenotools"),
@@ -231,7 +243,8 @@ test("PPSSPP limits Adreno sources to Android and stages Windows tar link target
     {
       path: "libretro/Makefile.common",
       find: "ifeq ($(TARGET_ARCH),arm64)\nSOURCES_CXX += \\\n\t  $(EXTDIR)/libadrenotools/src/driver.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/android_linker_ns.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/elf_soname_patcher.cpp\nendif",
-      replace: "ifeq ($(PLATFORM_EXT), android)\nifeq ($(TARGET_ARCH),arm64)\nSOURCES_CXX += \\\n\t  $(EXTDIR)/libadrenotools/src/driver.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/android_linker_ns.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/elf_soname_patcher.cpp\nendif\nendif",
+      replace:
+        "ifeq ($(PLATFORM_EXT), android)\nifeq ($(TARGET_ARCH),arm64)\nSOURCES_CXX += \\\n\t  $(EXTDIR)/libadrenotools/src/driver.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/android_linker_ns.cpp \\\n\t  $(EXTDIR)/libadrenotools/lib/linkernsbypass/elf_soname_patcher.cpp\nendif\nendif",
     },
   );
 });
@@ -266,8 +279,7 @@ test("PPSSPP builds Linux hardware capabilities only on supported targets", () =
 test("PPSSPP links ARM64 libpng NEON intrinsics", () => {
   const ppsspp = sources.cores.find(({ id }) => id === "ppsspp");
   const patch = ppsspp.patches.find(
-    ({ path, find }) =>
-      path === "libretro/Makefile.common" && find.includes("DYNAFLAGS"),
+    ({ path, find }) => path === "libretro/Makefile.common" && find.includes("DYNAFLAGS"),
   );
   assert.deepEqual(patch, {
     path: "libretro/Makefile.common",

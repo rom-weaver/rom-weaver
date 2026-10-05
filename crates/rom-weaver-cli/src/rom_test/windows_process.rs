@@ -133,10 +133,9 @@ mod tests {
         let mut child = command.spawn().unwrap();
         let job = Job::assign(&child).unwrap();
         let mut stdout = child.stdout.take().unwrap();
-        child.wait().unwrap();
         drop(job);
         let _ = child.kill();
-        let _ = child.wait();
+        child.wait().unwrap();
         let (sender, receiver) = mpsc::channel();
         thread::spawn(move || sender.send(stdout.read_to_end(&mut Vec::new())).unwrap());
         receiver
