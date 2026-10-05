@@ -80,12 +80,12 @@ const createSearchModuleSource = (routes) => {
     createDocsSearchIndex(routes).map((route) => [
       route.slug,
       route.searchEntries.map(({ id, label, text }) =>
-        text.startsWith(label) ? [id, label, text.slice(label.length), true] : [id, label, text],
+        text.startsWith(label) ? [id, label, text.slice(label.length)] : [id, label, text, 0],
       ),
     ]),
   );
-  // The downloaded index MUST restore exact text while sharing each leading heading with its label.
-  return `export const SEARCH_ENTRIES = Object.fromEntries(Object.entries(${serializeIntoCode(entries)}).map(([slug, entries]) => [slug, entries.map(([id, label, text, prefixed]) => ({ id, label, text: prefixed ? label + text : text }))]));\n`;
+  // The downloaded index MUST retain every entry while storing a repeated heading only once.
+  return `export const SEARCH_ENTRIES = Object.fromEntries(Object.entries(${serializeIntoCode(entries)}).map(([slug, entries]) => [slug, entries.map(([id, label, text, full]) => ({ id, label, text: full === 0 ? text : label + text }))]));\n`;
 };
 
 /** Serves the rendered guides to the app as `virtual:rom-weaver-docs*` modules. */

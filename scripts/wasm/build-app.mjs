@@ -7,6 +7,7 @@ import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { cargoTargetDir } from "../cargo-target-dir.mjs";
+import { brotliCompressFile } from "./brotli-compress.mjs";
 import { createWasmSourceFingerprint } from "./wasm-source-fingerprint.mjs";
 import { createWasmProdFingerprint } from "./wasm-prod-fingerprint.mjs";
 
@@ -121,8 +122,21 @@ export function main(argv = process.argv.slice(2), env = process.env) {
       cpSync(`${artifact}.opt`, artifact);
       rmSync(`${artifact}.opt`, { force: true });
       run(env.WASI_STRIP, [artifact]);
-      if (wantBrotli) run("node", [join(root, "scripts/wasm/brotli-compress.mjs"), artifact, `${artifact}.br`, quality]);
-      else process.stdout.write("ROM_WEAVER_WASM_NO_BROTLI=1; skipping .br sibling (host compresses on the fly)\n");
+      if (wantBrotli) {
+        // WASM MUST use the default window: the larger asset window increases this module's transfer size.
+        const { cached, compressedSize, sourceSize } = brotliCompressFile({
+          inputPath: artifact,
+          outputPath: `${artifact}.br`,
+          quality,
+          parameterProfile: "default",
+        });
+        process.stdout.write(
+          `brotli q${quality}${cached ? " (cached)" : ""}: ${sourceSize} -> ${compressedSize} bytes\n`,
+        );
+      } else
+        process.stdout.write(
+          "ROM_WEAVER_WASM_NO_BROTLI=1; skipping .br sibling (host compresses on the fly)\n",
+        );
       writeFileSync(fingerprintFile, `${fingerprint}\n`);
     }
   } else {

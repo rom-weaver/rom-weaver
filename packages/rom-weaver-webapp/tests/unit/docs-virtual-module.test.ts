@@ -63,7 +63,7 @@ describe("docs virtual module escaping", () => {
 describe("docs virtual search module", () => {
   const sampleRoute = {
     description: "Patch a ROM safely",
-    html: '<h1>Guide</h1><p>Start here.</p><h2 id="checks">Checks</h2><p>Verify CRC32 &amp; SHA-256 before applying.</p>',
+    html: '<h1>Guide</h1><p>Start here.</p><h2 id="checks">Safety checks</h2><p>Verify CRC32 &amp; SHA-256 before applying.</p>',
     label: "Guide",
     sections: [{ id: "checks", label: "Checks" }],
     slug: "docs/guide",
@@ -80,6 +80,10 @@ describe("docs virtual search module", () => {
       Object.fromEntries(createDocsSearchIndex(manyRoutes).map((r) => [r.slug, r.searchEntries])),
     );
     expect(Buffer.byteLength(sourceFor(manyRoutes))).toBeLessThan(Buffer.byteLength(plain) * 0.9);
+  });
+
+  it("stores a repeated entry label only once", () => {
+    expect(sourceFor().split(sampleRoute.title)).toHaveLength(2);
   });
 
   it("preserves all entries and search results after loading", async () => {
