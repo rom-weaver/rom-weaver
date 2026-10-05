@@ -72,6 +72,132 @@ export const coreRecipe = (core, platformName) => {
     build.at(-1).command.push("TARGET_ARCH=arm64", "ARCHFLAGS=-arch arm64");
   }
   if (core.id === "ppsspp" && platformName === "win32-x64") {
+    patches.push(
+      {
+        path: "ext/libzip/zip_source_file_win32_ansi.c",
+        find: `zip_win32_file_operations_t ops_ansi = {
+    ansi_allocate_tempname,
+    CreateFileA,
+    DeleteFileA,
+    GetFileAttributesA,
+    GetFileAttributesExA,
+    ansi_make_tempname,
+    MoveFileExA,
+    SetFileAttributesA,
+    strdup
+};`,
+        replace: `static HANDLE __stdcall
+ansi_create_file_callback(const void *name, DWORD access, DWORD share_mode, PSECURITY_ATTRIBUTES security_attributes, DWORD creation_disposition, DWORD file_attributes, HANDLE template_file) {
+    return CreateFileA((const char *)name, access, share_mode, security_attributes, creation_disposition, file_attributes, template_file);
+}
+
+static BOOL __stdcall
+ansi_delete_file_callback(const void *name) {
+    return DeleteFileA((const char *)name);
+}
+
+static DWORD __stdcall
+ansi_get_file_attributes_callback(const void *name) {
+    return GetFileAttributesA((const char *)name);
+}
+
+static BOOL __stdcall
+ansi_get_file_attributes_ex_callback(const void *name, GET_FILEEX_INFO_LEVELS info_level, void *information) {
+    return GetFileAttributesExA((const char *)name, info_level, information);
+}
+
+static BOOL __stdcall
+ansi_move_file_callback(const void *from, const void *to, DWORD flags) {
+    return MoveFileExA((const char *)from, (const char *)to, flags);
+}
+
+static BOOL __stdcall
+ansi_set_file_attributes_callback(const void *name, DWORD attributes) {
+    return SetFileAttributesA((const char *)name, attributes);
+}
+
+zip_win32_file_operations_t ops_ansi = {
+    ansi_allocate_tempname,
+    ansi_create_file_callback,
+    ansi_delete_file_callback,
+    ansi_get_file_attributes_callback,
+    ansi_get_file_attributes_ex_callback,
+    ansi_make_tempname,
+    ansi_move_file_callback,
+    ansi_set_file_attributes_callback,
+    strdup
+};`,
+      },
+      {
+        path: "ext/libzip/zip_source_file_win32_utf16.c",
+        find: "static char *utf16_strdup(const char *string);",
+        replace: `static char *utf16_strdup(const char *string);
+
+static HANDLE __stdcall
+utf16_create_file_callback(const void *name, DWORD access, DWORD share_mode, PSECURITY_ATTRIBUTES security_attributes, DWORD creation_disposition, DWORD file_attributes, HANDLE template_file) {
+    return utf16_create_file((const char *)name, access, share_mode, security_attributes, creation_disposition, file_attributes, template_file);
+}
+
+static BOOL __stdcall
+utf16_delete_file_callback(const void *name) {
+    return DeleteFileW((const wchar_t *)name);
+}
+
+static DWORD __stdcall
+utf16_get_file_attributes_callback(const void *name) {
+    return GetFileAttributesW((const wchar_t *)name);
+}
+
+static BOOL __stdcall
+utf16_get_file_attributes_ex_callback(const void *name, GET_FILEEX_INFO_LEVELS info_level, void *information) {
+    return GetFileAttributesExW((const wchar_t *)name, info_level, information);
+}
+
+static BOOL __stdcall
+utf16_move_file_callback(const void *from, const void *to, DWORD flags) {
+    return MoveFileExW((const wchar_t *)from, (const wchar_t *)to, flags);
+}
+
+static BOOL __stdcall
+utf16_set_file_attributes_callback(const void *name, DWORD attributes) {
+    return SetFileAttributesW((const wchar_t *)name, attributes);
+}`,
+      },
+      {
+        path: "ext/libzip/zip_source_file_win32_utf16.c",
+        find: `	utf16_create_file,
+	DelFile,
+	GetFileAttributesW,
+	GetFileAttr,
+	utf16_make_tempname,
+	MoveFileExW,
+	SetFileAttributesW,`,
+        replace: `	utf16_create_file_callback,
+	DelFile,
+	utf16_get_file_attributes_callback,
+	GetFileAttr,
+	utf16_make_tempname,
+	utf16_move_file_callback,
+	utf16_set_file_attributes_callback,`,
+      },
+      {
+        path: "ext/libzip/zip_source_file_win32_utf16.c",
+        find: `    utf16_create_file,
+    DeleteFileW,
+    GetFileAttributesW,
+    GetFileAttributesExW,
+    utf16_make_tempname,
+    MoveFileExW,
+    SetFileAttributesW,`,
+        replace: `    utf16_create_file_callback,
+    utf16_delete_file_callback,
+    utf16_get_file_attributes_callback,
+    utf16_get_file_attributes_ex_callback,
+    utf16_make_tempname,
+    utf16_move_file_callback,
+    utf16_set_file_attributes_callback,`,
+      },
+    );
     build
       .at(-1)
       .command.push(
