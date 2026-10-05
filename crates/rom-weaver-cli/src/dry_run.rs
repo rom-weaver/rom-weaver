@@ -238,16 +238,89 @@ impl CliApp {
                 return outcome;
             }
         }
-        self.plan_succeeded(
-            command,
+        let planned = (|| -> Result<(PathBuf, Option<PatchApplyCompressionPlan>, bool)> {
+            let options = Self::parse_patch_apply_compression_options(
+                args.no_compress,
+                args.compress_format.clone(),
+                args.compress_codec.clone(),
+                args.compress_level,
+            )?;
+            let unresolved = !args.no_extract
+                && self.containers.probe(&args.rom).is_some()
+                && options.enabled
+                && options.requested_format.is_none()
+                && options.codec.is_none()
+                && !options.level_explicit
+                && self
+                    .containers
+                    .find_by_output_extension(&args.output)
+                    .is_none();
+            if unresolved {
+                return Ok((args.output.clone(), None, true));
+            }
+            let options =
+                self.resolve_patch_apply_output_options(options, &args.output, &args.rom)?;
+            let plan = options
+                .enabled
+                .then(|| {
+                    self.resolve_patch_apply_compression_plan(&args.output, &args.rom, &options)
+                })
+                .transpose()?;
+            let output = plan
+                .as_ref()
+                .map(|plan| plan.output_path.clone())
+                .unwrap_or_else(|| args.output.clone());
+            Ok((output, plan, false))
+        })();
+        let (output, compression, unresolved) = match planned {
+            Ok(plan) => plan,
+            Err(error) => {
+                return self.plan_failed(command, OperationFamily::Patch, &error.to_string());
+            }
+        };
+        for source in [&args.rom, &args.patch] {
+            if super::patch_apply::paths_refer_to_same_file(source, &output) {
+                return self.plan_failed(command, OperationFamily::Patch,
+                    "PPF undo output and source resolve to the same file; choose a different --output path");
+            }
+        }
+        let mut report = OperationReport::succeeded(
             OperationFamily::Patch,
-            "dry run: would restore the ROM from PPF undo data; nothing written",
-            vec![args.output.display().to_string()],
-            vec![
-                "PPF undo data and output-parent access are not validated during dry run"
-                    .to_string(),
-            ],
-        )
+            Some("PPF".to_string()),
+            "plan",
+            "dry run: would restore the ROM from PPF undo data; nothing written".to_string(),
+            Some(100.0),
+            None,
+        );
+        let outputs_unknown = unresolved
+            || (compression.is_none()
+                && (detect_disc_sheet(&args.rom).is_some()
+                    || (!args.no_extract && self.containers.probe(&args.rom).is_some())));
+        let mut notes = vec![if unresolved {
+            "output format awaits archive payload selection; PPF undo data and destination access are not validated during dry run"
+        } else {
+            "archive members, PPF undo data, and destination access are not validated during dry run"
+        }];
+        if outputs_unknown {
+            notes.push("raw disc companion output paths, when present, await source inspection");
+        }
+        report.details = Some(json!({
+            "dry_run": true,
+            "command": command,
+            "writes": [output.display().to_string()],
+            "downloads": [],
+            "read_only": false,
+            "outputs_unknown": outputs_unknown,
+            "format": compression.as_ref().map(|plan| plan.format.as_str())
+                .unwrap_or(if unresolved { "unresolved" } else { "raw" }),
+            "codec": compression.as_ref().and_then(|plan| plan.codec.as_deref()),
+            "level": compression.as_ref().and_then(|plan| plan.level),
+            "notes": notes,
+        }));
+        if let Some(plan) = compression {
+            Self::append_report_warnings(&mut report, plan.warning);
+        }
+        self.finish(command, report)
     }
 
     fn plan_setup_dry_run(&self, args: &SetupCommand) -> AppRunOutcome {

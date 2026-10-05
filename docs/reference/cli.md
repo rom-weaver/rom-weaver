@@ -143,7 +143,7 @@ Native `extract` and `compress` accept `-` as an input path or as `--output`. Na
 | `patch apply --output -` | Requires `--no-compress` for raw bytes or `--compress-format` for compressed output. Conflicts with `--tui` and `--emit-bundle`. Requires one final regular file; disc sheets with companion files cannot be streamed. |
 | `trim --output -` | Requires exactly one trim-eligible source. Conflicts with `--in-place` and `--extension`. Writes the trimmed or restored file. |
 | `save set --output -` | Writes the edited save, or the original bytes when the validated edits make no change. |
-| `tools ppf-undo --output -` | Writes the restored ROM. |
+| `tools ppf-undo --output -` | Requires `--no-compress` for raw bytes or `--compress-format` for compressed output. Requires one final regular file; a raw disc sheet with companion tracks cannot be streamed. |
 | Binary stdout | Refuses terminal output and conflicts with `--json`, `--jsonl`, and `--dry-run`, regardless of flag order. Success summaries are suppressed; progress and errors use stderr. Interactive selection is disabled. |
 | Stdin with `--dry-run` | Fails before reading stdin. Dry runs require an input file. |
 
@@ -433,7 +433,13 @@ When every recorded cheat is `optional` and none resolves, a bundle with no patc
 
 ## Tools
 
-`tools ppf-undo` accepts `--input` (the patched ROM), `--patch` (a PPF3 patch with undo data), and `--output`. It restores the bytes recorded in that patch. The output must be a separate file from both inputs. Invalid or out-of-bounds undo data is rejected before writing the output. It cannot undo arbitrary patch formats or later unrelated edits.
+`tools ppf-undo` restores saved bytes from a PPF3 patch with undo data. Required flags: `--input` (patched ROM), `--patch`, and `--output`. Output paths must differ from both inputs. Invalid undo data is rejected before writing; failed undo or compression preserves existing outputs. It cannot reverse unrelated later edits.
+
+Inputs support automatic extraction. `--select` chooses the ROM member; `--patch-select` chooses the patch. `--no-extract` disables extraction; `--no-ignore` includes ignored members.
+
+For disc sheets, `--target` selects a track when ambiguous. Raw `.cue`/`.gdi` output includes companion tracks; compression preserves unchanged tracks.
+
+Compression flags and aliases follow [Apply's output policy](#output-and-compression). `.bin` requires `--no-compress` or an explicit format; extension/format disagreement warns. `--threads` controls extraction and compression.
 
 Procedures: [Undo PPF in the browser](../how-to/undo-ppf-browser.md) and [Undo PPF from the CLI](../how-to/cli-apply.md#undo-a-ppf-patch).
 

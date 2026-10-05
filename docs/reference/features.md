@@ -38,7 +38,7 @@ Cheat support covers writes to the ROM. Codes that need live game memory cannot 
 | Compress and convert | Put a ROM into a smaller container, or change its container. This does not port a game to another console. | [Convert a ROM](../how-to/convert-roms-browser.md) | [Archives and disc images](../how-to/work-with-archives.md) |
 | Trim | Remove padding from supported files. Padding is space around the useful data. | [Trim](../how-to/trim-roms-browser.md) | [Trim and restore padding](../how-to/cli-trim.md) |
 | Headers and byte order | Handle supported dump layouts so patches receive the bytes they expect. | [Resolve layout differences](../how-to/fix-checksum-errors.md#cartridge-header-differences) | [Header options](cli.md#header-and-byte-order-flags) |
-| PPF undo | Restore bytes saved inside a PPF3 patch that includes undo data. | [Undo PPF](../how-to/undo-ppf-browser.md) | [Tools](cli.md#tools) |
+| PPF undo | Restore bytes saved inside a PPF3 patch that includes undo data; unpack ROM and patch inputs and compress the restored output. | [Undo PPF](../how-to/undo-ppf-browser.md) | [Tools](cli.md#tools) |
 
 The browser's Extract tool downloads selected files, or several files as one ZIP. The CLI also creates archives from directories.
 

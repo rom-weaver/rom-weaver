@@ -223,6 +223,13 @@ fn validate(command: &Commands, options: &RunCommandOptions, name: Option<&str>)
                 ));
             }
         }
+        Commands::Tools(ToolsCommands::PpfUndo(args)) => {
+            if !args.no_compress && args.compress_format.is_none() {
+                return Err(invalid(
+                    "PPF undo output - requires --no-compress or --compress-format FORMAT",
+                ));
+            }
+        }
         Commands::Trim(args) if args.in_place || args.extension.is_some() => {
             return Err(invalid(
                 "trim output - cannot use --in-place or --extension",

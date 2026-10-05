@@ -15,14 +15,14 @@ This tool cannot undo arbitrary patches or reconstruct bytes absent from the pat
 ## Restore the saved bytes
 
 1. Open [PPF Undo](https://rom-weaver.com/ppf-undo).
-2. Add the patched ROM and the original `.ppf` patch.
-3. Check the **Patched ROM** and **PPF patch** cards.
-4. Enter a separate output filename.
+2. Add the patched ROM and the original `.ppf` patch. You can add archives containing either or both.
+3. If an archive contains several candidates, choose the ROM and PPF patch to use. Check the **Patched ROM** and **PPF patch** cards and any warnings about ignored inputs.
+4. Enter a separate output filename. Choose its format in **Restore**; open **Options** to adjust compression.
 5. Select **Restore original ROM**.
 
 ![PPF Undo with a restored 16-byte ROM ready to download](../screenshots/ppf-undo-restored.webp)
 
-If the patch lacks undo data, use your clean backup. The tool cannot recover changes from other patches applied afterward.
+If an input is invalid, replace it before restoring. If the patch lacks undo data, use your clean backup. The tool cannot recover changes from other patches applied afterward.
 
 ## Check the restored copy
 

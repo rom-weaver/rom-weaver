@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   preloadCapability: vi.fn(),
   scheduleBrowserRuntimeWarmupExtraction: vi.fn(),
   runtime: {
+    compression: { create: vi.fn() },
+    output: { createSource: vi.fn() },
     ingest: { run: vi.fn() },
     patch: { createPatchCandidates: vi.fn() },
     preload: { preloadCapability: vi.fn() },
@@ -227,6 +229,139 @@ describe("browser ingest and identify API", () => {
 });
 
 describe("browser runtime helpers", () => {
+  it("preserves content-detected DVD metadata for shared CHD auto mode", async () => {
+    const vfs = { normalizePath: (path: string) => path, getFile: vi.fn() };
+    const raw = { path: "/out/restored.bin", fileName: "restored.bin", size: 2048, vfs, dispose: vi.fn() };
+    const compressed = { ...raw, path: "/out/restored.chd", fileName: "restored.chd", dispose: vi.fn() };
+    mocks.runtime.workerIo.stageSources.mockResolvedValue([
+      { cleanup: vi.fn().mockResolvedValue(undefined), filePath: "/input/game.bin" },
+      { cleanup: vi.fn().mockResolvedValue(undefined), filePath: "/input/undo.ppf" },
+    ]);
+    mocks.invokeRomWeaverPpfUndoWorker.mockResolvedValue({
+      filePath: raw.path,
+      files: [{ path: raw.path, fileName: raw.fileName }],
+    });
+    mocks.runtime.workerIo.createWorkerOutput.mockResolvedValue(raw);
+    mocks.runtime.compression.create.mockResolvedValue({ output: compressed });
+    mocks.runtime.output.createSource.mockResolvedValue(compressed);
+    await api.undoPpf({
+      rom: blob("game.bin"),
+      patch: blob("undo.ppf"),
+      outputName: "restored.bin",
+      compression: "chd",
+      metadata: { format: "DVD", recommendedFormat: "chd" },
+    });
+    expect(mocks.runtime.compression.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        format: "chd",
+        source: expect.objectContaining({ path: raw.path, vfs }),
+        romSpecific: { chd: expect.objectContaining({ mode: "dvd" }) },
+      }),
+    );
+    expect(vfs.getFile).not.toHaveBeenCalled();
+  });
+
+  it("forwards RVZ controls through the shared output builder without reading the restored file into memory", async () => {
+    const vfs = { normalizePath: (path: string) => path, getFile: vi.fn() };
+    const raw = { path: "/out/restored.iso", fileName: "restored.iso", size: 1024, vfs, dispose: vi.fn() };
+    const compressed = { ...raw, path: "/out/restored.rvz", fileName: "restored.rvz", dispose: vi.fn() };
+    mocks.runtime.workerIo.stageSources.mockResolvedValue([
+      { cleanup: vi.fn().mockResolvedValue(undefined), filePath: "/input/game.iso" },
+      { cleanup: vi.fn().mockResolvedValue(undefined), filePath: "/input/undo.ppf" },
+    ]);
+    mocks.invokeRomWeaverPpfUndoWorker.mockResolvedValue({
+      filePath: raw.path,
+      files: [{ path: raw.path, fileName: raw.fileName }],
+    });
+    mocks.runtime.workerIo.createWorkerOutput.mockResolvedValue(raw);
+    mocks.runtime.compression.create.mockResolvedValue({ output: compressed });
+    mocks.runtime.output.createSource.mockResolvedValue(compressed);
+    await api.undoPpf({
+      rom: blob("game.iso"),
+      patch: blob("undo.ppf"),
+      outputName: "restored.iso",
+      compression: "rvz",
+      settings: {
+        output: { container: { rvzBlockSize: "131072", rvzScrub: true, rvzCodec: "zstd", rvzCompressionLevel: "7" } },
+      },
+    });
+    expect(mocks.runtime.compression.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        format: "rvz",
+        source: expect.objectContaining({ path: raw.path, vfs }),
+        romSpecific: {
+          rvz: expect.objectContaining({ blockSize: "131072", scrub: true, codec: "zstd", compressionLevel: 7 }),
+        },
+      }),
+    );
+    expect(vfs.getFile).not.toHaveBeenCalled();
+    expect(raw.dispose).toHaveBeenCalledOnce();
+  });
+
+  it("compresses restored OPFS outputs with shared archive settings and packages raw disc companions", async () => {
+    const cleanup = vi.fn().mockResolvedValue(undefined);
+    const inputs = [
+      { cleanup: vi.fn().mockResolvedValue(undefined), filePath: "/work/rom.bin" },
+      { cleanup: vi.fn().mockResolvedValue(undefined), filePath: "/work/undo.ppf" },
+    ];
+    mocks.runtime.workerIo.stageSources.mockResolvedValue(inputs);
+    const files = [{ fileName: "restored.bin", path: "/out/restored.bin" }];
+    mocks.invokeRomWeaverPpfUndoWorker.mockResolvedValue({ filePath: files[0].path, files, cleanup });
+    const archive = { fileName: "restored.zip", dispose: vi.fn() };
+    mocks.runtime.compression.create.mockResolvedValue({ output: archive });
+    await expect(
+      api.undoPpf({
+        rom: blob("rom.bin"),
+        patch: blob("undo.ppf"),
+        outputName: "restored.bin",
+        compression: "zip",
+        settings: { workers: { threads: 2 }, output: { container: { profile: "high", zipCodec: "store" } } },
+      }),
+    ).resolves.toBe(archive);
+    expect(mocks.runtime.compression.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entries: [expect.objectContaining({ filename: "restored.bin", filePath: "/out/restored.bin" })],
+        format: "zip",
+        options: expect.objectContaining({ zipCodec: "store", compressionProfile: "high", threads: 2 }),
+      }),
+    );
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(mocks.runtime.workerIo.createWorkerOutput).not.toHaveBeenCalled();
+    const discFiles = [
+      { fileName: "disc.cue", path: "/out/disc.cue" },
+      { fileName: "track.bin", path: "/out/track.bin" },
+    ];
+    mocks.invokeRomWeaverPpfUndoWorker.mockResolvedValue({ filePath: discFiles[0].path, files: discFiles, cleanup });
+    await api.undoPpf({ rom: blob("disc.cue"), patch: blob("undo.ppf"), outputName: "disc-restored.cue" });
+    expect(mocks.runtime.compression.create).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        entries: discFiles.map((file) => expect.objectContaining({ filename: file.fileName, filePath: file.path })),
+        format: "zip",
+        options: expect.objectContaining({ zipCodec: "store", outputName: "disc-restored.zip" }),
+      }),
+    );
+    expect(cleanup).toHaveBeenCalledTimes(2);
+  });
+
+  it("cleans restored and staged inputs when archive compression fails", async () => {
+    const cleanup = vi.fn().mockResolvedValue(undefined);
+    const sourceCleanup = vi.fn().mockResolvedValue(undefined);
+    mocks.runtime.workerIo.stageSources.mockResolvedValue([
+      { cleanup: sourceCleanup, filePath: "/work/rom.bin" },
+      { cleanup: sourceCleanup, filePath: "/work/undo.ppf" },
+    ]);
+    mocks.invokeRomWeaverPpfUndoWorker.mockResolvedValue({
+      files: [{ fileName: "restored.bin", path: "/out/restored.bin" }],
+      cleanup,
+    });
+    mocks.runtime.compression.create.mockRejectedValueOnce(new Error("Unsupported codec"));
+    await expect(
+      api.undoPpf({ rom: blob("rom.bin"), patch: blob("undo.ppf"), outputName: "restored.bin", compression: "zip" }),
+    ).rejects.toThrow("Unsupported codec");
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(sourceCleanup).toHaveBeenCalledTimes(2);
+  });
+
   it("constructs each browser workflow controller and applies its asset base", async () => {
     expect(new api.CreateWorkflow({ assetBaseUrl: "/assets" })).toBeInstanceOf(api.CreateWorkflow);
     expect(new api.ApplyWorkflow({ assetBaseUrl: "/assets" })).toBeInstanceOf(api.ApplyWorkflow);
@@ -292,7 +427,10 @@ describe("browser runtime helpers", () => {
       { cleanup: vi.fn().mockResolvedValue(undefined), filePath: "/work/undo.ppf" },
     ];
     mocks.runtime.workerIo.stageSources.mockResolvedValueOnce(staged);
-    mocks.invokeRomWeaverPpfUndoWorker.mockResolvedValueOnce({ filePath: "/work/restored.bin" });
+    mocks.invokeRomWeaverPpfUndoWorker.mockResolvedValueOnce({
+      filePath: "/work/restored.bin",
+      files: [{ fileName: "restored.bin", path: "/work/restored.bin" }],
+    });
     const output = { file: "restored.gba" };
     mocks.runtime.workerIo.createWorkerOutput.mockReturnValueOnce(output);
     await expect(

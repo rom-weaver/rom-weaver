@@ -572,6 +572,8 @@ describe("output-producing runtime workers", () => {
     expect(lastCall()[0]).toEqual({
       args: {
         args: {
+          no_extract: true,
+          no_compress: true,
           output: expect.any(String),
           patch: "/patch.ppf",
           rom: "/game.sfc",
@@ -580,6 +582,42 @@ describe("output-producing runtime workers", () => {
       },
       type: "tools",
     });
+  });
+
+  it("passes PPF disc targets and thread settings, retains emitted companions, and relays report warnings", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({
+        warnings: ["Disc warning"],
+        emitted_files: [
+          { path: "/out/restored.cue", size_bytes: 17 },
+          { path: "/out/track.bin", size_bytes: 32 },
+        ],
+      }),
+    );
+    const onWarning = vi.fn();
+    await expect(
+      invokeRomWeaverPpfUndoWorker({
+        outputName: "restored.cue",
+        romFilePath: "/disc.cue",
+        patchFilePath: "/undo.ppf",
+        target: "track.bin",
+        onWarning,
+        settings: { workers: { threads: 2 }, output: { container: { profile: "high", zipCodec: "store" } } },
+      }),
+    ).resolves.toMatchObject({
+      fileName: "restored.cue",
+      filePath: "/out/restored.cue",
+      files: expect.arrayContaining([expect.objectContaining({ path: "/out/track.bin" })]),
+    });
+    expect(lastCall()[0].args.args).toMatchObject({
+      no_extract: true,
+      no_compress: true,
+      threads: 2,
+      target: "track.bin",
+      rom: "/disc.cue",
+      patch: "/undo.ppf",
+    });
+    expect(onWarning).toHaveBeenCalledWith("Disc warning");
   });
 });
 

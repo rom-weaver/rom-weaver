@@ -165,8 +165,19 @@ Pass `--independent` to check each patch separately and report every verdict. Us
 Use the patched ROM and the exact PPF3 patch that changed it. The patch must include undo data.
 
 ```sh
-rom-weaver tools ppf-undo -i patched.bin --patch change.ppf -o restored.bin
+rom-weaver tools ppf-undo -i patched.bin --patch change.ppf -o restored.bin --no-compress
 ```
+
+To restore from archived ROM and patch inputs and compress the result:
+
+```sh
+rom-weaver tools ppf-undo \
+  -i patched.zip --select game.bin \
+  --patch change.zip --patch-select change.ppf \
+  -o restored.zip
+```
+
+See [compression overrides](../reference/cli.md#output-and-compression) for other formats and codecs.
 
 Compare the restored file with the original's known checksum before you use it. If the patch lacks undo data, restore your backup instead.
 

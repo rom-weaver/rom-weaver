@@ -1542,6 +1542,7 @@ impl CliApp {
             compression_plan.codec.as_deref().unwrap_or("default")
         );
         let (compress_report, codec_label) = match self.run_patch_apply_compression(
+            "patch-apply",
             &compression_plan,
             vec![archive_input],
             disc_track_overrides,
@@ -3588,6 +3589,7 @@ impl CliApp {
 
     pub(super) fn run_patch_apply_compression(
         &self,
+        command: &str,
         plan: &PatchApplyCompressionPlan,
         inputs: Vec<PathBuf>,
         overrides: &[CreateInputOverride],
@@ -3603,7 +3605,7 @@ impl CliApp {
         let compress_threads = Some(context.plan_threads(handler.capabilities().create_threads));
         self.emit_running(
             OperationLabel {
-                command: "patch-apply",
+                command,
                 family: OperationFamily::Patch,
                 format: Some(plan.format.as_str()),
             },
