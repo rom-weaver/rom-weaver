@@ -367,6 +367,7 @@ impl CliApp {
             plan.codec.as_deref().unwrap_or("default")
         );
         let (compress_report, codec_label) = match self.run_patch_apply_compression(
+            "patch-apply",
             &plan,
             vec![sheet.to_path_buf()],
             overrides,

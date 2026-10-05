@@ -8,6 +8,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import zlib from "node:zlib";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium, webkit } from "playwright";
 import { DOC_SOURCES, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
@@ -1180,6 +1181,247 @@ const configureUncompressedOutput = async (page) => {
   await page.locator(".settings-actions .btn.primary:visible").click();
 };
 
+const buildPpfUndoPatch = (records, undo = true) => {
+  const header = Buffer.alloc(60);
+  header.write("PPF30", 0, "ascii");
+  header[5] = 2;
+  header.write("Browser undo journey", 6, "ascii");
+  header[58] = Number(undo);
+  return Buffer.concat([
+    header,
+    ...records.map(({ offset, data, original }) => {
+      const recordHeader = Buffer.alloc(9);
+      recordHeader.writeBigUInt64LE(BigInt(offset));
+      recordHeader[8] = data.length;
+      return Buffer.concat([recordHeader, Buffer.from(data), ...(undo ? [Buffer.from(original)] : [])]);
+    }),
+  ]);
+};
+
+const buildUndoJourneyZip = (entries) => {
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+  for (const [fileName, bytes] of entries) {
+    const name = Buffer.from(fileName);
+    let crc = 0xffffffff;
+    for (const byte of bytes) {
+      crc ^= byte;
+      for (let bit = 0; bit < 8; bit += 1) crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
+    }
+    crc = (crc ^ 0xffffffff) >>> 0;
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(bytes.length, 18);
+    local.writeUInt32LE(bytes.length, 22);
+    local.writeUInt16LE(name.length, 26);
+    locals.push(local, name, bytes);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(bytes.length, 20);
+    central.writeUInt32LE(bytes.length, 24);
+    central.writeUInt16LE(name.length, 28);
+    central.writeUInt32LE(offset, 42);
+    centrals.push(central, name);
+    offset += local.length + name.length + bytes.length;
+  }
+  const directory = Buffer.concat(centrals);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, directory, end]);
+};
+
+const readUndoJourneyZip = (bytes) => {
+  const entries = new Map();
+  let offset = bytes.readUInt32LE(bytes.length - 6);
+  const count = bytes.readUInt16LE(bytes.length - 12);
+  for (let index = 0; index < count; index += 1) {
+    if (bytes.readUInt32LE(offset) !== 0x02014b50) throw new Error("PPF Undo: invalid ZIP directory");
+    const size = bytes.readUInt32LE(offset + 20);
+    const nameLength = bytes.readUInt16LE(offset + 28);
+    const name = bytes.subarray(offset + 46, offset + 46 + nameLength).toString();
+    const localOffset = bytes.readUInt32LE(offset + 42);
+    const payloadOffset =
+      localOffset + 30 + bytes.readUInt16LE(localOffset + 26) + bytes.readUInt16LE(localOffset + 28);
+    const payload = bytes.subarray(payloadOffset, payloadOffset + size);
+    const method = bytes.readUInt16LE(offset + 10);
+    if (method !== 0 && method !== 8) throw new Error(`PPF Undo: unsupported ZIP fixture method ${method}`);
+    entries.set(name, method === 8 ? zlib.inflateRawSync(payload) : payload);
+    offset += 46 + nameLength + bytes.readUInt16LE(offset + 30) + bytes.readUInt16LE(offset + 32);
+  }
+  return entries;
+};
+
+const runPpfUndoJourney = async (createContext, baseUrl) => {
+  const context = await createContext({ acceptDownloads: true, ignoreHTTPSErrors: true });
+  const page = await context.newPage();
+  const failures = [];
+  const downloads = [];
+  page.on("pageerror", (error) => failures.push(error.stack || error.message));
+  page.on("download", (download) => downloads.push(download));
+  const original = Buffer.from("abcdefghijklmnop");
+  const patched = Buffer.from("abXY123hijklmnop");
+  const records = [
+    { offset: 2, data: "XYZW", original: "cdef" },
+    { offset: 4, data: "123", original: "ZWg" },
+  ];
+  const validPatch = buildPpfUndoPatch(records);
+  const patchFile = (buffer, name) => ({ buffer, mimeType: "application/octet-stream", name });
+  try {
+    await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+    const nav = page.locator("#tab-ppf-undo");
+    await nav.waitFor({ state: "visible" });
+    if (await nav.locator(".nav-beta").count()) throw new Error("PPF Undo navigation still has a beta chip");
+    await nav.click();
+    const picker = page.locator("#ppf-undo-input-picker");
+    await picker.waitFor({ state: "attached" });
+    await picker.setInputFiles([patchFile(patched, "patched.bin"), patchFile(validPatch, "overlapping.ppf")]);
+    const restore = page.getByRole("button", { name: "Restore original ROM", exact: true });
+    await page.locator("#ppf-undo-output-compression").selectOption("none");
+    const restoreAndCheck = async () => {
+      const [download] = await Promise.all([
+        page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
+        restore.click(),
+      ]);
+      const downloadPath = await download.path();
+      if (!downloadPath) throw new Error("PPF Undo: Playwright did not expose the downloaded file");
+      if (!fs.readFileSync(downloadPath).equals(original)) {
+        throw new Error("PPF Undo: restored ROM differs from the original bytes");
+      }
+      if (download.suggestedFilename() !== "patched-restored.bin") {
+        throw new Error(`PPF Undo: unexpected output filename ${download.suggestedFilename()}`);
+      }
+      await page.getByRole("button", { name: "Download patched-restored.bin", exact: true }).waitFor();
+    };
+    await restoreAndCheck();
+    for (const { buffer, name, error } of [
+      {
+        buffer: buildPpfUndoPatch(records, false),
+        name: "no-undo.ppf",
+        error: "PPF patch does not contain complete undo data",
+      },
+      {
+        buffer: buildPpfUndoPatch([...records, { offset: original.length, data: "X", original: "a" }]),
+        name: "out-of-bounds.ppf",
+        error: "PPF undo data exceeds ROM bounds",
+      },
+    ]) {
+      await picker.setInputFiles(patchFile(buffer, name));
+      const previousDownloads = downloads.length;
+      await restore.click();
+      await page.locator("#ppf-undo-container").getByRole("alert").filter({ hasText: error }).waitFor({
+        timeout: DOWNLOAD_TIMEOUT_MS,
+      });
+      await restore.waitFor({ state: "visible" });
+      if (downloads.length !== previousDownloads) throw new Error(`PPF Undo: ${name} triggered a download`);
+      if (await page.getByRole("button", { name: "Download patched-restored.bin", exact: true }).count()) {
+        throw new Error(`PPF Undo: ${name} left a downloadable output`);
+      }
+      await picker.setInputFiles(patchFile(validPatch, "overlapping.ppf"));
+      await page.locator("#ppf-undo-container").getByRole("alert").waitFor({ state: "hidden" });
+      await restoreAndCheck();
+    }
+    if (downloads.length !== 3) throw new Error(`PPF Undo: expected 3 downloads, got ${downloads.length}`);
+    await picker.setInputFiles(
+      patchFile(
+        buildUndoJourneyZip([
+          ["patched.bin", patched],
+          ["overlapping.ppf", validPatch],
+          ["ignored.ips", Buffer.from("PATCHEOF")],
+        ]),
+        "undo-inputs.zip",
+      ),
+    );
+    await page.locator("#ppf-undo-container").getByRole("status").filter({ hasText: "Ignored ignored.ips" }).waitFor();
+    await restoreAndCheck();
+    await page.locator("#ppf-undo-output-compression").selectOption("zip");
+    const [compressed] = await Promise.all([
+      page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
+      restore.click(),
+    ]);
+    const compressedPath = await compressed.path();
+    if (
+      !(
+        compressedPath &&
+        [...readUndoJourneyZip(fs.readFileSync(compressedPath)).values()].some((bytes) => bytes.equals(original))
+      )
+    ) {
+      throw new Error("PPF Undo: ZIP output did not contain the original ROM bytes");
+    }
+    if (compressed.suggestedFilename() !== "patched-restored.zip")
+      throw new Error("PPF Undo: unexpected ZIP output name");
+    await picker.setInputFiles(patchFile(Buffer.from("PATCHEOF"), "unsupported.ips"));
+    await page.locator("#ppf-undo-container").getByRole("alert").filter({ hasText: "No valid PPF patch" }).waitFor();
+    if (!(await restore.isDisabled())) throw new Error("PPF Undo: unsupported patch left the prior patch runnable");
+    await picker.setInputFiles(patchFile(validPatch, "replacement.ppf"));
+    await page.locator("#ppf-undo-container").getByRole("alert").waitFor({ state: "hidden" });
+    await page.locator("#ppf-undo-output-compression").selectOption("none");
+    await restoreAndCheck();
+    const originalDisc = Buffer.alloc(2352 * 16);
+    original.copy(originalDisc);
+    const patchedDisc = Buffer.from(originalDisc);
+    patched.copy(patchedDisc);
+    const cue = Buffer.from('FILE "track.bin" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n');
+    const restoreDiscAndCheck = async () => {
+      const [download] = await Promise.all([
+        page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
+        restore.click(),
+      ]);
+      const downloadPath = await download.path();
+      if (!downloadPath) throw new Error("PPF Undo: missing disc download");
+      const entries = readUndoJourneyZip(fs.readFileSync(downloadPath));
+      if (
+        !(
+          entries.get("track.bin")?.equals(originalDisc) &&
+          [...entries.entries()].some(([name, bytes]) => name.endsWith(".cue") && bytes.equals(cue))
+        )
+      ) {
+        throw new Error("PPF Undo: disc download did not preserve the restored track and sheet");
+      }
+    };
+    await picker.setInputFiles(
+      patchFile(
+        buildUndoJourneyZip([
+          ["disc.cue", cue],
+          ["track.bin", patchedDisc],
+          ["extra.bin", Buffer.from("extra")],
+          ["disc.ppf", validPatch],
+          ["alternative.ppf", validPatch],
+        ]),
+        "disc.zip",
+      ),
+    );
+    const selection = page.locator(".rw-modal.select-modal .seltree");
+    await selection.getByRole("button").filter({ hasText: "track.bin" }).click();
+    await selection.getByRole("button").filter({ hasText: "disc.ppf" }).click();
+    await page
+      .locator("#ppf-undo-container")
+      .getByRole("status")
+      .filter({ hasText: "Choose one patched ROM" })
+      .waitFor();
+    await restoreDiscAndCheck();
+    await picker.setInputFiles([
+      patchFile(cue, "disc.cue"),
+      patchFile(patchedDisc, "track.bin"),
+      patchFile(validPatch, "disc.ppf"),
+    ]);
+    await restoreDiscAndCheck();
+    if (failures.length) throw new Error(`PPF Undo: uncaught page error\n${failures.join("\n")}`);
+    process.stdout.write("PASS PPF Undo (overlapping records, validation errors, replacement recovery)\n");
+  } finally {
+    await context.close();
+  }
+};
+
 const runApplyJourney = async (createContext, baseUrl, name, fixtureNames) => {
   const context = await createContext({ acceptDownloads: true, ignoreHTTPSErrors: true });
   const page = await context.newPage();
@@ -1369,6 +1611,7 @@ const main = async () => {
     }
     if (RUN_LINK_AUDIT) await scenario("links", (createContext) => runLinkAudit(createContext, devBaseUrl));
     if (RUN_RAW_JOURNEY) {
+      await scenario("PPF Undo/download/recovery", (createContext) => runPpfUndoJourney(createContext, previewBaseUrl));
       await scenario("raw apply/download", (createContext) =>
         runApplyJourney(createContext, previewBaseUrl, "raw apply/download", [
           "archive_sources/game.bin",

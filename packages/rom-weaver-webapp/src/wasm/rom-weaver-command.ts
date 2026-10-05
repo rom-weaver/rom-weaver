@@ -390,6 +390,7 @@ export function romWeaverCommandSupportsThreads(command: RomWeaverCommand): bool
           return assertNever(command.args);
       }
     case "tools":
+      return command.args.type === "ppf-undo";
     case "save":
       return false;
     case "plan-extract-batch":

@@ -793,6 +793,7 @@ fn running_compression_rejects_a_format_no_handler_claims() {
 
     let error = app()
         .run_patch_apply_compression(
+            "patch-apply",
             &plan,
             vec![payload],
             &[],
@@ -823,6 +824,7 @@ fn running_compression_writes_the_container_and_names_the_codec() {
 
     let (report, codec_label) = app()
         .run_patch_apply_compression(
+            "patch-apply",
             &plan,
             vec![payload],
             &[],

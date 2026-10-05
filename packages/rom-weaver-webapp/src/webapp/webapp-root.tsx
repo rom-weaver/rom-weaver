@@ -111,7 +111,6 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     railLabel: "Bundle",
   },
   {
-    beta: true,
     group: "patches",
     href: "ppf-undo",
     icon: <Undo2 aria-hidden="true" />,
@@ -211,6 +210,7 @@ const syncWorkflowSeoMetadata = (view: WebappView) => {
   else if (view === "home") route = WORKFLOW_SEO_ROUTES.home;
   else if (view === "identify") route = WORKFLOW_SEO_ROUTES.identify;
   else if (view === "patcher") route = WORKFLOW_SEO_ROUTES.patcher;
+  else if (view === "ppf-undo") route = WORKFLOW_SEO_ROUTES["ppf-undo"];
   else if (view === "test") route = WORKFLOW_SEO_ROUTES.test;
   if (!route) {
     const tab = WORKFLOW_TABS.find((entry) => entry.id === view);

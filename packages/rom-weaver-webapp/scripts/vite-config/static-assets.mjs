@@ -159,9 +159,14 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         makeBetaRouteNoindex(withShell("trim"), "trim-rom"),
         routePreloadLinks.get("trim"),
       );
-      const ppfUndoHtml = withRoutePreloadLinks(
-        makeBetaRouteNoindex(withShell("ppf-undo"), "ppf-undo"),
-        routePreloadLinks.get("ppf-undo"),
+      const ppfUndoHtml = injectLdJson(
+        createWorkflowRouteHtml(
+          withRoutePreloadLinks(withShell("ppf-undo"), routePreloadLinks.get("ppf-undo")),
+          WORKFLOW_SEO_ROUTES["ppf-undo"],
+          channel,
+          channelLabel,
+        ),
+        WORKFLOW_SEO_ROUTES["ppf-undo"],
       );
       const saveEditorHtml = withRoutePreloadLinks(
         makeBetaRouteNoindex(withShell("save-editor"), "save-editor"),
@@ -197,7 +202,7 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         ["whats-new", makeBetaRouteNoindex(whatsNewHtml, "whats-new")],
         ["save-editor", saveEditorHtml],
         // The old /tools/ URL stays reachable; it canonicalizes to /ppf-undo.
-        ["tools", ppfUndoHtml],
+        ["tools", makeBetaRouteNoindex(ppfUndoHtml, "ppf-undo")],
       ]) {
         const routeDir = path.join(distDir, slug);
         fs.mkdirSync(routeDir, { recursive: true });

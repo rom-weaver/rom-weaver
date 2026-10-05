@@ -3286,7 +3286,7 @@ pub struct PpfUndoCommand {
             short = 'i',
             long = "input",
             value_name = "ROM",
-            help = "The already-patched ROM to undo"
+            help = "The already-patched ROM to undo. May be an archive"
         )
     )]
     pub rom: PathBuf,
@@ -3295,7 +3295,7 @@ pub struct PpfUndoCommand {
         arg(
             long = "patch",
             value_name = "PPF",
-            help = "The PPF3 patch that was applied. It must carry undo data"
+            help = "The PPF3 patch that was applied. Must carry undo data; may be an archive"
         )
     )]
     pub patch: PathBuf,
@@ -3309,6 +3309,135 @@ pub struct PpfUndoCommand {
         )
     )]
     pub output: PathBuf,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            value_name = "GLOB",
+            help = "Disc track to restore, by exact name or glob. Required for a disc with multiple tracks"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub target: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            short = 's',
+            long,
+            help = "Pick the ROM archive payload by name, prefix, or glob (repeatable)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub select: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Pick the PPF archive payload by name, prefix, or glob (repeatable)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_select: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Treat the ROM and patch as raw files instead of extracting archives"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub no_extract: bool,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, help = NO_IGNORE_HELP))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub no_ignore: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            visible_alias = "raw",
+            help_heading = "Basic",
+            help = "Write a plain ROM instead of compressing the result"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub no_compress: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "compress-format",
+            ignore_case = true,
+            value_parser = CreateFormatValueParser,
+            visible_alias = "format",
+            help_heading = "Basic",
+            help = "Format to compress the restored ROM into [default: from the --output extension]",
+            long_help = "\
+Format to compress the restored ROM into, such as zip, 7z, chd, rvz, or z3ds.
+
+Normally you do not need this: the format comes from the --output extension.
+Pass it when the output name has no usable extension. If it disagrees with the
+extension, this flag wins and a warning is printed. Use --no-compress to write
+a plain ROM instead."
+        )
+    )]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub compress_format: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "compress-codec",
+            visible_alias = "codec",
+            action = ArgAction::Append,
+            value_delimiter = ',',
+            ignore_case = true,
+            value_parser = CodecValueParser,
+            help_heading = "Basic",
+            help = CODEC_HELP,
+            long_help = "\
+Compression method for the restored ROM, written as codec or codec:level.
+
+Each format has its own codecs, and each picks a sensible one on its own, so
+this is only for overriding that choice. CHD takes a list, tried in order:
+
+  --compress-codec cdzs:19,cdzl,cdfl
+
+Without :level, a codec follows the --compress-level profile."
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub compress_codec: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "compress-level",
+            visible_alias = "level",
+            value_enum,
+            help_heading = "Basic",
+            help = "How hard to compress: min, very-low, low, medium, high, very-high, or max [default: max]"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub compress_level: Option<CompressionLevelProfile>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            short = 'j',
+            long,
+            default_value = "auto",
+            value_name = "auto|N",
+            help = THREADS_HELP
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub threads: ThreadBudget,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

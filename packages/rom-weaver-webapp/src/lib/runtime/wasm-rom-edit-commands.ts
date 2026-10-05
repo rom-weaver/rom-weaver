@@ -1,4 +1,5 @@
 import type { LogLevel } from "../../types/logging.ts";
+import type { ApplySettings } from "../../types/settings.ts";
 import type {
   RuntimePatchWorkerProgress,
   RuntimeTrimWorkerInput,
@@ -15,7 +16,9 @@ import { getTrimOutputFileName, runWithRomWeaverOutputScope } from "./run-output
 import {
   asRecord,
   ensureRomWeaverSuccess,
+  getLastEvent,
   getEmittedFileDetails,
+  getEmittedFiles,
   getRunResultTiming,
   getTerminalEvent,
 } from "./run-result-parsing.ts";
@@ -81,20 +84,28 @@ const invokeRomWeaverTrimWorker = async (
 };
 
 const invokeRomWeaverPpfUndoWorker = async (input: {
+  target?: string;
+  onWarning?: (message: string) => void;
+  settings?: Partial<ApplySettings>;
   knownInputPaths?: string[];
   logLevel?: LogLevel | string;
   outputName: string;
   patchFilePath: string;
   romFilePath: string;
   signal?: AbortSignal;
-}): Promise<Parameters<RuntimeWorkerIo["createWorkerOutput"]>[0]> => {
+}): Promise<Parameters<RuntimeWorkerIo["createWorkerOutput"]>[0] & { files: ReturnType<typeof getEmittedFiles> }> => {
   const outputFileName = getPathBaseName(input.outputName, "restored-rom.bin");
+  const threadArg = toThreadBudget(input.settings?.workers?.threads);
   return runWithRomWeaverOutputScope(
     input.romFilePath,
     outputFileName,
     [input.romFilePath, input.patchFilePath],
     async (outputPath) => {
       const command = createRomWeaverCommand("tools-ppf-undo", {
+        ...(input.target ? { target: input.target } : {}),
+        no_extract: true,
+        no_compress: true,
+        ...(threadArg ? { threads: threadArg } : {}),
         output: outputPath,
         patch: input.patchFilePath,
         rom: input.romFilePath,
@@ -109,16 +120,29 @@ const invokeRomWeaverPpfUndoWorker = async (input: {
         command,
         toRomWeaverOptions({
           knownInputPaths: input.knownInputPaths,
+          onLog: (record) => {
+            if (record.level === "warn") input.onWarning?.(record.message);
+          },
           logLevel: input.logLevel,
           signal: input.signal,
         }),
       );
       ensureRomWeaverSuccess(result, "PPF undo failed");
-      const emitted = getEmittedFileDetails(result);
+      const terminal = getLastEvent(result);
+      const details = terminal ? getRomWeaverRunEventDetails(terminal) : undefined;
+      if (details && typeof details === "object" && !Array.isArray(details) && Array.isArray(details.warnings)) {
+        for (const warning of details.warnings) if (typeof warning === "string") input.onWarning?.(warning);
+      }
+      const files = getEmittedFiles(result);
+      const primary = files[0];
       return {
+        cueText: primary?.cueText,
+        gdiText: primary?.gdiText,
+        discGroupId: primary?.discGroupId,
+        files,
         fileName: outputFileName,
-        filePath: emitted?.path || outputPath,
-        size: emitted?.sizeBytes,
+        filePath: primary?.path || outputPath,
+        size: primary?.sizeBytes,
         timing: getRunResultTiming(result),
       };
     },

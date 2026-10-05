@@ -107,6 +107,7 @@ const DOCS_SCREENSHOT_NAMES = [
   "checksum-home-light.webp",
   "checksum-initial-light.webp",
   "checksum-mobile-dark.webp",
+  "ppf-undo-restored.webp",
 ];
 
 export {

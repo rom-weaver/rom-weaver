@@ -376,7 +376,7 @@ describe("romWeaverCommandSupportsThreads", () => {
     expect(romWeaverCommandSupportsThreads(asCommand({ args: {}, type: "probe" }))).toBe(false);
     expect(romWeaverCommandSupportsThreads(asCommand({ args: {}, type: "plan-extract-batch" }))).toBe(false);
     expect(romWeaverCommandSupportsThreads(asCommand({ args: { args: {}, type: "ppf-undo" }, type: "tools" }))).toBe(
-      false,
+      true,
     );
     for (const type of ["extract", "checksum", "identify", "ingest", "compress", "trim"] as const) {
       expect(romWeaverCommandSupportsThreads(asCommand({ args: {}, type }))).toBe(true);

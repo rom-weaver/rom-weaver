@@ -23,7 +23,7 @@ const routeShell = `<!doctype html><html><head>
 </head><body></body></html>`;
 
 test("workflow descriptions propagate to metadata and structured data", () => {
-  for (const key of ["home", "identify", "patcher", "creator"]) {
+  for (const key of ["home", "identify", "patcher", "creator", "ppf-undo"]) {
     const route = WORKFLOW_SEO_ROUTES[key];
     const html = injectLdJson(createWorkflowRouteHtml(routeShell, route, "prod", "Production"), route, key === "home");
     const expectedCanonical = `https://rom-weaver.com/${route.slug}`;
@@ -65,11 +65,12 @@ test("the sitemap contains each indexable workflow once and excludes beta tools"
     "create-patch",
     "extract",
     "identify-rom",
+    "ppf-undo",
     "test-rom",
   ]) {
     assert.ok(locations.includes(`https://rom-weaver.com/${slug}`), slug);
   }
-  for (const slug of ["trim", "ppf-undo", "save-editor"]) {
+  for (const slug of ["trim-rom", "save-editor"]) {
     assert.ok(!locations.includes(`https://rom-weaver.com/${slug}`), slug);
   }
 });
