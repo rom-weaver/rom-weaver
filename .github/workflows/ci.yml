@@ -29,12 +29,12 @@ on:
 permissions:
   contents: read
 
-# Main validation runs MUST finish independently as release candidates. Publication
-# jobs serialize destinations separately and reject superseded automatic builds.
+# Main validation MUST share one active slot to limit runner contention. New
+# pushes replace the pending run while the active run finishes.
 # The nightly gets its own group: it runs on main's ref, and a pending run in a
 # shared group would be replaced by the next push (or replace it).
 concurrency:
-  group: ci-${{ github.ref == 'refs/heads/main' && github.event_name != 'schedule' && github.run_id || (github.event_name == 'schedule' && 'nightly' || github.ref) }}
+  group: ci-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:

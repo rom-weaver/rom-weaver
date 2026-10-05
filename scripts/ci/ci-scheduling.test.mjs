@@ -45,8 +45,36 @@ test("preview opt-in and validation use the same WASM selection", () => {
   }
 });
 
-test("main validation has a unique run group and publishers serialize and guard writes", () => {
-  assert.match(workflow, /group: ci-.*github.run_id/u);
+test("main validation shares a group without cancelling active runs", () => {
+  const concurrency = workflow.split("\nconcurrency:\n")[1].split("\njobs:\n")[0];
+  const group = concurrency.match(/group: ci-\$\{\{ (.*) \}\}/u)[1];
+  const cancel = concurrency.match(/cancel-in-progress: \$\{\{ (.*) \}\}/u)[1];
+  const evaluateConcurrency = (ref, event, runId) => {
+    const context = { github: { ref, event_name: event, run_id: runId } };
+    return {
+      group: runInNewContext(group, context),
+      cancel: runInNewContext(cancel, context),
+    };
+  };
+  const main = evaluateConcurrency("refs/heads/main", "push", 1);
+  assert.deepEqual(main, { group: "refs/heads/main", cancel: false });
+  assert.deepEqual(evaluateConcurrency("refs/heads/main", "push", 2), main);
+  assert.deepEqual(evaluateConcurrency("refs/heads/main", "workflow_dispatch", 3), main);
+  assert.deepEqual(evaluateConcurrency("refs/heads/main", "schedule", 4), {
+    group: "nightly",
+    cancel: false,
+  });
+  assert.deepEqual(evaluateConcurrency("refs/pull/1/merge", "pull_request", 5), {
+    group: "refs/pull/1/merge",
+    cancel: true,
+  });
+  assert.notEqual(
+    evaluateConcurrency("refs/pull/2/merge", "pull_request", 6).group,
+    evaluateConcurrency("refs/pull/1/merge", "pull_request", 5).group,
+  );
+});
+
+test("publishers serialize and guard writes", () => {
   for (const name of ["docker-nightly", "docker-prebuilt-nightly", "deploy"]) {
     const body = job(name);
     assert.match(body, /concurrency:\n      group: publish-/u);
