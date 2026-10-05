@@ -318,6 +318,19 @@ test("Mupen selects its 64-bit MinGW recipe under UCRT64", () => {
   assert.ok(recipe.build[0].command.includes("MSYSTEM=MINGW64"));
 });
 
+test("Mupen statically links MinGW runtime libraries on Windows", () => {
+  const mupen = sources.cores.find(({ id }) => id === "mupen64plus_next");
+  assert.deepEqual(coreRecipe(mupen, "win32-x64").patches, [
+    {
+      path: "Makefile",
+      find: "LDFLAGS += -shared -static-libgcc -static-libstdc++ -Wl,--version-script=$(LIBRETRO_DIR)/link.T #-static",
+      replace:
+        "LDFLAGS += -shared -static -static-libgcc -static-libstdc++ -Wl,--version-script=$(LIBRETRO_DIR)/link.T #-static",
+    },
+  ]);
+  assert.deepEqual(coreRecipe(mupen, "linux-x64-gnu").patches, []);
+});
+
 test("Handy statically links MinGW runtime libraries on Windows", () => {
   const handy = sources.cores.find(({ id }) => id === "handy");
   const windows = coreRecipe(handy, "win32-x64");
