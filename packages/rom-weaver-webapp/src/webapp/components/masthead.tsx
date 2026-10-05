@@ -485,12 +485,19 @@ const Masthead = ({
           className="sub-chip sub-link whats-new-prompt"
           style={{
             flexShrink: 0,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 2,
+            padding: 0,
             fontSize: "0.55rem",
+            fontWeight: 600,
+            color: "var(--thread-text)",
             marginInlineStart: 4,
           }}
           onClick={onOpenWhatsNew}
           type="button"
         >
+          <Newspaper aria-hidden="true" size={11} />
           {localizer.message("ui.update.whatsNew")}
         </button>
       ) : null}
