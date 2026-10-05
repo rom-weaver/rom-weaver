@@ -36,7 +36,13 @@ export const writeBrotliSidecars = () => {
         throw new Error(`${emittedWasm} does not match ${sourceWasm}; refusing to stage a mismatched brotli sidecar`);
       }
       if (fs.existsSync(sourceSidecar)) fs.copyFileSync(sourceSidecar, `${emittedWasm}.br`);
-      else brotliCompressFile({ inputPath: emittedWasm, outputPath: `${emittedWasm}.br`, quality: 11 });
+      else
+        brotliCompressFile({
+          inputPath: emittedWasm,
+          outputPath: `${emittedWasm}.br`,
+          quality: 11,
+          parameterProfile: "default",
+        });
       // The Pages Function reads the type from SIDECAR_CONTENT_TYPES instead of probing
       // the static asset, so a staged sidecar whose extension is missing there would
       // silently fall back to Pages' own compression. Fail the build instead.
