@@ -42,8 +42,8 @@ test("keeps the full matrix on the nightly schedule and workflow_dispatch", () =
 
 // Pushes to main leave the other eight targets to the nightly schedule and the
 // release pull request.
-test("narrows to the pr-marked subset on pull_request and push", () => {
-  for (const event of ["pull_request", "push"]) {
+test("narrows to the pr-marked subset on pull_request, push, and merge_group", () => {
+  for (const event of ["pull_request", "push", "merge_group"]) {
     const subset = selectPlatformMatrix(platforms, event);
     assert.deepEqual(
       subset.map((platform) => platform.package),

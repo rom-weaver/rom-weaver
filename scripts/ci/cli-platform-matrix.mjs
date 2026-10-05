@@ -21,7 +21,8 @@ export function readPlatformMatrix(file = resolve(repoRoot, ".github/cli-platfor
 // schedule and on the release pull request, before anything can ship; this is
 // the `full_native` tier in classify-changes.mjs.
 //
-// Only `pull_request` and `push` narrow, and an absent EVENT_NAME means the
+// Only `pull_request`, `push`, and `merge_group` (which checks the commit a
+// push to main is about to receive) narrow, and an absent EVENT_NAME means the
 // full matrix: a caller that does not pass one (the release fan-out's `plan`
 // job in npm-publish.yml) can never silently publish a subset.
 //

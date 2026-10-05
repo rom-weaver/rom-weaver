@@ -516,6 +516,7 @@ test("main pushes keep the full matrix but leave full native coverage to the nig
     ["pull_request", "feature/x", false, false],
     ["pull_request", release, true, true],
     ["push", undefined, true, false],
+    ["merge_group", undefined, true, false],
     ["schedule", undefined, true, true],
     ["workflow_dispatch", undefined, true, true],
     [undefined, undefined, true, true],

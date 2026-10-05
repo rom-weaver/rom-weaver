@@ -261,11 +261,16 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
 // and the release pull request cover it before anything ships, which keeps
 // four 15-19 minute Windows builds per merge out of the shared runner pool.
 // An absent event keeps both, the same fail-open default as the classifier.
+// A merge-queue group checks the commit main is about to receive, so it gets
+// exactly a main push's coverage: whatever main's CI would fail on, the queue
+// fails on first.
+const CHECKS_MAIN_PUSH = new Set(["push", "merge_group"]);
+
 export function coverageTiers(eventName, headRef = undefined) {
   const releasePullRequest = isReleasePullRequest(eventName, headRef);
   return {
     fullMatrix: eventName !== "pull_request" || releasePullRequest,
-    fullNative: (eventName !== "pull_request" && eventName !== "push") || releasePullRequest,
+    fullNative: (eventName !== "pull_request" && !CHECKS_MAIN_PUSH.has(eventName)) || releasePullRequest,
   };
 }
 

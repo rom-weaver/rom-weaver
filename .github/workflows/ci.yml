@@ -10,6 +10,11 @@ on:
         type: choice
         options: [none, nightly, beta, prod]
   pull_request:
+  # The merge queue checks the commit main is about to receive, with a main
+  # push's coverage (see `coverageTiers` in scripts/ci/classify-changes.mjs),
+  # so two pull requests that pass alone cannot break main together. It never
+  # deploys or publishes: those stay on the push that follows.
+  merge_group:
   push:
     branches:
       - main
@@ -98,7 +103,7 @@ jobs:
       - name: Classify changed paths
         id: classify
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || steps.last-nightly.outputs.sha || '' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || steps.last-nightly.outputs.sha || '' }}
           HEAD_SHA: ${{ github.sha }}
           EVENT_NAME: ${{ github.event_name }}
           # Empty for anything that is not a pull request. It is what tells the
@@ -121,7 +126,10 @@ jobs:
       - name: Resolve channels
         id: plan
         continue-on-error: true
+        # A merge-queue commit is not main yet, so it plans no channel; the
+        # push that lands it deploys nightly.
         if: >-
+          github.event_name != 'merge_group' &&
           (github.ref_type == 'tag' ||
           (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_channel != 'none') ||
           steps.classify.outputs.webapp == 'true' ||
@@ -762,7 +770,7 @@ jobs:
 
       - name: Whitespace
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || '' }}
           HEAD_SHA: ${{ github.sha }}
         # The task reads BASE_SHA/HEAD_SHA above; the lefthook hook runs the same
         # task with neither set and checks the staged diff instead.
