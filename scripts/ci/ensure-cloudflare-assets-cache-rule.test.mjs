@@ -18,3 +18,99 @@ test("does not cache asset errors and replaces the old rule", async () => {
     { status_code_range: { from: 300, to: 599 }, value: -1 },
   ]);
 });
+
+test("retries a transient HTML server error before reading the rules", async () => {
+  const waits = [];
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    if (calls === 1) return new Response("upstream unavailable", { status: 500 });
+    return Response.json({ success: true, result: { rules: [cacheRule()] } });
+  };
+  assert.equal(
+    await ensureCacheRule({
+      zoneId: "zone",
+      token: "token",
+      fetchImpl,
+      sleep: async (ms) => waits.push(ms),
+    }),
+    "exists",
+  );
+  assert.equal(calls, 2);
+  assert.deepEqual(waits, [1000]);
+});
+
+test("limits retries and retains the final server error", async () => {
+  const waits = [];
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    return Response.json(
+      { success: false, errors: [{ message: "internal server error" }] },
+      { status: 500 },
+    );
+  };
+  await assert.rejects(
+    ensureCacheRule({
+      zoneId: "zone",
+      token: "token",
+      fetchImpl,
+      sleep: async (ms) => waits.push(ms),
+    }),
+    /HTTP 500[\s\S]*internal server error/,
+  );
+  assert.equal(calls, 3);
+  assert.deepEqual(waits, [1000, 2000]);
+});
+
+test("does not retry permanent read failures", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    return Response.json({ success: false }, { status: 403 });
+  };
+  await assert.rejects(
+    ensureCacheRule({
+      zoneId: "zone",
+      token: "token",
+      fetchImpl,
+      sleep: async () => assert.fail("unexpected retry"),
+    }),
+    /HTTP 403/,
+  );
+  assert.equal(calls, 1);
+});
+
+test("does not repeat writes after an ambiguous server error", async () => {
+  const methods = [];
+  const fetchImpl = async (_url, options = {}) => {
+    methods.push(options.method || "GET");
+    if (options.method === "PUT") return Response.json({ success: false }, { status: 500 });
+    return Response.json({ success: true, result: { rules: [] } });
+  };
+  await assert.rejects(
+    ensureCacheRule({
+      zoneId: "zone",
+      token: "token",
+      fetchImpl,
+      sleep: async () => assert.fail("unexpected retry"),
+    }),
+    /installing zone cache rule/,
+  );
+  assert.deepEqual(methods, ["GET", "PUT"]);
+});
+
+
+test("retries even when the failed response body has already errored", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    if (calls === 1) {
+      const body = new ReadableStream({ start(controller) { controller.error(new Error("upstream body terminated")); } });
+      return new Response(body, { status: 503 });
+    }
+    return Response.json({ success: true, result: { rules: [cacheRule()] } });
+  };
+  assert.equal(await ensureCacheRule({ zoneId: "zone", token: "token", fetchImpl, sleep: async () => {} }), "exists");
+  assert.equal(calls, 2);
+});
