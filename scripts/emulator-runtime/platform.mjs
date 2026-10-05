@@ -63,6 +63,13 @@ export const coreRecipe = (core, platformName) => {
     build.at(-1).command.push("MSYSTEM=MINGW64");
   }
   const patches = [];
+  if (core.id === "gambatte" && platformName === "win32-x64") {
+    patches.push({
+      path: "Makefile.libretro",
+      find: "SHARED := -shared -static-libgcc -static-libstdc++",
+      replace: "SHARED := -shared -static -static-libgcc -static-libstdc++",
+    });
+  }
   if (core.id === "ppsspp" && platformName === "darwin-arm64") {
     patches.push({
       path: "libretro/Makefile",
