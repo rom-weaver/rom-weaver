@@ -63,13 +63,13 @@ Before pushing webapp or published-doc changes, check the generated bundle, even
 
 Choose browser test files from the behavior you changed. These are starting points, not an exhaustive dependency map; include other affected tests and run the full browser suite when shared behavior makes the selection unclear. Paths below are relative to `packages/rom-weaver-webapp/tests/browser/`.
 
-| Changed behavior | Browser test files |
-| --- | --- |
-| Docs navigation, tutorial entry points, app shell | `webapp.browser.test.js` |
-| Remote URL imports and restoring imported files | `remote-url-session.browser.test.js` |
-| Create source selection, swapping, and queues | `create-form-queue.browser.test.js` |
-| Settings state and persistence | `settings-context.browser.test.js`, `settings-persistence.browser.test.js` |
-| Codec menu interactions | `codec-combobox.browser.test.js` |
+| Changed behavior                                  | Browser test files                                                         |
+| ------------------------------------------------- | -------------------------------------------------------------------------- |
+| Docs navigation, tutorial entry points, app shell | `webapp.browser.test.js`                                                   |
+| Remote URL imports and restoring imported files   | `remote-url-session.browser.test.js`                                       |
+| Create source selection, swapping, and queues     | `create-form-queue.browser.test.js`                                        |
+| Settings state and persistence                    | `settings-context.browser.test.js`, `settings-persistence.browser.test.js` |
+| Codec menu interactions                           | `codec-combobox.browser.test.js`                                           |
 
 From the webapp directory, pass one or more files to the existing runner. For example:
 
@@ -142,6 +142,7 @@ Run the independent property checks:
 
 ```bash
 cargo test -p rom-weaver-patches --test behavior_properties
+cargo test -p rom-weaver-containers --test behavior_properties
 cargo test -p rom-weaver-checksum edge_checksum_chunking
 cargo test -p rom-weaver-core single_money_edit_preserves
 ```
@@ -152,10 +153,11 @@ Run worker lifecycle and OPFS resource checks from the webapp package after prep
 
 ```bash
 npm run test:unit -- worker-lifecycle-properties.test.ts
-npm run test:browser:wasm -- browser-opfs-many-entries.test.mjs
+npm run test:browser:wasm -- browser-runtime-lifecycle.test.mjs browser-opfs-many-entries.test.mjs
+ROM_WEAVER_WASM_EXHAUSTIVE=1 npm run test:browser:wasm -- browser-runtime-lifecycle.test.mjs browser-opfs-many-entries.test.mjs
 ```
 
-Compare live/peak handles and buffered bytes at fixed concurrency as entry counts increase. Worker counts include the documented pool headroom. These are deterministic resource assertions, not wall-clock performance budgets.
+Compare live/peak handles and buffered bytes at fixed concurrency as entry counts increase. Worker counts include the documented pool headroom. These are deterministic resource assertions, not wall-clock performance budgets. The real runtime suite prints reproducible seeds and checks cancellation, stale responses, retries after CRC failures, idempotent cleanup, listener/request removal and released OPFS handles. Use the heavier command for twelve runtime seeds and the extended entry-count matrix.
 
 Prepare the pinned nightly toolchain for fuzz, sanitizer and Miri lanes:
 
@@ -163,6 +165,7 @@ Prepare the pinned nightly toolchain for fuzz, sanitizer and Miri lanes:
 rustup toolchain install nightly-2026-08-25 --component rust-src,miri
 mise run quality-fuzz smoke
 mise run quality-fuzz deep
+node --test scripts/quality-native-unaligned.test.mjs
 mise run quality-sanitizer
 mise run quality-miri
 mise run quality-kani
@@ -177,17 +180,17 @@ cargo build --locked -p rom-weaver-cli --bin rom-weaver
 mise run quality-reference
 ```
 
-The command reports tool provenance and hashes. It never rewrites the frozen oracle. Use the existing live parity workflow separately for current upstream compatibility.
+The command verifies ZIP/7z extraction and CHD/RVZ/7z canonical compressed payloads, reporting frozen tool versions, provenance and hashes. Whole-archive layouts can differ; the encoder manifest records the exact comparison scope. It never rewrites the frozen oracle. Use the existing live parity workflow separately for current upstream compatibility.
 
 Run coverage or opt into nightly branch coverage (also install `llvm-tools-preview` for that nightly):
 
 ```bash
 mise run coverage-rust
 mise run coverage-rust-branch
-mise run quality-diff-coverage main dist/coverage/rust/lcov.info
+mise run quality-diff-coverage main dist/coverage/rust/lcov.info --webapp-lcov dist/coverage/react-unit/lcov.info
 ```
 
-Use only LCOV produced from the current candidate. `changed-lines.json` separates covered, zero-hit, and not-measured lines and branch records; not-measured includes comments and unsupported/instrumentation-omitted code. The stable Rust lane has no branch instrumentation; browser LCOV may have decision records. Check selection logs before interpreting percentages.
+Use only LCOV produced from the current candidate. `changed-lines.json` separates covered, zero-hit, and not-measured lines and branch records; not-measured includes comments and unsupported/instrumentation-omitted code. The stable Rust lane has no branch instrumentation; browser LCOV may have decision records. Use `--webapp-lcov` for browser-relative source paths; pass `dist/coverage/react-browser` to include every UI shard. Empty report directories fail. Check selection logs before interpreting percentages. The weekly/manual Coverage workflow also combines current Rust, unit, UI and WASM-host LCOV for changed-line/decision reporting; its dispatch `base_ref` selects the comparison branch. Its WASM label measures page-host TypeScript, not Rust guest code or separate worker isolates. An all-zero source report fails.
 
 ### Prove a bug-fix regression test
 

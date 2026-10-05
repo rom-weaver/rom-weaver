@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { instrumentedArchive, sanitizerEnvironment, sanitizerArgs } from "./quality-sanitizer.mjs";
+import {
+  instrumentedArchive,
+  sanitizerEnvironment,
+  sanitizerArgs,
+  selectedSanitizerTests,
+} from "./quality-sanitizer.mjs";
 test("sanitizer lane instruments C/C++ and Rust in an isolated build directory", () => {
   const env = sanitizerEnvironment("/scratch", {
     CARGO_TARGET_DIR: "/ordinary",
@@ -27,7 +32,24 @@ test("native instrumentation is checked rather than inferred from flags", () => 
 
 test("sanitizer discovery selects the actual Rust module, not its filename", () => {
   const args = sanitizerArgs();
-  assert.ok(args.includes("libarchive::entries::tests"));
+  assert.ok(args.includes("libarchive::"));
   assert.ok(!args.includes("libarchive_entries"));
   assert.ok(args.includes("--lib"));
+});
+
+test("native boundary discovery cannot silently omit the SDK or entries suite", () => {
+  const entries = "libarchive::entries::tests::bounded_handles: test";
+  const sdk = "libarchive::tests::seven_zip_write_then_low_level_read_round_trips_payload: test";
+  const codec = "handlers_tests::tests::seven_z_short_period_matches_round_trip: test";
+  assert.equal(selectedSanitizerTests(`${entries}\n${sdk}\n${codec}\n`).length, 3);
+  assert.throws(() => selectedSanitizerTests(""), /no tests/);
+  assert.throws(
+    () => selectedSanitizerTests(`${entries}\n${sdk}`),
+    /omitted required native boundary/,
+  );
+  assert.throws(() => selectedSanitizerTests(sdk), /omitted required native boundary/);
+  assert.throws(
+    () => selectedSanitizerTests(`${entries}\n${sdk.replace(": test", ": benchmark")}`),
+    /omitted/,
+  );
 });

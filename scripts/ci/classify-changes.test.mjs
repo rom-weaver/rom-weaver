@@ -29,7 +29,10 @@ const REPO_LINT_ONLY = {
 };
 
 test("Rust save schemas rebuild both delivery targets", () => {
-  const result = classifyFor("pull_request", "crates/rom-weaver-core/src/save/schema/catalog/new_game.rs");
+  const result = classifyFor(
+    "pull_request",
+    "crates/rom-weaver-core/src/save/schema/catalog/new_game.rs",
+  );
   assert.equal(result.rust, "true");
   assert.equal(result.webapp, "true");
   assert.equal(result.wasm_runtime, "true");
@@ -520,7 +523,11 @@ test("main pushes keep the full matrix but leave full native coverage to the nig
     ["workflow_dispatch", undefined, true, true],
     [undefined, undefined, true, true],
   ]) {
-    assert.deepEqual(coverageTiers(eventName, headRef), { fullMatrix, fullNative }, `${eventName} ${headRef}`);
+    assert.deepEqual(
+      coverageTiers(eventName, headRef),
+      { fullMatrix, fullNative },
+      `${eventName} ${headRef}`,
+    );
   }
 });
 
@@ -530,5 +537,33 @@ test("the nightly keeps only the Rust selection", () => {
   assert.equal(nightly.rust, true);
   for (const [key, value] of Object.entries(nightly))
     if (key !== "rust") assert.equal(value, false, key);
-  assert.equal(scheduledSelection(classifyChanges(["docs/development/ci.md"], false, "schedule")).rust, false);
+  assert.equal(
+    scheduledSelection(classifyChanges(["docs/development/ci.md"], false, "schedule")).rust,
+    false,
+  );
+});
+
+test("real lifecycle host helper changes select WASM without selecting unrelated UI", () => {
+  for (const file of [
+    "lib/input/input-assets.ts",
+    "lib/compression/codec-parser.ts",
+    "lib/path-utils.ts",
+    "webapp/pwa/offline-warmup-client.ts",
+    "presentation/localization/catalog.ts",
+  ]) {
+    assert.equal(
+      classifyChanges([`packages/rom-weaver-webapp/src/${file}`], false, "pull_request")
+        .wasm_runtime,
+      true,
+      file,
+    );
+  }
+  assert.equal(
+    classifyChanges(
+      ["packages/rom-weaver-webapp/src/webapp/components/ThemePicker.tsx"],
+      false,
+      "pull_request",
+    ).wasm_runtime,
+    false,
+  );
 });

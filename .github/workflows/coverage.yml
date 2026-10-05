@@ -2,6 +2,11 @@ name: Coverage
 
 on:
   workflow_dispatch:
+    inputs:
+      base_ref:
+        description: Base branch for changed-line coverage (run this workflow on the candidate branch)
+        type: string
+        default: main
   schedule:
     # Informational and expensive: sample the current main branch weekly instead
     # of repeating the full test corpus after every successful CI run.
@@ -26,6 +31,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Restore production WASM
         id: wasm-cache
@@ -55,19 +62,45 @@ jobs:
         run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-webapp/src/wasm
 
       - name: Rust coverage
+        id: rust
         run: mise run coverage-rust
 
       - name: React unit coverage
+        id: unit
         run: npm --prefix packages/rom-weaver-webapp run test:unit:coverage
 
       - name: React UI coverage
+        id: ui
         run: npm --prefix packages/rom-weaver-webapp run test:browser:coverage
 
       - name: React wasm coverage
+        id: wasm
         run: npm --prefix packages/rom-weaver-webapp run test:browser:wasm:coverage
 
       - name: Coverage summary
+        if: ${{ !cancelled() }}
         run: node scripts/coverage-summary.mjs
+
+      - name: Changed-line coverage
+        id: changed
+        if: ${{ !cancelled() && steps.rust.outcome == 'success' && steps.unit.outcome == 'success' && steps.ui.outcome == 'success' && steps.wasm.outcome == 'success' }}
+        env:
+          QUALITY_BASE: ${{ inputs.base_ref || 'main' }}
+        run: |
+          git check-ref-format "refs/heads/$QUALITY_BASE"
+          git fetch origin "refs/heads/$QUALITY_BASE"
+          base=$(git rev-parse FETCH_HEAD)
+          mise run quality-diff-coverage "$base" dist/coverage/rust/lcov.info --webapp-lcov dist/coverage/react-unit/lcov.info --webapp-lcov dist/coverage/react-browser --webapp-lcov dist/coverage/react-wasm/lcov.info
+
+      - name: Report independent coverage evidence
+        if: ${{ !cancelled() }}
+        run: >-
+          node scripts/quality-summary.mjs
+          rust-coverage=${{ steps.rust.outcome }}
+          unit-coverage=${{ steps.unit.outcome }}
+          ui-coverage=${{ steps.ui.outcome }}
+          wasm-host-coverage=${{ steps.wasm.outcome }}
+          changed-coverage=${{ steps.changed.outcome }}
 
       - name: Upload coverage reports
         if: ${{ !cancelled() }}

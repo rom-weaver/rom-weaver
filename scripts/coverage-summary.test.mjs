@@ -28,3 +28,16 @@ test("buildCoverageSummary requires every coverage suite and deduplicates lines"
 test("parseLcov rejects reports without line data", () => {
   assert.throws(() => parseLcov("TN:\nSF:/repo/source.js\nend_of_record\n"), /no line records/u);
 });
+
+test("all-zero instrumentation cannot claim successful suite coverage", (context) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "rom-weaver-empty-coverage-"));
+  context.after(() => fs.rmSync(root, { force: true, recursive: true }));
+  for (const directory of ["rust", "react-unit", "react-browser", "react-wasm"]) {
+    fs.mkdirSync(path.join(root, directory), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, directory, "lcov.info"),
+      "SF:/repo/source.js\nDA:1,0\nend_of_record\n",
+    );
+  }
+  assert.throws(() => buildCoverageSummary(root), /no executed source lines/);
+});

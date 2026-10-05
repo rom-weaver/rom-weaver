@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
-import { resolve } from "node:path";
+import { resolve, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 const require = createRequire(resolve(process.cwd(), "packages/rom-weaver-webapp/package.json"));
 const { parseSync } = require("oxc-parser");
@@ -168,6 +168,108 @@ export function browserViolations(path, source, generatedNames = new Set()) {
   visit(tree);
   return violations;
 }
+function walkSyntax(node, visit) {
+  if (!node || typeof node !== "object") return;
+  visit(node);
+  for (const value of Object.values(node)) {
+    if (Array.isArray(value)) value.forEach((child) => walkSyntax(child, visit));
+    else if (value && typeof value === "object") walkSyntax(value, visit);
+  }
+}
+
+export function mainThreadViolations(modules, roots) {
+  const protectedModules = new Set([
+    ...syncOwners,
+    ...blockingOwners.keys(),
+    ...fileReaderOwners.keys(),
+    "wasm/rom-weaver-browser-opfs-api.ts",
+    "wasm/browser-opfs-runner.ts",
+    "wasm/browser-opfs-wasi-thread-runtime.ts",
+    "wasm/browser-opfs-proxy-server.ts",
+    "wasm/workers/browser-opfs-proxy-worker.ts",
+  ]);
+  const violations = [];
+  const visited = new Set();
+  const pending = roots.map((root) => ({ path: root, chain: [root] }));
+  while (pending.length) {
+    const { path, chain } = pending.shift();
+    if (visited.has(path)) continue;
+    visited.add(path);
+    if (protectedModules.has(path) || path.endsWith(".worker.ts")) {
+      violations.push(`Main-thread import reaches worker-only module: ${chain.join(" -> ")}`);
+      continue;
+    }
+    if (!modules.has(path)) {
+      violations.push(`Main-thread entry/module not selected: ${path}`);
+      continue;
+    }
+    const parsed = parseSync(path, modules.get(path));
+    if (parsed.errors.length) {
+      violations.push(`${path}: import graph parser failed: ${parsed.errors[0].message}`);
+      continue;
+    }
+    const addImport = (specifier) => {
+      if (typeof specifier !== "string") {
+        violations.push(`${path}: nonliteral dynamic import cannot establish thread ownership.`);
+        return;
+      }
+      const [bare, query = ""] = specifier.split("?");
+      const params = new URLSearchParams(query);
+      // Worker/url/raw imports yield an asset or constructor; their code executes outside this graph.
+      if (
+        params.has("worker") ||
+        params.has("sharedworker") ||
+        params.has("url") ||
+        params.has("raw")
+      )
+        return;
+      if (/^(?:@\/|~\/|#|src\/|\/src\/)/.test(bare)) {
+        violations.push(`${path}: forbidden local path alias ${specifier}; use relative imports.`);
+        return;
+      }
+      if (!bare.startsWith(".")) return;
+      const target = posix.normalize(posix.join(posix.dirname(path), bare));
+      if (/\.(?:css|json|svg|png|webp|wasm|po)$/.test(target)) return;
+      const candidates = [
+        target,
+        ...[".ts", ".tsx", ".js", ".mjs"].map((extension) => target + extension),
+        ...["index.ts", "index.tsx", "index.js"].map((name) => target + "/" + name),
+      ];
+      const found = candidates.find((candidate) => modules.has(candidate));
+      if (!found) {
+        violations.push(
+          `${path}: unresolved local runtime import ${specifier}; graph cannot claim complete selection.`,
+        );
+        return;
+      }
+      pending.push({ path: found, chain: [...chain, found] });
+    };
+    walkSyntax(parsed.program, (node) => {
+      if (node.type === "ImportDeclaration") {
+        if (
+          node.importKind === "type" ||
+          (node.specifiers.length > 0 &&
+            node.specifiers.every((item) => item.importKind === "type"))
+        )
+          return;
+        addImport(node.source.value);
+      }
+      if (["ExportNamedDeclaration", "ExportAllDeclaration"].includes(node.type) && node.source) {
+        if (
+          node.exportKind === "type" ||
+          (node.specifiers?.length > 0 &&
+            node.specifiers.every((item) => item.exportKind === "type"))
+        )
+          return;
+        addImport(node.source.value);
+      }
+      if (node.type === "ImportExpression") addImport(node.source.value);
+      // new URL(..., import.meta.url) is an asset reference, never a runtime import.
+    });
+  }
+  return { checkedMainThreadModules: visited.size, violations };
+}
+
 export function rustErrorViolations(path, source) {
   if (path === "crates/rom-weaver-core/src/error.rs" || /\/src\/(?:nod|xdvdfs)\//.test(path))
     return [];
@@ -198,7 +300,19 @@ export function checkArchitecture(cwd = process.cwd()) {
   );
   const violations = dependencyViolations(metadata);
   const prefix = "packages/rom-weaver-webapp/src/";
-  const sources = files(resolve(cwd, prefix)).filter((path) => /\.[jt]sx?$/.test(path));
+  const sources = files(resolve(cwd, prefix)).filter((path) => /\.[cm]?[jt]sx?$/.test(path));
+  const modules = new Map(
+    sources
+      .filter((path) => !path.endsWith(".d.ts"))
+      .map((path) => [path.slice(resolve(cwd, prefix).length + 1), readFileSync(path, "utf8")]),
+  );
+  const html = readFileSync(resolve(cwd, "packages/rom-weaver-webapp/index.html"), "utf8");
+  const roots = [
+    ...html.matchAll(/<script\b[^>]*\bsrc=["'](?:\.\/|\/)?src\/([^"']+)["'][^>]*>/g),
+  ].map((match) => match[1]);
+  if (!roots.length) violations.push("No browser document entry selected from index.html.");
+  const mainGraph = mainThreadViolations(modules, roots);
+  violations.push(...mainGraph.violations);
   const names = new Set();
   for (const path of sources.filter((p) => p.includes("/wasm/generated/"))) {
     const tree = parseSync(path, readFileSync(path, "utf8")).program;
@@ -225,6 +339,7 @@ export function checkArchitecture(cwd = process.cwd()) {
   return {
     checkedPackages: metadata.workspace_members.length,
     checkedBrowserModules: sources.length,
+    checkedMainThreadModules: mainGraph.checkedMainThreadModules,
     violations,
   };
 }

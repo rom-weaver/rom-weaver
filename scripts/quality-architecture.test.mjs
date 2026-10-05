@@ -4,6 +4,7 @@ import {
   dependencyViolations,
   browserViolations,
   rustErrorViolations,
+  mainThreadViolations,
 } from "./quality-architecture.mjs";
 const metadata = (edges) => ({
   workspace_members: Object.keys(edges),
@@ -128,3 +129,107 @@ test("imported Error alias implementation rejected", () =>
     ).length,
     1,
   ));
+const graph = (sources) => new Map(Object.entries(sources));
+test("transitive import and barrel export report a complete main-thread violation path", () => {
+  const result = mainThreadViolations(
+    graph({
+      "webapp/main.tsx": 'import "./middle";',
+      "webapp/middle.ts": 'export * from "../wasm/barrel.ts";',
+      "wasm/barrel.ts": 'export {open} from "./browser-opfs-sync-access.ts";',
+      "wasm/browser-opfs-sync-access.ts": "export const open=1;",
+    }),
+    ["webapp/main.tsx"],
+  );
+  assert.equal(result.violations.length, 1);
+  assert.match(
+    result.violations[0],
+    /main.tsx -> webapp\/middle.ts -> wasm\/barrel.ts -> wasm\/browser-opfs-sync-access.ts/,
+  );
+});
+test("type-only imports and exports erase ownership edges", () => {
+  const result = mainThreadViolations(
+    graph({
+      "main.ts":
+        'import type {T} from "./wasm/browser-opfs-sync-access.ts"; export type * from "./wasm/browser-opfs-runner.ts"; import {type U} from "./missing.ts"; export {type V} from "./absent.ts";',
+    }),
+    ["main.ts"],
+  );
+  assert.deepEqual(result.violations, []);
+  assert.equal(result.checkedMainThreadModules, 1);
+});
+test("mixed value/type imports preserve runtime edge", () => {
+  const result = mainThreadViolations(
+    graph({
+      "main.ts": 'import {type T, open} from "./wasm/browser-opfs-sync-access.ts";',
+      "wasm/browser-opfs-sync-access.ts": "export const open=1;",
+    }),
+    ["main.ts"],
+  );
+  assert.equal(result.violations.length, 1);
+});
+test("literal dynamic imports remain main-thread code even inside a callback", () => {
+  const result = mainThreadViolations(
+    graph({
+      "main.ts": 'const later = () => import("./wasm/browser-opfs-runner.ts");',
+      "wasm/browser-opfs-runner.ts": "export const run=1;",
+    }),
+    ["main.ts"],
+  );
+  assert.equal(result.violations.length, 1);
+});
+test("worker URL and Worker asset imports do not execute worker code in main graph", () => {
+  const result = mainThreadViolations(
+    graph({
+      "main.ts":
+        'import workerUrl from "./worker.worker.ts?worker&url"; import WorkerCtor from "./worker.worker.ts?worker"; new Worker(new URL("./worker.worker.js", import.meta.url));',
+      "worker.worker.ts": 'import "./wasm/browser-opfs-sync-access.ts";',
+      "wasm/browser-opfs-sync-access.ts": "export const open=1;",
+    }),
+    ["main.ts"],
+  );
+  assert.deepEqual(result.violations, []);
+  assert.equal(result.checkedMainThreadModules, 1);
+});
+test("ordinary import of worker entry is rejected", () => {
+  assert.match(
+    mainThreadViolations(
+      graph({ "main.ts": 'import "./worker.worker.ts";', "worker.worker.ts": "" }),
+      ["main.ts"],
+    ).violations[0],
+    /worker-only/,
+  );
+});
+test("missing roots, unresolved imports, opaque dynamic imports and local aliases fail closed", () => {
+  for (const source of [
+    'import "./missing";',
+    'import("./missing.ts")',
+    "import(path)",
+    'import "@/wasm/browser-opfs-sync-access.ts";',
+    'import "#runtime";',
+    'import "/src/wasm/browser-opfs-runner.ts";',
+  ]) {
+    assert.ok(
+      mainThreadViolations(graph({ "main.ts": source }), ["main.ts"]).violations.length,
+      source,
+    );
+  }
+  assert.match(mainThreadViolations(graph({}), ["missing.ts"]).violations[0], /not selected/);
+});
+test("extensionless index imports, cycles and package imports preserve selection", () => {
+  const result = mainThreadViolations(
+    graph({
+      "main.ts": 'import "./folder"; import "react";',
+      "folder/index.ts": 'import "../main.ts";',
+    }),
+    ["main.ts"],
+  );
+  assert.deepEqual(result.violations, []);
+  assert.equal(result.checkedMainThreadModules, 2);
+});
+test("malformed imported modules cannot be silently omitted", () => {
+  const result = mainThreadViolations(
+    graph({ "main.ts": 'import "./bad.ts";', "bad.ts": "import (" }),
+    ["main.ts"],
+  );
+  assert.match(result.violations[0], /parser failed/);
+});

@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runEncoderReferences } from "./quality-reference-encoder.mjs";
 import { cargoTargetDir } from "./cargo-target-dir.mjs";
 
 const fixturePath = fileURLToPath(new URL("./quality-reference-fixture.json", import.meta.url));
@@ -87,12 +88,19 @@ export function runReference({
   }
 }
 
-export function runReferences(options = {}) {
+export function runReferences(options = {}, encoders = runEncoderReferences) {
+  // Oracles MUST be loaded before candidate code runs, including preceding decode commands.
+  const encoderFixtures = JSON.parse(
+    readFileSync(new URL("./quality-reference-encoder.json", import.meta.url), "utf8"),
+  );
   const fixtures = [
     fixturePath,
     fileURLToPath(new URL("./quality-reference-7z-fixture.json", import.meta.url)),
   ].map((file) => JSON.parse(readFileSync(file, "utf8")));
-  return fixtures.map((fixture) => runReference({ ...options, fixture }));
+  return [
+    ...fixtures.map((fixture) => runReference({ ...options, fixture })),
+    ...encoders({ ...options, fixtures: encoderFixtures }),
+  ];
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

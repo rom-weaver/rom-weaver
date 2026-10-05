@@ -70,16 +70,24 @@ test("candidate setup and command failure never count as parity success", () => 
 
 test("both frozen formats execute and cannot rewrite their oracle", () => {
   let count = 0;
-  const results = runReferences({
-    execute: (binary, args) => {
-      count++;
-      return executeWith(payload())(binary, args);
+  let encoderRuns = 0;
+  const results = runReferences(
+    {
+      execute: (binary, args) => {
+        count++;
+        return executeWith(payload())(binary, args);
+      },
     },
-  });
+    () => {
+      encoderRuns++;
+      return ["chd", "rvz", "7z"].map((format) => ({ format, status: "passed" }));
+    },
+  );
   assert.equal(count, 2);
+  assert.equal(encoderRuns, 1);
   assert.deepEqual(
-    results.map((item) => item.archiveFormat),
-    ["zip", "7z"],
+    results.map((item) => item.archiveFormat ?? item.format),
+    ["zip", "7z", "chd", "rvz", "7z"],
   );
   assert.ok(results.every((item) => item.status === "passed"));
 });

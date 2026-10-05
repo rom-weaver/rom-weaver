@@ -73,6 +73,7 @@ jobs:
         run: |
           cargo test --locked -p rom-weaver-patches --test behavior_properties
           cargo test --locked -p rom-weaver-checksum --lib edge_checksum_chunking_matches_independent_bitwise_oracles
+          cargo test --locked -p rom-weaver-containers --test behavior_properties
       - name: Report selected signal
         if: ${{ !cancelled() }}
         env:
@@ -90,7 +91,67 @@ jobs:
             .agent/quality-mutation/mutants.out/**
             .agent/quality-fuzz/*.json
             .agent/quality-sanitizer/*.json
+            .agent/quality-sanitizer/*.log
             .agent/quality-miri/*.json
+            .agent/quality-miri/*.log
             .agent/quality-kani/*.json
+            .agent/quality-kani/*.log
             fuzz/artifacts/**
           if-no-files-found: ignore
+
+  browser:
+    name: Deep quality (browser lifecycle and resources)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      ROM_WEAVER_SYSTEM_CHROME: "1"
+      ROM_WEAVER_WASM_EXHAUSTIVE: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/wasm-cache
+        id: wasm-cache
+        with:
+          variant: prod
+      - uses: ./.github/actions/setup-build-env
+        with:
+          tools: node rust binaryen
+          apt-packages: cmake ninja-build pkg-config clang libclang-dev
+          rust-targets: wasm32-wasip1-threads
+          wasi-sdk: "true"
+          webapp-deps: "true"
+          identify-data-cache: "true"
+          cache-save: "false"
+      - name: Prepare attribution
+        run: node scripts/gen-third-party-licenses.mjs packages/rom-weaver-webapp/src/wasm --target webapp
+      - name: Build production WASM
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        run: mise run build-wasm-prod
+      - name: Verify WASM artifact
+        run: node scripts/wasm/verify-wasm-artifact.mjs packages/rom-weaver-webapp/src/wasm
+      - name: Production bundle and asset budgets
+        env:
+          ROM_WEAVER_SYSTEM_CHROME: "1"
+        run: |
+          npm --prefix packages/rom-weaver-webapp run build
+          npm --prefix packages/rom-weaver-webapp run check:size
+      - name: Seeded worker lifecycle
+        id: unit
+        run: |
+          mkdir -p .agent/quality-signals
+          npm --prefix packages/rom-weaver-webapp run test:unit -- worker-lifecycle-properties.test.ts --reporter=default --reporter=json --outputFile=../../.agent/quality-signals/runtime-unit.json
+      - name: Real WASM cancellation and resource invariants
+        id: runtime
+        run: npm --prefix packages/rom-weaver-webapp run test:browser:wasm -- browser-runtime-lifecycle.test.mjs browser-opfs-many-entries.test.mjs --reporter=default --reporter=json --outputFile=../../.agent/quality-signals/runtime-browser.json
+      - name: Runtime resource summary
+        if: ${{ !cancelled() }}
+        run: node scripts/quality-summary.mjs worker-lifecycle=${{ steps.unit.outcome }} runtime-resource-invariants=${{ steps.runtime.outcome }}
+      - name: Upload runtime invariant failures
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: deep-quality-browser
+          include-hidden-files: true
+          path: |
+            .agent/quality-signals/runtime-*.json
+            packages/rom-weaver-webapp/.vitest/attachments/failure-screenshots/**
+          if-no-files-found: warn
