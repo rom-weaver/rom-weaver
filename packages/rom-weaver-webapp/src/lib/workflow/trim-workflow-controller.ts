@@ -1,4 +1,4 @@
-import type { ChecksumRomProbe } from "../../types/checksum.ts";
+import type { ChecksumRomProbe, RomTypeTag } from "../../types/checksum.ts";
 import type { ParsedIdentifyResolution } from "../../types/identify.ts";
 import type { TrimResult } from "../../types/public.ts";
 import type { SelectionCandidate } from "../../types/selection.ts";
@@ -12,7 +12,7 @@ import type { WorkflowOptions, WorkflowWarning } from "../../types/workflow-cont
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { CreateWorkflowOptions, ProgressEvent, TrimInput } from "../../types/workflow-runtime-types.ts";
 import { getCompressionOutputExtension, isCompressionFormat } from "../compression/container-format-registry.ts";
-import { RomWeaverError, withAbortSignal } from "../errors.ts";
+import { RomWeaverError } from "../errors.ts";
 import { identifiedOutputBaseName } from "../../presentation/identify-title.ts";
 import { getPrimaryInputAsset, isChecksummableInputAsset } from "../input/input-assets.ts";
 import { getFileNameWithoutExtension } from "../input/path-utils.ts";
@@ -25,10 +25,12 @@ import {
   getAssetChecksumState,
   calculateStandardInputChecksumsForFile,
   cloneIdentification,
+  cloneRomType,
   getInputAssetChecksums,
   getPatchFilePrecomputedChecksumMs,
   getPatchFilePrecomputedChecksums,
   getPatchFilePrecomputedIdentification,
+  getPatchFilePrecomputedRomType,
 } from "./staged-source-checksums.ts";
 
 type SourceStatus = TrimWorkflowSourceState["status"];
@@ -48,6 +50,7 @@ type InternalSourceState = {
   decompressionTimeMs?: number;
   parentCompressions: TrimWorkflowParentCompression[];
   romProbe?: ChecksumRomProbe;
+  romType?: RomTypeTag;
   wasDecompressed?: boolean;
   warnings: WorkflowWarning[];
   role: SourceRole;
@@ -75,6 +78,7 @@ const cloneSourceState = (state: InternalSourceState | null | undefined) =>
               trim: state.romProbe.trim ? { ...state.romProbe.trim } : state.romProbe.trim,
             }
           : undefined,
+        romType: cloneRomType(state.romType),
         selectedCandidateId: state.selectedCandidateId,
         size: state.size,
         sourceSize: state.sourceSize,
@@ -201,6 +205,13 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
     });
   }
 
+  async setSettings(settings: Partial<CreateSettings>): Promise<void> {
+    return this.mutate("setSettings", async () => {
+      this.settings = cloneValue(settings || {});
+      if (!this.manualOutputName) this.outputName = this.buildAutomaticOutputName();
+    });
+  }
+
   async run(): Promise<TrimResult<TDestination>> {
     return this.mutate("run", async () => {
       const stage = this.inputStage;
@@ -210,10 +221,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
       this.getOutputCompression();
       const outputName = this.outputName.trim();
       if (!outputName) throw new RomWeaverError("INVALID_SETTINGS", "Output name is required");
-      const result = await withAbortSignal(
-        runTrimWorkflow(this.createTrimInput(stage), this.runtime),
-        this.abortController.signal,
-      );
+      const result = await runTrimWorkflow(this.createTrimInput(stage), this.runtime);
       const output = wrapPublicOutput<TDestination>(result.output, this.runtime, 0);
       return {
         input: this.toSelectedInputInfo(stage),
@@ -287,6 +295,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
       if (precomputed) {
         asset.checksums = precomputed;
         asset.identification = getPatchFilePrecomputedIdentification(asset.file);
+        asset.romType = getPatchFilePrecomputedRomType(asset.file);
         asset.checksumTimeMs = getPatchFilePrecomputedChecksumMs(asset.file) ?? 0;
         continue;
       }
@@ -304,6 +313,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
       });
       asset.checksums = checksumResult.checksums;
       asset.identification = checksumResult.identification;
+      asset.romType = checksumResult.romType;
       asset.checksumTimeMs = Date.now() - checksumStartedAt;
     }
     const primaryAsset = getPrimaryInputAsset(assets);
@@ -312,6 +322,7 @@ class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowControll
     stage.state.checksums = primaryChecksums;
     stage.state.checksumTimeMs = primaryAsset?.checksumTimeMs;
     stage.state.identification = cloneIdentification(primaryAsset?.identification);
+    stage.state.romType = cloneRomType(primaryAsset?.romType);
   }
 
   private getPreparedTrimSource(stage: StagedSource<TSource>): unknown | undefined {

@@ -29,10 +29,12 @@ The [trim support reference](../reference/formats.md#trim-support) lists support
 4. Read the warning, then select **Trim ROM** to continue.
 5. Save the result and test it in the emulator or hardware you use.
 
+GameCube and Wii disc inputs convert losslessly to RVZ by default. The downloaded extension reflects the actual format, and savings come from compression rather than removal of unused sectors.
+
 A file without removable padding may have no useful size reduction. A format that is not supported cannot be made trimmable by renaming it.
 
 ## Restore padding
 
 The browser does not expose the CLI's restore-padding or revert-marker options. Use [Trim and restore from the CLI](cli-trim.md#put-the-padding-back) when you need them.
 
-Restoring padding does not always reproduce the original bytes. XISO and RVZ scrub cannot be reverted. [Compression and trimming](../explanation/compression-formats.md#trim-compress-or-both) explains the difference.
+Restoring padding does not always reproduce the original bytes. XISO trimming and RVZ conversion do not support restore-padding. [Compression and trimming](../explanation/compression-formats.md#trim-compress-or-both) explains the difference.

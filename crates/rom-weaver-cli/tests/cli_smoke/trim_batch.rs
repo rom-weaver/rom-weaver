@@ -504,7 +504,7 @@ fn trim_wbfs_simulate_does_not_write_outputs() {
     assert_eq!(terminal["status"], "succeeded");
     let label = terminal["label"].as_str().expect("label");
     assert!(label.contains("trim simulation complete"));
-    assert!(label.contains("mode=rvz-scrub"));
+    assert!(label.contains("mode=rvz-convert"));
     assert!(!source_wbfs.path().with_extension("trim.rvz").exists());
 }
 
@@ -599,7 +599,11 @@ fn trim_gba_detects_ff_padding_boundary() {
 fn trim_3ds_uses_ff_padding_boundary() {
     let temp = setup_temp_dir();
     let source = temp.child("sample.3ds");
-    fs::write(source.path(), build_test_padded_rom(0x4567, 0x8000, 0xFF)).expect("fixture");
+    let mut rom = build_test_padded_rom(0x4567, 0x8000, 0xFF);
+    rom[0x100..0x104].copy_from_slice(b"NCCH");
+    rom[0x104..0x108].copy_from_slice(&0x22_u32.to_le_bytes());
+    rom[0x18E] = 0;
+    fs::write(source.path(), rom).expect("fixture");
 
     let output = command_stdout(
         &[
@@ -726,7 +730,7 @@ fn trim_xiso_revert_is_rejected() {
 }
 
 #[test]
-fn trim_wbfs_uses_rvz_scrub_output() {
+fn trim_wbfs_uses_rvz_convert_output() {
     let temp = setup_temp_dir();
     let iso_bytes = build_test_gamecube_iso(0x8000);
     let source_iso = temp.child("disc.iso");
@@ -768,11 +772,14 @@ fn trim_wbfs_uses_rvz_scrub_output() {
     assert_eq!(terminal["command"], "trim");
     assert_eq!(terminal["family"], "command");
     assert_eq!(terminal["status"], "succeeded");
+    assert_eq!(terminal["details"]["output_format"], "rvz");
+    assert_eq!(terminal["details"]["input_size"], iso_bytes.len() as u64);
+    assert_eq!(terminal["details"]["raw_size"], iso_bytes.len() as u64);
     let label = terminal["label"].as_str().expect("label");
-    assert!(label.contains("mode=rvz-scrub"));
+    assert!(label.contains("mode=rvz-convert"));
     assert!(label.contains("revert_supported=false"));
     assert!(label.contains(
-        "warning=trimmed rvz-scrub output cannot be reverted to original source format; keep backup"
+        "warning=RVZ conversion preserves logical disc bytes; use extract to recover ISO, not --revert"
     ));
 
     let trimmed = source_wbfs.path().with_extension("trim.rvz");
@@ -802,7 +809,7 @@ fn trim_wbfs_uses_rvz_scrub_output() {
 }
 
 #[test]
-fn trim_wbfs_revert_is_rejected_for_rvz_scrub() {
+fn trim_wbfs_revert_is_rejected_for_rvz_convert() {
     let temp = setup_temp_dir();
     let iso_bytes = build_test_gamecube_iso(0x4000);
     let source_iso = temp.child("disc.iso");
@@ -848,7 +855,7 @@ fn trim_wbfs_revert_is_rejected_for_rvz_scrub() {
         terminal["label"]
             .as_str()
             .expect("label")
-            .contains("rvz-scrub trim revert is not supported")
+            .contains("rvz-convert trim revert is not supported")
     );
 }
 
@@ -908,7 +915,11 @@ fn trim_revert_restores_gba_to_next_power_of_two() {
 fn trim_revert_restores_3ds_to_next_power_of_two() {
     let temp = setup_temp_dir();
     let source = temp.child("sample.3ds");
-    fs::write(source.path(), build_test_padded_rom(0x4567, 0x8000, 0xFF)).expect("fixture");
+    let mut rom = build_test_padded_rom(0x4567, 0x8000, 0xFF);
+    rom[0x100..0x104].copy_from_slice(b"NCCH");
+    rom[0x104..0x108].copy_from_slice(&0x22_u32.to_le_bytes());
+    rom[0x18E] = 0;
+    fs::write(source.path(), rom).expect("fixture");
 
     command_stdout(
         &[
@@ -1434,4 +1445,108 @@ fn trim_xiso_rejects_revert_marker_before_writing() {
         fs::read(source.path()).expect("source after trim"),
         original
     );
+}
+
+#[test]
+fn trim_archive_preserves_dotted_member_names() {
+    let temp = setup_temp_dir();
+    let first = temp.child("game.v1.gba");
+    let second = temp.child("game.v2.gba");
+    let archive = temp.child("games.zip");
+    for (source, byte) in [(&first, 1_u8), (&second, 2_u8)] {
+        let mut data = vec![byte; 8192];
+        data.extend(vec![0xff; 8192]);
+        fs::write(source.path(), data).unwrap();
+    }
+    command_stdout(
+        &[
+            "compress",
+            "-i",
+            first.path().to_str().unwrap(),
+            "-i",
+            second.path().to_str().unwrap(),
+            "-o",
+            archive.path().to_str().unwrap(),
+        ],
+        0,
+    );
+    command_stdout(
+        &["trim", "-i", archive.path().to_str().unwrap(), "--force"],
+        0,
+    );
+    assert_eq!(
+        fs::read(temp.child("game.v1.trim.gba").path()).unwrap(),
+        vec![1_u8; 8192]
+    );
+    assert_eq!(
+        fs::read(temp.child("game.v2.trim.gba").path()).unwrap(),
+        vec![2_u8; 8192]
+    );
+}
+
+#[test]
+fn trim_rejects_archive_output_collisions_before_writing() {
+    let temp = setup_temp_dir();
+    let first = temp.child("one.gba");
+    let second = temp.child("two.gba");
+    let archive = temp.child("games.zip");
+    for source in [&first, &second] {
+        let mut data = vec![1_u8; 8192];
+        data.extend(vec![0xff; 8192]);
+        fs::write(source.path(), data).unwrap();
+    }
+    command_stdout(
+        &[
+            "compress",
+            "-i",
+            first.path().to_str().unwrap(),
+            "--entry-name",
+            "a/game.gba",
+            "-i",
+            second.path().to_str().unwrap(),
+            "--entry-name",
+            "b/game.gba",
+            "-o",
+            archive.path().to_str().unwrap(),
+        ],
+        0,
+    );
+    for flags in [&["--force"][..], &["--dry-run"][..]] {
+        let mut args = vec!["trim", "-i", archive.path().to_str().unwrap()];
+        args.extend_from_slice(flags);
+        command_stdout(&args, 1);
+        assert!(!temp.child("game.trim.gba").path().exists());
+    }
+}
+
+#[test]
+fn trim_rejects_patch_only_archive_filter() {
+    let temp = setup_temp_dir();
+    let source = temp.child("game.gba");
+    let archive = temp.child("games.zip");
+    let mut data = vec![1_u8; 8192];
+    data.extend(vec![0xff; 8192]);
+    fs::write(source.path(), &data).unwrap();
+    command_stdout(
+        &[
+            "compress",
+            "-i",
+            source.path().to_str().unwrap(),
+            "-o",
+            archive.path().to_str().unwrap(),
+        ],
+        0,
+    );
+    command_stdout(
+        &[
+            "trim",
+            "-i",
+            archive.path().to_str().unwrap(),
+            "--filter",
+            "patch",
+        ],
+        1,
+    );
+    assert!(!temp.child("game.trim.gba").path().exists());
+    assert_eq!(fs::read(source.path()).unwrap(), data);
 }

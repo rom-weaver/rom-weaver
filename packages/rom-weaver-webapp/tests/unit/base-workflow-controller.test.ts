@@ -155,6 +155,26 @@ describe("BaseWorkflowController.runExclusiveMutation", () => {
     await first;
   });
 
+  it("rearms cancellation only after the active exclusive mutation settles", async () => {
+    const controller = new TestWorkflowController();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const signal = controller.abortSignal;
+    const first = controller.runExclusive("trim", async () => {
+      await gate;
+      throw new Error("cancelled operation");
+    });
+    controller.abort();
+    expect(signal.aborted).toBe(true);
+    release();
+    await expect(first).rejects.toThrow("cancelled operation");
+    expect(controller.abortSignal.aborted).toBe(false);
+    expect(controller.abortSignal).not.toBe(signal);
+    await expect(controller.runExclusive("retry", async () => "done")).resolves.toBe("done");
+  });
+
   it("allows a new exclusive mutation once the previous one settles", async () => {
     const controller = new TestWorkflowController();
     await controller.runExclusive("first", async () => undefined);

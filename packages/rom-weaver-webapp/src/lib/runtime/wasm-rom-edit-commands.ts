@@ -6,11 +6,19 @@ import type {
   WorkflowRuntimeLog,
 } from "../../types/workflow-runtime-adapter.ts";
 import { createRomWeaverCommand } from "../../wasm/index.ts";
+import { getRomWeaverRunEventDetails } from "../../workers/rom-weaver/rom-weaver-run-events.ts";
+import { replaceFileNameExtension } from "../input/path-utils.ts";
 import { getPathBaseName } from "../path-utils.ts";
 import { toThreadBudget } from "./compression-thread-budget.ts";
 import { emitRuntimeTrace, toRomWeaverOptions } from "./run-options.ts";
 import { getTrimOutputFileName, runWithRomWeaverOutputScope } from "./run-output-paths.ts";
-import { ensureRomWeaverSuccess, getEmittedFileDetails, getRunResultTiming } from "./run-result-parsing.ts";
+import {
+  asRecord,
+  ensureRomWeaverSuccess,
+  getEmittedFileDetails,
+  getRunResultTiming,
+  getTerminalEvent,
+} from "./run-result-parsing.ts";
 import { runRomWeaverJson, relaySimpleProgress } from "./wasm-command-shared.ts";
 
 const invokeRomWeaverTrimWorker = async (
@@ -56,8 +64,15 @@ const invokeRomWeaverTrimWorker = async (
     ensureRomWeaverSuccess(result, "Trim failed");
 
     const emitted = getEmittedFileDetails(result);
+    const terminal = getTerminalEvent(result);
+    const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
+    const sizeField = (value: unknown) =>
+      typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+    const actualFileName =
+      details?.output_format === "rvz" ? replaceFileNameExtension(outputFileName, "rvz") : outputFileName;
     return {
-      fileName: outputFileName,
+      fileName: actualFileName,
+      trimSizeSummary: { inputSize: sizeField(details?.input_size), rawSize: sizeField(details?.raw_size) },
       filePath: emitted?.path || outputPath,
       size: emitted?.sizeBytes,
       timing: getRunResultTiming(result),

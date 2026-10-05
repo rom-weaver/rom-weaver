@@ -9,10 +9,12 @@ static SCRATCH_COUNTER: AtomicU32 = AtomicU32::new(0);
 
 fn scratch_dir(label: &str) -> PathBuf {
     let unique = SCRATCH_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!(
-        "rw-trim-execution-{label}-{}-{unique}",
-        std::process::id()
-    ));
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../.agent/trim-fixes/rom-safety")
+        .join(format!(
+            "rw-trim-execution-{label}-{}-{unique}",
+            std::process::id()
+        ));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).expect("scratch dir");
     dir
@@ -37,7 +39,7 @@ fn nds_header(dsi: bool, ntr_rom_size: u32, ntr_twl_rom_size: u32) -> Vec<u8> {
     header[NDS_HEADER_NTR_ROM_SIZE_OFFSET..NDS_HEADER_NTR_ROM_SIZE_OFFSET + 4]
         .copy_from_slice(&ntr_rom_size.to_le_bytes());
     header[NDS_HEADER_HEADER_SIZE_OFFSET..NDS_HEADER_HEADER_SIZE_OFFSET + 4]
-        .copy_from_slice(&0x4000_u32.to_le_bytes());
+        .copy_from_slice(&0x1000_u32.to_le_bytes());
     header[NDS_HEADER_NTR_TWL_ROM_SIZE_OFFSET..NDS_HEADER_NTR_TWL_ROM_SIZE_OFFSET + 4]
         .copy_from_slice(&ntr_twl_rom_size.to_le_bytes());
     stamp_nds_crcs(&mut header);
@@ -375,7 +377,11 @@ fn a_power_of_two_trim_removes_the_detected_padding() {
 #[test]
 fn a_power_of_two_trim_leaves_a_rom_without_recognizable_padding() {
     let dir = scratch_dir("3ds-no-padding");
-    let rom = write_fixture(&dir, "game.3ds", &vec![0x42_u8; 1024]);
+    let mut bytes = vec![0x42_u8; 1024];
+    bytes[0x100..0x104].copy_from_slice(b"NCCH");
+    bytes[0x18E] = 0;
+    bytes[0x104..0x108].copy_from_slice(&2_u32.to_le_bytes());
+    let rom = write_fixture(&dir, "game.3ds", &bytes);
     let destination = dir.join("trimmed.3ds");
     let outcome = CliApp::trim_power_of_two_file(
         &rom,
@@ -578,13 +584,13 @@ fn the_temporary_xiso_path_is_hidden_and_sits_beside_the_source() {
 }
 
 #[test]
-fn an_rvz_scrub_trim_refuses_revert_empty_input_and_in_place() {
+fn an_rvz_convert_trim_refuses_revert_empty_input_and_in_place() {
     let dir = scratch_dir("rvz-refusals");
     let app = test_app();
     let context = app.context(ThreadBudget::Fixed(1));
     let empty = write_fixture(&dir, "empty.rvz", &[]);
     let error = app
-        .trim_rvz_scrub_file(
+        .trim_rvz_convert_file(
             &empty,
             &dir.join("out.rvz"),
             false,
@@ -596,11 +602,11 @@ fn an_rvz_scrub_trim_refuses_revert_empty_input_and_in_place() {
     assert!(
         error
             .to_string()
-            .contains("rvz-scrub trim revert is not supported"),
+            .contains("rvz-convert trim revert is not supported"),
         "{error}"
     );
     let error = app
-        .trim_rvz_scrub_file(
+        .trim_rvz_convert_file(
             &empty,
             &dir.join("out.rvz"),
             false,
@@ -613,7 +619,7 @@ fn an_rvz_scrub_trim_refuses_revert_empty_input_and_in_place() {
 
     let source = write_fixture(&dir, "game.rvz", &vec![0x42_u8; 4096]);
     let error = app
-        .trim_rvz_scrub_file(&source, &source, true, false, TrimOperation::Trim, &context)
+        .trim_rvz_convert_file(&source, &source, true, false, TrimOperation::Trim, &context)
         .err_or_panic("in-place unsupported");
     assert!(
         error
@@ -625,14 +631,14 @@ fn an_rvz_scrub_trim_refuses_revert_empty_input_and_in_place() {
 }
 
 #[test]
-fn an_rvz_scrub_of_a_non_disc_source_reports_the_rebuild_failure() {
+fn an_rvz_convert_of_a_non_disc_source_reports_the_rebuild_failure() {
     let dir = scratch_dir("rvz-not-a-disc");
     let app = test_app();
     let context = app.context(ThreadBudget::Fixed(1));
     let source = write_fixture(&dir, "game.rvz", &vec![0x42_u8; 4096]);
 
     let error = app
-        .trim_rvz_scrub_file(
+        .trim_rvz_convert_file(
             &source,
             &dir.join("out.rvz"),
             false,
@@ -644,12 +650,12 @@ fn an_rvz_scrub_of_a_non_disc_source_reports_the_rebuild_failure() {
     assert!(
         error
             .to_string()
-            .contains("rvz-scrub trim simulation failed while rebuilding"),
+            .contains("rvz-convert trim simulation failed while rebuilding"),
         "{error}"
     );
 
     let error = app
-        .trim_rvz_scrub_file(
+        .trim_rvz_convert_file(
             &source,
             &dir.join("out/out.rvz"),
             false,
@@ -661,7 +667,7 @@ fn an_rvz_scrub_of_a_non_disc_source_reports_the_rebuild_failure() {
     assert!(
         error
             .to_string()
-            .contains("rvz-scrub trim failed while rebuilding"),
+            .contains("rvz-convert trim failed while rebuilding"),
         "{error}"
     );
     fs::remove_dir_all(&dir).ok();
@@ -826,8 +832,8 @@ fn trim_file_dispatches_each_input_kind_to_its_own_refusal() {
     for (kind, expected) in [
         (TrimInputKind::Xiso, "xiso trim revert is not supported"),
         (
-            TrimInputKind::RvzScrub,
-            "rvz-scrub trim revert is not supported",
+            TrimInputKind::RvzConvert,
+            "rvz-convert trim revert is not supported",
         ),
     ] {
         let error = app
@@ -866,7 +872,7 @@ fn irreversible_trim_kinds_reject_existing_revert_footers() {
     let source = write_fixture(&dir, "marked.bin", &[0x42; 64]);
     CliApp::write_revert_footer(&source, 128, 0).expect("legacy footer");
     let original = fs::read(&source).expect("original bytes");
-    for kind in [TrimInputKind::Xiso, TrimInputKind::RvzScrub] {
+    for kind in [TrimInputKind::Xiso, TrimInputKind::RvzConvert] {
         for dry_run in [false, true] {
             let error = app
                 .trim_file(
@@ -896,7 +902,7 @@ fn irreversible_trim_kinds_reject_markers_including_dry_runs() {
     let app = test_app();
     let context = app.context(ThreadBudget::Fixed(1));
     let source = write_fixture(&dir, "source.bin", &[0x42; 64]);
-    for kind in [TrimInputKind::Xiso, TrimInputKind::RvzScrub] {
+    for kind in [TrimInputKind::Xiso, TrimInputKind::RvzConvert] {
         for dry_run in [false, true] {
             let error = app
                 .trim_file(
@@ -921,4 +927,163 @@ fn irreversible_trim_kinds_reject_markers_including_dry_runs() {
         }
     }
     fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn output_aliases_never_truncate_the_source() {
+    let dir = scratch_dir("output-aliases");
+    let mut bytes = vec![0x42; 1000];
+    bytes.resize(4096, 0xFF);
+    let source = write_fixture(&dir, "game.gba", &bytes);
+    fs::create_dir_all(dir.join("sub")).expect("subdirectory");
+    let hardlink = dir.join("hardlink.gba");
+    fs::hard_link(&source, &hardlink).expect("hardlink");
+    let mut aliases = vec![hardlink, dir.join("sub/../game.gba")];
+    #[cfg(unix)]
+    {
+        let symlink = dir.join("symlink.gba");
+        std::os::unix::fs::symlink(&source, &symlink).expect("symlink");
+        aliases.push(symlink);
+    }
+    for destination in aliases {
+        for dry_run in [false, true] {
+            let error = CliApp::trim_power_of_two_file(
+                &source,
+                &destination,
+                false,
+                dry_run,
+                TrimOperation::Trim,
+                TrimInputKind::Gba,
+            )
+            .err_or_panic("output alias");
+            assert!(
+                error.to_string().contains("refers to the input file"),
+                "{error}"
+            );
+            assert_eq!(fs::read(&source).expect("source"), bytes);
+        }
+    }
+    fs::remove_dir_all(dir).ok();
+}
+
+#[test]
+fn nds_boundaries_must_preserve_headers_and_referenced_data() {
+    let dir = scratch_dir("nds-small-boundaries");
+    for (boundary, referenced_end) in [(1, 0), (0x2000, 0x3000)] {
+        let mut header = nds_header(false, boundary, 0);
+        if referenced_end != 0 {
+            header[0x20..0x24].copy_from_slice(&0x1000_u32.to_le_bytes());
+            header[0x2C..0x30].copy_from_slice(&0x2000_u32.to_le_bytes());
+            stamp_nds_crcs(&mut header);
+        }
+        let bytes = nds_rom(&header, 0x4000);
+        let source = write_fixture(&dir, "game.nds", &bytes);
+        for operation in [TrimOperation::Trim, TrimOperation::Revert] {
+            let error = CliApp::trim_nds_file(&source, &source, true, false, operation)
+                .err_or_panic("boundary inside live data");
+            assert!(
+                error
+                    .to_string()
+                    .contains("below the header or referenced data extent"),
+                "{error}"
+            );
+            assert_eq!(fs::read(&source).expect("source"), bytes);
+        }
+    }
+    fs::remove_dir_all(dir).ok();
+}
+
+#[test]
+fn three_ds_trimming_preserves_declared_ncsd_and_ncch_extents() {
+    let dir = scratch_dir("3ds-extents");
+    for ncsd in [false, true] {
+        let mut bytes = vec![0; 0x10000];
+        bytes[0x100..0x104].copy_from_slice(if ncsd { b"NCSD" } else { b"NCCH" });
+        bytes[0x104..0x108]
+            .copy_from_slice(&(if ncsd { 0x80_u32 } else { 0x40_u32 }).to_le_bytes());
+        if ncsd {
+            bytes[0x120..0x124].copy_from_slice(&2_u32.to_le_bytes());
+            bytes[0x124..0x128].copy_from_slice(&0x3E_u32.to_le_bytes());
+            bytes[0x500..0x504].copy_from_slice(b"NCCH");
+            bytes[0x504..0x508].copy_from_slice(&0x3E_u32.to_le_bytes());
+        }
+        let source = write_fixture(&dir, "game.3ds", &bytes);
+        let output = dir.join("trimmed.3ds");
+        let outcome = CliApp::trim_power_of_two_file(
+            &source,
+            &output,
+            false,
+            false,
+            TrimOperation::Trim,
+            TrimInputKind::ThreeDs,
+        )
+        .expect("trim");
+        assert_eq!(outcome.result_size, 0x8000);
+        assert_eq!(fs::read(output).expect("output"), bytes[..0x8000]);
+        bytes[0x104..0x108].copy_from_slice(&0_u32.to_le_bytes());
+        fs::write(&source, &bytes).expect("malformed fixture");
+        CliApp::trim_power_of_two_file(
+            &source,
+            &source,
+            true,
+            false,
+            TrimOperation::Trim,
+            TrimInputKind::ThreeDs,
+        )
+        .err_or_panic("invalid extent");
+        assert_eq!(fs::read(source).expect("source"), bytes);
+    }
+    fs::remove_dir_all(dir).ok();
+}
+
+#[test]
+fn rvz_rejects_markers_footer_restoration_and_in_place_dry_runs() {
+    let dir = scratch_dir("rvz-refusals");
+    let app = test_app();
+    let context = app.context(ThreadBudget::Fixed(1));
+    let source = write_fixture(&dir, "game.rvz", &[0x42; 1000]);
+    CliApp::write_revert_footer(&source, 4096, 0xFF).expect("footer fixture");
+    let bytes = fs::read(&source).expect("source");
+    for dry_run in [false, true] {
+        for (operation, revert_marker, in_place, message) in [
+            (
+                TrimOperation::Trim,
+                true,
+                false,
+                "does not support --revert-marker",
+            ),
+            (
+                TrimOperation::Revert,
+                false,
+                false,
+                "revert is not supported",
+            ),
+            (
+                TrimOperation::Trim,
+                false,
+                true,
+                "requires a separate output file",
+            ),
+        ] {
+            let output = dir.join("out.rvz");
+            let error = app
+                .trim_file(
+                    &source,
+                    &output,
+                    TrimRequest {
+                        operation,
+                        revert_marker,
+                        in_place,
+                        dry_run,
+                        kind: TrimInputKind::RvzConvert,
+                    },
+                    &context,
+                )
+                .err_or_panic("unsupported RVZ operation");
+            assert!(error.to_string().contains(message), "{error}");
+            assert!(!output.exists());
+            assert_eq!(fs::read(&source).expect("source preserved"), bytes);
+        }
+    }
+    fs::remove_dir_all(dir).ok();
 }

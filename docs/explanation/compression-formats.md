@@ -51,6 +51,8 @@ Double-wrapping adds another extraction step: most setups must unpack a CHD from
 
 Some cartridge and disc formats carry padding rather than useful data. Trimming removes supported padding; compression encodes bytes in less space.
 
+For GameCube and Wii discs, the Trim workflow performs lossless RVZ conversion rather than sector scrubbing. The logical disc bytes remain intact; smaller storage size comes from compression. RVZ can be extracted back to the logical disc image, but the trim restore command does not recreate the original compressed container layout.
+
 A trimmed cartridge ROM needs no decompression. It can also be compressed afterward if the output container supports it.
 
 Restoration is a separate capability. Recording the original length and one padding byte cannot preserve every possible padding pattern. The [trim reference](../reference/formats.md#trim-support) lists exact restoration limits.
