@@ -1130,7 +1130,7 @@ XISO and RVZ scrub cannot be reverted."
         arg(
             long = "revert-marker",
             visible_alias = "reversible",
-            help = "Add a footer with the original size and a fill byte for --revert"
+            help = "Add a footer with the original size and a fill byte for --revert (NDS-family, GBA, and 3DS only)"
         )
     )]
     #[serde(default)]

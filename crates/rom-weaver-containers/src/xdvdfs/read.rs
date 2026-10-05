@@ -3,6 +3,7 @@ use super::layout::{
     self, DirectoryEntryDiskNode, DirectoryEntryNode, DirectoryEntryTable, VolumeDescriptor,
 };
 use super::util;
+use alloc::collections::BTreeSet;
 use maybe_async::maybe_async;
 
 /// Read the XDVDFS volume descriptor from sector 32 of the drive
@@ -83,8 +84,12 @@ impl DirectoryEntryTable {
         }
 
         let mut offset = self.offset(0)?;
+        let mut visited = BTreeSet::new();
 
         loop {
+            if !visited.insert(offset) {
+                return Err(util::Error::CyclicDirectory);
+            }
             let dirent = read_dirent(dev, offset).await?;
             let dirent = dirent.ok_or(util::Error::DoesNotExist)?;
             let dirent_name = dirent.name_str()?;
@@ -125,6 +130,10 @@ impl DirectoryEntryTable {
         }
 
         let mut dirent_tab = *self;
+        let mut ancestors = BTreeSet::new();
+        if !self.is_empty() {
+            ancestors.insert(self.region.sector);
+        }
         let mut path_iter = path
             .trim_start_matches('/')
             .split_terminator('/')
@@ -136,13 +145,19 @@ impl DirectoryEntryTable {
             traceln!("[walk_path] Node: {:?}", dirent.node);
             let dirent_data = &dirent.node.dirent;
 
+            let child_table = dirent_data.dirent_table();
+            if let Some(table) = child_table
+                && !table.is_empty()
+                && !ancestors.insert(table.region.sector)
+            {
+                return Err(util::Error::CyclicDirectory);
+            }
+
             if path_iter.peek().is_none() {
                 return Ok(dirent);
             }
 
-            dirent_tab = dirent_data
-                .dirent_table()
-                .ok_or(util::Error::IsNotDirectory)?;
+            dirent_tab = child_table.ok_or(util::Error::IsNotDirectory)?;
         }
 
         unreachable!("path_iter has been consumed without returning last dirent")
@@ -166,8 +181,12 @@ impl DirectoryEntryTable {
         }
 
         let mut stack = vec![0];
+        let mut visited = BTreeSet::new();
         while let Some(top) = stack.pop() {
             let offset = self.offset(top)?;
+            if !visited.insert(offset) {
+                return Err(util::Error::CyclicDirectory);
+            }
             let dirent = read_dirent(dev, offset).await?;
 
             if let Some(dirent) = dirent {
@@ -202,14 +221,21 @@ impl DirectoryEntryTable {
 
         let mut dirents = vec![];
 
-        let mut stack = vec![(String::from(""), *self)];
-        while let Some((parent, tree)) = stack.pop() {
+        let mut stack = vec![(String::from(""), *self, BTreeSet::new())];
+        while let Some((parent, tree, mut ancestors)) = stack.pop() {
+            if !tree.is_empty() && !ancestors.insert(tree.region.sector) {
+                return Err(util::Error::CyclicDirectory);
+            }
             debugln!("[file_tree] Descending through {}", parent);
             let children = tree.walk_dirent_tree(dev).await?;
             for child in children.iter() {
                 if let Some(dirent_table) = child.node.dirent.dirent_table() {
                     let child_name = child.name_str()?;
-                    stack.push((format!("{}/{}", parent, child_name), dirent_table));
+                    stack.push((
+                        format!("{}/{}", parent, child_name),
+                        dirent_table,
+                        ancestors.clone(),
+                    ));
                 }
 
                 dirents.push((parent.clone(), *child));

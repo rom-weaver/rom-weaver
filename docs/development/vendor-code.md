@@ -237,6 +237,7 @@ The module is **not** a verbatim copy. `#![no_std]` and `#[cfg(feature = "...")]
 - `#![no_std]` dropped; `extern crate alloc;` moved to the `rom-weaver-containers` crate root so the source's `use alloc::*` imports still resolve.
 - Feature gates resolved to the pinned set (`std`, `read`, `write`, `sync` on; `logging`, `checksum`, `ciso_support`, `wax` off). Left alone, those cfgs would have resolved against `rom-weaver-containers`' own features and silently deleted the code they guard. Disabled-feature code is removed, not gated.
 - `crate::` paths rewritten to `crate::xdvdfs::`.
+- Directory readers reject repeated tree-node offsets and recursive directory extents. These guards stop malformed images from looping during lookup, listing, or XISO rebuilding.
 - Edition 2024 fixes upstream never needed on 2021: `rng.gen()` → `rng.random()`, two `ref` bindings dropped for match ergonomics, and `if let` pairs collapsed into let chains in `write/avl.rs`.
 - Seven clippy fixes, because the module now falls under the workspace `-D warnings` gate, including `% n > 0` → `!is_multiple_of(n)` and `<'_>` lifetime elision.
 - `#[repr(C)]` dropped from a bitfield newtype in `layout.rs`: proc-bitfield 0.5 makes those `#[repr(transparent)]` itself, so the explicit attribute became a hard error. The layout is unchanged.
