@@ -7,6 +7,10 @@ import { pathToFileURL } from "node:url";
 import { parseLcov } from "./coverage-summary.mjs";
 import { runMain } from "./run-main.mjs";
 
+// Vitest reports src/ paths relative to its webapp package, while Rust uses repository paths.
+const repositoryPaths = (report) =>
+  report.replace(/^SF:(?:\.\/)?src\//gm, "SF:packages/rom-weaver-webapp/src/");
+
 export function addedLines(diff) {
   const lines = new Set();
   let file;
@@ -28,7 +32,7 @@ export function addedLines(diff) {
 export function parseBranches(report) {
   const branches = new Map();
   let source;
-  for (const line of report.split("\n")) {
+  for (const line of repositoryPaths(report).split("\n")) {
     if (line.startsWith("SF:")) source = [...parseLcov(`${line}\nDA:1,0\n`).keys()][0].slice(0, -2);
     if (!line.startsWith("BRDA:")) continue;
     const match = /^BRDA:(\d+),(\d+),(\d+),(\d+|-)$/u.exec(line);
@@ -43,7 +47,7 @@ export function parseBranches(report) {
 export function diffCoverage(diff, reports) {
   const measured = new Map();
   for (const report of reports)
-    for (const [location, hits] of parseLcov(report))
+    for (const [location, hits] of parseLcov(repositoryPaths(report)))
       measured.set(location, Math.max(hits, measured.get(location) || 0));
   const result = { covered: [], uncovered: [], notMeasured: [] };
   for (const location of addedLines(diff)) {
