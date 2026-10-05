@@ -1,12 +1,15 @@
-# Test a ROM in the browser
+# Play and test a ROM in your browser
 
-Use the Test page to play a local ROM or check an Apply result. The ROM stays on your device.
+Play a local NES, SNES, Game Boy, GBA, Nintendo 64, Nintendo DS, PlayStation, or other supported ROM in your browser with EmulatorJS. Use [Test](https://rom-weaver.com/test-rom) to try a patched game before downloading it. Your ROM stays on your device; no upload or account is required.
+
+To verify the exact file a patch requires, use [Checksum](checksum-roms-browser.md) to compare its hash with the author's expected value, or [Identify](identify-roms-browser.md) to look up a known game, region, and revision. Playing a game successfully does not verify its checksum.
 
 If you need a practice file, open [guided Test](https://rom-weaver.com/test-rom?guide=test). It loads a tiny homebrew NES ROM from this project.
 
 <!-- START doctoc -->
 ## Table of contents
 
+- [Check platform support](#check-platform-support)
 - [Load a ROM](#load-a-rom)
 - [Test an Apply result](#test-an-apply-result)
 - [Switch games or stop](#switch-games-or-stop)
@@ -16,6 +19,12 @@ If you need a practice file, open [guided Test](https://rom-weaver.com/test-rom?
 - [Fix a game that does not start](#fix-a-game-that-does-not-start)
 
 <!-- END doctoc -->
+
+## Check platform support
+
+1. Check [browser emulator support](../reference/formats.md#browser-emulator-support) for your game's platform and the bundled core limitations.
+2. For GameCube, Wii, Nintendo 3DS, Dreamcast, or PlayStation 2 games, use an emulator for that platform. Converting, patching, or identifying a ROM in rom-weaver does not mean the browser player supports it.
+3. Keep the original ROM and use a copy when testing a patch.
 
 ## Load a ROM
 

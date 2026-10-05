@@ -52,9 +52,10 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
     title: `ROM Patcher Online: BPS, IPS, UPS, xdelta & PPF | ${SITE_NAME}`,
   }),
   test: Object.freeze({
-    description: "Test patched and local ROMs in EmulatorJS directly in your browser. No uploads or account required.",
+    description:
+      "Play and test NES, SNES, Game Boy, GBA, N64, Nintendo DS, PlayStation, and other supported ROMs online with EmulatorJS. Try patched games locally. No uploads or account required.",
     slug: "test-rom",
-    title: `${SITE_NAME}: Test ROMs online`,
+    title: `Play and test ROMs online in your browser | ${SITE_NAME}`,
   }),
 });
 
