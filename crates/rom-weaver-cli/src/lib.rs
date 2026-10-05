@@ -1678,6 +1678,12 @@ pub use patch_plan::{
 
 mod bundle_parse;
 
+/// Production bundle parsing seam for the owned fuzz harness only.
+#[cfg(feature = "fuzzing")]
+pub fn parse_bundle_for_fuzzing(bytes: &[u8]) -> Result<RomWeaverBundle> {
+    bundle_parse::parse_bundle_bytes(bytes)
+}
+
 mod bundle_load;
 
 mod bundle_apply;

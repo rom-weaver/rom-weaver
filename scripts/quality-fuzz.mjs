@@ -4,7 +4,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { runMain } from "./run-main.mjs";
-export const FUZZ_TARGETS = ["ips_apply", "save_parse", "disc_sheet"];
+export const FUZZ_TARGETS = ["ips_apply", "save_parse", "disc_sheet", "bundle_parse", "dcp_zip", "iso9660"];
 export const FUZZ_TOOLCHAIN = "nightly-2026-08-25";
 export function fuzzPlan(mode, target) {
   if (!["smoke", "deep"].includes(mode)) throw new Error("Fuzz mode must be smoke or deep");

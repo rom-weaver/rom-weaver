@@ -12,6 +12,10 @@ test("coverage includes feature gated examples, accumulates profiles and records
   t.after(() => rmSync(output, { recursive: true, force: true }));
   const calls = [];
   collectCoverage(output, (args) => {
+    assert.ok(
+      !(args.includes("--no-clean") && args.includes("--no-report")),
+      "pinned cargo-llvm-cov rejects this combination",
+    );
     calls.push(args);
     return log;
   });
@@ -23,7 +27,8 @@ test("coverage includes feature gated examples, accumulates profiles and records
         args.includes("rom-weaver-typegen"),
     ),
   );
-  assert.equal(calls.filter((args) => args.includes("--no-clean")).length, 2);
+  assert.equal(calls.filter((args) => args.includes("--no-report")).length, 2);
+  assert.equal(calls.filter((args) => args[0] === "llvm-cov" && args[1] === "clean").length, 1);
   const report = JSON.parse(readFileSync(`${output}/selection.json`));
   assert.equal(report.suites[1].ignored, 2);
   assert.equal(report.doctests.instrumented, false);

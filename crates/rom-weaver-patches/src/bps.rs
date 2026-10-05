@@ -707,7 +707,6 @@ impl<'a> BpsApplyProgress<'a> {
             format: Some(self.format_name.to_string()),
             stage: "apply".to_string(),
             label: format!("applying patch using {}", self.format_name),
-            details: None,
             percent: Some(bucket as f32),
             elapsed_ms: None,
             status: OperationStatus::Running,

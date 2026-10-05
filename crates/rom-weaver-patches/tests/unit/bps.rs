@@ -5,7 +5,7 @@ use std::{
 };
 
 use rom_weaver_core::{
-    CancellationToken, OperationContext, OperationStatus, PatchApplyRequest,
+    CancellationToken, OperationContext, OperationFamily, OperationStatus, PatchApplyRequest,
     PatchChecksumValidation, PatchCreateRequest, PatchHandler, PatchValidateRequest,
     RecordingProgressSink, ThreadBudget,
 };
@@ -1521,6 +1521,70 @@ fn ordered_writes_skip_empty_records_and_seek_over_gaps() {
     drop(output);
 
     assert_eq!(fs::read(&output_path).expect("output"), b"\0\0\0\0WXYZ");
+}
+
+#[test]
+fn apply_progress_sink_preserves_the_public_event_contract() {
+    let temp = TestDir::new();
+    let input = temp.child("progress-source.bin");
+    let patch = temp.child("progress-update.bps");
+    fs::write(&input, b"ABCDEFGH").expect("source fixture");
+    fs::write(
+        &patch,
+        build_bps_patch(
+            b"ABCDEFGH",
+            b"ABxxEFxx",
+            vec![
+                TestAction::SourceRead(2),
+                TestAction::TargetRead(b"xx".to_vec()),
+                TestAction::SourceCopy {
+                    length: 2,
+                    relative_offset: 4,
+                },
+                TestAction::TargetCopy {
+                    length: 2,
+                    relative_offset: 2,
+                },
+            ],
+        ),
+    )
+    .expect("patch fixture");
+
+    for memory_limit in [0, u64::MAX] {
+        let sink = Arc::new(RecordingProgressSink::default());
+        let context = OperationContext::new(
+            ThreadBudget::Fixed(1),
+            temp.child("progress-temp"),
+            sink.clone(),
+            CancellationToken::new(),
+        )
+        .with_patch_apply_in_memory_limit(memory_limit);
+        let output = temp.child(&format!("progress-output-{memory_limit}.bin"));
+        BpsPatchHandler::new(&BPS)
+            .apply(
+                &PatchApplyRequest {
+                    input: input.clone(),
+                    patches: vec![patch.clone()],
+                    output: output.clone(),
+                },
+                &context,
+            )
+            .expect("apply");
+        assert_eq!(fs::read(output).expect("output"), b"ABxxEFxx");
+
+        let events = sink.snapshot();
+        assert_eq!(events.len(), 4, "memory_limit={memory_limit}: {events:?}");
+        for (event, percent) in events.iter().zip([25.0, 50.0, 75.0, 100.0]) {
+            assert_eq!(event.command, "patch-apply");
+            assert_eq!(event.family, OperationFamily::Patch);
+            assert_eq!(event.format.as_deref(), Some("BPS"));
+            assert_eq!(event.stage, "apply");
+            assert_eq!(event.label, "applying patch using BPS");
+            assert_eq!(event.percent, Some(percent));
+            assert_eq!(event.status, OperationStatus::Running);
+            assert_eq!(event.details, None);
+        }
+    }
 }
 
 #[test]

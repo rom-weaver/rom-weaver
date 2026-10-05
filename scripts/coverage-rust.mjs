@@ -45,13 +45,8 @@ export function collectCoverage(output, run, { branch = false } = {}) {
   for (const suite of coverageSelections) {
     const listed = run(["test", ...suite.args, "--", "--list"]);
     writeFileSync(join(output, `${suite.name.replaceAll(" ", "-")}-selected.txt`), listed);
-    const log = run([
-      "llvm-cov",
-      ...suite.args,
-      "--no-clean",
-      "--no-report",
-      ...(branch ? ["--branch"] : []),
-    ]);
+    // --no-report already retains profiles; cargo-llvm-cov forbids combining it with --no-clean.
+    const log = run(["llvm-cov", ...suite.args, "--no-report", ...(branch ? ["--branch"] : [])]);
     writeFileSync(join(output, `${suite.name.replaceAll(" ", "-")}-run.txt`), log);
     const counts = testCounts(log);
     if (!counts.targets || !counts.passed)

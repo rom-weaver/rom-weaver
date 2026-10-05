@@ -13,6 +13,9 @@ members = ["."]
 
 [dependencies]
 libfuzzer-sys = "=0.4.13"
+serde_json = "=1.0.151"
+crc32fast = "=1.5.2"
+rom-weaver-cli = { path = "../crates/rom-weaver-cli", default-features = false, features = ["fuzzing"] }
 rom-weaver-core = { path = "../crates/rom-weaver-core" }
 rom-weaver-patches = { path = "../crates/rom-weaver-patches" }
 
@@ -33,6 +36,27 @@ bench = false
 [[bin]]
 name = "disc_sheet"
 path = "fuzz_targets/disc_sheet.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "bundle_parse"
+path = "fuzz_targets/bundle_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dcp_zip"
+path = "fuzz_targets/dcp_zip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "iso9660"
+path = "fuzz_targets/iso9660.rs"
 test = false
 doc = false
 bench = false

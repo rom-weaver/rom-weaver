@@ -20,3 +20,10 @@ test("deep fuzzing is bounded and targeted runs never silently skip unknown targ
   assert.throws(() => fuzzPlan("other"), /mode/);
   assert.throws(() => fuzzPlan("smoke", "not_a_target"), /Unknown/);
 });
+
+test("smoke includes production bundle graph validation and owned binary metadata", () => {
+  for (const target of ["bundle_parse", "dcp_zip", "iso9660"]) {
+    assert.ok(FUZZ_TARGETS.includes(target));
+    assert.equal(fuzzPlan("smoke", target)[0].name, target);
+  }
+});

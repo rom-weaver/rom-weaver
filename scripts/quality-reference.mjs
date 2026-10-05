@@ -14,6 +14,8 @@ export function verifyFixture(fixture) {
   if (fixture.schemaVersion !== 1 || !fixture.referenceTool || fixture.entries?.length !== 1) {
     throw new Error("unsupported or empty pinned reference manifest");
   }
+  if (!["zip", "7z"].includes(fixture.archiveFormat || "zip"))
+    throw new Error("unsupported pinned reference archive format");
   const archive = Buffer.from(fixture.archiveBase64, "base64");
   if (sha256(archive) !== fixture.archiveSha256) throw new Error("pinned archive hash mismatch");
   for (const entry of fixture.entries) {
@@ -51,7 +53,7 @@ export function runReference({
   mkdirSync(parent, { recursive: true });
   const scratch = mkdtempSync(join(parent, "run-"));
   try {
-    const input = join(scratch, "reference.zip");
+    const input = join(scratch, `reference.${fixture.archiveFormat || "zip"}`);
     const output = join(scratch, "output");
     writeFileSync(input, archive);
     const cli =
@@ -76,6 +78,7 @@ export function runReference({
       signal: "pinned reference",
       status: "passed",
       referenceTool: fixture.referenceTool,
+      archiveFormat: fixture.archiveFormat || "zip",
       archiveSha256: fixture.archiveSha256,
       entries: fixture.entries,
     };
@@ -84,10 +87,18 @@ export function runReference({
   }
 }
 
+export function runReferences(options = {}) {
+  const fixtures = [
+    fixturePath,
+    fileURLToPath(new URL("./quality-reference-7z-fixture.json", import.meta.url)),
+  ].map((file) => JSON.parse(readFileSync(file, "utf8")));
+  return fixtures.map((fixture) => runReference({ ...options, fixture }));
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     console.log(
-      JSON.stringify(runReference({ binary: process.env.QUALITY_REFERENCE_BIN }), null, 2),
+      JSON.stringify(runReferences({ binary: process.env.QUALITY_REFERENCE_BIN }), null, 2),
     );
   } catch (error) {
     console.error(error.message);
