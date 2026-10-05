@@ -768,6 +768,10 @@ describe("offline warm-up client", () => {
     const sink = vi.fn();
     configureLogger({ level: "debug", sink });
 
+    // The wait is timed with performance.now(), which a real setTimeout sleep can undershoot
+    // by a fraction of a millisecond, so the test owns the clock and the duration is exact.
+    let now = 1_000;
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => now);
     pauseOfflineWarmup();
     try {
       cancel = scheduleOfflineWarmup({ delayMs: 0, idleDelayMs: 0, navigator: { serviceWorker } });
@@ -776,7 +780,7 @@ describe("offline warm-up client", () => {
           sink.mock.calls.some(([record]) => record.message === "offline warm-up waiting for interactive work"),
         ).toBe(true),
       );
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      now += 20;
       cancel();
       cancel = undefined;
       resumeOfflineWarmup();
@@ -789,9 +793,10 @@ describe("offline warm-up client", () => {
       });
       expect(
         logs.find(({ message }) => message === "offline warm-up interactive wait ended")?.details?.durationMs,
-      ).toBeGreaterThanOrEqual(15);
+      ).toBe(20);
       expect(messages).toHaveLength(0);
     } finally {
+      clock.mockRestore();
       resumeOfflineWarmup();
     }
   });

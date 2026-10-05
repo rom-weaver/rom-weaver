@@ -209,6 +209,7 @@ const BundleExportAction = ({
   return (
     <button
       className="btn primary slim bundle-share"
+      data-downloadable={bundleExport.downloadable || undefined}
       disabled={disabled}
       id="rom-weaver-button-export-bundle"
       onClick={() => void bundleExport.runExport()}

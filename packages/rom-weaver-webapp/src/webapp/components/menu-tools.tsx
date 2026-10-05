@@ -91,7 +91,7 @@ const ThemeTile = ({
       <button
         aria-expanded={open}
         aria-label={`${label}: ${currentName}`}
-        className={navRow ? "tool nav-row nav-tool" : "tool"}
+        className={navRow ? "tool theme-tool nav-row nav-tool" : "tool theme-tool"}
         onClick={() => onToggle(buttonRef.current)}
         ref={buttonRef}
         type="button"
@@ -118,6 +118,7 @@ const ThemeTile = ({
             <button
               aria-checked={choice.value === preference}
               className="tool-pop-item"
+              data-theme-choice={choice.value}
               key={choice.value}
               onPointerCancel={() => {
                 themePointerRef.current = null;
@@ -300,7 +301,7 @@ const ProjectTiles = ({
 const SettingsTile = ({ localizer, onOpenSettings }: { localizer: Localizer; onOpenSettings: () => void }) => {
   const label = localizer.message("ui.settings.title");
   return (
-    <button aria-label={label} className="tool" onClick={onOpenSettings} type="button">
+    <button aria-label={label} className="tool settings-tool" onClick={onOpenSettings} type="button">
       <Settings aria-hidden="true" />
       <span aria-hidden="true" className="tip">
         {label}

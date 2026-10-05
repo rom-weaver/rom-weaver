@@ -101,12 +101,16 @@ const NavRow = ({
     </>
   );
   const rowClass = join(className, entry.className);
+  // The sidebar copy is found by its `tab-<id>`; the Menu sheet copy needs its own
+  // handle, which stays off the sidebar so the prerendered shell does not carry it.
+  const navId = idPrefix ? undefined : entry.id;
   if (entry.href) {
     return (
       <a
         aria-current={entry.current ? "page" : undefined}
         aria-label={entry.title}
         className={rowClass}
+        data-nav={navId}
         hidden={entry.hidden}
         href={entry.href}
         id={idPrefix ? `${idPrefix}${entry.id}` : undefined}
@@ -129,7 +133,9 @@ const NavRow = ({
     <button
       aria-label={entry.title}
       className={rowClass}
+      data-nav={navId}
       hidden={entry.hidden}
+      id={idPrefix ? `${idPrefix}${entry.id}` : undefined}
       onClick={() => {
         onNavigate?.();
         entry.onSelect?.();

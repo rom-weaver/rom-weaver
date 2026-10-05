@@ -880,6 +880,11 @@ test("Theme and Accent float above the navigation without moving its rows", asyn
   await page.viewport(1280, 900);
 });
 
+// The sheet's bottom and the dock's top come from separate layout boxes, so the browser can
+// snap them to adjacent device pixels: a 1px gap or overlap is rounding, not a lift.
+const expectSheetOnDock = (sheet, dock) =>
+  expect(Math.abs(sheet.getBoundingClientRect().bottom - dock.getBoundingClientRect().top)).toBeLessThanOrEqual(1);
+
 test("the Tools sheet uses its content height and stays above the dock", async () => {
   await page.viewport(390, 1200);
   mountWebappRoot();
@@ -894,7 +899,7 @@ test("the Tools sheet uses its content height and stays above the dock", async (
     sheet.querySelector(".nav-group").getBoundingClientRect().top - sheet.getBoundingClientRect().top,
   ).toBeLessThan(24);
   expect(body.scrollHeight).toBe(body.clientHeight);
-  expect(sheet.getBoundingClientRect().bottom).toBeCloseTo(dock.getBoundingClientRect().top, 1);
+  expectSheetOnDock(sheet, dock);
   const start = {
     sheetHeight: sheet.getBoundingClientRect().height,
     projectTop: project.getBoundingClientRect().top,
@@ -907,11 +912,11 @@ test("the Tools sheet uses its content height and stays above the dock", async (
   await page.viewport(390, 844);
   expect(sheet.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
   expect(body.scrollHeight).toBe(body.clientHeight);
-  expect(sheet.getBoundingClientRect().bottom).toBeCloseTo(dock.getBoundingClientRect().top, 1);
+  expectSheetOnDock(sheet, dock);
   await page.viewport(390, 420);
   expect(sheet.getBoundingClientRect().top).toBeGreaterThanOrEqual(0);
   expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
-  expect(sheet.getBoundingClientRect().bottom).toBeCloseTo(dock.getBoundingClientRect().top, 1);
+  expectSheetOnDock(sheet, dock);
   await page.viewport(1280, 900);
 });
 
