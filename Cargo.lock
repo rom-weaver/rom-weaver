@@ -1839,6 +1839,7 @@ dependencies = [
  "rayon",
  "rom-weaver-checksum",
  "rom-weaver-core",
+ "same-file",
  "serde",
  "serde-big-array",
  "serde_json",

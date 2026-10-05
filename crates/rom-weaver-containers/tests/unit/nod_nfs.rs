@@ -239,7 +239,7 @@ fn load_files_reports_a_file_shorter_than_its_lba_ranges_claim() {
 // --- read_block -----------------------------------------------------------
 
 #[test]
-fn read_block_decrypts_mapped_sectors_and_skips_unmapped_ones() {
+fn read_block_decrypts_mapped_sectors_and_zeroes_unmapped_ones() {
     let root = temp_root("read-block");
     let content = root.join("content");
     fs::create_dir_all(&content).expect("content dir");
@@ -258,11 +258,13 @@ fn read_block_decrypts_mapped_sectors_and_skips_unmapped_ones() {
         assert_eq!(out, plain_sector(sector), "sector {sector} plaintext");
     }
 
-    // A sector with no LBA range is left untouched for the caller to zero.
-    out.fill(0xEE);
     let block = reader.read_block(&mut out, 2).expect("gap sector");
-    assert_eq!(block.kind, BlockKind::Raw);
-    assert!(out.iter().all(|&b| b == 0xEE));
+    assert!(
+        out.iter().all(|&b| b == 0),
+        "gap must clear the reused mapped-sector buffer"
+    );
+    assert_eq!(block.kind, BlockKind::Zero);
+    assert_eq!(block.sector, 2);
 
     fs::remove_dir_all(&root).expect("clean up");
 }
