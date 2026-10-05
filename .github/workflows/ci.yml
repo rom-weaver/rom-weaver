@@ -1292,6 +1292,8 @@ jobs:
           tools: node
           cargo-cache: "false"
           webapp-deps: "true"
+          # The Verify boot browser test loads the pinned cores from local files.
+          emulatorjs-cache: "true"
 
       # Carries the generated wasm attribution (notices.md, NOTICE,
       # WEBAPP_NOTICE) that knip and the vitest config load.

@@ -4406,3 +4406,58 @@ msgstr "Códec ZIP"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z y paquetes"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.verifyBoot.blank"
+msgstr "En blanco o bloqueado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.verifyBoot.boots"
+msgstr "Arranca"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.verifyBoot.checking"
+msgstr "Comprobando el arranque…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.verifyBoot.error"
+msgstr "No se pudo ejecutar la comprobación de arranque: {message}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.verifyBoot.failedToStart"
+msgstr "El emulador no pudo iniciar esta ROM."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.verifyBoot.hint"
+msgstr "Arranca el resultado en un emulador oculto después de aplicar. Solo se comprueban los sistemas que la pestaña Prueba puede ejecutar."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.verifyBoot.label"
+msgstr "Comprobar arranque tras aplicar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.verifyBoot.timeout"
+msgstr "La comprobación se detuvo tras {seconds} s sin resultado. Ábrelo en la pestaña Prueba para comprobarlo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.verifyBootAfterApply"
+msgstr "Comprobar arranque tras aplicar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "settings.verifyBootAfterApplyHelp"
+msgstr "Arranca el resultado en un emulador oculto después de aplicar. Solo se comprueban los sistemas que la pestaña Prueba puede ejecutar."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.verifyBoot.timedOut"
+msgstr "Tiempo agotado"

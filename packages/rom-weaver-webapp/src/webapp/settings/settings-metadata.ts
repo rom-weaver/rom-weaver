@@ -51,6 +51,7 @@ type SettingsState = {
   bundlePackage: string;
   postApplyDownloadBehavior: PostApplyActionBehavior;
   postApplyTestBehavior: PostApplyActionBehavior;
+  verifyBootAfterApply: boolean;
   betaToolsEnabled: boolean;
   emulatorSaveStorageEnabled: boolean;
   offlineCopyEnabled: boolean;
@@ -181,6 +182,7 @@ const SETTINGS_FIELD_ORDER = [
   "bundlePackage",
   "postApplyDownloadBehavior",
   "postApplyTestBehavior",
+  "verifyBootAfterApply",
   "compressionProfile",
   "chdCreateCdCodecs",
   "chdCreateDvdCodecs",
@@ -255,6 +257,7 @@ const SETTINGS_PANEL_SECTIONS: ReadonlyArray<{ fields: SettingsFieldKey[]; title
       "bundlePackage",
       "postApplyDownloadBehavior",
       "postApplyTestBehavior",
+      "verifyBootAfterApply",
       "emulatorSaveStorageEnabled",
       "fixChecksum",
       "identifiedOutputName",
@@ -363,6 +366,18 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     suggestion: "Choose whether Test opens automatically and whether its button stays visible.",
     validationLabel: "Post Apply Test",
     validValues: POST_APPLY_TEST_BEHAVIOR_OPTIONS.map((option) => option.value),
+  },
+  verifyBootAfterApply: {
+    defaultValue: false,
+    id: "settings-verify-boot-after-apply",
+    key: "verifyBootAfterApply",
+    kind: "checkbox",
+    label: getSettingsLabel("verifyBootAfterApply"),
+    labelId: "settings.verifyBootAfterApply",
+    layout: "large",
+    suggestion: getSettingsLabel("verifyBootAfterApplyHelp"),
+    suggestionDataLocalize:
+      "Boots the result in a hidden emulator after Apply. Only systems that the Test tab can play are checked.",
   },
   chdCreateCdCodecs: {
     codecOptions: getCompressionCodecOptions("chdCreateCdCodecs"),

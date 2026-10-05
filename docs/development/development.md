@@ -142,6 +142,14 @@ npm --prefix packages/rom-weaver-webapp run test:browser
 
 Use the repository's browser-test runner instead of invoking browser Vitest directly; it isolates files and avoids browser-mode hangs in linked worktrees.
 
+`tests/browser/verify-boot.browser.test.js` boots the patched NES sample in a hidden EmulatorJS player. It needs the pinned EmulatorJS files in `packages/rom-weaver-webapp/vendor/emulatorjs/data`. The `test:browser` scripts fetch them with `node scripts/ensure-emulatorjs.mjs`. Run that command yourself before you run the file alone:
+
+```bash
+cd packages/rom-weaver-webapp
+node scripts/ensure-emulatorjs.mjs
+node scripts/run-browser-tests.mjs tests/browser/verify-boot.browser.test.js
+```
+
 The fast end-to-end gate is also available separately:
 
 ```bash

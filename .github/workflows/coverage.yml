@@ -43,6 +43,7 @@ jobs:
           cache-save: "false"
           webapp-deps: "true"
           identify-data-cache: "true"
+          emulatorjs-cache: "true"
 
       - name: Generate webapp attribution
         run: node scripts/gen-third-party-licenses.mjs packages/rom-weaver-webapp/src/wasm --target webapp

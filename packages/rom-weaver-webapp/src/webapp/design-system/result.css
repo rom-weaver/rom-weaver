@@ -306,6 +306,36 @@
   border: 1px solid var(--seam-soft);
   border-radius: var(--r-s);
 }
+/* The boot check result sits under the play button as a one-line verdict. */
+.rw-app .boot-check {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2xs) var(--sp-s);
+  align-items: center;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ink-3);
+}
+.rw-app .boot-check svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.rw-app .boot-check-label {
+  font-weight: 600;
+}
+.rw-app .boot-check-note {
+  flex-basis: 100%;
+  color: var(--ink-3);
+}
+.rw-app .boot-check[data-state="boots"] {
+  color: var(--verified);
+}
+.rw-app .boot-check[data-state="blank"],
+.rw-app .boot-check[data-state="error"],
+.rw-app .boot-check[data-state="timeout"] {
+  color: var(--care-text);
+}
 .rw-app .emulatorjs-test .emulatorjs-error {
   margin: 0;
 }
