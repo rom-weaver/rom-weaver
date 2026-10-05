@@ -159,7 +159,7 @@ Checksums can target source bytes, selected container payloads, or byte ranges (
 
 `--revert` pads a trimmed file back out, and works for NDS, GBA, and 3DS. XISO and RVZ scrub cannot be reverted. It also answers to `--untrim` and `--restore`.
 
-`--revert-marker` (also `--reversible`) records the original length and one padding byte in a footer. Exact restoration needs a separate output file and uniformly padded removed bytes. In-place trimming can record the wrong padding byte. See the [footer format and limits](../development/trim-revert-footer.md).
+`--revert-marker` (also `--reversible`) records the original length and one padding byte in a footer for NDS-family, GBA, and 3DS ROMs. XISO and RVZ scrub reject this option and cannot be reverted, even when a footer is present. Exact restoration requires unchanged retained data and uniformly padded removed bytes. The fill byte is recorded before trimming, including in-place operations. See the [footer format and limits](../development/trim-revert-footer.md).
 
 ## Header detection and repair
 

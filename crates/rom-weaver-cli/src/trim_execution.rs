@@ -1,3 +1,4 @@
+use super::patch_apply::paths_refer_to_same_file;
 use super::*;
 
 /// The mode/operation settings for a single trim operation, grouped so `trim_file` takes one
@@ -28,8 +29,28 @@ impl CliApp {
             revert_marker,
         } = request;
 
+        if !in_place && source != destination && paths_refer_to_same_file(source, destination) {
+            return Err(RomWeaverError::Validation(format!(
+                "trim output `{}` refers to input `{}`; use --in-place to rewrite the source",
+                destination.display(),
+                source.display()
+            )));
+        }
+
+        let supports_revert = matches!(
+            kind,
+            TrimInputKind::NdsFamily | TrimInputKind::Gba | TrimInputKind::ThreeDs
+        );
+        if operation == TrimOperation::Trim && revert_marker && !supports_revert {
+            return Err(RomWeaverError::Validation(format!(
+                "{} trim does not support --revert-marker; the original disc layout cannot be reconstructed from padding",
+                kind.mode_label()
+            )));
+        }
+
         // Stored size and fill take precedence over format-specific restoration heuristics.
         if operation == TrimOperation::Revert
+            && supports_revert
             && let Some(footer) = Self::read_revert_footer(source)?
         {
             return Self::revert_with_footer(source, destination, in_place, dry_run, kind, footer);

@@ -1328,3 +1328,110 @@ fn build_test_padded_rom(payload_size: usize, full_size: usize, pad_byte: u8) ->
     }
     rom
 }
+
+#[test]
+fn trim_xiso_rejects_hard_link_output_without_touching_source() {
+    let temp = setup_temp_dir();
+    let source = temp.child("source.iso");
+    let output = temp.child("alias.xiso");
+    write_xiso_fixture_from_directory(temp.child("tree").path(), source.path());
+    let original = fs::read(source.path()).expect("source bytes");
+    fs::hard_link(source.path(), output.path()).expect("hard link");
+
+    let stdout = command_stdout(
+        &[
+            "trim",
+            "--input",
+            source.path().to_str().expect("source path"),
+            "--output",
+            output.path().to_str().expect("output path"),
+            "--force",
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(
+        fs::read(source.path()).expect("source after trim"),
+        original
+    );
+    assert_eq!(fs::read(output.path()).expect("alias after trim"), original);
+    let terminal = parse_single_json_line(&stdout);
+    assert!(
+        terminal["label"]
+            .as_str()
+            .expect("label")
+            .contains("--in-place"),
+        "{terminal}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn trim_xiso_rejects_symlink_output_without_touching_source() {
+    let temp = setup_temp_dir();
+    let source = temp.child("source.iso");
+    let output = temp.child("alias.xiso");
+    write_xiso_fixture_from_directory(temp.child("tree").path(), source.path());
+    let original = fs::read(source.path()).expect("source bytes");
+    std::os::unix::fs::symlink(source.path(), output.path()).expect("symlink");
+
+    let stdout = command_stdout(
+        &[
+            "trim",
+            "--input",
+            source.path().to_str().expect("source path"),
+            "--output",
+            output.path().to_str().expect("output path"),
+            "--force",
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(
+        fs::read(source.path()).expect("source after trim"),
+        original
+    );
+    assert_eq!(fs::read(output.path()).expect("alias after trim"), original);
+    let terminal = parse_single_json_line(&stdout);
+    assert!(
+        terminal["label"]
+            .as_str()
+            .expect("label")
+            .contains("--in-place"),
+        "{terminal}"
+    );
+}
+
+#[test]
+fn trim_xiso_rejects_revert_marker_before_writing() {
+    let temp = setup_temp_dir();
+    let source = temp.child("source.iso");
+    let output = temp.child("marked.xiso");
+    write_xiso_fixture_from_directory(temp.child("tree").path(), source.path());
+    let original = fs::read(source.path()).expect("source bytes");
+    let stdout = command_stdout(
+        &[
+            "trim",
+            "--input",
+            source.path().to_str().expect("source path"),
+            "--output",
+            output.path().to_str().expect("output path"),
+            "--revert-marker",
+            "--json",
+        ],
+        1,
+    );
+    let terminal = parse_single_json_line(&stdout);
+    assert!(
+        terminal["label"]
+            .as_str()
+            .expect("label")
+            .contains("does not support --revert-marker"),
+        "{terminal}"
+    );
+    assert!(!output.path().exists());
+    assert_eq!(
+        fs::read(source.path()).expect("source after trim"),
+        original
+    );
+}

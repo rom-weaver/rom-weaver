@@ -26,6 +26,8 @@
 //!   features is deleted rather than left gated.
 //! - `crate::` paths rewritten to `crate::xdvdfs::`.
 //! - Clippy lifetime-elision fixes for this workspace's `-D warnings` gate.
+//! - Directory cycle guards for untrusted images; upstream replacements MUST
+//!   preserve these checks when listing, looking up paths, and rebuilding images.
 
 // Upstream gates these on its `logging` feature, which this workspace left off,
 // so they expand to nothing. Wiring them to `tracing` is a worthwhile follow-up

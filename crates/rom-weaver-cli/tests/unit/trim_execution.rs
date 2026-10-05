@@ -857,3 +857,68 @@ fn trim_file_dispatches_each_input_kind_to_its_own_refusal() {
     );
     fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn irreversible_trim_kinds_reject_existing_revert_footers() {
+    let dir = scratch_dir("irreversible-revert-footer");
+    let app = test_app();
+    let context = app.context(ThreadBudget::Fixed(1));
+    let source = write_fixture(&dir, "marked.bin", &[0x42; 64]);
+    CliApp::write_revert_footer(&source, 128, 0).expect("legacy footer");
+    let original = fs::read(&source).expect("original bytes");
+    for kind in [TrimInputKind::Xiso, TrimInputKind::RvzScrub] {
+        for dry_run in [false, true] {
+            let error = app
+                .trim_file(
+                    &source,
+                    &source,
+                    TrimRequest {
+                        in_place: true,
+                        dry_run,
+                        ..request(TrimOperation::Revert, kind)
+                    },
+                    &context,
+                )
+                .err_or_panic("irreversible format");
+            assert!(
+                error.to_string().contains("trim revert is not supported"),
+                "{error}"
+            );
+            assert_eq!(fs::read(&source).expect("unchanged source"), original);
+        }
+    }
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn irreversible_trim_kinds_reject_markers_including_dry_runs() {
+    let dir = scratch_dir("irreversible-marker");
+    let app = test_app();
+    let context = app.context(ThreadBudget::Fixed(1));
+    let source = write_fixture(&dir, "source.bin", &[0x42; 64]);
+    for kind in [TrimInputKind::Xiso, TrimInputKind::RvzScrub] {
+        for dry_run in [false, true] {
+            let error = app
+                .trim_file(
+                    &source,
+                    &source,
+                    TrimRequest {
+                        in_place: true,
+                        dry_run,
+                        revert_marker: true,
+                        ..request(TrimOperation::Trim, kind)
+                    },
+                    &context,
+                )
+                .err_or_panic("irreversible format");
+            assert!(
+                error
+                    .to_string()
+                    .contains("does not support --revert-marker"),
+                "{error}"
+            );
+            assert_eq!(fs::read(&source).expect("unchanged source"), [0x42; 64]);
+        }
+    }
+    fs::remove_dir_all(&dir).ok();
+}
