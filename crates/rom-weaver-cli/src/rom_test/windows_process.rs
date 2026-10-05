@@ -109,7 +109,7 @@ impl Drop for Job {
 #[cfg(test)]
 mod tests {
     use std::{
-        io::Read,
+        io::{self, Read, Write},
         os::windows::process::CommandExt,
         process::{Command, Stdio},
         sync::mpsc,
@@ -119,28 +119,99 @@ mod tests {
 
     use super::{CREATE_SUSPENDED, Job};
 
+    const PROCESS_ROLE: &str = "ROM_WEAVER_WINDOWS_JOB_TEST_ROLE";
+    const DESCENDANT_READY: &[u8] = b"rom-weaver-descendant-ready";
+
     #[test]
     fn closing_job_closes_descendant_pipes() {
-        let mut command = Command::new("cmd.exe");
+        let mut command = Command::new(std::env::current_exe().unwrap());
         command
             .args([
-                "/D",
-                "/C",
-                "start \"\" /B ping.exe -n 30 127.0.0.1 & exit /B 0",
+                "--exact",
+                "rom_test::windows_process::tests::job_process_parent_helper",
+                "--nocapture",
             ])
+            .env(PROCESS_ROLE, "parent")
             .creation_flags(CREATE_SUSPENDED)
             .stdout(Stdio::piped());
         let mut child = command.spawn().unwrap();
         let job = Job::assign(&child).unwrap();
         let mut stdout = child.stdout.take().unwrap();
+
+        let (ready_sender, ready_receiver) = mpsc::channel();
+        let (closed_sender, closed_receiver) = mpsc::channel();
+        thread::spawn(move || {
+            let mut output = Vec::new();
+            let mut buffer = [0; 1024];
+            let mut ready_sent = false;
+            loop {
+                match stdout.read(&mut buffer) {
+                    Ok(0) => break,
+                    Ok(length) => {
+                        output.extend_from_slice(&buffer[..length]);
+                        if !ready_sent
+                            && output
+                                .windows(DESCENDANT_READY.len())
+                                .any(|window| window == DESCENDANT_READY)
+                        {
+                            let _ = ready_sender.send(());
+                            ready_sent = true;
+                        }
+                    }
+                    Err(error) => {
+                        let _ = closed_sender.send(Err(error));
+                        return;
+                    }
+                }
+            }
+            let _ = closed_sender.send(Ok(output));
+        });
+        ready_receiver
+            .recv_timeout(Duration::from_secs(10))
+            .expect("a descendant must start and write to stdout");
         drop(job);
         let _ = child.kill();
         child.wait().unwrap();
-        let (sender, receiver) = mpsc::channel();
-        thread::spawn(move || sender.send(stdout.read_to_end(&mut Vec::new())).unwrap());
-        receiver
+        let output = closed_receiver
             .recv_timeout(Duration::from_secs(3))
             .expect("the job must close pipes inherited by descendants")
             .unwrap();
+        assert!(
+            output
+                .windows(DESCENDANT_READY.len())
+                .any(|window| window == DESCENDANT_READY),
+            "the descendant must have written its readiness marker"
+        );
+    }
+
+    #[test]
+    fn job_process_parent_helper() {
+        if std::env::var(PROCESS_ROLE).ok().as_deref() != Some("parent") {
+            return;
+        }
+
+        let mut descendant = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "rom_test::windows_process::tests::job_process_descendant_helper",
+                "--nocapture",
+            ])
+            .env(PROCESS_ROLE, "descendant")
+            .stdout(Stdio::inherit())
+            .spawn()
+            .unwrap();
+        let _ = descendant.wait();
+    }
+
+    #[test]
+    fn job_process_descendant_helper() {
+        if std::env::var(PROCESS_ROLE).ok().as_deref() != Some("descendant") {
+            return;
+        }
+
+        let mut stdout = io::stdout().lock();
+        stdout.write_all(DESCENDANT_READY).unwrap();
+        stdout.flush().unwrap();
+        thread::sleep(Duration::from_secs(30));
     }
 }
