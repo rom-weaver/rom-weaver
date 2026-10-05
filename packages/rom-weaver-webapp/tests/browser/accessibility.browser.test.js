@@ -830,7 +830,7 @@ const DIALOGS = {
       title: "Reload and lose changes?",
     }),
   // The changelog route uses the same full-page accessibility checks.
-  "whats new": () => createElement(WhatsNewPage, { active: true, onReload: noop, updateReady: true }),
+  "whats new": () => createElement(WhatsNewPage, { active: true, onBack: noop, onReload: noop, updateReady: true }),
   log: () => createElement(LogDialog, { onClose: noop, onLevelChange: noop, open: true }),
   // Check Settings within the shared dialog.
   settings: () =>

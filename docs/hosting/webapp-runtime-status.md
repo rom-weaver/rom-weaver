@@ -24,6 +24,8 @@ The webapp masthead shows build identity, the configured thread count, and two i
 
 The version text normally looks like `vX.Y.Z · abcdef0`. The full build identifier, including a branch or dirty-build suffix when applicable, is available from the version tooltip.
 
+The “What’s new” prompt appears beside the version for two hours after this browser first sees a build, or until the changelog is opened. The browser remembers dismissal for that build. The changelog’s Back button returns to the previous view, or Home when opened directly. The version and navigation links remain available after the prompt disappears.
+
 ## Runtime values
 
 | Value | Meaning |

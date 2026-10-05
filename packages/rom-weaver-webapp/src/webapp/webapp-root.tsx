@@ -508,6 +508,14 @@ function WebappRoot({
      view it was made on, and only while that view is still the current one. */
   const pageDropFor = (view: WebappView) =>
     pageDrop && pageDrop.view === view && state.currentView === view ? pageDrop.drop : null;
+  const whatsNewReturnView = useRef<WebappView>("home");
+  const lastView = useRef(state.currentView);
+  useEffect(() => {
+    if (state.currentView === "whats-new" && lastView.current !== "whats-new") {
+      whatsNewReturnView.current = lastView.current;
+    }
+    lastView.current = state.currentView;
+  }, [state.currentView]);
   const openWhatsNew = useCallback(() => {
     pendingViewRef.current = null;
     selectViewWithTransition(() => actions.onSelectView("whats-new"));
@@ -851,6 +859,7 @@ function WebappRoot({
                   "whats-new",
                   <WhatsNewPageRoute
                     active={state.currentView === "whats-new"}
+                    onBack={() => handleSelectTab(whatsNewReturnView.current)}
                     onReload={actions.onReloadUpdate}
                     updateReady={pageUpdate.ready}
                   />,

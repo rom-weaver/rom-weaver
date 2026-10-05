@@ -1,6 +1,7 @@
 import { ArrowLeft, HardDrive, Heart, House, Info, Newspaper, ScrollText, Search, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { useWhatsNewPrompt } from "../use-whats-new-prompt.ts";
 import { DocsNavigation } from "../docs-navigation.tsx";
 import { BrandMark } from "./brand-mark.tsx";
 import { FIND_SHORTCUT_HINT, FindPalette } from "./find-palette.tsx";
@@ -93,6 +94,7 @@ const Masthead = ({
   version?: string;
   versionTitle?: string;
 }) => {
+  const showWhatsNewPrompt = useWhatsNewPrompt(currentTab === "whats-new");
   const settings = useRomWeaverSettings();
   const localizer = useUiLocalizer();
   const betaToolsEnabled = settings.betaToolsEnabled !== false;
@@ -478,6 +480,26 @@ const Masthead = ({
   const buildFacts = (
     <span className="build-facts">
       {buildTag}
+      {version && showWhatsNewPrompt ? (
+        <button
+          className="sub-chip channel-badge whats-new-prompt"
+          style={{
+            flexShrink: 0,
+            fontSize: "0.55rem",
+            letterSpacing: 0,
+            textTransform: "none",
+            marginInlineStart: 4,
+            padding: "0 4px",
+            color: "var(--thread-text)",
+            background: "color-mix(in oklab, var(--thread) 10%, transparent)",
+            border: "1px solid currentColor",
+          }}
+          onClick={onOpenWhatsNew}
+          type="button"
+        >
+          {localizer.message("ui.update.whatsNew")}
+        </button>
+      ) : null}
       {previewVersionStatus ? (
         <span className="build-runtime">
           <StatusChip
