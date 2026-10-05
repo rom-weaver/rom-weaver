@@ -65,7 +65,7 @@ const createStructuredDataLdJson = (route, includeWebsite) => {
 export const injectLdJson = (html, route, includeWebsite = false) =>
   html.replace("</head>", `  ${createStructuredDataLdJson(route, includeWebsite)}\n  </head>`);
 
-// The Trim, PPF undo, and Save Editor tabs are still beta - they navigate in
+// The Trim and Save Editor tabs are still beta - they navigate in
 // production but must not be indexed, so strip the shared index directive to
 // noindex and point their canonical at themselves.
 export const makeBetaRouteNoindex = (html, slug) =>

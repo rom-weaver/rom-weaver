@@ -1180,6 +1180,99 @@ const configureUncompressedOutput = async (page) => {
   await page.locator(".settings-actions .btn.primary:visible").click();
 };
 
+const buildPpfUndoPatch = (records, undo = true) => {
+  const header = Buffer.alloc(60);
+  header.write("PPF30", 0, "ascii");
+  header[5] = 2;
+  header.write("Browser undo journey", 6, "ascii");
+  header[58] = Number(undo);
+  return Buffer.concat([
+    header,
+    ...records.map(({ offset, data, original }) => {
+      const recordHeader = Buffer.alloc(9);
+      recordHeader.writeBigUInt64LE(BigInt(offset));
+      recordHeader[8] = data.length;
+      return Buffer.concat([recordHeader, Buffer.from(data), ...(undo ? [Buffer.from(original)] : [])]);
+    }),
+  ]);
+};
+
+const runPpfUndoJourney = async (createContext, baseUrl) => {
+  const context = await createContext({ acceptDownloads: true, ignoreHTTPSErrors: true });
+  const page = await context.newPage();
+  const failures = [];
+  const downloads = [];
+  page.on("pageerror", (error) => failures.push(error.stack || error.message));
+  page.on("download", (download) => downloads.push(download));
+  const original = Buffer.from("abcdefghijklmnop");
+  const patched = Buffer.from("abXY123hijklmnop");
+  const records = [
+    { offset: 2, data: "XYZW", original: "cdef" },
+    { offset: 4, data: "123", original: "ZWg" },
+  ];
+  const validPatch = buildPpfUndoPatch(records);
+  const patchFile = (buffer, name) => ({ buffer, mimeType: "application/octet-stream", name });
+  try {
+    await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+    const nav = page.locator("#tab-ppf-undo");
+    await nav.waitFor({ state: "visible" });
+    if (await nav.locator(".nav-beta").count()) throw new Error("PPF Undo navigation still has a beta chip");
+    await nav.click();
+    const picker = page.locator("#ppf-undo-input-picker");
+    await picker.waitFor({ state: "attached" });
+    await picker.setInputFiles([patchFile(patched, "patched.bin"), patchFile(validPatch, "overlapping.ppf")]);
+    const restore = page.getByRole("button", { name: "Restore original ROM", exact: true });
+    const restoreAndCheck = async () => {
+      const [download] = await Promise.all([
+        page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
+        restore.click(),
+      ]);
+      const downloadPath = await download.path();
+      if (!downloadPath) throw new Error("PPF Undo: Playwright did not expose the downloaded file");
+      if (!fs.readFileSync(downloadPath).equals(original)) {
+        throw new Error("PPF Undo: restored ROM differs from the original bytes");
+      }
+      if (download.suggestedFilename() !== "patched-restored.bin") {
+        throw new Error(`PPF Undo: unexpected output filename ${download.suggestedFilename()}`);
+      }
+      await page.getByRole("button", { name: "Download patched-restored.bin", exact: true }).waitFor();
+    };
+    await restoreAndCheck();
+    for (const { buffer, name, error } of [
+      {
+        buffer: buildPpfUndoPatch(records, false),
+        name: "no-undo.ppf",
+        error: "PPF patch does not contain complete undo data",
+      },
+      {
+        buffer: buildPpfUndoPatch([...records, { offset: original.length, data: "X", original: "a" }]),
+        name: "out-of-bounds.ppf",
+        error: "PPF undo data exceeds ROM bounds",
+      },
+    ]) {
+      await picker.setInputFiles(patchFile(buffer, name));
+      const previousDownloads = downloads.length;
+      await restore.click();
+      await page.locator("#ppf-undo-container").getByRole("alert").filter({ hasText: error }).waitFor({
+        timeout: DOWNLOAD_TIMEOUT_MS,
+      });
+      await restore.waitFor({ state: "visible" });
+      if (downloads.length !== previousDownloads) throw new Error(`PPF Undo: ${name} triggered a download`);
+      if (await page.getByRole("button", { name: "Download patched-restored.bin", exact: true }).count()) {
+        throw new Error(`PPF Undo: ${name} left a downloadable output`);
+      }
+      await picker.setInputFiles(patchFile(validPatch, "overlapping.ppf"));
+      await page.locator("#ppf-undo-container").getByRole("alert").waitFor({ state: "hidden" });
+      await restoreAndCheck();
+    }
+    if (downloads.length !== 3) throw new Error(`PPF Undo: expected 3 downloads, got ${downloads.length}`);
+    if (failures.length) throw new Error(`PPF Undo: uncaught page error\n${failures.join("\n")}`);
+    process.stdout.write("PASS PPF Undo (overlapping records, validation errors, replacement recovery)\n");
+  } finally {
+    await context.close();
+  }
+};
+
 const runApplyJourney = async (createContext, baseUrl, name, fixtureNames) => {
   const context = await createContext({ acceptDownloads: true, ignoreHTTPSErrors: true });
   const page = await context.newPage();
@@ -1369,6 +1462,7 @@ const main = async () => {
     }
     if (RUN_LINK_AUDIT) await scenario("links", (createContext) => runLinkAudit(createContext, devBaseUrl));
     if (RUN_RAW_JOURNEY) {
+      await scenario("PPF Undo/download/recovery", (createContext) => runPpfUndoJourney(createContext, previewBaseUrl));
       await scenario("raw apply/download", (createContext) =>
         runApplyJourney(createContext, previewBaseUrl, "raw apply/download", [
           "archive_sources/game.bin",

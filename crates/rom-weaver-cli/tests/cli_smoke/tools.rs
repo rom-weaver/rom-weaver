@@ -258,3 +258,65 @@ fn tools_ppf_undo_reports_a_missing_rom_as_a_validation_failure() {
             .contains("input path does not exist")
     );
 }
+
+#[test]
+fn tools_ppf_undo_rejects_output_aliases_without_changing_sources() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("patched.bin");
+    let patch = temp.child("update.ppf");
+    let rom_bytes = b"AXAA";
+    let patch_bytes = build_ppf3_undo_patch(&[(1, b"X".to_vec(), b"A".to_vec())]);
+    for output in [rom.path(), patch.path()] {
+        fs::write(rom.path(), rom_bytes).expect("ROM fixture");
+        fs::write(patch.path(), &patch_bytes).expect("patch fixture");
+        let json = run_single_json_event(
+            &[
+                "tools",
+                "ppf-undo",
+                "--input",
+                rom.path().to_str().expect("ROM path"),
+                "--patch",
+                patch.path().to_str().expect("patch path"),
+                "--output",
+                output.to_str().expect("output path"),
+                "--json",
+            ],
+            1,
+        );
+        assert_eq!(json["status"], "failed");
+        assert_eq!(fs::read(rom.path()).expect("ROM bytes"), rom_bytes);
+        assert_eq!(fs::read(patch.path()).expect("patch bytes"), patch_bytes);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn tools_ppf_undo_rejects_hardlink_output_without_changing_rom() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("patched.bin");
+    let patch = temp.child("update.ppf");
+    let output = temp.child("alias.bin");
+    let rom_bytes = b"AXAA";
+    let patch_bytes = build_ppf3_undo_patch(&[(1, b"X".to_vec(), b"A".to_vec())]);
+    fs::write(rom.path(), rom_bytes).expect("ROM fixture");
+    fs::write(patch.path(), &patch_bytes).expect("patch fixture");
+    fs::hard_link(rom.path(), output.path()).expect("hardlink fixture");
+    let json = run_single_json_event(
+        &[
+            "tools",
+            "ppf-undo",
+            "--input",
+            rom.path().to_str().expect("ROM path"),
+            "--patch",
+            patch.path().to_str().expect("patch path"),
+            "--output",
+            output.path().to_str().expect("output path"),
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(json["status"], "failed");
+    assert_eq!(fs::read(rom.path()).expect("ROM bytes"), rom_bytes);
+    assert_eq!(fs::read(patch.path()).expect("patch bytes"), patch_bytes);
+    assert_eq!(fs::read(output.path()).expect("alias bytes"), rom_bytes);
+}

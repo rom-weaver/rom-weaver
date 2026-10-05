@@ -59,7 +59,6 @@ const TABS = [
     railLabel: "Trim",
   },
   {
-    beta: true,
     group: "patches",
     href: "ppf-undo",
     icon: <svg aria-hidden="true" />,
@@ -282,7 +281,7 @@ describe("Masthead", () => {
     for (const nav of [".side-nav", ".menu-sheet"]) {
       const labels = rowsOf(container.querySelector(nav));
       expect(labels).not.toContain("Trim");
-      expect(labels).not.toContain("PPF undo");
+      expect(labels).toContain("PPF undo");
       expect(labels).not.toContain("Saves");
       expect(labels).toContain("Apply");
       for (const row of container.querySelectorAll(`${nav} .nav-row[hidden]`)) {

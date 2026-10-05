@@ -571,7 +571,7 @@ for (const script of bundledScripts) {
     throw new Error(`${script} bundles the Markdown parser; guides must be rendered at build time`);
 }
 
-for (const beta of ["trim-rom", "ppf-undo", "whats-new", "save-editor"]) {
+for (const beta of ["trim-rom", "whats-new", "save-editor"]) {
   assertIncludes(read(`${beta}/index.html`), 'name="robots" content="noindex, nofollow"', `${beta} noindex`);
   assertIncludes(
     read(`${beta}/index.html`),

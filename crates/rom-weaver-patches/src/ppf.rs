@@ -52,7 +52,7 @@ impl PpfPatchHandler {
 /// Restore a ROM produced by a PPF3 patch using each record's stored original bytes.
 pub fn undo_ppf(input_path: &Path, patch_path: &Path, output_path: &Path) -> Result<()> {
     let parsed = parse_ppf_file(patch_path)?;
-    if parsed.version != PpfVersion::V3
+    if !parsed.undo_enabled
         || parsed
             .records
             .iter()
@@ -64,15 +64,7 @@ pub fn undo_ppf(input_path: &Path, patch_path: &Path, output_path: &Path) -> Res
     }
 
     let input_len = fs::metadata(input_path)?.len();
-    if let Some(parent) = output_path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-    {
-        fs::create_dir_all(parent)?;
-    }
-    fs::copy(input_path, output_path)?;
-    let mut output = OpenOptions::new().write(true).open(output_path)?;
-    for record in parsed.records.iter().rev() {
+    for record in &parsed.records {
         let undo = record.undo_data.as_ref().expect("validated above");
         let end = record
             .offset
@@ -83,6 +75,17 @@ pub fn undo_ppf(input_path: &Path, patch_path: &Path, output_path: &Path) -> Res
                 "PPF undo data exceeds ROM bounds".into(),
             ));
         }
+    }
+    if let Some(parent) = output_path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent)?;
+    }
+    fs::copy(input_path, output_path)?;
+    let mut output = OpenOptions::new().write(true).open(output_path)?;
+    for record in parsed.records.iter().rev() {
+        let undo = record.undo_data.as_ref().expect("validated above");
         output.seek(SeekFrom::Start(record.offset))?;
         output.write_all(undo)?;
     }
@@ -328,6 +331,7 @@ impl PpfVersion {
 struct ParsedPpfPatch {
     version: PpfVersion,
     expected_input_len: Option<u64>,
+    undo_enabled: bool,
     blockcheck: Option<PpfBlockcheck>,
     records: Vec<PpfRecord>,
 }
@@ -406,6 +410,7 @@ fn parse_ppf_file(path: &Path) -> Result<ParsedPpfPatch> {
             Ok(ParsedPpfPatch {
                 version: PpfVersion::V1,
                 expected_input_len: None,
+                undo_enabled: false,
                 blockcheck: None,
                 records,
             })
@@ -435,6 +440,7 @@ fn parse_ppf_file(path: &Path) -> Result<ParsedPpfPatch> {
             Ok(ParsedPpfPatch {
                 version: PpfVersion::V2,
                 expected_input_len: Some(expected_input_len),
+                undo_enabled: false,
                 blockcheck: Some(PpfBlockcheck {
                     input_offset: PPF2_BLOCKCHECK_OFFSET,
                     expected: v2_header[60..(60 + PPF_VALIDATION_BLOCK_SIZE)].to_vec(),
@@ -496,6 +502,7 @@ fn parse_ppf_file(path: &Path) -> Result<ParsedPpfPatch> {
             Ok(ParsedPpfPatch {
                 version: PpfVersion::V3,
                 expected_input_len: None,
+                undo_enabled,
                 blockcheck,
                 records,
             })
@@ -997,6 +1004,7 @@ fn parse_ppf_v1(bytes: &[u8]) -> Result<ParsedPpfPatch> {
     Ok(ParsedPpfPatch {
         version: PpfVersion::V1,
         expected_input_len: None,
+        undo_enabled: false,
         blockcheck: None,
         records,
     })
@@ -1027,6 +1035,7 @@ fn parse_ppf_v2(bytes: &[u8]) -> Result<ParsedPpfPatch> {
     Ok(ParsedPpfPatch {
         version: PpfVersion::V2,
         expected_input_len: Some(expected_input_len),
+        undo_enabled: false,
         blockcheck: Some(PpfBlockcheck {
             input_offset: PPF2_BLOCKCHECK_OFFSET,
             expected,
@@ -1084,6 +1093,7 @@ fn parse_ppf_v3(bytes: &[u8]) -> Result<ParsedPpfPatch> {
     Ok(ParsedPpfPatch {
         version: PpfVersion::V3,
         expected_input_len: None,
+        undo_enabled,
         blockcheck,
         records,
     })

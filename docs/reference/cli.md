@@ -433,7 +433,7 @@ When every recorded cheat is `optional` and none resolves, a bundle with no patc
 
 ## Tools
 
-`tools ppf-undo` accepts `--input` (the patched ROM), `--patch` (a PPF3 patch with undo data), and `--output`. It restores the bytes recorded in that patch. It cannot undo arbitrary patch formats or later unrelated edits.
+`tools ppf-undo` accepts `--input` (the patched ROM), `--patch` (a PPF3 patch with undo data), and `--output`. It restores the bytes recorded in that patch. The output must be a separate file from both inputs. Invalid or out-of-bounds undo data is rejected before writing the output. It cannot undo arbitrary patch formats or later unrelated edits.
 
 Procedures: [Undo PPF in the browser](../how-to/undo-ppf-browser.md) and [Undo PPF from the CLI](../how-to/cli-apply.md#undo-a-ppf-patch).
 

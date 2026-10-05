@@ -20,6 +20,18 @@ impl CliApp {
             ) {
                 return self.finish(command, report);
             }
+            if super::patch_apply::paths_refer_to_same_file(path, &args.output) {
+                return self.finish(
+                    command,
+                    OperationReport::failed(
+                        OperationFamily::Patch,
+                        Some("PPF".to_string()),
+                        "validate",
+                        format!("PPF undo output and {label} resolve to the same file; choose a different --output path"),
+                        execution.clone(),
+                    ),
+                );
+            }
             if path.is_dir() {
                 return self.finish(
                     command,
