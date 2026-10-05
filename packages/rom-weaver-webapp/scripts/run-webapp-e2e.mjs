@@ -1056,7 +1056,16 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       // download has to have moved to it. The served HTML still names
       // production, which is the right answer for a crawler but the wrong one
       // for anyone copying a command out of a beta or preview deployment.
-      await page.waitForFunction(() => !document.getElementById("webapp-root")?.hasAttribute("aria-busy"));
+      // Hydration clears aria-busy before the asset-base effect re-renders the
+      // article. Wait for that second update before checking the production
+      // origin, otherwise WebKit can observe the authored HTML in between.
+      await page.waitForFunction((productionOrigin) => {
+        if (document.getElementById("webapp-root")?.hasAttribute("aria-busy")) return false;
+        const stillProduction = [...document.querySelectorAll(".docs-article pre code")]
+          .flatMap((block) => (block.textContent || "").match(/https?:\/\/[^\s"'<>]+/g) || [])
+          .some((value) => URL.canParse(value) && new URL(value).origin === productionOrigin);
+        return !stillProduction;
+      }, SITE_ORIGIN);
       const samples = await page.evaluate((productionOrigin) => {
         // Origins are compared after parsing so a lookalike host such as
         // `rom-weaver.com.example` can never read as either origin.
