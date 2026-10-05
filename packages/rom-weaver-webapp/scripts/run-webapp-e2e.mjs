@@ -12,6 +12,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium, webkit } from "playwright";
 import { DOC_SOURCES, SITE_ORIGIN } from "../src/webapp/docs-routing.mjs";
 import { buildStoredZip } from "../tests/wasm/stored-zip-fixture.mjs";
+import { chooseFilesByKeyboard, runAccessibleNavigationAudit, tabTo } from "./accessible-navigation-audit.mjs";
 import { summarizeCssCoverage } from "./css-coverage.mjs";
 import { createGuidedLoadingAudit } from "./guided-loading-audit.mjs";
 
@@ -1189,9 +1190,11 @@ const runApplyJourney = async (createContext, baseUrl, name, fixtureNames) => {
     await page.goto(new URL("apply", baseUrl).href, { waitUntil: "domcontentloaded" });
     await page.locator("#rom-weaver-input-file-unified").waitFor({ state: "attached" });
     await configureUncompressedOutput(page);
-    await page
-      .locator("#rom-weaver-input-file-unified")
-      .setInputFiles(fixtureNames.map((fixture) => path.join(FIXTURE_DIR, fixture)));
+    await chooseFilesByKeyboard(
+      page,
+      page.locator("#rom-weaver-input-file-unified"),
+      fixtureNames.map((fixture) => path.join(FIXTURE_DIR, fixture)),
+    );
 
     const apply = page.locator("#rom-weaver-button-apply");
     await apply.waitFor({ state: "visible" });
@@ -1201,9 +1204,10 @@ const runApplyJourney = async (createContext, baseUrl, name, fixtureNames) => {
       return button instanceof HTMLButtonElement && !button.disabled && /apply/i.test(button.textContent || "");
     });
 
+    await tabTo(page, apply);
     const [download] = await Promise.all([
       page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
-      apply.click(),
+      page.keyboard.press("Enter"),
     ]);
     const downloadPath = await download.path();
     if (!downloadPath) throw new Error(`${name}: Playwright did not expose the downloaded file`);
@@ -1361,6 +1365,9 @@ const main = async () => {
         }
       });
     if (RUN_AUDITS) {
+      await scenario("accessible navigation", (createContext) =>
+        runAccessibleNavigationAudit(createContext, previewBaseUrl),
+      );
       await runAuditPhases(
         () => scenario("hydration", (createContext) => runHydrationAudit(createContext, previewBaseUrl)),
         () => scenario("accessibility", (createContext) => runAccessibilityAudit(createContext, previewBaseUrl)),
