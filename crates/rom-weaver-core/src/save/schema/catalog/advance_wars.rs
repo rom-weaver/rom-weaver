@@ -14,8 +14,8 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
         bytes: b"wars".to_vec(),
     }];
     game.fields = vec![
-        FieldDefinition::new("points".into(), "Points".into(), 0x386, Storage::U32Le).max(9999),
-        FieldDefinition::new("coins".into(), "Coins".into(), 0x382, Storage::U16Le).max(999),
+        catalog_field("points", "Points", 0x386, Storage::U32Le).max(9999),
+        catalog_field("coins", "Coins", 0x382, Storage::U16Le).max(999),
     ];
     for field in &mut game.fields {
         field.behavior.group = Some("system_record".into());

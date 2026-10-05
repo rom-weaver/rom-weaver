@@ -10,73 +10,55 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
 
 fn game_mario_party_2_canonical_eeprom() -> GameDefinition {
     let fields = vec![
-        FieldDefinition::new("coins".into(), "Coins".into(), 120, Storage::U32Be),
-        FieldDefinition::new(
-            "bowser_land".into(),
-            "Bowser Land unlocked".into(),
-            128,
-            Storage::Bit,
-        )
-        .bit(1),
-        FieldDefinition::new(
-            "credits_machine".into(),
-            "Credits Machine unlocked".into(),
+        catalog_field("coins", "Coins", 120, Storage::U32Be),
+        catalog_field("bowser_land", "Bowser Land unlocked", 128, Storage::Bit).bit(1),
+        catalog_field(
+            "credits_machine",
+            "Credits Machine unlocked",
             129,
             Storage::Bit,
         )
         .bit(3),
-        FieldDefinition::new(
-            "boards.western_land".into(),
-            "Western Land played".into(),
+        catalog_field(
+            "boards.western_land",
+            "Western Land played",
             128,
             Storage::Bit,
         )
         .bit(5),
-        FieldDefinition::new(
-            "boards.pirate_land".into(),
-            "Pirate Land played".into(),
+        catalog_field(
+            "boards.pirate_land",
+            "Pirate Land played",
             128,
             Storage::Bit,
         )
         .bit(6),
-        FieldDefinition::new(
-            "boards.horror_land".into(),
-            "Horror Land played".into(),
+        catalog_field(
+            "boards.horror_land",
+            "Horror Land played",
             128,
             Storage::Bit,
         )
         .bit(7),
-        FieldDefinition::new(
-            "boards.space_land".into(),
-            "Space Land played".into(),
-            129,
-            Storage::Bit,
-        )
-        .bit(0),
-        FieldDefinition::new(
-            "boards.mystery_land".into(),
-            "Mystery Land played".into(),
+        catalog_field("boards.space_land", "Space Land played", 129, Storage::Bit).bit(0),
+        catalog_field(
+            "boards.mystery_land",
+            "Mystery Land played",
             129,
             Storage::Bit,
         )
         .bit(1),
-        FieldDefinition::new(
-            "boards.bowser_land".into(),
-            "Bowser Land played".into(),
+        catalog_field(
+            "boards.bowser_land",
+            "Bowser Land played",
             129,
             Storage::Bit,
         )
         .bit(2),
-        FieldDefinition::new(
-            "drivers_ed.played".into(),
-            "Driver's Ed played".into(),
-            43,
-            Storage::Bit,
-        )
-        .bit(0),
-        FieldDefinition::new(
-            "drivers_ed.unlocked".into(),
-            "Driver's Ed unlocked".into(),
+        catalog_field("drivers_ed.played", "Driver's Ed played", 43, Storage::Bit).bit(0),
+        catalog_field(
+            "drivers_ed.unlocked",
+            "Driver's Ed unlocked",
             52,
             Storage::Bit,
         )

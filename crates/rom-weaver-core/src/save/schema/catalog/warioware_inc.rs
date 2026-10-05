@@ -36,15 +36,8 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
         section_id: None,
         warning: None,
     });
-    game.fields.push(
-        FieldDefinition::new(
-            "gender".into(),
-            "Gender (0: male, 1: female)".into(),
-            0x1c,
-            Storage::U8,
-        )
-        .max(1),
-    );
+    game.fields
+        .push(catalog_field("gender", "Gender (0: male, 1: female)", 0x1c, Storage::U8).max(1));
     for (index, id) in [
         (0, "introduction"),
         (1, "jimmy_blue"),

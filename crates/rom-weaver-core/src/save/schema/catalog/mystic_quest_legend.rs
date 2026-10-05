@@ -18,9 +18,9 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
         let check = Check { when: None, assert: Condition::new(move |bytes| Ok(u16::from_le_bytes([bytes[base + 4], bytes[base + 5]]) == checksum(bytes, base))), code: "mystic_quest_checksum".into(), message: "the Mystic Quest slot checksum is invalid".into(), section_id: None, warning: None };
         GameDefinition {
             fields: vec![
-                FieldDefinition::new("money".into(), "Money".into(), base + 0xa6, Storage::U24Le).min(0).max(9_999_999),
-                FieldDefinition::new("location".into(), "Location code".into(), base + 0xb3, Storage::U8),
-                FieldDefinition::new("party.hero.level".into(), "Hero level".into(), base + 0x16, Storage::U8).min(1).max(41),
+                catalog_field("money", "Money", base + 0xa6, Storage::U24Le).min(0).max(9_999_999),
+                catalog_field("location", "Location code", base + 0xb3, Storage::U8),
+                catalog_field("party.hero.level", "Hero level", base + 0x16, Storage::U8).min(1).max(41),
             ],
             description: format!("Edits independent scalar fields in slot {}. Equipment, spell, and inventory changes with coupled rules are omitted.", slot + 1),
             signatures: vec![SignatureDefinition { offset: base, bytes: b"FF0!".to_vec() }],

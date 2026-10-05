@@ -18,8 +18,8 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
         }).collect();
         GameDefinition {
             fields: vec![
-                FieldDefinition::new("deaths".into(), "Death count".into(), 0x22, Storage::U16Be).max(999),
-                FieldDefinition::new("rupees".into(), "Rupees (basic wallet range)".into(), 0x34, Storage::U16Be).max(99),
+                catalog_field("deaths", "Death count", 0x22, Storage::U16Be).max(999),
+                catalog_field("rupees", "Rupees (basic wallet range)", 0x34, Storage::U16Be).max(99),
             ].into_iter().map(|field| field.behavior(field::FieldBehavior { group: Some("file".into()), ..Default::default() })).collect(),
             description: "Edits death count and 0–99 rupees in one occupied file of canonical big-endian 32 KiB N64 SRAM. Uses the primary save or valid backup, and repairs both save copies. Slot padding and other files remain unchanged. GameCube, iQue and byte-swapped saves are unsupported. Requires a game-made template.".into(),
             runtime: runtime::Runtime { logical_size: Some(0x1354),

@@ -29,9 +29,9 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
         let base = slot * 0x90;
         GameDefinition {
             fields: vec![
-                FieldDefinition::new("playtime_seconds".into(), "Playtime in seconds".into(), base + 8, Storage::U32Be),
-                FieldDefinition::new("hard_mode".into(), "Hard difficulty".into(), base + 0xe, Storage::Bit).bit(7),
-                FieldDefinition::new("rainbow_palace".into(), "Rainbow Palace unlocked".into(), base + 0x19, Storage::Bit).bit(7),
+                catalog_field("playtime_seconds", "Playtime in seconds", base + 8, Storage::U32Be),
+                catalog_field("hard_mode", "Hard difficulty", base + 0xe, Storage::Bit).bit(7),
+                catalog_field("rainbow_palace", "Rainbow Palace unlocked", base + 0x19, Storage::Bit).bit(7),
             ],
             signatures: vec![SignatureDefinition { offset: 0, bytes: b"BAKU".to_vec() }],
             checksums: checksums(base),

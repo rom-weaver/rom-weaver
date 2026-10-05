@@ -34,105 +34,105 @@ fn game_super_mario_world_schema() -> GameDefinition {
         );
     }
     fields.extend([
-        FieldDefinition::new(
-            "slot_1.players.player_1.submap".into(),
-            "Player 1 submap".into(),
+        catalog_field(
+            "slot_1.players.player_1.submap",
+            "Player 1 submap",
             111,
             Storage::U8,
         ),
-        FieldDefinition::new(
-            "slot_1.players.player_1.animation".into(),
-            "Player 1 overworld animation".into(),
+        catalog_field(
+            "slot_1.players.player_1.animation",
+            "Player 1 overworld animation",
             113,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_1.players.player_1.x".into(),
-            "Player 1 X position".into(),
+        catalog_field(
+            "slot_1.players.player_1.x",
+            "Player 1 X position",
             117,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_1.players.player_1.y".into(),
-            "Player 1 Y position".into(),
+        catalog_field(
+            "slot_1.players.player_1.y",
+            "Player 1 Y position",
             119,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_1.players.player_1.x_tile".into(),
-            "Player 1 X tile pointer".into(),
+        catalog_field(
+            "slot_1.players.player_1.x_tile",
+            "Player 1 X tile pointer",
             125,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_1.players.player_1.y_tile".into(),
-            "Player 1 Y tile pointer".into(),
+        catalog_field(
+            "slot_1.players.player_1.y_tile",
+            "Player 1 Y tile pointer",
             127,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_1.players.player_2.submap".into(),
-            "Player 2 submap".into(),
+        catalog_field(
+            "slot_1.players.player_2.submap",
+            "Player 2 submap",
             112,
             Storage::U8,
         ),
-        FieldDefinition::new(
-            "slot_1.players.player_2.animation".into(),
-            "Player 2 overworld animation".into(),
+        catalog_field(
+            "slot_1.players.player_2.animation",
+            "Player 2 overworld animation",
             115,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_1.players.player_2.x".into(),
-            "Player 2 X position".into(),
+        catalog_field(
+            "slot_1.players.player_2.x",
+            "Player 2 X position",
             121,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_1.players.player_2.y".into(),
-            "Player 2 Y position".into(),
+        catalog_field(
+            "slot_1.players.player_2.y",
+            "Player 2 Y position",
             123,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_1.players.player_2.x_tile".into(),
-            "Player 2 X tile pointer".into(),
+        catalog_field(
+            "slot_1.players.player_2.x_tile",
+            "Player 2 X tile pointer",
             129,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_1.players.player_2.y_tile".into(),
-            "Player 2 Y tile pointer".into(),
+        catalog_field(
+            "slot_1.players.player_2.y_tile",
+            "Player 2 Y tile pointer",
             131,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_1.progress.switch_palaces.yellow".into(),
-            "Yellow Switch Palace".into(),
+        catalog_field(
+            "slot_1.progress.switch_palaces.yellow",
+            "Yellow Switch Palace",
             133,
             Storage::Bool,
         ),
-        FieldDefinition::new(
-            "slot_1.progress.switch_palaces.green".into(),
-            "Green Switch Palace".into(),
+        catalog_field(
+            "slot_1.progress.switch_palaces.green",
+            "Green Switch Palace",
             134,
             Storage::Bool,
         ),
-        FieldDefinition::new(
-            "slot_1.progress.switch_palaces.red".into(),
-            "Red Switch Palace".into(),
+        catalog_field(
+            "slot_1.progress.switch_palaces.red",
+            "Red Switch Palace",
             135,
             Storage::Bool,
         ),
-        FieldDefinition::new(
-            "slot_1.progress.switch_palaces.blue".into(),
-            "Blue Switch Palace".into(),
+        catalog_field(
+            "slot_1.progress.switch_palaces.blue",
+            "Blue Switch Palace",
             136,
             Storage::Bool,
         ),
-        FieldDefinition::new(
-            "slot_1.progress.exits_completed".into(),
-            "Exits completed".into(),
+        catalog_field(
+            "slot_1.progress.exits_completed",
+            "Exits completed",
             140,
             Storage::U8,
         ),

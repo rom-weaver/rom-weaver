@@ -52,45 +52,35 @@ fn game(id: &str, region: &str, shift: usize) -> GameDefinition {
     };
     GameDefinition {
         fields: vec![
-            FieldDefinition::new("master.hp".into(), "Master HP".into(), 0x1246, Storage::U8)
+            catalog_field("master.hp", "Master HP", 0x1246, Storage::U8)
                 .min(1)
                 .max(24),
-            FieldDefinition::new(
-                "master.level".into(),
-                "Master level".into(),
-                level_offset,
-                Storage::U8,
-            )
-            .min(1)
-            .max(17)
-            .behavior(field::FieldBehavior {
-                on_edit: vec![Store {
-                    when: None,
-                    destination: Scalar {
-                        offset: level_offset + 6,
-                        storage: Storage::U16Le,
-                        mask: None,
-                    },
-                    value: ReadValue::new(move |bytes| {
-                        let index = usize::from(bytes[level_offset])
-                            .checked_sub(1)
-                            .ok_or_else(|| invalid("ActRaiser level must be from 1 to 17"))?;
-                        experience
-                            .get(index)
-                            .copied()
-                            .ok_or_else(|| invalid("ActRaiser level must be from 1 to 17"))
-                    }),
-                }],
-                ..Default::default()
-            }),
-            FieldDefinition::new(
-                "master.mp".into(),
-                "Master MP".into(),
-                0x1448 - shift,
-                Storage::U16Le,
-            )
-            .min(0)
-            .max(10),
+            catalog_field("master.level", "Master level", level_offset, Storage::U8)
+                .min(1)
+                .max(17)
+                .behavior(field::FieldBehavior {
+                    on_edit: vec![Store {
+                        when: None,
+                        destination: Scalar {
+                            offset: level_offset + 6,
+                            storage: Storage::U16Le,
+                            mask: None,
+                        },
+                        value: ReadValue::new(move |bytes| {
+                            let index = usize::from(bytes[level_offset])
+                                .checked_sub(1)
+                                .ok_or_else(|| invalid("ActRaiser level must be from 1 to 17"))?;
+                            experience
+                                .get(index)
+                                .copied()
+                                .ok_or_else(|| invalid("ActRaiser level must be from 1 to 17"))
+                        }),
+                    }],
+                    ..Default::default()
+                }),
+            catalog_field("master.mp", "Master MP", 0x1448 - shift, Storage::U16Le)
+                .min(0)
+                .max(10),
         ],
         description: format!(
             "Edits Master HP, level, and MP for {region}. Level edits update the regional next-level experience value. Select the save's region explicitly."
