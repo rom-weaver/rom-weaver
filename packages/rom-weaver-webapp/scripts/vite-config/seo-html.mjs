@@ -5,9 +5,8 @@ import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "../../src/
 import { repoRoot } from "./paths.mjs";
 
 export const createRobotsSource = (channel) =>
-  channel === "prod"
-    ? "User-agent: *\nAllow: /\nSitemap: https://rom-weaver.com/sitemap.xml\n"
-    : "User-agent: *\nDisallow: /\n";
+  `User-agent: *\nContent-Signal: ai-train=${channel === "prod" ? "yes" : "no"}, search=${channel === "prod" ? "yes" : "no"}, ai-input=${channel === "prod" ? "yes" : "no"}\n` +
+  (channel === "prod" ? "Allow: /\nSitemap: https://rom-weaver.com/sitemap.xml\n" : "Disallow: /\n");
 
 const replaceMetaContent = (html, attribute, name, content) =>
   html.replace(new RegExp(`(<meta\\s+${attribute}="${name}"\\s+content=")[^"]*(")`), `$1${content}$2`);

@@ -38,7 +38,7 @@ export const writeCloudflareHeadersAsset = (channel) => {
         // document load. The service worker script needs the same treatment and
         // inherits it from here; only /assets/* detaches it below.
         "Cache-Control": "no-cache",
-        "Content-Signal": `ai-train=no, search=${channel === "prod" ? "yes" : "no"}, ai-input=yes`,
+        "Content-Signal": `ai-train=${channel === "prod" ? "yes" : "no"}, search=${channel === "prod" ? "yes" : "no"}, ai-input=${channel === "prod" ? "yes" : "no"}`,
         ...(channel === "prod" ? {} : { "X-Robots-Tag": "noindex, nofollow" }),
       };
       const distDir = path.resolve(rootDir, outDir);
