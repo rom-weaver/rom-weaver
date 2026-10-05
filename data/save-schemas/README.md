@@ -107,7 +107,7 @@ These profiles require explicit game selection and a game-made template. They ex
 | Super Smash Bros. | 1 | Canonical 32 KiB N64 SRAM | Independent unlocks and arcade score/bonus fields |
 | Paper Mario | 4 | Canonical 128 KiB N64 FlashRAM | Coins, Star Pieces, and Star Points; newest occupied record for each file |
 | The Legend of Zelda: Ocarina of Time | 3 | Canonical 32 KiB N64 SRAM | Death count and rupees in the basic wallet range, 0–99; primary/backup recovery and paired writes |
-| Banjo-Kazooie | 3 | Canonical 2 KiB N64 EEPROM | Eggs, red feathers, and gold feathers; fixed file profiles |
+| Banjo-Kazooie | 3 | Canonical 512 B N64 EEPROM | Eggs, red feathers, and gold feathers; fixed file profiles |
 | Tekken | 45 | Single-block save in a raw 128 KiB PS1 card | Difficulty and character unlocks |
 | Rayman | 45 | Single-block save in a raw 128 KiB PS1 card | Lives and Tings |
 | Castlevania: Symphony of the Night | 60 | Single-block save in a raw 128 KiB PS1 card | Gold with its preview and experience |
