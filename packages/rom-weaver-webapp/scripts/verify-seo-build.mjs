@@ -55,8 +55,8 @@ const assertCount = (source, expected, count, label) => {
 // was measuring.
 const countVisibleWords = (source) =>
   source
-    .replace(/<script[\s\S]*?<\/script>/g, " ")
-    .replace(/<style>[\s\S]*?<\/style>/g, " ")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, " ")
     .replace(/<[^>]+>/g, " ")
     .trim()
     .split(/\s+/).length;

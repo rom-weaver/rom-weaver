@@ -2,15 +2,15 @@ import { minifySync } from "vite";
 
 // Parser-time scripts stay inline so the shell can use their state before the
 // module bundle runs. Minify them after rendering without changing HTML whitespace.
-const INLINE_SCRIPT = /<script([^>]*)>([\s\S]+?)<\/script>/g;
-const SCRIPT_TYPE = /\btype\s*=\s*"([^"]*)"/;
+const INLINE_SCRIPT = /<script\b([^>]*)>([\s\S]+?)<\/script\s*>/gi;
+const SCRIPT_TYPE = /\btype\s*=\s*"([^"]*)"/i;
 // A classic script and a module both minify; anything else (`application/ld+json`
 // above all) is data this must not rewrite.
 const EXECUTABLE_TYPES = new Set(["", "module", "text/javascript"]);
 
 /** @param {string} attributes */
 const isMinifiableScript = (attributes) => {
-  if (/\bsrc\s*=/.test(attributes)) return false;
+  if (/\bsrc\s*=/i.test(attributes)) return false;
   return EXECUTABLE_TYPES.has(SCRIPT_TYPE.exec(attributes)?.[1] ?? "");
 };
 

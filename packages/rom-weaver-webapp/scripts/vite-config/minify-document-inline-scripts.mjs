@@ -6,10 +6,10 @@ import { rootDir } from "./paths.mjs";
 // Head spacing has no visual effect. Script and style contents MUST retain their whitespace.
 export const minifyDocumentHead = (html) =>
   html.replace(
-    /<head>([\s\S]*?)<\/head>/,
+    /<head>([\s\S]*?)<\/head>/i,
     (_, head) =>
       `<head>${head
-        .split(/(<script\b[^>]*>[\s\S]*?<\/script>|<style\b[^>]*>[\s\S]*?<\/style>)/g)
+        .split(/(<script\b[^>]*>[\s\S]*?<\/script>|<style\b[^>]*>[\s\S]*?<\/style>)/gi)
         .map((part, index) => (index % 2 ? part : part.replace(/>\s+</g, "><").trim()))
         .join("")}</head>`,
   );

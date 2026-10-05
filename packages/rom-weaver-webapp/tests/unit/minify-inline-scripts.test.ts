@@ -14,6 +14,19 @@ describe("inline script minification", () => {
     expect(html).not.toContain("\n");
   });
 
+  it("minifies uppercase scripts", () => {
+    expect(minifyInlineScripts("<SCRIPT>window.a = 1; // note\n</SCRIPT>")).toBe("<script>window.a=1;</script>");
+  });
+
+  it("preserves uppercase data and external scripts", () => {
+    for (const html of [
+      '<SCRIPT TYPE="application/ld+json">{"name": "test"}</SCRIPT>',
+      '<SCRIPT SRC="app.js"> fallback </SCRIPT>',
+    ]) {
+      expect(minifyInlineScripts(html)).toBe(html);
+    }
+  });
+
   it("keeps top-level names another inline script calls", () => {
     const html = minifyInlineScripts(
       "<script>function resolveShellIdentity(){window.ok=true}</script><script>resolveShellIdentity()</script>",
@@ -40,6 +53,11 @@ describe("inline script minification", () => {
 });
 
 describe("document head minification", () => {
+  it("preserves uppercase script and style contents", () => {
+    const content = '<SCRIPT>window.text = "a>  <b";</SCRIPT><STYLE>p::before { content: "a>  <b"; }</STYLE>';
+    expect(minifyDocumentHead(`<head>  ${content}  </head>`)).toBe(`<head>${content}</head>`);
+  });
+
   it("keeps script, style, and body whitespace while removing head spacing", () => {
     const script = '<script>window.text = "a>  <b"; // Keep the newline.\nwindow.ok = true;</script>';
     const style = '<style>body::before { content: "a>  <b"; }</style>';
