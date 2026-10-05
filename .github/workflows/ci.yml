@@ -10,6 +10,7 @@ on:
         type: choice
         options: [none, nightly, beta, prod]
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches:
       - main
@@ -28,12 +29,12 @@ on:
 permissions:
   contents: read
 
-# Superseded pushes to a branch are pointless work; on main every commit is a
-# release candidate, so those runs are allowed to finish.
+# Main validation runs MUST finish independently as release candidates. Publication
+# jobs serialize destinations separately and reject superseded automatic builds.
 # The nightly gets its own group: it runs on main's ref, and a pending run in a
 # shared group would be replaced by the next push (or replace it).
 concurrency:
-  group: ci-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
+  group: ci-${{ github.ref == 'refs/heads/main' && github.event_name != 'schedule' && github.run_id || (github.event_name == 'schedule' && 'nightly' || github.ref) }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
@@ -137,7 +138,7 @@ jobs:
           (github.ref_type == 'tag' ||
           (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_channel != 'none') ||
           steps.classify.outputs.webapp == 'true' ||
-          github.event_name == 'pull_request') &&
+          (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'preview'))) &&
           (github.event_name != 'workflow_dispatch' || github.event.inputs.deploy_channel != 'none') &&
           (github.event_name != 'pull_request' ||
           (github.event.pull_request.head.repo.full_name == github.repository &&
@@ -213,6 +214,7 @@ jobs:
           (steps.plan.outputs.targets != '' &&
           steps.plan.outputs.targets != '[]') ||
           (github.event_name == 'pull_request' &&
+          contains(github.event.pull_request.labels.*.name, 'preview') &&
           github.event.pull_request.head.repo.full_name == github.repository &&
           github.event.pull_request.user.login != 'dependabot[bot]')
         run: echo "selected=true" >> "$GITHUB_OUTPUT"
@@ -574,17 +576,30 @@ jobs:
       && contains(needs.changes.outputs.docker_matrix, 'rom-weaver-cli')
     permissions:
       contents: read
+      actions: read
       packages: write
       # Attesting the nightly image, so it carries the same signed provenance as
       # every image the release fan-out pushes.
       attestations: write
       artifact-metadata: write
       id-token: write
+    concurrency:
+      group: publish-docker-cli-nightly
+      cancel-in-progress: false
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Check publication freshness
+        id: freshness
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PUBLICATION_JOB_NAME: Docker publish (CLI, nightly)
+          PUBLICATION_STEP_NAME: Assemble the manifest list
+        run: node scripts/ci/publication-freshness.mjs
+
       - name: Log in to GitHub Container Registry
+        if: steps.freshness.outputs.fresh == 'true'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -592,6 +607,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Assemble the manifest list
+        if: steps.freshness.outputs.fresh == 'true'
         id: manifest
         uses: ./.github/actions/docker-manifest
         with:
@@ -602,6 +618,7 @@ jobs:
       # The manifest list, not either architecture's image: that is what a pull
       # of `:nightly` resolves against.
       - name: Sign build provenance
+        if: steps.freshness.outputs.fresh == 'true'
         uses: ./.github/actions/attest-retry
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/rom-weaver-cli
@@ -687,16 +704,29 @@ jobs:
       && needs.docker-prebuilt.result == 'success'
     permissions:
       contents: read
+      actions: read
       packages: write
       # Same signed provenance the release fan-out attaches to every image.
       attestations: write
       artifact-metadata: write
       id-token: write
+    concurrency:
+      group: publish-docker-webapp-nightly
+      cancel-in-progress: false
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Check publication freshness
+        id: freshness
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PUBLICATION_JOB_NAME: Docker publish (webapp, nightly)
+          PUBLICATION_STEP_NAME: Assemble the manifest list
+        run: node scripts/ci/publication-freshness.mjs
+
       - name: Log in to GitHub Container Registry
+        if: steps.freshness.outputs.fresh == 'true'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -704,6 +734,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Assemble the manifest list
+        if: steps.freshness.outputs.fresh == 'true'
         id: manifest
         uses: ./.github/actions/docker-manifest
         with:
@@ -712,6 +743,7 @@ jobs:
           tags: ghcr.io/${{ github.repository_owner }}/rom-weaver-webapp:nightly
 
       - name: Sign build provenance
+        if: steps.freshness.outputs.fresh == 'true'
         uses: ./.github/actions/attest-retry
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/rom-weaver-webapp
@@ -730,11 +762,12 @@ jobs:
       size: ${{ steps.size.outcome }}
     # Skipped whole rather than started with every step gated off. Webapp tests
     # and `docker-prebuilt` still select this through `changes.webapp`, while
-    # first-party pull requests also select it to build their preview bundle.
+    # first-party pull requests with the preview label also select their bundle.
     # The `Plumbing` aggregate below is the required check.
     if: >-
       needs.changes.outputs.webapp == 'true' ||
       (github.event_name == 'pull_request' &&
+      contains(github.event.pull_request.labels.*.name, 'preview') &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.user.login != 'dependabot[bot]')
     env:
@@ -883,7 +916,7 @@ jobs:
           REPO_LINT_RESULT: ${{ needs.repo-lint.result }}
           DOCKER_SELECTED: ${{ needs.changes.outputs.docker_matrix != '[]' }}
           DOCKER_RESULT: ${{ needs.docker.result }}
-          WASM_SELECTED: ${{ needs.changes.outputs.webapp == 'true' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') }}
+          WASM_SELECTED: ${{ needs.changes.outputs.webapp == 'true' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'preview') && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]') }}
           WASM_RESULT: ${{ needs.wasm.result }}
           DOCKER_PREBUILT_SELECTED: ${{ needs.changes.outputs.docker_prebuilt }}
           DOCKER_PREBUILT_RESULT: ${{ needs.docker-prebuilt.result }}
@@ -1772,6 +1805,7 @@ jobs:
     continue-on-error: true
     permissions:
       contents: read
+      actions: read
       statuses: write
       deployments: write
     # `!cancelled()` because deploy-preview-fast is skipped outright on tags and
@@ -1797,6 +1831,9 @@ jobs:
       fail-fast: false
       matrix:
         target: ${{ fromJSON(needs.changes.outputs.deploy_targets) }}
+    concurrency:
+      group: publish-pages-${{ matrix.target.project }}-${{ matrix.target.branch }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
         with:
@@ -1809,7 +1846,16 @@ jobs:
           fetch-depth: 60
           fetch-tags: true
 
+      - name: Check publication freshness
+        id: freshness
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PUBLICATION_JOB_NAME: Webapp deploy (${{ matrix.target.channel }})
+          PUBLICATION_STEP_NAME: Build and deploy
+        run: node scripts/ci/publication-freshness.mjs
+
       - name: Mark deployment pending
+        if: steps.freshness.outputs.fresh == 'true'
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1821,12 +1867,14 @@ jobs:
         run: node scripts/ci/deployment-status.mjs
 
       - name: Download WASM artifact
+        if: steps.freshness.outputs.fresh == 'true'
         uses: actions/download-artifact@v8
         with:
           name: wasm-prod
           path: packages/rom-weaver-webapp/src/wasm
 
       - name: Build and deploy
+        if: steps.freshness.outputs.fresh == 'true'
         id: pages
         uses: ./.github/actions/deploy-webapp-pages
         with:
@@ -1839,7 +1887,7 @@ jobs:
           cloudflare-account-id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Publish deployment status
-        if: always()
+        if: steps.freshness.outputs.fresh == 'true' && (always())
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1866,14 +1914,14 @@ jobs:
       # read-merge-write. It skips with a notice until CLOUDFLARE_ZONE_ID is
       # set and the API token carries Zone -> Cache Rules -> Edit.
       - name: Ensure zone cache rules for assets and negotiated pages
-        if: matrix.target.channel == 'nightly'
+        if: steps.freshness.outputs.fresh == 'true' && (matrix.target.channel == 'nightly')
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
         run: node scripts/ci/ensure-cloudflare-assets-cache-rule.mjs
 
       - name: Purge negotiated page cache after custom-domain deployment
-        if: success() && matrix.target.channel != 'preview' && steps.pages.outputs.url != ''
+        if: steps.freshness.outputs.fresh == 'true' && (success() && matrix.target.channel != 'preview' && steps.pages.outputs.url != '')
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
@@ -1881,7 +1929,7 @@ jobs:
         run: node scripts/ci/purge-cloudflare-pages-cache.mjs
 
       - name: Delete superseded deployments for this pull request
-        if: ${{ !cancelled() && matrix.target.channel == 'preview' }}
+        if: ${{ steps.freshness.outputs.fresh == 'true' && (!cancelled() && matrix.target.channel == 'preview') }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
