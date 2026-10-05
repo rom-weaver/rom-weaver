@@ -482,17 +482,11 @@ const Masthead = ({
       {buildTag}
       {version && showWhatsNewPrompt ? (
         <button
-          className="sub-chip channel-badge whats-new-prompt"
+          className="sub-chip sub-link whats-new-prompt"
           style={{
             flexShrink: 0,
             fontSize: "0.55rem",
-            letterSpacing: 0,
-            textTransform: "none",
             marginInlineStart: 4,
-            padding: "0 4px",
-            color: "var(--thread-text)",
-            background: "color-mix(in oklab, var(--thread) 10%, transparent)",
-            border: "1px solid currentColor",
           }}
           onClick={onOpenWhatsNew}
           type="button"
