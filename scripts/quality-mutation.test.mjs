@@ -91,3 +91,33 @@ test("stale outcomes are removed before invoking the tool", (context) => {
   );
   assert.throws(() => runMutation(["broad"], () => ({ status: 1 }), output), /no outcomes/);
 });
+
+test("successful diff runs with no selected mutants report no mutation evidence", (context) => {
+  const scratch = path.resolve(".agent/quality-mutation-tests");
+  fs.mkdirSync(scratch, { recursive: true });
+  const output = fs.mkdtempSync(path.join(scratch, "run-"));
+  context.after(() => fs.rmSync(output, { recursive: true, force: true }));
+  const runner = (command, args) => {
+    if (command === "git") return { status: 0, stdout: args[0] === "merge-base" ? "abc\n" : "" };
+    return { status: 0 };
+  };
+
+  assert.equal(runMutation(["diff", "main"], runner, output), 0);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(output, "summary.json"), "utf8")), {
+    caught: 0,
+    surviving: 0,
+    timeouts: 0,
+    buildFailures: 0,
+    baselineFailures: 0,
+    equivalent: 0,
+    explicitlyExcluded: [
+      {
+        path: "crates/rom-weaver-patches/src/test_support.rs",
+        reason: "Assertion and fixture helpers are not shipped behavior",
+      },
+    ],
+    exclusions: ".config/mutants.toml (scope and test-helper exclusion; no equivalent claims)",
+    survivors: [],
+    noSelectedMutants: true,
+  });
+});

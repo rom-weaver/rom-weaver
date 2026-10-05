@@ -76,3 +76,21 @@ test("whole-file review findings omit unavailable line numbers", () => {
   assert.match(summary, /review: policy.yml verification-change/);
   assert.doesNotMatch(summary, /undefined|null/);
 });
+
+test("mutation summary distinguishes an empty diff from measured outcomes", () => {
+  const summary = renderSignals(
+    { mutation: "success" },
+    {
+      mutation: {
+        caught: 0,
+        surviving: 0,
+        timeouts: 0,
+        buildFailures: 0,
+        baselineFailures: 0,
+        noSelectedMutants: true,
+      },
+    },
+  );
+  assert.match(summary, /Mutation outcomes: 0 caught/);
+  assert.match(summary, /No selected mutants; this diff provides no mutation evidence\./);
+});

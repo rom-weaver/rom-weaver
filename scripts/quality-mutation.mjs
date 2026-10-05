@@ -125,6 +125,13 @@ export function runMutation(
     );
   }
   if (mode !== "list") {
+    if (!fs.existsSync(report) && mode === "diff" && result.status === 0) {
+      const summary = mutationSummary({ outcomes: [] });
+      summary.noSelectedMutants = true;
+      fs.writeFileSync(path.join(output, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
+      console.log("No selected mutants; this diff provides no mutation evidence.");
+      return 0;
+    }
     if (!fs.existsSync(report))
       throw new Error(
         "Mutation run produced no outcomes; setup/build failure is not a caught mutation",
