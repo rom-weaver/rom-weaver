@@ -6,6 +6,8 @@ name: PR Gates
 # Scripts, allowlists, and commitlint config MUST come from the base commit.
 # Pull request titles, authors, and comments are untrusted data; they MUST NOT be executed.
 on:
+  merge_group:
+    types: [checks_requested]
   pull_request_target:
     types: [opened, reopened, synchronize, edited]
   issue_comment:
@@ -15,6 +17,29 @@ permissions:
   contents: read
 
 jobs:
+  merge-group:
+    name: Queued PR gates
+    if: github.event_name == 'merge_group'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: write
+    steps:
+      # Queue statuses MUST use trusted scripts from the base, just like PR gates.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.merge_group.base_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.18.0
+      - name: Verify queued pull request gates
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/ci/merge-group-gates.mjs
+
   cla:
     name: CLA Check
     # The CLA keyword only selects comments to check; cla-gate.mjs owns the signing rule.

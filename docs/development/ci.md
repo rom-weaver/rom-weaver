@@ -43,8 +43,8 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
 
 | Workflow | Trigger | Red build blocks a release? | Purpose |
 | --- | --- | --- | --- |
-| `ci.yml` | PR, push to `main`, `v*` tags, nightly 05:41 UTC, manual | **Yes** | Build, lint, test, deploy the webapp; the nightly builds the full native matrix |
-| `pull-request.yml` | PR (open/reopen/sync/edit), PR comment | **Yes** | The required `CLA Signed` and `PR Title Lint` checks |
+| `ci.yml` | PR, merge group, push to `main`, `v*` tags, nightly 05:41 UTC, manual | **Yes** | Build, lint, test, deploy the webapp; the nightly builds the full native matrix |
+| `pull-request.yml` | PR (open/reopen/sync/edit), PR comment, merge group | **Yes** | The required `CLA Signed` and `PR Title Lint` checks |
 | `dependabot-auto-merge.yml` | Dependabot PR open/reopen/sync | No | Arm native squash auto-merge for patch and minor updates after required checks pass |
 | `codeql.yml` | source push to `main`, weekly, manual | No | Static analysis into the Security tab |
 | `coverage.yml` | weekly Sunday 06:43 UTC, manual | No | Rust + React coverage reports |
@@ -61,6 +61,10 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
 | `attestation-dry-run-called.yml` | called by `attestation-dry-run.yml` | No | Prove that attestation permissions survive a reusable-workflow boundary |
 
 `pull-request.yml` posts two required commit statuses against the pull request head: `CLA Signed` and `PR Title Lint`. It uses `pull_request_target` so fork contributions can receive statuses. It reads scripts, configuration, and the allowlist from the base commit; it never executes contributor code.
+
+The default branch uses a squash merge queue. Both required workflows handle `merge_group.checks_requested`. CI classifies the changes from the merge group's base SHA and tests the combined commit. Queue runs never plan a webapp deployment or publish Docker images; those publications remain on the existing PR, main-push, tag, and manual paths.
+
+On a merge group, `pull-request.yml` reads the queue through GitHub's API and verifies the latest `PR Title Lint` and `CLA Signed` statuses on every included PR head. Both must be successful statuses from GitHub Actions before the same contexts become successful on the group SHA. Missing entries, incomplete queue data, API failures, and missing or unsuccessful statuses fail both group gates. The script comes from the merge group's base commit, and this path cannot record CLA signatures.
 
 The title job runs commitlint on the pull request title. Squash merges use that title as the commit subject. [Commit conventions](commits.md) owns the title format.
 
