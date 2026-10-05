@@ -26,7 +26,8 @@ The inlined tree is not byte-identical to the release. Audited against 0.8.3 on
 `crate::xdvdfs::` back to `crate::`, and diffing: 14 of 16 files pair up and
 differ by 238 lines. Unlike nod, formatting is NOT a factor here - neither
 upstream nor this repo has a rustfmt.toml, so both use stable defaults. Every
-difference falls into one of these, and there are NO functional divergences:
+difference in that audit falls into the categories below. The later safety
+category records a functional divergence added after the audit:
 
   features    The pinned set (std, read, write, sync on; logging, checksum,
               ciso_support off) is resolved rather than gated, so
@@ -50,6 +51,12 @@ difference falls into one of these, and there are NO functional divergences:
   deps        layout.rs drops `#[repr(C)]` on a bitfield newtype - proc-bitfield
               0.5 makes those `#[repr(transparent)]` itself and the explicit
               attribute became a hard error. Layout is unchanged.
+  safety      read.rs rejects repeated directory-tree node offsets and directory
+              ancestor sectors during lookup and recursion with the existing
+              util.rs error type's CyclicDirectory variant. Image rebuilds use
+              the guarded lookup. Valid traversal order and output bytes are
+              unchanged; empty directories and shared non-ancestor extents are
+              accepted. Added 2026-10-05 to bound malformed-image traversal.
   tests       layout.rs's 2 test fns are dropped because they need
               `futures::executor` and `futures` is not a dependency of
               rom-weaver-containers. util.rs (3) and write/avl.rs (6) keep theirs.

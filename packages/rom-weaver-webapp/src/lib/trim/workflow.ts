@@ -1,4 +1,4 @@
-import { getPatchFileBytes } from "../../lib/input/binary-service.ts";
+import { attachPatchFileSourceRef, getPatchFileBytes } from "../../lib/input/binary-service.ts";
 import { getPrimaryInputAsset } from "../../lib/input/input-assets.ts";
 import { prepareInputAssets } from "../../lib/input/input-preparation-service.ts";
 import { getProgressEventPercent } from "../../presentation/workflow-presentation.ts";
@@ -200,13 +200,14 @@ const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Prom
       }),
     () => ({ worker: true }),
   );
-  const rawSize = result.sizeSummary?.outputSize ?? result.output.size;
+  const rawSize = result.sizeSummary?.rawSize ?? result.sizeSummary?.outputSize ?? result.output.size;
+  const logicalInputSize = result.sizeSummary?.inputSize ?? inputSize;
   if (compression === "none") {
     return {
       ...result,
       sizeSummary: {
         ...result.sizeSummary,
-        inputSize,
+        inputSize: logicalInputSize,
         outputSize: result.output.size,
         rawSize,
       },
@@ -217,9 +218,22 @@ const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Prom
   // trim output on the main thread. Archive compression reads the bytes synchronously and needs them.
   const trimmedFile = await createPatchFileFromPublicOutput(
     result.output,
-    rawTrimFileName,
+    result.output.fileName || rawTrimFileName,
     isRomSpecificCompressionFormat(compression) ? { materializeBlob: false, preferExternalFilePath: true } : undefined,
   );
+  if (
+    isRomSpecificCompressionFormat(compression) &&
+    result.output.path &&
+    getFileNameExtension(result.output.fileName) === "rvz" &&
+    getFileNameExtension(result.output.path) !== "rvz"
+  ) {
+    const snapshot = await result.output.vfs.getFile?.(result.output.path);
+    if (!snapshot) throw new Error("Trim output cannot be staged with its actual format");
+    attachPatchFileSourceRef(trimmedFile, {
+      fileName: result.output.fileName,
+      source: new File([snapshot], result.output.fileName, { type: snapshot.type }),
+    });
+  }
   const output = await createCompressedTrimOutput(trimmedFile, compression);
   const compressionTimeMs = roundElapsedMs(output?.timing);
   return {
@@ -227,9 +241,9 @@ const runTrimWorkflow = async (input: TrimInput, runtime: WorkflowRuntime): Prom
     sizeSummary: {
       ...result.sizeSummary,
       ...(compressionTimeMs === undefined ? {} : { compressionTimeMs }),
-      inputSize,
+      inputSize: logicalInputSize,
       outputSize: output.size,
-      rawSize: trimmedFile.fileSize,
+      rawSize,
     },
   };
 };

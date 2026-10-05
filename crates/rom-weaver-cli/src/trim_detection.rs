@@ -27,14 +27,14 @@ impl CliApp {
             return Some(kind);
         }
 
-        if self.is_rvz_scrub_candidate(path) {
-            return Some(TrimInputKind::RvzScrub);
+        if self.is_rvz_convert_candidate(path) {
+            return Some(TrimInputKind::RvzConvert);
         }
 
         None
     }
 
-    pub(super) fn is_rvz_scrub_candidate(&self, path: &Path) -> bool {
+    pub(super) fn is_rvz_convert_candidate(&self, path: &Path) -> bool {
         let recommendation = self.containers.recommend_compress_format(path);
         recommendation.format_name.eq_ignore_ascii_case("rvz")
     }
@@ -363,7 +363,7 @@ impl CliApp {
     }
 
     pub(super) fn default_trim_output_path(source: &TrimSource, extension: &str) -> PathBuf {
-        let source_extension = if source.kind == TrimInputKind::RvzScrub {
+        let source_extension = if source.kind == TrimInputKind::RvzConvert {
             "rvz"
         } else {
             source
@@ -385,7 +385,7 @@ impl CliApp {
         source: &TrimSource,
         extension: &str,
     ) -> PathBuf {
-        let source_extension = if source.kind == TrimInputKind::RvzScrub {
+        let source_extension = if source.kind == TrimInputKind::RvzConvert {
             "rvz"
         } else {
             source
@@ -404,8 +404,6 @@ impl CliApp {
             .file_stem()
             .and_then(|value| value.to_str())
             .unwrap_or("trimmed");
-        let mut output = directory.join(stem);
-        output.set_extension(extension);
-        output
+        directory.join(format!("{stem}.{extension}"))
     }
 }

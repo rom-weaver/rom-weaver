@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { brotliCompressFile } from "../../../../scripts/wasm/brotli-compress.mjs";
 import { sidecarContentType } from "../../functions/assets/content-types.js";
+import { MARKDOWN_ROUTES } from "../../functions/markdown-routes.js";
 import { rootDir } from "./paths.mjs";
 
 // Every webapp bundle carries quality-11 brotli sidecars for immutable assets
@@ -75,25 +76,31 @@ export const writeBrotliSidecars = () => {
         // Every identify asset rides the one wildcard include staged above. An exact
         // entry per pack, shard, and manifest would be redundant and eat the budget
         // asserted below.
-        // Browser and documentation chunks share routes as the page count grows.
+        // JavaScript and CSS MUST share extension routes as documentation adds chunks.
         // The asset function falls back to static serving for missing sidecars.
-        const prefix = ["identify-", "browser-", "docs-"].find((candidate) => name.startsWith(candidate));
-        const route = prefix ? `/assets/${prefix}*` : `/assets/${name}`;
+        const extension = path.extname(name);
+        const route = [".js", ".css"].includes(extension) ? `/assets/*${extension}` : `/assets/${name}`;
         if (!sidecarUrls.includes(route)) sidecarUrls.push(route);
       }
       const include = [
         ...sidecarUrls,
+        "/docs",
+        "/docs/*",
+        ...MARKDOWN_ROUTES.filter(({ path }) => !path.startsWith("/docs")).map(({ path }) => path),
         "/mcp",
         "/mcp/*",
         "/.well-known/mcp/server-card.json",
         "/.well-known/ai-catalog.json",
       ].sort();
-      if (include.length > PAGES_ROUTES_MAX_INCLUDES) {
-        throw new Error(`${include.length} function routes exceed the ${PAGES_ROUTES_MAX_INCLUDES} budget`);
+      const exclude = ["/docs/*.md"];
+      if (include.length + exclude.length > PAGES_ROUTES_MAX_INCLUDES) {
+        throw new Error(
+          `${include.length + exclude.length} function routes exceed the ${PAGES_ROUTES_MAX_INCLUDES} budget`,
+        );
       }
       fs.writeFileSync(
         path.join(distDir, "_routes.json"),
-        `${JSON.stringify({ version: 1, include, exclude: [] }, null, 2)}\n`,
+        `${JSON.stringify({ version: 1, include, exclude }, null, 2)}\n`,
       );
     },
     configResolved(config) {

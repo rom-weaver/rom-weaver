@@ -27,6 +27,7 @@ vi.mock("../../src/lib/runtime/public-output-bin-file.ts", () => ({
 }));
 vi.mock("../../src/lib/apply/patch-apply-service.ts", () => ({ toPublicOutput: mocks.toPublicOutput }));
 
+import { getPatchFileExternalSource } from "../../src/lib/input/binary-service.ts";
 import { runTrimWorkflow } from "../../src/lib/trim/workflow.ts";
 
 const source = { fileName: "game.bin", fileSize: 100, getExtension: () => "bin" };
@@ -152,6 +153,58 @@ describe("runTrimWorkflow compressed outputs", () => {
       output: { fileName: "trimmed.zip", size: 30 },
       sizeSummary: { compressionTimeMs: 12, inputSize: 100, outputSize: 30, rawSize: 50 },
     });
+  });
+
+  it("preserves the actual disc intermediate name and logical raw size", async () => {
+    const runtime = {
+      ...baseRuntime,
+      trim: {
+        trim: vi.fn(async () => ({
+          output: { fileName: "trimmed.rvz", path: "/work/trimmed.rvz", size: 7 },
+          sizeSummary: { inputSize: 100, rawSize: 100, outputSize: 7 },
+        })),
+      },
+    };
+    mocks.createPatchFileFromPublicOutput.mockResolvedValue({ fileName: "trimmed.rvz", fileSize: 7 });
+    mocks.romSpecificOutput.mockResolvedValue({ fileName: "trimmed.chd", size: 20 });
+    const result = await runTrimWorkflow(
+      {
+        source: source as never,
+        options: { output: { compression: "chd", outputName: "trimmed.chd" } },
+      },
+      runtime as never,
+    );
+    expect(mocks.createPatchFileFromPublicOutput).toHaveBeenCalledWith(expect.anything(), "trimmed.rvz", {
+      materializeBlob: false,
+      preferExternalFilePath: true,
+    });
+    expect(result.sizeSummary).toMatchObject({ inputSize: 100, rawSize: 100, outputSize: 20 });
+  });
+
+  it("remounts mislabeled disc paths from a disk-backed snapshot without reading bytes", async () => {
+    const snapshot = new File([new Uint8Array([82, 86, 90, 1])], "trimmed.iso");
+    const getFile = vi.fn(async () => snapshot);
+    const trimmedFile = { fileName: "trimmed.rvz", fileSize: 4, _lazyExternalSource: true };
+    mocks.createPatchFileFromPublicOutput.mockResolvedValue(trimmedFile);
+    mocks.romSpecificOutput.mockResolvedValue({ fileName: "trimmed.chd", size: 20 });
+    const runtime = {
+      ...baseRuntime,
+      trim: {
+        trim: vi.fn(async () => ({
+          output: { fileName: "trimmed.rvz", path: "/work/trimmed.iso", size: 4, vfs: { getFile } },
+          sizeSummary: { inputSize: 100, rawSize: 100 },
+        })),
+      },
+    };
+    await runTrimWorkflow(
+      { source: source as never, options: { output: { compression: "chd", outputName: "trimmed.chd" } } },
+      runtime as never,
+    );
+    expect(getFile).toHaveBeenCalledWith("/work/trimmed.iso");
+    const staged = getPatchFileExternalSource(trimmedFile as never);
+    expect(staged?.fileName).toBe("trimmed.rvz");
+    expect(staged?.source).toBeInstanceOf(File);
+    expect(staged?.source).toMatchObject({ name: "trimmed.rvz" });
   });
 
   it("uses the lazy output path for ROM-specific compression", async () => {

@@ -4,7 +4,7 @@ import { matchPagesHeaders, parsePagesHeaders } from "../../scripts/pages-header
 // The shape writeCloudflareHeadersAsset emits.
 const headersFile = `/*
   Cross-Origin-Embedder-Policy: require-corp
-  Content-Signal: ai-train=no, search=yes, ai-input=yes
+  Content-Signal: ai-train=yes, search=yes, ai-input=yes
   ! Link
 
 /assets/*
@@ -22,7 +22,7 @@ const rules = parsePagesHeaders(headersFile);
 describe("pages _headers matching", () => {
   it("applies the /* block to a document", () => {
     expect(matchPagesHeaders(rules, "/")).toEqual({
-      "Content-Signal": "ai-train=no, search=yes, ai-input=yes",
+      "Content-Signal": "ai-train=yes, search=yes, ai-input=yes",
       "Cross-Origin-Embedder-Policy": "require-corp",
     });
   });

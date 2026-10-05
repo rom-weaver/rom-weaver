@@ -84,6 +84,10 @@ After the production build and size check above, reuse that bundle for accessibi
 ROM_WEAVER_CHANNEL=prod ROM_WEAVER_E2E_USE_PREBUILT_DIST=1 npm run test:e2e:a11y
 ```
 
+The accessibility shard also checks keyboard navigation at desktop and mobile widths: the skip link preserving the current route and moving focus to main content, Settings and reset dialog names and focus, Escape and cancellation focus return, saving settings, and opening the file picker. It asserts focused ARIA snapshots alongside accessible-name and role checks. The raw and archive Apply journeys select files through the keyboard file picker and activate Apply through the tab order and Enter, then verify the downloaded bytes. These checks run headlessly in Chromium and WebKit using the existing Playwright dependency.
+
+Treat these as regression checks, not screen-reader certification. They do not run NVDA or VoiceOver or verify spoken live-region announcements. For those checks, use a real screen reader to import files, select and reorder patches, apply a patch, and confirm progress, errors, and completion announcements. Guidepup can automate real-reader journeys on Windows (NVDA) or macOS (VoiceOver) with a headed browser; it requires a separate platform runner.
+
 Use `test:e2e:webapp` for all Chromium E2E scenarios or `test:e2e:webapp:webkit` for WebKit with the same environment. Rebuild and recheck sizes after changes to build inputs; the prebuilt option validates the channel and required files, not source freshness. Do not reuse a bundle from an earlier revision. Running E2E without these variables builds again and defaults to the development channel.
 
 For webapp build or tooling changes, run `npm run test:scripts` from the webapp directory. From the repository root, `node --test scripts/ci/*.test.mjs` checks the change classifier and its WASM dependency coverage without compiling Rust or launching browsers. The pre-commit hook runs these CI script tests when CI files, webapp JavaScript/TypeScript, or fixture trees change, including runtime imports outside `src/wasm`.

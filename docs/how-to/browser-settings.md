@@ -25,11 +25,11 @@ The separate **Theme** and **Accent** controls in the navigation apply changes i
 ## Enable beta tools
 
 1. Open **Settings**.
-2. Select **Enable beta tools (Trim, PPF undo, and Save Editor)**.
+2. Select **Enable beta tools (Trim and Save Editor)**.
 3. Select **Save**.
 4. Open the required tool from the app's navigation.
 
-This exposes Trim, PPF Undo, and Save Editor. Cheat tools in Apply, Create, and Identify do not require this setting.
+This exposes Trim and Save Editor. PPF Undo and cheat tools in Apply, Create, and Identify do not require this setting.
 
 ## Prepare for offline use
 

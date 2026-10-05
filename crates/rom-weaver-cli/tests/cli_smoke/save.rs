@@ -68,6 +68,35 @@ fn save_catalog_lists_compiled_games_and_generation_support() {
     assert!(game_ids.contains(&"game-and-watch-gallery-3"));
     assert!(game_ids.contains(&"kirbys-adventure-canada-slot-3"));
     for id in [
+        "castlevania-dawn-of-sorrow",
+        "castlevania-order-of-ecclesia",
+        "castlevania-symphony-of-the-night-usa-block-1",
+        "grandia-usa-block-1",
+        "final-fantasy-vii-usa-block-1",
+        "final-fantasy-viii-usa-block-1",
+        "advance-wars",
+        "banjo-kazooie-canonical-eeprom-file-1",
+        "bomberman-64-canonical-eeprom-slot-1",
+        "castlevania-harmony-of-dissonance",
+        "game-boy-camera",
+        "golden-sun-file-1",
+        "golden-sun-the-lost-age-file-3",
+        "kingdom-hearts-chain-of-memories",
+        "konami-krazy-racers",
+        "kurukuru-kururin",
+        "paper-mario-canonical-flashram-file-1",
+        "rayman-usa-block-1",
+        "rondo-of-blood-japan",
+        "sonic-advance",
+        "sonic-advance-2",
+        "sonic-advance-3",
+        "sonic-rush",
+        "super-smash-bros-canonical-sram",
+        "tekken-usa-block-15",
+        "wario-land-4",
+        "warioware-inc-minigame-mania",
+        "zelda-the-minish-cap",
+        "zelda-ocarina-of-time-canonical-sram-file-3",
         "1080-snowboarding",
         "yoshis-story-canonical-eeprom-japan",
         "castlevania-aria-of-sorrow",
@@ -111,6 +140,94 @@ fn save_catalog_lists_compiled_games_and_generation_support() {
             .iter()
             .any(|game| game == "zelda-a-link-to-the-past")
     );
+}
+
+#[test]
+fn save_set_repairs_rondo_bcd_and_preserves_other_bram_records() {
+    let temp = setup_temp_dir();
+    let source = temp.child("rondo.sav");
+    let output = temp.child("rondo-edited.sav");
+    let mut original = vec![0x67; 2048];
+    original[..0xb0].fill(0);
+    original[..4].copy_from_slice(b"HUBM");
+    original[0x16..0x1f].copy_from_slice(b"DRACULA X");
+    original[0x21] = 4;
+    let checksum = original[0x14..0xb0]
+        .iter()
+        .fold(0u16, |sum, byte| sum.wrapping_sub(u16::from(*byte)));
+    original[0x12..0x14].copy_from_slice(&checksum.to_le_bytes());
+    fs::write(source.path(), &original).unwrap();
+    run_single_json_event(
+        &[
+            "save",
+            "set",
+            source.to_str().unwrap(),
+            "slot_1.money=123456",
+            "--game",
+            "rondo-of-blood-japan",
+            "--output",
+            output.to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    let mut expected = original.clone();
+    expected[0x3f..0x42].copy_from_slice(&[0x56, 0x34, 0x12]);
+    let checksum = expected[0x14..0xb0]
+        .iter()
+        .fold(0u16, |sum, byte| sum.wrapping_sub(u16::from(*byte)));
+    expected[0x12..0x14].copy_from_slice(&checksum.to_le_bytes());
+    assert_eq!(fs::read(output.path()).unwrap(), expected);
+    assert_eq!(fs::read(source.path()).unwrap(), original);
+}
+
+#[test]
+fn save_set_preserves_ps1_card_wrappers_and_other_blocks() {
+    let temp = setup_temp_dir();
+    let mut card = vec![0xa5; 0x20000];
+    card[..0x80].fill(0);
+    card[..2].copy_from_slice(b"MC");
+    card[0x7f] = b'M' ^ b'C';
+    card[0x180..0x200].fill(0);
+    card[0x180] = 0x51;
+    card[0x184..0x188].copy_from_slice(&0x2000u32.to_le_bytes());
+    card[0x188..0x18a].fill(0xff);
+    card[0x18a..0x18c].copy_from_slice(b"BA");
+    card[0x18c..0x196].copy_from_slice(b"SLUS-00005");
+    card[0x1ff] = card[0x180..0x1ff].iter().fold(0, |xor, byte| xor ^ byte);
+    card[0x6000..0x8000].fill(0);
+    card[0x6000..0x6004].copy_from_slice(&[b'S', b'C', 0x11, 1]);
+    card[0x6200] = 1;
+    for (name, magic, header_size) in [
+        ("raw.mcr", b"".as_slice(), 0),
+        ("dexdrive.gme", b"123-456-STD".as_slice(), 0xf40),
+        ("vgs.mem", b"VgsM".as_slice(), 0x40),
+    ] {
+        let source = temp.child(name);
+        let output = temp.child(format!("edited-{name}"));
+        let mut wrapped = vec![0x5a; header_size];
+        wrapped[..magic.len()].copy_from_slice(magic);
+        wrapped.extend_from_slice(&card);
+        fs::write(source.path(), &wrapped).unwrap();
+        run_single_json_event(
+            &[
+                "save",
+                "set",
+                source.to_str().unwrap(),
+                "lives=99",
+                "--game",
+                "rayman-usa-block-3",
+                "--output",
+                output.to_str().unwrap(),
+                "--json",
+            ],
+            0,
+        );
+        let mut expected = wrapped.clone();
+        expected[header_size + 0x6400] = 99;
+        assert_eq!(fs::read(output.path()).unwrap(), expected);
+        assert_eq!(fs::read(source.path()).unwrap(), wrapped);
+    }
 }
 
 #[test]

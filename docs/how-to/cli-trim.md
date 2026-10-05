@@ -34,17 +34,19 @@ rom-weaver trim --input game.nds --output game-trimmed.nds
 rom-weaver trim --input game.nds --extension trimmed.nds
 ```
 
-`--in-place` rewrites the source file. Keep a known-good copy first; a trimmed ROM is not always the file a patch expects.
+For a GameCube or Wii disc, keep the default `.rvz` output name: this path converts the disc losslessly to RVZ without removing unused sectors. It requires a separate output and does not support restore markers.
+
+`--in-place` rewrites the source file. Use it instead of pointing `--output` at a symlink or hard link to the input; output aliases are rejected even with `--force`. Keep a known-good copy first; a trimmed ROM is not always the file a patch expects.
 
 ## Make the trim reversible
 
-Write a separate copy with `--revert-marker` to record the original length and padding byte:
+For NDS-family, GBA, and 3DS ROMs, write a separate copy with `--revert-marker` to record the original length and padding byte. XISO and RVZ conversion reject this option because rebuilding the disc cannot be reversed from a padding footer:
 
 ```bash
 rom-weaver trim --input game.gba --output game-trimmed.gba --revert-marker
 ```
 
-The footer stores one repeated byte, not a copy of the removed data. Exact restoration requires uniform removed padding. Keep the source when trimming NDS files whose removed area may contain other bytes. Do not combine this option with `--in-place` when exact restoration matters: in-place trimming can record the wrong padding byte.
+The footer stores one repeated byte, not a copy of the removed data. Exact restoration requires uniform removed padding. Keep the source when trimming NDS files whose removed area may contain other bytes. The fill byte is recorded before trimming, including with `--in-place`.
 
 ## Put the padding back
 
@@ -52,17 +54,19 @@ The footer stores one repeated byte, not a copy of the removed data. Exact resto
 rom-weaver trim --input game-trimmed.gba --output game.gba --revert
 ```
 
-`--revert` works for NDS, GBA, and 3DS. XISO and RVZ scrub cannot be reverted. Without a footer from `--revert-marker`, the restored padding is reconstructed and may not be byte-identical.
+`--revert` works for NDS, GBA, and 3DS. XISO trimming and RVZ conversion do not support this operation. Without a footer from `--revert-marker`, the restored padding is reconstructed and may not be byte-identical.
 
 ## Trim files inside an archive
 
 `trim` opens archives for you and filters to ROMs by default:
 
 ```bash
-rom-weaver trim --input games.zip --select 'game*.nds' --output game-trimmed.nds
+rom-weaver trim --input games.zip
 ```
 
-`--no-filter` considers every member instead.
+Each supported ROM is written beside the archive using its member filename and the trim extension. `--output` requires exactly one supported ROM. Conflicting output names are rejected before writing, including with `--force`.
+
+`--no-filter` considers every member instead. A patch-only `--filter` is rejected.
 
 ## Look up what is supported
 

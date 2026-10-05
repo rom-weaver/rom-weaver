@@ -700,7 +700,9 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
       window.history.pushState(window.history.state, "", url);
       syncRouteFromUrl(() => {
         if (url.hash) {
-          document.getElementById(decodeURIComponent(url.hash.slice(1)))?.scrollIntoView({ block: "start" });
+          const target = document.getElementById(decodeURIComponent(url.hash.slice(1)));
+          target?.scrollIntoView({ block: "start" });
+          target?.focus({ preventScroll: true });
         } else {
           window.scrollTo({ top: 0, left: 0, behavior: "auto" });
         }

@@ -253,7 +253,8 @@ Cut the unused padding off the end of a ROM, making the file smaller without
 changing what a console or emulator reads from it.
 
 Works on NDS-family ROMs (.nds, .dsi, .srl), GBA (.gba), 3DS (.3ds), XISO
-images, and RVZ scrub candidates.
+images, and GameCube/Wii discs. Disc inputs convert losslessly to RVZ; unused
+sectors are preserved, and the size reduction comes from compression.
 
 By default a new file is written. --in-place overwrites the original, and
 -n/--dry-run reports what would change without touching anything.
@@ -1339,7 +1340,7 @@ enum TrimInputKind {
     Gba,
     ThreeDs,
     Xiso,
-    RvzScrub,
+    RvzConvert,
 }
 
 impl TrimInputKind {
@@ -1371,7 +1372,7 @@ impl TrimInputKind {
             Self::Gba => "gba",
             Self::ThreeDs => "3ds",
             Self::Xiso => "xiso",
-            Self::RvzScrub => "rvz-scrub",
+            Self::RvzConvert => "rvz-convert",
         }
     }
 
@@ -1379,7 +1380,7 @@ impl TrimInputKind {
         match self {
             // Without a footer, restore GBA and 3DS padding using the conventional 0xFF fill.
             Self::ThreeDs | Self::Gba => 0xFF,
-            Self::NdsFamily | Self::Xiso | Self::RvzScrub => 0x00,
+            Self::NdsFamily | Self::Xiso | Self::RvzConvert => 0x00,
         }
     }
 }

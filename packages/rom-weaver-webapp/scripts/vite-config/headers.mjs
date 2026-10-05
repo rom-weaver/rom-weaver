@@ -6,7 +6,8 @@ import {
   OPENAPI_PATH,
   WEBAPP_URL_SESSION_DOC_PATH,
 } from "../../src/webapp/api-catalog.mjs";
-import { DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
+import { WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
+import { MARKDOWN_ROUTES } from "../../functions/markdown-routes.js";
 import { rootDir } from "./paths.mjs";
 
 // SharedArrayBuffer (the wasm thread pool) needs a cross-origin isolated page: COOP/COEP on the
@@ -38,7 +39,7 @@ export const writeCloudflareHeadersAsset = (channel) => {
         // document load. The service worker script needs the same treatment and
         // inherits it from here; only /assets/* detaches it below.
         "Cache-Control": "no-cache",
-        "Content-Signal": `ai-train=no, search=${channel === "prod" ? "yes" : "no"}, ai-input=yes`,
+        "Content-Signal": `ai-train=${channel === "prod" ? "yes" : "no"}, search=${channel === "prod" ? "yes" : "no"}, ai-input=${channel === "prod" ? "yes" : "no"}`,
         ...(channel === "prod" ? {} : { "X-Robots-Tag": "noindex, nofollow" }),
       };
       const distDir = path.resolve(rootDir, outDir);
@@ -62,15 +63,23 @@ export const writeCloudflareHeadersAsset = (channel) => {
         `<${WEBAPP_URL_SESSION_DOC_PATH}>; rel="service-doc"; type="text/html"`,
         '</llms.txt>; rel="describedby"; type="text/plain"',
       ].join(", ");
-      const homepageHeaders = `/\n  Link: ${discoveryLinks}\n\n`;
+      const pageDiscoveryHeaders = Object.values(WORKFLOW_SEO_ROUTES)
+        .map(({ slug }) => {
+          const routePath = `/${slug}`;
+          const markdownPath = `/${slug || "index"}.md`;
+          const links = [`<${markdownPath}>; rel="alternate"; type="text/markdown"`];
+          if (routePath === "/") links.unshift(discoveryLinks);
+          return `${routePath}\n  Link: ${links.join(", ")}\n`;
+        })
+        .join("\n");
       const authMarkdownHeaders = "/auth.md\n  Content-Type: text/markdown; charset=utf-8\n\n";
-      const markdownHeaders = DOC_SOURCES.map(
-        ({ slug }) =>
-          `/${slug}.md\n  Content-Type: text/markdown; charset=utf-8\n  Link: <https://rom-weaver.com/${slug}>; rel="canonical"\n`,
+      const markdownHeaders = MARKDOWN_ROUTES.map(
+        ({ path: routePath, markdownPath }) =>
+          `${markdownPath}\n  Content-Type: text/markdown; charset=utf-8\n  Link: <https://rom-weaver.com${routePath}>; rel="canonical"\n`,
       ).join("\n");
       fs.writeFileSync(
         outputPath,
-        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${installerContentType}\n${homepageHeaders}${apiCatalogHeaders}${authMarkdownHeaders}${markdownHeaders}`,
+        `/*\n${headerLines}\n  ! Link\n\n/assets/*\n  ! Cache-Control\n  Cache-Control: public, max-age=31536000, immutable\n\n${licenseContentType}\n${installerContentType}\n${pageDiscoveryHeaders}\n${apiCatalogHeaders}${authMarkdownHeaders}${markdownHeaders}`,
       );
     },
     configResolved(config) {

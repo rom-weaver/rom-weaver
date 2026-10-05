@@ -1178,7 +1178,6 @@ describe("webapp responsive navigation", () => {
       label: "Docs",
     },
     {
-      beta: true,
       group: "patches",
       href: "ppf-undo",
       icon: createElement("span", { "aria-hidden": "true" }),

@@ -51,6 +51,12 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
     slug: "apply-patches",
     title: `ROM Patcher Online: BPS, IPS, UPS, xdelta & PPF | ${SITE_NAME}`,
   }),
+  "ppf-undo": Object.freeze({
+    description:
+      "Undo a PPF3 patch using its stored original bytes and download a restored ROM locally in your browser. Requires the exact patch with undo data. No uploads.",
+    slug: "ppf-undo",
+    title: `${SITE_NAME}: Undo PPF patches online`,
+  }),
   test: Object.freeze({
     description:
       "Play and test NES, SNES, Game Boy, GBA, N64, Nintendo DS, PlayStation, and other supported ROMs online with EmulatorJS. Try patched games locally. No uploads or account required.",

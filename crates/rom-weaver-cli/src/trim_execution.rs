@@ -1,3 +1,4 @@
+use super::patch_apply::paths_refer_to_same_file;
 use super::*;
 
 /// The mode/operation settings for a single trim operation, grouped so `trim_file` takes one
@@ -28,8 +29,22 @@ impl CliApp {
             revert_marker,
         } = request;
 
+        Self::validate_trim_destination(source, destination, in_place)?;
+
+        let supports_revert = matches!(
+            kind,
+            TrimInputKind::NdsFamily | TrimInputKind::Gba | TrimInputKind::ThreeDs
+        );
+        if operation == TrimOperation::Trim && revert_marker && !supports_revert {
+            return Err(RomWeaverError::Validation(format!(
+                "{} trim does not support --revert-marker; the original disc layout cannot be reconstructed from padding",
+                kind.mode_label()
+            )));
+        }
+
         // Stored size and fill take precedence over format-specific restoration heuristics.
         if operation == TrimOperation::Revert
+            && supports_revert
             && let Some(footer) = Self::read_revert_footer(source)?
         {
             return Self::revert_with_footer(source, destination, in_place, dry_run, kind, footer);
@@ -57,9 +72,14 @@ impl CliApp {
             TrimInputKind::Xiso => {
                 Self::trim_xiso_file(source, destination, in_place, dry_run, operation)
             }
-            TrimInputKind::RvzScrub => {
-                self.trim_rvz_scrub_file(source, destination, in_place, dry_run, operation, context)
-            }
+            TrimInputKind::RvzConvert => self.trim_rvz_convert_file(
+                source,
+                destination,
+                in_place,
+                dry_run,
+                operation,
+                context,
+            ),
         }?;
 
         // Unchanged files need no restoration metadata.
@@ -79,6 +99,7 @@ impl CliApp {
         dry_run: bool,
         operation: TrimOperation,
     ) -> Result<NdsTrimOutcome> {
+        Self::validate_trim_destination(source, destination, in_place)?;
         let mutate_source = in_place || source == destination;
         let mut input = File::options()
             .read(true)
@@ -162,7 +183,13 @@ impl CliApp {
         operation: TrimOperation,
         kind: TrimInputKind,
     ) -> Result<NdsTrimOutcome> {
+        Self::validate_trim_destination(source, destination, in_place)?;
         let original_size = fs::metadata(source)?.len();
+        let minimum_size = if kind == TrimInputKind::ThreeDs {
+            Self::three_ds_data_extent(source, original_size, operation == TrimOperation::Revert)?
+        } else {
+            1
+        };
         if original_size == 0 {
             return Err(RomWeaverError::Validation(format!(
                 "input is empty and cannot be processed: `{}`",
@@ -179,14 +206,16 @@ impl CliApp {
                 match Self::detect_trailing_pad_byte(source)? {
                     Some(pad_byte) => {
                         let trimmed_size =
-                            Self::scan_trimmed_size_from_trailing_padding(source, pad_byte)?;
+                            Self::scan_trimmed_size_from_trailing_padding(source, pad_byte)?
+                                .max(minimum_size);
                         (trimmed_size, trimmed_size == original_size)
                     }
                     None => (original_size, true),
                 }
             }
             TrimOperation::Revert => {
-                let revert_size = Self::power_of_two_target_size_for_revert(original_size)?;
+                let revert_size =
+                    Self::power_of_two_target_size_for_revert(original_size)?.max(minimum_size);
                 (revert_size, revert_size == original_size)
             }
         };
@@ -327,7 +356,7 @@ impl CliApp {
         })
     }
 
-    pub(super) fn trim_rvz_scrub_file(
+    pub(super) fn trim_rvz_convert_file(
         &self,
         source: &Path,
         destination: &Path,
@@ -338,7 +367,14 @@ impl CliApp {
     ) -> Result<NdsTrimOutcome> {
         if operation == TrimOperation::Revert {
             return Err(RomWeaverError::Validation(
-                "rvz-scrub trim revert is not supported; original source container layout cannot be reconstructed"
+                "rvz-convert trim revert is not supported; original source container layout cannot be reconstructed"
+                    .to_string(),
+            ));
+        }
+
+        if in_place || paths_refer_to_same_file(source, destination) {
+            return Err(RomWeaverError::Validation(
+                "rvz-convert trim requires a separate output file; in-place replacement is not supported"
                     .to_string(),
             ));
         }
@@ -352,14 +388,14 @@ impl CliApp {
         }
 
         if dry_run {
-            let result_size = self
-                .measure_rvz_scrubbed_size(source, context)
-                .map_err(|error| {
-                    RomWeaverError::Validation(format!(
-                        "rvz-scrub trim simulation failed while rebuilding `{}`: {error}",
-                        source.display()
-                    ))
-                })?;
+            let result_size =
+                self.measure_rvz_converted_size(source, context)
+                    .map_err(|error| {
+                        RomWeaverError::Validation(format!(
+                            "rvz-convert trim simulation failed while rebuilding `{}`: {error}",
+                            source.display()
+                        ))
+                    })?;
             return Ok(NdsTrimOutcome {
                 original_size,
                 result_size,
@@ -368,34 +404,27 @@ impl CliApp {
                 } else {
                     destination.to_path_buf()
                 },
-                mode: TrimInputKind::RvzScrub.mode_label(),
+                mode: TrimInputKind::RvzConvert.mode_label(),
                 preserved_download_play_cert: false,
                 already_target_size: result_size == original_size,
                 revert_supported: false,
             });
         }
 
-        if in_place || source == destination {
-            return Err(RomWeaverError::Validation(
-                "rvz-scrub trim requires a separate output file; in-place replacement is not supported"
-                    .to_string(),
-            ));
-        }
-
-        self.create_rvz_scrubbed_output(source, destination, context)?;
+        self.create_rvz_converted_output(source, destination, context)?;
         let result_size = fs::metadata(destination)?.len();
         Ok(NdsTrimOutcome {
             original_size,
             result_size,
             output_path: destination.to_path_buf(),
-            mode: TrimInputKind::RvzScrub.mode_label(),
+            mode: TrimInputKind::RvzConvert.mode_label(),
             preserved_download_play_cert: false,
             already_target_size: result_size == original_size,
             revert_supported: false,
         })
     }
 
-    pub(super) fn create_rvz_scrubbed_output(
+    pub(super) fn create_rvz_converted_output(
         &self,
         source: &Path,
         destination: &Path,
@@ -410,7 +439,7 @@ impl CliApp {
             .ok_or(RomWeaverError::Unsupported(
                 UnsupportedOp::HandlerNotRegistered {
                     handler: "rvz",
-                    feature: "rvz-scrub trim",
+                    feature: "rvz-convert trim",
                 },
             ))?;
         handler
@@ -428,14 +457,14 @@ impl CliApp {
             )
             .map_err(|error| {
                 RomWeaverError::Validation(format!(
-                    "rvz-scrub trim failed while rebuilding `{}`: {error}",
+                    "rvz-convert trim failed while rebuilding `{}`: {error}",
                     source.display()
                 ))
             })?;
         Ok(())
     }
 
-    pub(super) fn measure_rvz_scrubbed_size(
+    pub(super) fn measure_rvz_converted_size(
         &self,
         source: &Path,
         context: &OperationContext,
@@ -446,7 +475,7 @@ impl CliApp {
             .ok_or(RomWeaverError::Unsupported(
                 UnsupportedOp::HandlerNotRegistered {
                     handler: "rvz",
-                    feature: "rvz-scrub trim",
+                    feature: "rvz-convert trim",
                 },
             ))?;
         handler
@@ -464,7 +493,7 @@ impl CliApp {
             )
             .map_err(|error| {
                 RomWeaverError::Validation(format!(
-                    "rvz-scrub trim simulation failed while rebuilding `{}`: {error}",
+                    "rvz-convert trim simulation failed while rebuilding `{}`: {error}",
                     source.display()
                 ))
             })
@@ -551,6 +580,7 @@ impl CliApp {
         target_size: u64,
         fill_byte: u8,
     ) -> Result<()> {
+        Self::validate_trim_destination(source, destination, in_place)?;
         if in_place || source == destination {
             let mut input = File::options().read(true).write(true).open(source)?;
             if target_size < original_size {
@@ -569,15 +599,131 @@ impl CliApp {
         let mut input = BufReader::new(File::open(source)?);
         let mut output = BufWriter::new(File::create(destination)?);
         let copy_len = original_size.min(target_size);
-        io::copy(
+        let copied = io::copy(
             &mut std::io::Read::by_ref(&mut input).take(copy_len),
             &mut output,
         )?;
+        if copied != copy_len {
+            return Err(RomWeaverError::Validation(format!(
+                "trim source ended after {copied} bytes; expected {copy_len} bytes"
+            )));
+        }
         if target_size > copy_len {
             Self::write_padding_bytes(&mut output, target_size - copy_len, fill_byte)?;
         }
         output.flush()?;
         Ok(())
+    }
+
+    fn validate_trim_destination(source: &Path, destination: &Path, in_place: bool) -> Result<()> {
+        if !in_place && source != destination && paths_refer_to_same_file(source, destination) {
+            return Err(RomWeaverError::Validation(
+                "trim output refers to the input file; use --in-place for intentional replacement"
+                    .into(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn three_ds_media_unit(header: &[u8; 0x200]) -> Result<u64> {
+        // Sizes MUST use the unit exponent in the NCSD/NCCH flags, rather than assuming 512-byte units.
+        // https://www.3dbrew.org/wiki/NCSD#Partition_Flags and https://www.3dbrew.org/wiki/NCCH#NCCH_Flags
+        let shift = u32::from(header[0x18E]);
+        if shift > 22 {
+            return Err(RomWeaverError::Validation(
+                "invalid 3DS media unit size".into(),
+            ));
+        }
+        Ok(0x200_u64 << shift)
+    }
+
+    fn three_ds_data_extent(source: &Path, file_size: u64, reverting: bool) -> Result<u64> {
+        let mut file = File::open(source)?;
+        let mut header = [0_u8; 0x200];
+        file.read_exact(&mut header)?;
+        let unit = Self::three_ds_media_unit(&header)?;
+        let extent = match &header[0x100..0x104] {
+            b"NCCH" => u64::from(Self::read_u32_le(&header, 0x104, "NCCH size")?) * unit,
+            b"NCSD" => {
+                let media_size =
+                    u64::from(Self::read_u32_le(&header, 0x104, "NCSD media size")?) * unit;
+                let mut end = 0x200;
+                let mut partitions = Vec::new();
+                for index in 0..8 {
+                    let offset = u64::from(Self::read_u32_le(
+                        &header,
+                        0x120 + index * 8,
+                        "partition offset",
+                    )?) * unit;
+                    let length = u64::from(Self::read_u32_le(
+                        &header,
+                        0x124 + index * 8,
+                        "partition size",
+                    )?) * unit;
+                    if length == 0 {
+                        if offset != 0 {
+                            return Err(RomWeaverError::Validation(
+                                "NCSD partition has an offset but no size".into(),
+                            ));
+                        }
+                        continue;
+                    }
+                    let partition_end = offset + length;
+                    if offset < 0x200 || partition_end > media_size || length < 0x200 {
+                        return Err(RomWeaverError::Validation(
+                            "invalid NCSD partition extent".into(),
+                        ));
+                    }
+                    if partitions.iter().any(|&(start, previous_end)| {
+                        offset < previous_end && start < partition_end
+                    }) {
+                        return Err(RomWeaverError::Validation(
+                            "overlapping NCSD partitions".into(),
+                        ));
+                    }
+                    partitions.push((offset, partition_end));
+                    // NAND partitions MUST NOT be treated as cartridge NCCH content.
+                    // https://www.3dbrew.org/wiki/NCSD#NCSD_Header
+                    if header[0x110 + index] != 0 {
+                        return Err(RomWeaverError::Validation(
+                            "unsupported NCSD partition filesystem".into(),
+                        ));
+                    }
+                    file.seek(SeekFrom::Start(offset))?;
+                    let mut partition_header = [0_u8; 0x200];
+                    file.read_exact(&mut partition_header)?;
+                    let content_size =
+                        u64::from(Self::read_u32_le(&partition_header, 0x104, "NCCH size")?)
+                            * Self::three_ds_media_unit(&partition_header)?;
+                    if &partition_header[0x100..0x104] != b"NCCH"
+                        || content_size < 0x200
+                        || content_size > length
+                    {
+                        return Err(RomWeaverError::Validation(
+                            "invalid NCCH partition header or size".into(),
+                        ));
+                    }
+                    end = end.max(partition_end);
+                }
+                if partitions.is_empty() {
+                    return Err(RomWeaverError::Validation(
+                        "NCSD contains no partitions".into(),
+                    ));
+                }
+                end
+            }
+            _ => {
+                return Err(RomWeaverError::Validation(
+                    "3DS input must contain an NCSD or NCCH header".into(),
+                ));
+            }
+        };
+        if extent < 0x200 || (!reverting && extent > file_size) {
+            return Err(RomWeaverError::Validation(
+                "3DS data extent is invalid or exceeds the input size".into(),
+            ));
+        }
+        Ok(extent)
     }
 
     pub(super) fn write_padding_bytes(
@@ -633,6 +779,54 @@ impl CliApp {
             return Err(RomWeaverError::Validation(
                 "NDS header reported a zero trim boundary".into(),
             ));
+        }
+
+        let header_size = u64::from(Self::read_u32_le(
+            &header,
+            NDS_HEADER_HEADER_SIZE_OFFSET,
+            "header size",
+        )?);
+        let mut minimum_size = header_size.max(if dsi_mode { 0x1000 } else { 0x160 });
+        let mut regions = vec![
+            (0x20, 0x2C),
+            (0x30, 0x3C),
+            (0x40, 0x44),
+            (0x48, 0x4C),
+            (0x50, 0x54),
+            (0x58, 0x5C),
+        ];
+        if dsi_mode {
+            regions.extend([(0x1C0, 0x1CC), (0x1D0, 0x1DC)]);
+        }
+        for (offset_field, size_field) in regions {
+            let offset = u64::from(Self::read_u32_le(&header, offset_field, "data offset")?);
+            let length = u64::from(Self::read_u32_le(&header, size_field, "data size")?);
+            if length != 0 {
+                minimum_size = minimum_size.max(offset + length);
+            }
+        }
+        let banner = u64::from(Self::read_u32_le(&header, 0x68, "banner offset")?);
+        if banner != 0 {
+            input.seek(SeekFrom::Start(start_offset + banner))?;
+            let mut version = [0; 2];
+            input.read_exact(&mut version)?;
+            let banner_size = match u16::from_le_bytes(version) {
+                1 => 0x840,
+                2 => 0x940,
+                3 => 0xA40,
+                0x103 => 0x23C0,
+                version => {
+                    return Err(RomWeaverError::Validation(format!(
+                        "unsupported NDS banner version {version:#X}"
+                    )));
+                }
+            };
+            minimum_size = minimum_size.max(banner + banner_size);
+        }
+        if trimmed_size < minimum_size {
+            return Err(RomWeaverError::Validation(format!(
+                "NDS trim boundary ({trimmed_size} bytes) is below the header or referenced data extent ({minimum_size} bytes)"
+            )));
         }
 
         let mut preserved_download_play_cert = false;

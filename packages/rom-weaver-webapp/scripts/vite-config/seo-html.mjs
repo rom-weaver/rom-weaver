@@ -5,9 +5,8 @@ import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "../../src/
 import { repoRoot } from "./paths.mjs";
 
 export const createRobotsSource = (channel) =>
-  channel === "prod"
-    ? "User-agent: *\nAllow: /\nSitemap: https://rom-weaver.com/sitemap.xml\n"
-    : "User-agent: *\nDisallow: /\n";
+  `User-agent: *\nContent-Signal: ai-train=${channel === "prod" ? "yes" : "no"}, search=${channel === "prod" ? "yes" : "no"}, ai-input=${channel === "prod" ? "yes" : "no"}\n` +
+  (channel === "prod" ? "Allow: /\nSitemap: https://rom-weaver.com/sitemap.xml\n" : "Disallow: /\n");
 
 const replaceMetaContent = (html, attribute, name, content) =>
   html.replace(new RegExp(`(<meta\\s+${attribute}="${name}"\\s+content=")[^"]*(")`), `$1${content}$2`);
@@ -28,7 +27,10 @@ export const createWorkflowRouteHtml = (html, route, channel, channelLabel) => {
   ]) {
     routeHtml = replaceMetaContent(routeHtml, attribute, name, content);
   }
-  return routeHtml;
+  return routeHtml.replace(
+    "</head>",
+    `  <link rel="alternate" type="text/markdown" href="/${route.slug || "index"}.md" />\n</head>`,
+  );
 };
 
 // Describe both the site name and free browser tool in one graph. alternateName
@@ -63,7 +65,7 @@ const createStructuredDataLdJson = (route, includeWebsite) => {
 export const injectLdJson = (html, route, includeWebsite = false) =>
   html.replace("</head>", `  ${createStructuredDataLdJson(route, includeWebsite)}\n  </head>`);
 
-// The Trim, PPF undo, and Save Editor tabs are still beta - they navigate in
+// The Trim and Save Editor tabs are still beta - they navigate in
 // production but must not be indexed, so strip the shared index directive to
 // noindex and point their canonical at themselves.
 export const makeBetaRouteNoindex = (html, slug) =>
@@ -110,3 +112,6 @@ ${DOC_SOURCES.map((source) => {
 }).join("\n")}
 </urlset>
 `;
+
+export const createWorkflowMarkdown = (route) =>
+  `Canonical: https://rom-weaver.com/${route.slug}\n\n# ${route.title}\n\n${route.description}\n\n[Open in browser](https://rom-weaver.com/${route.slug})\n\n[Documentation](https://rom-weaver.com/docs.md)\n`;

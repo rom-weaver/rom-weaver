@@ -504,7 +504,7 @@ export type PatchCreateCommand = { original: string, modified?: string, format?:
 
 export type PatchCommands = { "type": "apply", "args": PatchApplyCommand } | { "type": "validate", "args": PatchValidateCommand } | { "type": "create", "args": PatchCreateCommand };
 
-export type PpfUndoCommand = { rom: string, patch: string, output: string, };
+export type PpfUndoCommand = { rom: string, patch: string, output: string, target?: string, select?: Array<string>, patch_select?: Array<string>, no_extract?: boolean, no_ignore?: boolean, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, threads?: ThreadBudget, };
 
 export type ToolsCommands = { "type": "ppf-undo", "args": PpfUndoCommand };
 

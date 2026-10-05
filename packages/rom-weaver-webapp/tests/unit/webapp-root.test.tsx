@@ -421,6 +421,26 @@ describe("page-level drag and drop", () => {
 });
 
 describe("page metadata per view", () => {
+  it("updates PPF undo metadata after navigating from Apply", async () => {
+    const canonical = document.createElement("link");
+    canonical.rel = "canonical";
+    const description = document.createElement("meta");
+    description.name = "description";
+    document.head.append(canonical, description);
+    try {
+      const root = await renderRoot({ currentView: "patcher" });
+      expect(canonical.href).toBe("https://rom-weaver.com/apply-patches");
+      root.unmount();
+      await renderRoot({ currentView: "ppf-undo" });
+      expect(canonical.href).toBe("https://rom-weaver.com/ppf-undo");
+      expect(description.content).toContain("Undo a PPF3 patch");
+      expect(document.title).toContain("Undo PPF patches online");
+    } finally {
+      canonical.remove();
+      description.remove();
+    }
+  });
+
   it("names the page for a view that has no SEO route of its own", async () => {
     await renderRoot({ currentView: "trim" });
 

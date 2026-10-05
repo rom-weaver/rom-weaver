@@ -1574,6 +1574,7 @@ const LogDialog = ({
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (open && !dialog.open) {
+      const previousFocus = document.activeElement;
       dialog.showModal();
       // showModal() hands focus to the first tabbable descendant, which is the
       // selected tab, and the browser paints a focus ring on it even when the
@@ -1582,7 +1583,16 @@ const LogDialog = ({
       // the modal - screen readers still announce it, Tab still walks into the
       // rail - without lighting up a control nobody has reached yet.
       dialog.focus({ preventScroll: true });
-    } else if (!open && dialog.open) dialog.close();
+      return () => {
+        // The parent unmounts the console on close, so it MUST restore the opener explicitly.
+        dialog.close();
+        if (previousFocus instanceof HTMLElement && previousFocus.isConnected) {
+          previousFocus.focus({ preventScroll: true });
+        }
+      };
+    }
+    if (!open && dialog.open) dialog.close();
+    return undefined;
   }, [open]);
 
   const visible = useMemo(() => {

@@ -207,6 +207,7 @@ fn ppf_undo_dry_run_does_not_write_the_restored_rom() {
         &[
             "tools",
             "ppf-undo",
+            "--no-compress",
             "--input",
             rom.path().to_str().expect("rom path"),
             "--patch",
@@ -277,4 +278,172 @@ fn man_install_dry_run_does_not_create_its_destination() {
         !output.path().exists(),
         "dry run must not create the man directory"
     );
+}
+
+#[test]
+fn ppf_undo_dry_run_resolves_compression_path_and_warnings_without_writes() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("patched.gba");
+    let patch = temp.child("undo.ppf");
+    fs::write(rom.path(), b"patched").expect("ROM fixture");
+    fs::write(patch.path(), b"PPF30").expect("patch fixture");
+    let output = temp.child("restored");
+    let report = run_single_json_event(
+        &[
+            "tools",
+            "ppf-undo",
+            "--input",
+            rom.path().to_str().expect("ROM"),
+            "--patch",
+            patch.path().to_str().expect("patch"),
+            "--output",
+            output.path().to_str().expect("output"),
+            "--compress-format",
+            "zip",
+            "--compress-codec",
+            "store",
+            "--dry-run",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(report["details"]["format"], "zip");
+    assert_eq!(report["details"]["codec"], "store");
+    assert_eq!(
+        report["details"]["writes"],
+        serde_json::json!([temp.child("restored.zip").path().display().to_string()])
+    );
+    assert!(!output.path().exists());
+    assert!(!temp.child("restored.zip").path().exists());
+    let mismatched_output = temp.child("restored.7z");
+    let report = run_single_json_event(
+        &[
+            "tools",
+            "ppf-undo",
+            "--input",
+            rom.path().to_str().expect("ROM"),
+            "--patch",
+            patch.path().to_str().expect("patch"),
+            "--output",
+            mismatched_output.path().to_str().expect("output"),
+            "--compress-format",
+            "zip",
+            "--dry-run",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(report["warnings"].as_array().expect("warnings").len(), 1);
+    assert!(!mismatched_output.path().exists());
+}
+
+#[test]
+fn ppf_undo_dry_run_rejects_invalid_compression_without_touching_output() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("patched.gba");
+    let patch = temp.child("undo.ppf");
+    let output = temp.child("restored.zip");
+    fs::write(rom.path(), b"patched").expect("ROM fixture");
+    fs::write(patch.path(), b"PPF30").expect("patch fixture");
+    fs::write(output.path(), b"keep output").expect("output fixture");
+    let report = run_single_json_event(
+        &[
+            "tools",
+            "ppf-undo",
+            "--input",
+            rom.path().to_str().expect("ROM"),
+            "--patch",
+            patch.path().to_str().expect("patch"),
+            "--output",
+            output.path().to_str().expect("output"),
+            "--compress-codec",
+            "lzma2",
+            "--dry-run",
+            "--json",
+        ],
+        1,
+    );
+    assert!(
+        report["label"]
+            .as_str()
+            .expect("label")
+            .contains("unsupported zip codec")
+    );
+    assert_eq!(fs::read(output.path()).expect("output"), b"keep output");
+}
+
+#[test]
+fn ppf_undo_dry_run_defers_raw_output_validation_until_archive_selection() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("patched.gba");
+    let packed = temp.child("rom.tar.gz");
+    let patch = temp.child("undo.ppf");
+    let output = temp.child("restored.gba");
+    fs::write(rom.path(), b"patched").expect("ROM fixture");
+    fs::write(patch.path(), b"PPF30").expect("patch fixture");
+    write_tar_gz_fixture(&[(rom.path(), "patched.gba")], packed.path());
+    let report = run_single_json_event(
+        &[
+            "tools",
+            "ppf-undo",
+            "--input",
+            packed.path().to_str().expect("packed"),
+            "--patch",
+            patch.path().to_str().expect("patch"),
+            "--output",
+            output.path().to_str().expect("output"),
+            "--dry-run",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(report["details"]["format"], "unresolved");
+    assert!(
+        report["details"]["notes"][0]
+            .as_str()
+            .expect("note")
+            .contains("awaits archive payload selection")
+    );
+    assert!(!output.path().exists());
+}
+
+#[test]
+fn ppf_undo_dry_run_marks_raw_disc_companion_outputs_unknown() {
+    let temp = setup_temp_dir();
+    let sheet = temp.child("disc.cue");
+    let track = temp.child("track.bin");
+    let patch = temp.child("undo.ppf");
+    fs::write(
+        sheet.path(),
+        "FILE \"track.bin\" BINARY\n  TRACK 01 MODE1/2048\n    INDEX 01 00:00:00\n",
+    )
+    .expect("disc sheet");
+    fs::write(track.path(), [0u8; 2048]).expect("track");
+    fs::write(patch.path(), b"PPF30").expect("patch");
+    for (name, flags, unknown) in [
+        ("out/restored.cue", vec!["--no-compress"], true),
+        ("out/restored.zip", Vec::new(), false),
+    ] {
+        let output = temp.child(name);
+        let mut args = vec![
+            "tools",
+            "ppf-undo",
+            "--input",
+            sheet.path().to_str().expect("sheet path"),
+            "--patch",
+            patch.path().to_str().expect("patch path"),
+            "--output",
+            output.path().to_str().expect("output path"),
+            "--dry-run",
+            "--json",
+        ];
+        args.extend(flags);
+        let report = run_single_json_event(&args, 0);
+        assert_eq!(report["details"]["outputs_unknown"], unknown, "{name}");
+        assert!(!output.path().exists());
+        assert_eq!(
+            fs::read(track.path()).expect("unchanged track"),
+            [0u8; 2048]
+        );
+    }
 }

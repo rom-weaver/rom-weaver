@@ -1566,7 +1566,7 @@ msgstr "EmulatorJS: {name}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Beta-Tools aktivieren (Trimmen, PPF rückgängig machen und Spielstand-Editor)"
+msgstr "Beta-Tools aktivieren (Trimmen und Spielstand-Editor)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

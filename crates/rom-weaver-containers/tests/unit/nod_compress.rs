@@ -259,6 +259,64 @@ fn zlib_decompress_rejects_data_that_is_not_a_zlib_stream() {
     );
 }
 
+#[test]
+fn zlib_decompress_requires_a_complete_stream_and_sufficient_output() {
+    let input = repetitive(32768);
+    let mut buffer = Vec::with_capacity(input.len() * 2);
+    assert!(zlib_api::compress(&input, 6, &mut buffer).expect("compresses"));
+    for (source, output_len) in [
+        (&buffer[..buffer.len() - 1], input.len()),
+        (buffer.as_slice(), input.len() - 1),
+    ] {
+        let error = zlib_api::decompress(source, &mut vec![0; output_len])
+            .expect_err("partial decompression must fail");
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    }
+}
+
+#[test]
+fn zlib_compress_rejects_invalid_levels_without_panicking() {
+    let mut buffer = Vec::with_capacity(128);
+    let error = zlib_api::compress(b"payload", 10, &mut buffer).expect_err("invalid level");
+    assert!(error.to_string().contains("invalid level 10"));
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn zlib_compression_matches_compress2_at_every_level() {
+    for input in [Vec::new(), repetitive(32768), incompressible(32768)] {
+        for level in 0..=9 {
+            let mut expected = vec![0; input.len() * 2 + 64];
+            let mut expected_len = expected.len() as libz_sys::uLongf;
+            let code = unsafe {
+                libz_sys::compress2(
+                    expected.as_mut_ptr(),
+                    &mut expected_len,
+                    input.as_ptr(),
+                    input.len() as libz_sys::uLong,
+                    level,
+                )
+            };
+            assert_eq!(code, libz_sys::Z_OK);
+            expected.truncate(expected_len as usize);
+            let mut actual = Vec::with_capacity(input.len() * 2 + 64);
+            assert!(zlib_api::compress(&input, level as u8, &mut actual).expect("compresses"));
+            assert_eq!(
+                actual,
+                expected,
+                "level {level}, input size {}",
+                input.len()
+            );
+            let mut decoded = vec![0; input.len()];
+            assert_eq!(
+                zlib_api::decompress(&actual, &mut decoded).expect("decompresses"),
+                input.len()
+            );
+            assert_eq!(decoded, input);
+        }
+    }
+}
+
 // --- bzip2 ----------------------------------------------------------------
 
 #[test]

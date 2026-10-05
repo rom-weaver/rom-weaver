@@ -23,8 +23,9 @@ struct TrimBatchState {
     first_error_kind: Option<rom_weaver_core::RomWeaverErrorKind>,
     mode_counts: BTreeMap<&'static str, usize>,
     single_detail: Option<String>,
+    single_metadata: Option<Value>,
     irreversible_xiso: bool,
-    irreversible_rvz_scrub: bool,
+    irreversible_rvz_convert: bool,
     planned_outputs: Vec<String>,
     emitted_outputs: Vec<PathBuf>,
 }
@@ -478,6 +479,12 @@ impl CliApp {
             threads = %args.threads,
             "starting trim command"
         );
+        let filter_patches_only = args.rom_filter
+            && !args.filter.is_empty()
+            && !args
+                .filter
+                .iter()
+                .any(|kind| matches!(kind, FilterKind::Rom));
         let rom_filter = args.rom_filter_enabled();
         let TrimCommand {
             input: source,
@@ -514,6 +521,14 @@ impl CliApp {
                 thread_execution.clone(),
             )
         };
+        if !rom_filter && filter_patches_only {
+            return self.finish(
+                "trim",
+                fail_error("validate", RomWeaverError::Validation(
+                    "trim does not support a patch-only archive filter; use --filter rom or --no-filter".into(),
+                )),
+            );
+        }
         let extension = extension
             .unwrap_or_else(|| Self::default_trim_extension_pattern(operation).to_string());
         let extension = match Self::normalize_trim_extension(&extension) {
@@ -546,7 +561,7 @@ impl CliApp {
         };
 
         // Report format reflects the kind(s) actually collected, so xiso /
-        // rvz-scrub trims are no longer mislabeled `nds`.
+        // rvz-convert trims are no longer mislabeled `nds`.
         let report_format = Self::trim_report_format(&trim_sources);
 
         if trim_sources.is_empty() {
@@ -585,6 +600,10 @@ impl CliApp {
             thread_execution: &thread_execution,
             source_count: trim_sources.len(),
         };
+        if let Err(error) = Self::validate_trim_batch_destinations(&trim_sources, &config) {
+            Self::cleanup_temp_paths(&cleanup_paths);
+            return self.finish("trim", fail_error("validate", error));
+        }
         let mut state = TrimBatchState::default();
         for trim_source in &trim_sources {
             self.process_trim_source(trim_source, &config, &mut state);
@@ -676,11 +695,11 @@ impl CliApp {
     fn irreversible_trim_warning(operation: TrimOperation, state: &TrimBatchState) -> &'static str {
         if operation != TrimOperation::Trim {
             ""
-        } else if state.irreversible_xiso && !state.irreversible_rvz_scrub {
+        } else if state.irreversible_xiso && !state.irreversible_rvz_convert {
             "; warning=trimmed xiso output cannot be reverted to original padding; keep backup"
-        } else if state.irreversible_rvz_scrub && !state.irreversible_xiso {
-            "; warning=trimmed rvz-scrub output cannot be reverted to original source format; keep backup"
-        } else if state.irreversible_xiso && state.irreversible_rvz_scrub {
+        } else if state.irreversible_rvz_convert && !state.irreversible_xiso {
+            "; warning=RVZ conversion preserves logical disc bytes; use extract to recover ISO, not --revert"
+        } else if state.irreversible_xiso && state.irreversible_rvz_convert {
             "; warning=some trimmed outputs cannot be reverted to original source format; keep backups"
         } else {
             ""
@@ -813,10 +832,72 @@ impl CliApp {
             }));
             report = Self::attach_emitted_files_details(report, state.emitted_outputs, None);
         }
+        if let (Some(Value::Object(details)), Some(Value::Object(metadata))) =
+            (report.details.as_mut(), state.single_metadata)
+        {
+            details.extend(metadata);
+        }
         if let Some(warning) = irreversible_warning.strip_prefix("; warning=") {
             Self::append_report_warnings(&mut report, [warning.to_string()]);
         }
         report
+    }
+
+    fn trim_destination(trim_source: &TrimSource, config: &TrimBatchConfig<'_>) -> PathBuf {
+        if trim_source.repack_root.is_some() {
+            trim_source.path.clone()
+        } else if let Some(explicit_output) = config.explicit_output {
+            explicit_output.to_path_buf()
+        } else if config.in_place {
+            trim_source.path.clone()
+        } else if let Some(archive) = trim_source.archive_origin.as_ref() {
+            Self::archive_sidecar_trim_output_path(archive, trim_source, config.extension)
+        } else {
+            Self::default_trim_output_path(trim_source, config.extension)
+        }
+    }
+
+    fn validate_trim_batch_destinations(
+        sources: &[TrimSource],
+        config: &TrimBatchConfig<'_>,
+    ) -> Result<()> {
+        if config.in_place {
+            return Ok(());
+        }
+        let mut outputs = BTreeMap::new();
+        for source in sources {
+            let output = Self::trim_destination(source, config);
+            let key = fs::canonicalize(&output).unwrap_or_else(|_| {
+                let parent = output.parent().unwrap_or_else(|| Path::new("."));
+                fs::canonicalize(parent)
+                    .unwrap_or_else(|_| parent.to_path_buf())
+                    .join(output.file_name().unwrap_or_default())
+            });
+            if let Some(previous) = outputs.insert(key, &source.path) {
+                return Err(RomWeaverError::Validation(format!(
+                    "trim output collision: `{}` and `{}` both write `{}`; use separate destinations",
+                    previous.display(),
+                    source.path.display(),
+                    output.display(),
+                )));
+            }
+            if output.exists()
+                && let Some(input) = sources.iter().find(|input| {
+                    paths_refer_to_same_file(&output, &input.path)
+                        || input
+                            .archive_origin
+                            .as_ref()
+                            .is_some_and(|archive| paths_refer_to_same_file(&output, archive))
+                })
+            {
+                return Err(RomWeaverError::Validation(format!(
+                    "trim output `{}` would overwrite input `{}`; use --in-place for intentional replacement",
+                    output.display(),
+                    input.path.display(),
+                )));
+            }
+        }
+        Ok(())
     }
 
     fn process_trim_source(
@@ -829,17 +910,7 @@ impl CliApp {
             return;
         }
         let repack_root = trim_source.repack_root.as_ref();
-        let output_path = if repack_root.is_some() {
-            trim_source.path.clone()
-        } else if let Some(explicit_output) = config.explicit_output {
-            explicit_output.to_path_buf()
-        } else if config.in_place {
-            trim_source.path.clone()
-        } else if let Some(archive) = trim_source.archive_origin.as_ref() {
-            Self::archive_sidecar_trim_output_path(archive, trim_source, config.extension)
-        } else {
-            Self::default_trim_output_path(trim_source, config.extension)
-        };
+        let output_path = Self::trim_destination(trim_source, config);
         // --in-place and archive repack rewrite the source on purpose, so the
         // overwrite guard only covers the new files --output/--extension name.
         let writes_new_file = repack_root.is_none() && !config.in_place;
@@ -920,6 +991,32 @@ impl CliApp {
                 // flight.
                 if writes_new_file && !config.dry_run {
                     rom_weaver_core::complete_in_progress_output(&output_path);
+                }
+                if config.source_count == 1 && trim_source.kind == TrimInputKind::RvzConvert {
+                    let mut metadata = serde_json::Map::new();
+                    metadata.insert("output_format".into(), json!("rvz"));
+                    if !config.dry_run {
+                        let logical_size =
+                            self.containers.find_by_name("rvz").and_then(|handler| {
+                                handler
+                                    .list_entry_records(
+                                        &ContainerProbeRequest {
+                                            source: outcome.output_path.clone(),
+                                            split_bin: false,
+                                        },
+                                        config.context,
+                                    )
+                                    .ok()
+                                    .and_then(|entries| {
+                                        entries.first().and_then(|entry| entry.size)
+                                    })
+                            });
+                        if let Some(size) = logical_size {
+                            metadata.insert("input_size".into(), json!(size));
+                            metadata.insert("raw_size".into(), json!(size));
+                        }
+                    }
+                    state.single_metadata = Some(Value::Object(metadata));
                 }
                 Self::record_trim_outcome(outcome, config, state);
             }
@@ -1005,7 +1102,8 @@ impl CliApp {
         *mode_count = mode_count.saturating_add(1);
         if config.operation == TrimOperation::Trim && !outcome.revert_supported {
             state.irreversible_xiso |= outcome.mode == TrimInputKind::Xiso.mode_label();
-            state.irreversible_rvz_scrub |= outcome.mode == TrimInputKind::RvzScrub.mode_label();
+            state.irreversible_rvz_convert |=
+                outcome.mode == TrimInputKind::RvzConvert.mode_label();
         }
         if outcome.already_target_size {
             state.already_trimmed_count = state.already_trimmed_count.saturating_add(1);
@@ -1036,7 +1134,7 @@ impl CliApp {
     }
 
     /// Report `format` for a trim run: the shared trim kind's label when every
-    /// collected source is the same kind (so an xiso / rvz-scrub batch is not
+    /// collected source is the same kind (so an xiso / rvz-convert batch is not
     /// mislabeled `nds`), or a generic `trim` when the kinds differ or none were
     /// collected.
     fn trim_report_format(sources: &[TrimSource]) -> String {
@@ -1303,16 +1401,16 @@ mod trim_report_format_tests {
     }
 
     #[test]
-    fn single_rvz_scrub_is_not_mislabeled_nds() {
-        let sources = vec![source(TrimInputKind::RvzScrub)];
-        assert_eq!(CliApp::trim_report_format(&sources), "rvz-scrub");
+    fn single_rvz_convert_is_not_mislabeled_nds() {
+        let sources = vec![source(TrimInputKind::RvzConvert)];
+        assert_eq!(CliApp::trim_report_format(&sources), "rvz-convert");
     }
 
     #[test]
     fn mixed_kinds_fall_back_to_generic_trim() {
         let sources = vec![
             source(TrimInputKind::NdsFamily),
-            source(TrimInputKind::RvzScrub),
+            source(TrimInputKind::RvzConvert),
         ];
         assert_eq!(CliApp::trim_report_format(&sources), "trim");
     }
