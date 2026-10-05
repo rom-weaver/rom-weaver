@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
-import { parseLcov } from "./coverage-summary.mjs";
+import { parseLcov, findLcovFiles } from "./coverage-summary.mjs";
 import { runMain } from "./run-main.mjs";
 
 // Vitest reports src/ paths relative to its webapp package, while Rust uses repository paths.
@@ -29,25 +29,30 @@ export function addedLines(diff) {
   }
   return lines;
 }
-export function parseBranches(report) {
+export function parseBranches(report, sourceRoot) {
   const branches = new Map();
   let source;
   for (const line of repositoryPaths(report).split("\n")) {
-    if (line.startsWith("SF:")) source = [...parseLcov(`${line}\nDA:1,0\n`).keys()][0].slice(0, -2);
+    if (line.startsWith("SF:"))
+      source = [...parseLcov(`${line}\nDA:1,0\n`, sourceRoot).keys()][0].slice(0, -2);
     if (!line.startsWith("BRDA:")) continue;
-    const match = /^BRDA:(\d+),(\d+),(\d+),(\d+|-)$/u.exec(line);
+    const match = /^BRDA:(\d+),(\d+),(\d+),(-?\d+|-)$/u.exec(line);
     if (!match || !source) throw new Error(`Invalid branch record: ${line}`);
+    // V8 shard LCOV can contain negative counts; they provide no coverage evidence.
     branches.set(
       `${source}:${match[1]}:${match[2]}:${match[3]}`,
-      match[4] === "-" ? null : Number(match[4]),
+      match[4] === "-" || Number(match[4]) < 0 ? null : Number(match[4]),
     );
   }
   return branches;
 }
 export function diffCoverage(diff, reports) {
+  const sources = reports.map((report) =>
+    typeof report === "string" ? { contents: report, sourceRoot: undefined } : report,
+  );
   const measured = new Map();
-  for (const report of reports)
-    for (const [location, hits] of parseLcov(repositoryPaths(report)))
+  for (const { contents, sourceRoot } of sources)
+    for (const [location, hits] of parseLcov(repositoryPaths(contents), sourceRoot))
       measured.set(location, Math.max(hits, measured.get(location) || 0));
   const result = { covered: [], uncovered: [], notMeasured: [] };
   for (const location of addedLines(diff)) {
@@ -57,8 +62,8 @@ export function diffCoverage(diff, reports) {
   }
   const changed = addedLines(diff);
   const branches = new Map();
-  for (const report of reports)
-    for (const [key, hits] of parseBranches(report)) {
+  for (const { contents, sourceRoot } of sources)
+    for (const [key, hits] of parseBranches(contents, sourceRoot)) {
       if (
         !branches.has(key) ||
         (hits !== null && (branches.get(key) === null || hits > branches.get(key)))
@@ -80,11 +85,29 @@ export function diffCoverage(diff, reports) {
   }
   return result;
 }
+export function coverageInputs(argv) {
+  const [base, ...args] = argv;
+  const reports = [];
+  for (let i = 0; i < args.length; i++) {
+    const browser = args[i] === "--webapp-lcov";
+    const file = browser ? args[++i] : args[i];
+    if (!file || file.startsWith("--")) throw new Error("Missing or invalid LCOV path");
+    reports.push({ file, sourceRoot: browser ? resolve("packages/rom-weaver-webapp") : undefined });
+  }
+  if (!base || !reports.length)
+    throw new Error("Usage: quality-diff-coverage BASE LCOV [--webapp-lcov LCOV ...]");
+  return { base, reports };
+}
+export function readCoverageReports(reports) {
+  return reports.flatMap(({ file, sourceRoot }) => {
+    const files = statSync(file).isDirectory() ? findLcovFiles(file) : [file];
+    if (!files.length) throw new Error(`No LCOV reports selected in ${file}`);
+    return files.map((report) => ({ contents: readFileSync(report, "utf8"), sourceRoot }));
+  });
+}
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
   runMain(() => {
-    const [base, ...files] = process.argv.slice(2);
-    if (!base || !files.length)
-      throw new Error("Usage: node scripts/quality-diff-coverage.mjs BASE LCOV [LCOV ...]");
+    const { base, reports } = coverageInputs(process.argv.slice(2));
     const mergeBase = execFileSync("git", ["merge-base", base, "HEAD"], {
       encoding: "utf8",
     }).trim();
@@ -104,10 +127,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
       ],
       { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 },
     );
-    const result = diffCoverage(
-      diff,
-      files.map((file) => readFileSync(file, "utf8")),
-    );
+    const result = diffCoverage(diff, readCoverageReports(reports));
     mkdirSync("dist/coverage", { recursive: true });
     writeFileSync(
       resolve("dist/coverage/changed-lines.json"),

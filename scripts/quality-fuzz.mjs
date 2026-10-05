@@ -4,7 +4,14 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { runMain } from "./run-main.mjs";
-export const FUZZ_TARGETS = ["ips_apply", "save_parse", "disc_sheet", "bundle_parse", "dcp_zip", "iso9660"];
+export const FUZZ_TARGETS = [
+  "ips_apply",
+  "save_parse",
+  "disc_sheet",
+  "bundle_parse",
+  "dcp_zip",
+  "iso9660",
+];
 export const FUZZ_TOOLCHAIN = "nightly-2026-08-25";
 export function fuzzPlan(mode, target) {
   if (!["smoke", "deep"].includes(mode)) throw new Error("Fuzz mode must be smoke or deep");
@@ -30,12 +37,24 @@ export function fuzzPlan(mode, target) {
     ],
   }));
 }
-export function runFuzz(argv, run = spawnSync) {
+export function runFuzz(argv, run = spawnSync, root = process.cwd()) {
   const [mode = "smoke", target] = argv;
-  const scratch = path.resolve(".agent/quality-fuzz");
+  const plan = fuzzPlan(mode, target);
+  const scratch = path.resolve(root, ".agent/quality-fuzz");
   fs.mkdirSync(scratch, { recursive: true });
-  for (const entry of fuzzPlan(mode, target)) {
-    const corpus = path.resolve(`fuzz/corpus/${entry.name}`);
+  for (const name of FUZZ_TARGETS) fs.rmSync(path.join(scratch, `${name}.json`), { force: true });
+  fs.writeFileSync(
+    path.join(scratch, "selection.json"),
+    `${JSON.stringify({ mode, targets: plan.map((entry) => entry.name) })}\n`,
+  );
+  for (const entry of plan) {
+    fs.writeFileSync(
+      path.join(scratch, `${entry.name}.json`),
+      `${JSON.stringify({ target: entry.name, seed: 1, seconds: entry.seconds, status: null, error: "not executed" })}\n`,
+    );
+  }
+  for (const entry of plan) {
+    const corpus = path.resolve(root, `fuzz/corpus/${entry.name}`);
     fs.mkdirSync(corpus, { recursive: true });
     const seeds =
       entry.name === "disc_sheet"
@@ -49,6 +68,7 @@ export function runFuzz(argv, run = spawnSync) {
     fs.mkdirSync(targetScratch, { recursive: true });
     const result = run("cargo", entry.args, {
       stdio: "inherit",
+      cwd: root,
       timeout: (entry.seconds + 1200) * 1000,
       env: {
         ...process.env,
@@ -62,7 +82,7 @@ export function runFuzz(argv, run = spawnSync) {
       path.join(scratch, `${entry.name}.json`),
       `${JSON.stringify({ target: entry.name, seed: 1, seconds: entry.seconds, status: result.status, error: result.error?.message ?? null })}\n`,
     );
-    if (result.status !== 0) return result.status ?? 1;
+    if (result.error || result.status !== 0) return result.status || 1;
   }
   return 0;
 }

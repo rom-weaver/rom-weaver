@@ -30,14 +30,18 @@ export function sanitizerEnvironment(root, inherited = process.env) {
 }
 export function instrumentedArchive(symbols) {
   if (!symbols.includes("__asan_") || !symbols.includes("__ubsan_"))
-    throw new Error("Vendored libarchive is missing ASan or UBSan instrumentation");
+    throw new Error("Native archive is missing ASan or UBSan instrumentation");
   return { address: true, undefined: true };
 }
 function findArchives(directory) {
   if (!fs.existsSync(directory)) return [];
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const name = path.join(directory, entry.name);
-    return entry.isDirectory() ? findArchives(name) : entry.name === "libarchive.a" ? [name] : [];
+    return entry.isDirectory()
+      ? findArchives(name)
+      : ["libarchive.a", "liblzma_sdk.a"].includes(entry.name)
+        ? [name]
+        : [];
   });
 }
 export function sanitizerArgs() {
@@ -49,10 +53,24 @@ export function sanitizerArgs() {
     "--lib",
     "--target",
     "x86_64-unknown-linux-gnu",
-    "libarchive::entries::tests",
     "--",
     "--nocapture",
+    "libarchive::",
+    "handlers_tests::tests::seven_z_short_period_matches_round_trip",
   ];
+}
+export function selectedSanitizerTests(stdout) {
+  const tests = stdout.split(/\r?\n/u).filter((line) => line.endsWith(": test"));
+  if (!tests.length) throw new Error("Sanitizer lane selected no tests");
+  for (const required of [
+    "libarchive::entries::tests::",
+    "libarchive::tests::seven_zip_write_then_low_level_read_round_trips_payload",
+    "handlers_tests::tests::seven_z_short_period_matches_round_trip",
+  ]) {
+    if (!tests.some((test) => test.includes(required)))
+      throw new Error(`Sanitizer lane omitted required native boundary: ${required}`);
+  }
+  return tests;
 }
 export function runSanitizers(run = spawnSync) {
   if (process.platform !== "linux" || process.arch !== "x64")
@@ -65,18 +83,26 @@ export function runSanitizers(run = spawnSync) {
   if (clangVersion.status !== 0 || rustVersion.status !== 0)
     throw new Error("Cannot resolve pinned sanitizer compiler versions");
   const args = sanitizerArgs();
-  const listing = run("cargo", [...args.slice(0, -1), "--list"], {
+  const listing = run("cargo", [...args.filter((arg) => arg !== "--nocapture"), "--list"], {
     encoding: "utf8",
     env,
     timeout: 1800000,
     maxBuffer: 16 * 1024 * 1024,
   });
-  if (listing.status !== 0) throw new Error(`Sanitizer discovery/build failed: ${listing.stderr}`);
-  const tests = listing.stdout.split(/\r?\n/u).filter((line) => line.endsWith(": test"));
-  if (!tests.length) throw new Error("Sanitizer lane selected no tests");
+  fs.writeFileSync(
+    path.join(root, "discovery.log"),
+    `${listing.stdout ?? ""}\n${listing.stderr ?? ""}`,
+  );
+  if (listing.error || listing.status !== 0)
+    throw new Error(
+      `Sanitizer discovery/build failed: ${listing.error?.message ?? listing.stderr}`,
+    );
+  const tests = selectedSanitizerTests(listing.stdout);
   const archives = findArchives(env.CARGO_TARGET_DIR);
-  if (!archives.length)
-    throw new Error("No vendored libarchive archive found; native instrumentation unverified");
+  for (const name of ["libarchive.a", "liblzma_sdk.a"]) {
+    if (!archives.some((archive) => path.basename(archive) === name))
+      throw new Error(`Missing ${name}; native instrumentation unverified`);
+  }
   for (const archive of archives) {
     const symbols = run("nm", ["-u", archive], { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
     if (symbols.status !== 0) throw new Error("Cannot inspect native instrumentation");
@@ -84,7 +110,7 @@ export function runSanitizers(run = spawnSync) {
   }
   fs.writeFileSync(
     path.join(root, "instrumentation.json"),
-    `${JSON.stringify({ tests, archives, clangVersion: clangVersion.stdout.trim(), rustVersion: rustVersion.stdout.trim(), rust: "ASan", vendoredLibarchive: "ASan + UBSan", limitation: "Rust has no UBSan mode; Rust standard library, external system libraries and assembly are not claimed instrumented" }, null, 2)}\n`,
+    `${JSON.stringify({ tests, archives, clangVersion: clangVersion.stdout.trim(), rustVersion: rustVersion.stdout.trim(), rust: "ASan", vendoredLibarchive: "ASan + UBSan", vendoredLzmaSdk: "ASan + UBSan for C; decoder assembly is uninstrumented", limitation: "Rust has no UBSan mode; Rust standard library, external system libraries and assembly are not claimed instrumented" }, null, 2)}\n`,
   );
   const result = run("cargo", args, {
     encoding: "utf8",

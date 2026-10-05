@@ -1,0 +1,9 @@
+	/* Finalization permits NULL input with zero consumed bytes. */
+	if (in_len != 0)
+		lastrm->next_in += in_len;
+	lastrm->avail_in -= in_len;
+	lastrm->total_in += in_len;
+	if (out_len != 0)
+		lastrm->next_out += out_len;
+	lastrm->avail_out -= out_len;
+	lastrm->total_out += out_len;

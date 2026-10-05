@@ -101,6 +101,7 @@ cmake = "0.1.58"
 path-slash = "0.2.1"
 
 [dev-dependencies]
+proptest = "1.6.0"
 claxon.workspace = true
 rand.workspace = true
 tar.workspace = true

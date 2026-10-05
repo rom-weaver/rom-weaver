@@ -36,6 +36,44 @@ const REPO_LINT_CI_HELPERS = new Set([
   "scripts/ci/github-api.mjs",
 ]);
 
+// The real runtime lifecycle suite imports these host helpers outside the worker layers.
+// The import-graph test MUST reject newly reachable helpers missing from this list.
+const WASM_RUNTIME_SUPPORT = new Set([
+  "packages/rom-weaver-webapp/src/lib/cheats/model.ts",
+  "packages/rom-weaver-webapp/src/lib/checksum-algorithms.ts",
+  "packages/rom-weaver-webapp/src/lib/compression/codec-parser.ts",
+  "packages/rom-weaver-webapp/src/lib/compression/compression-metadata.ts",
+  "packages/rom-weaver-webapp/src/lib/compression/container-format-registry.ts",
+  "packages/rom-weaver-webapp/src/lib/compression/disc-image-policy.ts",
+  "packages/rom-weaver-webapp/src/lib/compression/rom-specific-format-support.ts",
+  "packages/rom-weaver-webapp/src/lib/compression/z3ds-subtypes.ts",
+  "packages/rom-weaver-webapp/src/lib/errors.ts",
+  "packages/rom-weaver-webapp/src/lib/identify/checksum-router.mjs",
+  "packages/rom-weaver-webapp/src/lib/identify/identify-catalog.ts",
+  "packages/rom-weaver-webapp/src/lib/identify/sha256-hex.ts",
+  "packages/rom-weaver-webapp/src/lib/identify/title-index.mjs",
+  "packages/rom-weaver-webapp/src/lib/input/input-assets.ts",
+  "packages/rom-weaver-webapp/src/lib/input/input-classification.ts",
+  "packages/rom-weaver-webapp/src/lib/input/patch-archive-replacement.ts",
+  "packages/rom-weaver-webapp/src/lib/input/rom-specific-file-utils.ts",
+  "packages/rom-weaver-webapp/src/lib/patch-format-classification.ts",
+  "packages/rom-weaver-webapp/src/lib/path-utils.ts",
+  "packages/rom-weaver-webapp/src/lib/perf/op-perf-marks.ts",
+  "packages/rom-weaver-webapp/src/lib/workflow/source-preparation.ts",
+  "packages/rom-weaver-webapp/src/presentation/formatting/index.ts",
+  "packages/rom-weaver-webapp/src/presentation/localization/catalog.ts",
+  "packages/rom-weaver-webapp/src/presentation/localization/locales/de.ts",
+  "packages/rom-weaver-webapp/src/presentation/localization/locales/en.ts",
+  "packages/rom-weaver-webapp/src/presentation/localization/locales/es.ts",
+  "packages/rom-weaver-webapp/src/webapp/offline-warmup.ts",
+  "packages/rom-weaver-webapp/src/webapp/pwa/docs-image-format.ts",
+  "packages/rom-weaver-webapp/src/webapp/pwa/offline-copy-policy.ts",
+  "packages/rom-weaver-webapp/src/webapp/pwa/offline-download-log.ts",
+  "packages/rom-weaver-webapp/src/webapp/pwa/offline-progress-reporter.ts",
+  "packages/rom-weaver-webapp/src/webapp/pwa/offline-warmup-client.ts",
+  "packages/rom-weaver-webapp/src/webapp/pwa/response-encoded-size.ts",
+]);
+
 const EMPTY = {
   rust: false,
   webapp: false,
@@ -143,6 +181,7 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
       /^(?:Cargo\.toml|Cargo\.lock|package\.json|package-lock\.json)$/.test(path) ||
       path.startsWith("scripts/wasm/") ||
       path.startsWith("tests/fixtures/") ||
+      WASM_RUNTIME_SUPPORT.has(path) ||
       path.startsWith("crates/rom-weaver-patches/tests/fixtures/hdiffpatch/") ||
       /^packages\/rom-weaver-webapp\/(?:package(?:-lock)?\.json|vitest(?:\.config\.base|(?:\.wasm)?\.browser\.config)\.mjs)$/.test(
         path,
