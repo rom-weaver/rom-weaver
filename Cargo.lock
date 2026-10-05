@@ -1834,6 +1834,7 @@ dependencies = [
  "path-slash",
  "polonius-the-crab",
  "proc-bitfield",
+ "proptest",
  "rand 0.10.3",
  "rayon",
  "rom-weaver-checksum",
