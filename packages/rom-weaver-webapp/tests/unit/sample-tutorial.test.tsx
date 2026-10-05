@@ -644,7 +644,7 @@ describe("sample tutorial step card", () => {
     expect(document.querySelector(".sample-tutorial-try")?.textContent).toBe("Try itOpen the first drawer.");
   });
 
-  it("holds Continue on a locked step and shows the step's own controls", async () => {
+  it("holds Continue on a locked step that has no work of its own", async () => {
     const workbench = (locked: boolean) => (
       <div className="rw-app">
         <TutorialSection id="tutorial-first" label="First drawer" />
@@ -653,14 +653,7 @@ describe("sample tutorial step card", () => {
           loadingBody="Loading."
           onClose={vi.fn()}
           ready
-          steps={[
-            {
-              ...(STEPS[0] as SampleTutorialStep),
-              aside: locked ? <button type="button">Use the practice files</button> : undefined,
-              locked,
-            },
-            STEPS[1] as SampleTutorialStep,
-          ]}
+          steps={[{ ...(STEPS[0] as SampleTutorialStep), locked }, STEPS[1] as SampleTutorialStep]}
         />
       </div>
     );
@@ -668,16 +661,95 @@ describe("sample tutorial step card", () => {
 
     const next = screen.getByRole("button", { name: "Continue" });
     expect(next.getAttribute("aria-disabled")).toBe("true");
-    expect(
-      screen.getByRole("button", { name: "Use the practice files" }).closest(".sample-tutorial-aside"),
-    ).toBeTruthy();
     fireEvent.click(next);
     expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy();
 
     rerender(workbench(false));
     expect(next.getAttribute("aria-disabled")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Use the practice files" })).toBeNull();
     fireEvent.click(next);
     await waitFor(() => expect(screen.getByRole("heading", { name: "Second section" })).toBeTruthy());
+  });
+
+  it("runs a locked step's Continue work and moves on once the step unlocks", async () => {
+    const onContinue = vi.fn();
+    const workbench = ({ busy = false, error = "", locked = true } = {}) => (
+      <div className="rw-app">
+        <TutorialSection id="tutorial-first" label="First drawer" />
+        <TutorialSection id="tutorial-second" label="Second drawer" />
+        <SampleTutorial
+          download={{ href: "/first-weave.zip", name: "first-weave.zip" }}
+          error={error}
+          loadingBody="Loading."
+          onClose={vi.fn()}
+          ready
+          steps={[{ ...(STEPS[0] as SampleTutorialStep), busy, locked, onContinue }, STEPS[1] as SampleTutorialStep]}
+        />
+      </div>
+    );
+    const { rerender } = render(workbench());
+
+    const next = screen.getByRole("button", { name: "Continue" });
+    expect(next.getAttribute("aria-disabled")).toBeNull();
+    expect(screen.getByRole("link", { name: "Download first-weave.zip" }).getAttribute("href")).toBe(
+      "/first-weave.zip",
+    );
+    fireEvent.click(next);
+    expect(onContinue).toHaveBeenCalledOnce();
+    rerender(workbench({ busy: true }));
+    expect(next.getAttribute("aria-busy")).toBe("true");
+    expect(next.textContent).toBe("Loading sample files…");
+    // A second press while the files load starts nothing new.
+    fireEvent.click(next);
+    expect(onContinue).toHaveBeenCalledOnce();
+
+    rerender(workbench({ locked: false }));
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Second section" })).toBeTruthy());
+    // The download belongs to the first step only.
+    expect(screen.queryByRole("link", { name: "Download first-weave.zip" })).toBeNull();
+  });
+
+  it("stays on a locked step whose Continue work failed", async () => {
+    const workbench = ({ error = "", locked = true } = {}) => (
+      <div className="rw-app">
+        <TutorialSection id="tutorial-first" label="First drawer" />
+        <TutorialSection id="tutorial-second" label="Second drawer" />
+        <SampleTutorial
+          error={error}
+          loadingBody="Loading."
+          onClose={vi.fn()}
+          ready
+          steps={[{ ...(STEPS[0] as SampleTutorialStep), locked, onContinue: vi.fn() }, STEPS[1] as SampleTutorialStep]}
+        />
+      </div>
+    );
+    const { rerender } = render(workbench());
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    rerender(workbench({ error: "Could not load the sample. Try again." }));
+    expect(screen.getByRole("status").textContent).toBe("Could not load the sample. Try again.");
+
+    // Files the reader adds afterwards unlock the step without carrying it on.
+    rerender(workbench({ locked: false }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.getByRole("heading", { name: "First section" })).toBeTruthy();
+  });
+
+  it("highlights the row on screen, not a hidden panel's copy of it", async () => {
+    render(
+      <div className="rw-app">
+        {/* A visited workbench stays mounted, hidden, with the same row ids. */}
+        <div hidden>
+          <TutorialSection id="tutorial-first" label="Hidden drawer" />
+        </div>
+        <div className="panel">
+          <TutorialSection id="tutorial-first" label="First drawer" />
+          <TutorialSection id="tutorial-second" label="Second drawer" />
+          <SampleTutorial loadingBody="Loading." onClose={vi.fn()} ready steps={STEPS} />
+        </div>
+      </div>,
+    );
+    const [hidden, shown] = Array.from(document.querySelectorAll<HTMLElement>("[id='tutorial-first']"));
+    await waitFor(() => expect(shown?.classList.contains("sample-tutorial-target")).toBe(true));
+    expect(hidden?.classList.contains("sample-tutorial-target")).toBe(false);
+    expect(document.querySelector(".sample-tutorial-ring")).toBeTruthy();
   });
 });

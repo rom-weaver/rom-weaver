@@ -255,6 +255,21 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.apply.tutorial.downloadPractice"
+#~ msgstr "Descargar first-weave.zip"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.apply.tutorial.noFiles"
+#~ msgstr "¿No tienes archivos a mano?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.apply.tutorial.usePractice"
+#~ msgstr "Usar los archivos de práctica"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", una extensión de salida. El selector de formato agrega la extensión; elimínala para evitar un nombre duplicado."
 
@@ -436,7 +451,7 @@ msgstr "Añadir una ROM"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.addFiles.tryIt"
-msgstr "Añade una ROM y al menos un parche, o usa los archivos de práctica de abajo."
+msgstr "Añade una ROM y al menos un parche, o pulsa Continuar para usar los archivos de práctica."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1410,6 +1425,11 @@ msgstr "Descargar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tutorial.downloadPractice"
+msgstr "Descargar {file}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.download"
 msgstr "Descargar bundle {format}"
 
@@ -1427,11 +1447,6 @@ msgstr "Descargar {name}"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.downloadTestBundle"
 msgstr "Descargar un paquete de prueba"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.downloadPractice"
-msgstr "Descargar first-weave.zip"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2400,11 +2415,6 @@ msgstr "No se encontró un parche compatible."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.noFiles"
-msgstr "¿No tienes archivos a mano?"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.identify.nameNoMatch"
 msgstr "Ningún juego en los datos de identificación tiene ese nombre."
 
@@ -2967,6 +2977,11 @@ msgstr "Prueba después de aplicar"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.practiceFiles"
 msgstr "Archivos de práctica"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.practiceFiles"
+msgstr "Archivos de práctica:"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4196,11 +4211,6 @@ msgstr "Usar ROM duplicadas"
 #: src/presentation/localization/messages.ts
 msgid "ui.drop.duplicateTitle"
 msgstr "¿Usar ROM duplicadas?"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.usePractice"
-msgstr "Usar los archivos de práctica"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

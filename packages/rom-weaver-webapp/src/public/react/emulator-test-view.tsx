@@ -627,6 +627,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
     <div className="emulator-test-view">
       {sampleTutorialActive ? (
         <SampleTutorial
+          download={{ href: resolveAssetUrl(assetBaseUrl, TEST_SAMPLE_ASSET), name: TEST_SAMPLE_ASSET }}
           loadingBody="RomWeaver is loading a tiny homebrew NES ROM for the Test guide."
           onClose={closeTestSample}
           ready={sampleTutorialReady}

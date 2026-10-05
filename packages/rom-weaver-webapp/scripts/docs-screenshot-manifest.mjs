@@ -64,14 +64,14 @@ const DOCS_SCREENSHOT_CASES = [
     target: "#rom-weaver-row-patch-stack",
   },
 ];
-const PRACTICE_FILES_BUTTON = ".sample-tutorial-practice button";
+const PRACTICE_FILES_BUTTON = ".sample-tutorial-actions .btn.primary";
 const waitForDocsScreenshotReady = async (page, captureCase) => {
   await page.locator("body").waitFor({ state: "visible" });
   if (captureCase.dismissGuide) {
     await page.locator('.sample-tutorial-dialog[aria-busy="false"]').waitFor({ state: "visible" });
   }
-  // Guided Apply waits on its drop zone until files are added; the guide card's
-  // own button stages the practice files every Apply capture shows.
+  // Guided Apply waits on its drop zone until files are added; its Continue
+  // stages the practice files every Apply capture shows.
   if (captureCase.practiceFiles) {
     await page.locator(PRACTICE_FILES_BUTTON).click();
   }
