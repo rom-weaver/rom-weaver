@@ -138,4 +138,27 @@ describe("CodecCombobox", () => {
 
     expect(scrollIntoView).not.toHaveBeenCalled();
   });
+
+  it("reopens on click and ignores a stale blur timeout after refocus", async () => {
+    const { container } = render(<StatefulCombobox initial="deflate" />);
+    const input = container.querySelector("input[role=combobox]") as HTMLInputElement;
+
+    await act(async () => {
+      fireEvent.focus(input);
+      fireEvent.keyDown(input, { key: "Escape" });
+    });
+    expect(document.querySelector("[role=listbox]")).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(input);
+    });
+    expect(document.querySelector("[role=listbox]")).toBeTruthy();
+
+    fireEvent.blur(input);
+    fireEvent.focus(input);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120);
+    });
+    expect(document.querySelector("[role=listbox]")).toBeTruthy();
+  });
 });
