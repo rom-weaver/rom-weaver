@@ -89,6 +89,13 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          # OpenSSL MUST use native Perl because Git's Perl omits required core modules.
+          $perl = 'C:\Strawberry\perl\bin\perl.exe'
+          if (-not (Test-Path $perl)) { throw 'The Windows 2025 runner image does not contain Strawberry Perl.' }
+          & $perl -MIPC::Cmd -e 1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "OPENSSL_SRC_PERL=$perl" >> $env:GITHUB_ENV
+
           $msys2 = 'C:\msys64'
           $pacman = Join-Path $msys2 'usr\bin\pacman.exe'
           if (-not (Test-Path $pacman)) { throw 'The Windows 2025 runner image does not contain MSYS2.' }
