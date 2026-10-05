@@ -15,6 +15,13 @@ on:
       - main
     # Release tags deploy the webapp; tests run on pull requests and branch pushes.
     tags: ["v*"]
+  # Nightly native coverage: the eight CLI targets, macOS Rust, and the arm64
+  # runtime check that main pushes skip (see `full_native` in
+  # scripts/ci/classify-changes.mjs). It selects only Rust, and only when a
+  # Rust input changed since the last green nightly, so a quiet day costs one
+  # `Changes` job.
+  schedule:
+    - cron: "41 5 * * *"
 
 # Least privilege: most of this workflow only reads the repo. The deploy job
 # widens its own permissions rather than granting them workflow-wide.
@@ -23,15 +30,22 @@ permissions:
 
 # Superseded pushes to a branch are pointless work; on main every commit is a
 # release candidate, so those runs are allowed to finish.
+# The nightly gets its own group: it runs on main's ref, and a pending run in a
+# shared group would be replaced by the next push (or replace it).
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'schedule' && 'nightly' || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   changes:
     name: Changes
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    # A cold identify-data cache rebuilds the packs here; see below.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # The nightly reads its own run history to find the last green nightly.
+      actions: read
     outputs:
       rust: ${{ steps.classify.outputs.rust }}
       webapp: ${{ steps.classify.outputs.webapp }}
@@ -45,6 +59,9 @@ jobs:
       # event but an ordinary pull request. The release pull request is the
       # exception among pull requests; scripts/ci/release-pr.mjs owns the rule.
       full_matrix: ${{ steps.classify.outputs.full_matrix }}
+      # The non-Linux CLI targets, macOS Rust, and the arm64 runtime check:
+      # full_matrix minus pushes to main, which leave them to the nightly.
+      full_native: ${{ steps.classify.outputs.full_native }}
       cli_platforms: ${{ steps.cli-platforms.outputs.matrix }}
       deploy_targets: ${{ steps.plan.outputs.targets }}
       preview_branch: ${{ steps.plan.outputs.preview_branch }}
@@ -65,10 +82,23 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
         run: node scripts/ci/cli-platform-matrix.mjs
 
+      # The nightly diffs against the last nightly that passed, so it rebuilds
+      # the native targets only when a Rust input changed since then. No
+      # previous green nightly leaves BASE_SHA empty, which selects everything.
+      - name: Find the last green nightly
+        id: last-nightly
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          echo "sha=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml
+          --event schedule --branch main --status success --limit 1
+          --json headSha --jq '.[0].headSha // ""')" >> "$GITHUB_OUTPUT"
+
       - name: Classify changed paths
         id: classify
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || steps.last-nightly.outputs.sha || '' }}
           HEAD_SHA: ${{ github.sha }}
           EVENT_NAME: ${{ github.event_name }}
           # Empty for anything that is not a pull request. It is what tells the
@@ -153,38 +183,41 @@ jobs:
           echo "targets=$matrix" >> "$GITHUB_OUTPUT"
           echo "Deploying ref ${GITHUB_REF_NAME} to: $channels"
 
-  # The packs are content-identical across all runners. Restore or build them
-  # once, then share the exact tree with every selected consumer in this run.
-  # On a warm cache this is one restore plus artifact fan-out; on a miss it
-  # prevents each Rust, WASM, Docker, and browser job from rebuilding it.
-  identify-data:
-    name: Prepare ROM identify data
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    needs: changes
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      needs.changes.outputs.rust == 'true' ||
-      needs.changes.outputs.webapp == 'true' ||
-      needs.changes.outputs.docker_matrix != '[]' ||
-      (needs.changes.outputs.deploy_targets != '' &&
-      needs.changes.outputs.deploy_targets != '[]') ||
-      (github.event_name == 'pull_request' &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.user.login != 'dependabot[bot]')
-    steps:
-      - uses: actions/checkout@v7
+      # The packs are content-identical across all runners. Restore or build them
+      # once, then share the exact tree with every selected consumer in this run.
+      # This lives in `changes` rather than a job of its own because every
+      # consumer already waits on `changes`: a separate producer added a second
+      # wait for a runner (1.5-4 minutes under the concurrency cap) in front of
+      # every Rust, WASM, Docker, and browser job, for about eight seconds of
+      # work on a warm cache. A cache miss rebuilds here (minutes, a few times a
+      # year), which also delays the jobs that do not need the packs.
+      - name: Select identify data
+        id: identify
+        if: >-
+          github.event_name == 'workflow_dispatch' ||
+          steps.classify.outputs.rust == 'true' ||
+          steps.classify.outputs.webapp == 'true' ||
+          steps['docker-matrix'].outputs.matrix != '[]' ||
+          (steps.plan.outputs.targets != '' &&
+          steps.plan.outputs.targets != '[]') ||
+          (github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.event.pull_request.user.login != 'dependabot[bot]')
+        run: echo "selected=true" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-node@v7
+      - if: steps.identify.outputs.selected == 'true'
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           package-manager-cache: false
 
-      - uses: ./.github/actions/identify-data
+      - if: steps.identify.outputs.selected == 'true'
+        uses: ./.github/actions/identify-data
 
       # These files are already Brotli-compressed where it matters. Avoid
       # spending CPU recompressing a large tree before every downstream job.
       - name: Upload identify data
+        if: steps.identify.outputs.selected == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: identify-data
@@ -241,7 +274,7 @@ jobs:
     name: Docker build (${{ matrix.name }}, ${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
-    needs: [changes, identify-data]
+    needs: changes
     if: >-
       github.ref_type != 'tag'
       && needs.changes.outputs.docker_matrix != '[]'
@@ -516,7 +549,7 @@ jobs:
     name: Build WASM module + webapp
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    needs: [changes, identify-data]
+    needs: changes
     outputs:
       bundle: ${{ steps.webapp-bundle.outcome }}
       size: ${{ steps.size.outcome }}
@@ -687,7 +720,7 @@ jobs:
     name: "Rust (Linux: lint + metadata)"
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    needs: [changes, identify-data]
+    needs: changes
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
     env:
       CARGO_TERM_COLOR: always
@@ -753,7 +786,7 @@ jobs:
     name: "Rust (Linux: tests + package)"
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    needs: [changes, identify-data]
+    needs: changes
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
     env:
       CARGO_TERM_COLOR: always
@@ -796,7 +829,7 @@ jobs:
     name: CLI target (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
-    needs: [changes, identify-data]
+    needs: changes
     if: github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
     env:
       CARGO_INCREMENTAL: "0"
@@ -851,7 +884,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     needs: [changes, cli-platforms]
     if: >-
-      github.ref_type != 'tag' && needs.changes.outputs.full_matrix == 'true'
+      github.ref_type != 'tag' && needs.changes.outputs.full_native == 'true'
       && needs.changes.outputs.rust == 'true'
     steps:
       - uses: actions/checkout@v7
@@ -918,9 +951,9 @@ jobs:
     name: Rust (macOS)
     runs-on: macos-15
     timeout-minutes: 90
-    needs: [changes, identify-data]
+    needs: changes
     if: >-
-      github.ref_type != 'tag' && needs.changes.outputs.full_matrix == 'true'
+      github.ref_type != 'tag' && needs.changes.outputs.full_native == 'true'
       && needs.changes.outputs.rust == 'true'
     env:
       CARGO_TERM_COLOR: always
@@ -952,7 +985,7 @@ jobs:
     name: Rust (Windows)
     runs-on: windows-2025
     timeout-minutes: 90
-    needs: [changes, identify-data]
+    needs: changes
     if: >-
       github.ref_type != 'tag' && needs.changes.outputs.rust == 'true'
     env:
@@ -1047,14 +1080,14 @@ jobs:
       # nextest and the plain workspace test above never build these: both
       # examples set `required-features`, which cargo only enables when the
       # matching `--features ... --example ...` invocation asks for them
-      # explicitly. Kept as separate steps for the same reason `test-rust` in
-      # .config/mise.toml splits them out - this leg bypasses mise (see the
-      # job comment above) so it needs its own copy of the same two commands.
-      - name: Rust typegen example tests
-        run: cargo test -p rom-weaver-cli --locked --features typescript-types --example rom-weaver-typegen
-
-      - name: Rust wasm-app example tests
-        run: cargo test -p rom-weaver-cli --locked --features wasm-app --example rom-weaver-app
+      # explicitly. One invocation enables both features, as `test-rust` in
+      # .config/mise.toml does, so the CLI crate compiles once for the pair -
+      # this leg bypasses mise (see the job comment above) so it needs its own
+      # copy of the command.
+      - name: Rust example tests
+        run: >-
+          cargo test -p rom-weaver-cli --locked --features typescript-types,wasm-app
+          --example rom-weaver-typegen --example rom-weaver-app
 
   # Presents one stable check name while the independent host and threaded-target
   # work runs in parallel, so branch protection has a single thing to require.
@@ -1093,7 +1126,7 @@ jobs:
         run: >-
           node scripts/ci/assert-jobs.mjs
           '${{ needs.changes.result }}'
-          '${{ needs.changes.outputs.rust == 'true' && needs.changes.outputs.full_matrix == 'true' }}'
+          '${{ needs.changes.outputs.rust == 'true' && needs.changes.outputs.full_native == 'true' }}'
           'cli-linux-arm64=${{ needs.cli-linux-arm64.result }}'
           'rust-macos=${{ needs.rust-macos.result }}'
 
@@ -1103,7 +1136,7 @@ jobs:
     name: Webapp (static)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    needs: [changes, wasm, identify-data]
+    needs: [changes, wasm]
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
     permissions:
       contents: read
@@ -1297,7 +1330,7 @@ jobs:
     name: Webapp (E2E)
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    needs: [changes, wasm, identify-data]
+    needs: [changes, wasm]
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
     env:
       ROM_WEAVER_SYSTEM_CHROME: "1"
@@ -1337,7 +1370,7 @@ jobs:
     # macos-15 tracks the current Playwright WebKit revision; macos-14 pins an obsolete override.
     runs-on: macos-15
     timeout-minutes: 60
-    needs: [changes, wasm, identify-data]
+    needs: [changes, wasm]
     if: github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true'
     env:
       ROM_WEAVER_E2E_USE_PREBUILT_DIST: "1"
@@ -1415,7 +1448,7 @@ jobs:
     name: Webapp deploy (preview, cached wasm)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    needs: [changes, identify-data]
+    needs: changes
     # Same non-gating boundary as `deploy`: a Cloudflare outage must not turn a
     # green build red.
     continue-on-error: true
@@ -1511,7 +1544,7 @@ jobs:
     name: Webapp deploy (${{ matrix.target.channel }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    needs: [wasm, changes, deploy-preview-fast, identify-data]
+    needs: [wasm, changes, deploy-preview-fast]
     # Deployment was a separate, non-gating workflow before it moved here to
     # share the wasm artifact. Preserve that boundary: a Cloudflare outage must
     # not turn a green main build red and suppress release automation.

@@ -84,8 +84,11 @@ test("CI prepares identify data once and shares the artifact with every consumer
     const next = body.slice(start + 1).search(/\n  [\w-]+:\n/u);
     return next === -1 ? body.slice(start) : body.slice(start, start + 1 + next);
   };
-  const producer = jobFor("identify-data");
-  assert.ok(producer, "CI has no identify data producer job");
+  // `changes` produces the packs: every consumer already waits on it, so a
+  // separate producer job only added a second runner queue.
+  assert.equal(jobFor("identify-data"), undefined, "a separate producer job is back");
+  const producer = jobFor("changes");
+  assert.ok(producer, "CI has no changes job to produce identify data");
   assert.match(producer, /uses: \.\/\.github\/actions\/identify-data/u);
   assert.match(producer, /name: identify-data/u);
   assert.match(producer, /path: crates\/rom-weaver-cli\/data\/identify/u);
@@ -113,7 +116,7 @@ test("CI prepares identify data once and shares the artifact with every consumer
   for (const name of consumers) {
     const job = jobFor(name);
     assert.ok(job, `CI has no ${name} job`);
-    assert.match(job, /needs:.*identify-data/u, `${name} does not wait for identify data`);
+    assert.match(job, /needs:.*\bchanges\b/u, `${name} does not wait for identify data`);
   }
 
   for (const name of ["docker", "wasm", "rust-lint", "rust-host", "rust-macos", "rust-windows", "webapp-static", "webapp-e2e", "webapp-webkit-e2e"]) {
@@ -142,9 +145,9 @@ test("identify Brotli cache is main-only and has a stable producer directory", (
 
 test("identify producer runs for every selected consumer and skips fork documentation runs", () => {
   const body = readFileSync(WORKFLOW, "utf8");
-  const identify = body.match(/^  identify-data:\n([\s\S]*?)^    steps:/mu)?.[0];
+  const identify = body.match(/      - name: Select identify data\n([\s\S]*?)\n        run:/u)?.[1];
   assert.ok(identify, "CI has no identify producer condition");
-  const condition = identify.match(/    if: >-\n([\s\S]*?)\n    steps:/u)?.[1].trim();
+  const condition = identify.match(/        if: >-\n([\s\S]*)/u)?.[1].trim();
   assert.ok(condition, "identify producer has no condition");
   const selected = ({ eventName, rust = "false", webapp = "false", docker = "[]", deploy = "", firstParty = false }) =>
     runInNewContext(condition, {
@@ -158,7 +161,11 @@ test("identify producer runs for every selected consumer and skips fork document
           },
         },
       },
-      needs: { changes: { outputs: { deploy_targets: deploy, docker_matrix: docker, rust, webapp } } },
+      steps: {
+        classify: { outputs: { rust, webapp } },
+        "docker-matrix": { outputs: { matrix: docker } },
+        plan: { outputs: { targets: deploy } },
+      },
     });
 
   assert.equal(selected({ eventName: "push", webapp: "true" }), true, "tag deploy can build WASM");
