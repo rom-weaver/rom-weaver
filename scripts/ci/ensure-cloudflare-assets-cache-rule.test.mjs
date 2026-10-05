@@ -142,6 +142,7 @@ test("page rule caches only published negotiated pages with raw Accept variants"
     headers: { accept: { action: "passthrough" }, "accept-encoding": { action: "normalize" } },
   });
   assert.equal(pageCacheRule().action_parameters.edge_ttl.mode, "respect_origin");
+  assert.deepEqual(pageCacheRule().action_parameters.browser_ttl, { mode: "respect_origin" });
   assert.ok(PAGE_CACHE_RULE_EXPRESSION.length <= 4096);
 });
 
