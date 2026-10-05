@@ -508,6 +508,25 @@ describe("output-producing runtime workers", () => {
     });
   });
 
+  it("names a lossless disc trim by its actual format and retains logical size metadata", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({
+        emitted_files: [{ path: "/out/trimmed.iso", size_bytes: 700 }],
+        output_format: "rvz",
+        input_size: 65536,
+        raw_size: 65536,
+      }),
+    );
+    await expect(
+      invokeRomWeaverTrimWorker({ outputName: "trimmed.iso", sourceFilePath: "/game.iso" }),
+    ).resolves.toMatchObject({
+      fileName: "trimmed.rvz",
+      filePath: "/out/trimmed.iso",
+      size: 700,
+      trimSizeSummary: { inputSize: 65536, rawSize: 65536 },
+    });
+  });
+
   it("creates a patch, trims a ROM, and undoes a PPF", async () => {
     mocks.runRomWeaverJson.mockResolvedValue(
       succeededResult({ emitted_files: [{ path: "/out/custom.bin", size_bytes: 7 }] }),

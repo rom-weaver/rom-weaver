@@ -231,12 +231,14 @@ abstract class BaseWorkflowController<
         details: { activeOperation: this.activeMutation, operation },
       });
     }
+    const operationSignal = this.abortController.signal;
     this.activeMutation = operation;
     this.emitChange();
     try {
       return await callback();
     } finally {
       this.activeMutation = null;
+      this.rearmAbortController(operationSignal);
       this.emitChange();
     }
   }

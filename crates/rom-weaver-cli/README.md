@@ -40,7 +40,7 @@ This crate ships the `rom-weaver` binary and the shared `rom_weaver_app` command
 - **Inspect and extract archives, disc images, and compressed ROMs.** ZIP, 7z, RAR, tar, CHD, RVZ, Z3DS, CSO, PBP, GCZ, WIA, WBFS, and more, including nested archives.
 - **Create compressed output.** ZIP, 7z, CHD, RVZ, and Z3DS. CHD and RVZ output is validated against `chdman` and `dolphin-tool`, respectively.
 - **Checksum and verify.** CRC-32, CRC-32C, CRC-16, Adler-32, MD5, SHA-1, SHA-256, and BLAKE3, with copier-header detection and header-aware checksum variants.
-- **Trim and restore.** Trimming for NDS, GBA, 3DS, XISO, and RVZ scrub. NDS, GBA, and 3DS support padding restoration. An opt-in footer stores the original size and a fill byte; it does not store removed data.
+- **Trim and restore.** Trimming for NDS, GBA, 3DS, and XISO, plus lossless GameCube/Wii conversion to RVZ without sector scrubbing. NDS, GBA, and 3DS support padding restoration. An opt-in footer stores the original size and a fill byte; it does not store removed data.
 - **Share workflows.** `rom-weaver-bundle.json` bundles pin patch order, checksums, and output naming so others can replay the exact workflow.
 - **Scriptable.** `--json` emits one complete result document and `--jsonl` emits line-delimited events; generated assets use result details in JSON modes.
 

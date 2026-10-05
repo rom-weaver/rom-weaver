@@ -147,3 +147,66 @@ test("trim workflow sends extracted archive payload to the trim worker", async (
     await workflow.dispose();
   }
 });
+
+const buildAlignedGameCubeRom = () => {
+  const bytes = new Uint8Array(65536);
+  bytes.set(new TextEncoder().encode("RWTEST"));
+  bytes.set([0xc2, 0x33, 0x9f, 0x3d], 0x1c);
+  bytes.set(new TextEncoder().encode("rom-weaver-test"), 0x20);
+  for (let index = 0x440; index < bytes.length; index++) bytes[index] = index % 251;
+  return bytes;
+};
+
+test("disc trim names lossless RVZ honestly and converts the intermediate to CHD", async () => {
+  const bytes = buildAlignedGameCubeRom();
+  const workflow = new TrimWorkflow({
+    settings: { output: { compression: "none", outputName: "trimmed.iso" }, workers: { threads: 1 } },
+  });
+  try {
+    await workflow.setInput(new File([bytes], "game.iso"));
+    expect(workflow.getInput()?.romType?.recommendedFormat).toBe("rvz");
+    const raw = await workflow.run();
+    try {
+      expect(raw.output.fileName).toBe("trimmed.rvz");
+      expect(raw.sizeSummary).toMatchObject({ inputSize: bytes.length, rawSize: bytes.length });
+      const blob = await raw.output.getBlob();
+      expect(Array.from(new Uint8Array(await blob.slice(0, 4).arrayBuffer()))).toEqual([82, 86, 90, 1]);
+    } finally {
+      await raw.output.dispose();
+    }
+    await workflow.setOutputFormat("chd");
+    await workflow.setOutputName("trimmed.chd");
+    const chd = await workflow.run();
+    try {
+      expect(chd.output.fileName).toBe("trimmed.chd");
+      expect(chd.sizeSummary).toMatchObject({ inputSize: bytes.length, rawSize: bytes.length });
+      const blob = await chd.output.getBlob();
+      expect(new TextDecoder().decode(await blob.slice(0, 8).arrayBuffer())).toBe("MComprHD");
+    } finally {
+      await chd.output.dispose();
+    }
+  } finally {
+    await workflow.dispose();
+  }
+});
+
+test("trim applies edited ZIP Store settings to an already staged input", async () => {
+  const workflow = new TrimWorkflow({
+    settings: { output: { compression: "zip", outputName: "trimmed.zip" }, workers: { threads: 1 } },
+  });
+  try {
+    await workflow.setInput(new File([buildTestNdsRom()], "game.nds"));
+    await workflow.setSettings({ output: { container: { zipCodec: "store", zipLevel: 0 } }, workers: { threads: 1 } });
+    const result = await workflow.run();
+    try {
+      const blob = await result.output.getBlob();
+      const header = new DataView(await blob.slice(0, 30).arrayBuffer());
+      expect(header.getUint32(0, true)).toBe(0x04034b50);
+      expect(header.getUint16(8, true)).toBe(0);
+    } finally {
+      await result.output.dispose();
+    }
+  } finally {
+    await workflow.dispose();
+  }
+});

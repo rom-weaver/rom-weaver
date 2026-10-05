@@ -1076,7 +1076,7 @@ padding byte. Without a footer, the size rounds up to the next power of two;
 NDS also keeps the used-data boundary from its header. Restoration does not
 guarantee the original bytes.
 
-XISO and RVZ scrub cannot be reverted."
+XISO trimming and lossless RVZ conversion do not support this operation."
         )
     )]
     #[serde(default)]
@@ -1098,7 +1098,7 @@ XISO and RVZ scrub cannot be reverted."
             value_enum,
             value_delimiter = ',',
             default_value = "rom",
-            help = FILTER_HELP
+            help = "Filter archive members by kind (default: rom); patch-only filters are not supported"
         )
     )]
     #[serde(default = "default_rom_filter_kinds")]

@@ -33,7 +33,7 @@ Standard CRC-32/IEEE (polynomial `0xEDB88320`, init `0xFFFFFFFF`, reflected, fin
 
 ## Detection and revert
 
-XISO and RVZ scrub reject `--revert-marker` and `--revert`, including inputs with an existing footer. Their rebuilt disc layout cannot be restored by appending padding.
+XISO and RVZ conversion reject `--revert-marker` and `--revert`, including inputs with an existing footer. Disc conversion and rebuilding cannot be reversed by appending padding.
 
 For NDS-family, GBA, and 3DS ROMs, on `--revert`, before the format-specific size heuristics, rom-weaver reads the final 14 bytes and treats them as a footer only if **both** the magic matches `RWT\x01` **and** the CRC-32 validates. When a valid footer is present:
 

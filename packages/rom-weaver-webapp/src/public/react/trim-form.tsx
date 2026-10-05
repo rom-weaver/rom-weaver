@@ -81,7 +81,7 @@ import {
 import { deriveWorkflowRunTiming, useWorkflowRunLifecycle } from "./workflow-run-lifecycle.ts";
 import { describeAgentSource, useAgentWorkflow } from "../../webapp/agent/workflow-registry.ts";
 
-/** Trim-eligible formats only (Rust `TrimInputKind::from_path` + rvz-scrub
+/** Trim-eligible formats only (Rust `TrimInputKind::from_path` + rvz-convert
  * candidates), listed in the 0x01 info popover - not the full ROM registry. */
 const TRIM_SUPPORTED_FILES = [
   {
@@ -310,7 +310,7 @@ const getCompletedDownloadMeta = (
     .filter(Boolean)
     .join(" · ");
   return {
-    format: `Trimmed .${getSourceExtension(fileName)}`,
+    format: `${getSourceExtension(fileName) === "rvz" ? "Converted" : "Trimmed"} .${getSourceExtension(fileName)}`,
     savedSize: savedSize || undefined,
     size: typeof outputSize === "number" ? formatByteSize(outputSize) : undefined,
   };
@@ -609,6 +609,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const sourceFileName = getReactBinarySourceFileName(source, "ROM");
   const resolvedSourceFileName = sourceState?.fileName || sourceFileName;
   const rawOutputFormat = getSourceExtension(resolvedSourceFileName);
+  const losslessDiscConversion = sourceState?.romType?.recommendedFormat === "rvz";
   const defaultCompressionMode = getDefaultCompressionMode(settings);
   const defaultArchiveFormat = getDefaultCompressionArchive(defaultCompressionMode);
   const configuredOutputFormat = props.outputFormat ?? (outputFormatEdited ? internalOutputFormat : "");
@@ -624,7 +625,11 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     defaultCompressionMode,
     rawOutputFormat,
   });
-  const resolvedOutputFormat = configuredOutputFormat || automaticOutputFormat;
+  const requestedOutputFormat = configuredOutputFormat || automaticOutputFormat;
+  const resolvedOutputFormat =
+    losslessDiscConversion && (requestedOutputFormat === rawOutputFormat || requestedOutputFormat === "none")
+      ? "rvz"
+      : requestedOutputFormat;
   const configuredOutputName = getCreateSettingsOutputName(props.settings || props.defaultSettings || providerSettings);
   const identifiedOutputTitle = identifiedOutputBaseName(sourceState?.identification);
   const useIdentifiedOutputName = settings.output?.identifiedName !== false;
@@ -950,6 +955,13 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         trimWorkflow,
         usingStagedWorkflow,
       });
+      await trimWorkflow.setSettings(
+        toCreateWorkflowSettings(
+          { ...settings, output: { ...settings.output, compression: outputCompression } } as CreateSettings,
+          executionOutputName,
+          props.threads,
+        ),
+      );
       await trimWorkflow.setOutputFormat(resolvedOutputFormat);
       await trimWorkflow.setOutputName(executionOutputName);
 
@@ -1039,10 +1051,13 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       }
     : null;
 
-  const rawExtensionOption = rawOutputFormat;
+  const rawExtensionOption = losslessDiscConversion ? "" : rawOutputFormat;
   const formatOptions = useMemo(
-    () => createTrimOutputOptions(rawExtensionOption, { rawLabel: source ? undefined : "None" }),
-    [rawExtensionOption, source],
+    () =>
+      createTrimOutputOptions(losslessDiscConversion ? "rvz" : rawExtensionOption, {
+        rawLabel: source ? undefined : "None",
+      }),
+    [losslessDiscConversion, rawExtensionOption, source],
   );
   const compressFormatOptions = useMemo(
     () => createCompressionTypeOptions(formatOptions, rawExtensionOption),
@@ -1204,8 +1219,14 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         <strong>Output</strong>
         <ul>
           <li>Set the filename without an extension - the format selector controls it.</li>
-          <li>Trimming permanently removes trailing padding from the ROM and can't be undone.</li>
-          <li>Choose the raw extension to keep the trimmed bytes, or zip/7z to compress them.</li>
+          {losslessDiscConversion ? (
+            <li>Disc conversion preserves all data in RVZ. Savings come from compression.</li>
+          ) : (
+            <>
+              <li>Trimming permanently removes trailing padding from the ROM and can't be undone.</li>
+              <li>Choose the raw extension to keep the trimmed bytes, or zip/7z to compress them.</li>
+            </>
+          )}
         </ul>
       </InfoPopover>
     ),
@@ -1245,11 +1266,19 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     title: "Trim",
   });
 
+  let trimConfirmationBody = `The trimmed copy of ${sourceFileName} is saved as a new download - your original file is not changed. Keep the original: some patches and tools need the untrimmed ROM, and restored padding may not be byte-identical.`;
+  if (losslessDiscConversion) {
+    trimConfirmationBody = `A lossless copy of ${sourceFileName} is saved as a new download. All disc data is preserved; savings come from compression. Your original file is not changed.`;
+  }
+  if (trimPreparationPending) {
+    trimConfirmationBody = `A new copy of ${sourceFileName} is saved as a download. Supported cartridge padding is removed; GameCube and Wii discs are converted losslessly. Your original file is not changed. Keep the original for patches and tools.`;
+  }
+
   const createModel = (): TrimPatchFormViewModel => ({
     done: !!completedOutput,
     onSelectTab: props.onSelectTab,
     confirm: {
-      body: `The trimmed copy of ${sourceFileName} is saved as a new download - your original file is not changed. Keep the original: some patches and tools need the untrimmed ROM, and restored padding may not be byte-identical.`,
+      body: trimConfirmationBody,
       cancelLabel: "Cancel",
       confirmLabel: "Trim ROM",
       onCancel: () => setConfirmOpen(false),

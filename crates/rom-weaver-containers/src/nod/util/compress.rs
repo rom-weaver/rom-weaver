@@ -139,90 +139,50 @@ impl Compressor {
     }
 }
 
-#[cfg(feature = "compress-zlib-vendored")]
-use libz_sys as zlib_raw;
-
-#[cfg(all(feature = "compress-zlib", not(feature = "compress-zlib-vendored")))]
-mod zlib_raw {
-    use core::ffi::{c_int, c_ulong};
-
-    pub type uLong = c_ulong;
-    pub type uLongf = c_ulong;
-
-    pub const Z_OK: c_int = 0;
-    pub const Z_BUF_ERROR: c_int = -5;
-
-    #[cfg_attr(not(target_env = "msvc"), link(name = "z"))]
-    #[cfg_attr(target_env = "msvc", link(name = "zlib", kind = "static"))]
-    unsafe extern "C" {
-        pub fn uncompress(
-            dest: *mut u8,
-            destLen: *mut uLongf,
-            source: *const u8,
-            sourceLen: uLong,
-        ) -> c_int;
-
-        pub fn compress2(
-            dest: *mut u8,
-            destLen: *mut uLongf,
-            source: *const u8,
-            sourceLen: uLong,
-            level: c_int,
-        ) -> c_int;
-    }
-}
-
 #[cfg(feature = "compress-zlib")]
 mod zlib_api {
-    use std::{ffi::c_int, io};
+    use std::io;
 
-    use super::zlib_raw;
+    use flate2::{Compress, Compression, Decompress, FlushCompress, FlushDecompress, Status};
 
+    // WASM's Z_SOLO build MUST receive explicit allocators. flate2 supplies them
+    // for the same zlib backend, unlike zlib's uncompress/compress2 helpers.
     pub fn decompress(buf: &[u8], out: &mut [u8]) -> io::Result<usize> {
-        let mut out_len = zlib_raw::uLongf::try_from(out.len())
-            .map_err(|_| io::Error::other("Output buffer length exceeds zlib limits"))?;
-        let in_len = zlib_raw::uLong::try_from(buf.len())
-            .map_err(|_| io::Error::other("Input buffer length exceeds zlib limits"))?;
-        let code =
-            unsafe { zlib_raw::uncompress(out.as_mut_ptr(), &mut out_len, buf.as_ptr(), in_len) };
-        match code {
-            zlib_raw::Z_OK => Ok(out_len as usize),
-            _ => Err(io::Error::new(
+        let mut decoder = Decompress::new(true);
+        let status = decoder
+            .decompress(buf, out, FlushDecompress::Finish)
+            .map_err(|error| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("zlib decompression failed: {error}"),
+                )
+            })?;
+        if status != Status::StreamEnd {
+            return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("zlib decompression failed with code {code}"),
-            )),
+                "zlib decompression failed: incomplete stream or output buffer too small",
+            ));
         }
+        Ok(decoder.total_out() as usize)
     }
 
     pub fn compress(buf: &[u8], level: u8, out: &mut Vec<u8>) -> io::Result<bool> {
-        let in_len = zlib_raw::uLong::try_from(buf.len())
-            .map_err(|_| io::Error::other("Input buffer length exceeds zlib limits"))?;
-        let capacity = zlib_raw::uLongf::try_from(out.capacity())
-            .map_err(|_| io::Error::other("Output buffer capacity exceeds zlib limits"))?;
-        out.resize(out.capacity(), 0);
-        let mut out_len = capacity;
-        let code = unsafe {
-            zlib_raw::compress2(
-                out.as_mut_ptr(),
-                &mut out_len,
-                buf.as_ptr(),
-                in_len,
-                level as c_int,
-            )
-        };
-        match code {
-            zlib_raw::Z_OK => {
-                out.truncate(out_len as usize);
-                Ok(true)
-            }
-            zlib_raw::Z_BUF_ERROR => {
-                out.clear();
-                Ok(false)
-            }
-            _ => Err(io::Error::other(format!(
-                "zlib compression failed with code {code}"
-            ))),
+        if level > 9 {
+            return Err(io::Error::other(format!(
+                "zlib compression failed: invalid level {level}"
+            )));
         }
+        let mut encoder = Compress::new(Compression::new(u32::from(level)), true);
+        out.resize(out.capacity(), 0);
+        let status = encoder
+            .compress(buf, out, FlushCompress::Finish)
+            .map_err(|error| io::Error::other(format!("zlib compression failed: {error}")))?;
+        if status != Status::StreamEnd {
+            out.clear();
+            return Ok(false);
+        }
+        out.truncate(encoder.total_out() as usize);
+        Ok(true)
     }
 }
 
