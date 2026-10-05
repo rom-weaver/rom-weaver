@@ -32,6 +32,8 @@ export function renderSignals(signals, details = {}) {
     extra.push(
       `Mutation outcomes: ${mutation.caught} caught; ${mutation.surviving} surviving; ${mutation.timeouts} timeouts; ${mutation.buildFailures} build failures; ${mutation.baselineFailures} baseline failures.`,
     );
+    if (mutation.noSelectedMutants)
+      extra.push("No selected mutants; this diff provides no mutation evidence.");
     for (const item of (mutation.survivors || []).slice(0, 20))
       extra.push(`- ${item.outcome}: ${item.mutant.name || JSON.stringify(item.mutant)}`);
     if ((mutation.survivors || []).length > 20)
