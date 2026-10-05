@@ -34,19 +34,24 @@ test("defaults to the full matrix when no event is given", () => {
   assert.deepEqual(selectPlatformMatrix(platforms, ""), platforms);
 });
 
-test("keeps the full matrix on push and workflow_dispatch", () => {
-  for (const event of ["push", "workflow_dispatch", "schedule"]) {
+test("keeps the full matrix on the nightly schedule and workflow_dispatch", () => {
+  for (const event of ["workflow_dispatch", "schedule"]) {
     assert.deepEqual(selectPlatformMatrix(platforms, event), platforms, event);
   }
 });
 
-test("narrows to the pr-marked subset on pull_request", () => {
-  const subset = selectPlatformMatrix(platforms, "pull_request");
-  assert.deepEqual(
-    subset.map((platform) => platform.package),
-    ["linux-x64-gnu"],
-  );
-  assert.ok(subset.length < platforms.length, "the subset must actually be smaller");
+// Pushes to main leave the other eight targets to the nightly schedule and the
+// release pull request.
+test("narrows to the pr-marked subset on pull_request and push", () => {
+  for (const event of ["pull_request", "push"]) {
+    const subset = selectPlatformMatrix(platforms, event);
+    assert.deepEqual(
+      subset.map((platform) => platform.package),
+      ["linux-x64-gnu"],
+      event,
+    );
+    assert.ok(subset.length < platforms.length, "the subset must actually be smaller");
+  }
 });
 
 // Merging the release pull request is what publishes these nine packages, so it

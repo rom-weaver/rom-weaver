@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { classifyChanges } from "./classify-changes.mjs";
+import { classifyChanges, coverageTiers, scheduledSelection } from "./classify-changes.mjs";
 import { RELEASE_PR_BRANCH_PREFIX } from "./release-pr.mjs";
 
 // Both helpers stringify, so a `deepEqual` against the whole result and a spot
@@ -508,4 +508,27 @@ test("a head ref on a non-pull-request event changes nothing", () => {
       String(eventName),
     );
   }
+});
+
+test("main pushes keep the full matrix but leave full native coverage to the nightly", () => {
+  const release = `${RELEASE_PR_BRANCH_PREFIX}cli`;
+  for (const [eventName, headRef, fullMatrix, fullNative] of [
+    ["pull_request", "feature/x", false, false],
+    ["pull_request", release, true, true],
+    ["push", undefined, true, false],
+    ["schedule", undefined, true, true],
+    ["workflow_dispatch", undefined, true, true],
+    [undefined, undefined, true, true],
+  ]) {
+    assert.deepEqual(coverageTiers(eventName, headRef), { fullMatrix, fullNative }, `${eventName} ${headRef}`);
+  }
+});
+
+test("the nightly keeps only the Rust selection", () => {
+  const everything = classifyChanges([], true, "schedule");
+  const nightly = scheduledSelection(everything);
+  assert.equal(nightly.rust, true);
+  for (const [key, value] of Object.entries(nightly))
+    if (key !== "rust") assert.equal(value, false, key);
+  assert.equal(scheduledSelection(classifyChanges(["docs/development/ci.md"], false, "schedule")).rust, false);
 });

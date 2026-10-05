@@ -253,6 +253,29 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
   return result;
 }
 
+// Which run-wide coverage tiers this event gets.
+// `fullMatrix` (macOS/arm64 Docker legs, prebuilt images) stays on for every
+// event but an ordinary pull request, because main's legs feed the nightly
+// manifest lists. `fullNative` - the eight non-Linux CLI targets, macOS Rust,
+// and the arm64 CLI runtime - also leaves main pushes: the nightly schedule
+// and the release pull request cover it before anything ships, which keeps
+// four 15-19 minute Windows builds per merge out of the shared runner pool.
+// An absent event keeps both, the same fail-open default as the classifier.
+export function coverageTiers(eventName, headRef = undefined) {
+  const releasePullRequest = isReleasePullRequest(eventName, headRef);
+  return {
+    fullMatrix: eventName !== "pull_request" || releasePullRequest,
+    fullNative: (eventName !== "pull_request" && eventName !== "push") || releasePullRequest,
+  };
+}
+
+// The nightly schedule exists only to build the native targets main pushes
+// skip. It keeps the Rust selection of whatever changed since the last green
+// nightly and drops everything else: those stacks already ran on each push.
+export function scheduledSelection(result) {
+  return { ...EMPTY, rust: result.rust };
+}
+
 export function formatChanges(result) {
   return `${Object.entries(result)
     .map(([key, value]) => `${key}=${value}`)

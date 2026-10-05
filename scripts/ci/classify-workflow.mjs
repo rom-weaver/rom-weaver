@@ -7,7 +7,12 @@ import { appendFileSync } from "node:fs";
 import process from "node:process";
 
 import { runMain } from "../run-main.mjs";
-import { classifyChanges, formatChanges } from "./classify-changes.mjs";
+import {
+  classifyChanges,
+  coverageTiers,
+  formatChanges,
+  scheduledSelection,
+} from "./classify-changes.mjs";
 import { isReleasePullRequest } from "./release-pr.mjs";
 
 const EMPTY_SHA = "0".repeat(40);
@@ -41,11 +46,11 @@ runMain(() => {
   });
   if (paths)
     process.stdout.write(`changed paths:\n${paths.length ? paths.join("\n") : "(none)"}\n`);
-  // Event-gated macOS, arm64 runtime, and prebuilt-image jobs share this full-matrix decision.
-  const fullMatrix = eventName !== "pull_request" || releasePullRequest;
+  const { fullMatrix, fullNative } = coverageTiers(eventName, headRef);
+  const changes = classifyChanges(paths ?? [], paths === null, eventName, headRef);
   const output = `${formatChanges(
-    classifyChanges(paths ?? [], paths === null, eventName, headRef),
-  )}full_matrix=${fullMatrix}\n`;
+    eventName === "schedule" ? scheduledSelection(changes) : changes,
+  )}full_matrix=${fullMatrix}\nfull_native=${fullNative}\n`;
   process.stdout.write(output);
   appendFileSync(process.env.GITHUB_OUTPUT, output);
 });

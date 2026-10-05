@@ -24,6 +24,7 @@ Works offline in your browser or CLI. Your files stay on your device. No telemet
   <a href="https://github.com/orgs/rom-weaver/packages/container/package/rom-weaver-cli"><img alt="Container images on GitHub Container Registry" src="https://img.shields.io/badge/ghcr.io-rom--weaver-d9690f?logo=docker&amp;logoColor=white"></a>
   <a href="https://github.com/rom-weaver/homebrew-tap"><img alt="Homebrew tap" src="https://img.shields.io/badge/homebrew-rom--weaver%2Ftap-d9690f?logo=homebrew&amp;logoColor=white"></a>
   <a href="https://github.com/rom-weaver/rom-weaver/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/rom-weaver/rom-weaver/ci.yml?branch=main&amp;logo=githubactions&amp;logoColor=white&amp;label=CI&amp;color=365d82"></a>
+  <a href="https://github.com/rom-weaver/rom-weaver/actions/workflows/ci.yml?query=event%3Aschedule"><img alt="Nightly native build status" src="https://img.shields.io/github/actions/workflow/status/rom-weaver/rom-weaver/ci.yml?branch=main&amp;event=schedule&amp;logo=githubactions&amp;logoColor=white&amp;label=nightly&amp;color=365d82"></a>
   <a href="package.json"><img alt="Node.js 22 or newer" src="https://img.shields.io/badge/Node.js-22%2B-365d82?logo=nodedotjs&amp;logoColor=white"></a>
   <a href=".config/mise.toml"><img alt="Rust 1.97.1" src="https://img.shields.io/badge/Rust-1.97.1-2c323b?logo=rust&amp;logoColor=white"></a>
   <a href="LICENSE"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-365d82"></a>
