@@ -41,7 +41,6 @@ const tabs = [
     label: "Trim",
   },
   {
-    beta: true,
     group: "patches",
     href: "ppf-undo",
     icon: createElement("svg", { "aria-hidden": true }),

@@ -275,3 +275,127 @@ fn directory_entry_table_writer_computes_a_nonzero_size_for_entries() {
     writer.compute_size::<std::io::Error>().unwrap();
     assert!(writer.dirtab_size() > 0);
 }
+
+struct BoundedImage {
+    bytes: Vec<u8>,
+    reads_left: usize,
+}
+
+impl blockdev::BlockDeviceRead<std::io::Error> for BoundedImage {
+    fn read(&mut self, offset: u64, buffer: &mut [u8]) -> std::io::Result<()> {
+        self.reads_left = self
+            .reads_left
+            .checked_sub(1)
+            .ok_or_else(|| std::io::Error::other("bounded fixture read limit exceeded"))?;
+        let start = offset as usize;
+        let source = self
+            .bytes
+            .get(start..start + buffer.len())
+            .ok_or_else(|| std::io::Error::from(std::io::ErrorKind::UnexpectedEof))?;
+        buffer.copy_from_slice(source);
+        Ok(())
+    }
+}
+
+fn cyclic_image(directory_cycle: bool) -> (layout::DirectoryEntryTable, BoundedImage) {
+    let table = layout::DirectoryEntryTable::new(2048, 33);
+    let mut bytes = vec![0; 34 * layout::SECTOR_SIZE as usize];
+    let volume = layout::VolumeDescriptor::new(table)
+        .serialize::<std::io::Error>()
+        .unwrap();
+    bytes[32 * 2048..33 * 2048].copy_from_slice(&volume);
+    let base = 33 * 2048;
+    if directory_cycle {
+        bytes[base + 4..base + 8].copy_from_slice(&33_u32.to_le_bytes());
+        bytes[base + 8..base + 12].copy_from_slice(&2048_u32.to_le_bytes());
+        bytes[base + 12] = 0x10;
+        bytes[base + 13] = 4;
+        bytes[base + 14..base + 18].copy_from_slice(b"loop");
+    } else {
+        bytes[base..base + 2].copy_from_slice(&8_u16.to_le_bytes());
+        bytes[base + 13] = 1;
+        bytes[base + 14] = b'z';
+        bytes[base + 32..base + 34].copy_from_slice(&8_u16.to_le_bytes());
+        bytes[base + 45] = 1;
+        bytes[base + 46] = b'm';
+    }
+    (
+        table,
+        BoundedImage {
+            bytes,
+            reads_left: 64,
+        },
+    )
+}
+
+#[test]
+fn cyclic_directory_node_is_rejected_by_tree_walk() {
+    let (table, mut image) = cyclic_image(false);
+    let error = table.walk_dirent_tree(&mut image).unwrap_err();
+    assert!(error.to_string().contains("Cyclic directory"), "{error}");
+}
+
+#[test]
+fn cyclic_directory_node_is_rejected_by_path_lookup() {
+    let (table, mut image) = cyclic_image(false);
+    let error = table.walk_path(&mut image, "/a").unwrap_err();
+    assert!(error.to_string().contains("Cyclic directory"), "{error}");
+}
+
+#[test]
+fn cyclic_directory_recursion_is_rejected_by_file_tree() {
+    let (table, mut image) = cyclic_image(true);
+    let error = table.file_tree(&mut image).unwrap_err();
+    assert!(error.to_string().contains("Cyclic directory"), "{error}");
+}
+
+#[test]
+fn cyclic_directory_recursion_is_rejected_during_rebuild() {
+    let (_, image) = cyclic_image(true);
+    let mut filesystem = XDVDFSFilesystem::new(image).unwrap();
+    let mut output = UnwrittenOutput;
+    let error = create_xdvdfs_image(&mut filesystem, &mut output, |_| {}).unwrap_err();
+    assert!(error.to_string().contains("Cyclic directory"), "{error}");
+}
+
+struct UnwrittenOutput;
+
+impl blockdev::BlockDeviceWrite<std::io::Error> for UnwrittenOutput {
+    fn write(&mut self, _offset: u64, _buffer: &[u8]) -> std::io::Result<()> {
+        panic!("cyclic input must be rejected before writing output");
+    }
+
+    fn len(&mut self) -> std::io::Result<u64> {
+        Ok(0)
+    }
+}
+
+#[test]
+fn shared_directory_extent_is_allowed_when_it_is_not_an_ancestor() {
+    let (table, mut image) = cyclic_image(true);
+    image.bytes.resize(35 * 2048, 0);
+    let base = 33 * 2048;
+    image.bytes[base + 2..base + 4].copy_from_slice(&8_u16.to_le_bytes());
+    image.bytes[base + 4..base + 8].copy_from_slice(&34_u32.to_le_bytes());
+    image.bytes[base + 13] = 1;
+    image.bytes[base + 14] = b'a';
+    let entry = image.bytes[base..base + 15].to_vec();
+    image.bytes[base + 32..base + 47].copy_from_slice(&entry);
+    image.bytes[base + 34..base + 36].fill(0);
+    image.bytes[base + 46] = b'b';
+    image.bytes[34 * 2048 + 13] = 1;
+    image.bytes[34 * 2048 + 14] = b'c';
+
+    let entries = table.file_tree(&mut image).unwrap();
+    assert_eq!(entries.len(), 4);
+    assert!(entries.iter().any(|(parent, _)| parent == "/a"));
+    assert!(entries.iter().any(|(parent, _)| parent == "/b"));
+}
+
+#[test]
+fn empty_directory_extent_may_use_an_ancestor_sector() {
+    let (table, mut image) = cyclic_image(true);
+    image.bytes[33 * 2048 + 8..33 * 2048 + 12].fill(0);
+    assert_eq!(table.file_tree(&mut image).unwrap().len(), 1);
+    assert!(table.walk_path(&mut image, "/loop").is_ok());
+}

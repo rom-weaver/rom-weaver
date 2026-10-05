@@ -1,121 +1,126 @@
 use super::*;
 
+#[inline(never)]
+fn fields(slot: usize, base: usize) -> Vec<FieldDefinition> {
+    vec![
+        FieldDefinition::new(
+            format!("slot_{slot}.energy.current"),
+            "Current energy".into(),
+            base + 48,
+            Storage::U16Le,
+        ),
+        FieldDefinition::new(
+            format!("slot_{slot}.energy.maximum"),
+            "Maximum energy".into(),
+            base + 50,
+            Storage::U16Le,
+        ),
+        FieldDefinition::new(
+            format!("slot_{slot}.missiles.current"),
+            "Current missiles".into(),
+            base + 52,
+            Storage::U16Le,
+        ),
+        FieldDefinition::new(
+            format!("slot_{slot}.missiles.maximum"),
+            "Maximum missiles".into(),
+            base + 54,
+            Storage::U16Le,
+        ),
+        FieldDefinition::new(
+            format!("slot_{slot}.super_missiles.current"),
+            "Current super missiles".into(),
+            base + 56,
+            Storage::U16Le,
+        ),
+        FieldDefinition::new(
+            format!("slot_{slot}.super_missiles.maximum"),
+            "Maximum super missiles".into(),
+            base + 58,
+            Storage::U16Le,
+        ),
+        FieldDefinition::new(
+            format!("slot_{slot}.power_bombs.current"),
+            "Current power bombs".into(),
+            base + 60,
+            Storage::U16Le,
+        ),
+        FieldDefinition::new(
+            format!("slot_{slot}.power_bombs.maximum"),
+            "Maximum power bombs".into(),
+            base + 62,
+            Storage::U16Le,
+        ),
+        FieldDefinition::new(
+            format!("slot_{slot}.reserve.current"),
+            "Current reserve energy".into(),
+            base + 64,
+            Storage::U16Le,
+        ),
+        FieldDefinition::new(
+            format!("slot_{slot}.reserve.maximum"),
+            "Maximum reserve energy".into(),
+            base + 66,
+            Storage::U16Le,
+        )
+        .description(
+            concat!(
+                "Read-only because changing zero/nonzero state requires a coupled ",
+                "supply-mode update."
+            )
+            .into(),
+        )
+        .editable(false),
+        FieldDefinition::new(
+            format!("slot_{slot}.playtime.milliseconds"),
+            "Playtime milliseconds".into(),
+            base + 72,
+            Storage::U16Le,
+        ),
+        FieldDefinition::new(
+            format!("slot_{slot}.playtime.seconds"),
+            "Playtime seconds".into(),
+            base + 74,
+            Storage::U16Le,
+        ),
+        FieldDefinition::new(
+            format!("slot_{slot}.playtime.minutes"),
+            "Playtime minutes".into(),
+            base + 76,
+            Storage::U16Le,
+        ),
+        FieldDefinition::new(
+            format!("slot_{slot}.playtime.hours"),
+            "Playtime hours".into(),
+            base + 78,
+            Storage::U16Le,
+        ),
+        FieldDefinition::new(
+            format!("slot_{slot}.location.raw"),
+            "Raw location words".into(),
+            base + 358,
+            Storage::U32Le,
+        )
+        .description(
+            concat!(
+                "Read-only pair packed as a u32. The source editor transforms the ",
+                "two u16 values."
+            )
+            .into(),
+        )
+        .editable(false),
+        FieldDefinition::new(
+            format!("slot_{slot}.brinstar_rooms_count"),
+            "Brinstar rooms count".into(),
+            base + 362,
+            Storage::U16Le,
+        ),
+    ]
+}
+
 fn default() -> GameDefinition {
     {
-        let fields = vec![
-            FieldDefinition::new(
-                "slot_1.energy.current".into(),
-                "Current energy".into(),
-                48,
-                Storage::U16Le,
-            ),
-            FieldDefinition::new(
-                "slot_1.energy.maximum".into(),
-                "Maximum energy".into(),
-                50,
-                Storage::U16Le,
-            ),
-            FieldDefinition::new(
-                "slot_1.missiles.current".into(),
-                "Current missiles".into(),
-                52,
-                Storage::U16Le,
-            ),
-            FieldDefinition::new(
-                "slot_1.missiles.maximum".into(),
-                "Maximum missiles".into(),
-                54,
-                Storage::U16Le,
-            ),
-            FieldDefinition::new(
-                "slot_1.super_missiles.current".into(),
-                "Current super missiles".into(),
-                56,
-                Storage::U16Le,
-            ),
-            FieldDefinition::new(
-                "slot_1.super_missiles.maximum".into(),
-                "Maximum super missiles".into(),
-                58,
-                Storage::U16Le,
-            ),
-            FieldDefinition::new(
-                "slot_1.power_bombs.current".into(),
-                "Current power bombs".into(),
-                60,
-                Storage::U16Le,
-            ),
-            FieldDefinition::new(
-                "slot_1.power_bombs.maximum".into(),
-                "Maximum power bombs".into(),
-                62,
-                Storage::U16Le,
-            ),
-            FieldDefinition::new(
-                "slot_1.reserve.current".into(),
-                "Current reserve energy".into(),
-                64,
-                Storage::U16Le,
-            ),
-            FieldDefinition::new(
-                "slot_1.reserve.maximum".into(),
-                "Maximum reserve energy".into(),
-                66,
-                Storage::U16Le,
-            )
-            .description(
-                concat!(
-                    "Read-only because changing zero/nonzero state requires a coupled ",
-                    "supply-mode update."
-                )
-                .into(),
-            )
-            .editable(false),
-            FieldDefinition::new(
-                "slot_1.playtime.milliseconds".into(),
-                "Playtime milliseconds".into(),
-                72,
-                Storage::U16Le,
-            ),
-            FieldDefinition::new(
-                "slot_1.playtime.seconds".into(),
-                "Playtime seconds".into(),
-                74,
-                Storage::U16Le,
-            ),
-            FieldDefinition::new(
-                "slot_1.playtime.minutes".into(),
-                "Playtime minutes".into(),
-                76,
-                Storage::U16Le,
-            ),
-            FieldDefinition::new(
-                "slot_1.playtime.hours".into(),
-                "Playtime hours".into(),
-                78,
-                Storage::U16Le,
-            ),
-            FieldDefinition::new(
-                "slot_1.location.raw".into(),
-                "Raw location words".into(),
-                358,
-                Storage::U32Le,
-            )
-            .description(
-                concat!(
-                    "Read-only pair packed as a u32. The source editor transforms the ",
-                    "two u16 values."
-                )
-                .into(),
-            )
-            .editable(false),
-            FieldDefinition::new(
-                "slot_1.brinstar_rooms_count".into(),
-                "Brinstar rooms count".into(),
-                362,
-                Storage::U16Le,
-            ),
-        ];
+        let fields = fields(1, 0);
         GameDefinition {
             fields,
             description: concat!(
@@ -223,120 +228,7 @@ fn game_super_metroid_samus_b() -> GameDefinition {
             ..ChecksumDefinition::new(ChecksumAlgorithm::Sum16Le, 8186)
         },
     ];
-    let fields = vec![
-        FieldDefinition::new(
-            "slot_2.energy.current".into(),
-            "Current energy".into(),
-            1676,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.energy.maximum".into(),
-            "Maximum energy".into(),
-            1678,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.missiles.current".into(),
-            "Current missiles".into(),
-            1680,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.missiles.maximum".into(),
-            "Maximum missiles".into(),
-            1682,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.super_missiles.current".into(),
-            "Current super missiles".into(),
-            1684,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.super_missiles.maximum".into(),
-            "Maximum super missiles".into(),
-            1686,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.power_bombs.current".into(),
-            "Current power bombs".into(),
-            1688,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.power_bombs.maximum".into(),
-            "Maximum power bombs".into(),
-            1690,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.reserve.current".into(),
-            "Current reserve energy".into(),
-            1692,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.reserve.maximum".into(),
-            "Maximum reserve energy".into(),
-            1694,
-            Storage::U16Le,
-        )
-        .description(
-            concat!(
-                "Read-only because changing zero/nonzero state requires a coupled ",
-                "supply-mode update."
-            )
-            .into(),
-        )
-        .editable(false),
-        FieldDefinition::new(
-            "slot_2.playtime.milliseconds".into(),
-            "Playtime milliseconds".into(),
-            1700,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.playtime.seconds".into(),
-            "Playtime seconds".into(),
-            1702,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.playtime.minutes".into(),
-            "Playtime minutes".into(),
-            1704,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.playtime.hours".into(),
-            "Playtime hours".into(),
-            1706,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.location.raw".into(),
-            "Raw location words".into(),
-            1986,
-            Storage::U32Le,
-        )
-        .description(
-            concat!(
-                "Read-only pair packed as a u32. The source editor transforms the ",
-                "two u16 values."
-            )
-            .into(),
-        )
-        .editable(false),
-        FieldDefinition::new(
-            "slot_2.brinstar_rooms_count".into(),
-            "Brinstar rooms count".into(),
-            1990,
-            Storage::U16Le,
-        ),
-    ];
+    let fields = fields(2, 1628);
     game.fields = fields;
     game
 }
@@ -380,120 +272,7 @@ fn game_super_metroid_samus_c() -> GameDefinition {
             ..ChecksumDefinition::new(ChecksumAlgorithm::Sum16Le, 8188)
         },
     ];
-    let fields = vec![
-        FieldDefinition::new(
-            "slot_3.energy.current".into(),
-            "Current energy".into(),
-            3304,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.energy.maximum".into(),
-            "Maximum energy".into(),
-            3306,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.missiles.current".into(),
-            "Current missiles".into(),
-            3308,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.missiles.maximum".into(),
-            "Maximum missiles".into(),
-            3310,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.super_missiles.current".into(),
-            "Current super missiles".into(),
-            3312,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.super_missiles.maximum".into(),
-            "Maximum super missiles".into(),
-            3314,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.power_bombs.current".into(),
-            "Current power bombs".into(),
-            3316,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.power_bombs.maximum".into(),
-            "Maximum power bombs".into(),
-            3318,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.reserve.current".into(),
-            "Current reserve energy".into(),
-            3320,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.reserve.maximum".into(),
-            "Maximum reserve energy".into(),
-            3322,
-            Storage::U16Le,
-        )
-        .description(
-            concat!(
-                "Read-only because changing zero/nonzero state requires a coupled ",
-                "supply-mode update."
-            )
-            .into(),
-        )
-        .editable(false),
-        FieldDefinition::new(
-            "slot_3.playtime.milliseconds".into(),
-            "Playtime milliseconds".into(),
-            3328,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.playtime.seconds".into(),
-            "Playtime seconds".into(),
-            3330,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.playtime.minutes".into(),
-            "Playtime minutes".into(),
-            3332,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.playtime.hours".into(),
-            "Playtime hours".into(),
-            3334,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.location.raw".into(),
-            "Raw location words".into(),
-            3614,
-            Storage::U32Le,
-        )
-        .description(
-            concat!(
-                "Read-only pair packed as a u32. The source editor transforms the ",
-                "two u16 values."
-            )
-            .into(),
-        )
-        .editable(false),
-        FieldDefinition::new(
-            "slot_3.brinstar_rooms_count".into(),
-            "Brinstar rooms count".into(),
-            3618,
-            Storage::U16Le,
-        ),
-    ];
+    let fields = fields(3, 3256);
     game.fields = fields;
     game
 }
@@ -559,120 +338,7 @@ fn game_super_metroid_samus_b_supermetroid() -> GameDefinition {
             ..ChecksumDefinition::new(ChecksumAlgorithm::Sum16Le, 8186)
         },
     ];
-    let fields = vec![
-        FieldDefinition::new(
-            "slot_2.energy.current".into(),
-            "Current energy".into(),
-            1676,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.energy.maximum".into(),
-            "Maximum energy".into(),
-            1678,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.missiles.current".into(),
-            "Current missiles".into(),
-            1680,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.missiles.maximum".into(),
-            "Maximum missiles".into(),
-            1682,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.super_missiles.current".into(),
-            "Current super missiles".into(),
-            1684,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.super_missiles.maximum".into(),
-            "Maximum super missiles".into(),
-            1686,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.power_bombs.current".into(),
-            "Current power bombs".into(),
-            1688,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.power_bombs.maximum".into(),
-            "Maximum power bombs".into(),
-            1690,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.reserve.current".into(),
-            "Current reserve energy".into(),
-            1692,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.reserve.maximum".into(),
-            "Maximum reserve energy".into(),
-            1694,
-            Storage::U16Le,
-        )
-        .description(
-            concat!(
-                "Read-only because changing zero/nonzero state requires a coupled ",
-                "supply-mode update."
-            )
-            .into(),
-        )
-        .editable(false),
-        FieldDefinition::new(
-            "slot_2.playtime.milliseconds".into(),
-            "Playtime milliseconds".into(),
-            1700,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.playtime.seconds".into(),
-            "Playtime seconds".into(),
-            1702,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.playtime.minutes".into(),
-            "Playtime minutes".into(),
-            1704,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.playtime.hours".into(),
-            "Playtime hours".into(),
-            1706,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_2.location.raw".into(),
-            "Raw location words".into(),
-            1986,
-            Storage::U32Le,
-        )
-        .description(
-            concat!(
-                "Read-only pair packed as a u32. The source editor transforms the ",
-                "two u16 values."
-            )
-            .into(),
-        )
-        .editable(false),
-        FieldDefinition::new(
-            "slot_2.brinstar_rooms_count".into(),
-            "Brinstar rooms count".into(),
-            1990,
-            Storage::U16Le,
-        ),
-    ];
+    let fields = fields(2, 1628);
     game.fields = fields;
     game
 }
@@ -720,120 +386,7 @@ fn game_super_metroid_samus_c_supermetroid() -> GameDefinition {
             ..ChecksumDefinition::new(ChecksumAlgorithm::Sum16Le, 8188)
         },
     ];
-    let fields = vec![
-        FieldDefinition::new(
-            "slot_3.energy.current".into(),
-            "Current energy".into(),
-            3304,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.energy.maximum".into(),
-            "Maximum energy".into(),
-            3306,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.missiles.current".into(),
-            "Current missiles".into(),
-            3308,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.missiles.maximum".into(),
-            "Maximum missiles".into(),
-            3310,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.super_missiles.current".into(),
-            "Current super missiles".into(),
-            3312,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.super_missiles.maximum".into(),
-            "Maximum super missiles".into(),
-            3314,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.power_bombs.current".into(),
-            "Current power bombs".into(),
-            3316,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.power_bombs.maximum".into(),
-            "Maximum power bombs".into(),
-            3318,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.reserve.current".into(),
-            "Current reserve energy".into(),
-            3320,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.reserve.maximum".into(),
-            "Maximum reserve energy".into(),
-            3322,
-            Storage::U16Le,
-        )
-        .description(
-            concat!(
-                "Read-only because changing zero/nonzero state requires a coupled ",
-                "supply-mode update."
-            )
-            .into(),
-        )
-        .editable(false),
-        FieldDefinition::new(
-            "slot_3.playtime.milliseconds".into(),
-            "Playtime milliseconds".into(),
-            3328,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.playtime.seconds".into(),
-            "Playtime seconds".into(),
-            3330,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.playtime.minutes".into(),
-            "Playtime minutes".into(),
-            3332,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.playtime.hours".into(),
-            "Playtime hours".into(),
-            3334,
-            Storage::U16Le,
-        ),
-        FieldDefinition::new(
-            "slot_3.location.raw".into(),
-            "Raw location words".into(),
-            3614,
-            Storage::U32Le,
-        )
-        .description(
-            concat!(
-                "Read-only pair packed as a u32. The source editor transforms the ",
-                "two u16 values."
-            )
-            .into(),
-        )
-        .editable(false),
-        FieldDefinition::new(
-            "slot_3.brinstar_rooms_count".into(),
-            "Brinstar rooms count".into(),
-            3618,
-            Storage::U16Le,
-        ),
-    ];
+    let fields = fields(3, 3256);
     game.fields = fields;
     game
 }

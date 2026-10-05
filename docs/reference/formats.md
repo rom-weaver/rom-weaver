@@ -151,15 +151,17 @@ Checksums can target source bytes, selected container payloads, or byte ranges (
 
 - NDS-family ROMs (`.nds`, `.dsi`, `.srl`)
 - GBA ROMs (`.gba`)
-- 3DS images (`.3ds`)
+- 3DS images (`.3ds`) with validated NCSD/NCCH partition extents
 - XISO images (`.xiso`, `.xiso.iso`, and probed XDVDFS `.iso` files)
-- RVZ scrub candidates detected by the format recommendation
+- GameCube/Wii disc candidates detected by the format recommendation: lossless RVZ conversion, without sector scrubbing
+
+A single disc conversion reports mode `rvz-convert` and `output_format: "rvz"`. Completed conversions also report logical disc byte counts in `input_size` and `raw_size`. The emitted file size is the compressed size. Separate output is required; sectors are not scrubbed.
 
 `--in-place` rewrites the source file; `--output` or `--extension` write the trimmed copy elsewhere instead, and `-n`/`--dry-run` reports what would change without writing anything.
 
-`--revert` pads a trimmed file back out, and works for NDS, GBA, and 3DS. XISO and RVZ scrub cannot be reverted. It also answers to `--untrim` and `--restore`.
+`--revert` pads a trimmed file back out, and works for NDS, GBA, and 3DS. XISO trimming and RVZ conversion do not support this operation. It also answers to `--untrim` and `--restore`.
 
-`--revert-marker` (also `--reversible`) records the original length and one padding byte in a footer. Exact restoration needs a separate output file and uniformly padded removed bytes. In-place trimming can record the wrong padding byte. See the [footer format and limits](../development/trim-revert-footer.md).
+`--revert-marker` (also `--reversible`) records the original length and one padding byte in a footer for NDS-family, GBA, and 3DS ROMs. XISO and RVZ conversion reject this option and cannot be reverted, even when a footer is present. Exact restoration requires unchanged retained data and uniformly padded removed bytes. The fill byte is recorded before trimming, including in-place operations. See the [footer format and limits](../development/trim-revert-footer.md).
 
 ## Header detection and repair
 

@@ -47,7 +47,7 @@ The Save Editor changes persistent game data. It does not change emulator save s
 
 The Pokémon handlers cover the English layouts named above. A matching file size alone does not prove support.
 
-The default registry also includes 118 fixed profiles for 51 title groups. The [catalog](../../data/save-schemas/README.md) lists their profile counts, exact editable scope, accepted physical variants, and creation support.
+The default registry also includes 589 fixed profiles for 80 title groups. The [catalog](../../data/save-schemas/README.md) lists their profile counts, exact editable scope, accepted physical variants, and creation support.
 
 ## Editable fields
 
@@ -130,9 +130,9 @@ Procedures: [Create saves in the browser](../how-to/create-game-saves-browser.md
 
 ## Built-in schema catalog
 
-The application includes every supported game definition in its default registry. The catalog contains 140 profiles: the original Pokémon, Super Mario World, and A Link to the Past definitions and 118 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. The catalog and its profile counts are in [`data/save-schemas/README.md`](../../data/save-schemas/README.md).
+The application includes every supported game definition in its default registry. The catalog contains 611 profiles: the original Pokémon, Super Mario World, and A Link to the Past definitions and 589 additional profiles. Existing IDs remain stable, including IDs that end in `-schema`. The catalog and its profile counts are in [`data/save-schemas/README.md`](../../data/save-schemas/README.md).
 
-The 118 additional profiles require explicit game selection. The original game families retain automatic recognition.
+The 589 additional profiles require explicit game selection. The original game families retain automatic recognition.
 
 A profile represents one fixed slot, player, region, or storage variant. Profile count is not title count. A compatible physical format or save size does not make an unrecognized game editable.
 
@@ -173,12 +173,13 @@ An unsupported save still gets a physical format guess from its raw size. The re
 | Sega Genesis and Mega Drive      | Cartridge SRAM 8 KiB, 32 KiB, 64 KiB                                                                                | None                                                  |
 | Sega Master System and Game Gear | Cartridge SRAM 8 KiB, 32 KiB                                                                                        | None                                                  |
 | Sony PlayStation                 | Memory card 128 KiB                                                                                                 | `MC` at offset 0                                      |
+| PC Engine / TurboGrafx-CD         | Backup RAM 2 KiB | `HUBM` at offset 0 |
 | Sega Saturn                      | Internal backup RAM 32 KiB, 64 KiB (16-bit dump)                                                                    | `BackUpRam Format` header, contiguous or on odd bytes |
 
 The Mupen64Plus combined save is the libretro core's `.srm`: EEPROM, four Controller Paks, SRAM, then FlashRAM, 296,960 bytes in total. PSP saves are per-game directories and have no entry.
 
 ## Unsupported data
 
-Pokémon generations after V and Zelda games other than A Link to the Past, Oracle of Ages, and Oracle of Seasons remain unsupported. The editor does not change party Pokémon or box contents. Generation IV and V Pokédex data and Generation IV inventory remain unsupported. Fields absent from a game's schema have no editing path; this is not unrestricted byte editing.
+Pokémon generations after V remain unsupported. Zelda support is limited to A Link to the Past, Link’s Awakening, Oracle of Ages, Oracle of Seasons, Ocarina of Time, and The Minish Cap, within the fields and physical variants listed in the catalog. The editor does not change party Pokémon or box contents. Generation IV and V Pokédex data and Generation IV inventory remain unsupported. Fields absent from a game's schema have no editing path; this is not unrestricted byte editing.
 
 A physical format match or a removed container does not make a save editable. Only games in the built-in registry have an editor. Emulator save states are rejected.

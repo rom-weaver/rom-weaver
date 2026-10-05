@@ -71,6 +71,7 @@ describe("createWebappRootController over the vanilla store", () => {
   it("keeps Identify available while gating beta workflows", () => {
     const controller = createController();
     expect(controller.selectView("identify")).toBe("identify");
+    expect(controller.selectView("ppf-undo")).toBe("ppf-undo");
     expect(controller.selectView("trim")).toBe("patcher");
     expect(controller.getState().currentView).toBe("patcher");
 
@@ -87,7 +88,7 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(controller.selectView("trim")).toBe("patcher");
   });
 
-  it("keeps a direct beta route in the initial path", () => {
+  it("keeps the legacy tools route pointing to PPF undo", () => {
     window.history.replaceState({}, "", "/tools");
     const controller = createController();
     expect(controller.getState().currentView).toBe("ppf-undo");
@@ -202,10 +203,8 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(window.location.hash).toBe("");
   });
 
-  it("routes and tracks the PPF undo workflow", () => {
+  it("routes and tracks the PPF undo workflow without beta tools", () => {
     const controller = createController();
-    controller.updateDraftSetting("betaToolsEnabled", true);
-    expect(controller.saveDraftSettings()).toBe(true);
     expect(controller.selectView("ppf-undo")).toBe("ppf-undo");
     expect(window.location.pathname).toBe("/ppf-undo");
     controller.setPpfUndoSessionState(true);

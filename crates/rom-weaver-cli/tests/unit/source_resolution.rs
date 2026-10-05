@@ -86,6 +86,7 @@ fn options(
     mode: AutoExtractMode,
 ) -> AutoExtractResolutionOptions {
     AutoExtractResolutionOptions {
+        group_disc_payloads: false,
         no_extract: false,
         no_ignore: false,
         kind_filter,
@@ -704,4 +705,26 @@ fn exact_member_rejects_raw_input_and_disabled_extraction() {
         assert!(error.to_string().contains("game.bin"));
     }
     fs::remove_dir_all(dir).expect("cleanup");
+}
+
+#[test]
+fn ppf_disc_grouping_normalizes_sheet_track_paths() {
+    let root = scratch_dir("ppf-disc-normalized-refs");
+    fs::create_dir(root.join("subdir")).expect("subdir");
+    fs::write(root.join("track01.bin"), b"track one").expect("track one");
+    fs::write(root.join("track02.bin"), b"track two").expect("track two");
+    fs::write(root.join("disc.cue"),
+        "FILE \"./track01.bin\" BINARY\n TRACK 01 MODE1/2352\n INDEX 01 00:00:00\nFILE \"subdir/../track02.bin\" BINARY\n TRACK 02 AUDIO\n INDEX 01 00:00:00\n",
+    ).expect("sheet");
+    let app = noninteractive_app();
+    let candidates = app
+        .collect_checksum_extract_candidates(&root)
+        .expect("candidates");
+    let grouped = CliApp::group_disc_extract_candidates(candidates).expect("grouped disc");
+    let paths = grouped
+        .iter()
+        .map(|candidate| candidate.display_name.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(paths, ["disc.cue"]);
+    fs::remove_dir_all(root).expect("cleanup fixture");
 }

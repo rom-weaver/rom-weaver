@@ -143,6 +143,11 @@ class MockTrimWorkflow {
     });
   }
 
+  setSettings(settings) {
+    this.settings = settings;
+    return Promise.resolve();
+  }
+
   setOutputFormat(outputFormat) {
     this.outputFormat = outputFormat;
     return Promise.resolve();

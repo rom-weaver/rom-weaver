@@ -38,7 +38,7 @@ Cheat support covers writes to the ROM. Codes that need live game memory cannot 
 | Compress and convert | Put a ROM into a smaller container, or change its container. This does not port a game to another console. | [Convert a ROM](../how-to/convert-roms-browser.md) | [Archives and disc images](../how-to/work-with-archives.md) |
 | Trim | Remove padding from supported files. Padding is space around the useful data. | [Trim](../how-to/trim-roms-browser.md) | [Trim and restore padding](../how-to/cli-trim.md) |
 | Headers and byte order | Handle supported dump layouts so patches receive the bytes they expect. | [Resolve layout differences](../how-to/fix-checksum-errors.md#cartridge-header-differences) | [Header options](cli.md#header-and-byte-order-flags) |
-| PPF undo | Restore bytes saved inside a PPF3 patch that includes undo data. | [Undo PPF](../how-to/undo-ppf-browser.md) | [Tools](cli.md#tools) |
+| PPF undo | Restore bytes saved inside a PPF3 patch that includes undo data; unpack ROM and patch inputs and compress the restored output. | [Undo PPF](../how-to/undo-ppf-browser.md) | [Tools](cli.md#tools) |
 
 The browser's Extract tool downloads selected files, or several files as one ZIP. The CLI also creates archives from directories.
 
@@ -64,7 +64,7 @@ Patching support, emulator support, cheat support, and save editing support are 
 | Offline use | Cached app files, databases, and emulator cores work offline. Remote links and uncached assets need a connection. [Offline setup](../how-to/browser-settings.md#prepare-for-offline-use). |
 | Browser preferences | Theme, accent, language, byte units, guided help, output defaults, compression settings, and worker threads. [Settings](../how-to/browser-settings.md). |
 | Guided practice runs | Step-by-step cards for Apply, Create, Bundle, Test, and the two cheat workflows, using homebrew practice files. Guided Apply waits for you to add files. [Guided practice runs](guided-runs.md). |
-| Beta tools | Trim, PPF Undo, and Save Editor are behind the browser's beta setting. Cheat tools in Apply, Create, and Identify are available without it. |
+| Beta tools | Trim and Save Editor are behind the browser's beta setting. PPF Undo and cheat tools in Apply, Create, and Identify are available without it. |
 | Scripts and pipelines | The CLI has file selection, dry runs, standard input/output, JSON results, JSON event streams, shell completions, and man pages. [CLI reference](cli.md). |
 | Hosting and integration | Static or Docker hosting, subpaths, URL-loaded ROMs and patches, bundles, and same-origin file integration. [Hosting](../hosting/self-hosting.md), [integration](../hosting/webapp-integration.md). |
 

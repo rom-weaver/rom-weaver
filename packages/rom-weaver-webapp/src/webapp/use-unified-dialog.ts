@@ -46,6 +46,15 @@ const leaveConsoleHistory = () => {
   if (typeof window === "undefined" || !readConsoleHashTab()) return;
   const depth = readConsoleDepth();
   if (depth > 0) {
+    const opener = document.activeElement;
+    // History traversal MUST finish fragment focus before the console restores its opener.
+    window.addEventListener(
+      "hashchange",
+      () => {
+        if (opener instanceof HTMLElement && opener.isConnected) opener.focus({ preventScroll: true });
+      },
+      { once: true },
+    );
     window.history.go(-depth);
     return;
   }

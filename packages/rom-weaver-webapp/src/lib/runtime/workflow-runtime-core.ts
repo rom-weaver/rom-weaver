@@ -464,7 +464,7 @@ const createSharedTrimRuntime = (adapter: TrimRuntimeAdapter): WorkflowRuntime["
           result.fileName || outputName || "trimmed.bin",
           adapter.workerOutputFailureMessage,
         ),
-        sizeSummary: trimTimeMs === undefined ? {} : { trimTimeMs },
+        sizeSummary: { ...result.trimSizeSummary, ...(trimTimeMs === undefined ? {} : { trimTimeMs }) },
       };
     } finally {
       await workerSource.cleanup().catch(() => undefined);

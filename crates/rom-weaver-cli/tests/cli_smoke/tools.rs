@@ -69,6 +69,7 @@ fn tools_ppf_undo_restores_the_original_rom() {
         &[
             "tools",
             "ppf-undo",
+            "--no-compress",
             "-i",
             rom_path.path().to_str().expect("rom path"),
             "--patch",
@@ -117,6 +118,7 @@ fn tools_ppf_undo_stdout_matches_file_output_and_keeps_sources() {
         &[
             "tools",
             "ppf-undo",
+            "--no-compress",
             "--input",
             rom_path.path().to_str().expect("rom path"),
             "--patch",
@@ -130,6 +132,7 @@ fn tools_ppf_undo_stdout_matches_file_output_and_keeps_sources() {
         &[
             "tools",
             "ppf-undo",
+            "--no-compress",
             "--input",
             rom_path.path().to_str().expect("rom path"),
             "--patch",
@@ -162,6 +165,7 @@ fn tools_ppf_undo_failure_to_stdout_writes_no_bytes_and_keeps_sources() {
         &[
             "tools",
             "ppf-undo",
+            "--no-compress",
             "--input",
             rom_path.path().to_str().expect("rom path"),
             "--patch",
@@ -197,6 +201,7 @@ fn tools_ppf_undo_rejects_a_patch_without_undo_data() {
         &[
             "tools",
             "ppf-undo",
+            "--no-compress",
             "-i",
             rom_path.path().to_str().expect("rom path"),
             "--patch",
@@ -239,6 +244,7 @@ fn tools_ppf_undo_reports_a_missing_rom_as_a_validation_failure() {
         &[
             "tools",
             "ppf-undo",
+            "--no-compress",
             "-i",
             missing_rom.path().to_str().expect("rom path"),
             "--patch",
@@ -257,4 +263,745 @@ fn tools_ppf_undo_reports_a_missing_rom_as_a_validation_failure() {
             .expect("label")
             .contains("input path does not exist")
     );
+}
+
+#[test]
+fn tools_ppf_undo_rejects_output_aliases_without_changing_sources() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("patched.bin");
+    let patch = temp.child("update.ppf");
+    let rom_bytes = b"AXAA";
+    let patch_bytes = build_ppf3_undo_patch(&[(1, b"X".to_vec(), b"A".to_vec())]);
+    for output in [rom.path(), patch.path()] {
+        fs::write(rom.path(), rom_bytes).expect("ROM fixture");
+        fs::write(patch.path(), &patch_bytes).expect("patch fixture");
+        let json = run_single_json_event(
+            &[
+                "tools",
+                "ppf-undo",
+                "--no-compress",
+                "--input",
+                rom.path().to_str().expect("ROM path"),
+                "--patch",
+                patch.path().to_str().expect("patch path"),
+                "--output",
+                output.to_str().expect("output path"),
+                "--json",
+            ],
+            1,
+        );
+        assert_eq!(json["status"], "failed");
+        assert_eq!(fs::read(rom.path()).expect("ROM bytes"), rom_bytes);
+        assert_eq!(fs::read(patch.path()).expect("patch bytes"), patch_bytes);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn tools_ppf_undo_rejects_hardlink_output_without_changing_rom() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("patched.bin");
+    let patch = temp.child("update.ppf");
+    let output = temp.child("alias.bin");
+    let rom_bytes = b"AXAA";
+    let patch_bytes = build_ppf3_undo_patch(&[(1, b"X".to_vec(), b"A".to_vec())]);
+    fs::write(rom.path(), rom_bytes).expect("ROM fixture");
+    fs::write(patch.path(), &patch_bytes).expect("patch fixture");
+    fs::hard_link(rom.path(), output.path()).expect("hardlink fixture");
+    let json = run_single_json_event(
+        &[
+            "tools",
+            "ppf-undo",
+            "--no-compress",
+            "--input",
+            rom.path().to_str().expect("ROM path"),
+            "--patch",
+            patch.path().to_str().expect("patch path"),
+            "--output",
+            output.path().to_str().expect("output path"),
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(json["status"], "failed");
+    assert_eq!(fs::read(rom.path()).expect("ROM bytes"), rom_bytes);
+    assert_eq!(fs::read(patch.path()).expect("patch bytes"), patch_bytes);
+    assert_eq!(fs::read(output.path()).expect("alias bytes"), rom_bytes);
+}
+
+fn undo_fixture(temp: &TempDir) -> (PathBuf, PathBuf, Vec<u8>, Vec<u8>) {
+    let rom = temp.child("patched.gba").path().to_path_buf();
+    let patch = temp.child("undo.ppf").path().to_path_buf();
+    let original = b"AAAAAAAAAAAAAAAA".to_vec();
+    let mut modified = original.clone();
+    modified[4..7].copy_from_slice(b"XYZ");
+    fs::write(&rom, &modified).expect("ROM fixture");
+    fs::write(
+        &patch,
+        build_ppf3_undo_patch(&[(4, b"XYZ".to_vec(), b"AAA".to_vec())]),
+    )
+    .expect("patch fixture");
+    (rom, patch, original, modified)
+}
+
+fn undo_report(input: &Path, patch: &Path, output: &Path, options: &[&str], code: i32) -> Value {
+    let mut args = vec![
+        "tools",
+        "ppf-undo",
+        "--input",
+        input.to_str().expect("input path"),
+        "--patch",
+        patch.to_str().expect("patch path"),
+        "--output",
+        output.to_str().expect("output path"),
+        "--json",
+    ];
+    args.extend_from_slice(options);
+    run_single_json_event(&args, code)
+}
+
+#[test]
+fn tools_ppf_undo_extracts_rom_and_patch_archives_and_compresses_output() {
+    let temp = setup_temp_dir();
+    let (rom, patch, original, modified) = undo_fixture(&temp);
+    let rom_archive = temp.child("rom.tar.gz");
+    let patch_archive = temp.child("patch.tar.gz");
+    write_tar_gz_fixture(&[(&rom, "nested/patched.gba")], rom_archive.path());
+    write_tar_gz_fixture(&[(&patch, "nested/undo.ppf")], patch_archive.path());
+    let output = temp.child("restored.zip");
+    let report = undo_report(
+        rom_archive.path(),
+        patch_archive.path(),
+        output.path(),
+        &["--compress-codec", "store", "--threads", "1"],
+        0,
+    );
+    assert_eq!(report["status"], "succeeded");
+    let label = report["label"].as_str().expect("label");
+    assert!(
+        label.contains("PPF undo ROM source resolved via"),
+        "{label}"
+    );
+    assert!(
+        label.contains("PPF undo patch source resolved via"),
+        "{label}"
+    );
+    assert!(
+        label.contains("restored output compressed as zip"),
+        "{label}"
+    );
+    assert_eq!(report["details"]["emitted_files"][0]["kind"], "archive");
+    let unpacked = temp.child("unpacked");
+    command_stdout(
+        &[
+            "extract",
+            "--input",
+            output.path().to_str().expect("output path"),
+            "--output",
+            unpacked.path().to_str().expect("unpacked path"),
+        ],
+        0,
+    );
+    assert_eq!(
+        fs::read(unpacked.path().join("restored.gba")).expect("restored ROM"),
+        original
+    );
+    assert_eq!(fs::read(&rom).expect("ROM source"), modified);
+    assert_eq!(
+        fs::read(&patch).expect("patch source"),
+        build_ppf3_undo_patch(&[(4, b"XYZ".to_vec(), b"AAA".to_vec())])
+    );
+}
+
+#[test]
+fn tools_ppf_undo_matching_rom_extension_writes_raw_and_no_extract_is_optional() {
+    let temp = setup_temp_dir();
+    let (rom, patch, original, _) = undo_fixture(&temp);
+    let output = temp.child("restored.gba");
+    let report = undo_report(&rom, &patch, output.path(), &["--no-extract"], 0);
+    assert_eq!(report["status"], "succeeded");
+    assert_eq!(report["stage"], "undo");
+    assert_eq!(fs::read(output.path()).expect("restored ROM"), original);
+}
+
+#[test]
+fn tools_ppf_undo_explicit_format_warns_when_output_extension_disagrees() {
+    let temp = setup_temp_dir();
+    let (rom, patch, original, _) = undo_fixture(&temp);
+    let output = temp.child("restored.7z");
+    let report = undo_report(
+        &rom,
+        &patch,
+        output.path(),
+        &["--compress-format", "zip", "--compress-codec", "store"],
+        0,
+    );
+    let warnings = report["warnings"].as_array().expect("warnings");
+    assert_eq!(warnings.len(), 1);
+    let warning = warnings[0].as_str().expect("warning");
+    assert!(
+        warning.contains("zip") && warning.contains("7z"),
+        "{warning}"
+    );
+    assert!(fs::read(output.path()).expect("archive").starts_with(b"PK"));
+    let unpacked = temp.child("unpacked");
+    command_stdout(
+        &[
+            "extract",
+            "--input",
+            output.path().to_str().expect("output"),
+            "--output",
+            unpacked.path().to_str().expect("unpacked"),
+        ],
+        0,
+    );
+    assert_eq!(
+        fs::read(unpacked.path().join("restored.gba")).expect("ROM"),
+        original
+    );
+}
+
+#[test]
+fn tools_ppf_undo_invalid_compression_options_preserve_existing_output() {
+    let temp = setup_temp_dir();
+    let (rom, patch, _, modified) = undo_fixture(&temp);
+    let cases: &[(&str, &[&str], &str)] = &[
+        ("restored", &[], "output has no file extension"),
+        ("restored.bin", &[], "neither a registered container"),
+        ("restored.unknown", &[], "neither a registered container"),
+        (
+            "restored.zip",
+            &["--no-compress", "--compress-format", "zip"],
+            "cannot be combined",
+        ),
+        (
+            "restored.zip",
+            &["--no-compress", "--compress-codec", "store"],
+            "cannot be combined",
+        ),
+        (
+            "restored.zip",
+            &["--compress-codec", "lzma2"],
+            "unsupported zip codec",
+        ),
+        (
+            "restored.zip",
+            &["--compress-codec", "deflate:100"],
+            "compression level 100 is invalid",
+        ),
+        (
+            "restored.zip",
+            &["--compress-codec", "store", "--compress-level", "max"],
+            "does not accept --compress-level",
+        ),
+    ];
+    for (name, options, expected) in cases {
+        let output = temp.child(name);
+        fs::write(output.path(), b"keep existing output").expect("output fixture");
+        let report = undo_report(&rom, &patch, output.path(), options, 1);
+        let label = report["label"].as_str().expect("label");
+        assert!(label.contains(expected), "{name}: {label}");
+        assert_eq!(
+            fs::read(output.path()).expect("output"),
+            b"keep existing output"
+        );
+        assert_eq!(fs::read(&rom).expect("ROM"), modified);
+    }
+}
+
+#[test]
+fn tools_ppf_undo_rejects_ambiguous_archives_and_accepts_payload_selectors() {
+    let temp = setup_temp_dir();
+    let (rom, patch, original, _) = undo_fixture(&temp);
+    let alternative_rom = temp.child("another.gba");
+    let alternative_patch = temp.child("another.ppf");
+    fs::write(alternative_rom.path(), b"WRONG ROM").expect("alternative ROM");
+    fs::write(alternative_patch.path(), b"WRONG PATCH").expect("alternative patch");
+    let rom_archive = temp.child("roms.tar.gz");
+    let patch_archive = temp.child("patches.tar.gz");
+    write_tar_gz_fixture(
+        &[
+            (&rom, "nested/patched.gba"),
+            (alternative_rom.path(), "another.gba"),
+        ],
+        rom_archive.path(),
+    );
+    write_tar_gz_fixture(
+        &[
+            (&patch, "nested/undo.ppf"),
+            (alternative_patch.path(), "another.ppf"),
+        ],
+        patch_archive.path(),
+    );
+    let output = temp.child("restored.gba");
+    fs::write(output.path(), b"keep output").expect("output fixture");
+    for (input, patch_input) in [
+        (rom_archive.path(), patch.as_path()),
+        (rom.as_path(), patch_archive.path()),
+    ] {
+        let report = undo_report(input, patch_input, output.path(), &[], 1);
+        assert!(
+            report["label"]
+                .as_str()
+                .expect("label")
+                .contains("payload resolution is ambiguous")
+        );
+        assert_eq!(fs::read(output.path()).expect("output"), b"keep output");
+    }
+    let report = undo_report(
+        rom_archive.path(),
+        patch_archive.path(),
+        output.path(),
+        &[
+            "--select",
+            "nested/patched.gba",
+            "--patch-select",
+            "nested/undo.ppf",
+        ],
+        0,
+    );
+    assert_eq!(report["status"], "succeeded");
+    assert_eq!(fs::read(output.path()).expect("output"), original);
+}
+
+#[test]
+fn tools_ppf_undo_compression_failure_preserves_existing_output() {
+    let temp = setup_temp_dir();
+    let (rom, patch, _, _) = undo_fixture(&temp);
+    let output = temp.child("restored.rvz");
+    fs::write(output.path(), b"keep existing output").expect("output fixture");
+    let report = undo_report(&rom, &patch, output.path(), &[], 1);
+    assert_eq!(report["stage"], "compress");
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        b"keep existing output"
+    );
+}
+
+#[test]
+fn tools_ppf_undo_checks_alias_after_appending_compressed_output_extension() {
+    let temp = setup_temp_dir();
+    let (rom, patch, _, _) = undo_fixture(&temp);
+    let archive = temp.child("source.zip");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            rom.to_str().expect("ROM"),
+            "--output",
+            archive.path().to_str().expect("archive"),
+            "--codec",
+            "store",
+        ],
+        0,
+    );
+    let archive_bytes = fs::read(archive.path()).expect("archive fixture");
+    let report = undo_report(
+        archive.path(),
+        &patch,
+        temp.child("source").path(),
+        &["--compress-format", "zip"],
+        1,
+    );
+    assert!(
+        report["label"]
+            .as_str()
+            .expect("label")
+            .contains("resolve to the same file")
+    );
+    assert_eq!(fs::read(archive.path()).expect("archive"), archive_bytes);
+}
+
+#[test]
+fn tools_ppf_undo_no_extract_rejects_a_packed_patch() {
+    let temp = setup_temp_dir();
+    let (rom, patch, _, _) = undo_fixture(&temp);
+    let patch_archive = temp.child("patch.tar.gz");
+    write_tar_gz_fixture(&[(&patch, "undo.ppf")], patch_archive.path());
+    let output = temp.child("restored.gba");
+    let report = undo_report(
+        &rom,
+        patch_archive.path(),
+        output.path(),
+        &["--no-extract"],
+        1,
+    );
+    assert_eq!(report["status"], "failed");
+    assert!(!output.path().exists());
+}
+
+#[test]
+fn tools_ppf_undo_compressed_stdout_is_a_complete_archive() {
+    let temp = setup_temp_dir();
+    let (rom, patch, original, _) = undo_fixture(&temp);
+    let stdout = command_stdout(
+        &[
+            "tools",
+            "ppf-undo",
+            "--input",
+            rom.to_str().expect("ROM"),
+            "--patch",
+            patch.to_str().expect("patch"),
+            "--output",
+            "-",
+            "--compress-format",
+            "zip",
+            "--compress-codec",
+            "store",
+        ],
+        0,
+    );
+    assert!(stdout.starts_with(b"PK"));
+    let archive = temp.child("stdout.zip");
+    fs::write(archive.path(), stdout).expect("stdout archive");
+    let unpacked = temp.child("unpacked");
+    command_stdout(
+        &[
+            "extract",
+            "--input",
+            archive.path().to_str().expect("archive"),
+            "--output",
+            unpacked.path().to_str().expect("unpacked"),
+        ],
+        0,
+    );
+    assert_eq!(
+        fs::read(unpacked.path().join("payload.gba")).expect("restored ROM"),
+        original
+    );
+}
+
+#[test]
+fn tools_ppf_undo_stdout_requires_an_explicit_output_mode() {
+    let temp = setup_temp_dir();
+    let (rom, patch, _, _) = undo_fixture(&temp);
+    let stdout = command_stdout(
+        &[
+            "tools",
+            "ppf-undo",
+            "--input",
+            rom.to_str().expect("ROM"),
+            "--patch",
+            patch.to_str().expect("patch"),
+            "--output",
+            "-",
+        ],
+        2,
+    );
+    assert!(stdout.is_empty());
+}
+
+#[test]
+fn tools_ppf_undo_matching_bin_extension_requires_explicit_raw_output() {
+    let temp = setup_temp_dir();
+    let (rom, patch, original, _) = undo_fixture(&temp);
+    let bin = temp.child("patched.bin");
+    fs::copy(&rom, bin.path()).expect("BIN fixture");
+    let output = temp.child("restored.bin");
+    fs::write(output.path(), b"keep output").expect("output fixture");
+    let report = undo_report(bin.path(), &patch, output.path(), &[], 1);
+    assert!(
+        report["label"]
+            .as_str()
+            .expect("label")
+            .contains("ambiguous between a raw ROM and a disc image")
+    );
+    assert_eq!(fs::read(output.path()).expect("output"), b"keep output");
+    undo_report(bin.path(), &patch, output.path(), &["--no-compress"], 0);
+    assert_eq!(fs::read(output.path()).expect("output"), original);
+}
+
+#[test]
+fn tools_ppf_undo_disc_target_restores_one_track_and_keeps_other_tracks() {
+    let temp = setup_temp_dir();
+    let (track01, original_track02) = super::patch_disc::write_two_track_cd(&temp);
+    let mut modified_track02 = original_track02.clone();
+    modified_track02[100..103].copy_from_slice(b"XYZ");
+    fs::write(temp.child("track02.bin").path(), &modified_track02).expect("patched track");
+    let patch = temp.child("undo.ppf");
+    fs::write(
+        patch.path(),
+        build_ppf3_undo_patch(&[(100, b"XYZ".to_vec(), original_track02[100..103].to_vec())]),
+    )
+    .expect("patch");
+    let sheet = temp.child("disc.cue");
+    let output = temp.child("restored/disc.cue");
+    let report = undo_report(
+        sheet.path(),
+        patch.path(),
+        output.path(),
+        &["--no-compress"],
+        1,
+    );
+    assert!(
+        report["label"]
+            .as_str()
+            .expect("label")
+            .contains("pass --target")
+    );
+    assert!(!output.path().exists());
+    let report = undo_report(
+        sheet.path(),
+        patch.path(),
+        output.path(),
+        &["--no-extract", "--no-compress", "--target", "track02.bin"],
+        0,
+    );
+    assert_eq!(report["status"], "succeeded");
+    assert_eq!(
+        fs::read(temp.child("restored/track01.bin").path()).expect("track01"),
+        track01
+    );
+    assert_eq!(
+        fs::read(temp.child("restored/track02.bin").path()).expect("track02"),
+        original_track02
+    );
+    assert_eq!(
+        fs::read(temp.child("track02.bin").path()).expect("source track02"),
+        modified_track02
+    );
+    assert_eq!(
+        report["details"]["emitted_files"]
+            .as_array()
+            .expect("files")
+            .len(),
+        3
+    );
+    let alias_output = temp.child("another.cue");
+    let report = undo_report(
+        sheet.path(),
+        patch.path(),
+        alias_output.path(),
+        &["--no-compress", "--target", "track02.bin"],
+        1,
+    );
+    assert!(
+        report["label"]
+            .as_str()
+            .expect("label")
+            .contains("resolve to the same file")
+    );
+    assert!(!alias_output.path().exists());
+    assert_eq!(
+        fs::read(temp.child("track02.bin").path()).expect("source track02"),
+        modified_track02
+    );
+}
+
+#[test]
+fn tools_ppf_undo_extracts_chd_and_recompresses_the_restored_disc() {
+    let temp = setup_temp_dir();
+    let track = temp.child("disc.bin");
+    let cue = temp.child("disc.cue");
+    let original = (0..8 * 2352)
+        .map(|index| (index % 211) as u8)
+        .collect::<Vec<_>>();
+    fs::write(track.path(), &original).expect("original track");
+    cue.write_str("FILE \"disc.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n")
+        .expect("cue");
+    let expected = temp.child("expected.chd");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            cue.path().to_str().expect("cue"),
+            "--output",
+            expected.path().to_str().expect("expected"),
+            "--codec",
+            "zstd",
+            "--threads",
+            "1",
+        ],
+        0,
+    );
+    let mut modified = original.clone();
+    modified[100..103].copy_from_slice(b"XYZ");
+    fs::write(track.path(), &modified).expect("patched track");
+    let packed = temp.child("patched.chd");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            cue.path().to_str().expect("cue"),
+            "--output",
+            packed.path().to_str().expect("packed"),
+            "--codec",
+            "zstd",
+            "--threads",
+            "1",
+        ],
+        0,
+    );
+    let patch = temp.child("undo.ppf");
+    fs::write(
+        patch.path(),
+        build_ppf3_undo_patch(&[(100, b"XYZ".to_vec(), original[100..103].to_vec())]),
+    )
+    .expect("patch");
+    let output = temp.child("restored.chd");
+    let report = undo_report(
+        packed.path(),
+        patch.path(),
+        output.path(),
+        &["--compress-codec", "zstd", "--threads", "1"],
+        0,
+    );
+    assert_eq!(report["status"], "succeeded");
+    assert_eq!(
+        fs::read(output.path()).expect("restored CHD"),
+        fs::read(expected.path()).expect("expected CHD")
+    );
+    assert_eq!(fs::read(track.path()).expect("source track"), modified);
+}
+
+#[test]
+fn tools_ppf_undo_disc_warnings_and_invalid_targets_match_apply() {
+    let temp = setup_temp_dir();
+    let (_, original_track02) = super::patch_disc::write_two_track_cd(&temp);
+    let patch = temp.child("undo.ppf");
+    fs::write(
+        patch.path(),
+        build_ppf3_undo_patch(&[(100, original_track02[100..103].to_vec(), b"AAA".to_vec())]),
+    )
+    .expect("patch");
+    let loose = temp.child("unreferenced.bin");
+    fs::write(loose.path(), b"unrelated bytes").expect("loose track");
+    let output = temp.child("restored/disc.cue");
+    let sheet = temp.child("disc.cue");
+    for (target, expected) in [
+        ("missing.bin", "matched none"),
+        ("track*.bin", "matched 2 tracks"),
+    ] {
+        let report = undo_report(
+            sheet.path(),
+            patch.path(),
+            output.path(),
+            &["--no-compress", "--target", target],
+            1,
+        );
+        assert!(report["label"].as_str().expect("label").contains(expected));
+        assert!(!output.path().exists());
+    }
+    let report = undo_report(
+        sheet.path(),
+        patch.path(),
+        output.path(),
+        &["--no-compress", "--target", "track02.bin"],
+        0,
+    );
+    assert!(
+        report["warnings"]
+            .as_array()
+            .expect("warnings")
+            .iter()
+            .any(|warning| warning
+                .as_str()
+                .is_some_and(|warning| warning.contains("ignored 1 unreferenced data file")))
+    );
+    let invalid_output = temp.child("invalid.bin");
+    let report = undo_report(
+        sheet.path(),
+        patch.path(),
+        invalid_output.path(),
+        &["--no-compress", "--target", "track02.bin"],
+        1,
+    );
+    assert!(
+        report["label"]
+            .as_str()
+            .expect("label")
+            .contains("must be a .cue/.gdi path")
+    );
+    assert!(!invalid_output.path().exists());
+    let report = undo_report(
+        temp.child("track02.bin").path(),
+        patch.path(),
+        invalid_output.path(),
+        &["--no-compress", "--target", "track02.bin"],
+        1,
+    );
+    assert!(
+        report["label"]
+            .as_str()
+            .expect("label")
+            .contains("--target requires a disc-sheet")
+    );
+}
+
+#[test]
+fn tools_ppf_undo_invalid_patch_preserves_existing_compressed_destination() {
+    let temp = setup_temp_dir();
+    let (rom, patch, _, _) = undo_fixture(&temp);
+    let output = temp.child("restored.zip");
+    for (patch_bytes, expected) in [
+        (
+            build_ppf3_patch_without_undo(&[]),
+            "does not contain complete undo data",
+        ),
+        (
+            build_ppf3_undo_patch(&[(1000, b"X".to_vec(), b"A".to_vec())]),
+            "exceeds ROM bounds",
+        ),
+        (b"invalid patch".to_vec(), "too small"),
+    ] {
+        fs::write(&patch, patch_bytes).expect("invalid patch fixture");
+        fs::write(output.path(), b"keep output").expect("output fixture");
+        let report = undo_report(&rom, &patch, output.path(), &[], 1);
+        assert!(report["label"].as_str().expect("label").contains(expected));
+        assert_eq!(fs::read(output.path()).expect("output"), b"keep output");
+    }
+}
+
+#[test]
+fn tools_ppf_undo_extracts_rvz_iso_payload_and_compresses_restored_output() {
+    let temp = setup_temp_dir();
+    let original = build_test_gamecube_iso(512 * 1024);
+    let mut modified = original.clone();
+    modified[0x500..0x503].copy_from_slice(b"XYZ");
+    let iso = temp.child("patched.iso");
+    fs::write(iso.path(), &modified).expect("ISO fixture");
+    let packed = temp.child("patched.rvz");
+    command_stdout(
+        &[
+            "compress",
+            "--input",
+            iso.path().to_str().expect("ISO"),
+            "--output",
+            packed.path().to_str().expect("RVZ"),
+            "--threads",
+            "1",
+        ],
+        0,
+    );
+    let patch = temp.child("undo.ppf");
+    fs::write(
+        patch.path(),
+        build_ppf3_undo_patch(&[(0x500, b"XYZ".to_vec(), original[0x500..0x503].to_vec())]),
+    )
+    .expect("PPF fixture");
+    let output = temp.child("restored.zip");
+    let report = undo_report(
+        packed.path(),
+        patch.path(),
+        output.path(),
+        &["--compress-codec", "store", "--threads", "1"],
+        0,
+    );
+    assert_eq!(report["status"], "succeeded");
+    let unpacked = temp.child("unpacked");
+    command_stdout(
+        &[
+            "extract",
+            "--input",
+            output.path().to_str().expect("output"),
+            "--output",
+            unpacked.path().to_str().expect("unpacked"),
+        ],
+        0,
+    );
+    assert_eq!(
+        fs::read(unpacked.path().join("restored.iso")).expect("restored ISO"),
+        original
+    );
+    assert_eq!(fs::read(iso.path()).expect("source ISO"), modified);
 }

@@ -71,6 +71,73 @@ const makeController = (settings: Record<string, unknown> = {}) => {
 };
 
 describe("TrimWorkflowController execution paths", () => {
+  it("uses current output compression settings without restaging the input", async () => {
+    const controller = makeController({ output: { compression: "zip", outputName: "trimmed.zip" } });
+    const inputStage = stage();
+    controller.inputStage = inputStage;
+    mocks.wrapPublicOutput.mockReturnValue({ fileName: "trimmed.zip", size: 40 });
+    mocks.runTrimWorkflow.mockResolvedValue({ output: { fileName: "trimmed.zip", size: 40 } });
+    await controller.setSettings({ output: { compression: "zip", container: { zipCodec: "store", zipLevel: 0 } } });
+    await controller.run();
+    expect(controller.inputStage).toBe(inputStage);
+    expect(mocks.runTrimWorkflow).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          output: expect.objectContaining({
+            container: { zipCodec: "store", zipLevel: 0 },
+          }),
+        }),
+      }),
+      expect.anything(),
+    );
+  });
+
+  it("waits for cancelled work to settle before retrying the same staged input", async () => {
+    const controller = makeController({ output: { outputName: "trimmed.bin" } });
+    const inputStage = stage();
+    controller.inputStage = inputStage;
+    let release!: () => void;
+    let started!: () => void;
+    const running = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mocks.runTrimWorkflow.mockImplementationOnce(async (input) => {
+      started();
+      await gate;
+      expect(input.options.signal.aborted).toBe(true);
+      throw new Error("cancelled trim worker");
+    });
+    const pending = controller.run();
+    const cancelled = expect(pending).rejects.toThrow("cancelled trim worker");
+    await running;
+    controller.abort();
+    expect(controller.getSnapshot().busy).toBe(true);
+    await expect(controller.run()).rejects.toMatchObject({ code: "CANCELLED" });
+    release();
+    await cancelled;
+    expect(controller.getSnapshot().busy).toBe(false);
+    expect(controller.inputStage).toBe(inputStage);
+    mocks.runTrimWorkflow.mockResolvedValueOnce({ output: { fileName: "trimmed.bin", size: 60 } });
+    mocks.wrapPublicOutput.mockReturnValueOnce({ fileName: "trimmed.bin", size: 60 });
+    await expect(controller.run()).resolves.toMatchObject({ output: { size: 60 } });
+  });
+
+  it("propagates the ingested asset RVZ recommendation into the staged snapshot", async () => {
+    const controller = makeController();
+    const inputStage = stage();
+    const asset = inputStage.preparedInputAssets?.[0];
+    if (!asset) throw new Error("Missing staged fixture asset");
+    asset.checksums = { crc32: "12345678", md5: "00", sha1: "00" };
+    asset.romType = { platform: "Nintendo GameCube", recommendedFormat: "rvz" };
+    controller.inputStage = inputStage;
+    await controller.finalizeInputStableState(inputStage);
+    expect(controller.getInput()?.romType).toEqual(asset.romType);
+    expect(controller.getInput()?.romType).not.toBe(asset.romType);
+  });
+
   it("runs a prepared source and maps progress stages and the public output", async () => {
     const controller = makeController({ output: { outputName: "trimmed.zip", compression: "zip" } });
     const inputStage = stage();

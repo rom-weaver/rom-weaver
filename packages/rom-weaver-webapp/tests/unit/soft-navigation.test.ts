@@ -24,3 +24,22 @@ test("accepts same-origin app routes and leaves ordinary links alone", () => {
   document.body.append(newTabLink);
   expect(getSoftNavigationUrl(click(newTabLink), newTabLink, currentUrl)).toBeNull();
 });
+
+test("keeps fragment-only links on the current route despite the app base URL", () => {
+  const base = document.createElement("base");
+  base.href = `${window.location.origin}/`;
+  document.head.append(base);
+  const anchor = document.createElement("a");
+  anchor.href = "#main-content";
+  document.body.append(anchor);
+  try {
+    const route = new URL("/apply-patches?guide=apply", window.location.origin);
+    expect(new URL(anchor.href).pathname).toBe("/");
+    expect(getSoftNavigationUrl(click(anchor), anchor, route)?.href).toBe(
+      `${window.location.origin}/apply-patches?guide=apply#main-content`,
+    );
+  } finally {
+    anchor.remove();
+    base.remove();
+  }
+});

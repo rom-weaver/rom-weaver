@@ -8,6 +8,8 @@ mise run build-wasm
 mise run build-wasm-prod
 ```
 
+Production WASM sidecars use Brotli quality 11 with Node's default 22-bit window. The larger 24-bit window used for other build assets increased the compressed module size in the measured production build. Both paths preserve the decoded WASM bytes.
+
 Use `run-browser-cli.mjs` when a smoke test must run in a real browser. It is a developer tool, not a supported application API. Use the native Rust CLI for command-line work.
 
 The [development guide](../../docs/development/development.md#build-and-run-the-webapp) explains the toolchain and build flow. The [browser WASM runtime guide](../../packages/rom-weaver-webapp/src/wasm/README.md) documents the TypeScript worker and OPFS APIs. Keeping those API examples in one place prevents the build-script notes from drifting away from the runtime.

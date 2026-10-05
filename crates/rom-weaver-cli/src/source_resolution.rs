@@ -45,6 +45,7 @@ pub(super) struct PatchResolveLabels<'a> {
 
 #[derive(Clone, Copy, Debug)]
 struct AutoExtractResolutionOptions {
+    group_disc_payloads: bool,
     no_extract: bool,
     no_ignore: bool,
     kind_filter: ArchiveEntryKindFilter,
@@ -130,6 +131,7 @@ impl CliApp {
                         context,
                         labels,
                         AutoExtractResolutionOptions {
+                            group_disc_payloads: false,
                             no_extract: false,
                             no_ignore: true,
                             kind_filter: ArchiveEntryKindFilter::default(),
@@ -239,6 +241,31 @@ impl CliApp {
             context,
             labels,
             AutoExtractResolutionOptions {
+                group_disc_payloads: false,
+                no_extract: flags.no_extract,
+                no_ignore: flags.no_ignore,
+                kind_filter: flags.kind_filter,
+                mode: AutoExtractMode::Recursive,
+                stop_on_single_payload_codec: flags.stop_on_single_payload_codec,
+            },
+        )
+    }
+
+    pub(super) fn resolve_ppf_undo_rom_source(
+        &self,
+        source: &Path,
+        select: &[String],
+        context: &OperationContext,
+        labels: AutoExtractResolutionLabels<'_>,
+        flags: AutoExtractResolutionFlags,
+    ) -> Result<ResolvedChecksumSource> {
+        self.resolve_source_with_auto_extract_with_mode(
+            source,
+            select,
+            context,
+            labels,
+            AutoExtractResolutionOptions {
+                group_disc_payloads: true,
                 no_extract: flags.no_extract,
                 no_ignore: flags.no_ignore,
                 kind_filter: flags.kind_filter,
@@ -478,6 +505,11 @@ impl CliApp {
         options: AutoExtractResolutionOptions,
     ) -> Result<ChecksumExtractCandidate> {
         let all_candidates = self.collect_checksum_extract_candidates(out_dir)?;
+        let all_candidates = if options.group_disc_payloads {
+            Self::group_disc_extract_candidates(all_candidates)?
+        } else {
+            all_candidates
+        };
         trace!(
             source = %current_source.display(),
             candidate_count = all_candidates.len(),
@@ -513,6 +545,33 @@ impl CliApp {
             )?
         };
         self.select_auto_extract_candidate(current_source, candidates, labels.source_label)
+    }
+
+    fn group_disc_extract_candidates(
+        candidates: Vec<ChecksumExtractCandidate>,
+    ) -> Result<Vec<ChecksumExtractCandidate>> {
+        let mut companions = BTreeSet::new();
+        for candidate in &candidates {
+            if detect_disc_sheet(&candidate.source).is_none() {
+                continue;
+            }
+            let parent = candidate.source.parent().unwrap_or_else(|| Path::new("."));
+            for name in enumerate_disc_sheet_refs(&candidate.source)?.referenced_files {
+                let track = parent.join(name);
+                companions.insert(fs::canonicalize(&track).unwrap_or(track));
+            }
+            if let Some(gdi) = sibling_gdi_path(&candidate.source) {
+                companions.insert(fs::canonicalize(&gdi).unwrap_or(gdi));
+            }
+        }
+        Ok(candidates
+            .into_iter()
+            .filter(|candidate| {
+                let source = fs::canonicalize(&candidate.source)
+                    .unwrap_or_else(|_| candidate.source.clone());
+                !companions.contains(&source)
+            })
+            .collect())
     }
 
     fn filter_ignored_auto_extract_candidates(

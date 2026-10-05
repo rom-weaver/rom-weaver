@@ -102,6 +102,7 @@ type RuntimeWorkerOutput = {
   size?: number;
   timing?: PublicOutput["timing"];
   trackNumber?: number;
+  trimSizeSummary?: TrimResult["sizeSummary"];
 };
 
 type RuntimeWorkerIo = {

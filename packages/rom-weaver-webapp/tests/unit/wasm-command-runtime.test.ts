@@ -508,6 +508,25 @@ describe("output-producing runtime workers", () => {
     });
   });
 
+  it("names a lossless disc trim by its actual format and retains logical size metadata", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({
+        emitted_files: [{ path: "/out/trimmed.iso", size_bytes: 700 }],
+        output_format: "rvz",
+        input_size: 65536,
+        raw_size: 65536,
+      }),
+    );
+    await expect(
+      invokeRomWeaverTrimWorker({ outputName: "trimmed.iso", sourceFilePath: "/game.iso" }),
+    ).resolves.toMatchObject({
+      fileName: "trimmed.rvz",
+      filePath: "/out/trimmed.iso",
+      size: 700,
+      trimSizeSummary: { inputSize: 65536, rawSize: 65536 },
+    });
+  });
+
   it("creates a patch, trims a ROM, and undoes a PPF", async () => {
     mocks.runRomWeaverJson.mockResolvedValue(
       succeededResult({ emitted_files: [{ path: "/out/custom.bin", size_bytes: 7 }] }),
@@ -553,6 +572,8 @@ describe("output-producing runtime workers", () => {
     expect(lastCall()[0]).toEqual({
       args: {
         args: {
+          no_extract: true,
+          no_compress: true,
           output: expect.any(String),
           patch: "/patch.ppf",
           rom: "/game.sfc",
@@ -561,6 +582,42 @@ describe("output-producing runtime workers", () => {
       },
       type: "tools",
     });
+  });
+
+  it("passes PPF disc targets and thread settings, retains emitted companions, and relays report warnings", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({
+        warnings: ["Disc warning"],
+        emitted_files: [
+          { path: "/out/restored.cue", size_bytes: 17 },
+          { path: "/out/track.bin", size_bytes: 32 },
+        ],
+      }),
+    );
+    const onWarning = vi.fn();
+    await expect(
+      invokeRomWeaverPpfUndoWorker({
+        outputName: "restored.cue",
+        romFilePath: "/disc.cue",
+        patchFilePath: "/undo.ppf",
+        target: "track.bin",
+        onWarning,
+        settings: { workers: { threads: 2 }, output: { container: { profile: "high", zipCodec: "store" } } },
+      }),
+    ).resolves.toMatchObject({
+      fileName: "restored.cue",
+      filePath: "/out/restored.cue",
+      files: expect.arrayContaining([expect.objectContaining({ path: "/out/track.bin" })]),
+    });
+    expect(lastCall()[0].args.args).toMatchObject({
+      no_extract: true,
+      no_compress: true,
+      threads: 2,
+      target: "track.bin",
+      rom: "/disc.cue",
+      patch: "/undo.ppf",
+    });
+    expect(onWarning).toHaveBeenCalledWith("Disc warning");
   });
 });
 

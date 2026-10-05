@@ -20,7 +20,10 @@ const StatefulCombobox = ({
 };
 
 beforeEach(() => vi.useFakeTimers());
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe("CodecCombobox", () => {
   it("opens suggestions, filters by typed text, and selects with Enter", async () => {
@@ -110,5 +113,29 @@ describe("CodecCombobox", () => {
       await vi.advanceTimersByTimeAsync(120);
     });
     expect(document.querySelector("[role=listbox]")).toBeNull();
+  });
+
+  it("does not scroll a focused input that is already inside the visual viewport", async () => {
+    const viewport = Object.assign(new EventTarget(), {
+      height: 768,
+      offsetLeft: 0,
+      offsetTop: 0,
+      width: 1024,
+    });
+    vi.stubGlobal("visualViewport", viewport);
+    const { container } = render(<StatefulCombobox />);
+    const input = container.querySelector("input[role=combobox]") as HTMLInputElement;
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(input, "getBoundingClientRect", {
+      configurable: true,
+      value: () => new DOMRect(100, 100, 200, 34),
+    });
+    Object.defineProperty(input, "scrollIntoView", { configurable: true, value: scrollIntoView });
+
+    await act(async () => {
+      fireEvent.focus(input);
+    });
+
+    expect(scrollIntoView).not.toHaveBeenCalled();
   });
 });

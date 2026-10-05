@@ -4,6 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import type { BinarySource } from "../../src/public/react/patcher-form.ts";
 
+let recommendedFormat: string | undefined;
+let stagingGate: Promise<void> | undefined;
+
 const makeTrimSource = (fileName: string) => ({
   candidates: [{ id: "rom-candidate", label: "ROM" }],
   checksums: { crc32: "C6FB1252", md5: "0123456789abcdef", sha1: "0123456789012345678901234567890123456789" },
@@ -22,7 +25,8 @@ const makeTrimSource = (fileName: string) => ({
     status: "matched",
   },
   parentCompressions: [],
-  romProbe: { trim: { detected: true, trimmedInputBytes: 96 } },
+  romProbe: recommendedFormat ? undefined : { trim: { detected: true, trimmedInputBytes: 96 } },
+  romType: recommendedFormat ? { recommendedFormat } : undefined,
   selectedCandidateId: "rom-candidate",
   size: 128,
   status: "ready",
@@ -55,8 +59,10 @@ const makeFakeTrimWorkflow = () => {
       sizeSummary: { compressionTimeMs: 4, inputSize: 128, outputSize: 80, rawSize: 96, trimTimeMs: 8 },
     })),
     setInput: vi.fn(async (source: BinarySource) => {
+      await stagingGate;
       input = makeTrimSource(source instanceof File ? source.name : "game.nes");
     }),
+    setSettings: vi.fn(async () => undefined),
     setOutputFormat: vi.fn(async () => undefined),
     setOutputName: vi.fn(async () => undefined),
   };
@@ -84,6 +90,8 @@ const renderForm = (props: Record<string, unknown> = {}) =>
 beforeEach(() => {
   window.history.replaceState(null, "", "/trim-rom");
   latest = null;
+  recommendedFormat = undefined;
+  stagingGate = undefined;
 });
 
 afterEach(() => {
@@ -107,7 +115,7 @@ describe("TrimPatchForm", () => {
   it("requires confirmation, runs the trim, and exposes a completed download", async () => {
     const onComplete = vi.fn();
     const file = new File(["rom"], "game.nes", { type: "application/octet-stream" });
-    const { container } = renderForm({ onTrimComplete: onComplete });
+    const { container } = renderForm({ onTrimComplete: onComplete, settings: { zipCodec: "store", zipLevel: 0 } });
     const input = container.querySelector("#trim-builder-input-file-unified") as HTMLInputElement;
     await act(async () => {
       Object.defineProperty(input, "files", { configurable: true, value: [file] });
@@ -124,6 +132,11 @@ describe("TrimPatchForm", () => {
     await act(async () => fireEvent.click(confirm as HTMLButtonElement));
     await vi.waitFor(() => expect(latest?.workflow.run).toHaveBeenCalled());
     await vi.waitFor(() => expect(latest?.output.saveAs).toHaveBeenCalled());
+    expect(latest?.workflow.setSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        output: expect.objectContaining({ container: expect.objectContaining({ zipCodec: "store" }) }),
+      }),
+    );
     expect(onComplete).toHaveBeenCalledOnce();
     expect(container.textContent).toContain("Trimmed .nes");
     expect(container.textContent).toContain("32 B raw");
@@ -194,6 +207,82 @@ describe("TrimPatchForm", () => {
     await vi.waitFor(() => expect(container.textContent).toContain("download failed"));
     expect(latest?.output.saveAs).toHaveBeenCalledWith({ interactive: true });
   });
+
+  it("uses neutral confirmation while disc metadata is pending and preserves queued execution", async () => {
+    recommendedFormat = "rvz";
+    let release!: () => void;
+    stagingGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { container } = renderForm({
+      pageDrop: { files: [new File(["disc"], "game.gcz")], id: 1 },
+      outputFormat: "chd",
+    });
+    await vi.waitFor(() => expect(latest?.workflow.setInput).toHaveBeenCalled());
+    await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
+    expect(document.body.textContent).toContain("A new copy of game.gcz");
+    expect(document.body.textContent).toContain("GameCube and Wii discs are converted losslessly");
+    expect(document.body.textContent).not.toContain("A lossless RVZ copy");
+    expect(document.body.textContent).not.toContain("restored padding");
+    await act(async () =>
+      fireEvent.click(
+        Array.from(document.querySelectorAll("button")).find((button) =>
+          button.textContent?.includes("Trim ROM"),
+        ) as HTMLButtonElement,
+      ),
+    );
+    expect(latest?.workflow.run).not.toHaveBeenCalled();
+    await act(async () => {
+      release();
+    });
+    await vi.waitFor(() => expect(latest?.workflow.run).toHaveBeenCalledOnce());
+  });
+
+  it("describes a known disc CHD output as a lossless copy", async () => {
+    recommendedFormat = "rvz";
+    const { container } = renderForm({
+      pageDrop: { files: [new File(["disc"], "game.wbfs")], id: 1 },
+      outputFormat: "chd",
+    });
+    await vi.waitFor(() => expect(latest?.workflow.getInput()?.status).toBe("ready"));
+    await act(async () => fireEvent.click(container.querySelector("#trim-builder-button-run") as HTMLButtonElement));
+    expect(document.body.textContent).toContain("A lossless copy of game.wbfs");
+    expect(document.body.textContent).not.toContain("A lossless RVZ copy");
+    expect(document.body.textContent).not.toContain("restored padding");
+  });
+
+  it("preserves the global ZIP default for a detected RVZ-convertible disc", async () => {
+    recommendedFormat = "rvz";
+    const { container } = renderForm({
+      pageDrop: { files: [new File(["disc"], "game.iso")], id: 1 },
+      defaultSettings: { defaultCompression: "zip" },
+    });
+    await vi.waitFor(() => expect(latest?.workflow.getInput()?.status).toBe("ready"));
+    await vi.waitFor(() =>
+      expect((container.querySelector("#trim-builder-select-output-format") as HTMLSelectElement)?.value).toBe("zip"),
+    );
+  });
+
+  it.each(["game.gcm", "game.iso", "game.rvz"])(
+    "offers actual compressed formats for lossless disc conversion of %s",
+    async (fileName) => {
+      recommendedFormat = "rvz";
+      const { container } = renderForm({
+        pageDrop: { files: [new File(["disc"], fileName)], id: 1 },
+        settings: { defaultCompression: "none" },
+      });
+      await vi.waitFor(() => expect(latest?.workflow.getInput()?.status).toBe("ready"));
+      await vi.waitFor(() => {
+        const format = container.querySelector("#trim-builder-select-output-format") as HTMLSelectElement;
+        expect(format?.value).toBe("rvz");
+        expect(Array.from(format.options).filter((option) => option.value === "rvz")).toHaveLength(1);
+        if (fileName !== "game.rvz")
+          expect(Array.from(format.options).map((option) => option.value)).not.toContain(fileName.split(".").pop());
+        const compression = container.querySelector("#trim-builder-select-output-compression") as HTMLSelectElement;
+        expect(Array.from(compression.options).map((option) => option.textContent)).not.toContain("None");
+      });
+    },
+  );
 
   it("updates the trim output name and format controls", async () => {
     const file = new File(["rom"], "game.nes", { type: "application/octet-stream" });

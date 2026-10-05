@@ -2095,3 +2095,151 @@ fn chunk_diff_scan_seeks_into_the_middle_of_both_inputs() {
     assert_eq!(runs[0].offset, 3);
     assert_eq!(runs[0].len, 1);
 }
+
+#[test]
+fn undo_rejects_empty_ppf3_without_undo_flag() {
+    let temp = TestDir::new();
+    let input = temp.child("input.bin");
+    let patch = temp.child("empty.ppf");
+    let output = temp.child("output.bin");
+    fs::write(&input, b"ROM").expect("input fixture");
+    fs::write(
+        &patch,
+        build_ppf3_patch("empty", 0, false, false, None, Vec::new()),
+    )
+    .expect("patch fixture");
+    let error = undo_ppf(&input, &patch, &output).expect_err("undo flag required");
+    assert!(
+        error
+            .to_string()
+            .contains("does not contain complete undo data")
+    );
+    assert!(!output.exists());
+}
+
+#[test]
+fn undo_bounds_failure_preserves_existing_and_missing_outputs() {
+    let temp = TestDir::new();
+    let input = temp.child("input.bin");
+    let patch = temp.child("bounds.ppf");
+    let output = temp.child("output.bin");
+    fs::write(&input, b"NNNN").expect("input fixture");
+    fs::write(
+        &patch,
+        build_ppf3_patch(
+            "bounds",
+            0,
+            false,
+            true,
+            None,
+            vec![
+                V3Record {
+                    offset: 100,
+                    data: b"N".to_vec(),
+                    undo: b"O".to_vec(),
+                },
+                V3Record {
+                    offset: 0,
+                    data: b"N".to_vec(),
+                    undo: b"O".to_vec(),
+                },
+            ],
+        ),
+    )
+    .expect("patch fixture");
+    fs::write(&output, b"keep existing output").expect("output fixture");
+    undo_ppf(&input, &patch, &output).expect_err("bounds validation");
+    assert_eq!(
+        fs::read(&output).expect("existing output"),
+        b"keep existing output"
+    );
+    fs::remove_file(&output).expect("remove fixture");
+    undo_ppf(&input, &patch, &output).expect_err("bounds validation");
+    assert!(!output.exists());
+}
+
+#[test]
+fn undo_malformed_patch_preserves_sources_and_outputs() {
+    let valid = build_ppf3_patch(
+        "truncated undo",
+        0,
+        false,
+        true,
+        None,
+        vec![V3Record {
+            offset: 0,
+            data: b"NEW".to_vec(),
+            undo: b"OLD".to_vec(),
+        }],
+    );
+    for bytes in [
+        b"not a PPF patch".to_vec(),
+        valid[..valid.len() - 1].to_vec(),
+    ] {
+        let temp = TestDir::new();
+        let input = temp.child("input.bin");
+        let patch = temp.child("invalid.ppf");
+        let output = temp.child("output.bin");
+        fs::write(&input, b"NEW").expect("input fixture");
+        fs::write(&patch, &bytes).expect("patch fixture");
+        fs::write(&output, b"keep output").expect("output fixture");
+        undo_ppf(&input, &patch, &output).expect_err("invalid patch");
+        assert_eq!(fs::read(&output).expect("existing output"), b"keep output");
+        fs::remove_file(&output).expect("remove output fixture");
+        undo_ppf(&input, &patch, &output).expect_err("invalid patch");
+        assert!(!output.exists());
+        assert_eq!(fs::read(&input).expect("input preserved"), b"NEW");
+        assert_eq!(fs::read(&patch).expect("patch preserved"), bytes);
+    }
+}
+
+#[test]
+fn undo_restores_overlapping_records_in_reverse_order() {
+    let temp = TestDir::new();
+    let input = temp.child("input.bin");
+    let patch = temp.child("overlap.ppf");
+    let output = temp.child("output.bin");
+    fs::write(&input, b"aXYZef").expect("input fixture");
+    fs::write(
+        &patch,
+        build_ppf3_patch(
+            "overlap",
+            0,
+            false,
+            true,
+            None,
+            vec![
+                V3Record {
+                    offset: 1,
+                    data: b"123".to_vec(),
+                    undo: b"bcd".to_vec(),
+                },
+                V3Record {
+                    offset: 1,
+                    data: b"XYZ".to_vec(),
+                    undo: b"123".to_vec(),
+                },
+            ],
+        ),
+    )
+    .expect("patch fixture");
+    undo_ppf(&input, &patch, &output).expect("undo");
+    assert_eq!(fs::read(&output).expect("output"), b"abcdef");
+    assert_eq!(fs::read(&input).expect("input"), b"aXYZef");
+}
+
+#[test]
+fn undo_accepts_empty_ppf3_with_undo_flag() {
+    let temp = TestDir::new();
+    let input = temp.child("input.bin");
+    let patch = temp.child("empty.ppf");
+    let output = temp.child("output.bin");
+    fs::write(&input, b"ROM").expect("input fixture");
+    fs::write(
+        &patch,
+        build_ppf3_patch("empty", 0, false, true, None, Vec::new()),
+    )
+    .expect("patch fixture");
+    undo_ppf(&input, &patch, &output).expect("empty undo");
+    assert_eq!(fs::read(&output).expect("output"), b"ROM");
+}
