@@ -10,8 +10,6 @@ on:
         type: choice
         options: [none, nightly, beta, prod]
   pull_request:
-  merge_group:
-    types: [checks_requested]
   push:
     branches:
       - main
@@ -100,7 +98,7 @@ jobs:
       - name: Classify changed paths
         id: classify
         env:
-          BASE_SHA: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha || github.event.before || steps.last-nightly.outputs.sha || '' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || steps.last-nightly.outputs.sha || '' }}
           HEAD_SHA: ${{ github.sha }}
           EVENT_NAME: ${{ github.event_name }}
           # Empty for anything that is not a pull request. It is what tells the
@@ -124,7 +122,6 @@ jobs:
         id: plan
         continue-on-error: true
         if: >-
-          github.event_name != 'merge_group' &&
           (github.ref_type == 'tag' ||
           (github.event_name == 'workflow_dispatch' && github.event.inputs.deploy_channel != 'none') ||
           steps.classify.outputs.webapp == 'true' ||
@@ -765,7 +762,7 @@ jobs:
 
       - name: Whitespace
         env:
-          BASE_SHA: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha || github.event.before || '' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
           HEAD_SHA: ${{ github.sha }}
         # The task reads BASE_SHA/HEAD_SHA above; the lefthook hook runs the same
         # task with neither set and checks the staged diff instead.
@@ -1418,16 +1415,7 @@ jobs:
     name: Webapp
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs:
-      [
-        changes,
-        wasm,
-        webapp-static,
-        webapp-browser,
-        webapp-wasm-browser,
-        webapp-e2e,
-        webapp-webkit-e2e,
-      ]
+    needs: [changes, wasm, webapp-static, webapp-browser, webapp-wasm-browser, webapp-e2e, webapp-webkit-e2e]
     if: ${{ !cancelled() && github.ref_type != 'tag' }}
     steps:
       - name: Checkout
