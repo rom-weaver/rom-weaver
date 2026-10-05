@@ -231,7 +231,7 @@ utf16_set_file_attributes_callback(const void *name, DWORD attributes) {
         path: "libretro/Makefile",
         find: "LDFLAGS += -shared -Wl,--no-undefined -static-libgcc -static-libstdc++ -Wl,--version-script=link.T -lwinmm -lgdi32 -lwsock32 -lws2_32",
         replace:
-          "LDFLAGS += -shared -Wl,--no-undefined -static-libgcc -static-libstdc++ -Wl,--version-script=link.T -lwinmm -lgdi32 -lwsock32 -lws2_32 -lversion -liphlpapi",
+          "LDFLAGS += -shared -static -Wl,--no-undefined -static-libgcc -static-libstdc++ -Wl,--version-script=link.T -lwinmm -lgdi32 -lwsock32 -lws2_32 -lversion -liphlpapi",
       },
       {
         path: "libretro/Makefile.common",
