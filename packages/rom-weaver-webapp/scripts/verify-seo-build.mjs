@@ -77,6 +77,11 @@ const installScript = read("install.sh");
 const redirects = read("_redirects");
 const llmsTxt = read("llms.txt");
 const robots = read("robots.txt");
+assertIncludes(
+  robots,
+  `Content-Signal: ai-train=${production ? "yes" : "no"}, search=${production ? "yes" : "no"}, ai-input=${production ? "yes" : "no"}`,
+  "robots.txt content signals",
+);
 
 for (const route of DOC_ROUTES) {
   assertIncludes(read(`${route.slug}.md`), `Canonical: https://rom-weaver.com/${route.slug}`, "Markdown canonical");
@@ -255,7 +260,7 @@ for (const url of [
 }
 assertIncludes(
   headers,
-  `Content-Signal: ai-train=no, search=${production ? "yes" : "no"}, ai-input=yes`,
+  `Content-Signal: ai-train=${production ? "yes" : "no"}, search=${production ? "yes" : "no"}, ai-input=${production ? "yes" : "no"}`,
   `${channel} content signal`,
 );
 assertIncludes(

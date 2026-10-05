@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { WORKFLOW_SEO_ROUTES } from "../src/webapp/workflow-seo.mjs";
-import { createSitemapSource, createWorkflowRouteHtml, injectLdJson } from "./vite-config/seo-html.mjs";
+import {
+  createRobotsSource,
+  createSitemapSource,
+  createWorkflowRouteHtml,
+  injectLdJson,
+} from "./vite-config/seo-html.mjs";
 
 const routeShell = `<!doctype html><html><head>
 <title>old</title>
@@ -65,3 +70,15 @@ test("the sitemap contains each indexable workflow once and excludes beta tools"
     assert.ok(!locations.includes(`https://rom-weaver.com/${slug}`), slug);
   }
 });
+
+for (const channel of ["prod", "beta", "nightly", "preview", "dev"]) {
+  test(`${channel} robots declares content usage and crawl policy`, () => {
+    const robots = createRobotsSource(channel);
+    const signal = channel === "prod" ? "yes" : "no";
+    assert.ok(
+      robots.startsWith(`User-agent: *\nContent-Signal: ai-train=${signal}, search=${signal}, ai-input=${signal}\n`),
+    );
+    assert.ok(robots.includes(channel === "prod" ? "Allow: /\n" : "Disallow: /\n"));
+    assert.equal(robots.includes("Sitemap:"), channel === "prod");
+  });
+}
