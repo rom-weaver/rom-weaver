@@ -9,19 +9,41 @@ const ci = load(readFileSync(".github/workflows/ci.yml", "utf8"));
 const deep = load(readFileSync(".github/workflows/quality-deep.yml", "utf8"));
 const coverage = load(readFileSync(".github/workflows/coverage.yml", "utf8"));
 const parity = load(readFileSync(".github/workflows/parity.yml", "utf8"));
-test("PR analysis checks the source revision so mutation diffs exclude newer base commits", () => {
+test("nightly and manual analysis runs use the selected source revision", () => {
+  for (const name of ["quality-fast", "quality-analysis", "quality-reference"]) {
+    assert.ok(ci.jobs[name].if.includes("github.event_name == 'schedule'"));
+    assert.ok(ci.jobs[name].if.includes("github.event_name == 'workflow_dispatch'"));
+    assert.ok(!ci.jobs[name].if.includes("github.event_name == 'pull_request'"));
+    assert.ok(!ci.jobs[name].if.includes("github.event_name == 'push'"));
+  }
   const checkout = ci.jobs["quality-analysis"].steps.find((step) =>
     step.uses?.startsWith("actions/checkout@"),
   );
   assert.equal(checkout.with.ref, "${{ github.event.pull_request.head.sha || github.sha }}");
   assert.equal(checkout.with["fetch-depth"], 0);
+  assert.equal(ci.jobs.changes.outputs.last_nightly_sha, "${{ steps.last-nightly.outputs.sha }}");
+  assert.ok(
+    ci.jobs.changes.steps
+      .find((step) => step.id === "last-nightly")
+      .if.includes("github.event_name == 'workflow_dispatch'"),
+  );
+  assert.ok(ci.jobs["quality-fast"].needs.includes("changes"));
+  const guardrails = ci.jobs["quality-fast"].steps.find((step) => step.id === "guardrails");
+  assert.ok(guardrails.env.QUALITY_BASE.includes("needs.changes.outputs.last_nightly_sha"));
+  assert.ok(guardrails.run.includes('git rev-parse HEAD^'));
+  assert.ok(ci.jobs["quality-analysis"].needs.includes("changes"));
+  const mutation = ci.jobs["quality-analysis"].steps.find((step) => step.id === "mutation");
+  assert.ok(mutation.env.QUALITY_BASE.includes("needs.changes.outputs.last_nightly_sha"));
 });
-test("existing required Rust aggregate cannot skip new fast or selected reference gates", () => {
+test("per-change Rust checks do not require the nightly quality jobs", () => {
   assert.ok(ci.jobs.rust.needs.includes("quality-fast"));
   assert.ok(ci.jobs.rust.needs.includes("quality-reference"));
   const fast = ci.jobs.rust.steps.find((step) => step.name === "Verify required quality checks");
-  assert.ok(fast.run.includes("'true'"));
-  assert.ok(fast.run.includes("needs.quality-fast.result"));
+  assert.ok(fast.if.includes("github.event_name == 'schedule'"));
+  assert.ok(fast.if.includes("github.event_name == 'workflow_dispatch'"));
+  const reference = ci.jobs.rust.steps.find((step) => step.name === "Verify selected pinned reference");
+  assert.ok(reference.if.includes("github.event_name == 'schedule'"));
+  assert.ok(reference.if.includes("github.event_name == 'workflow_dispatch'"));
   assert.equal(ci.jobs["quality-fast"]["continue-on-error"], undefined);
   assert.equal(ci.jobs["quality-reference"]["continue-on-error"], undefined);
   assert.equal(ci.jobs["quality-analysis"]["continue-on-error"], true);
@@ -75,7 +97,7 @@ test("live upstream parity retains failure and independent reporting", () => {
   assert.equal(step["continue-on-error"], undefined);
   assert.ok(parity.jobs.parity.steps.some((s) => s.run?.includes("live-upstream-parity=")));
 });
-test("PR and deep lanes remain independently runnable with bounded execution and artifacts", () => {
+test("nightly and deep quality lanes remain bounded and upload artifacts", () => {
   assert.ok(
     ci.jobs["quality-fast"].steps.some((step) =>
       step.run?.includes("quality-trusted-guardrails.mjs"),
@@ -100,7 +122,7 @@ test("PR and deep lanes remain independently runnable with bounded execution and
     "properties",
   ]);
   assert.equal(deep.on.pull_request, undefined);
-  assert.ok(deep.on.schedule.length > 0);
+  assert.deepEqual(deep.on.schedule, [{ cron: "17 7 * * 1" }]);
 });
 
 test("quality evidence in hidden scratch directories is uploaded", () => {
