@@ -1,0 +1,23 @@
+# Throwaway experiment: compare ubuntu-slim with ubuntu-24.04 for the
+# aggregate-gate shape (checkout + one node script). Not for merge.
+name: Slim timing
+
+on:
+  push:
+    branches: [ci/slim-timing]
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Gate (${{ matrix.runner }} ${{ matrix.n }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-slim]
+        n: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v7
+      - run: node --version && node scripts/ci/assert-jobs.mjs success true 'a=success'
