@@ -188,7 +188,14 @@ test("PPSSPP uses each upstream platform directory and native architecture", () 
       ),
   );
   const makefilePatch = windows.patches.find(({ path }) => path === "libretro/Makefile");
-  assert.match(makefilePatch.replace, /-lversion -liphlpapi$/);
+  assert.equal(
+    makefilePatch.find,
+    "LDFLAGS += -shared -Wl,--no-undefined -static-libgcc -static-libstdc++ -Wl,--version-script=link.T -lwinmm -lgdi32 -lwsock32 -lws2_32",
+  );
+  assert.equal(
+    makefilePatch.replace,
+    "LDFLAGS += -shared -static -Wl,--no-undefined -static-libgcc -static-libstdc++ -Wl,--version-script=link.T -lwinmm -lgdi32 -lwsock32 -lws2_32 -lversion -liphlpapi",
+  );
   const zstdPatch = windows.patches.find(({ path }) => path === "libretro/Makefile.common");
   assert.match(zstdPatch.replace, /CFLAGS \+= -DZSTD_DISABLE_ASM/);
   const workflow = fs.readFileSync(
