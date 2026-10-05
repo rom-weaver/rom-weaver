@@ -6,6 +6,13 @@ const require = createRequire(import.meta.url);
 const { load } = require("js-yaml");
 const ci = load(readFileSync(".github/workflows/ci.yml", "utf8"));
 const deep = load(readFileSync(".github/workflows/quality-deep.yml", "utf8"));
+test("PR analysis checks the source revision so mutation diffs exclude newer base commits", () => {
+  const checkout = ci.jobs["quality-analysis"].steps.find((step) =>
+    step.uses?.startsWith("actions/checkout@"),
+  );
+  assert.equal(checkout.with.ref, "${{ github.event.pull_request.head.sha || github.sha }}");
+  assert.equal(checkout.with["fetch-depth"], 0);
+});
 test("existing required Rust aggregate cannot skip new fast or selected reference gates", () => {
   assert.ok(ci.jobs.rust.needs.includes("quality-fast"));
   assert.ok(ci.jobs.rust.needs.includes("quality-reference"));
