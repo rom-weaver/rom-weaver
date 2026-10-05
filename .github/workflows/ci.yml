@@ -311,6 +311,8 @@ jobs:
           fi
       - name: Checker failure-injection tests
         run: node --test scripts/quality-*.test.mjs scripts/coverage-rust.test.mjs
+      - name: Compile locale modules for architecture inspection
+        run: npm --prefix packages/rom-weaver-webapp run i18n:compile
       - name: Architecture invariants
         id: architecture
         if: ${{ !cancelled() }}
@@ -1286,7 +1288,18 @@ jobs:
     name: Rust
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs: [changes, quality-fast, quality-reference, rust-host, rust-lint, cli-platforms, cli-linux-arm64, rust-macos, rust-windows]
+    needs:
+      [
+        changes,
+        quality-fast,
+        quality-reference,
+        rust-host,
+        rust-lint,
+        cli-platforms,
+        cli-linux-arm64,
+        rust-macos,
+        rust-windows,
+      ]
     if: ${{ !cancelled() && github.ref_type != 'tag' }}
     steps:
       - name: Checkout
@@ -1614,7 +1627,16 @@ jobs:
     name: Webapp
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    needs: [changes, wasm, webapp-static, webapp-browser, webapp-wasm-browser, webapp-e2e, webapp-webkit-e2e]
+    needs:
+      [
+        changes,
+        wasm,
+        webapp-static,
+        webapp-browser,
+        webapp-wasm-browser,
+        webapp-e2e,
+        webapp-webkit-e2e,
+      ]
     if: ${{ !cancelled() && github.ref_type != 'tag' }}
     steps:
       - name: Checkout

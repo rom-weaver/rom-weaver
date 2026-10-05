@@ -114,3 +114,13 @@ test("quality evidence in hidden scratch directories is uploaded", () => {
     assert.equal(upload.with["include-hidden-files"], true);
   }
 });
+
+test("architecture inspection generates locale imports before walking the complete graph", () => {
+  const steps = ci.jobs["quality-fast"].steps;
+  const compile = steps.findIndex(
+    (s) => s.run === "npm --prefix packages/rom-weaver-webapp run i18n:compile",
+  );
+  const architecture = steps.findIndex((s) => s.id === "architecture");
+  assert.ok(compile >= 0 && compile < architecture);
+  assert.equal(steps[compile]["continue-on-error"], undefined);
+});

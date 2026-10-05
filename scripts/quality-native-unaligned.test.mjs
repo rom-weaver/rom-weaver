@@ -70,3 +70,35 @@ test("native integration retains portable compiler-specific forced inclusion", (
       assert.ok(header.includes(`#undef ${prefix}${suffix}`));
   }
 });
+
+// quality-reason: this cross-assembly check uses clang-18 from the Linux native lane; other hosts retain the portable integration checks.
+test(
+  "ARM64 SDK assembly accepts the forced C compatibility header",
+  { skip: process.platform !== "linux" },
+  () => {
+    const directory = path.resolve(".agent/quality-native-unaligned");
+    fs.mkdirSync(directory, { recursive: true });
+    const scratch = fs.mkdtempSync(path.join(directory, "assembly-"));
+    try {
+      const result = spawnSync(
+        "clang-18",
+        [
+          "--target=aarch64-unknown-linux-gnu",
+          "-Icrates/rom-weaver-containers/lzma-sdk/vendor/C",
+          "-Icrates/rom-weaver-containers/lzma-sdk/vendor/Asm/arm64",
+          "-include",
+          "crates/rom-weaver-containers/lzma-sdk/glue/rom_weaver_unaligned.h",
+          "-c",
+          "crates/rom-weaver-containers/lzma-sdk/vendor/Asm/arm64/LzmaDecOpt.S",
+          "-o",
+          path.join(scratch, "decoder.o"),
+        ],
+        { encoding: "utf8" },
+      );
+      assert.equal(result.status, 0, result.stderr || result.error?.message);
+      assert.ok(fs.statSync(path.join(scratch, "decoder.o")).size > 0);
+    } finally {
+      fs.rmSync(scratch, { recursive: true, force: true });
+    }
+  },
+);

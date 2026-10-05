@@ -7,6 +7,8 @@
  */
 #ifndef ROM_WEAVER_UNALIGNED_H
 #define ROM_WEAVER_UNALIGNED_H
+/* cc-rs also force-includes this header in preprocessed ARM64 assembly. */
+#ifndef __ASSEMBLER__
 #include "Precomp.h"
 #include "CpuArch.h"
 
@@ -70,4 +72,5 @@ RW_INLINE void rw_set_be(void *pointer, UInt64 value, unsigned size)
 #define SetBe32(p, v) { rw_set_be((p), (UInt32)(v), 4); }
 #define SetBe64(p, v) { rw_set_be((p), (UInt64)(v), 8); }
 #undef RW_INLINE
+#endif /* !__ASSEMBLER__ */
 #endif
