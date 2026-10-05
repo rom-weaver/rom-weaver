@@ -2,6 +2,12 @@
 
 > A local-first ROM toolkit. Apply and create patches, identify files, extract or compress ROMs, share bundles, bake supported cheats, and edit game saves in the browser or CLI. The browser also plays supported games. Files stay on-device without uploads or accounts.
 
+## Markdown pages
+
+The homepage and published tool pages have Markdown alternatives at `/index.md` and the tool path followed by `.md`. HTML pages advertise their Markdown URL with an alternate link.
+
+- [Homepage](https://rom-weaver.com/index.md): Markdown summary and documentation link.
+
 ## Web app
 
 - [Apply ROM patches](https://rom-weaver.com/apply-patches): Apply BPS, IPS, IPS32, UPS, xdelta, VCDIFF, PPF, APS, RUP, and other supported patches with format detection and ordered patch chains.

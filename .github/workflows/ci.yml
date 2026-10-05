@@ -1658,8 +1658,8 @@ jobs:
       # Every sidecar-backed /assets/* request invokes the Pages Function, so
       # a zone Cache Rule makes the edge cache those responses and the
       # function run roughly once per URL per PoP instead of per request.
-      # Safe because everything under /assets/ is content-hashed and
-      # immutable; respect_origin keeps the function's own Cache-Control
+      # Assets are content-hashed and immutable; negotiated pages have a
+      # one-hour TTL and Vary Accept. respect_origin keeps the function's Cache-Control
       # authoritative. Zone rules only exist on the custom domains - pages.dev
       # previews stay per-request, which is fine (preview traffic is internal).
       #
@@ -1667,12 +1667,20 @@ jobs:
       # matrix leg so release-channel deploys cannot race the ruleset
       # read-merge-write. It skips with a notice until CLOUDFLARE_ZONE_ID is
       # set and the API token carries Zone -> Cache Rules -> Edit.
-      - name: Ensure zone cache rule for /assets
+      - name: Ensure zone cache rules for assets and negotiated pages
         if: matrix.target.channel == 'nightly'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
         run: node scripts/ci/ensure-cloudflare-assets-cache-rule.mjs
+
+      - name: Purge negotiated page cache after custom-domain deployment
+        if: success() && matrix.target.channel != 'preview' && steps.pages.outputs.url != ''
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          DEPLOYMENT_DOMAIN: ${{ matrix.target.env }}
+        run: node scripts/ci/purge-cloudflare-pages-cache.mjs
 
       - name: Delete superseded deployments for this pull request
         if: ${{ !cancelled() && matrix.target.channel == 'preview' }}

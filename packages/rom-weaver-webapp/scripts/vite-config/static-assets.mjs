@@ -28,6 +28,7 @@ import {
   createRobotsSource,
   createSitemapSource,
   createWorkflowRouteHtml,
+  createWorkflowMarkdown,
   injectLdJson,
   makeBetaRouteNoindex,
 } from "./seo-html.mjs";
@@ -83,6 +84,9 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
           true,
         ),
       );
+      for (const route of Object.values(WORKFLOW_SEO_ROUTES)) {
+        fs.writeFileSync(path.join(distDir, `${route.slug || "index"}.md`), createWorkflowMarkdown(route));
+      }
       const patcherHtml = withRoutePreloadLinks(withShell("patcher"), routePreloadLinks.get("patcher"));
       const applyHtml = injectLdJson(
         createWorkflowRouteHtml(patcherHtml, WORKFLOW_SEO_ROUTES.patcher, channel, channelLabel),

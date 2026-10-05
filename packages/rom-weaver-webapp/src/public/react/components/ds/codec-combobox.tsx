@@ -256,7 +256,20 @@ const CodecCombobox = ({
   }, [getRenderedDropdownHeight, keepInputVisible, updateDropdownFrame]);
 
   const focusInputIntoView = () => {
-    inputRef.current?.scrollIntoView({ block: "center", inline: "nearest" });
+    const input = inputRef.current;
+    const rect = input?.getBoundingClientRect();
+    const viewport = globalThis.visualViewport;
+    const viewportTop = viewport?.offsetTop ?? 0;
+    const viewportLeft = viewport?.offsetLeft ?? 0;
+    const viewportHeight = viewport?.height ?? globalThis.innerHeight;
+    const viewportWidth = viewport?.width ?? globalThis.innerWidth;
+    const alreadyVisible =
+      rect &&
+      rect.top >= viewportTop + DROPDOWN_MARGIN &&
+      rect.bottom <= viewportTop + viewportHeight - DROPDOWN_MARGIN &&
+      rect.left >= viewportLeft + DROPDOWN_MARGIN &&
+      rect.right <= viewportLeft + viewportWidth - DROPDOWN_MARGIN;
+    if (!alreadyVisible) input?.scrollIntoView({ block: "center", inline: "nearest" });
     for (const delay of [80, 220, 420]) {
       globalThis.setTimeout(syncViewportPosition, delay);
     }
