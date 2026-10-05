@@ -475,6 +475,20 @@ fn build_lzma_sdk(
         .warnings(false)
         .extra_warnings(false);
 
+    // SDK wire accesses MUST avoid unaligned typed pointers such as props + 1;
+    // byte accessors preserve encoding parity without changing the vendor snapshot.
+    // Forced inclusion reaches libc headers before Threads.h enables GNU extensions.
+    if env::var("CARGO_CFG_TARGET_OS").ok().as_deref() == Some("linux") {
+        build.define("_GNU_SOURCE", None);
+    }
+    let unaligned_header = glue_dir.join("rom_weaver_unaligned.h");
+    println!("cargo:rerun-if-changed={}", unaligned_header.display());
+    if build.get_compiler().is_like_msvc() {
+        build.flag(format!("/FI{}", unaligned_header.display()));
+    } else {
+        build.flag("-include").flag(unaligned_header.as_os_str());
+    }
+
     // Give every portable C target the assembly loop's fast paths for repeated
     // short-distance matches while keeping the vendored SDK snapshot
     // byte-for-byte upstream.
@@ -607,6 +621,15 @@ fn patch_path(manifest_dir: &Path, relative_path: &str) -> PathBuf {
 }
 
 fn emit_vendor_patch_rerun_if_changed(manifest_dir: &Path) {
+    for name in [
+        "7zip_sdk_null_advance.original.txt",
+        "7zip_sdk_null_advance.replacement.txt",
+    ] {
+        println!(
+            "cargo:rerun-if-changed={}",
+            patch_path(manifest_dir, name).display()
+        );
+    }
     for patch_file in WASM_PATCH_FILES {
         println!(
             "cargo:rerun-if-changed={}",
@@ -645,6 +668,13 @@ fn prepare_source_tree(manifest_dir: &Path, libarchive_dir: &Path, out_dir: &Pat
     // staged copy; the vendored tree stays a verbatim snapshot of the fork.
     copy_dir_recursive(libarchive_dir, &staged).expect("failed to stage libarchive source tree");
     drop_test_subdirectories(&staged).expect("failed to drop libarchive test subdirectories");
+    replace_file_fragment(
+        &staged.join("libarchive/archive_write_set_format_7zip.c"),
+        &patch_path(manifest_dir, "7zip_sdk_null_advance.original.txt"),
+        &patch_path(manifest_dir, "7zip_sdk_null_advance.replacement.txt"),
+        "7zip SDK zero-length null pointer advancement",
+    )
+    .expect("failed to patch 7zip SDK finalization pointer arithmetic");
     let write_extra = write_extra_enabled();
     add_wasm_archive_write_format_shim(manifest_dir, &staged.join("libarchive"))
         .expect("failed to add libarchive format shim");
