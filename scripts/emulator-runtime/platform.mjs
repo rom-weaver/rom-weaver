@@ -243,7 +243,7 @@ utf16_set_file_attributes_callback(const void *name, DWORD attributes) {
     build
       .at(-1)
       .command.push(
-        "FFMPEGLDFLAGS=-L../ffmpeg/Windows/x86_64/lib -lavformat -lavcodec -lavutil -lswresample -lswscale -Wl,-Bstatic -liconv -Wl,-Bdynamic",
+        "FFMPEGLDFLAGS=-L../ffmpeg/Windows/x86_64/lib -lavformat -lavcodec -lavutil -lswresample -lswscale -Wl,-Bstatic -liconv -Wl,-Bdynamic -Wl,-Bstatic",
       );
   }
   return { build, output, patches };

@@ -184,7 +184,7 @@ test("PPSSPP uses each upstream platform directory and native architecture", () 
     windows.build
       .at(-1)
       .command.includes(
-        "FFMPEGLDFLAGS=-L../ffmpeg/Windows/x86_64/lib -lavformat -lavcodec -lavutil -lswresample -lswscale -Wl,-Bstatic -liconv -Wl,-Bdynamic",
+        "FFMPEGLDFLAGS=-L../ffmpeg/Windows/x86_64/lib -lavformat -lavcodec -lavutil -lswresample -lswscale -Wl,-Bstatic -liconv -Wl,-Bdynamic -Wl,-Bstatic",
       ),
   );
   const makefilePatch = windows.patches.find(({ path }) => path === "libretro/Makefile");
