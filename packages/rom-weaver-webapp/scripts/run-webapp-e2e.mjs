@@ -185,7 +185,7 @@ const requestStatus = (url, { headers = {}, maxRedirects = 5 } = {}) =>
 
 const openSettingsPanel = async (page) => {
   // Phones reach Settings through the dock's App button; desktop keeps the header tool.
-  const settings = page.locator(".dock-app:visible, .topbar-tools .tool[aria-label='Settings']:visible");
+  const settings = page.locator(".dock-app:visible, .topbar-tools .settings-tool:visible");
   await settings.first().click();
   await page.getByRole("dialog").waitFor({ state: "visible" });
 };
@@ -606,23 +606,16 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     watched.on("pageerror", (error) => failures.push(`[${watched.url()}] ${error.stack || error.message}`));
   };
   watchPageErrors();
-  // Theme is a named menu rather than a cycle, so the choice is picked by name.
+  // Theme is a named menu rather than a cycle, so the choice is picked by its value.
   const setTheme = async (theme) => {
     if ((await page.locator("html").getAttribute("data-theme")) === theme) return;
-    await page.locator('.tool[aria-label^="Theme"]:visible').first().click();
-    await page
-      .locator('[role="menuitemradio"]:visible')
-      .filter({ hasText: theme === "dark" ? "Dark" : "Light" })
-      .first()
-      .click();
+    await page.locator(".theme-tool:visible").first().click();
+    await page.locator(`[role="menuitemradio"][data-theme-choice="${theme}"]:visible`).first().click();
     await page.waitForFunction((expected) => document.documentElement.dataset.theme === expected, theme);
   };
   /** A nav row by name, from whichever layout the viewport shows. */
-  const navRow = (name) =>
-    page
-      .locator(".side-nav:visible .nav-row, #menu-sheet:visible .nav-row")
-      .filter({ has: page.locator(`.nav-row-label:text-is("${name}")`) })
-      .first();
+  // Rows are found by tab id, never by label, so a renamed destination keeps its audit.
+  const navRow = (id) => page.locator(`.side-nav:visible #tab-${id}, #menu-sheet:visible [data-nav="${id}"]`).first();
   /** Menu is the phone's index; the sidebar is always on screen on desktop. */
   const openNav = async () => {
     if (await page.locator(".side-nav:visible").count()) return;
@@ -670,7 +663,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       throw new Error("404 page marks a workflow tab as selected");
     }
     await page.locator(".not-found-home").waitFor({ state: "visible" });
-    await page.getByRole("link", { name: "Browse docs" }).waitFor({ state: "visible" });
+    await page.locator(".not-found-docs:visible").waitFor({ state: "visible" });
     await installAuditTools();
     await scanVariants("not found");
     if (browserName === "chromium") cssCoverageEntries.push(...(await page.coverage.stopCSSCoverage()));
@@ -777,7 +770,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.locator("#docs-drawer .docs-row.is-here").waitFor({ state: "visible" });
     if (await page.locator("#menu-sheet:visible").count()) throw new Error("Both mobile navigation layers are open");
     // The same button closes the drawer, so it MUST stay above the drawer's scrim.
-    await page.locator(".docs-bar-open", { hasText: "Close" }).click();
+    await page.locator('.docs-bar-open[aria-expanded="true"]').click();
     await page.locator("#docs-drawer").waitFor({ state: "hidden" });
     page.off("request", recordGuideChunkRequest);
     if (guideChunkRequests.length > 0) {
@@ -837,14 +830,11 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         await scanLiveApp(page, `Settings (${viewport.label}, ${theme})`);
         const betaTools = page.locator("#settings-beta-tools-enabled");
         if (!(await betaTools.isChecked())) await betaTools.check();
-        await page.getByRole("button", { exact: true, name: "Save" }).click();
+        await page.locator(".settings-actions .btn.primary:visible").click();
       }
-      for (const [tab, label] of [
-        ["patcher", "Apply"],
-        ["creator", "Create"],
-      ]) {
+      for (const tab of ["patcher", "creator"]) {
         await openNav();
-        await navRow(label).click();
+        await navRow(tab).click();
         await page.locator(`#panel-${tab}:not([hidden])`).waitFor({ state: "visible" });
         for (const theme of ["light", "dark"]) {
           await setTheme(theme);
@@ -853,17 +843,13 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       }
       // Trim, PPF undo and Save Editor are named rows under their own group
       // heading, which is what supplies the noun their short label drops.
-      for (const [label, panelId] of [
-        ["Trim", "panel-trim"],
-        ["PPF undo", "panel-ppf-undo"],
-        ["Saves", "panel-save-editor"],
-      ]) {
+      for (const tab of ["trim", "ppf-undo", "save-editor"]) {
         await openNav();
-        await navRow(label).click();
-        await page.locator(`#${panelId}:not([hidden])`).waitFor({ state: "visible" });
+        await navRow(tab).click();
+        await page.locator(`#panel-${tab}:not([hidden])`).waitFor({ state: "visible" });
         for (const theme of ["light", "dark"]) {
           await setTheme(theme);
-          await scanLiveApp(page, `${label} (${viewport.label}, ${theme})`);
+          await scanLiveApp(page, `${tab} (${viewport.label}, ${theme})`);
         }
       }
     }
@@ -871,7 +857,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
     await openNav();
-    await navRow("Apply").click();
+    await navRow("patcher").click();
 
     const infoButton = page.locator(".info-btn").first();
     await infoButton.click();
@@ -881,27 +867,29 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
 
     await openSettingsPanel(page);
     // Codecs are Advanced fields, so the console hides them until the switch is on.
-    const advancedSwitch = page.getByRole("switch", { name: /^Advanced/ }).first();
+    const advancedSwitch = page.locator('.console-advanced[role="switch"]').first();
     if ((await advancedSwitch.getAttribute("aria-checked")) !== "true") await advancedSwitch.click();
     const codecCombobox = page.locator(".codec-combobox input").first();
     await codecCombobox.click();
     await page.locator(".codec-combobox-list").waitFor({ state: "visible" });
     await scanVariants("codec combobox");
     await page.locator(".codec-combobox-option").first().click();
-    await page.getByRole("button", { exact: true, name: "Save" }).click();
+    await page.locator(".settings-actions .btn.primary:visible").click();
     await page.getByRole("dialog").waitFor({ state: "hidden" });
 
     await openNav();
-    await navRow("Logs").click();
+    await navRow("logs").click();
     const logDialog = page.locator("dialog.log-dlg");
     await logDialog.waitFor({ state: "visible" });
     await scanVariants("log dialog");
-    await logDialog.getByRole("button", { name: "Close" }).click();
+    await logDialog.locator(".console-close").click();
 
-    await page.getByRole("button", { name: "Reset" }).click();
-    await page.getByRole("dialog", { name: "Reset the page?" }).waitFor({ state: "visible" });
+    await page.locator(".reset-btn:visible").click();
+    const resetConfirmation = page.locator(".rw-modal .confirm-card:visible");
+    await resetConfirmation.waitFor({ state: "visible" });
     await scanLiveApp(page, "reset confirmation (desktop, light)");
-    await page.getByRole("button", { name: "Stay here" }).click();
+    // Cancel is the ghost action; the primary one would reset the page.
+    await resetConfirmation.locator(".c-actions .btn.ghost").click();
 
     const romFixture = fs.readFileSync(path.join(FIXTURE_DIR, "archive_sources", "game.bin"));
     await page.locator("#rom-weaver-input-file-unified").setInputFiles([
@@ -916,10 +904,10 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
 
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
-    const onboardingChip = page.getByRole("button", { name: "New here?" });
+    const onboardingChip = page.locator(".sample-tutorial-start-chip:visible").first();
     await onboardingChip.waitFor({ state: "visible", timeout: 60_000 });
     await onboardingChip.click();
-    const guidedApply = page.getByRole("link", { name: "Start guided Apply" });
+    const guidedApply = page.locator(".sample-tutorial-start-primary:visible").first();
     await guidedApply.waitFor({ state: "visible", timeout: 60_000 });
     const tutorial = page.locator(".sample-tutorial-dialog");
     // Guided Apply opens on the drop zone and loads nothing until asked, so its
@@ -930,7 +918,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       .locator('.sample-tutorial-dialog[data-step="1"][data-step-count="4"]:not([data-moving])')
       .waitFor({ state: "visible", timeout: 60_000 });
     await scanVariants("guided Apply 1/4 (waiting for files)");
-    await tutorial.getByRole("button", { name: "Continue" }).click();
+    await tutorial.locator(".sample-tutorial-next").click();
     for (let step = 2; step <= 4; step += 1) {
       await page
         .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="4"]:not([data-moving])`)
@@ -943,7 +931,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         ]);
         await download.cancel();
       } else {
-        await tutorial.getByRole("button", { name: "Continue" }).click();
+        await tutorial.locator(".sample-tutorial-next").click();
       }
     }
     await tutorial.waitFor({ state: "hidden" });
@@ -961,7 +949,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
         .waitFor({ state: "visible", timeout: 60_000 });
       await scanVariants(`guided Bundle ${step}/4`);
       if (step === 4) {
-        const createBundleButton = page.getByRole("button", { name: "Share bundle", exact: true });
+        const createBundleButton = page.locator("#rom-weaver-button-export-bundle:not([data-downloadable])");
         await createBundleButton.waitFor({ state: "visible", timeout: 60_000 });
         await page.waitForFunction(
           () => {
@@ -972,7 +960,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
           { timeout: 60_000 },
         );
         await createBundleButton.click();
-        const downloadButton = page.getByRole("button", { name: "Download ZIP Bundle", exact: true });
+        // The same control turns into the download once the bundle is built.
+        const downloadButton = page.locator("#rom-weaver-button-export-bundle[data-downloadable]");
         await downloadButton.waitFor({ state: "visible", timeout: 60_000 });
         // Stability first: the guide re-anchors (and may scroll) while the
         // control settles from Create into Download, and hovering during that
@@ -989,44 +978,43 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
           throw new Error(`guided Bundle downloaded ${download.suggestedFilename()}; expected a ZIP`);
         }
       } else {
-        await tutorial.getByRole("button", { name: "Continue" }).click();
+        await tutorial.locator(".sample-tutorial-next").click();
       }
     }
     await tutorial.waitFor({ state: "hidden" });
 
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
-    const firstPatchMenu = page.getByRole("button", { name: "Patch actions" }).first();
+    const firstPatchMenu = page.locator(".patch-menu-btn:not(.is-editing):visible").first();
     await firstPatchMenu.click();
-    await page.getByRole("menuitem", { name: "Edit details" }).click();
-    await page.getByRole("button", { name: "Done editing patch details" }).waitFor({ state: "visible" });
+    await page.locator('.patch-menu-list:not([hidden]) [role="menuitem"][id^="rom-weaver-patch-meta-edit-"]').click();
+    const patchDetailsDone = page.locator(".patch-menu-btn.is-editing:visible");
+    await patchDetailsDone.waitFor({ state: "visible" });
     await scanVariants("patch details editor");
-    await page.getByRole("button", { name: "Done editing patch details" }).click();
+    await patchDetailsDone.click();
 
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
-    const firstPatchHandle = page.getByRole("button", { name: /^Patch 1 of 2\./ });
-    await firstPatchHandle.focus();
-    await firstPatchHandle.press("ArrowDown");
-    await page
-      .getByRole("button", { name: /^Patch 2 of 2\./ })
-      .first()
-      .waitFor({ state: "visible" });
+    // Handles are in card order, so the first one is patch 1 of the stack.
+    const patchHandles = page.locator("button.phandle:visible");
+    await patchHandles.first().focus();
+    await patchHandles.first().press("ArrowDown");
+    await patchHandles.nth(1).waitFor({ state: "visible" });
     await scanLiveApp(page, "reordered patches (desktop, light)");
-    const editablePatchHandle = page.getByRole("button", { name: /^Patch 1 of 2\./ });
-    await editablePatchHandle.click();
-    await page.getByRole("spinbutton", { name: /^Edit patch position/ }).waitFor({ state: "visible" });
+    await patchHandles.first().click();
+    const patchPositionInput = page.locator("input.phandle-input:visible");
+    await patchPositionInput.waitFor({ state: "visible" });
     await scanVariants("patch position editor");
-    await page.getByRole("spinbutton", { name: /^Edit patch position/ }).press("Escape");
+    await patchPositionInput.press("Escape");
 
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
     await openNav();
-    await navRow("Create").click();
-    const createOnboardingChip = page.getByRole("button", { name: "New here?" });
+    await navRow("creator").click();
+    const createOnboardingChip = page.locator(".sample-tutorial-start-chip:visible").first();
     await createOnboardingChip.waitFor({ state: "visible" });
     await createOnboardingChip.click();
-    const guidedCreate = page.getByRole("link", { name: "Start guided Create" });
+    const guidedCreate = page.locator(".sample-tutorial-start-primary:visible").first();
     await guidedCreate.waitFor({ state: "visible" });
     await scanGuidedLoading(
       page,
@@ -1042,7 +1030,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       if (step === 6) {
         await page.locator("#patch-builder-button-create").click();
       } else {
-        await tutorial.getByRole("button", { name: "Continue" }).click();
+        await tutorial.locator(".sample-tutorial-next").click();
       }
     }
     await tutorial.waitFor({ state: "hidden" });
@@ -1180,7 +1168,7 @@ const createWorkerReuseCorpus = () => {
 const configureUncompressedOutput = async (page) => {
   await openSettingsPanel(page);
   await page.locator("#settings-default-compression").selectOption("none");
-  await page.getByRole("button", { exact: true, name: "Save" }).click();
+  await page.locator(".settings-actions .btn.primary:visible").click();
 };
 
 const runApplyJourney = async (createContext, baseUrl, name, fixtureNames) => {

@@ -1182,7 +1182,7 @@ const SampleTutorial = ({
             <button
               aria-busy={busy || undefined}
               aria-disabled={busy || (locked && !step.onContinue) ? "true" : undefined}
-              className="btn primary slim"
+              className="btn primary slim sample-tutorial-next"
               onClick={() => {
                 // A second press mid-handoff would cancel the exit the first one
                 // started, stranding the card invisible on a step it never left.

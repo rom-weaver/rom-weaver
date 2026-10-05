@@ -149,7 +149,10 @@ test("CSS coverage unions the same stylesheet across pages", () => {
   );
 });
 
-test("a metric Lighthouse could not collect fails instead of passing", () => {
+test("a metric Lighthouse could not collect fails instead of passing", (t) => {
+  // evaluateReports prints ::error workflow commands; muted here so this fixture's fake
+  // route cannot surface as a Lighthouse failure annotation on the CI job running it.
+  t.mock.method(process.stdout, "write", () => true);
   const config = {
     metrics: { "largest-contentful-paint": { expected: 3500, maximum: 5000, unit: "ms" } },
     scores: { performance: { expected: 0.85, minimum: 0.75 } },
