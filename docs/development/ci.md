@@ -48,7 +48,7 @@ Every workflow in `.github/workflows`, what triggers it, what it gates, and what
 | `ci.yml` | PR, push to `main`, `v*` tags, nightly 05:41 UTC, manual | **Yes** | Build, lint, test, deploy the webapp; nightly also runs fast quality signals and the full native matrix |
 | `pull-request.yml` | PR (open/reopen/sync/edit), PR comment | **Yes** | The required `CLA Signed` and `PR Title Lint` checks |
 | `dependabot-auto-merge.yml` | Dependabot PR open/reopen/sync | No | Arm native squash auto-merge for patch and minor updates after required checks pass |
-| `codeql.yml` | source push to `main`, weekly, manual | No | Static analysis into the Security tab |
+| `codeql.yml` | nightly (05:27 UTC), manual | No | Static analysis into the Security tab |
 | `coverage.yml` | weekly Sunday 06:43 UTC, manual | No | Rust + React coverage reports |
 | `parity.yml` | nightly 07:13 UTC, manual | No | Byte parity against live chdman, dolphin-tool, 7-Zip, and Info-ZIP, with an exact cached CLI |
 | `quality-deep.yml` | weekly Monday 07:17 UTC, manual | No | Mutation shard, long fuzzing, sanitizers, Miri, Kani, property checks, and browser lifecycle/resource checks |
