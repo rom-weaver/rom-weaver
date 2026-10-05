@@ -23,7 +23,9 @@ export function renderSignals(signals, details = {}) {
       `Verification changes: ${findings.filter((item) => item.severity === "review").length} require review; ${findings.filter((item) => item.severity === "error").length} blocking findings.`,
     );
     for (const finding of findings)
-      extra.push(`- ${finding.severity}: ${finding.path}:${finding.line} ${finding.kind}`);
+      extra.push(
+        `- ${finding.severity}: ${finding.path}${finding.line == null ? "" : `:${finding.line}`} ${finding.kind}`,
+      );
   }
   if (details.mutation) {
     const mutation = details.mutation;

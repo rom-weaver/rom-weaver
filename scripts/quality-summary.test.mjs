@@ -63,3 +63,16 @@ test("coverage, discovered targets, fuzz and actual resource failures stay separ
   assert.match(summary, /Pinned reference zip: passed/);
   assert.match(summary, /Runtime invariant failure: cancel removes output: live handles=1/);
 });
+
+test("whole-file review findings omit unavailable line numbers", () => {
+  const summary = renderSignals(
+    { guardrails: "success" },
+    {
+      guardrails: {
+        findings: [{ severity: "review", path: "policy.yml", kind: "verification-change" }],
+      },
+    },
+  );
+  assert.match(summary, /review: policy.yml verification-change/);
+  assert.doesNotMatch(summary, /undefined|null/);
+});
