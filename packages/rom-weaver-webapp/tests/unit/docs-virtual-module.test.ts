@@ -104,4 +104,11 @@ describe("docs virtual search module", () => {
       expect(loaded.SEARCH_ENTRIES).toEqual(Object.fromEntries(index.map((r) => [r.slug, r.searchEntries])));
     }
   });
+
+  it("preserves text when the section label differs from its heading", async () => {
+    const input = [{ ...sampleRoute, sections: [{ id: "checks", label: "Verification" }] }];
+    const loaded = await import(`data:text/javascript,${encodeURIComponent(sourceFor(input))}`);
+    const index = createDocsSearchIndex(input);
+    expect(loaded.SEARCH_ENTRIES).toEqual(Object.fromEntries(index.map((r) => [r.slug, r.searchEntries])));
+  });
 });

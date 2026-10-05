@@ -1145,21 +1145,16 @@ fn frlg_tail(scope: &FieldScope) -> Vec<FieldDefinition> {
 fn default() -> GameDefinition {
     {
         let mut fields = vec![
-            FieldDefinition::new(
-                "trainer.name".into(),
-                "Trainer name".into(),
-                0,
-                Storage::Ascii,
-            )
-            .description("English trainer text".into())
-            .length(7)
-            .text_codec("pokemon_gen3_english")
-            .presentation(
-                field::Presentation::new(0, 0)
-                    .step(None)
-                    .encoding(Some("pokemon_gen3_english")),
-            ),
-            FieldDefinition::new("trainer.gender".into(), "Gender".into(), 8, Storage::U8)
+            catalog_field("trainer.name", "Trainer name", 0, Storage::Ascii)
+                .description("English trainer text".into())
+                .length(7)
+                .text_codec("pokemon_gen3_english")
+                .presentation(
+                    field::Presentation::new(0, 0)
+                        .step(None)
+                        .encoding(Some("pokemon_gen3_english")),
+                ),
+            catalog_field("trainer.gender", "Gender", 8, Storage::U8)
                 .description("Player gender".into())
                 .choices(choices(&[("male", 0), ("female", 1)]))
                 .presentation(
@@ -1167,101 +1162,91 @@ fn default() -> GameDefinition {
                         .choices(vec!["male".into(), "female".into()])
                         .step(None),
                 ),
-            FieldDefinition::new("trainer.id".into(), "Trainer ID".into(), 10, Storage::U16Le)
+            catalog_field("trainer.id", "Trainer ID", 10, Storage::U16Le)
                 .description("Public trainer identifier".into())
                 .min(0)
                 .max(65535)
                 .presentation(field::Presentation::new(0, 10).step(None)),
-            FieldDefinition::new(
-                "trainer.secret_id".into(),
-                "Secret ID".into(),
-                12,
-                Storage::U16Le,
-            )
-            .description("Hidden trainer identifier".into())
-            .min(0)
-            .max(65535)
-            .presentation(field::Presentation::new(0, 12).step(None)),
-            FieldDefinition::new("trainer.money".into(), "Money".into(), 5264, Storage::U32Le)
+            catalog_field("trainer.secret_id", "Secret ID", 12, Storage::U16Le)
+                .description("Hidden trainer identifier".into())
+                .min(0)
+                .max(65535)
+                .presentation(field::Presentation::new(0, 12).step(None)),
+            catalog_field("trainer.money", "Money", 5264, Storage::U32Le)
                 .description("Money carried by the player".into())
                 .min(0)
                 .max(999999)
                 .presentation(field::Presentation::new(1, 1168)),
-            FieldDefinition::new("trainer.coins".into(), "Coins".into(), 5268, Storage::U16Le)
+            catalog_field("trainer.coins", "Coins", 5268, Storage::U16Le)
                 .description("Game Corner coins".into())
                 .min(0)
                 .max(9999)
                 .presentation(field::Presentation::new(1, 1172)),
-            FieldDefinition::new(
-                "trainer.play_time".into(),
-                "Play time".into(),
-                14,
-                Storage::Ascii,
-            )
-            .description("Time played".into())
-            .length(1)
-            .editable(false)
-            .behavior(field::FieldBehavior {
-                format: Some(vec![
-                    field::FormatPart::Number {
-                        value: rules::ReadValue::new(move |bytes| {
-                            rules::Scalar {
-                                offset: 14,
-                                storage: Storage::U16Le,
-                                mask: None,
-                            }
-                            .read(bytes)
-                        }),
-                        width: 0,
-                    },
-                    field::FormatPart::Text(":".into()),
-                    field::FormatPart::Number {
-                        value: rules::ReadValue::new(move |bytes| {
-                            rules::Scalar {
-                                offset: 16,
-                                storage: Storage::U8,
-                                mask: None,
-                            }
-                            .read(bytes)
-                        }),
-                        width: 2,
-                    },
-                    field::FormatPart::Text(":".into()),
-                    field::FormatPart::Number {
-                        value: rules::ReadValue::new(move |bytes| {
-                            rules::Scalar {
-                                offset: 17,
-                                storage: Storage::U8,
-                                mask: None,
-                            }
-                            .read(bytes)
-                        }),
-                        width: 2,
-                    },
-                    field::FormatPart::Text(":".into()),
-                    field::FormatPart::Number {
-                        value: rules::ReadValue::new(move |bytes| {
-                            rules::Scalar {
-                                offset: 18,
-                                storage: Storage::U8,
-                                mask: None,
-                            }
-                            .read(bytes)
-                        }),
-                        width: 2,
-                    },
-                ]),
-                presentation: Some(
-                    field::Presentation::new(0, 14)
-                        .constraints(SaveConstraint::default())
-                        .step(None)
-                        .encoding(None),
-                ),
-                ..Default::default()
-            }),
-            FieldDefinition::new(
-                "trainer.play_time_hours".into(),
-                "Play time hours".into(),
+            catalog_field("trainer.play_time", "Play time", 14, Storage::Ascii)
+                .description("Time played".into())
+                .length(1)
+                .editable(false)
+                .behavior(field::FieldBehavior {
+                    format: Some(vec![
+                        field::FormatPart::Number {
+                            value: rules::ReadValue::new(move |bytes| {
+                                rules::Scalar {
+                                    offset: 14,
+                                    storage: Storage::U16Le,
+                                    mask: None,
+                                }
+                                .read(bytes)
+                            }),
+                            width: 0,
+                        },
+                        field::FormatPart::Text(":".into()),
+                        field::FormatPart::Number {
+                            value: rules::ReadValue::new(move |bytes| {
+                                rules::Scalar {
+                                    offset: 16,
+                                    storage: Storage::U8,
+                                    mask: None,
+                                }
+                                .read(bytes)
+                            }),
+                            width: 2,
+                        },
+                        field::FormatPart::Text(":".into()),
+                        field::FormatPart::Number {
+                            value: rules::ReadValue::new(move |bytes| {
+                                rules::Scalar {
+                                    offset: 17,
+                                    storage: Storage::U8,
+                                    mask: None,
+                                }
+                                .read(bytes)
+                            }),
+                            width: 2,
+                        },
+                        field::FormatPart::Text(":".into()),
+                        field::FormatPart::Number {
+                            value: rules::ReadValue::new(move |bytes| {
+                                rules::Scalar {
+                                    offset: 18,
+                                    storage: Storage::U8,
+                                    mask: None,
+                                }
+                                .read(bytes)
+                            }),
+                            width: 2,
+                        },
+                    ]),
+                    presentation: Some(
+                        field::Presentation::new(0, 14)
+                            .constraints(SaveConstraint::default())
+                            .step(None)
+                            .encoding(None),
+                    ),
+                    ..Default::default()
+                }),
+            catalog_field(
+                "trainer.play_time_hours",
+                "Play time hours",
                 14,
                 Storage::U16Le,
             )
@@ -1269,9 +1254,9 @@ fn default() -> GameDefinition {
             .min(0)
             .max(65535)
             .presentation(field::Presentation::new(0, 14)),
-            FieldDefinition::new(
-                "trainer.play_time_minutes".into(),
-                "Play time minutes".into(),
+            catalog_field(
+                "trainer.play_time_minutes",
+                "Play time minutes",
                 16,
                 Storage::U8,
             )
@@ -1279,9 +1264,9 @@ fn default() -> GameDefinition {
             .min(0)
             .max(59)
             .presentation(field::Presentation::new(0, 16)),
-            FieldDefinition::new(
-                "trainer.play_time_seconds".into(),
-                "Play time seconds".into(),
+            catalog_field(
+                "trainer.play_time_seconds",
+                "Play time seconds",
                 17,
                 Storage::U8,
             )
@@ -1289,9 +1274,9 @@ fn default() -> GameDefinition {
             .min(0)
             .max(59)
             .presentation(field::Presentation::new(0, 17)),
-            FieldDefinition::new(
-                "trainer.play_time_frames".into(),
-                "Play time frames".into(),
+            catalog_field(
+                "trainer.play_time_frames",
+                "Play time frames",
                 18,
                 Storage::U8,
             )
@@ -1299,42 +1284,27 @@ fn default() -> GameDefinition {
             .min(0)
             .max(59)
             .presentation(field::Presentation::new(0, 18)),
-            FieldDefinition::new(
-                "options.button_mode".into(),
-                "Button mode".into(),
-                19,
-                Storage::U8,
-            )
-            .description("A-button and shoulder-button behavior".into())
-            .choices(choices(&[("help", 0), ("lr", 1), ("l_equals_a", 2)]))
-            .presentation(
-                field::Presentation::new(0, 19)
-                    .choices(vec!["help".into(), "lr".into(), "l_equals_a".into()])
-                    .step(None),
-            ),
-            FieldDefinition::new(
-                "options.text_speed".into(),
-                "Text speed".into(),
-                20,
-                Storage::U16Le,
-            )
-            .description("Text speed: 0 slow, 1 medium, 2 fast".into())
-            .min(0)
-            .max(2)
-            .mask(7)
-            .presentation(field::Presentation::new(0, 20)),
-            FieldDefinition::new(
-                "options.window_frame".into(),
-                "Window frame".into(),
-                20,
-                Storage::U16Le,
-            )
-            .description("Text window frame type".into())
-            .min(0)
-            .max(19)
-            .mask(248)
-            .presentation(field::Presentation::new(0, 20)),
-            FieldDefinition::new("options.sound".into(), "Sound".into(), 20, Storage::U16Le)
+            catalog_field("options.button_mode", "Button mode", 19, Storage::U8)
+                .description("A-button and shoulder-button behavior".into())
+                .choices(choices(&[("help", 0), ("lr", 1), ("l_equals_a", 2)]))
+                .presentation(
+                    field::Presentation::new(0, 19)
+                        .choices(vec!["help".into(), "lr".into(), "l_equals_a".into()])
+                        .step(None),
+                ),
+            catalog_field("options.text_speed", "Text speed", 20, Storage::U16Le)
+                .description("Text speed: 0 slow, 1 medium, 2 fast".into())
+                .min(0)
+                .max(2)
+                .mask(7)
+                .presentation(field::Presentation::new(0, 20)),
+            catalog_field("options.window_frame", "Window frame", 20, Storage::U16Le)
+                .description("Text window frame type".into())
+                .min(0)
+                .max(19)
+                .mask(248)
+                .presentation(field::Presentation::new(0, 20)),
+            catalog_field("options.sound", "Sound", 20, Storage::U16Le)
                 .description("Sound output mode".into())
                 .choices(choices(&[("mono", 0), ("stereo", 1)]))
                 .mask(256)
@@ -1343,37 +1313,27 @@ fn default() -> GameDefinition {
                         .choices(vec!["mono".into(), "stereo".into()])
                         .step(None),
                 ),
-            FieldDefinition::new(
-                "options.battle_style".into(),
-                "Battle style".into(),
-                20,
-                Storage::U16Le,
-            )
-            .description("Whether the game offers a switch after a foe faints".into())
-            .choices(choices(&[("shift", 0), ("set", 1)]))
-            .mask(512)
-            .presentation(
-                field::Presentation::new(0, 20)
-                    .choices(vec!["shift".into(), "set".into()])
-                    .step(None),
-            ),
-            FieldDefinition::new(
-                "options.battle_scene".into(),
-                "Battle scene".into(),
-                20,
-                Storage::U16Le,
-            )
-            .description("Battle animation mode".into())
-            .choices(choices(&[("on", 0), ("off", 1)]))
-            .mask(1024)
-            .presentation(
-                field::Presentation::new(0, 20)
-                    .choices(vec!["on".into(), "off".into()])
-                    .step(None),
-            ),
-            FieldDefinition::new(
-                "options.region_map_zoom".into(),
-                "Region map zoom".into(),
+            catalog_field("options.battle_style", "Battle style", 20, Storage::U16Le)
+                .description("Whether the game offers a switch after a foe faints".into())
+                .choices(choices(&[("shift", 0), ("set", 1)]))
+                .mask(512)
+                .presentation(
+                    field::Presentation::new(0, 20)
+                        .choices(vec!["shift".into(), "set".into()])
+                        .step(None),
+                ),
+            catalog_field("options.battle_scene", "Battle scene", 20, Storage::U16Le)
+                .description("Battle animation mode".into())
+                .choices(choices(&[("on", 0), ("off", 1)]))
+                .mask(1024)
+                .presentation(
+                    field::Presentation::new(0, 20)
+                        .choices(vec!["on".into(), "off".into()])
+                        .step(None),
+                ),
+            catalog_field(
+                "options.region_map_zoom",
+                "Region map zoom",
                 21,
                 Storage::Bit,
             )
@@ -2014,21 +1974,16 @@ fn game_pokemon_emerald() -> GameDefinition {
     game.id = "pokemon-emerald".into();
     game.name = "Pokémon Emerald".into();
     let mut fields = vec![
-        FieldDefinition::new(
-            "trainer.name".into(),
-            "Trainer name".into(),
-            0,
-            Storage::Ascii,
-        )
-        .description("English trainer text".into())
-        .length(7)
-        .text_codec("pokemon_gen3_english")
-        .presentation(
-            field::Presentation::new(0, 0)
-                .step(None)
-                .encoding(Some("pokemon_gen3_english")),
-        ),
-        FieldDefinition::new("trainer.gender".into(), "Gender".into(), 8, Storage::U8)
+        catalog_field("trainer.name", "Trainer name", 0, Storage::Ascii)
+            .description("English trainer text".into())
+            .length(7)
+            .text_codec("pokemon_gen3_english")
+            .presentation(
+                field::Presentation::new(0, 0)
+                    .step(None)
+                    .encoding(Some("pokemon_gen3_english")),
+            ),
+        catalog_field("trainer.gender", "Gender", 8, Storage::U8)
             .description("Player gender".into())
             .choices(gender())
             .presentation(
@@ -2036,22 +1991,17 @@ fn game_pokemon_emerald() -> GameDefinition {
                     .choices(vec!["male".into(), "female".into()])
                     .step(None),
             ),
-        FieldDefinition::new("trainer.id".into(), "Trainer ID".into(), 10, Storage::U16Le)
+        catalog_field("trainer.id", "Trainer ID", 10, Storage::U16Le)
             .description("Public trainer identifier".into())
             .min(0)
             .max(65535)
             .presentation(field::Presentation::new(0, 10).step(None)),
-        FieldDefinition::new(
-            "trainer.secret_id".into(),
-            "Secret ID".into(),
-            12,
-            Storage::U16Le,
-        )
-        .description("Hidden trainer identifier".into())
-        .min(0)
-        .max(65535)
-        .presentation(field::Presentation::new(0, 12).step(None)),
-        FieldDefinition::new("trainer.money".into(), "Money".into(), 5264, Storage::U32Le)
+        catalog_field("trainer.secret_id", "Secret ID", 12, Storage::U16Le)
+            .description("Hidden trainer identifier".into())
+            .min(0)
+            .max(65535)
+            .presentation(field::Presentation::new(0, 12).step(None)),
+        catalog_field("trainer.money", "Money", 5264, Storage::U32Le)
             .description("Money carried by the player".into())
             .min(0)
             .max(999999)
@@ -2067,7 +2017,7 @@ fn game_pokemon_emerald() -> GameDefinition {
                 presentation: Some(field::Presentation::new(1, 1168)),
                 ..Default::default()
             }),
-        FieldDefinition::new("trainer.coins".into(), "Coins".into(), 5268, Storage::U16Le)
+        catalog_field("trainer.coins", "Coins", 5268, Storage::U16Le)
             .description("Game Corner coins".into())
             .min(0)
             .max(9999)
@@ -2083,76 +2033,71 @@ fn game_pokemon_emerald() -> GameDefinition {
                 presentation: Some(field::Presentation::new(1, 1172)),
                 ..Default::default()
             }),
-        FieldDefinition::new(
-            "trainer.play_time".into(),
-            "Play time".into(),
-            14,
-            Storage::Ascii,
-        )
-        .description("Time played".into())
-        .length(1)
-        .editable(false)
-        .behavior(field::FieldBehavior {
-            format: Some(vec![
-                field::FormatPart::Number {
-                    value: rules::ReadValue::new(move |bytes| {
-                        rules::Scalar {
-                            offset: 14,
-                            storage: Storage::U16Le,
-                            mask: None,
-                        }
-                        .read(bytes)
-                    }),
-                    width: 0,
-                },
-                field::FormatPart::Text(":".into()),
-                field::FormatPart::Number {
-                    value: rules::ReadValue::new(move |bytes| {
-                        rules::Scalar {
-                            offset: 16,
-                            storage: Storage::U8,
-                            mask: None,
-                        }
-                        .read(bytes)
-                    }),
-                    width: 2,
-                },
-                field::FormatPart::Text(":".into()),
-                field::FormatPart::Number {
-                    value: rules::ReadValue::new(move |bytes| {
-                        rules::Scalar {
-                            offset: 17,
-                            storage: Storage::U8,
-                            mask: None,
-                        }
-                        .read(bytes)
-                    }),
-                    width: 2,
-                },
-                field::FormatPart::Text(":".into()),
-                field::FormatPart::Number {
-                    value: rules::ReadValue::new(move |bytes| {
-                        rules::Scalar {
-                            offset: 18,
-                            storage: Storage::U8,
-                            mask: None,
-                        }
-                        .read(bytes)
-                    }),
-                    width: 2,
-                },
-            ]),
-            presentation: Some(
-                field::Presentation::new(0, 14)
-                    .constraints(SaveConstraint::default())
-                    .step(None)
-                    .encoding(None),
-            ),
-            ..Default::default()
-        }),
-        FieldDefinition::new(
-            "trainer.play_time_hours".into(),
-            "Play time hours".into(),
+        catalog_field("trainer.play_time", "Play time", 14, Storage::Ascii)
+            .description("Time played".into())
+            .length(1)
+            .editable(false)
+            .behavior(field::FieldBehavior {
+                format: Some(vec![
+                    field::FormatPart::Number {
+                        value: rules::ReadValue::new(move |bytes| {
+                            rules::Scalar {
+                                offset: 14,
+                                storage: Storage::U16Le,
+                                mask: None,
+                            }
+                            .read(bytes)
+                        }),
+                        width: 0,
+                    },
+                    field::FormatPart::Text(":".into()),
+                    field::FormatPart::Number {
+                        value: rules::ReadValue::new(move |bytes| {
+                            rules::Scalar {
+                                offset: 16,
+                                storage: Storage::U8,
+                                mask: None,
+                            }
+                            .read(bytes)
+                        }),
+                        width: 2,
+                    },
+                    field::FormatPart::Text(":".into()),
+                    field::FormatPart::Number {
+                        value: rules::ReadValue::new(move |bytes| {
+                            rules::Scalar {
+                                offset: 17,
+                                storage: Storage::U8,
+                                mask: None,
+                            }
+                            .read(bytes)
+                        }),
+                        width: 2,
+                    },
+                    field::FormatPart::Text(":".into()),
+                    field::FormatPart::Number {
+                        value: rules::ReadValue::new(move |bytes| {
+                            rules::Scalar {
+                                offset: 18,
+                                storage: Storage::U8,
+                                mask: None,
+                            }
+                            .read(bytes)
+                        }),
+                        width: 2,
+                    },
+                ]),
+                presentation: Some(
+                    field::Presentation::new(0, 14)
+                        .constraints(SaveConstraint::default())
+                        .step(None)
+                        .encoding(None),
+                ),
+                ..Default::default()
+            }),
+        catalog_field(
+            "trainer.play_time_hours",
+            "Play time hours",
             14,
             Storage::U16Le,
         )
@@ -2160,9 +2105,9 @@ fn game_pokemon_emerald() -> GameDefinition {
         .min(0)
         .max(65535)
         .presentation(field::Presentation::new(0, 14)),
-        FieldDefinition::new(
-            "trainer.play_time_minutes".into(),
-            "Play time minutes".into(),
+        catalog_field(
+            "trainer.play_time_minutes",
+            "Play time minutes",
             16,
             Storage::U8,
         )
@@ -2170,9 +2115,9 @@ fn game_pokemon_emerald() -> GameDefinition {
         .min(0)
         .max(59)
         .presentation(field::Presentation::new(0, 16)),
-        FieldDefinition::new(
-            "trainer.play_time_seconds".into(),
-            "Play time seconds".into(),
+        catalog_field(
+            "trainer.play_time_seconds",
+            "Play time seconds",
             17,
             Storage::U8,
         )
@@ -2180,9 +2125,9 @@ fn game_pokemon_emerald() -> GameDefinition {
         .min(0)
         .max(59)
         .presentation(field::Presentation::new(0, 17)),
-        FieldDefinition::new(
-            "trainer.play_time_frames".into(),
-            "Play time frames".into(),
+        catalog_field(
+            "trainer.play_time_frames",
+            "Play time frames",
             18,
             Storage::U8,
         )
@@ -2190,42 +2135,27 @@ fn game_pokemon_emerald() -> GameDefinition {
         .min(0)
         .max(59)
         .presentation(field::Presentation::new(0, 18)),
-        FieldDefinition::new(
-            "options.button_mode".into(),
-            "Button mode".into(),
-            19,
-            Storage::U8,
-        )
-        .description("A-button and shoulder-button behavior".into())
-        .choices(button_mode())
-        .presentation(
-            field::Presentation::new(0, 19)
-                .choices(vec!["help".into(), "lr".into(), "l_equals_a".into()])
-                .step(None),
-        ),
-        FieldDefinition::new(
-            "options.text_speed".into(),
-            "Text speed".into(),
-            20,
-            Storage::U16Le,
-        )
-        .description("Text speed: 0 slow, 1 medium, 2 fast".into())
-        .min(0)
-        .max(2)
-        .mask(7)
-        .presentation(field::Presentation::new(0, 20)),
-        FieldDefinition::new(
-            "options.window_frame".into(),
-            "Window frame".into(),
-            20,
-            Storage::U16Le,
-        )
-        .description("Text window frame type".into())
-        .min(0)
-        .max(19)
-        .mask(248)
-        .presentation(field::Presentation::new(0, 20)),
-        FieldDefinition::new("options.sound".into(), "Sound".into(), 20, Storage::U16Le)
+        catalog_field("options.button_mode", "Button mode", 19, Storage::U8)
+            .description("A-button and shoulder-button behavior".into())
+            .choices(button_mode())
+            .presentation(
+                field::Presentation::new(0, 19)
+                    .choices(vec!["help".into(), "lr".into(), "l_equals_a".into()])
+                    .step(None),
+            ),
+        catalog_field("options.text_speed", "Text speed", 20, Storage::U16Le)
+            .description("Text speed: 0 slow, 1 medium, 2 fast".into())
+            .min(0)
+            .max(2)
+            .mask(7)
+            .presentation(field::Presentation::new(0, 20)),
+        catalog_field("options.window_frame", "Window frame", 20, Storage::U16Le)
+            .description("Text window frame type".into())
+            .min(0)
+            .max(19)
+            .mask(248)
+            .presentation(field::Presentation::new(0, 20)),
+        catalog_field("options.sound", "Sound", 20, Storage::U16Le)
             .description("Sound output mode".into())
             .mask(256)
             .choices(sound())
@@ -2234,37 +2164,27 @@ fn game_pokemon_emerald() -> GameDefinition {
                     .choices(vec!["mono".into(), "stereo".into()])
                     .step(None),
             ),
-        FieldDefinition::new(
-            "options.battle_style".into(),
-            "Battle style".into(),
-            20,
-            Storage::U16Le,
-        )
-        .description("Whether the game offers a switch after a foe faints".into())
-        .mask(512)
-        .choices(battle_style())
-        .presentation(
-            field::Presentation::new(0, 20)
-                .choices(vec!["shift".into(), "set".into()])
-                .step(None),
-        ),
-        FieldDefinition::new(
-            "options.battle_scene".into(),
-            "Battle scene".into(),
-            20,
-            Storage::U16Le,
-        )
-        .description("Battle animation mode".into())
-        .mask(1024)
-        .choices(battle_scene())
-        .presentation(
-            field::Presentation::new(0, 20)
-                .choices(vec!["on".into(), "off".into()])
-                .step(None),
-        ),
-        FieldDefinition::new(
-            "options.region_map_zoom".into(),
-            "Region map zoom".into(),
+        catalog_field("options.battle_style", "Battle style", 20, Storage::U16Le)
+            .description("Whether the game offers a switch after a foe faints".into())
+            .mask(512)
+            .choices(battle_style())
+            .presentation(
+                field::Presentation::new(0, 20)
+                    .choices(vec!["shift".into(), "set".into()])
+                    .step(None),
+            ),
+        catalog_field("options.battle_scene", "Battle scene", 20, Storage::U16Le)
+            .description("Battle animation mode".into())
+            .mask(1024)
+            .choices(battle_scene())
+            .presentation(
+                field::Presentation::new(0, 20)
+                    .choices(vec!["on".into(), "off".into()])
+                    .step(None),
+            ),
+        catalog_field(
+            "options.region_map_zoom",
+            "Region map zoom",
             21,
             Storage::Bit,
         )
@@ -2844,21 +2764,16 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
     game.id = id.into();
     game.name = name.into();
     let mut fields = vec![
-        FieldDefinition::new(
-            "trainer.name".into(),
-            "Trainer name".into(),
-            0,
-            Storage::Ascii,
-        )
-        .description("English trainer text".into())
-        .length(7)
-        .text_codec("pokemon_gen3_english")
-        .presentation(
-            field::Presentation::new(0, 0)
-                .step(None)
-                .encoding(Some("pokemon_gen3_english")),
-        ),
-        FieldDefinition::new("trainer.gender".into(), "Gender".into(), 8, Storage::U8)
+        catalog_field("trainer.name", "Trainer name", 0, Storage::Ascii)
+            .description("English trainer text".into())
+            .length(7)
+            .text_codec("pokemon_gen3_english")
+            .presentation(
+                field::Presentation::new(0, 0)
+                    .step(None)
+                    .encoding(Some("pokemon_gen3_english")),
+            ),
+        catalog_field("trainer.gender", "Gender", 8, Storage::U8)
             .description("Player gender".into())
             .choices(gender())
             .presentation(
@@ -2866,22 +2781,17 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
                     .choices(vec!["male".into(), "female".into()])
                     .step(None),
             ),
-        FieldDefinition::new("trainer.id".into(), "Trainer ID".into(), 10, Storage::U16Le)
+        catalog_field("trainer.id", "Trainer ID", 10, Storage::U16Le)
             .description("Public trainer identifier".into())
             .min(0)
             .max(65535)
             .presentation(field::Presentation::new(0, 10).step(None)),
-        FieldDefinition::new(
-            "trainer.secret_id".into(),
-            "Secret ID".into(),
-            12,
-            Storage::U16Le,
-        )
-        .description("Hidden trainer identifier".into())
-        .min(0)
-        .max(65535)
-        .presentation(field::Presentation::new(0, 12).step(None)),
-        FieldDefinition::new("trainer.money".into(), "Money".into(), 4752, Storage::U32Le)
+        catalog_field("trainer.secret_id", "Secret ID", 12, Storage::U16Le)
+            .description("Hidden trainer identifier".into())
+            .min(0)
+            .max(65535)
+            .presentation(field::Presentation::new(0, 12).step(None)),
+        catalog_field("trainer.money", "Money", 4752, Storage::U32Le)
             .description("Money carried by the player".into())
             .min(0)
             .max(999999)
@@ -2897,7 +2807,7 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
                 presentation: Some(field::Presentation::new(1, 656)),
                 ..Default::default()
             }),
-        FieldDefinition::new("trainer.coins".into(), "Coins".into(), 4756, Storage::U16Le)
+        catalog_field("trainer.coins", "Coins", 4756, Storage::U16Le)
             .description("Game Corner coins".into())
             .min(0)
             .max(9999)
@@ -2913,76 +2823,71 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
                 presentation: Some(field::Presentation::new(1, 660)),
                 ..Default::default()
             }),
-        FieldDefinition::new(
-            "trainer.play_time".into(),
-            "Play time".into(),
-            14,
-            Storage::Ascii,
-        )
-        .description("Time played".into())
-        .length(1)
-        .editable(false)
-        .behavior(field::FieldBehavior {
-            format: Some(vec![
-                field::FormatPart::Number {
-                    value: rules::ReadValue::new(move |bytes| {
-                        rules::Scalar {
-                            offset: 14,
-                            storage: Storage::U16Le,
-                            mask: None,
-                        }
-                        .read(bytes)
-                    }),
-                    width: 0,
-                },
-                field::FormatPart::Text(":".into()),
-                field::FormatPart::Number {
-                    value: rules::ReadValue::new(move |bytes| {
-                        rules::Scalar {
-                            offset: 16,
-                            storage: Storage::U8,
-                            mask: None,
-                        }
-                        .read(bytes)
-                    }),
-                    width: 2,
-                },
-                field::FormatPart::Text(":".into()),
-                field::FormatPart::Number {
-                    value: rules::ReadValue::new(move |bytes| {
-                        rules::Scalar {
-                            offset: 17,
-                            storage: Storage::U8,
-                            mask: None,
-                        }
-                        .read(bytes)
-                    }),
-                    width: 2,
-                },
-                field::FormatPart::Text(":".into()),
-                field::FormatPart::Number {
-                    value: rules::ReadValue::new(move |bytes| {
-                        rules::Scalar {
-                            offset: 18,
-                            storage: Storage::U8,
-                            mask: None,
-                        }
-                        .read(bytes)
-                    }),
-                    width: 2,
-                },
-            ]),
-            presentation: Some(
-                field::Presentation::new(0, 14)
-                    .constraints(SaveConstraint::default())
-                    .step(None)
-                    .encoding(None),
-            ),
-            ..Default::default()
-        }),
-        FieldDefinition::new(
-            "trainer.play_time_hours".into(),
-            "Play time hours".into(),
+        catalog_field("trainer.play_time", "Play time", 14, Storage::Ascii)
+            .description("Time played".into())
+            .length(1)
+            .editable(false)
+            .behavior(field::FieldBehavior {
+                format: Some(vec![
+                    field::FormatPart::Number {
+                        value: rules::ReadValue::new(move |bytes| {
+                            rules::Scalar {
+                                offset: 14,
+                                storage: Storage::U16Le,
+                                mask: None,
+                            }
+                            .read(bytes)
+                        }),
+                        width: 0,
+                    },
+                    field::FormatPart::Text(":".into()),
+                    field::FormatPart::Number {
+                        value: rules::ReadValue::new(move |bytes| {
+                            rules::Scalar {
+                                offset: 16,
+                                storage: Storage::U8,
+                                mask: None,
+                            }
+                            .read(bytes)
+                        }),
+                        width: 2,
+                    },
+                    field::FormatPart::Text(":".into()),
+                    field::FormatPart::Number {
+                        value: rules::ReadValue::new(move |bytes| {
+                            rules::Scalar {
+                                offset: 17,
+                                storage: Storage::U8,
+                                mask: None,
+                            }
+                            .read(bytes)
+                        }),
+                        width: 2,
+                    },
+                    field::FormatPart::Text(":".into()),
+                    field::FormatPart::Number {
+                        value: rules::ReadValue::new(move |bytes| {
+                            rules::Scalar {
+                                offset: 18,
+                                storage: Storage::U8,
+                                mask: None,
+                            }
+                            .read(bytes)
+                        }),
+                        width: 2,
+                    },
+                ]),
+                presentation: Some(
+                    field::Presentation::new(0, 14)
+                        .constraints(SaveConstraint::default())
+                        .step(None)
+                        .encoding(None),
+                ),
+                ..Default::default()
+            }),
+        catalog_field(
+            "trainer.play_time_hours",
+            "Play time hours",
             14,
             Storage::U16Le,
         )
@@ -2990,9 +2895,9 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
         .min(0)
         .max(65535)
         .presentation(field::Presentation::new(0, 14)),
-        FieldDefinition::new(
-            "trainer.play_time_minutes".into(),
-            "Play time minutes".into(),
+        catalog_field(
+            "trainer.play_time_minutes",
+            "Play time minutes",
             16,
             Storage::U8,
         )
@@ -3000,9 +2905,9 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
         .min(0)
         .max(59)
         .presentation(field::Presentation::new(0, 16)),
-        FieldDefinition::new(
-            "trainer.play_time_seconds".into(),
-            "Play time seconds".into(),
+        catalog_field(
+            "trainer.play_time_seconds",
+            "Play time seconds",
             17,
             Storage::U8,
         )
@@ -3010,9 +2915,9 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
         .min(0)
         .max(59)
         .presentation(field::Presentation::new(0, 17)),
-        FieldDefinition::new(
-            "trainer.play_time_frames".into(),
-            "Play time frames".into(),
+        catalog_field(
+            "trainer.play_time_frames",
+            "Play time frames",
             18,
             Storage::U8,
         )
@@ -3020,42 +2925,27 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
         .min(0)
         .max(59)
         .presentation(field::Presentation::new(0, 18)),
-        FieldDefinition::new(
-            "options.button_mode".into(),
-            "Button mode".into(),
-            19,
-            Storage::U8,
-        )
-        .description("A-button and shoulder-button behavior".into())
-        .choices(button_mode())
-        .presentation(
-            field::Presentation::new(0, 19)
-                .choices(vec!["help".into(), "lr".into(), "l_equals_a".into()])
-                .step(None),
-        ),
-        FieldDefinition::new(
-            "options.text_speed".into(),
-            "Text speed".into(),
-            20,
-            Storage::U16Le,
-        )
-        .description("Text speed: 0 slow, 1 medium, 2 fast".into())
-        .min(0)
-        .max(2)
-        .mask(7)
-        .presentation(field::Presentation::new(0, 20)),
-        FieldDefinition::new(
-            "options.window_frame".into(),
-            "Window frame".into(),
-            20,
-            Storage::U16Le,
-        )
-        .description("Text window frame type".into())
-        .min(0)
-        .max(19)
-        .mask(248)
-        .presentation(field::Presentation::new(0, 20)),
-        FieldDefinition::new("options.sound".into(), "Sound".into(), 20, Storage::U16Le)
+        catalog_field("options.button_mode", "Button mode", 19, Storage::U8)
+            .description("A-button and shoulder-button behavior".into())
+            .choices(button_mode())
+            .presentation(
+                field::Presentation::new(0, 19)
+                    .choices(vec!["help".into(), "lr".into(), "l_equals_a".into()])
+                    .step(None),
+            ),
+        catalog_field("options.text_speed", "Text speed", 20, Storage::U16Le)
+            .description("Text speed: 0 slow, 1 medium, 2 fast".into())
+            .min(0)
+            .max(2)
+            .mask(7)
+            .presentation(field::Presentation::new(0, 20)),
+        catalog_field("options.window_frame", "Window frame", 20, Storage::U16Le)
+            .description("Text window frame type".into())
+            .min(0)
+            .max(19)
+            .mask(248)
+            .presentation(field::Presentation::new(0, 20)),
+        catalog_field("options.sound", "Sound", 20, Storage::U16Le)
             .description("Sound output mode".into())
             .mask(256)
             .choices(sound())
@@ -3064,37 +2954,27 @@ fn game_pokemon_firered_leafgreen(id: &str, name: &str) -> GameDefinition {
                     .choices(vec!["mono".into(), "stereo".into()])
                     .step(None),
             ),
-        FieldDefinition::new(
-            "options.battle_style".into(),
-            "Battle style".into(),
-            20,
-            Storage::U16Le,
-        )
-        .description("Whether the game offers a switch after a foe faints".into())
-        .mask(512)
-        .choices(battle_style())
-        .presentation(
-            field::Presentation::new(0, 20)
-                .choices(vec!["shift".into(), "set".into()])
-                .step(None),
-        ),
-        FieldDefinition::new(
-            "options.battle_scene".into(),
-            "Battle scene".into(),
-            20,
-            Storage::U16Le,
-        )
-        .description("Battle animation mode".into())
-        .mask(1024)
-        .choices(battle_scene())
-        .presentation(
-            field::Presentation::new(0, 20)
-                .choices(vec!["on".into(), "off".into()])
-                .step(None),
-        ),
-        FieldDefinition::new(
-            "options.region_map_zoom".into(),
-            "Region map zoom".into(),
+        catalog_field("options.battle_style", "Battle style", 20, Storage::U16Le)
+            .description("Whether the game offers a switch after a foe faints".into())
+            .mask(512)
+            .choices(battle_style())
+            .presentation(
+                field::Presentation::new(0, 20)
+                    .choices(vec!["shift".into(), "set".into()])
+                    .step(None),
+            ),
+        catalog_field("options.battle_scene", "Battle scene", 20, Storage::U16Le)
+            .description("Battle animation mode".into())
+            .mask(1024)
+            .choices(battle_scene())
+            .presentation(
+                field::Presentation::new(0, 20)
+                    .choices(vec!["on".into(), "off".into()])
+                    .step(None),
+            ),
+        catalog_field(
+            "options.region_map_zoom",
+            "Region map zoom",
             21,
             Storage::Bit,
         )

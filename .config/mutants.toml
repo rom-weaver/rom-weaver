@@ -1,0 +1,16 @@
+# Build/cache directories MUST not be copied into nested mutation sandboxes.
+gitignore = true
+# Pure/low-I/O core modules are selected positively; codecs, OS I/O and generated
+# schema catalogs are outside this initial lane, rather than assumed equivalent.
+examine_globs = [
+  "crates/rom-weaver-patches/src/**/*.rs",
+  "crates/rom-weaver-checksum/src/**/*.rs",
+  "crates/rom-weaver-core/src/cancel.rs",
+  "crates/rom-weaver-core/src/concurrency.rs",
+  "crates/rom-weaver-core/src/disc_sheet.rs",
+  "crates/rom-weaver-core/src/selection.rs",
+  "crates/rom-weaver-core/src/prompt.rs",
+]
+# Test helpers contain assertions and fixture construction, not shipped behavior.
+exclude_globs = ["crates/rom-weaver-patches/src/test_support.rs"]
+# No equivalent-mutant exclusions: a survivor requires investigation, not relabeling.

@@ -3,32 +3,21 @@ use super::*;
 fn default() -> GameDefinition {
     {
         let fields = vec![
-            FieldDefinition::new(
-                "slot_1.player_1.location".into(),
-                "Location code".into(),
-                21,
-                Storage::U8,
-            ),
-            FieldDefinition::new(
-                "slot_1.player_1.play_time".into(),
-                "Play-time counter".into(),
+            catalog_field("slot_1.player_1.location", "Location code", 21, Storage::U8),
+            catalog_field(
+                "slot_1.player_1.play_time",
+                "Play-time counter",
                 19,
                 Storage::U16Le,
             ),
-            FieldDefinition::new(
-                "slot_1.player_1.completion".into(),
-                "Completion percentage".into(),
+            catalog_field(
+                "slot_1.player_1.completion",
+                "Completion percentage",
                 22,
                 Storage::U8,
             )
             .editable(false),
-            FieldDefinition::new(
-                "slot_1.player_1.mode".into(),
-                "Mode code".into(),
-                16,
-                Storage::U8,
-            )
-            .editable(false),
+            catalog_field("slot_1.player_1.mode", "Mode code", 16, Storage::U8).editable(false),
         ];
         GameDefinition {
             fields,
@@ -114,32 +103,26 @@ fn game_donkey_kong_country_slot_1_player_2() -> GameDefinition {
         },
     ];
     let fields = vec![
-        FieldDefinition::new(
-            "slot_1.player_2.location".into(),
-            "Location code".into(),
+        catalog_field(
+            "slot_1.player_2.location",
+            "Location code",
             361,
             Storage::U8,
         ),
-        FieldDefinition::new(
-            "slot_1.player_2.play_time".into(),
-            "Play-time counter".into(),
+        catalog_field(
+            "slot_1.player_2.play_time",
+            "Play-time counter",
             359,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_1.player_2.completion".into(),
-            "Completion percentage".into(),
+        catalog_field(
+            "slot_1.player_2.completion",
+            "Completion percentage",
             362,
             Storage::U8,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_1.player_2.mode".into(),
-            "Mode code".into(),
-            356,
-            Storage::U8,
-        )
-        .editable(false),
+        catalog_field("slot_1.player_2.mode", "Mode code", 356, Storage::U8).editable(false),
     ];
     game.fields = fields;
     game
@@ -175,32 +158,26 @@ fn game_donkey_kong_country_slot_2_player_1() -> GameDefinition {
         },
     ];
     let fields = vec![
-        FieldDefinition::new(
-            "slot_2.player_1.location".into(),
-            "Location code".into(),
+        catalog_field(
+            "slot_2.player_1.location",
+            "Location code",
             701,
             Storage::U8,
         ),
-        FieldDefinition::new(
-            "slot_2.player_1.play_time".into(),
-            "Play-time counter".into(),
+        catalog_field(
+            "slot_2.player_1.play_time",
+            "Play-time counter",
             699,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_2.player_1.completion".into(),
-            "Completion percentage".into(),
+        catalog_field(
+            "slot_2.player_1.completion",
+            "Completion percentage",
             702,
             Storage::U8,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_2.player_1.mode".into(),
-            "Mode code".into(),
-            696,
-            Storage::U8,
-        )
-        .editable(false),
+        catalog_field("slot_2.player_1.mode", "Mode code", 696, Storage::U8).editable(false),
     ];
     game.fields = fields;
     game
@@ -236,32 +213,26 @@ fn game_donkey_kong_country_slot_2_player_2() -> GameDefinition {
         },
     ];
     let fields = vec![
-        FieldDefinition::new(
-            "slot_2.player_2.location".into(),
-            "Location code".into(),
+        catalog_field(
+            "slot_2.player_2.location",
+            "Location code",
             1041,
             Storage::U8,
         ),
-        FieldDefinition::new(
-            "slot_2.player_2.play_time".into(),
-            "Play-time counter".into(),
+        catalog_field(
+            "slot_2.player_2.play_time",
+            "Play-time counter",
             1039,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_2.player_2.completion".into(),
-            "Completion percentage".into(),
+        catalog_field(
+            "slot_2.player_2.completion",
+            "Completion percentage",
             1042,
             Storage::U8,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_2.player_2.mode".into(),
-            "Mode code".into(),
-            1036,
-            Storage::U8,
-        )
-        .editable(false),
+        catalog_field("slot_2.player_2.mode", "Mode code", 1036, Storage::U8).editable(false),
     ];
     game.fields = fields;
     game
@@ -297,32 +268,26 @@ fn game_donkey_kong_country_slot_3_player_1() -> GameDefinition {
         },
     ];
     let fields = vec![
-        FieldDefinition::new(
-            "slot_3.player_1.location".into(),
-            "Location code".into(),
+        catalog_field(
+            "slot_3.player_1.location",
+            "Location code",
             1381,
             Storage::U8,
         ),
-        FieldDefinition::new(
-            "slot_3.player_1.play_time".into(),
-            "Play-time counter".into(),
+        catalog_field(
+            "slot_3.player_1.play_time",
+            "Play-time counter",
             1379,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_3.player_1.completion".into(),
-            "Completion percentage".into(),
+        catalog_field(
+            "slot_3.player_1.completion",
+            "Completion percentage",
             1382,
             Storage::U8,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_3.player_1.mode".into(),
-            "Mode code".into(),
-            1376,
-            Storage::U8,
-        )
-        .editable(false),
+        catalog_field("slot_3.player_1.mode", "Mode code", 1376, Storage::U8).editable(false),
     ];
     game.fields = fields;
     game
@@ -358,32 +323,26 @@ fn game_donkey_kong_country_slot_3_player_2() -> GameDefinition {
         },
     ];
     let fields = vec![
-        FieldDefinition::new(
-            "slot_3.player_2.location".into(),
-            "Location code".into(),
+        catalog_field(
+            "slot_3.player_2.location",
+            "Location code",
             1721,
             Storage::U8,
         ),
-        FieldDefinition::new(
-            "slot_3.player_2.play_time".into(),
-            "Play-time counter".into(),
+        catalog_field(
+            "slot_3.player_2.play_time",
+            "Play-time counter",
             1719,
             Storage::U16Le,
         ),
-        FieldDefinition::new(
-            "slot_3.player_2.completion".into(),
-            "Completion percentage".into(),
+        catalog_field(
+            "slot_3.player_2.completion",
+            "Completion percentage",
             1722,
             Storage::U8,
         )
         .editable(false),
-        FieldDefinition::new(
-            "slot_3.player_2.mode".into(),
-            "Mode code".into(),
-            1716,
-            Storage::U8,
-        )
-        .editable(false),
+        catalog_field("slot_3.player_2.mode", "Mode code", 1716, Storage::U8).editable(false),
     ];
     game.fields = fields;
     game

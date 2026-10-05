@@ -118,9 +118,14 @@ fn enumerate_cue_refs(text: &str, path: &Path) -> Result<Vec<String>> {
             continue;
         }
         let remainder = line[keyword_end..].trim_start();
-        let (name, _) = split_token(remainder).ok_or_else(|| {
-            RomWeaverError::Validation(format!("invalid FILE entry in cue `{}`", path.display()))
-        })?;
+        let (name, _) = split_token(remainder)
+            .filter(|(name, _)| !name.is_empty())
+            .ok_or_else(|| {
+                RomWeaverError::Validation(format!(
+                    "invalid FILE entry in cue `{}`",
+                    path.display()
+                ))
+            })?;
         push_unique(&mut files, name);
     }
     if files.is_empty() {
@@ -158,7 +163,7 @@ fn enumerate_gdi_refs(text: &str, path: &Path) -> Result<Vec<String>> {
             let (_track_type, rest) = split_token(rest)?;
             let (_sector_size, rest) = split_token(rest)?;
             let (name, _rest) = split_token(rest)?;
-            Some(name)
+            (!name.is_empty()).then_some(name)
         })()
         .ok_or_else(|| {
             RomWeaverError::Validation(format!(

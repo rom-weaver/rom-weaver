@@ -1413,3 +1413,66 @@ fn compiled_and_custom_handlers_have_unique_registry_ids() {
     assert!(ids.contains("super-mario-world"));
     assert!(ids.contains("super-mario-world-schema"));
 }
+
+#[test]
+fn single_money_edit_preserves_all_unrelated_fields_and_bytes() {
+    let registry = SaveGameRegistry::default();
+    let mut amounts = vec![0, 1, 255, 256, 65_535, 65_536, 999_999];
+    let mut seed = 0xcafe_u32;
+    for _ in 0..16 {
+        seed ^= seed << 13;
+        seed ^= seed >> 17;
+        seed ^= seed << 5;
+        amounts.push(seed % 1_000_000);
+    }
+    for (family, id, money_offset) in [
+        (Family::Rs, "pokemon-ruby", 0x490),
+        (Family::Emerald, "pokemon-emerald", 0x490),
+        (Family::Frlg, "pokemon-firered", 0x290),
+    ] {
+        for active_slot in [0, 1] {
+            let (counter_a, counter_b) = if active_slot == 0 { (9, 8) } else { (8, 9) };
+            let input = input(fixture(family, counter_a, counter_b), Some(id));
+            let identity = game(family, id);
+            let before = registry
+                .parse(&input, &identity)
+                .expect("original document");
+            let money_start = logical_offset(active_slot, money_offset);
+            let checksum_start = section_offset(active_slot, 1) + 0xFF6;
+            for amount in &amounts {
+                let result = registry
+                    .apply(
+                        &input,
+                        &identity,
+                        &[SaveEdit {
+                            field: "trainer.money".into(),
+                            value: SaveValue::U32(*amount),
+                        }],
+                        false,
+                    )
+                    .expect("single-field edit");
+                let output = result.bytes.expect("edited bytes");
+                assert_eq!(output.len(), input.bytes.len());
+                for (offset, (original, edited)) in input.bytes.iter().zip(&output).enumerate() {
+                    if !(money_start..money_start + 4).contains(&offset)
+                        && !(checksum_start..checksum_start + 2).contains(&offset)
+                    {
+                        assert_eq!(
+                            original, edited,
+                            "{id}, slot={active_slot}, amount={amount}, offset={offset:#x}"
+                        );
+                    }
+                }
+                for field in &before.fields {
+                    let expected = if field.id == "trainer.money" {
+                        SaveValue::U32(*amount)
+                    } else {
+                        field.value.clone()
+                    };
+                    assert_eq!(value(&result.document, &field.id), expected);
+                }
+                assert_eq!(result.document.integrity, before.integrity);
+            }
+        }
+    }
+}

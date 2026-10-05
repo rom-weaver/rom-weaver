@@ -30,6 +30,8 @@ default = ["bundled-identify-data"]
 bundled-identify-data = []
 typescript-types = ["dep:ts-rs", "rom-weaver-core/typescript-types"]
 wasm-app = []
+# Exposes the production bundle validator to the separately locked fuzz harness.
+fuzzing = []
 
 [dependencies]
 crc32fast.workspace = true

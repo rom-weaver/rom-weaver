@@ -15,9 +15,9 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
         bytes: b"AGBWarioLand".to_vec(),
     }];
     game.fields.push(
-        FieldDefinition::new(
-            "super_hard_mode".into(),
-            "Super Hard Mode unlocked".into(),
+        catalog_field(
+            "super_hard_mode",
+            "Super Hard Mode unlocked",
             0xa,
             Storage::Bit,
         )

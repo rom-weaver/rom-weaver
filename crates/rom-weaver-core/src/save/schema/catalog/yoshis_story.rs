@@ -42,18 +42,18 @@ fn game(region: Region) -> GameDefinition {
         Region::Europe | Region::Usa => (0x0, 4, 0x0, 5),
     };
     fields.push(
-        FieldDefinition::new(
-            "unlocked.black_yoshi".into(),
-            "Black Yoshi unlocked".into(),
+        catalog_field(
+            "unlocked.black_yoshi",
+            "Black Yoshi unlocked",
             black_offset,
             Storage::Bit,
         )
         .bit(black_bit),
     );
     fields.push(
-        FieldDefinition::new(
-            "unlocked.white_yoshi".into(),
-            "White Yoshi unlocked".into(),
+        catalog_field(
+            "unlocked.white_yoshi",
+            "White Yoshi unlocked",
             white_offset,
             Storage::Bit,
         )
@@ -62,9 +62,9 @@ fn game(region: Region) -> GameDefinition {
 
     if !matches!(region, Region::Japan) {
         fields.push(
-            FieldDefinition::new(
-                "continue.page".into(),
-                "Continue page (zero-based)".into(),
+            catalog_field(
+                "continue.page",
+                "Continue page (zero-based)",
                 0x3f9,
                 Storage::U8,
             )
@@ -113,7 +113,7 @@ fn game(region: Region) -> GameDefinition {
         0xc0
     };
     fields.push(
-        FieldDefinition::new("options.audio".into(), "Audio".into(), 0, Storage::U8)
+        catalog_field("options.audio", "Audio", 0, Storage::U8)
             .mask(audio_mask)
             .choices(choices(&[("Stereo", 0), ("Mono", 1), ("Headphones", 2)])),
     );
@@ -124,7 +124,7 @@ fn game(region: Region) -> GameDefinition {
             Region::Japan => unreachable!(),
         };
         fields.push(
-            FieldDefinition::new("options.language".into(), "Language".into(), 0, Storage::U8)
+            catalog_field("options.language", "Language", 0, Storage::U8)
                 .mask(0x0c)
                 .choices(languages),
         );

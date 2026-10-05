@@ -31,21 +31,16 @@ fn power(id: &str, label: &str, level: u8) -> FieldDefinition {
 // Layout: https://github.com/RyudoSynbios/game-tools-collection/tree/8fb075e7c130da9e72c3c46ec8efa447a252ad88/src/lib/templates/wario-land-3/saveEditor
 pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
     let fields = vec![
-        FieldDefinition::new(
-            "coins_bcd".into(),
-            "Coins (packed BCD)".into(),
-            0x388,
-            Storage::BcdBe,
-        )
-        .length(2)
-        .min(0)
-        .max(999),
-        FieldDefinition::new("language".into(), "Language".into(), 0x3ca, Storage::U8)
+        catalog_field("coins_bcd", "Coins (packed BCD)", 0x388, Storage::BcdBe)
+            .length(2)
+            .min(0)
+            .max(999),
+        catalog_field("language", "Language", 0x3ca, Storage::U8)
             .min(0)
             .max(4),
-        FieldDefinition::new(
-            "time_of_day".into(),
-            "Time of day (0: day, 1: night)".into(),
+        catalog_field(
+            "time_of_day",
+            "Time of day (0: day, 1: night)",
             0x3bf,
             Storage::U8,
         )

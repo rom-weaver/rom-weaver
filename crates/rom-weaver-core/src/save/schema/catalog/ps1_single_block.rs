@@ -16,14 +16,9 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
             ("japan", "SLPS-00040"),
         ] {
             let mut fields = vec![
-                FieldDefinition::new(
-                    "difficulty".into(),
-                    "Difficulty".into(),
-                    base + 0x203,
-                    Storage::U8,
-                )
-                .min(0)
-                .max(4),
+                catalog_field("difficulty", "Difficulty", base + 0x203, Storage::U8)
+                    .min(0)
+                    .max(4),
             ];
             for (index, name) in [
                 "Kazuya",
@@ -85,18 +80,13 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
             ("asia", "SCPS-45196", 0x100),
         ] {
             let fields = vec![
-                FieldDefinition::new(
-                    "gold".into(),
-                    "Gold".into(),
-                    base + shift + 0x3c4,
-                    Storage::U32Le,
-                )
-                .min(0)
-                .max(999999)
-                .copies(vec![base + shift + 0x110]),
-                FieldDefinition::new(
-                    "experience".into(),
-                    "Experience".into(),
+                catalog_field("gold", "Gold", base + shift + 0x3c4, Storage::U32Le)
+                    .min(0)
+                    .max(999999)
+                    .copies(vec![base + shift + 0x110]),
+                catalog_field(
+                    "experience",
+                    "Experience",
                     base + shift + 0x3c0,
                     Storage::U32Le,
                 )
@@ -120,14 +110,9 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
             ("germany", "SLES-02399", 0),
         ] {
             let fields = vec![
-                FieldDefinition::new(
-                    "gold".into(),
-                    "Gold pieces".into(),
-                    base + shift + 0x1b0,
-                    Storage::U32Le,
-                )
-                .min(0)
-                .max(9999999),
+                catalog_field("gold", "Gold pieces", base + shift + 0x1b0, Storage::U32Le)
+                    .min(0)
+                    .max(9999999),
             ];
             games.push(playstation_card::definition(
                 "grandia", "Grandia", region, product, block, fields,

@@ -32,12 +32,12 @@ fn game(version: usize, slot: usize) -> GameDefinition {
     game.description = "Edits gold with its save preview and the current step count in the selected initialized file of a raw 64 KiB Europe/USA/localized-Europe/Japan save. Uses the first matching physical slot tag, validates complete record byte sums, and preserves other files and records. Requires a game-made template; names, party, inventory, and wrappers are omitted.".into();
     let record_size = if version == 0 { 0x1000 } else { 0x3000 };
     game.fields = vec![
-        FieldDefinition::new("gold".into(), "Gold".into(), 0x260, Storage::U32Le)
+        catalog_field("gold", "Gold", 0x260, Storage::U32Le)
             .max(999999)
             .copies(vec![0x24]),
-        FieldDefinition::new(
-            "current_steps".into(),
-            "Current steps".into(),
+        catalog_field(
+            "current_steps",
+            "Current steps",
             if version == 0 { 0x48a } else { 0x4aa },
             Storage::U16Le,
         ),

@@ -43,13 +43,7 @@ fn checksum(bytes: &[u8], offset: usize) -> [u32; 2] {
 // https://github.com/RyudoSynbios/game-tools-collection/tree/75ce8f848b628f202c50daa75d95dda58eb1f3a5/src/lib/templates/1080-snowboarding/saveEditor
 pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
     let mut fields = vec![
-        FieldDefinition::new(
-            "progression".into(),
-            "Progression".into(),
-            0x1fb,
-            Storage::U8,
-        )
-        .choices(choices(&[
+        catalog_field("progression", "Progression", 0x1fb, Storage::U8).choices(choices(&[
             ("Not cleared", 1),
             ("Normal cleared", 2),
             ("Hard cleared", 3),
@@ -194,7 +188,7 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
         );
     }
     fields.push(
-        FieldDefinition::new("audio.mode".into(), "Sound mode".into(), 0x1fd, Storage::U8)
+        catalog_field("audio.mode", "Sound mode", 0x1fd, Storage::U8)
             .mask(3)
             .choices(choices(&[("Stereo", 0), ("Headset", 1), ("Mono", 2)])),
     );

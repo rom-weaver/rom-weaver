@@ -83,11 +83,11 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
             ("spain", "SCES-00900"),
         ] {
             let fields = vec![
-                FieldDefinition::new("gil".into(), "Gil".into(), base + 0xd7c, Storage::U32Le)
+                catalog_field("gil", "Gil", base + 0xd7c, Storage::U32Le)
                     .min(0)
                     .max(9999999)
                     .copies(vec![base + 0x220]),
-                FieldDefinition::new("gp".into(), "GP".into(), base + 0xeee, Storage::U16Le)
+                catalog_field("gp", "GP", base + 0xeee, Storage::U16Le)
                     .min(0)
                     .max(10000),
             ];
@@ -112,22 +112,12 @@ pub(in crate::save) fn schemas() -> Vec<SchemaSaveHandler> {
             ("spain", "SLESP02084"),
         ] {
             let fields = vec![
-                FieldDefinition::new(
-                    "squall.gil".into(),
-                    "Squall gil".into(),
-                    base + 0xc8c,
-                    Storage::U32Le,
-                )
-                .min(0)
-                .max(99999999),
-                FieldDefinition::new(
-                    "laguna.gil".into(),
-                    "Laguna gil".into(),
-                    base + 0xc90,
-                    Storage::U32Le,
-                )
-                .min(0)
-                .max(99999999),
+                catalog_field("squall.gil", "Squall gil", base + 0xc8c, Storage::U32Le)
+                    .min(0)
+                    .max(99999999),
+                catalog_field("laguna.gil", "Laguna gil", base + 0xc90, Storage::U32Le)
+                    .min(0)
+                    .max(99999999),
             ];
             let mut game = playstation_card::definition(
                 "final-fantasy-viii",

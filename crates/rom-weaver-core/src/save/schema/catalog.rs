@@ -1,6 +1,12 @@
 use super::*;
 use text::TextCodec;
 
+// Literal catalog fields MUST share string allocation code to bound WASM size.
+#[inline(never)]
+fn catalog_field(id: &str, label: &str, offset: usize, storage: Storage) -> FieldDefinition {
+    FieldDefinition::new(id.into(), label.into(), offset, storage)
+}
+
 fn build(
     games: Vec<GameDefinition>,
     codecs: BTreeMap<String, TextCodec>,

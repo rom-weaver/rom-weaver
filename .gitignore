@@ -47,3 +47,6 @@
 
 # Prebuilt inputs for container builds; see docs/development/ci.md.
 /prebuilt/
+
+# Disposable agent task resources MUST stay out of mutation sandboxes.
+/.agent/
