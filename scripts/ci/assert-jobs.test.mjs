@@ -27,4 +27,11 @@ test("fails when the changes job itself did not succeed", () => assert.equal(sta
 
 test("names the offending job so the failure is readable in the log", () => assert.match(assertJobs("success", "true", ["webapp-browser=failure"]).output.join("\n"), /webapp-browser/));
 
+test("points a size-gate failure at the step that measured it", () => {
+  const output = assertJobs("success", "true", ["webapp-size=failure"]).output.join("\n");
+  assert.match(output, /webapp-size reported 'failure'/);
+  assert.match(output, /Asset size gates/);
+  assert.match(output, /check:size/);
+});
+
 test("rejects a call with no dependencies to check", () => assert.equal(main(["success", "true"]), 2));

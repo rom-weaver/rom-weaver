@@ -3,6 +3,13 @@
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
+// Some results reach this aggregate from a step whose own job stays green, so
+// the failed check would otherwise carry no pointer to the cause.
+const FAILURE_HINTS = {
+  "webapp-size":
+    "the 'Asset size gates' step of 'Build WASM module + webapp' failed (continue-on-error keeps that job green); its annotations name the budget. Reproduce after a production build with `npm --prefix packages/rom-weaver-webapp run check:size`, and see the Performance budgets section of docs/development/ci.md.",
+};
+
 export function assertJobs(changesResult, selected, dependencies) {
   const output = [];
   let failed = false;
@@ -21,7 +28,8 @@ export function assertJobs(changesResult, selected, dependencies) {
       output.push(`${job}: skipped (group not selected for this change)`);
       continue;
     }
-    output.push(`::error::${job} reported '${result}' (group selected: ${selected || "unset"})`);
+    const hint = result === "failure" && FAILURE_HINTS[job] ? `: ${FAILURE_HINTS[job]}` : "";
+    output.push(`::error::${job} reported '${result}' (group selected: ${selected || "unset"})${hint}`);
     failed = true;
   }
 
