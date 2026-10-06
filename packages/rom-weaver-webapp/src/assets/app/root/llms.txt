@@ -34,6 +34,7 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 - [Undo PPF in the browser](https://rom-weaver.com/docs/undo-ppf-browser): Restore bytes recorded in a PPF3 patch with undo data.
 - [Settings and offline use](https://rom-weaver.com/docs/browser-settings): Preferences, beta tools, offline preparation, and local storage.
 - [Markdown documentation index](https://rom-weaver.com/docs.md): Generated Markdown index for every published documentation page.
+- [Patch a compressed CHD disc](https://rom-weaver.com/docs/patch-compressed-disc): Browser tutorial with a synthetic CHD, two ordered patches, and a verified output checksum.
 - [Your first patch](https://rom-weaver.com/docs/get-started): Tutorial that patches a homebrew ROM in the browser and verifies the result.
 - [Apply patches guide](https://rom-weaver.com/docs/apply-rom-patches): Browser instructions for supported byte-level patch families, including SOLID, GDIFF, APSGBA, PAT/FireFlower, EBP, BDF/BSDIFF40, BSP, MOD/PMSR, DLDI, DPS, and single-file HDiffPatch/HPatchZ. NINJA1 and PDS cannot be applied.
 - [Apply Dreamcast DCP patches (CLI)](https://rom-weaver.com/docs/cli-apply#apply-a-dreamcast-dcp-patch): Rebuild a Dreamcast disc from one DCP patch and its CUE or GDI input. DCP must run alone and is unavailable in browser Apply.

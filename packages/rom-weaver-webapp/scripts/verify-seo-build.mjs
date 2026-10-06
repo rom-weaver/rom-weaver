@@ -97,6 +97,12 @@ for (const { path: routePath, markdownPath } of MARKDOWN_ROUTES) {
   );
 }
 for (const route of Object.values(WORKFLOW_SEO_ROUTES)) {
+  const html = read(`${route.slug || "index"}.html`);
+  const headings = [...html.matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/g)];
+  if (headings.length !== 1 || headings[0][1].replace(/<[^>]*>/g, "").trim() === SITE_NAME) {
+    throw new Error(`${route.slug || "home"} must have one descriptive workflow heading`);
+  }
+
   const pageLinks = matchPagesHeaders(parsePagesHeaders(headers), `/${route.slug}`).Link?.join(", ") ?? "";
   assertIncludes(
     pageLinks,

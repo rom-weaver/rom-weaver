@@ -345,6 +345,7 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
 
   return (
     <section className="panel checksum-tool" id="checksum-container">
+      {!sourceEmpty && <h1 className="sr-only">{localizer.message("ui.hero.checksumThesis")}</h1>}
       {sourceEmpty ? (
         <UnifiedDropZone
           addLabel="Replace the file"

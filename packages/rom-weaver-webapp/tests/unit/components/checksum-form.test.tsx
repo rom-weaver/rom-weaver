@@ -69,10 +69,12 @@ describe("ChecksumForm", () => {
       readyInput({ crc32: CRC32, md5: "m".repeat(32), sha1: "s".repeat(40), sha256: SHA256 }),
     );
     render(<ChecksumForm />);
+    const heading = screen.getByRole("heading", { level: 1 }).textContent;
 
     addRom();
 
     expect((await screen.findAllByText(CRC32)).length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(heading);
     expect(screen.queryByRole("button", { name: /^Calculate/ })).toBeNull();
 
     fireEvent.click(screen.getByLabelText("SHA-256"));

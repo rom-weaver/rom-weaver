@@ -126,7 +126,11 @@ describe("groupDocNavigationRoutes", () => {
 
   it("keeps tutorials separate from the source-folder grouping", () => {
     const practice = shelves.find((shelf) => shelf.title === "Walkthroughs");
-    expect(practice?.routes.map((route) => route.slug)).toEqual(["docs/get-started", "docs/cli-get-started"]);
+    expect(practice?.routes.map((route) => route.slug)).toEqual([
+      "docs/get-started",
+      "docs/patch-compressed-disc",
+      "docs/cli-get-started",
+    ]);
     expect(docGroupTitle("tutorials/first-patch.md")).toBe("Tutorials");
   });
 
