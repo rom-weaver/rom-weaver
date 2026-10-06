@@ -835,7 +835,7 @@ function ApplyWorkflowFormView({
       ),
       format: compressHeaderFormat,
       formatId: "rom-weaver-select-output-format-compress",
-      formatLabel: localizer.message("ui.apply.compressionType"),
+      formatLabel: localizer.message("ui.output.type"),
       formatOptions: compressionTypeOptions,
       formatValue: outputState.compressionFormat,
       note: outputState.compress?.note,
@@ -1086,7 +1086,12 @@ function ApplyWorkflowFormView({
           {bundlePage ? null : (
             <WorkflowOutputStep
               {...applyOutputProps}
-              className="apply-output"
+              className={
+                outputState.compress?.fields?.length === 2 &&
+                outputState.compress.fields.some((field) => field.kind === "codec")
+                  ? "apply-output compress-trio"
+                  : "apply-output"
+              }
               fault={applyFailed}
               id="rom-weaver-row-output-file-name"
               info={

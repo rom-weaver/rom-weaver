@@ -242,9 +242,6 @@
   color: var(--thread-text);
 }
 .rw-app .optsbody {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-m);
   padding-block: 9px 2px;
 }
 /* Leads the options body, so it sits above the grid rather than in it. */
@@ -254,6 +251,7 @@
   line-height: 1.35;
   color: var(--ink-3);
 }
+.rw-app .optsbody,
 .rw-app .optsgrid {
   display: flex;
   flex-direction: column;

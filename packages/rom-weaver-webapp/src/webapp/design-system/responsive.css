@@ -35,9 +35,7 @@
   .rw-app .card-name {
     gap: var(--sp-2xs);
   }
-  .rw-app .card-actions {
-    gap: var(--sp-xs);
-  }
+  .rw-app .card-actions,
   /* Retain a 30px drawer-header tap floor; phone controls and padding are
      smaller, so less is held back from the check value. */
   .rw-app .cks {
@@ -48,9 +46,6 @@
   .rw-app .cks > .cks-head {
     min-height: var(--drawer-head-h);
     padding-block: 1px;
-  }
-  .rw-app .cks > .cks-head .readouts {
-    gap: var(--sp-xs);
   }
   .rw-app .cks .cks-inner > :last-child {
     margin-block-end: 6px;
@@ -84,6 +79,15 @@
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     grid-column: 1 / -1;
+  }
+  @media (min-width: 375px) {
+    .compress-trio .opts-compression-fields {
+      grid-template-columns: 0.65fr 1fr 1.45fr;
+    }
+    .compress-trio .ofld-wide {
+      display: flex;
+      grid-column: auto;
+    }
   }
   .rw-app .fname .outname,
   .rw-app .fname .select {
@@ -129,9 +133,7 @@
     padding: 10px 14px;
     font-size: 0.78rem;
   }
-  .rw-app .cards {
-    gap: var(--sp-m);
-  }
+  .rw-app .cards,
   .rw-app .patch-cards {
     gap: var(--sp-m);
   }
@@ -176,37 +178,37 @@
    * storage) taking the free width, then copy/download. The filter has the
    * row below to itself.
    */
-  .rw-app .log-dlg .dlg-subhead .log-controls {
+  .rw-app .log-dlg .log-controls {
     display: flex;
     flex-wrap: nowrap;
     gap: var(--sp-s);
   }
-  .rw-app .log-dlg .dlg-subhead .logview {
+  .rw-app .log-dlg .logview {
     flex: none;
     min-height: 44px;
   }
-  .rw-app .log-dlg .dlg-subhead .logview .seg-btn {
+  .rw-app .log-dlg .logview .seg-btn {
     height: 38px;
   }
-  .rw-app .log-dlg .dlg-subhead .loglevel {
+  .rw-app .log-dlg .loglevel {
     flex: 1 1 auto;
     min-width: 0;
     margin-inline-start: 0;
   }
-  .rw-app .log-dlg .dlg-subhead .loglevel .dropdown-select,
-  .rw-app .log-dlg .dlg-subhead .loglevel .select {
+  .rw-app .log-dlg .loglevel .dropdown-select,
+  .rw-app .log-dlg .loglevel .select {
     width: 100%;
   }
-  .rw-app .log-dlg .dlg-subhead .log-refresh {
+  .rw-app .log-dlg .log-refresh {
     inline-size: 44px;
     height: 44px;
     margin-inline-start: 0;
   }
-  .rw-app .log-dlg .dlg-subhead .log-actions {
+  .rw-app .log-dlg .log-actions {
     margin-inline-start: auto;
   }
-  .rw-app .log-dlg .dlg-subhead .loglevel .select,
-  .rw-app .log-dlg .dlg-subhead .log-filter {
+  .rw-app .log-dlg .loglevel .select,
+  .rw-app .log-dlg .log-filter {
     height: 44px;
   }
   .rw-app .log-dlg .log-actions .log-icon-btn {

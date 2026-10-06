@@ -134,7 +134,7 @@ const CompressPanelBody = ({
           </OutputField>
         ) : field.kind === "codec" ? (
           <OutputField
-            className="ofld-wide"
+            className={field.multiple || fields.length < 3 ? "ofld-wide" : undefined}
             key={field.key}
             label={label}
             labelInfo={<FieldInfoToggle info={field.info} label={label} />}
