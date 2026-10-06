@@ -9,10 +9,11 @@ import { OutputCard } from "../../../src/public/react/components/ds/output-card.
 import { buildCompressPanel } from "../../../src/public/react/compress-options.ts";
 
 /**
- * Collapsed output options: every option rides the drawer header as a chip that
- * names its value, so the settings read without opening the drawer. Pinned here
- * because the header is built from the same field models the drawer body
- * renders - a chip that stopped naming its value would otherwise go unnoticed.
+ * Collapsed output options: the codec and level ride the drawer header as chips
+ * that name their values, so the settings that change the output read without
+ * opening the drawer. Pinned here because the header is built from the same
+ * field models the drawer body renders - a chip that stopped naming its value
+ * would otherwise go unnoticed.
  */
 
 const chips = (container: HTMLElement) =>
@@ -42,23 +43,28 @@ const renderOutput = (format: string, settings: Record<string, unknown>, extra =
 };
 
 describe("output options header chips", () => {
-  it("names every option with its resolved value", () => {
+  it("names the codec and the profile level", () => {
     const { container } = renderOutput("zip", { compressionProfile: "max", zipCodec: "" });
     expect(chips(container)).toEqual([
-      { label: "Type", value: ".zip" },
       // An unset codec reads as the default the run will actually use.
-      { label: "Codec", value: "deflate:9" },
+      { label: "Codec", value: "deflate" },
       { label: "Level", value: "Max" },
     ]);
   });
 
-  it("reports an explicit codec level as an overridden profile", () => {
+  it("moves an explicit codec level into the codec chip and drops the level chip", () => {
     const { container } = renderOutput("zip", { compressionProfile: "max", zipCodec: "zstd:12" });
-    expect(chips(container)).toEqual([
-      { label: "Type", value: ".zip" },
-      { label: "Codec", value: "zstd:12" },
-      { label: "Level", value: "Overridden" },
-    ]);
+    expect(chips(container)).toEqual([{ label: "Codec", value: "zstd:12" }]);
+  });
+
+  it("summarizes a CHD codec list by its first codec", () => {
+    const chip = (settings: Record<string, unknown>) =>
+      buildCompressPanel("chd", { chdOutputMode: "cd", ...settings })?.fields[0]?.chip?.value;
+    expect(chip({ chdCreateCdCodecs: "" })).toBe("lzma+");
+    expect(chip({ chdCreateCdCodecs: "cdlz:9,cdzl:12,cdfl:8" })).toBe("lzma:9+");
+    // The first codec carries no level of its own, so it reads at the profile's level.
+    expect(chip({ chdCreateCdCodecs: "cdzs,cdzl:12", compressionProfile: "max" })).toBe("zstd:22+");
+    expect(chip({ chdCreateCdCodecs: "cdfl" })).toBe("flac");
   });
 
   it("carries a format-implied note as an unlabelled muted chip", () => {
@@ -78,12 +84,12 @@ describe("output options header chips", () => {
   it("builds codec, block-size, and profile fields for every compressed format", () => {
     const sevenZip = buildCompressPanel("7z", { sevenZipCodec: "lzma2", compressionProfile: "max" });
     expect(sevenZip?.fields.map((field) => field.key)).toEqual(["sevenZipCodec", "compressionProfile"]);
-    expect(sevenZip?.fields[0]?.chip.value).toBe("lzma2:9");
+    expect(sevenZip?.fields[0]?.chip?.value).toBe("lzma2");
     expect(sevenZip?.fields[1]?.value).toBe("max");
 
     const rvz = buildCompressPanel("rvz", { rvzCodec: "zstd", rvzBlockSize: 131072, compressionProfile: "small" });
     expect(rvz?.fields.map((field) => field.key)).toEqual(["rvzCodec", "rvzBlockSize", "compressionProfile"]);
-    expect(rvz?.fields[1]?.chip.value).toBe("131072");
+    expect(rvz?.fields[1]?.chip).toBeUndefined();
     expect(rvz?.fields[1]?.value).toBe("131072");
   });
 

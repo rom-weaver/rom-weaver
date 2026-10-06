@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { stripCompressionCodecLevelOverrides } from "../../../../lib/compression/codec-fields.ts";
 import { InfoToggle } from "../../../../presentation/react/info-toggle.tsx";
 import { type CompressField, type CompressFieldInfo, OUTPUT_FORMAT_INFO } from "../../compress-options.ts";
@@ -82,11 +82,14 @@ const localizeFieldLabel = (field: CompressField, localizer: ReturnType<typeof u
   return messageId ? localizer.message(messageId) : field.label;
 };
 
-const localizeChipLabel = (field: CompressField, localizer: ReturnType<typeof useUiLocalizer>): string => {
-  if (field.chip.label === "Codec") return localizer.message("ui.settings.codec");
-  if (field.chip.label === "Block size") return localizer.message("ui.settings.rvzBlockSize");
-  if (field.chip.label === field.label) return localizeFieldLabel(field, localizer);
-  return field.chip.label;
+const localizeChipLabel = (
+  field: CompressField,
+  chipLabel: string,
+  localizer: ReturnType<typeof useUiLocalizer>,
+): string => {
+  if (chipLabel === "Codec") return localizer.message("ui.settings.codec");
+  if (chipLabel === field.label) return localizeFieldLabel(field, localizer);
+  return chipLabel;
 };
 
 const CompressPanelBody = ({
@@ -134,8 +137,9 @@ const CompressPanelBody = ({
           </OutputField>
         ) : field.kind === "codec" ? (
           <OutputField
-            className={field.multiple || fields.length < 3 ? "ofld-wide" : undefined}
             key={field.key}
+            // Phone layouts size the cell from the codec list's length.
+            style={{ "--ofld-ch": (field.value || field.placeholder || "").length } as CSSProperties}
             label={label}
             labelInfo={<FieldInfoToggle info={field.info} label={label} />}
           >
@@ -176,8 +180,6 @@ type OutputCompressionPanelConfig = {
    * apply output's "ROM header" select). */
   extraChildren?: ReactNode;
   fields?: CompressField[] | null;
-  /** Value of the header's format chip - the short format label, not a sentence. */
-  format?: string;
   formatId?: string;
   formatInfo?: CompressFieldInfo | null;
   formatLabel?: string;
@@ -193,44 +195,26 @@ type OutputCompressionPanelConfig = {
   timing?: ReactNode;
 };
 
-type CompressionFormatLabelOptions = {
-  noneLabel?: string;
-  uncompressedValues?: string[];
-};
-
-const getOutputCompressionFormatLabel = (
-  formatValue: string,
-  formatOptions: FormatOption[],
-  { noneLabel = "None", uncompressedValues = ["none"] }: CompressionFormatLabelOptions = {},
-) =>
-  uncompressedValues.includes(formatValue)
-    ? noneLabel
-    : formatOptions.find((option) => option.value === formatValue)?.label;
-
 /**
- * The collapsed header's chip row: the output format, any format-implied note,
- * then one value chip per option, the caller's extra chips, and the timing.
- * Labels stay in the markup for assistive technology. Chips are derived from
- * the same field models the drawer body renders, so a header value can never
- * drift from its control.
+ * The collapsed header's chip row: any format-implied note, then the codec and
+ * level chips, the caller's extra chips, and the timing. The format is left out
+ * because its picker sits beside the file name. Labels stay in the markup for
+ * assistive technology. Chips are derived from the same field models the drawer
+ * body renders, so a header value can never drift from its control.
  */
 const OutputOptionReadouts = ({
   fields,
-  format,
   note,
   readouts,
   timing,
-}: Pick<OutputCompressionPanelConfig, "fields" | "format" | "note" | "readouts" | "timing">) => {
+}: Pick<OutputCompressionPanelConfig, "fields" | "note" | "readouts" | "timing">) => {
   const localizer = useUiLocalizer();
   return (
     <>
-      {/* The chip key stays "Type" even where the control is labelled at length
-        ("Compression type"), because a chip has no room for the long form. */}
-      {format ? <DrawerReadout label={localizer.message("ui.output.type")}>{format}</DrawerReadout> : null}
       {note ? <DrawerReadout muted>{note}</DrawerReadout> : null}
       {fields?.map((field) =>
-        field.chip.value ? (
-          <DrawerReadout key={field.key} label={localizeChipLabel(field, localizer)}>
+        field.chip?.value ? (
+          <DrawerReadout key={field.key} label={localizeChipLabel(field, field.chip.label, localizer)}>
             {field.chip.value}
           </DrawerReadout>
         ) : null,
@@ -245,7 +229,6 @@ const buildOutputCompressionPanel = ({
   disabled,
   extraChildren,
   fields,
-  format,
   formatId,
   formatInfo = OUTPUT_FORMAT_INFO,
   formatLabel,
@@ -272,14 +255,8 @@ const buildOutputCompressionPanel = ({
     formatOptions,
     formatValue,
     onFormatChange,
-    readouts: <OutputOptionReadouts fields={fields} format={format} note={note} readouts={readouts} timing={timing} />,
+    readouts: <OutputOptionReadouts fields={fields} note={note} readouts={readouts} timing={timing} />,
   };
 };
 
-export {
-  buildOutputCompressionPanel,
-  CompressInfoContent,
-  CompressPanelBody,
-  FieldInfoToggle,
-  getOutputCompressionFormatLabel,
-};
+export { buildOutputCompressionPanel, CompressInfoContent, CompressPanelBody, FieldInfoToggle };

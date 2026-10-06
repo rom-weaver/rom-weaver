@@ -9,7 +9,7 @@ import { getCheatHeaderStripConflict } from "../../lib/cheats/header-guard.ts";
 import { ApplyPatchListStep } from "./apply-patch-list-step.tsx";
 import type { CheatStackRenderState } from "./components/cheat-database-section.tsx";
 import { getEmulatorJsCore } from "./components/emulatorjs.ts";
-import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./components/ds/compress-panel.tsx";
+import { buildOutputCompressionPanel } from "./components/ds/compress-panel.tsx";
 import { Notice } from "./components/ds/feedback.tsx";
 import {
   databaseOnlyChecks,
@@ -35,7 +35,6 @@ import { OutputCard, type OutputCardProps } from "./components/ds/output-card.ts
 import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.tsx";
 import { ARCHIVE_FILE_EXTENSIONS, PATCH_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
-import { createCompressionTypeOptions } from "./output-view-model.ts";
 import type {
   NoticeController,
   PatcherOutputController,
@@ -679,8 +678,6 @@ function ApplyWorkflowFormView({
     singleRom,
     uiController,
   });
-  const compressHeaderFormat = getOutputCompressionFormatLabel(outputState.compressionFormat, outputState.options);
-  const compressionTypeOptions = createCompressionTypeOptions(outputState.options, "none");
   const outputDisabled = outputState.disabled || bundleExport?.busy === true;
   const header = resolveOutputHeaderOptions(romInputs);
   const renderOutputHeaderField = (id?: string) => (
@@ -830,17 +827,10 @@ function ApplyWorkflowFormView({
     compress: buildOutputCompressionPanel({
       disabled: outputDisabled,
       extraChildren: outputExtraFields,
-      fields: outputState.compress?.fields?.toSorted(
-        (left, right) => Number(left.kind === "codec") - Number(right.kind === "codec"),
-      ),
-      format: compressHeaderFormat,
-      formatId: "rom-weaver-select-output-format-compress",
-      formatLabel: localizer.message("ui.output.type"),
-      formatOptions: compressionTypeOptions,
-      formatValue: outputState.compressionFormat,
+      // The format picker beside the file name already sets the compression type.
+      fields: outputState.compress?.fields,
       note: outputState.compress?.note,
       onFieldChange: (key, value, updates) => controllers.output.setOutputCompressOption?.(key, value, updates),
-      onFormatChange: (value) => controllers.output.setOutputCompression(value),
       readouts: null,
       timing: outputState.compressTiming || undefined,
     }),
@@ -1086,12 +1076,7 @@ function ApplyWorkflowFormView({
           {bundlePage ? null : (
             <WorkflowOutputStep
               {...applyOutputProps}
-              className={
-                outputState.compress?.fields?.length === 2 &&
-                outputState.compress.fields.some((field) => field.kind === "codec")
-                  ? "apply-output compress-trio"
-                  : "apply-output"
-              }
+              className="apply-output"
               fault={applyFailed}
               id="rom-weaver-row-output-file-name"
               info={

@@ -265,6 +265,10 @@
 .rw-app .opts-extra-fields {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
+/* Phones give the pair its own row; elsewhere each field is a grid cell. */
+.rw-app .post-apply-fields {
+  display: contents;
+}
 .rw-app .optsgroup + .optsgroup {
   padding-block-start: var(--sp-m);
   border-block-start: 1px solid var(--seam-soft);
@@ -283,13 +287,6 @@
 }
 .rw-app .patch-description-field {
   grid-column: 1 / -1;
-}
-/* Ellipsize long export types instead of stretching the grid. */
-.rw-app .export-type-field {
-  min-width: 0;
-}
-.rw-app .export-type-field .select {
-  text-overflow: ellipsis;
 }
 .rw-app .bundle-job {
   margin-block-start: var(--sp-l);

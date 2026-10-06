@@ -1787,9 +1787,7 @@ describe("apply workflow view - bundle controls", () => {
     expect(selects).toHaveLength(2);
     expect(selects.every((select) => select.value === "auto")).toBe(true);
     expect(selects.every((select) => select.disabled)).toBe(true);
-    expect((container.querySelector("#rom-weaver-select-output-format-compress") as HTMLSelectElement)?.disabled).toBe(
-      true,
-    );
+    expect((container.querySelector("#rom-weaver-select-output-format") as HTMLSelectElement)?.disabled).toBe(true);
     fireEvent.change(selects[1] as HTMLSelectElement, { target: { value: "rom" } });
     expect(onPatchInputBasisChange).not.toHaveBeenCalled();
   });

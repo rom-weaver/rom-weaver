@@ -344,7 +344,6 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
           compress={buildOutputCompressionPanel({
             disabled,
             fields: panel?.fields,
-            format: formatOptions.find((option) => option.value === format)?.label,
             note: panel?.note,
             onFieldChange: (key, value, updates) => {
               clearOutput();
