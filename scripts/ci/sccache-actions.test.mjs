@@ -98,3 +98,13 @@ test("CI only installs the Rust compiler cache when it must compile WASM", () =>
   assert.match(miss, /sccache: "true"/u);
   assert.doesNotMatch(hit, /sccache: "true"/u);
 });
+
+test("WASM C cache avoids the native-sized eviction ceiling", () => {
+  const workflow = readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
+  const wasm = workflow.split("\n  wasm:\n")[1].split(/\n  [\w-]+:\n/u)[0];
+  const miss = wasm
+    .split("      - name: Set up WASM build environment\n")[1]
+    .split(/\n      - /u)[0];
+  assert.match(miss, /ccache-maxsize: 1G/u);
+  assert.match(action, /ccache-maxsize:[\s\S]*?default: 300M/u);
+});
