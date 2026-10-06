@@ -494,8 +494,9 @@
 .rw-app .ck-group-head {
   position: relative;
   display: flex;
+  gap: 6px;
   align-items: center;
-  width: fit-content;
+  justify-content: space-between;
   padding: 2px 9px;
   margin-block-end: 3px;
   font-size: 0.62rem;
@@ -520,34 +521,6 @@
   margin-block: -2px 6px;
   font-size: 0.72rem;
   color: var(--ink-3);
-}
-.rw-app .patch-checks-context {
-  display: grid;
-  grid-column: 1 / -1;
-  gap: 5px;
-  padding: 7px 9px;
-  margin: 3px 0 5px;
-  background: color-mix(in oklab, var(--well) 58%, transparent);
-  border-block: 1px solid var(--ck-seam);
-}
-.rw-app .patch-checks-context-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px var(--sp-s);
-  align-items: center;
-  justify-content: space-between;
-}
-.rw-app .patch-checks-execution {
-  min-width: 0;
-  margin: 0;
-  font-size: 0.72rem;
-  font-weight: 650;
-  line-height: 1.35;
-  color: var(--ink-2);
-}
-.rw-app .patch-checks-context .patch-execution-grp {
-  min-width: 0;
-  color: var(--thread-text);
 }
 .rw-app .ck {
   /* The label track floor aligns independently gridded rows. */

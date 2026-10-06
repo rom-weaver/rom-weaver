@@ -14,7 +14,7 @@ import { identifiedOutputBaseName } from "../../presentation/identify-title.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import { resolveAssetUrl } from "./asset-url.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
-import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./components/ds/compress-panel.tsx";
+import { buildOutputCompressionPanel } from "./components/ds/compress-panel.tsx";
 import { Notice } from "./components/ds/feedback.tsx";
 import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { InfoPopover, NeedsInput } from "./components/ds/layout.tsx";
@@ -1533,7 +1533,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       compress: buildOutputCompressionPanel({
         disabled: outputDisabled,
         fields: createCompressPanel?.fields,
-        format: getOutputCompressionFormatLabel(createCompression, createCompressionOptions),
         formatId: "patch-builder-select-output-compression",
         formatOptions: createCompressionOptions,
         formatValue: createCompression,

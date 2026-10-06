@@ -270,6 +270,26 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.apply.compressionType"
+#~ msgstr "Compression type"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.output.file"
+#~ msgstr "File"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.output.identified"
+#~ msgstr "Ident"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.output.name"
+#~ msgstr "Name"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", an output extension. The format selector adds the extension; remove it to avoid a doubled name."
 
@@ -440,6 +460,11 @@ msgstr "Accent"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.addCheckLabel"
+msgstr "Add"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.addCheck"
 msgstr "Add {side} check"
 
@@ -462,11 +487,6 @@ msgstr "Add a supported ROM, raw or in an archive, to test the game in the brows
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.addCheats"
 msgstr "Add cheats to the patch order"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patch.addCheckLabel"
-msgstr "Add check"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -647,11 +667,6 @@ msgstr "Archives are decompressed; we find the ROM or let you choose."
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.author"
 msgstr "Author"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.input"
-msgstr "Authored input checks: {basis}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1110,6 +1125,11 @@ msgstr "Codecs, threads, raw file lists"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.stackOutput"
+msgstr "Combined result"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.commandLine"
 msgstr "Command line"
 
@@ -1167,11 +1187,6 @@ msgstr "Compression defaults come from Settings › Compression and apply to com
 #: src/presentation/localization/messages.ts
 msgid "error.COMPRESSION_FAILED"
 msgstr "Compression failed."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.compressionType"
-msgstr "Compression type"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1545,11 +1560,6 @@ msgstr "Edit trainer names, money, badges, hearts, and gear in a game save,"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.embeddedOutput"
-msgstr "Embedded output checks: Standalone patch result"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.test.tutorial.controls"
 msgstr "Emulator controls"
 
@@ -1687,11 +1697,6 @@ msgstr "Extracting & {verb}…"
 #: src/presentation/localization/messages.ts
 msgid "ui.common.file"
 msgstr "file"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.output.file"
-msgstr "File"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1870,11 +1875,6 @@ msgstr "Home"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.output.identified"
-msgstr "Ident"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.drop.identified"
 msgstr "Identified"
 
@@ -1942,6 +1942,11 @@ msgstr "Input handling"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.inputHandling.title"
 msgstr "Input handling"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.input"
+msgstr "Input: {basis}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2352,11 +2357,6 @@ msgstr "Multiple values"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.n64ByteOrder"
 msgstr "N64 byte order before patching"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.output.name"
-msgstr "Name"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2852,6 +2852,11 @@ msgstr "Patch parsing failed."
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.position"
 msgstr "Patch position"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.embeddedOutput"
+msgstr "Patch result"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3521,7 +3526,7 @@ msgstr "Share your changes."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.sharedInput"
-msgstr "Shared input checks: {input}"
+msgstr "Shared input: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3587,11 +3592,6 @@ msgstr "source"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.source"
 msgstr "Source"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.stackOutput"
-msgstr "Stack output checks: Combined result"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4406,3 +4406,16 @@ msgstr "ZIP codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z and bundles"
+
+
+#. js-lingui-explicit-id
+msgid "ui.apply.tutorial.identify.title"
+msgstr "Identify your starting ROM"
+
+#. js-lingui-explicit-id
+msgid "ui.apply.tutorial.identify.body"
+msgstr "Before adding a ROM, Identify can search by game name or checksum. Choose a title, then its release, to set the expected ROM checks. This search hides once a ROM is added or the patches already supply checks. In Detailed view, the ROM’s Identify drawer shows database matches, region and revision when available. The homebrew practice ROM has no public database entry."
+
+#. js-lingui-explicit-id
+msgid "ui.apply.tutorial.identify.tryIt"
+msgstr "Choose Detailed, then open Identify to inspect the ROM information. Open Checks to compare checksums."

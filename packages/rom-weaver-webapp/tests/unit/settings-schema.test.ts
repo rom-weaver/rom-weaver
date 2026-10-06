@@ -68,17 +68,10 @@ describe("getDefaultSettings", () => {
     const testField = SETTINGS_FIELD_METADATA.postApplyTestBehavior;
     expect(downloadField.kind).toBe("select");
     expect(downloadField.options?.map((option) => option.value)).toEqual(["auto-show", "show"]);
-    expect(downloadField.options?.map((option) => option.label)).toEqual([
-      "Auto Start & DL Again Button (Default)",
-      "DL Again Button",
-    ]);
+    expect(downloadField.options?.map((option) => option.label)).toEqual(["Auto + button", "Button only"]);
     expect(testField.kind).toBe("select");
     expect(testField.options?.map((option) => option.value)).toEqual(["show", "auto-show", "hide"]);
-    expect(testField.options?.map((option) => option.label)).toEqual([
-      "Show After Apply (Default)",
-      "Auto Test & Show After Apply",
-      "Hide Button",
-    ]);
+    expect(testField.options?.map((option) => option.label)).toEqual(["Button only", "Auto + button", "Hide Button"]);
     expect(SETTINGS_FIELD_ORDER.indexOf("postApplyDownloadBehavior")).toBeGreaterThan(
       SETTINGS_FIELD_ORDER.indexOf("bundlePackage"),
     );

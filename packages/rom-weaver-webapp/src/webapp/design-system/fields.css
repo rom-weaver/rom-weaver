@@ -242,18 +242,9 @@
   color: var(--thread-text);
 }
 .rw-app .optsbody {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-m);
   padding-block: 9px 2px;
 }
-/* Leads the options body, so it sits above the grid rather than in it. */
-.rw-app .optsnote {
-  margin: 0;
-  font-size: 0.78rem;
-  line-height: 1.35;
-  color: var(--ink-3);
-}
+.rw-app .optsbody,
 .rw-app .optsgrid {
   display: flex;
   flex-direction: column;
@@ -271,8 +262,7 @@
   padding-block-start: var(--sp-m);
   border-block-start: 1px solid var(--seam-soft);
 }
-/* Info buttons set a 24px label rail. Keep fields without one on that same
-   rail so every select in a row starts at the same y-coordinate. */
+/* The 24px rail MUST keep labels aligned with their info buttons. */
 .rw-app .optsgroup .ofld-l {
   min-height: 24px;
 }
@@ -286,13 +276,6 @@
 }
 .rw-app .patch-description-field {
   grid-column: 1 / -1;
-}
-/* Ellipsize long export types instead of stretching the grid. */
-.rw-app .export-type-field {
-  min-width: 0;
-}
-.rw-app .export-type-field .select {
-  text-overflow: ellipsis;
 }
 .rw-app .bundle-job {
   margin-block-start: var(--sp-l);
@@ -831,16 +814,11 @@
 .rw-app .ck-add {
   box-sizing: border-box;
   display: inline-flex;
+  flex: none;
   gap: 6px;
   align-items: center;
   width: fit-content;
-  /* Its tallest child is a 12px glyph, so the label alone would sit under the
-     WCAG 2.5.8 floor once the select stops being held at 16px. */
-  min-height: 24px;
-  padding: 4px 10px 4px 8px;
-  /* Align the bordered control with row text, not the full-bleed frame. */
-  margin-block-start: 7px;
-  margin-inline-start: 9px;
+  padding: 0 6px;
   color: var(--ink-3);
   cursor: pointer;
   background: color-mix(in oklab, var(--well) 55%, transparent);
@@ -859,6 +837,7 @@
 .rw-app .ck-add-select {
   width: auto;
   min-width: 0;
+  height: 24px;
   padding: 0 12px 0 0;
   margin: 0;
   font-family: var(--font);
@@ -877,7 +856,8 @@
   width: 10px;
   height: 10px;
 }
-.rw-app .ck-add:focus-within {
+.rw-app .ck-add:focus-within,
+.rw-app .ck-add:active {
   color: var(--ink);
   background: color-mix(in oklab, var(--thread) 9%, var(--well));
   border-color: var(--thread);
@@ -889,11 +869,7 @@
     border-color: var(--thread);
   }
 }
-.rw-app .ck-add:active {
-  color: var(--ink);
-  background: color-mix(in oklab, var(--thread) 9%, var(--well));
-  border-color: var(--thread);
-}
+
 .rw-app .ckrows .patch-off-note {
   margin-block-start: 7px;
   margin-inline: 9px;
@@ -968,11 +944,11 @@
   letter-spacing: 0.07em;
 }
 .rw-app .ofld .input {
-  height: 32px;
+  height: var(--fld-h, 32px);
   font-size: 0.82rem;
 }
 .rw-app .ofld .select {
-  height: 32px;
+  height: var(--fld-h, 32px);
   font-size: var(--dropdown-fs, 0.82rem);
 }
 .rw-app .btn.run,

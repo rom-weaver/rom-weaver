@@ -161,7 +161,7 @@ export const PostApplyBehaviorFields = ({
   const downloadValue = usePostApplyDownloadBehaviorValue(downloadSetting);
   const testValue = usePostApplyTestBehaviorValue(testSetting);
   return (
-    <>
+    <div className="post-apply-fields">
       <PostApplyActionField
         disabled={disabled}
         id="rom-weaver-select-post-apply-download"
@@ -178,7 +178,7 @@ export const PostApplyBehaviorFields = ({
         options={POST_APPLY_TEST_BEHAVIOR_OPTIONS}
         value={testValue}
       />
-    </>
+    </div>
   );
 };
 
@@ -451,7 +451,6 @@ export const BundleOutputStep = ({
             {headerField}
           </>
         ),
-        optionsNote: headerField ? localizer.message("ui.bundleExport.headerNotSaved") : false,
       }}
       disabled={bundleExport.busy}
       fault={!!bundleExport.error}

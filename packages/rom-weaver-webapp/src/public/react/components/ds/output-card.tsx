@@ -1,9 +1,9 @@
 import { ScanSearch, SlidersHorizontal, TriangleAlert } from "lucide-react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { detectOutputLikeExtension } from "../../../../lib/output/output-name-validation.ts";
 import { useUiLocalizer } from "../../settings-context.tsx";
 import { join } from "./cx.ts";
-import { Drawer, DrawerReadout } from "./drawer.tsx";
+import { Drawer } from "./drawer.tsx";
 import { DropdownSelect } from "./dropdown-select.tsx";
 
 /**
@@ -12,8 +12,8 @@ import { DropdownSelect } from "./dropdown-select.tsx";
  * overrides), and a caller-supplied action (run button or inline progress).
  * Shared by apply, create, and trim outputs.
  *
- * The drawer header carries every option as an accessible labelled chip, so the
- * values stay readable while the drawer is shut.
+ * The drawer header carries the codec and level as accessible labelled chips, so
+ * the settings that change the output stay readable while the drawer is shut.
  */
 
 type FormatOption = { value: string; label: string };
@@ -28,9 +28,9 @@ type OutputCompressPanel = {
   formatInfo?: ReactNode;
   formatId?: string;
   onFormatChange?: (value: string) => void;
-  optionsNote?: ReactNode | false;
 };
 type OutputCardProps = {
+  className?: string;
   fileName: string;
   onFileNameChange: (value: string) => void;
   fileNamePlaceholder?: string;
@@ -56,14 +56,16 @@ const OutputField = ({
   label,
   labelInfo,
   className,
+  style,
   children,
 }: {
   label: ReactNode;
   labelInfo?: ReactNode;
   className?: string;
+  style?: CSSProperties;
   children: ReactNode;
 }) => (
-  <div className={join("ofld ofield", className)}>
+  <div className={join("ofld ofield", className)} style={style}>
     <span className="ofld-l ofld-lbl">
       <span className="ofld-text">{label}</span>
       {labelInfo}
@@ -73,6 +75,7 @@ const OutputField = ({
 );
 
 const OutputCard = ({
+  className,
   fileName,
   onFileNameChange,
   fileNamePlaceholder,
@@ -115,7 +118,7 @@ const OutputCard = ({
       </OutputField>
     ) : null;
   return (
-    <div className="card outcard">
+    <div className={join("card outcard", className)}>
       {doubledExtension ? (
         <p aria-live="polite" className="patch-off-note outname-ext-warn" role="alert">
           <TriangleAlert aria-hidden="true" />
@@ -167,20 +170,8 @@ const OutputCard = ({
           integrated
           label={localizer.message("ui.output.options")}
           labelIcon={<SlidersHorizontal aria-hidden="true" className="tune" />}
-          readouts={
-            <>
-              {nameSource ? (
-                <DrawerReadout label={localizer.message("ui.output.name")}>
-                  {nameSource.on ? localizer.message("ui.output.identified") : localizer.message("ui.output.file")}
-                </DrawerReadout>
-              ) : null}
-              {compress?.readouts}
-            </>
-          }
+          readouts={compress?.readouts}
         >
-          {compress?.optionsNote === false ? null : (
-            <p className="optsnote">{compress?.optionsNote ?? localizer.message("ui.output.notSaved")}</p>
-          )}
           <div className="optsgrid">
             {nameSource ? (
               <div className="optsgroup opts-name-source">
