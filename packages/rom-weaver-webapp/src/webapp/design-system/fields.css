@@ -250,7 +250,7 @@
 /* Leads the options body, so it sits above the grid rather than in it. */
 .rw-app .optsnote {
   margin: 0;
-  font-size: 0.78rem;
+  font-size: var(--opts-f, 0.78rem);
   line-height: 1.35;
   color: var(--ink-3);
 }
@@ -271,10 +271,10 @@
   padding-block-start: var(--sp-m);
   border-block-start: 1px solid var(--seam-soft);
 }
-/* Info buttons set a 24px label rail. Keep fields without one on that same
-   rail so every select in a row starts at the same y-coordinate. */
+/* The default 24px rail aligns labels with info buttons. Compact layouts MAY
+   release that space for fields without a button. */
 .rw-app .optsgroup .ofld-l {
-  min-height: 24px;
+  min-height: var(--lbl-h, 24px);
 }
 /* The test toggle is a secondary setting. Give it the full row so its label
    stays readable instead of wrapping inside a narrow grid cell. */
@@ -968,11 +968,11 @@
   letter-spacing: 0.07em;
 }
 .rw-app .ofld .input {
-  height: 32px;
+  height: var(--fld-h, 32px);
   font-size: 0.82rem;
 }
 .rw-app .ofld .select {
-  height: 32px;
+  height: var(--fld-h, 32px);
   font-size: var(--dropdown-fs, 0.82rem);
 }
 .rw-app .btn.run,

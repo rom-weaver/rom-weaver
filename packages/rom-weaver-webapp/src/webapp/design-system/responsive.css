@@ -66,6 +66,12 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--sp-s) var(--sp-m);
   }
+  .rw-app #rom-weaver-row-output-file-name .optsbody {
+    --sp-s: 2px;
+    --lbl-h: 0;
+    --fld-h: 28px;
+    --opts-f: 0.72rem;
+  }
   .rw-app .fname .outname,
   .rw-app .fname .select {
     padding-block: 9px;
