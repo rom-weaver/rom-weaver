@@ -337,18 +337,20 @@
 .rw-app .panel-view-toggle input[type="checkbox"]:checked + span {
   color: var(--thread-text);
 }
-/* Reset keeps its aria-label, so its text goes first when the heading runs out of room. */
+/* Reset keeps its aria-label, so its text goes first when the heading runs out
+   of room; the switch keeps one too. Translated step titles (Eingaben,
+   Entradas) and labels (Zurücksetzen) reach the head without the thread count. */
 @media (max-width: 419px) {
-  .rw-app .workflow-panel-head[data-threads] .reset-btn {
+  .rw-app .workflow-panel-head .reset-btn {
     justify-content: center;
     min-inline-size: 24px;
   }
-  .rw-app .workflow-panel-head[data-threads] .reset-btn span {
+  .rw-app .workflow-panel-head .reset-btn span {
     display: none;
   }
 }
 @media (max-width: 359px) {
-  .rw-app .workflow-panel-head[data-threads] .panel-view-toggle span {
+  .rw-app .workflow-panel-head .panel-view-toggle span {
     display: none;
   }
 }
