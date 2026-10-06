@@ -860,7 +860,7 @@ function ApplyWorkflowFormView({
   );
   const applySecondaryJob = bundlePage ? (
     <ApplySecondaryJob>
-      <OutputCard {...applyOutputProps} />
+      <OutputCard {...applyOutputProps} className="apply-output" />
       {outputNotice}
     </ApplySecondaryJob>
   ) : null;

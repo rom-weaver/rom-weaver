@@ -71,71 +71,6 @@
   .apply-output .outopts.is-open .readouts {
     display: none;
   }
-  /* The groups flatten into one bordered box of wrapping cells. Each label sits
-     inside its cell, and 1px gaps over the seam colour draw the dividers. */
-  .apply-output .optsgrid {
-    flex-flow: row wrap;
-    gap: 1px;
-    overflow: hidden;
-    background: var(--seam);
-    border: 1px solid var(--seam);
-    border-radius: var(--r-s);
-  }
-  .apply-output .optsgroup {
-    display: contents;
-  }
-  /* A codec cell grows by about 0.5rem per character of its list, plus room for
-     the arrow, so a long list takes a row of its own instead of clipping. */
-  .apply-output .ofld {
-    position: relative;
-    flex: 1 1 max(96px, calc(var(--ofld-ch, 0) * 0.5rem + 36px));
-    background: var(--plate);
-  }
-  .apply-output .ofld-l {
-    position: absolute;
-    inset-block-start: 0;
-    inset-inline-start: 6px;
-    inset-inline-end: 6px;
-    font-size: 0.66rem;
-    text-transform: none;
-    letter-spacing: 0.01em;
-    white-space: nowrap;
-    pointer-events: none;
-  }
-  .apply-output .ofld-text {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .apply-output .ofld-l .info {
-    pointer-events: auto;
-  }
-  .apply-output .ofld .select,
-  .apply-output .ofld .input {
-    height: 44px;
-    padding-block: 17px 0;
-    padding-inline-start: 6px;
-    background: transparent;
-    border: 0;
-    border-radius: 0;
-  }
-  .apply-output .post-apply-fields {
-    display: flex;
-    flex: 1 1 100%;
-    gap: 1px;
-  }
-  /* The identified title gets its own line under the label so it wraps whole. */
-  .apply-output .outname-source {
-    flex: 1 1 100%;
-    flex-wrap: wrap;
-    padding: 6px;
-    background: var(--plate);
-  }
-  .apply-output .outname-source-name {
-    flex-basis: 100%;
-    overflow-wrap: anywhere;
-    white-space: normal;
-  }
   .rw-app .fname .outname,
   .rw-app .fname .select {
     padding-block: 9px;
@@ -300,6 +235,78 @@
     width: 20px;
     height: 20px;
   }
+}
+/* At every width, the apply output groups flatten into one bordered box of
+   wrapping cells. Each label sits inside its cell, and 1px gaps over the seam
+   colour draw the dividers. */
+.apply-output .optsgrid {
+  flex-flow: row wrap;
+  gap: 1px;
+  overflow: hidden;
+  background: var(--seam);
+  border: 1px solid var(--seam);
+  border-radius: var(--r-s);
+}
+.apply-output .optsgroup {
+  display: contents;
+}
+/* A codec cell grows by about 0.5rem per character of its list, plus room for
+   the arrow, so a long list takes a row of its own instead of clipping. */
+.apply-output .ofld {
+  position: relative;
+  flex: 1 1 max(96px, calc(var(--ofld-ch, 0) * 0.5rem + 36px));
+  background: var(--plate);
+}
+.apply-output .ofld-l {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 6px;
+  inset-inline-end: 6px;
+  font-size: 0.66rem;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.apply-output .ofld-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.apply-output .ofld-l .info {
+  pointer-events: auto;
+}
+.apply-output .ofld .select,
+.apply-output .ofld .input {
+  height: 44px;
+  padding-block: 17px 0;
+  padding-inline-start: 6px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.apply-output .post-apply-fields {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  gap: 1px;
+}
+/* Wide enough for "Post Apply Download", so a narrow card stacks the pair
+   instead of clipping the label. */
+.post-apply-fields > .ofld {
+  flex-basis: 136px;
+}
+/* The identified title gets its own line under the label so it wraps whole. */
+.apply-output .outname-source {
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  padding: 6px;
+  background: var(--plate);
+}
+.apply-output .outname-source-name {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 /* Forced colors */
