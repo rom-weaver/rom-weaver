@@ -4406,3 +4406,16 @@ msgstr "ZIP-Codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z und Bundles"
+
+
+#. js-lingui-explicit-id
+msgid "ui.apply.tutorial.identify.title"
+msgstr "Identifiziere dein Ausgangs-ROM"
+
+#. js-lingui-explicit-id
+msgid "ui.apply.tutorial.identify.body"
+msgstr "Vor dem Hinzufügen eines ROMs kannst du unter Identifizieren nach Spielname oder Prüfsumme suchen. Wähle einen Titel und dann seine Version, um die erwarteten ROM-Prüfungen festzulegen. Die Suche verschwindet, sobald ein ROM hinzugefügt wurde oder die Patches bereits Prüfwerte liefern. In der Detailansicht zeigt Identifizieren Datenbanktreffer, Region und Revision, sofern verfügbar. Das Homebrew-Übungs-ROM ist nicht in der öffentlichen Datenbank."
+
+#. js-lingui-explicit-id
+msgid "ui.apply.tutorial.identify.tryIt"
+msgstr "Wähle Detailliert und öffne Identifizieren, um die ROM-Informationen anzusehen. Öffne Prüfungen, um Prüfsummen zu vergleichen."

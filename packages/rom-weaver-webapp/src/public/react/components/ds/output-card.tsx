@@ -28,7 +28,6 @@ type OutputCompressPanel = {
   formatInfo?: ReactNode;
   formatId?: string;
   onFormatChange?: (value: string) => void;
-  optionsNote?: ReactNode | false;
 };
 type OutputCardProps = {
   className?: string;
@@ -173,9 +172,6 @@ const OutputCard = ({
           labelIcon={<SlidersHorizontal aria-hidden="true" className="tune" />}
           readouts={compress?.readouts}
         >
-          {compress?.optionsNote === false ? null : (
-            <p className="optsnote">{compress?.optionsNote ?? localizer.message("ui.output.notSaved")}</p>
-          )}
           <div className="optsgrid">
             {nameSource ? (
               <div className="optsgroup opts-name-source">

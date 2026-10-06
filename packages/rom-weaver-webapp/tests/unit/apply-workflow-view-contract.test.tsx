@@ -468,7 +468,7 @@ describe("apply workflow view - empty bench", () => {
     const dialog = document.querySelector(".sample-tutorial-dialog") as HTMLElement;
     expect(dialog.textContent).toContain("Add your files");
     expect(dialog.dataset.step).toBe("1");
-    expect(dialog.dataset.stepCount).toBe("4");
+    expect(dialog.dataset.stepCount).toBe("5");
     // Nothing reaches the bench the reader did not put there.
     expect(fetchMock).not.toHaveBeenCalled();
     expect(onUnifiedDrop).not.toHaveBeenCalled();
@@ -1487,12 +1487,10 @@ describe("apply workflow view - output and diagnostics notices", () => {
 });
 
 describe("apply workflow view - output options notice", () => {
-  it("tells the user the options are not saved and Settings holds the defaults", () => {
+  it("omits the defaults notice from output options", () => {
     const { container } = renderView({ ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.nes")] } });
-    const note = container.querySelector(".outopts .optsnote");
-    expect(note?.textContent).toBe("These choices are not saved. Change your defaults in Settings.");
-    // It leads the body, so it covers every option below it rather than one field.
-    expect(note?.nextElementSibling?.className).toContain("optsgrid");
+    expect(container.querySelector(".outopts .optsnote")).toBeNull();
+    expect(container.querySelector(".outopts .optsgrid")).toBeTruthy();
   });
 });
 
@@ -1912,7 +1910,7 @@ describe("apply workflow view - bundle controls", () => {
     expect(setOutputCompression).toHaveBeenCalledWith("7z");
     fireEvent.click(job?.querySelector(".outopts .cks-head") as HTMLButtonElement);
     expect(job?.querySelector("#rom-weaver-bundle-export-bundle-rom")).toBeTruthy();
-    expect(job?.querySelector(".optsnote")?.textContent).toBe("Output header changes apply only to this session.");
+    expect(job?.querySelector(".optsnote")).toBeNull();
     expect(job?.querySelectorAll("#rom-weaver-select-bundle-output-header")).toHaveLength(1);
     expect(job?.contains(applyJob)).toBe(true);
     expect(applyJob?.querySelector(".cks-head")?.textContent).toContain("Apply");

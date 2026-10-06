@@ -4406,3 +4406,16 @@ msgstr "ZIP codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z and bundles"
+
+
+#. js-lingui-explicit-id
+msgid "ui.apply.tutorial.identify.title"
+msgstr "Identify your starting ROM"
+
+#. js-lingui-explicit-id
+msgid "ui.apply.tutorial.identify.body"
+msgstr "Before adding a ROM, Identify can search by game name or checksum. Choose a title, then its release, to set the expected ROM checks. This search hides once a ROM is added or the patches already supply checks. In Detailed view, the ROM’s Identify drawer shows database matches, region and revision when available. The homebrew practice ROM has no public database entry."
+
+#. js-lingui-explicit-id
+msgid "ui.apply.tutorial.identify.tryIt"
+msgstr "Choose Detailed, then open Identify to inspect the ROM information. Open Checks to compare checksums."

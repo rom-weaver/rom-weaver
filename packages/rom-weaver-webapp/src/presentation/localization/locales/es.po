@@ -4406,3 +4406,16 @@ msgstr "Códec ZIP"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z y paquetes"
+
+
+#. js-lingui-explicit-id
+msgid "ui.apply.tutorial.identify.title"
+msgstr "Identifica tu ROM inicial"
+
+#. js-lingui-explicit-id
+msgid "ui.apply.tutorial.identify.body"
+msgstr "Antes de añadir una ROM, Identificar permite buscar por nombre del juego o suma de comprobación. Elige un título y luego su versión para fijar las comprobaciones esperadas. La búsqueda se oculta al añadir una ROM o si los parches ya aportan comprobaciones. En la vista Detallada, Identificar muestra coincidencias de la base de datos, región y revisión cuando están disponibles. La ROM homebrew de práctica no figura en la base de datos pública."
+
+#. js-lingui-explicit-id
+msgid "ui.apply.tutorial.identify.tryIt"
+msgstr "Elige Detallada y abre Identificar para consultar la información de la ROM. Abre Comprobaciones para comparar las sumas."

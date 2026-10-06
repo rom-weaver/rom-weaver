@@ -575,6 +575,19 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.tutorial.patches.title": msg({ id: "ui.apply.tutorial.patches.title", message: "Patches and cheats" }),
   "ui.apply.tutorial.remove": msg({ id: "ui.apply.tutorial.remove", message: "Remove" }),
   "ui.apply.tutorial.replacePatch": msg({ id: "ui.apply.tutorial.replacePatch", message: "Replace patch" }),
+  "ui.apply.tutorial.identify.title": msg({
+    id: "ui.apply.tutorial.identify.title",
+    message: "Identify your starting ROM",
+  }),
+  "ui.apply.tutorial.identify.body": msg({
+    id: "ui.apply.tutorial.identify.body",
+    message:
+      "Before adding a ROM, Identify can search by game name or checksum. Choose a title, then its release, to set the expected ROM checks. This search hides once a ROM is added or the patches already supply checks. In Detailed view, the ROM’s Identify drawer shows database matches, region and revision when available. The homebrew practice ROM has no public database entry.",
+  }),
+  "ui.apply.tutorial.identify.tryIt": msg({
+    id: "ui.apply.tutorial.identify.tryIt",
+    message: "Choose Detailed, then open Identify to inspect the ROM information. Open Checks to compare checksums.",
+  }),
   "ui.apply.tutorial.rom.body": msg({
     id: "ui.apply.tutorial.rom.body",
     message:

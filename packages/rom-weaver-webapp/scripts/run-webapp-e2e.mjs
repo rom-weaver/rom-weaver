@@ -917,16 +917,16 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     // files and moves on by itself once they are in.
     await guidedApply.click();
     await page
-      .locator('.sample-tutorial-dialog[data-step="1"][data-step-count="4"]:not([data-moving])')
+      .locator('.sample-tutorial-dialog[data-step="1"][data-step-count="5"]:not([data-moving])')
       .waitFor({ state: "visible", timeout: 60_000 });
-    await scanVariants("guided Apply 1/4 (waiting for files)");
+    await scanVariants("guided Apply 1/5 (waiting for files)");
     await tutorial.locator(".sample-tutorial-next").click();
-    for (let step = 2; step <= 4; step += 1) {
+    for (let step = 2; step <= 5; step += 1) {
       await page
-        .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="4"]:not([data-moving])`)
+        .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="5"]:not([data-moving])`)
         .waitFor({ state: "visible", timeout: 60_000 });
-      await scanVariants(`guided Apply ${step}/4`);
-      if (step === 4) {
+      await scanVariants(`guided Apply ${step}/5`);
+      if (step === 5) {
         const [download] = await Promise.all([
           page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
           page.locator("#rom-weaver-button-apply").click(),
@@ -945,12 +945,12 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       await page.locator("#rom-weaver-input-file-unified-bundle").waitFor({ state: "attached" });
       await installAuditTools();
     });
-    for (let step = 1; step <= 4; step += 1) {
+    for (let step = 1; step <= 5; step += 1) {
       await page
-        .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="4"]:not([data-moving])`)
+        .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="5"]:not([data-moving])`)
         .waitFor({ state: "visible", timeout: 60_000 });
-      await scanVariants(`guided Bundle ${step}/4`);
-      if (step === 4) {
+      await scanVariants(`guided Bundle ${step}/5`);
+      if (step === 5) {
         const createBundleButton = page.locator("#rom-weaver-button-export-bundle:not([data-downloadable])");
         await createBundleButton.waitFor({ state: "visible", timeout: 60_000 });
         await page.waitForFunction(

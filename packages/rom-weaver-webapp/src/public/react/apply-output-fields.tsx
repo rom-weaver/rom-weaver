@@ -451,7 +451,6 @@ export const BundleOutputStep = ({
             {headerField}
           </>
         ),
-        optionsNote: headerField ? localizer.message("ui.bundleExport.headerNotSaved") : false,
       }}
       disabled={bundleExport.busy}
       fault={!!bundleExport.error}

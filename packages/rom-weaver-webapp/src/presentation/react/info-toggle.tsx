@@ -87,7 +87,11 @@ function InfoToggle({
       id={panelId}
       ref={panelRef}
       // Portal into the app root so fixed positioning and the popover z-index apply outside the trigger.
-      style={portalPanel ? { display: "block", position: "fixed", zIndex: 80, ...panelStyle } : { display: "block" }}
+      style={
+        portalPanel
+          ? { display: "block", position: "fixed", zIndex: "var(--info-pop-z, 80)", ...panelStyle }
+          : { display: "block" }
+      }
     >
       {children}
     </section>

@@ -567,6 +567,40 @@ describe("sample tutorial step card", () => {
     expect(screen.getByText(/Switch Detailed off/)).toBeTruthy();
   });
 
+  it("changes the live view from the guide comparison without advancing", async () => {
+    const Workbench = () => {
+      const [detailed, setDetailed] = useState(false);
+      return (
+        <RomWeaverSettingsProvider settings={{ detailedViewEnabled: detailed }}>
+          <div className="rw-app">
+            <div className="workflow-panel-head">
+              <label className="panel-view-toggle">
+                <input
+                  checked={detailed}
+                  onChange={(event) => setDetailed(event.currentTarget.checked)}
+                  type="checkbox"
+                />
+                <span>Detailed</span>
+              </label>
+            </div>
+            <TutorialSection id="tutorial-first" label="First drawer" />
+            <ViewGuide />
+          </div>
+        </RomWeaverSettingsProvider>
+      );
+    };
+    render(<Workbench />);
+    await waitFor(() => expect(document.querySelector("#tutorial-first.sample-tutorial-target")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Detailed", pressed: false }));
+    expect(screen.getByRole("checkbox")).toHaveProperty("checked", true);
+    expect(screen.getByText(/You're in Detailed view/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Detailed", pressed: true }));
+    expect(screen.getByRole("checkbox")).toHaveProperty("checked", true);
+    fireEvent.click(screen.getByRole("button", { name: "Simple", pressed: false }));
+    expect(screen.getByRole("checkbox")).toHaveProperty("checked", false);
+    expect(document.querySelector(".sample-tutorial-dialog")?.getAttribute("data-step")).toBe("1");
+  });
+
   it("lifts the switch in the target's own panel, not a hidden panel's earlier copy", async () => {
     // Visited workflows stay mounted but hidden, each with its own heading -
     // a document-wide lookup would light up the first one, which is not on screen.

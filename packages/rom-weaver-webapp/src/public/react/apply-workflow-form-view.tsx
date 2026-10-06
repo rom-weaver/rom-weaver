@@ -88,6 +88,13 @@ type ApplyTutorialInputs = {
  * reader adds files by any of the real routes, or presses Continue to use the
  * practice files - so nothing appears on the bench they did not ask for.
  */
+const getIdentifyTutorialStep = (localizer: ReturnType<typeof useUiLocalizer>): SampleTutorialStep =>
+  getViewTutorialStep(localizer, "#rom-weaver-row-file-rom", {
+    body: localizer.message("ui.apply.tutorial.identify.body"),
+    title: localizer.message("ui.apply.tutorial.identify.title"),
+    tryIt: localizer.message("ui.apply.tutorial.identify.tryIt"),
+  });
+
 const getApplySampleTutorialSteps = (
   localizer: ReturnType<typeof useUiLocalizer>,
   inputs: ApplyTutorialInputs,
@@ -121,6 +128,7 @@ const getApplySampleTutorialSteps = (
     title: localizer.message("ui.apply.tutorial.rom.title"),
     tryIt: localizer.message("ui.apply.tutorial.rom.tryIt"),
   }),
+  getIdentifyTutorialStep(localizer),
   {
     actions: [
       ["toggle", localizer.message("ui.apply.tutorial.toggle")],
@@ -194,7 +202,7 @@ const APPLY_CHEATS_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
 ];
 
 const getBundleSampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer>): readonly SampleTutorialStep[] => [
-  {
+  getViewTutorialStep(localizer, "#rom-weaver-row-file-rom", {
     actions: [
       ["checks", localizer.message("ui.apply.tutorial.checks")],
       ["remove", localizer.message("ui.apply.tutorial.remove")],
@@ -203,7 +211,8 @@ const getBundleSampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalize
     openDrawers: true,
     target: "#rom-weaver-row-file-rom",
     title: localizer.message("ui.apply.bundleTutorial.rom.title"),
-  },
+  }),
+  getIdentifyTutorialStep(localizer),
   {
     actions: [
       ["reorder", localizer.message("ui.apply.tutorial.moveUp")],
