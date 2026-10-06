@@ -60,7 +60,7 @@
     padding-block: 6px 0;
   }
   .rw-app .optsgrid {
-    gap: var(--sp-s) var(--sp-m);
+    gap: var(--sp-s);
   }
   .rw-app .optsgroup {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -69,19 +69,17 @@
   .apply-output .optsbody {
     --sp-s: 2px;
     --sp-m: 4px;
-    --lbl-h: 0;
     --fld-h: 28px;
   }
   .apply-output .outopts.is-open .readouts {
     display: none;
   }
   .apply-output .optsgroup {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 275px), 1fr));
   }
   .apply-output .ofld {
     display: grid;
-    grid-template-columns: 112px minmax(0, 1fr);
-    align-items: center;
+    grid-template-columns: fit-content(112px) minmax(0, 1fr);
   }
   .rw-app .fname .outname,
   .rw-app .fname .select {

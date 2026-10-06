@@ -215,6 +215,7 @@
   white-space: nowrap;
 }
 .rw-app .patch-desc {
+  clear: both;
   margin: 0;
   font-size: 0.8rem;
   line-height: 1.45;
