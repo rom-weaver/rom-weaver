@@ -4100,6 +4100,11 @@ msgstr "Herramienta Recortar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.trySampleChecksum"
+msgstr "Prueba una suma de verificación de ejemplo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tutorial.tryIt"
 msgstr "Pruébalo"
 

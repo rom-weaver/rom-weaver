@@ -494,12 +494,14 @@ const RomSearch = ({
   idPrefix = "rom-weaver-rom",
   lookup,
   localizer,
+  sampleChecksum,
   variant = "hero",
 }: {
   /** Owner-scoped id prefix: the apply and identify panels stay mounted side by side. */
   idPrefix?: string;
   lookup: ReturnType<typeof useRomLookup>;
   localizer: ReturnType<typeof useUiLocalizer>;
+  sampleChecksum?: string;
   variant?: "compact" | "hero" | "section";
 }) => {
   const [titlePage, setTitlePage] = useState({ titles: lookup.titles, count: 50 });
@@ -593,6 +595,19 @@ const RomSearch = ({
           value={lookup.text}
         />
       </div>
+      {sampleChecksum ? (
+        <button
+          className="sample-tutorial-start-chip"
+          disabled={searching}
+          onClick={() => {
+            inputRef.current?.focus();
+            lookup.setText(sampleChecksum);
+          }}
+          type="button"
+        >
+          {localizer.message("ui.identify.trySampleChecksum")}
+        </button>
+      ) : null}
       {searching || (lookup.incompleteHash && !lookup.error) ? (
         <p aria-live="polite" className="identify-search-status" role="status">
           {searching ? searchingLabel : localizer.message("ui.identify.hashInvalid")}

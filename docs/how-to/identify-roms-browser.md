@@ -52,6 +52,8 @@ If several records share the checksums, read every candidate. If identification 
 
 Search finds database records. It does not download a game. A name match alone does not prove that you have the right revision.
 
+To try identification without a file, select **Try a sample checksum**, then choose the matching Tetris release.
+
 ## Inspect known cheats
 
 1. Add a ROM or archive and wait for Identify to finish.

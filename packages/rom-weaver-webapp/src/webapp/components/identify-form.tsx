@@ -426,7 +426,11 @@ const IdentifyForm = ({
           if (selected) selectFile(selected);
         }}
         supported={IDENTIFY_SUPPORTED_FILES}
-        afterDropZone={heroShown ? <RomSearch idPrefix={containerId} localizer={localizer} lookup={romLookup} /> : null}
+        afterDropZone={
+          heroShown ? (
+            <RomSearch idPrefix={containerId} localizer={localizer} lookup={romLookup} sampleChecksum="46df91ad" />
+          ) : null
+        }
       />
       {file ? (
         <WorkflowRomInputStep
