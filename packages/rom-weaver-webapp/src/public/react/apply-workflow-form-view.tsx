@@ -1084,6 +1084,7 @@ function ApplyWorkflowFormView({
           {bundlePage ? null : (
             <WorkflowOutputStep
               {...applyOutputProps}
+              className="apply-output"
               fault={applyFailed}
               id="rom-weaver-row-output-file-name"
               info={

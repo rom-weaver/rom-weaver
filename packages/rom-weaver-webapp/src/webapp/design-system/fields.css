@@ -250,7 +250,7 @@
 /* Leads the options body, so it sits above the grid rather than in it. */
 .rw-app .optsnote {
   margin: 0;
-  font-size: var(--opts-f, 0.78rem);
+  font-size: 0.78rem;
   line-height: 1.35;
   color: var(--ink-3);
 }
@@ -831,16 +831,14 @@
 .rw-app .ck-add {
   box-sizing: border-box;
   display: inline-flex;
+  flex: none;
   gap: 6px;
   align-items: center;
   width: fit-content;
   /* Its tallest child is a 12px glyph, so the label alone would sit under the
      WCAG 2.5.8 floor once the select stops being held at 16px. */
   min-height: 24px;
-  padding: 4px 10px 4px 8px;
-  /* Align the bordered control with row text, not the full-bleed frame. */
-  margin-block-start: 7px;
-  margin-inline-start: 9px;
+  padding: 0 6px;
   color: var(--ink-3);
   cursor: pointer;
   background: color-mix(in oklab, var(--well) 55%, transparent);
@@ -877,7 +875,8 @@
   width: 10px;
   height: 10px;
 }
-.rw-app .ck-add:focus-within {
+.rw-app .ck-add:focus-within,
+.rw-app .ck-add:active {
   color: var(--ink);
   background: color-mix(in oklab, var(--thread) 9%, var(--well));
   border-color: var(--thread);
@@ -889,11 +888,7 @@
     border-color: var(--thread);
   }
 }
-.rw-app .ck-add:active {
-  color: var(--ink);
-  background: color-mix(in oklab, var(--thread) 9%, var(--well));
-  border-color: var(--thread);
-}
+
 .rw-app .ckrows .patch-off-note {
   margin-block-start: 7px;
   margin-inline: 9px;

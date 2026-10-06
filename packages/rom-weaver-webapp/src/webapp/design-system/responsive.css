@@ -66,11 +66,22 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--sp-s) var(--sp-m);
   }
-  .rw-app #rom-weaver-row-output-file-name .optsbody {
+  .apply-output .optsbody {
     --sp-s: 2px;
+    --sp-m: 4px;
     --lbl-h: 0;
     --fld-h: 28px;
-    --opts-f: 0.72rem;
+  }
+  .apply-output .outopts.is-open .readouts {
+    display: none;
+  }
+  .apply-output .optsgroup {
+    grid-template-columns: 1fr;
+  }
+  .apply-output .ofld {
+    display: grid;
+    grid-template-columns: 112px minmax(0, 1fr);
+    align-items: center;
   }
   .rw-app .fname .outname,
   .rw-app .fname .select {

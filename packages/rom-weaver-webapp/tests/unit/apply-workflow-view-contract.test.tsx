@@ -1362,14 +1362,11 @@ describe("apply workflow view - post-apply behavior selects", () => {
     const download = container.querySelector("#rom-weaver-select-post-apply-download") as HTMLSelectElement;
     const test = container.querySelector("#rom-weaver-select-post-apply-test") as HTMLSelectElement;
     expect(download.value).toBe("auto-show");
-    expect(Array.from(download.options, (option) => option.textContent)).toEqual([
-      "Auto Start & DL Again Button (Default)",
-      "DL Again Button",
-    ]);
+    expect(Array.from(download.options, (option) => option.textContent)).toEqual(["Auto + button", "Button only"]);
     expect(test.value).toBe("show");
     expect(Array.from(test.options, (option) => option.textContent)).toEqual([
-      "Show After Apply (Default)",
-      "Auto Test & Show After Apply",
+      "Button only",
+      "Auto + button",
       "Hide Button",
     ]);
   });

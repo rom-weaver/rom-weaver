@@ -53,7 +53,9 @@ const getPatchInputSelect = async (index) => {
 
 const patchCheckHeadings = (index) => {
   const card = [...document.querySelectorAll("#rom-weaver-list-patch-stack .card.patch")][index];
-  return [...(card?.querySelectorAll(".ck-group-head") || [])].map((head) => head.textContent?.trim());
+  return [...(card?.querySelectorAll(".ck-group-head") || [])].map((head) =>
+    head.querySelector(":scope > span")?.textContent?.trim(),
+  );
 };
 
 test("a true BPS chain defers the dependent patch instead of failing it", async () => {

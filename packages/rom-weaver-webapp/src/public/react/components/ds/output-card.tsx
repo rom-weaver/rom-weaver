@@ -31,6 +31,7 @@ type OutputCompressPanel = {
   optionsNote?: ReactNode | false;
 };
 type OutputCardProps = {
+  className?: string;
   fileName: string;
   onFileNameChange: (value: string) => void;
   fileNamePlaceholder?: string;
@@ -73,6 +74,7 @@ const OutputField = ({
 );
 
 const OutputCard = ({
+  className,
   fileName,
   onFileNameChange,
   fileNamePlaceholder,
@@ -115,7 +117,7 @@ const OutputCard = ({
       </OutputField>
     ) : null;
   return (
-    <div className="card outcard">
+    <div className={join("card outcard", className)}>
       {doubledExtension ? (
         <p aria-live="polite" className="patch-off-note outname-ext-warn" role="alert">
           <TriangleAlert aria-hidden="true" />
