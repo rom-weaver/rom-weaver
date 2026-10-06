@@ -1494,8 +1494,8 @@ describe("apply workflow view - output options notice", () => {
     const { container } = renderView({ ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.nes")] } });
     const note = container.querySelector(".outopts .optsnote");
     expect(note?.textContent).toBe("These choices are not saved. Change your defaults in Settings.");
-    // It leads the body, so it covers every option below it rather than one field.
-    expect(note?.nextElementSibling?.className).toContain("optsgrid");
+    expect(note?.closest(".cks-head")).not.toBeNull();
+    expect(container.querySelector(".optsbody .optsnote")).toBeNull();
   });
 });
 
@@ -1925,6 +1925,10 @@ describe("apply workflow view - bundle controls", () => {
     expect(container.textContent).not.toContain("0x05");
     expect(applyJob?.querySelector(".bundle-job")?.classList).not.toContain("is-open");
     fireEvent.click(applyJob?.querySelector(".cks-head") as HTMLButtonElement);
+    const applyNote = applyJob?.querySelector(".outopts .optsnote");
+    expect(applyNote?.textContent).toBe("These choices are not saved. Change your defaults in Settings.");
+    expect(applyNote?.closest(".cks-head")).not.toBeNull();
+    expect(applyJob?.querySelector(".optsbody .optsnote")).toBeNull();
     expect(container.querySelectorAll("#rom-weaver-select-output-header")).toHaveLength(1);
     expect(container.querySelectorAll('[id="rom-weaver-select-bundle-output-header"]')).toHaveLength(1);
   });

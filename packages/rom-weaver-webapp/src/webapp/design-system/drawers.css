@@ -415,7 +415,9 @@
   row-gap: 4px;
 }
 .rw-app .outopts > .cks-head .lab {
-  white-space: nowrap;
+  flex-wrap: wrap;
+  max-width: calc(100% - 0.82rem - var(--sp-xs));
+  white-space: normal;
 }
 .rw-app .outopts > .cks-head .readouts {
   flex: 0 0 auto;

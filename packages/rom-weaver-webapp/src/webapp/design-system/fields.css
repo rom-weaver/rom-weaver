@@ -247,12 +247,14 @@
   gap: var(--sp-m);
   padding-block: 9px 2px;
 }
-/* Leads the options body, so it sits above the grid rather than in it. */
 .rw-app .optsnote {
   margin: 0;
   font-size: 0.78rem;
+  font-weight: 400;
   line-height: 1.35;
   color: var(--ink-3);
+  text-transform: none;
+  letter-spacing: normal;
 }
 .rw-app .optsgrid {
   display: flex;

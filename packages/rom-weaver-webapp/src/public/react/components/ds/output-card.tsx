@@ -165,7 +165,14 @@ const OutputCard = ({
           bodyClassName="optsbody"
           className="optsblock outopts"
           integrated
-          label={localizer.message("ui.output.options")}
+          label={
+            <>
+              <span>{localizer.message("ui.output.options")}</span>
+              {compress?.optionsNote === false ? null : (
+                <span className="optsnote">{compress?.optionsNote ?? localizer.message("ui.output.notSaved")}</span>
+              )}
+            </>
+          }
           labelIcon={<SlidersHorizontal aria-hidden="true" className="tune" />}
           readouts={
             <>
@@ -178,9 +185,6 @@ const OutputCard = ({
             </>
           }
         >
-          {compress?.optionsNote === false ? null : (
-            <p className="optsnote">{compress?.optionsNote ?? localizer.message("ui.output.notSaved")}</p>
-          )}
           <div className="optsgrid">
             {nameSource ? (
               <div className="optsgroup opts-name-source">
