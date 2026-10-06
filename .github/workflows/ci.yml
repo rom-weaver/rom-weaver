@@ -808,6 +808,7 @@ jobs:
         uses: ./.github/actions/setup-build-env
         with:
           tools: node rust binaryen
+          cargo-cache-targets: "false"
           apt-packages: cmake ninja-build pkg-config clang libclang-dev
           rust-targets: wasm32-wasip1-threads
           wasi-sdk: "true"
@@ -815,6 +816,19 @@ jobs:
           sccache: "true"
           webapp-deps: "true"
           emulatorjs-cache: ${{ github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true' }}
+
+      # Cargo MUST validate restored fingerprints; this cache contains build state,
+      # not a finished module. The SHA suffix allows successful main builds to save
+      # new generations without losing restores from compatible older commits.
+      - name: Restore WASM target artifacts
+        id: wasm-target-cache
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: target
+          key: wasm-target-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'crates/**/Cargo.toml', '.cargo/config.toml', 'rust-toolchain*', '.config/mise.toml', 'scripts/wasm/**', '.github/actions/setup-build-env/action.yml') }}-${{ github.sha }}
+          restore-keys: |
+            wasm-target-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'crates/**/Cargo.toml', '.cargo/config.toml', 'rust-toolchain*', '.config/mise.toml', 'scripts/wasm/**', '.github/actions/setup-build-env/action.yml') }}-
 
       - uses: ./.github/actions/download-identify-data
 
@@ -824,13 +838,23 @@ jobs:
       - name: Build production WASM
         id: wasm-build
         if: steps.wasm-cache.outputs.cache-hit != 'true'
-        run: mise run build-wasm-prod
+        env:
+          CARGO_LOG: cargo::core::compiler::fingerprint=info
+        run: /usr/bin/time -v mise run build-wasm-prod
+
+      - name: Save WASM target artifacts
+        if: steps.wasm-build.outcome == 'success' && github.ref == 'refs/heads/main' && steps.wasm-target-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: target
+          key: ${{ steps.wasm-target-cache.outputs.cache-primary-key }}
 
       - name: Compiler cache statistics
         if: always() && (steps.wasm-build.outcome == 'success' || steps.wasm-build.outcome == 'failure')
         run: |
           ccache --show-stats --verbose
           sccache --show-stats
+          du -sh target
 
       - name: Generate webapp attribution
         run: node scripts/gen-third-party-licenses.mjs packages/rom-weaver-webapp/src/wasm --target webapp
