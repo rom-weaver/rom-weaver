@@ -411,6 +411,7 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
 
 export {
   buildCompressPanel,
+  codecProfileSummary,
   COMPRESSION_PROFILE_FIELD_INFO,
   type CompressField,
   type CompressFieldInfo,
