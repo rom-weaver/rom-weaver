@@ -411,8 +411,8 @@ const IdentifyForm = ({
         disabled={busy}
         {...(!file && expectation ? { hint: "Optional - the match above stands on its own" } : {})}
         guide={WORKFLOW_GUIDES.identify}
-        heroLabel="Drop a ROM to identify it"
-        heroLabelCoarse="Tap to add a ROM"
+        heroLabel={localizer.message("ui.identify.drop")}
+        heroLabelCoarse={localizer.message("ui.identify.tap")}
         info={<p>Identification runs locally. Your ROM never leaves this browser.</p>}
         inputId={inputId}
         lead={{

@@ -4100,6 +4100,16 @@ msgstr "Trim tool"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.drop"
+msgstr "Drop a ROM to identify it"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.tap"
+msgstr "Tap to add a ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identify.trySample"
 msgstr "Try a sample"
 
