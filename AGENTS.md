@@ -97,32 +97,10 @@ Exclusion, oracle, budget and verification-script changes require explicit revie
   `docs/development/ARCHITECTURE.md`.
 - **Tracing.** Use `tracing` `trace!`/`debug!` liberally in Rust pipelines -
   trace output is the primary debugging tool for wasm/browser issues.
-- **Every `:hover` rule lives inside `@media (hover: hover)`**, paired with an
-  `:active` twin that supplies the press feedback touch users lose. Touch
-  browsers latch `:hover` onto the last-tapped element, so an ungated rule
-  leaves tapped controls stuck in the hover look. Never group `:hover` with
-  `:focus-visible`/`:focus-within`/`:active` in one selector list - those halves
-  must stay outside the media query. Enforced by `npm run lint:touch-styles`;
-  genuine exceptions go in that script's `EXEMPT` map with a reason.
-- **A cascade layer boundary costs more than it looks.** `design-system/index.css`
-  declares the layer order; across a boundary that order decides outright and
-  specificity stops counting, so a bare `.card` in a later layer beats a
-  `.card.is-disabled .rb` in an earlier one. Layers therefore exist only where a
-  stylesheet arrives at a different time (`deferred.css`, `docs-route.css`) - a new
-  file joins the layer its neighbours are in, never one of its own. An override
-  belongs in the file that owns the component it modifies; reaching across a
-  boundary cannot be fixed by adding specificity. Enforced by
-  `npm run lint:css-layers`, with exceptions in that script's `EXEMPT` map.
-- **CSS belongs to Biome; everything else to oxfmt.** oxfmt does not read CSS,
-  so `npm run format:css` runs Biome's formatter plus its property sort, and
-  `biome.jsonc` turns the JS/TS/JSON formatters off to keep Biome off oxfmt's
-  territory. Biome ignores glob arguments, so that scope lives in the config,
-  not the command line. Two of Biome's CSS rules are deliberately `off` with
-  the reason written at each rule: `noImportantStyles`, because every
-  `!important` here escapes an inline style, a later cascade layer, or a
-  reduced-motion reset, and `noDescendingSpecificity`, because it pairs rules
-  by their rightmost selector and reports every icon rule ending in `svg`
-  against every other one. Real ordering hazards are `lint:css-layers`'s job.
+- **Formatting ownership.** CSS uses Biome; everything else uses oxfmt.
+- Before changing CSS, design-system styles, or CSS tooling, read and follow
+  [the CSS rules](.agents/references/css.md), including hover/active pairing,
+  cascade layers, formatting ownership, and exception requirements.
 - Relative imports only in TypeScript (no path aliases).
 
 ## Documentation
@@ -161,63 +139,14 @@ mode, and the folder names the mode.
 
 ## Releases
 
-Releases are release-please driven; the global `npm version` / `changelog:all`
-instructions do **not** apply here.
+Before release work, version changes, release automation, or npm/Docker
+publishing, read and follow [the release rules](.agents/references/releases.md).
+Release Please owns version bumps; never hand-edit versions or publish a draft
+release before its fan-out finishes.
 
-- **Pick the PR title type with `docs/development/commits.md#choosing-a-type`.**
-  The squash title becomes the commit Release Please reads. `feat` is only for
-  a new capability; a changed look or flow is `ux`, and docs-only work is
-  `docs`. Never write `chore` (automation only) or `style` (retired).
-- **Never hand-edit a version.** `release-please-config.json` owns every bump:
-  the root/webapp package files and locks, the alias and all 9 platform
-  `package.json`s, the `optionalDependencies` pins,
-  `workspace.package.version`, the path-dependency pins across `crates/*`,
-  and `Cargo.lock`.
-- **Flow:** merge conventional commits to `main` (CI runs, but the release
-  workflow has no `push` trigger) → when you want a release, **run the `Release` workflow
-  manually** from the Actions tab, which opens/refreshes the
-  `chore(main): release X.Y.Z` PR and captures its screenshots → merging that PR
-  creates a **draft** GitHub release and sets `release_created=true`, which
-  unlocks the npm and Docker publish jobs. Release assets attach to the
-  draft; `publish-release` publishes it, which creates the
-  `vX.Y.Z` tag, stamps the release immutable, and triggers `cargo-publish.yml`.
-  Homebrew and Scoop update after release publication.
-  Merging the release PR is the release decision; nothing publishes before it.
-- **Dispatch after main's CI is green.** The screenshots reuse the `wasm-prod`
-  artifact from that commit's CI run; without it the job rebuilds WASM from
-  source (~6.5 min). Re-dispatch any time to refresh an open release PR.
-- The dispatch takes an optional `release_as` input (wired to the action's
-  `release-as`) to force a version without a `Release-As:` commit footer.
-- **Highlights are written by hand, not generated.** The `release` skill
-  (`.agents/skills/release/SKILL.md`; `/release` in Claude Code, `$release` in
-  Codex) drafts them from the commits since the
-  last tag, gets them approved, and passes them as the dispatch's `highlights`
-  input. `scripts/aggregate-release-changelog.mjs` puts them at the top of the
-  changelog section and hides every generated entry except breaking changes
-  under a collapsed `All changes` block; the release PR body, and so the GitHub release, carry
-  the same layout. A re-dispatch with a blank input keeps the stored ones.
-- **Immutable releases are ON.** A published release accepts no new assets and
-  permanently reserves its tag name - the version can never be re-cut. That is
-  why the fan-out is draft-first: a failed release leaves a deletable draft
-  instead of burning the version (v0.6.0 was lost this way). Never publish a
-  draft release by hand before the fan-out finishes.
-- **Prerelease:** `Release-As: X.Y.Z-alpha.N` commit footer for a one-off, or
-  `prerelease`/`prerelease-type` in the config for a sustained track. Routing is
-  automatic and keys off a hyphen in the version - no dist-tag step to remember:
-  npm gets `beta` instead of `latest`, docker skips `latest` and the series
-  tags, and the webapp deploys to `beta.rom-weaver.com`. Cargo needs no guard
-  (crates.io has no dist-tags).
-- **Docker channels mirror the webapp's.** `latest`/`beta`/`nightly` are the
-  image-side names for prod/beta/nightly and cascade the same way a deploy
-  does - a stable release moves all three, a prerelease moves `beta` and
-  `nightly`, and a push to `main` moves only `nightly`. The `nightly` images
-  are pushed from `ci.yml` (CLI from the `docker` job, webapp from
-  `docker-prebuilt`), not from `docker-publish.yml`.
-- `npm version` (→ `scripts/sync-version.mjs`) is the legacy manual path that
-  cut v0.2.0-v0.5.0. It overlaps release-please and will fight it. Keep it only
-  as a break-glass fallback.
-- Pre-1.0 breaking changes bump the minor version because
-  `bump-minor-pre-major` is enabled in `release-please-config.json`.
+Pick commit and PR title types with
+[the commit guide](docs/development/commits.md#choosing-a-type).
+
 
 ## Layout pointers
 
