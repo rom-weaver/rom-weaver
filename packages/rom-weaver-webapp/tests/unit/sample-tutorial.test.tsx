@@ -434,7 +434,7 @@ describe("sample tutorial", () => {
     expect(button.dataset.guideCta).toBeUndefined();
   });
 
-  it("leaves an opened drawer open when the final action ends the guide", async () => {
+  it("re-closes an opened drawer when the final action ends the guide", async () => {
     const ctaSteps: readonly SampleTutorialStep[] = [
       {
         body: "Press it.",
@@ -463,7 +463,7 @@ describe("sample tutorial", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(onClose).toHaveBeenCalledOnce();
     rerender(workbench(false));
-    expect(drawer.getAttribute("aria-expanded")).toBe("true");
+    expect(drawer.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("re-closes the drawers it opened when the guide ends", async () => {

@@ -29,7 +29,7 @@ Apply, Create, and Bundle include a Simple/Detailed comparison. Its buttons chan
 
 Guide cards fit their content without an internal scrollbar. The first step includes a click/drop demonstration; reduced-motion preferences disable its movement.
 
-A step that needs a control the page does not show, such as the **Detailed** switch, is left out. **✕** or Esc ends a run; files already added stay.
+A step that needs a control the page does not show, such as the **Detailed** switch, is left out. **✕** or Esc ends a run; files already added stay. Drawers opened by the guide close again when it ends, including after its final action.
 
 ## Where a run starts
 

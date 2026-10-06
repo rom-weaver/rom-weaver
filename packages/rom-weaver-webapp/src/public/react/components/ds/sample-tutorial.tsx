@@ -735,7 +735,6 @@ const SampleTutorial = ({
     onClose();
   };
   const endGuideRef = useRef(endGuide);
-  const endedByCtaRef = useRef(false);
   endGuideRef.current = endGuide;
   // Resolved once: re-querying per render hands createPortal a different
   // container the moment .rw-app appears, which tears the whole overlay down
@@ -870,10 +869,7 @@ const SampleTutorial = ({
         // whenever its download state changes and would drop a class we added.
         cta = target.querySelector<HTMLElement>(stepCta);
         cta?.setAttribute("data-guide-cta", "true");
-        removeCtaEndListener = bindFinalCta(cta, stepIndex === steps.length - 1, () => {
-          endedByCtaRef.current = true;
-          endGuideRef.current();
-        });
+        removeCtaEndListener = bindFinalCta(cta, stepIndex === steps.length - 1, () => endGuideRef.current());
       }
       return true;
     };
@@ -889,13 +885,10 @@ const SampleTutorial = ({
       window.cancelAnimationFrame(frame);
       observer?.disconnect();
       setTargetEl(null);
-      if (!endedByCtaRef.current) {
-        if (openedMenu?.getAttribute("aria-expanded") === "true") openedMenu.click();
-        for (const drawer of openedDrawers) {
-          if (drawer.getAttribute("aria-expanded") === "true") drawer.click();
-        }
+      if (openedMenu?.getAttribute("aria-expanded") === "true") openedMenu.click();
+      for (const drawer of openedDrawers) {
+        if (drawer.getAttribute("aria-expanded") === "true") drawer.click();
       }
-      endedByCtaRef.current = false;
       removeCtaEndListener?.();
       cta?.removeAttribute("data-guide-cta");
       lifted?.classList.remove("sample-tutorial-lift");
