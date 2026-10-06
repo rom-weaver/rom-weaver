@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { identifyDumpTagLabel, identifyMatchCountLabel } from "../../../../presentation/identify-status.ts";
 import { uniqueIdentifyDisplayNames } from "../../../../presentation/identify-title.ts";
 import type { ParsedBundleChecks } from "../../../../types/bundle.ts";
@@ -516,6 +516,27 @@ const RomSearch = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const resultButtonsRef = useRef<Array<HTMLButtonElement | null>>([]);
+  const sampleRef = useRef<HTMLButtonElement>(null);
+  const sampleLabel = sampleChecksum && !lookup.text ? localizer.message("ui.identify.trySample") : "";
+  // The sample button sits inside the empty box; reserve its measured width so
+  // the placeholder ellipsizes before it instead of running underneath.
+  useLayoutEffect(() => {
+    const input = inputRef.current;
+    const sample = sampleRef.current;
+    if (!input) return;
+    if (!(sampleLabel && sample)) {
+      input.style.paddingInlineEnd = "";
+      return;
+    }
+    const fit = () => {
+      input.style.paddingInlineEnd = `${sample.offsetWidth + 8}px`;
+    };
+    fit();
+    // A late web font or a locale change resizes the label after first paint.
+    const observer = new ResizeObserver(fit);
+    observer.observe(sample);
+    return () => observer.disconnect();
+  }, [sampleLabel]);
   const resultKind = lookup.versions.length ? "version" : !chosen && lookup.titles.length ? "title" : "none";
   const resultCount =
     resultKind === "version"
@@ -594,20 +615,21 @@ const RomSearch = ({
           type="text"
           value={lookup.text}
         />
+        {sampleChecksum && sampleLabel ? (
+          <button
+            className="sample-tutorial-start-chip identify-search-sample"
+            disabled={searching}
+            onClick={() => {
+              inputRef.current?.focus();
+              lookup.setText(sampleChecksum);
+            }}
+            ref={sampleRef}
+            type="button"
+          >
+            {sampleLabel}
+          </button>
+        ) : null}
       </div>
-      {sampleChecksum ? (
-        <button
-          className="sample-tutorial-start-chip"
-          disabled={searching}
-          onClick={() => {
-            inputRef.current?.focus();
-            lookup.setText(sampleChecksum);
-          }}
-          type="button"
-        >
-          {localizer.message("ui.identify.trySampleChecksum")}
-        </button>
-      ) : null}
       {searching || (lookup.incompleteHash && !lookup.error) ? (
         <p aria-live="polite" className="identify-search-status" role="status">
           {searching ? searchingLabel : localizer.message("ui.identify.hashInvalid")}

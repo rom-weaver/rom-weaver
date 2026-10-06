@@ -4100,8 +4100,8 @@ msgstr "Trim tool"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.trySampleChecksum"
-msgstr "Try a sample checksum"
+msgid "ui.identify.trySample"
+msgstr "Try a sample"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
