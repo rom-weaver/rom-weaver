@@ -528,12 +528,12 @@ const RomSearch = ({
       input.style.paddingInlineEnd = "";
       return;
     }
-    const fit = () => {
+    const reserve = () => {
       input.style.paddingInlineEnd = `${sample.offsetWidth + 8}px`;
     };
-    fit();
+    reserve();
     // A late web font or a locale change resizes the label after first paint.
-    const observer = new ResizeObserver(fit);
+    const observer = new ResizeObserver(reserve);
     observer.observe(sample);
     return () => observer.disconnect();
   }, [sampleLabel]);
