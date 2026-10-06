@@ -466,7 +466,7 @@ msgstr "Add cheats to the patch order"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.addCheckLabel"
-msgstr "Add check"
+msgstr "Add"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -651,7 +651,7 @@ msgstr "Author"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.input"
-msgstr "Authored input checks: {basis}"
+msgstr "Input: {basis}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1546,7 +1546,7 @@ msgstr "Edit trainer names, money, badges, hearts, and gear in a game save,"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.embeddedOutput"
-msgstr "Embedded output checks: Standalone patch result"
+msgstr "Patch result"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3521,7 +3521,7 @@ msgstr "Share your changes."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.sharedInput"
-msgstr "Shared input checks: {input}"
+msgstr "Shared input: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3591,7 +3591,7 @@ msgstr "Source"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.stackOutput"
-msgstr "Stack output checks: Combined result"
+msgstr "Combined result"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

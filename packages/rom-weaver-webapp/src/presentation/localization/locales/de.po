@@ -466,7 +466,7 @@ msgstr "Cheats zur Patch-Reihenfolge hinzufügen"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.addCheckLabel"
-msgstr "Prüfung hinzufügen"
+msgstr "Hinzufügen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -651,7 +651,7 @@ msgstr "Autor"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.input"
-msgstr "Erstellte Eingabeprüfungen: {basis}"
+msgstr "Eingabe: {basis}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1546,7 +1546,7 @@ msgstr "Bearbeite Trainernamen, Geld, Orden, Herzen und Ausrüstung in einem Spi
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.embeddedOutput"
-msgstr "Eingebettete Ausgabeprüfungen: Einzelnes Patch-Ergebnis"
+msgstr "Patch-Ergebnis"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3521,7 +3521,7 @@ msgstr "in einen komprimierten, teilbaren Patch, den andere anwenden können."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.sharedInput"
-msgstr "Gemeinsame Eingabeprüfungen: {input}"
+msgstr "Gemeinsame Eingabe: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3591,7 +3591,7 @@ msgstr "Quelle"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.stackOutput"
-msgstr "Stapel-Ausgabeprüfungen: Kombiniertes Ergebnis"
+msgstr "Kombiniertes Ergebnis"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -934,10 +934,10 @@ describe("apply workflow view - staged bench", () => {
     });
 
     const addOnCard = container.querySelectorAll("#rom-weaver-list-patch-stack .card.patch")[1];
-    expect(addOnCard?.textContent).toContain("Authored input checks: Original ROM");
-    expect(addOnCard?.textContent).toContain("Embedded output checks: Standalone patch result");
-    expect(addOnCard?.textContent).toContain("Stack output checks: Combined result");
-    expect(addOnCard?.textContent).toContain("Shared input checks: Base patch");
+    expect(addOnCard?.textContent).toContain("Input: Original ROM");
+    expect(addOnCard?.textContent).toContain("Patch result");
+    expect(addOnCard?.textContent).toContain("Combined result");
+    expect(addOnCard?.textContent).toContain("Shared input: Base patch");
     expect(addOnCard?.textContent).toContain("Checks during apply: Base patch");
     expect(addOnCard?.textContent).not.toContain("Verified: game.sfc / program.rom");
 
@@ -1083,7 +1083,7 @@ describe("apply workflow view - staged bench", () => {
     });
 
     const sharedChecks = container.querySelector("#rom-weaver-patch-shared-input-checks-0");
-    expect(sharedChecks?.textContent).toContain("Shared input checks: Original ROM / program.rom");
+    expect(sharedChecks?.textContent).toContain("Shared input: Original ROM / program.rom");
     expect(sharedChecks?.textContent).toContain("c6fb1252");
     expect(sharedChecks?.querySelector(".ck-mark")).toBeNull();
 

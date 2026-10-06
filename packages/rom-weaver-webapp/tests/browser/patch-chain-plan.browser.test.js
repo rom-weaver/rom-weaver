@@ -75,15 +75,15 @@ test("a true BPS chain defers the dependent patch instead of failing it", async 
   // A single target lane has nothing to choose between, so the track select is hidden.
   expect(document.getElementById("rom-weaver-patch-track-0")).toBeNull();
   expect(patchCheckHeadings(0)).toEqual([
-    "Authored input checks: Original ROM (automatic)",
-    "Embedded output checks: Standalone patch result",
-    "Stack output checks: Combined result",
-    "Shared input checks: Original ROM",
+    "Input: Original ROM (automatic)",
+    "Patch result",
+    "Combined result",
+    "Shared input: Original ROM",
   ]);
   expect(patchCheckHeadings(1)).toEqual([
-    "Authored input checks: Previous patch output (automatic)",
-    "Embedded output checks: Standalone patch result",
-    "Stack output checks: Combined result",
+    "Input: Previous patch output (automatic)",
+    "Patch result",
+    "Combined result",
   ]);
   expect(document.querySelector("#rom-weaver-patch-checks-help-1")).toBeNull();
   await page.viewport(390, 844);
@@ -146,20 +146,16 @@ test("a patch input selector re-plans that patch", async () => {
   // real intermediate decides).
   setFormControlValue(basisSelect, "previous");
   await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("Checks during apply: game.bin");
-  expect(patchCheckHeadings(1)).toEqual([
-    "Authored input checks: Previous patch output",
-    "Embedded output checks: Standalone patch result",
-    "Stack output checks: Combined result",
-  ]);
+  expect(patchCheckHeadings(1)).toEqual(["Input: Previous patch output", "Patch result", "Combined result"]);
 
   // Return to automatic detection.
   setFormControlValue(document.getElementById("rom-weaver-select-patch-target-1"), "auto");
   await expect.poll(() => chipText(1), { timeout: 90000 }).toBe("Verified");
   expect(patchCheckHeadings(1)).toEqual([
-    "Authored input checks: Original ROM (automatic)",
-    "Embedded output checks: Standalone patch result",
-    "Stack output checks: Combined result",
-    "Shared input checks: Original ROM",
+    "Input: Original ROM (automatic)",
+    "Patch result",
+    "Combined result",
+    "Shared input: Original ROM",
   ]);
 }, 180000);
 

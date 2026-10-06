@@ -466,7 +466,7 @@ msgstr "Añadir trucos al orden de parches"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.addCheckLabel"
-msgstr "Añadir comprobación"
+msgstr "Añadir"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -651,7 +651,7 @@ msgstr "Autor"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.input"
-msgstr "Comprobaciones de entrada creadas: {basis}"
+msgstr "Entrada: {basis}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1546,7 +1546,7 @@ msgstr "Edita nombres de entrenador, dinero, medallas, corazones y equipo en una
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.embeddedOutput"
-msgstr "Comprobaciones de salida integradas: Resultado del parche independiente"
+msgstr "Resultado del parche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3521,7 +3521,7 @@ msgstr "en un parche comprimido y compartible que otros puedan aplicar."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.sharedInput"
-msgstr "Comprobaciones de entrada compartidas: {input}"
+msgstr "Entrada compartida: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3591,7 +3591,7 @@ msgstr "Fuente"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.stackOutput"
-msgstr "Comprobaciones de salida de la pila: Resultado combinado"
+msgstr "Resultado combinado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
