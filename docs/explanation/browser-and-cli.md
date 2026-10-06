@@ -1,6 +1,6 @@
 # Browser and CLI
 
-rom-weaver ships two front ends over one engine. Both use the same patch and container implementations.
+rom-weaver's browser and CLI share one engine.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -16,45 +16,39 @@ rom-weaver ships two front ends over one engine. Both use the same patch and con
 
 ## One engine, two front ends
 
-The patch formats, container handlers, checksum algorithms, and validation rules live in Rust. The CLI links that code natively. The webapp runs the same code compiled to WebAssembly, inside your browser's workers.
+Rust implements patches, containers, checksums, and validation. The CLI links it natively; the webapp runs it as WebAssembly in browser workers.
 
-Patches and bundles created by either interface can be read by the other. Output bytes can depend on the selected format, options, and backend; sharing the engine does not guarantee identical compressed files.
-
-What differs is the interface, and that difference is deliberate.
+Both interfaces read each other's patches and bundles. Format, options, and backend can change output bytes, so compressed files may differ.
 
 ## What the browser is good at
 
-The browser presents file details and workflow choices together:
+The browser combines file details and workflow choices:
 
-- **It explains what it found.** Cards show checksums, expected names, header state, and archive contents before you commit to anything.
+- **It explains files.** Cards show checksums, expected names, headers, and archive contents before processing.
 - **It needs no install.** The app runs from a web address.
-- **It has guided samples.** You can learn the workflow on homebrew files before touching a real ROM. [Guided practice runs](../reference/guided-runs.md) lists them.
+- **It has guided samples.** Learn with homebrew files before using a real ROM; see [Guided practice runs](../reference/guided-runs.md).
 - **It works on phones and tablets**, within their memory limits.
-
-These properties suit learning and occasional patching, where visible checks help explain a mismatch.
 
 ## What the CLI is good at
 
-The CLI is the better tool when the work repeats or the files are large:
+The CLI suits repeated work and large files:
 
-- **It scripts.** Batch jobs, CI, and release automation need commands, not clicks.
-- **It is not inside a browser sandbox.** Large disc images are limited by your machine, not by a tab's storage and memory rules.
-- **Its flags are quotable.** A release note can carry the exact command readers should run.
-- **It emits JSON.** Other tools can consume its output.
-
-These properties suit scripts, batches, CI, repeatable release commands, and large jobs.
+- **It scripts.** Commands support batches, CI, and releases.
+- **It avoids browser limits.** Your machine bounds large disc jobs, rather than a tab's storage and memory rules.
+- **Its flags are quotable.** Release notes can include exact commands.
+- **It emits JSON** for other tools.
 
 ## Why the documentation does not mix them
 
-Browser guides do not put terminal commands in the middle of a visual workflow, and CLI guides do not describe cards and drag handles. A reader following one interface should never have to translate steps written for the other.
+Browser guides describe visible controls; CLI guides describe commands. Neither requires translating steps from the other interface.
 
-That is why installation, terminal examples, and flags live in the CLI pages and the [CLI reference](../reference/cli.md), while the browser guides stay on visible controls.
+Installation, terminal examples, and flags belong in CLI pages and the [CLI reference](../reference/cli.md).
 
 ## If you are unsure
 
-The browser lowers the setup cost of a first job. The CLI lowers the repetition cost of later jobs and avoids browser storage limits.
+The browser reduces initial setup; the CLI reduces repetition and avoids browser storage limits.
 
-The [feature map](../reference/features.md) distinguishes shared capabilities from browser-only playback and interface-specific controls.
+The [feature map](../reference/features.md) separates shared capabilities, browser playback, and interface-specific controls.
 
 ## Related
 
