@@ -111,7 +111,7 @@
   "dependencies": {
     "@bjorn3/browser_wasi_shim": "0.4.2",
     "@lingui/core": "6.9.0",
-    "lucide-react": "1.49.0",
+    "lucide-react": "1.51.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
