@@ -133,7 +133,12 @@ const CompressPanelBody = ({
             </DropdownSelect>
           </OutputField>
         ) : field.kind === "codec" ? (
-          <OutputField key={field.key} label={label} labelInfo={<FieldInfoToggle info={field.info} label={label} />}>
+          <OutputField
+            className="ofld-wide"
+            key={field.key}
+            label={label}
+            labelInfo={<FieldInfoToggle info={field.info} label={label} />}
+          >
             <CodecCombobox
               ariaLabel={label}
               disabled={disabled}

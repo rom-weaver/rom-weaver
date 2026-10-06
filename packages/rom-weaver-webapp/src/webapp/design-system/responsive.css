@@ -74,12 +74,16 @@
   .apply-output .outopts.is-open .readouts {
     display: none;
   }
-  .apply-output .optsgroup {
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 275px), 1fr));
+  .apply-output .ofld .select {
+    padding-inline: 4px 20px;
   }
-  .apply-output .ofld {
+  .apply-output .dropdown-arrow {
+    inset-inline-end: 6px;
+  }
+  .apply-output .ofld-wide {
     display: grid;
-    grid-template-columns: fit-content(112px) minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-column: 1 / -1;
   }
   .rw-app .fname .outname,
   .rw-app .fname .select {

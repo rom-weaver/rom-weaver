@@ -830,7 +830,9 @@ function ApplyWorkflowFormView({
     compress: buildOutputCompressionPanel({
       disabled: outputDisabled,
       extraChildren: outputExtraFields,
-      fields: outputState.compress?.fields,
+      fields: outputState.compress?.fields?.toSorted(
+        (left, right) => Number(left.kind === "codec") - Number(right.kind === "codec"),
+      ),
       format: compressHeaderFormat,
       formatId: "rom-weaver-select-output-format-compress",
       formatLabel: localizer.message("ui.apply.compressionType"),
