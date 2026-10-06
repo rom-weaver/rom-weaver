@@ -494,8 +494,9 @@
 .rw-app .ck-group-head {
   position: relative;
   display: flex;
+  gap: 6px;
   align-items: center;
-  width: fit-content;
+  justify-content: space-between;
   padding: 2px 9px;
   margin-block-end: 3px;
   font-size: 0.62rem;

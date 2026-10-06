@@ -98,11 +98,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: ", an output extension. The format selector adds the extension; remove it to avoid a doubled name.",
   }),
   "ui.output.doubledExtension.before": msg({ id: "ui.output.doubledExtension.before", message: "The name ends in" }),
-  "ui.output.file": msg({ id: "ui.output.file", message: "File" }),
   "ui.output.filename": msg({ id: "ui.output.filename", message: "Output filename" }),
   "ui.output.format": msg({ id: "ui.output.format", message: "Output format" }),
-  "ui.output.identified": msg({ id: "ui.output.identified", message: "Ident" }),
-  "ui.output.name": msg({ id: "ui.output.name", message: "Name" }),
   "ui.output.nameFromIdentified": msg({ id: "ui.output.nameFromIdentified", message: "Name from identified title" }),
   "ui.output.notSaved": msg({
     id: "ui.output.notSaved",
@@ -206,7 +203,6 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.checksumming": msg({ id: "ui.apply.checksumming", message: "Checksumming" }),
   "ui.apply.checksummingProgress": msg({ id: "ui.apply.checksummingProgress", message: "Checksumming…" }),
   "ui.apply.clearRom": msg({ id: "ui.apply.clearRom", message: "Clear ROM input" }),
-  "ui.apply.compressionType": msg({ id: "ui.apply.compressionType", message: "Compression type" }),
   "ui.apply.fileTypes.archives": msg({ id: "ui.apply.fileTypes.archives", message: "Archives & containers" }),
   "ui.apply.fileTypes.patches": msg({ id: "ui.apply.fileTypes.patches", message: "Patches" }),
   "ui.apply.fileTypes.roms": msg({ id: "ui.apply.fileTypes.roms", message: "ROMs" }),
@@ -223,7 +219,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.home.flowTest": msg({ id: "ui.home.flowTest", message: "Test ROM" }),
   "ui.home.webapp": msg({ id: "ui.home.webapp", message: "Webapp" }),
   "ui.patch.addCheck": msg({ id: "ui.patch.addCheck", message: "Add {side} check" }),
-  "ui.patch.addCheckLabel": msg({ id: "ui.patch.addCheckLabel", message: "Add check" }),
+  "ui.patch.addCheckLabel": msg({ id: "ui.patch.addCheckLabel", message: "Add" }),
   "ui.patch.applyToAll": msg({ id: "ui.patch.applyToAll", message: "Apply to all" }),
   "ui.patch.archiveSupport": msg({
     id: "ui.patch.archiveSupport",
@@ -579,6 +575,19 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.tutorial.patches.title": msg({ id: "ui.apply.tutorial.patches.title", message: "Patches and cheats" }),
   "ui.apply.tutorial.remove": msg({ id: "ui.apply.tutorial.remove", message: "Remove" }),
   "ui.apply.tutorial.replacePatch": msg({ id: "ui.apply.tutorial.replacePatch", message: "Replace patch" }),
+  "ui.apply.tutorial.identify.title": msg({
+    id: "ui.apply.tutorial.identify.title",
+    message: "Identify your starting ROM",
+  }),
+  "ui.apply.tutorial.identify.body": msg({
+    id: "ui.apply.tutorial.identify.body",
+    message:
+      "Before adding a ROM, Identify can search by game name or checksum. Choose a title, then its release, to set the expected ROM checks. This search hides once a ROM is added or the patches already supply checks. In Detailed view, the ROM’s Identify drawer shows database matches, region and revision when available. The homebrew practice ROM has no public database entry.",
+  }),
+  "ui.apply.tutorial.identify.tryIt": msg({
+    id: "ui.apply.tutorial.identify.tryIt",
+    message: "Choose Detailed, then open Identify to inspect the ROM information. Open Checks to compare checksums.",
+  }),
   "ui.apply.tutorial.rom.body": msg({
     id: "ui.apply.tutorial.rom.body",
     message:
@@ -1090,21 +1099,21 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.patchInputs.original": msg({ id: "ui.patchInputs.original", message: "Original ROM" }),
   "ui.patchInputs.previous": msg({ id: "ui.patchInputs.previous", message: "Previous patch output" }),
   "ui.patchChecks.identified": msg({ id: "ui.patchChecks.identified", message: "{title}: {platform}" }),
-  "ui.patchChecks.input": msg({ id: "ui.patchChecks.input", message: "Authored input checks: {basis}" }),
+  "ui.patchChecks.input": msg({ id: "ui.patchChecks.input", message: "Input: {basis}" }),
   "ui.patchChecks.deferred": msg({ id: "ui.patchChecks.deferred", message: "Checks during apply: {input}" }),
   "ui.patchChecks.embeddedOutput": msg({
     id: "ui.patchChecks.embeddedOutput",
-    message: "Embedded output checks: Standalone patch result",
+    message: "Patch result",
   }),
   "ui.patchChecks.expects": msg({ id: "ui.patchChecks.expects", message: "Requires {patch} first" }),
   "ui.patchChecks.precedingPatchOutput": msg({
     id: "ui.patchChecks.precedingPatchOutput",
     message: "Previous patch output",
   }),
-  "ui.patchChecks.sharedInput": msg({ id: "ui.patchChecks.sharedInput", message: "Shared input checks: {input}" }),
+  "ui.patchChecks.sharedInput": msg({ id: "ui.patchChecks.sharedInput", message: "Shared input: {input}" }),
   "ui.patchChecks.stackOutput": msg({
     id: "ui.patchChecks.stackOutput",
-    message: "Stack output checks: Combined result",
+    message: "Combined result",
   }),
   "ui.patchChecks.unknown": msg({ id: "ui.patchChecks.unknown", message: "Not checked yet: {input}" }),
   "ui.patchChecks.patchOutput": msg({ id: "ui.patchChecks.patchOutput", message: "Output of {patch}" }),

@@ -343,7 +343,6 @@ const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
                 disabled: busy || opening,
                 fields: panel?.fields,
                 note: panel?.note,
-                format: compression,
                 onFieldChange: (key, value, updates) => {
                   clearOutput();
                   setOverrides((previous) => ({ ...previous, ...updates, [key]: value }));

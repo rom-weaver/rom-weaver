@@ -244,6 +244,7 @@ const PatchChecksDrawer = ({
             <div className="ck-group">
               <div className="ck-group-head">
                 <span>{side === "output" ? localizer.message("ui.patchChecks.stackOutput") : inputHeading}</span>
+                {addControl}
               </div>
               <IdentifiedCheckTitle checks={meta?.[metaField]} enabled={!disabled} />
               {side === "input"
@@ -264,7 +265,6 @@ const PatchChecksDrawer = ({
                   value={userValue(field)}
                 />
               ))}
-              {addControl}
             </div>
           </Fragment>
         );

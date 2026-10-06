@@ -9,7 +9,7 @@ import { getCheatHeaderStripConflict } from "../../lib/cheats/header-guard.ts";
 import { ApplyPatchListStep } from "./apply-patch-list-step.tsx";
 import type { CheatStackRenderState } from "./components/cheat-database-section.tsx";
 import { getEmulatorJsCore } from "./components/emulatorjs.ts";
-import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./components/ds/compress-panel.tsx";
+import { buildOutputCompressionPanel } from "./components/ds/compress-panel.tsx";
 import { Notice } from "./components/ds/feedback.tsx";
 import {
   databaseOnlyChecks,
@@ -35,7 +35,6 @@ import { OutputCard, type OutputCardProps } from "./components/ds/output-card.ts
 import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.tsx";
 import { ARCHIVE_FILE_EXTENSIONS, PATCH_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
-import { createCompressionTypeOptions } from "./output-view-model.ts";
 import type {
   NoticeController,
   PatcherOutputController,
@@ -89,6 +88,13 @@ type ApplyTutorialInputs = {
  * reader adds files by any of the real routes, or presses Continue to use the
  * practice files - so nothing appears on the bench they did not ask for.
  */
+const getIdentifyTutorialStep = (localizer: ReturnType<typeof useUiLocalizer>): SampleTutorialStep =>
+  getViewTutorialStep(localizer, "#rom-weaver-row-file-rom", {
+    body: localizer.message("ui.apply.tutorial.identify.body"),
+    title: localizer.message("ui.apply.tutorial.identify.title"),
+    tryIt: localizer.message("ui.apply.tutorial.identify.tryIt"),
+  });
+
 const getApplySampleTutorialSteps = (
   localizer: ReturnType<typeof useUiLocalizer>,
   inputs: ApplyTutorialInputs,
@@ -122,6 +128,7 @@ const getApplySampleTutorialSteps = (
     title: localizer.message("ui.apply.tutorial.rom.title"),
     tryIt: localizer.message("ui.apply.tutorial.rom.tryIt"),
   }),
+  getIdentifyTutorialStep(localizer),
   {
     actions: [
       ["toggle", localizer.message("ui.apply.tutorial.toggle")],
@@ -195,7 +202,7 @@ const APPLY_CHEATS_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
 ];
 
 const getBundleSampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer>): readonly SampleTutorialStep[] => [
-  {
+  getViewTutorialStep(localizer, "#rom-weaver-row-file-rom", {
     actions: [
       ["checks", localizer.message("ui.apply.tutorial.checks")],
       ["remove", localizer.message("ui.apply.tutorial.remove")],
@@ -204,7 +211,8 @@ const getBundleSampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalize
     openDrawers: true,
     target: "#rom-weaver-row-file-rom",
     title: localizer.message("ui.apply.bundleTutorial.rom.title"),
-  },
+  }),
+  getIdentifyTutorialStep(localizer),
   {
     actions: [
       ["reorder", localizer.message("ui.apply.tutorial.moveUp")],
@@ -679,8 +687,6 @@ function ApplyWorkflowFormView({
     singleRom,
     uiController,
   });
-  const compressHeaderFormat = getOutputCompressionFormatLabel(outputState.compressionFormat, outputState.options);
-  const compressionTypeOptions = createCompressionTypeOptions(outputState.options, "none");
   const outputDisabled = outputState.disabled || bundleExport?.busy === true;
   const header = resolveOutputHeaderOptions(romInputs);
   const renderOutputHeaderField = (id?: string) => (
@@ -830,15 +836,10 @@ function ApplyWorkflowFormView({
     compress: buildOutputCompressionPanel({
       disabled: outputDisabled,
       extraChildren: outputExtraFields,
+      // The format picker beside the file name already sets the compression type.
       fields: outputState.compress?.fields,
-      format: compressHeaderFormat,
-      formatId: "rom-weaver-select-output-format-compress",
-      formatLabel: localizer.message("ui.apply.compressionType"),
-      formatOptions: compressionTypeOptions,
-      formatValue: outputState.compressionFormat,
       note: outputState.compress?.note,
       onFieldChange: (key, value, updates) => controllers.output.setOutputCompressOption?.(key, value, updates),
-      onFormatChange: (value) => controllers.output.setOutputCompression(value),
       readouts: null,
       timing: outputState.compressTiming || undefined,
     }),
@@ -868,7 +869,7 @@ function ApplyWorkflowFormView({
   );
   const applySecondaryJob = bundlePage ? (
     <ApplySecondaryJob>
-      <OutputCard {...applyOutputProps} />
+      <OutputCard {...applyOutputProps} className="apply-output" />
       {outputNotice}
     </ApplySecondaryJob>
   ) : null;
@@ -1084,6 +1085,7 @@ function ApplyWorkflowFormView({
           {bundlePage ? null : (
             <WorkflowOutputStep
               {...applyOutputProps}
+              className="apply-output"
               fault={applyFailed}
               id="rom-weaver-row-output-file-name"
               info={

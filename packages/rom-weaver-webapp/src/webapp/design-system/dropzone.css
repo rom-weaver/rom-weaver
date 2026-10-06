@@ -773,12 +773,12 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   animation: tutorial-bell-shake 0.9s ease-in-out 1;
 }
 @media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
-  /* The three help controls MUST stay on one line on a phone where the font
-     allows, so the text scales with the viewport: full size from ~420px up,
-     shrinking just enough below that, with the icons scaling alongside it.
-     phone-dock.css sizes the "New here?" chip from this too. */
+  /* The three help controls MUST stay on one line on a phone, so the text
+     scales with the viewport: full size from ~420px up, shrinking just enough
+     below that, with the icons scaling alongside it. phone-dock.css sizes the
+     "New here?" chip from this too. */
   .rw-app {
-    --hero-help-font: clamp(0.58rem, 2.95vw, 0.82rem);
+    --hero-help-font: clamp(0.58rem, 2.85vw, 0.82rem);
   }
   .rw-app .sample-tutorial-start-bell,
   .rw-app .simple-hero .hero-guide svg {
@@ -795,15 +795,14 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
     padding-inline: 2px;
     white-space: nowrap;
   }
-  /* The outer row still wraps: a wide fallback font (DejaVu on Linux) can
-     outgrow the scaled line on the longer Bundle guide label, and wrapping
-     beats spilling past the panel. The open format list wraps the same way. */
   .rw-app .simple-hero .hero-help,
   .rw-app .simple-hero .hero-help-links {
-    gap: 0 6px;
-  }
-  .rw-app .simple-hero .hero-help-links {
     flex-wrap: nowrap;
+    gap: 0;
+  }
+  /* The open format list still takes a line of its own under the row. */
+  .rw-app .simple-hero .hero-help:has(> .hero-formats-help[open]) {
+    flex-wrap: wrap;
   }
 }
 @media (max-width: 720px) and (max-height: 800px) {
@@ -1033,17 +1032,11 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   bottom: calc(var(--dock-h, max(0px, env(safe-area-inset-bottom))) + 18px);
   z-index: 1003;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
   grid-template-columns: 48px minmax(0, 1fr);
   gap: var(--sp-l);
-  align-items: start;
   width: min(720px, calc(100vw - 2 * var(--gutter)));
-  /* Room for the Try it row and the view comparison; the copy area scrolls
-     past this. */
-  max-height: min(380px, calc(100dvh - 36px));
   padding: var(--sp-l);
   margin-inline: auto;
-  overflow: hidden;
   color: var(--ink);
   background:
     repeating-linear-gradient(0deg, transparent 0 3px, color-mix(in oklab, var(--thread) 5%, transparent) 3px 4px),
@@ -1098,7 +1091,6 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   top: 50%;
   bottom: auto;
   width: min(560px, calc(100vw - 2 * var(--gutter)));
-  max-height: calc(100dvh - 36px);
   translate: 0 -50%;
   animation-name: sample-tutorial-loading-in;
 }
@@ -1121,7 +1113,6 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
 }
 .rw-app .sample-tutorial-beacon {
   display: grid;
-  grid-row: 1;
   grid-column: 1;
   place-items: center;
   width: 48px;
@@ -1136,15 +1127,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   border-radius: var(--r-s);
 }
 .rw-app .sample-tutorial-copy-area {
-  grid-row: 1;
   grid-column: 2;
-  align-self: stretch;
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
-}
-.rw-app .sample-tutorial-live {
-  min-width: 0;
 }
 .rw-app .sample-tutorial-kicker-row {
   /* The ✕ sits in the corner this row and the title share, so the card needs
@@ -1175,7 +1158,6 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   background: var(--thread);
 }
 .rw-app .sample-tutorial-kicker {
-  display: block;
   font-size: 0.68rem;
   font-weight: 800;
   color: var(--thread-text);
@@ -1229,17 +1211,21 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   gap: var(--sp-s);
   margin-block-start: var(--sp-s);
 }
-.rw-app .sample-tutorial-copy .sample-tutorial-compare p {
+.rw-app .sample-tutorial-compare button {
   display: grid;
   gap: var(--sp-2xs);
   align-content: start;
   padding: var(--sp-s) var(--sp-m);
   font-size: 0.78rem;
   line-height: 1.4;
+  color: var(--ink-2);
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
   border: 1px solid var(--seam);
   border-radius: var(--r-s);
 }
-.rw-app .sample-tutorial-copy .sample-tutorial-compare p[data-current="true"] {
+.rw-app .sample-tutorial-compare button[data-current="true"] {
   background: color-mix(in oklab, var(--thread) 8%, transparent);
   border-color: var(--thread);
 }
@@ -1354,7 +1340,6 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
 }
 .rw-app .sample-tutorial-actions {
   display: flex;
-  grid-row: 2;
   grid-column: 1 / -1;
   gap: var(--sp-s);
   align-items: center;
@@ -1403,8 +1388,6 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--sp-s);
     width: calc(100vw - 20px);
-    /* Leaves at least half the screen for the row; the copy scrolls inside. */
-    max-height: min(320px, 48dvh);
     padding: var(--sp-m);
   }
   .rw-app .sample-tutorial-dialog[data-placement="top"] {
@@ -1414,18 +1397,17 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   .rw-app .sample-tutorial-dialog[data-loading="true"] {
     top: 50%;
     bottom: auto;
-    max-height: calc(100dvh - 20px);
   }
   /* The phone bar shares the screen with the row it explains, so it keeps
      only what the step needs: the kicker already numbers the step, the
      highlighted row shows its own controls, and the ✕ says how to leave. The
-     view comparison goes too - the body names the current view and what the
-     other one adds. What remains is the title, the body, and the Try it row. */
+     view comparison keeps its buttons and hides their summaries. The body
+     names the current view and what the other one adds. */
   .rw-app .sample-tutorial-beacon,
   .rw-app .sample-tutorial-action-label,
   .rw-app .sample-tutorial-action-list,
   .rw-app .sample-tutorial-actions .sample-tutorial-end-hint,
-  .rw-app .sample-tutorial-compare {
+  .rw-app .sample-tutorial-compare button > span {
     display: none;
   }
   .rw-app .sample-tutorial-copy-area {
@@ -1558,4 +1540,20 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
 .rw-app .ghost-next .ghost-next-arrow {
   font-size: 0.72rem;
   color: var(--ink-3);
+}
+
+@media (hover: hover) {
+  .rw-app .sample-tutorial-compare button:hover {
+    border-color: var(--thread);
+  }
+}
+.rw-app .sample-tutorial-compare button:active {
+  border-color: var(--thread);
+}
+.rw-app .sample-tutorial-input-demo {
+  display: block;
+  width: 100%;
+  height: 44px;
+  margin-block-start: var(--sp-s);
+  color: var(--thread-text);
 }

@@ -270,6 +270,26 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.apply.compressionType"
+#~ msgstr "Komprimierungstyp"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.output.file"
+#~ msgstr "Datei"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.output.identified"
+#~ msgstr "Erkannt"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.output.name"
+#~ msgstr "Name"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", eine Ausgabe-Endung. Die Formatauswahl fügt die Endung hinzu; entferne sie, um einen doppelten Namen zu vermeiden."
 
@@ -440,6 +460,11 @@ msgstr "Akzentfarbe"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.addCheckLabel"
+msgstr "Hinzufügen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.addCheck"
 msgstr "{side}-Prüfung hinzufügen"
 
@@ -462,11 +487,6 @@ msgstr "Füge eine unterstützte ROM direkt oder in einem Archiv hinzu, um das S
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.addCheats"
 msgstr "Cheats zur Patch-Reihenfolge hinzufügen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patch.addCheckLabel"
-msgstr "Prüfung hinzufügen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -647,11 +667,6 @@ msgstr "Archive werden dekomprimiert; wir finden das ROM oder lassen dich wähle
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.author"
 msgstr "Autor"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.input"
-msgstr "Erstellte Eingabeprüfungen: {basis}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1110,6 +1125,11 @@ msgstr "Codecs, Threads, Rohdateilisten"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.stackOutput"
+msgstr "Kombiniertes Ergebnis"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.commandLine"
 msgstr "Befehlszeile"
 
@@ -1167,11 +1187,6 @@ msgstr "Komprimierungsvorgaben kommen aus Einstellungen › Komprimierung und ge
 #: src/presentation/localization/messages.ts
 msgid "error.COMPRESSION_FAILED"
 msgstr "Die Kompression ist fehlgeschlagen."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.compressionType"
-msgstr "Komprimierungstyp"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1545,11 +1560,6 @@ msgstr "Bearbeite Trainernamen, Geld, Orden, Herzen und Ausrüstung in einem Spi
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.embeddedOutput"
-msgstr "Eingebettete Ausgabeprüfungen: Einzelnes Patch-Ergebnis"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.test.tutorial.controls"
 msgstr "Emulator-Steuerung"
 
@@ -1686,11 +1696,6 @@ msgstr "Entpacken und {verb}…"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.common.file"
-msgstr "Datei"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.output.file"
 msgstr "Datei"
 
 #. js-lingui-explicit-id
@@ -1870,11 +1875,6 @@ msgstr "Startseite"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.output.identified"
-msgstr "Erkannt"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.drop.identified"
 msgstr "Identifiziert"
 
@@ -1942,6 +1942,11 @@ msgstr "Eingabeverarbeitung"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.inputHandling.title"
 msgstr "Eingabeverarbeitung"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.input"
+msgstr "Eingabe: {basis}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2352,11 +2357,6 @@ msgstr "Mehrere Werte"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.n64ByteOrder"
 msgstr "N64-Byte-Reihenfolge vor dem Patchen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.output.name"
-msgstr "Name"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2852,6 +2852,11 @@ msgstr "Das Parsen des Patches ist fehlgeschlagen."
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.position"
 msgstr "Patch-Position"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.embeddedOutput"
+msgstr "Patch-Ergebnis"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3521,7 +3526,7 @@ msgstr "in einen komprimierten, teilbaren Patch, den andere anwenden können."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.sharedInput"
-msgstr "Gemeinsame Eingabeprüfungen: {input}"
+msgstr "Gemeinsame Eingabe: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3587,11 +3592,6 @@ msgstr "Quelle"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.source"
 msgstr "Quelle"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.stackOutput"
-msgstr "Stapel-Ausgabeprüfungen: Kombiniertes Ergebnis"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4421,3 +4421,16 @@ msgstr "ZIP-Codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z und Bundles"
+
+
+#. js-lingui-explicit-id
+msgid "ui.apply.tutorial.identify.title"
+msgstr "Identifiziere dein Ausgangs-ROM"
+
+#. js-lingui-explicit-id
+msgid "ui.apply.tutorial.identify.body"
+msgstr "Vor dem Hinzufügen eines ROMs kannst du unter Identifizieren nach Spielname oder Prüfsumme suchen. Wähle einen Titel und dann seine Version, um die erwarteten ROM-Prüfungen festzulegen. Die Suche verschwindet, sobald ein ROM hinzugefügt wurde oder die Patches bereits Prüfwerte liefern. In der Detailansicht zeigt Identifizieren Datenbanktreffer, Region und Revision, sofern verfügbar. Das Homebrew-Übungs-ROM ist nicht in der öffentlichen Datenbank."
+
+#. js-lingui-explicit-id
+msgid "ui.apply.tutorial.identify.tryIt"
+msgstr "Wähle Detailliert und öffne Identifizieren, um die ROM-Informationen anzusehen. Öffne Prüfungen, um Prüfsummen zu vergleichen."
