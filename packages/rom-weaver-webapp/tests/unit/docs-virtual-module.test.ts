@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { docsVirtualModule } from "../../scripts/docs-virtual-module.mjs";
 import { createDocsSearchIndex, searchDocs } from "../../src/webapp/docs-search.mjs";
+import { readDocRoutes } from "../../src/webapp/docs-pages.mjs";
 import { DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
 
 const METADATA_ID = "\0virtual:rom-weaver-docs";
@@ -110,5 +111,69 @@ describe("docs virtual search module", () => {
     const loaded = await import(`data:text/javascript,${encodeURIComponent(sourceFor(input))}`);
     const index = createDocsSearchIndex(input);
     expect(loaded.SEARCH_ENTRIES).toEqual(Object.fromEntries(index.map((r) => [r.slug, r.searchEntries])));
+  });
+});
+
+describe("docs virtual payload round trips", () => {
+  const load = (source: string) => import(`data:text/javascript,${encodeURIComponent(source)}`);
+
+  it("preserves every published route's metadata and search entry", async () => {
+    const routes = readDocRoutes();
+    const plugin = docsVirtualModule(routes);
+    const metadata = await load(plugin.load.handler.call(null, METADATA_ID) as string);
+    expect(metadata.DOC_ROUTES).toStrictEqual(routes.map(({ html: _html, ...entry }) => entry));
+    const search = await load(plugin.load.handler.call(null, "\0virtual:rom-weaver-docs-search") as string);
+    expect(search.SEARCH_ENTRIES).toEqual(
+      Object.fromEntries(createDocsSearchIndex(routes).map((entry) => [entry.slug, entry.searchEntries])),
+    );
+  });
+
+  it("preserves every published page's HTML with the shared icon", async () => {
+    const routes = readDocRoutes();
+    const plugin = docsVirtualModule(routes);
+    const iconSource = plugin.load.handler.call(null, "\0virtual:rom-weaver-docs-html") as string;
+    const iconUrl = `data:text/javascript,${encodeURIComponent(iconSource)}`;
+    for (const entry of routes) {
+      const source = plugin.load.handler.call(null, `${PAGE_ID_PREFIX}${entry.slug}`) as string;
+      const loaded = await load(source.replace('"virtual:rom-weaver-docs-html"', JSON.stringify(iconUrl)));
+      expect(loaded.html, entry.slug).toBe(entry.html);
+    }
+  });
+
+  it("preserves custom IDs, duplicate heading IDs, punctuation and Unicode labels", async () => {
+    const labels = ["Simple heading", "Simple heading", 'Quotes " & < >', "日本語", "", "  Leading and trailing  "];
+    const sections = labels.map((label, index) => ({
+      id: ["simple-heading", "simple-heading-1", "custom", "unicode", "empty", "leading-and-trailing"][index],
+      label,
+    }));
+    const entry = {
+      ...route("docs/adversarial"),
+      description: "Description",
+      label: "Guide",
+      sections,
+      html: sections.map(({ id, label }) => `<h2 id="${id}">${label}</h2><p>$& $' \\ \u2028 \u2029</p>`).join(""),
+    };
+    const plugin = docsVirtualModule([entry]);
+    const metadata = await load(plugin.load.handler.call(null, METADATA_ID) as string);
+    expect(metadata.DOC_ROUTES[0].sections).toEqual(sections);
+    const search = await load(plugin.load.handler.call(null, "\0virtual:rom-weaver-docs-search") as string);
+    expect(search.SEARCH_ENTRIES[entry.slug]).toEqual(createDocsSearchIndex([entry])[0].searchEntries);
+  });
+
+  it("splits exact icon occurrences without interpreting surrounding literals", async () => {
+    const icon = '<svg class="docs-section-link-icon"><path d="test"/></svg>';
+    const html = `${icon}$& $' \\ \u2028 \u2029 \${placeholder}</script>${icon}<svg class="other">different</svg>${icon}`;
+    const plugin = docsVirtualModule([{ ...route("docs"), html }]);
+    const iconSource = plugin.load.handler.call(null, "\0virtual:rom-weaver-docs-html") as string;
+    const source = plugin.load.handler.call(null, `${PAGE_ID_PREFIX}docs`) as string;
+    expect(source).not.toContain("<");
+    expect(source).not.toContain(">");
+    const loaded = await load(
+      source.replace(
+        '"virtual:rom-weaver-docs-html"',
+        JSON.stringify(`data:text/javascript,${encodeURIComponent(iconSource)}`),
+      ),
+    );
+    expect(loaded.html).toBe(html);
   });
 });

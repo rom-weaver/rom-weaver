@@ -150,6 +150,7 @@ const UnifiedDropZone = ({
       num={num}
       title={title ?? localizer.message("ui.drop.inputs")}
     >
+      <h1 className="sr-only">{localizer.message(lead.line1)}</h1>
       {beforeDropZone}
       <DropZone
         {...dropZoneProps}

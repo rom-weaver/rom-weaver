@@ -23,6 +23,12 @@ const DOC_SOURCES = Object.freeze([
     slug: "docs/get-started",
   }),
   Object.freeze({
+    audience: "browser",
+    file: "tutorials/patch-compressed-disc.md",
+    label: "Patch a compressed disc",
+    slug: "docs/patch-compressed-disc",
+  }),
+  Object.freeze({
     audience: "cli",
     file: "tutorials/cli-first-weave.md",
     label: "Apply your first patch (CLI)",

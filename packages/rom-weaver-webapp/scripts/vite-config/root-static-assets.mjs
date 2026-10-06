@@ -35,6 +35,12 @@ export const rootStaticAssetSourcesForChannel = (channel) => ({
   "/social-preview.webp": generatedSocialPreviewPath("social-preview.webp"),
   ...identifyDataSources,
   ...docsScreenshotSources,
+  "/docs/samples/compressed-disc/practice-disc.chd": path.join(
+    repoRoot,
+    "docs/samples/compressed-disc/practice-disc.chd",
+  ),
+  "/docs/samples/compressed-disc/01-first.bps": path.join(repoRoot, "docs/samples/compressed-disc/01-first.bps"),
+  "/docs/samples/compressed-disc/02-second.bps": path.join(repoRoot, "docs/samples/compressed-disc/02-second.bps"),
 });
 export const generatedSampleAssetPaths = new Set([
   "/first-create.zip",
@@ -64,7 +70,7 @@ const setRootStaticAssetContentType = (requestPath, res) => {
   else if (requestPath.endsWith(".webp")) res.setHeader("Content-Type", "image/webp");
   else if (requestPath.endsWith(".svg")) res.setHeader("Content-Type", "image/svg+xml");
   else if (requestPath.endsWith(".ico")) res.setHeader("Content-Type", "image/x-icon");
-  else if (requestPath.endsWith(".pack")) res.setHeader("Content-Type", "application/octet-stream");
+  else if (/\.(?:pack|chd|bps)$/.test(requestPath)) res.setHeader("Content-Type", "application/octet-stream");
   else if (requestPath.endsWith("LICENSE") || requestPath.endsWith("NOTICE")) {
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
   }

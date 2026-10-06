@@ -1,6 +1,6 @@
 # Frequently asked questions
 
-Find the guide that answers your question.
+Find rom-weaver guides for ROM patching, checksum errors, supported files, privacy, and offline use.
 
 <!-- START doctoc -->
 ## Table of contents

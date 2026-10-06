@@ -1,5 +1,7 @@
 # Cheat database reference
 
+Supported cheat-code systems, match types, and ROM patch export limits in rom-weaver, with database sources and local storage behavior.
+
 <!-- START doctoc -->
 ## Table of contents
 

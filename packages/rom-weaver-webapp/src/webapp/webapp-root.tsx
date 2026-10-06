@@ -695,7 +695,15 @@ function WebappRoot({
         )}
         <div className="workflow-body">
           {/* Only ever engages for a tab switch: the landing route is preloaded before the first mount. */}
-          <Suspense fallback={null}>{form}</Suspense>
+          <Suspense
+            fallback={
+              <h1 className="sr-only">
+                {view === "whats-new" ? "What's new" : WORKFLOW_TABS.find((tab) => tab.id === view)?.label}
+              </h1>
+            }
+          >
+            {form}
+          </Suspense>
         </div>
       </section>
     ) : null;

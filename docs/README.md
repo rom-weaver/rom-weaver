@@ -65,6 +65,7 @@ For terminal equivalents and availability limits, use the [feature map](referenc
 Guided practice runs. Follow them start to finish; everything you need is supplied.
 
 - [Your first patch in the browser](tutorials/first-patch.md): patch a homebrew ROM and verify the result byte for byte.
+- [Patch a compressed CHD disc](tutorials/patch-compressed-disc.md): apply two supplied patches and verify the decompressed result.
 - [Your first apply in the terminal](tutorials/cli-first-weave.md): the same job, plus creating and bundling a patch, from a command line.
 
 ## How-to guides

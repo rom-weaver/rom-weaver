@@ -446,9 +446,6 @@ const Masthead = ({
   ];
   // No beta workflow claims a dock slot, so the dock needs no reveal pass.
   const dockTabs = tabs.filter((tab) => tab.dock && !tab.beta);
-  // Docs and the landing page bring their own h1, so the brand steps down to a
-  // span there rather than giving the document two.
-  const BrandHeading = currentTab === "docs" || currentTab === "home" || currentTab === "whats-new" ? "span" : "h1";
   const buildTag = version ? (
     <BuildTag
       channelBadge={channelBadge}
@@ -553,10 +550,10 @@ const Masthead = ({
                 </a>
                 <span className="brand-copy">
                   <a className="brand-word-link" href={homeHref}>
-                    <BrandHeading className="brand-word">
+                    <span className="brand-word">
                       rom<span className="brand-hy">-</span>
                       <b>weaver</b>
-                    </BrandHeading>
+                    </span>
                   </a>
                   {previewVersionStatus ? null : buildFacts}
                 </span>

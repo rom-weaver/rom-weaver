@@ -1,4 +1,4 @@
-import { Marked, Parser, Renderer } from "marked";
+import { Lexer, Marked, Parser, Renderer } from "marked";
 import { docGroupTitle, DOC_SOURCES, SITE_ORIGIN } from "./docs-routing.mjs";
 
 // Build-time only. `marked` must never reach a browser bundle: the client
@@ -277,10 +277,8 @@ const renderMarkdown = (markdown, slug, sourceFile) => {
 const createDocRoute = ({ file, group, label, slug }, markdown) => {
   const title = markdown.match(/^#\s+(.+)$/m)?.[1];
   if (!title) throw new Error(`${file} must have one level-one heading`);
-  const description = stripDoctoc(markdown, false)
-    .split(/\n\s*\n/)
-    .map(stripMarkdown)
-    .find((block) => block && !block.startsWith("#") && !block.startsWith("<!--"));
+  const paragraph = Lexer.lex(stripDoctoc(markdown, false)).find((token) => token.type === "paragraph");
+  const description = paragraph && "tokens" in paragraph && paragraph.tokens ? plainHeading(paragraph.tokens) : "";
   if (!description) throw new Error(`${file} must start with a descriptive paragraph`);
   const { html, sections } = renderMarkdown(markdown, slug, file);
   return Object.freeze({

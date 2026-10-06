@@ -148,8 +148,8 @@ describe("Masthead", () => {
     expect(home.getAttribute("href")).toBe("/");
     fireEvent.click(home);
     expect(onSelectTab).toHaveBeenCalledWith("home");
-    // Build facts stay with the title in both layouts.
-    expect(container.querySelectorAll("h1").length).toBe(1);
+    // The workflow owns its heading; the shared brand is not a page title.
+    expect(container.querySelectorAll("h1").length).toBe(0);
     expect(container.querySelectorAll(".brand").length).toBe(1);
     expect(container.querySelectorAll(".masthead-threads").length).toBe(0);
     expect(container.querySelectorAll(".sub-status").length).toBe(2);

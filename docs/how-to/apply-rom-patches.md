@@ -27,6 +27,8 @@ Apply BPS, IPS, UPS, xdelta, PPF, and other supported ROM patches locally in you
 
 Never done this before? [Your first patch in the browser](../tutorials/first-patch.md) walks the same workflow with homebrew practice files first, using [guided Apply](https://rom-weaver.com/apply-patches?guide=apply).
 
+For a compressed-disc practice run, [patch a supplied CHD](../tutorials/patch-compressed-disc.md) with two ordered patches and verify the result.
+
 ## What do you need?
 
 You need the patch and your own copy of the exact game release it was made for. The files have different roles:
