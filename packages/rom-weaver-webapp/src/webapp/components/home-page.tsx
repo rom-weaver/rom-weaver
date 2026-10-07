@@ -56,17 +56,17 @@ const INSTALL_METHODS: readonly InstallMethod[] = [
 type NavigatorWithPlatformHint = Navigator & { userAgentData?: { platform?: string } };
 
 /**
- * Picks the install tab from the visitor's platform: PowerShell on Windows,
- * Homebrew on macOS, the shell script everywhere else (Linux, phones, unknown).
+ * Picks the install tab from the visitor's platform: PowerShell on Windows, the
+ * shell script everywhere else. macOS gets the script rather than Homebrew:
+ * stock macOS has no `brew`, the page cannot tell whether a visitor installed
+ * it, and the script also checks build provenance. Homebrew users pick its tab.
  * The prerendered page has no navigator, so it renders the shell script and the
- * hydrated page switches, the same as before this picker had more than two
- * entries.
+ * hydrated page switches on Windows.
  */
 const detectInstallMethod = (): InstallMethod["id"] => {
   const nav = navigator as NavigatorWithPlatformHint;
   const platform = `${nav.userAgentData?.platform ?? ""} ${nav.userAgent}`;
   if (/Windows/i.test(platform)) return "windows";
-  if (/Mac/i.test(platform) && !/iPhone|iPad|iPod/i.test(platform)) return "brew";
   return "shell";
 };
 
