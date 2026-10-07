@@ -23,9 +23,17 @@ The [guided Apply cheats tour](https://rom-weaver.com/apply-patches?guide=apply-
 The picker includes **Make the greeting start with M** (`80970D`) and **Change the background color** (`8077300F`). These are practice codes for the supplied homebrew ROM only.
 
 <figure class="docs-screenshot">
-  <picture>
-    <source media="(max-width: 520px)" srcset="../screenshots/cheat-apply-cheats-mobile-light.webp" width="390" height="844">
-    <img src="../screenshots/cheat-apply-cheats-desktop-dark.webp" alt="Shared cheat picker with two practice codes and manual entry" width="1164" height="900">
+  <picture data-docs-screenshot-theme="light">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/cheat-apply-cheats-mobile-light.avif" width="1170" height="2532">
+    <source type="image/avif" srcset="../screenshots/cheat-apply-cheats-desktop-light.avif" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/cheat-apply-cheats-mobile-light.webp" width="1170" height="2532">
+    <img src="../screenshots/cheat-apply-cheats-desktop-light.webp" alt="Shared cheat picker with two practice codes and manual entry in the light theme" width="2328" height="1800">
+  </picture>
+  <picture data-docs-screenshot-theme="dark">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/cheat-apply-cheats-mobile-dark.avif" width="1170" height="2532">
+    <source type="image/avif" srcset="../screenshots/cheat-apply-cheats-desktop-dark.avif" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/cheat-apply-cheats-mobile-dark.webp" width="1170" height="2532">
+    <img src="../screenshots/cheat-apply-cheats-desktop-dark.webp" alt="Shared cheat picker with two practice codes and manual entry in the dark theme" width="2328" height="1800">
   </picture>
   <figcaption>The shared picker lists practice codes for the supplied ROM.</figcaption>
 </figure>
@@ -46,16 +54,16 @@ Use each card's inclusion control to leave a step out without removing it. Patch
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/cheat-step-mobile-light.avif" width="1170" height="2141">
-    <source type="image/avif" srcset="../screenshots/cheat-step-desktop-light.avif" width="1770" height="1180">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/cheat-step-mobile-light.webp" width="1170" height="2141">
-    <img src="../screenshots/cheat-step-desktop-light.webp" alt="Two sample patches followed by a manual ROM cheat in the same ordered list in the light theme" width="1770" height="1180">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/cheat-step-mobile-light.avif" width="1170" height="2532">
+    <source type="image/avif" srcset="../screenshots/cheat-step-desktop-light.avif" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/cheat-step-mobile-light.webp" width="1170" height="2532">
+    <img src="../screenshots/cheat-step-desktop-light.webp" alt="Two sample patches followed by a manual ROM cheat in the same ordered list in the light theme" width="2328" height="1800">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/cheat-step-mobile-dark.avif" width="1170" height="2141">
-    <source type="image/avif" srcset="../screenshots/cheat-step-desktop-dark.avif" width="1770" height="1180">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/cheat-step-mobile-dark.webp" width="1170" height="2141">
-    <img src="../screenshots/cheat-step-desktop-dark.webp" alt="Two sample patches followed by a manual ROM cheat in the same ordered list in the dark theme" width="1770" height="1180">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/cheat-step-mobile-dark.avif" width="1170" height="2532">
+    <source type="image/avif" srcset="../screenshots/cheat-step-desktop-dark.avif" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/cheat-step-mobile-dark.webp" width="1170" height="2532">
+    <img src="../screenshots/cheat-step-desktop-dark.webp" alt="Two sample patches followed by a manual ROM cheat in the same ordered list in the dark theme" width="2328" height="1800">
   </picture>
   <figcaption>Cheats occupy numbered steps beside patches. This homebrew example demonstrates the controls, not a recommended gameplay code.</figcaption>
 </figure>
@@ -96,7 +104,18 @@ The [guided Create cheats tour](https://rom-weaver.com/create-patch?guide=create
 **Pick from the cheat database** offers the same database as Apply. A code that cannot become ROM writes blocks creation and states its reason.
 
 <figure class="docs-screenshot">
-  <img src="../screenshots/cheat-create-cheats-desktop-light.webp" alt="Create using the shared cheat picker and manual entry" width="1164" height="900">
+  <picture data-docs-screenshot-theme="light">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/cheat-create-cheats-mobile-light.avif" width="1170" height="2532">
+    <source type="image/avif" srcset="../screenshots/cheat-create-cheats-desktop-light.avif" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/cheat-create-cheats-mobile-light.webp" width="1170" height="2532">
+    <img src="../screenshots/cheat-create-cheats-desktop-light.webp" alt="Create using the shared cheat picker and manual entry in the light theme" width="2328" height="1800">
+  </picture>
+  <picture data-docs-screenshot-theme="dark">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/cheat-create-cheats-mobile-dark.avif" width="1170" height="2532">
+    <source type="image/avif" srcset="../screenshots/cheat-create-cheats-desktop-dark.avif" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/cheat-create-cheats-mobile-dark.webp" width="1170" height="2532">
+    <img src="../screenshots/cheat-create-cheats-desktop-dark.webp" alt="Create using the shared cheat picker and manual entry in the dark theme" width="2328" height="1800">
+  </picture>
   <figcaption>Create uses the same picker to add codes to its input.</figcaption>
 </figure>
 

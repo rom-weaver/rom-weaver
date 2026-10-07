@@ -31,8 +31,18 @@ Documentation images show real app controls with homebrew samples or a generated
 | `cheat-step` | [Use cheats](../how-to/use-browser-cheats.md) | A manual ROM-write step in the patch order |
 | `save-editor` | [Edit a save](../how-to/edit-gen3-saves.md) | Filtered fields and a checked edit preview |
 | `test-player` | [Test a ROM](../how-to/test-roms-in-browser.md) | The homebrew player and its ROM fingerprint |
+| `cheat-apply-cheats` | [Use cheats](../how-to/use-browser-cheats.md) | The shared cheat picker on Apply |
+| `cheat-create-cheats` | [Use cheats](../how-to/use-browser-cheats.md) | The same picker on Create |
+| `compress-select-files` | [Convert files](../how-to/convert-roms-browser.md) | Choosing files inside an archive |
+| `compress` | [Convert files](../how-to/convert-roms-browser.md) | Compress inputs and output controls |
+| `checksum-initial` | [Checksum files](../how-to/checksum-roms-browser.md) | Checksum options before a file is added |
+| `ppf-undo` | [Undo a PPF patch](../how-to/undo-ppf-browser.md) | A restored ROM ready to download |
+| `settings` | [Set up the browser app](../how-to/browser-settings.md#change-preferences) | App preferences and Save |
+| `offline` | [Set up the browser app](../how-to/browser-settings.md#prepare-for-offline-use) | The offline copy status |
 
 Each subject has desktop and mobile captures in light and dark themes. AVIF is the preferred image format; WebP is the fallback. These are delivery variants, not duplicate examples.
+
+Every capture is one whole viewport, so all images of a viewport share one size: desktop is 2328×1800 and mobile is 1170×2532. The older `cheat-identify`, `checksum`, and `first-sample-*` images are single captures outside this set.
 
 The manual cheat capture demonstrates the controls, not a useful cheat for the homebrew ROM. The save capture changes a generated Zelda save; it includes no game ROM.
 
@@ -92,12 +102,12 @@ Clear that filter before the next full capture:
 unset ROM_WEAVER_SCREENSHOT_CASE
 ```
 
-The capture script waits for the displayed result and crops the relevant controls. Desktop uses 2x resolution; mobile uses 3x. Playback is muted.
+The capture script waits for the displayed result, scrolls the relevant controls to the top, and captures the whole viewport. Desktop is 1164×900 at 2x resolution; mobile is 390×844 at 3x. Playback is muted.
 
-The crop hides the floating navigation dock so it cannot cover tool controls. ImageMagick crops images and encodes WebP; the bundled WebAssembly encoder creates AVIF.
+The capture hides the floating navigation dock so it cannot cover tool controls. ImageMagick encodes WebP; the bundled WebAssembly encoder creates AVIF.
 
 Keep image paths relative to the Markdown page. The documentation renderer rewrites Markdown images and HTML picture sources for the published site.
 
-After regeneration, update each image's `width` and `height` to its measured pixel size. Keep alt text and captions specific to the state shown.
+Every `width` and `height` in the docs markup must equal the image's pixel size. The webapp script tests check this for every docs screenshot. Keep alt text and captions specific to the state shown.
 
 The build checks that each subject has every required format, viewport, and theme variant, and that its owning guide references them.
