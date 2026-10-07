@@ -187,10 +187,14 @@ describe("Masthead", () => {
       "Project",
       "Controls",
     ]);
-    // Opening Menu puts the cursor in its Find box, so the keyboard comes with it.
+    // Menu opens for browsing: the cursor stays out of its Find box, so the keyboard stays down.
     const find = sheet.querySelector(".find-palette.is-embedded .find-input");
     expect(find).toBeTruthy();
-    expect(document.activeElement).toBe(find);
+    expect(document.activeElement).not.toBe(find);
+    // A tile too narrow for its full label shows the short one and keeps the full one as its name.
+    const offline = sheet.querySelector('[data-nav="status"]') as HTMLElement;
+    expect(offline.querySelector(".nav-row-short")?.textContent).toBe("Offline");
+    expect(offline.getAttribute("aria-label")).toBe("Offline app");
     expect(sheet.querySelector(".find-empty")).toBeNull();
     expect(sheet.querySelector(".sub-status")).toBeNull();
     expect(container.querySelector(".phone-runtime .sub-status-text")?.textContent).toBe(
@@ -198,7 +202,7 @@ describe("Masthead", () => {
     );
   });
 
-  it("docks three workflows plus Menu and Controls", () => {
+  it("docks the workflows, then Menu, which reads Close while its sheet is open", () => {
     const onSelectTab = vi.fn();
     const onOpenSettings = vi.fn();
     const { container } = render(
@@ -206,7 +210,7 @@ describe("Masthead", () => {
     );
     const dockNav = container.querySelector(".dock") as HTMLElement;
     const slots = Array.from(dockNav.querySelectorAll(".dock-tab"));
-    expect(slots.map((slot) => slot.textContent)).toEqual(["Apply", "Create", "Menu", "Test", "Controls"]);
+    expect(slots.map((slot) => slot.textContent)).toEqual(["Apply", "Create", "Test", "Menu"]);
     expect(slots[0]?.getAttribute("aria-current")).toBe("page");
     expect(container.querySelector(".phone-runtime .sub-status")).toBeTruthy();
     expect(container.querySelector(".dock-find")).toBeNull();
@@ -219,7 +223,10 @@ describe("Masthead", () => {
     fireEvent.click(menu);
     expect(menu.getAttribute("aria-expanded")).toBe("true");
     expect(sheet.hidden).toBe(false);
-    // Clicking Menu again closes it; so does Escape.
+    // The way out sits where the way in was.
+    expect(menu.textContent).toBe("Close");
+    expect(menu.getAttribute("aria-label")).toBe("Close");
+    // Clicking it again closes the sheet; so does Escape.
     fireEvent.click(menu);
     expect(sheet.hidden).toBe(true);
     fireEvent.click(menu);
@@ -229,23 +236,13 @@ describe("Masthead", () => {
     fireEvent.click(dockNav.querySelector('[data-mode="test"]') as HTMLAnchorElement);
     expect(onSelectTab).toHaveBeenCalledWith("test");
 
-    // App closes the sheet and opens the console.
+    // Settings in the sheet closes it and opens the console; the dock has no slot of its own for it.
+    expect(dockNav.querySelector(".dock-app")).toBeNull();
     fireEvent.click(menu);
-    fireEvent.click(dockNav.querySelector(".dock-app") as HTMLButtonElement);
+    fireEvent.click(sheet.querySelector('[data-nav="settings"]') as HTMLButtonElement);
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
     expect(sheet.hidden).toBe(true);
-  });
-
-  it("opens the console on a leftward swipe across the dock, not on a vertical drag", () => {
-    const onOpenSettings = vi.fn();
-    const { container } = render(withSettings(<Masthead {...mastheadProps} onOpenSettings={onOpenSettings} />));
-    const dockNav = container.querySelector(".dock") as HTMLElement;
-    fireEvent.pointerDown(dockNav, { clientX: 300, clientY: 700, isPrimary: true });
-    fireEvent.pointerUp(dockNav, { clientX: 290, clientY: 600, isPrimary: true });
-    expect(onOpenSettings).not.toHaveBeenCalled();
-    fireEvent.pointerDown(dockNav, { clientX: 300, clientY: 700, isPrimary: true });
-    fireEvent.pointerUp(dockNav, { clientX: 180, clientY: 705, isPrimary: true });
-    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+    expect(menu.textContent).toBe("Menu");
   });
 
   it("spends Escape on the sheet when the open popover is the chrome's, not the sheet's", () => {

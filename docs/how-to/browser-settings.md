@@ -14,11 +14,11 @@ Use Settings to change app preferences, enable beta tools, and prepare local ass
 
 ## Change preferences
 
-Open **Settings** from the app navigation. On a phone, select **Controls** at the right end of the bottom bar, or swipe the bar to the left. Change the required values, then select **Save**.
+Open **Settings** from the app navigation. On a phone, select **Menu** at the right end of the bottom bar, then **Settings**. Change the required values, then select **Save**.
 
 The settings cover language, byte units, guided help, output defaults, and compression. Guided help is the **New here?** button that starts the [guided practice runs](../reference/guided-runs.md). Turn on **Advanced** to show worker threads, codecs, and the RVZ block size. Leave automatic thread selection enabled unless you need to limit resource use.
 
-To leave Settings on a phone, select **Close** at the right end of the bottom bar, swipe the bottom bar to the right, or use your browser's back gesture.
+To leave Settings on a phone, select **Close** at the right end of the bottom bar, swipe right from the left edge of the screen, or use your browser's back gesture.
 
 The separate **Theme** and **Accent** controls in the navigation apply changes immediately. Theme offers light, dark, and system appearance; Accent changes the highlight color.
 

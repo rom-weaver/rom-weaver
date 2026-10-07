@@ -254,12 +254,12 @@ describe("Find", () => {
     fireEvent.click(container.querySelector(".topbar-find") as HTMLButtonElement);
     expect(container.querySelector("#find-palette")).not.toBeNull();
 
-    // Opening Tools closes the floating palette and focuses the sheet's own box.
+    // Opening Menu closes the floating palette; its own box waits for a tap, so the keyboard stays down.
     fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
     expect(container.querySelector("#find-palette")).toBeNull();
     const embedded = container.querySelector("#menu-sheet .find-palette.is-embedded") as HTMLElement;
     expect(embedded.getAttribute("role")).toBe("search");
-    expect(document.activeElement).toBe(embedded.querySelector(".find-input"));
+    expect(document.activeElement).not.toBe(embedded.querySelector(".find-input"));
     expect(container.querySelector(".dock-find")).toBeNull();
 
     // Empty, the box shows the sheet's nav and points at no options.

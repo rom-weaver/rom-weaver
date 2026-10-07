@@ -970,7 +970,9 @@ describe("webapp keyboard navigation", () => {
     await renderMasthead(noop);
     host.querySelector(".dock-menu").click();
     await settleUntil(() => !!host.querySelector("#menu-sheet .find-input"));
-    expect(document.activeElement).toBe(host.querySelector("#menu-sheet .find-input"));
+    // Menu opens for browsing; tapping its Find box is what brings the keyboard.
+    expect(document.activeElement).not.toBe(host.querySelector("#menu-sheet .find-input"));
+    host.querySelector("#menu-sheet .find-input").focus();
 
     host
       .querySelector("#menu-sheet .find-input")
@@ -1301,9 +1303,9 @@ describe("webapp responsive navigation", () => {
       const dock = host.querySelector(".dock");
       expect(getComputedStyle(dock).display).toBe("grid");
       expect(getComputedStyle(dock).position).toBe("fixed");
-      // Three workflows plus Menu and Controls, each with a word under its glyph.
+      // The fixture's three dock workflows, then Menu, each with a word under its glyph.
       const slots = [...dock.querySelectorAll(".dock-tab")];
-      expect(slots.length).toBe(5);
+      expect(slots.length).toBe(4);
       for (const slot of slots) {
         const label = slot.lastElementChild;
         expect(label.textContent.trim().length).toBeGreaterThan(0);
@@ -1334,7 +1336,7 @@ describe("webapp responsive navigation", () => {
     }
   });
 
-  test("Menu lists every sidebar row but theme and accent, and the dock ends with Controls", async () => {
+  test("Menu lists every sidebar row but theme and accent, and the dock ends with Menu", async () => {
     await setViewport(VIEWPORTS[0]);
     await renderMastheadOnly(ALL_TABS);
     const labels = (scope) => [...host.querySelectorAll(`${scope} .nav-row-label`)].map((label) => label.textContent);
@@ -1348,7 +1350,8 @@ describe("webapp responsive navigation", () => {
     expect(sortLabels(labels(".menu-sheet"))).toEqual(
       sortLabels(labels(".side-nav").filter((label) => !appearance.has(label))),
     );
-    expect(host.querySelector(".dock-app")?.textContent).toBe("Controls");
+    expect(host.querySelector(".dock-app")).toBeNull();
+    expect(host.querySelector(".dock .dock-tab:last-child")?.classList.contains("dock-menu")).toBe(true);
     expect(host.querySelector(".phone-runtime .sub-status")?.getAttribute("aria-label")).toBe(
       host.querySelector(".desktop-runtime .sub-status")?.getAttribute("aria-label"),
     );
