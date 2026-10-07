@@ -797,6 +797,7 @@
   font-weight: 650;
 }
 .rw-app .identify-search-row {
+  position: relative;
   display: flex;
   flex: 1 1 20rem;
   gap: var(--sp-s);
@@ -805,6 +806,13 @@
 .rw-app .identify-search-input {
   flex: 1 1 8rem;
   min-width: 0;
+  text-overflow: ellipsis;
+}
+/* The no-file sample reuses the onboarding chip's pill and 44px target, set
+   inside the empty box's end; the row's centering places it vertically. */
+.rw-app .identify-search-sample {
+  position: absolute;
+  inset-inline-end: 2px;
 }
 .rw-app .identify-search-error {
   flex-basis: 100%;

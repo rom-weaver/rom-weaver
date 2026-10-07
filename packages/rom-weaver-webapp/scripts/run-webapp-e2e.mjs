@@ -911,7 +911,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
 
     await page.setViewportSize(A11Y_VIEWPORTS[0]);
     await setTheme("light");
-    const onboardingChip = page.locator(".sample-tutorial-start-chip:visible").first();
+    const onboardingChip = page.locator(".sample-tutorial-start .sample-tutorial-start-chip:visible").first();
     await onboardingChip.waitFor({ state: "visible", timeout: 60_000 });
     await onboardingChip.click();
     const guidedApply = page.locator(".sample-tutorial-start-primary:visible").first();
@@ -1018,7 +1018,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await setTheme("light");
     await openNav();
     await navRow("creator").click();
-    const createOnboardingChip = page.locator(".sample-tutorial-start-chip:visible").first();
+    const createOnboardingChip = page.locator(".sample-tutorial-start .sample-tutorial-start-chip:visible").first();
     await createOnboardingChip.waitFor({ state: "visible" });
     await createOnboardingChip.click();
     const guidedCreate = page.locator(".sample-tutorial-start-primary:visible").first();

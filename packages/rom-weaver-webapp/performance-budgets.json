@@ -50,13 +50,13 @@
         "maxBrotliBytes": 11500
       },
       {
-        "_comment": "Raised for the patches-step cheat card layout and database picker added in the apply workflow. The mobile docs navigation measures 258,432 raw CSS bytes and 41,009 Brotli bytes; its approved limits are 260,000 and 42,000 bytes. The shared cheat picker and read-only inspection add about 0.7 KiB raw CSS; the approved raw limit is 262,000 bytes. The guided Simple/Detailed step on Apply and Create brings the PR bundle to 262,498 raw and 41,446 Brotli bytes; the approved limits of 264,500 raw and 42,300 Brotli bytes retain about 2 KiB and 0.8 KiB of headroom.",
+        "_comment": "Raised for the patches-step cheat card layout and database picker added in the apply workflow. The mobile docs navigation measures 258,432 raw CSS bytes and 41,009 Brotli bytes; its approved limits are 260,000 and 42,000 bytes. The shared cheat picker and read-only inspection add about 0.7 KiB raw CSS; the approved raw limit is 262,000 bytes. The guided Simple/Detailed step on Apply and Create brings the PR bundle to 262,498 raw and 41,446 Brotli bytes; the approved limits of 264,500 raw and 42,300 Brotli bytes retain about 2 KiB and 0.8 KiB of headroom. The Identify sample button inside the empty search box adds about 110 raw bytes on top of #1020, which left about 50 bytes of raw headroom; the approved raw limit is 265,500 bytes.",
         "name": "CSS",
         "directory": "assets",
         "extension": ".css",
         "requireBrotliMinBytes": 1024,
         "expectedRawBytes": 245000,
-        "maxRawBytes": 264500,
+        "maxRawBytes": 265500,
         "expectedBrotliBytes": 38600,
         "maxBrotliBytes": 42300
       },

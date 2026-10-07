@@ -588,8 +588,10 @@ test.each([
   await page.viewport(1024, 900);
   mountWebappRoot({ initialView });
 
-  await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeInstanceOf(HTMLButtonElement);
-  const chip = document.querySelector(".sample-tutorial-start-chip");
+  await expect
+    .poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip"))
+    .toBeInstanceOf(HTMLButtonElement);
+  const chip = document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip");
   const chipBox = chip.getBoundingClientRect();
   expect(chipBox.height).toBeGreaterThanOrEqual(44);
   expect(chipBox.height).toBeLessThanOrEqual(48);
@@ -621,12 +623,12 @@ test.each([
 
   // Dismissal hides the beacon in place.
   document.querySelector(".sample-tutorial-start-dismiss").click();
-  await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeNull();
+  await expect.poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip")).toBeNull();
 
   // The persisted form of the same choice: onboardingEnabled=false renders no beacon.
   mountWebappRoot({ initialView, settings: { ...getDefaultSettings(), onboardingEnabled: false } });
   await expect.poll(() => document.querySelector(".drop.hero")).toBeTruthy();
-  expect(document.querySelector(".sample-tutorial-start-chip")).toBeNull();
+  expect(document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip")).toBeNull();
 });
 
 test("WebappRoot resolves an auto thread count the same way the Threads setting does", async () => {

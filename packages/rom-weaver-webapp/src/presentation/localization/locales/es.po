@@ -4100,6 +4100,21 @@ msgstr "Herramienta Recortar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.drop"
+msgstr "Suelta una ROM para identificarla"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.tap"
+msgstr "Toca para añadir una ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.trySample"
+msgstr "Probar un ejemplo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tutorial.tryIt"
 msgstr "Pruébalo"
 
