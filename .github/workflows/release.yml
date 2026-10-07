@@ -405,12 +405,18 @@ jobs:
           )
 
           for name in "${names[@]}"; do
-            status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            lookup_failed=0
+            status=$(curl --silent --retry 3 --retry-all-errors --fail \
+              --output /dev/null --write-out '%{http_code}' \
               --user-agent "$CRATES_IO_USER_AGENT" \
-              "https://crates.io/api/v1/crates/$name")
-            if [[ "$status" != 200 ]]; then
+              "https://crates.io/api/v1/crates/$name") || lookup_failed=1
+            if [[ "$status" = 404 ]]; then
               echo "::notice::$name has no published baseline yet - skipping semver check"
               continue
+            fi
+            if [[ "$status" != 200 || "$lookup_failed" != 0 ]]; then
+              echo "::error::$name baseline lookup failed (HTTP $status)"
+              exit 1
             fi
             cargo semver-checks check-release --package "$name"
           done
@@ -585,12 +591,13 @@ jobs:
           subject-path: rom-weaver-webapp.tar.gz
 
   publish-npm:
-    needs: [release, cargo-publish-dry-run]
+    needs: [release, semver-check, cargo-publish-dry-run]
     if: >-
       !cancelled() &&
       needs.release.result == 'success' &&
       needs.release.outputs.release_created == 'true' &&
-      needs.cargo-publish-dry-run.result == 'success'
+      needs.cargo-publish-dry-run.result == 'success' &&
+      needs.semver-check.result == 'success'
     permissions:
       contents: write
       id-token: write
@@ -756,12 +763,13 @@ jobs:
   # docker-publish falls back to building from source if either artifact is
   # missing, which is what a standalone workflow_dispatch gets.
   publish-containers:
-    needs: [release, static-webapp, publish-npm]
+    needs: [release, semver-check, static-webapp, publish-npm]
     if: >-
       !cancelled() &&
       needs.release.result == 'success' &&
       needs.static-webapp.result == 'success' &&
       needs.publish-npm.result == 'success' &&
+      needs.semver-check.result == 'success' &&
       needs.release.outputs.release_created == 'true'
     permissions:
       # Belt and braces for the artifact download in docker-publish.yml. A

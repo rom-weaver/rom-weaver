@@ -207,7 +207,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
     if (!currentIdentity) return undefined;
     const sendVisibility = (kind: "visibility-pause" | "visibility-resume") => {
       iframeRef.current?.contentWindow?.postMessage(
-        { gameId: currentIdentity.gameName, kind, source: "rom-weaver-emulator" },
+        { gameId: currentIdentity.saveId, kind, source: "rom-weaver-emulator" },
         "*",
       );
     };
@@ -242,7 +242,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
       if (event.source !== iframeRef.current?.contentWindow) return;
       if (!event.data || typeof event.data !== "object") return;
       const message = event.data as { source?: unknown; gameId?: unknown; kind?: unknown };
-      if (message.source !== "rom-weaver-emulator" || message.gameId !== currentIdentity.gameName) return;
+      if (message.source !== "rom-weaver-emulator" || message.gameId !== currentIdentity.saveId) return;
       if (message.kind !== "sram-loaded" && message.kind !== "sram-load-failed") return;
       setSaveLoadResult({
         gameName: currentIdentity.gameName,
@@ -798,6 +798,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                       referrerPolicy="no-referrer"
                       srcDoc={createEmulatorDocument(dataUrl, gameUrl, currentIdentity.gameName, currentCore, {
                         gameId: currentIdentity.gameId,
+                        saveId: currentIdentity.saveId,
                         gameLabel: currentGame.fileName,
                       })}
                       title={`EmulatorJS test for ${currentGame.fileName}`}

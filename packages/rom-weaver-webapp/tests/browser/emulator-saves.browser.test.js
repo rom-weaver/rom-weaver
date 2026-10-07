@@ -16,10 +16,43 @@ const original = {
   sram: new Uint8Array([2]),
 };
 const readSave = async () => (await listEmulatorSaves()).find((record) => record.gameId === sha1);
+const readSaveById = async (gameId) => (await listEmulatorSaves()).find((record) => record.gameId === gameId);
 
 afterEach(async () => {
   vi.restoreAllMocks();
   await deleteEmulatorSave(sha1);
+  for (const record of await listEmulatorSaves()) {
+    if (record.gameId.startsWith(`${sha1}.chd`)) await deleteEmulatorSave(record.gameId);
+  }
+});
+
+it("migrates CHD aliases atomically while concurrent imports retain both new save parts", async () => {
+  await writeEmulatorSave({ ...original, gameId: `${sha1}.chd`, gameName: `${sha1}.chd`, updatedAt: 1 });
+  await Promise.all([
+    importEmulatorSavePart({ data: new Uint8Array([10, 11]), part: "state", sha1 }),
+    importEmulatorSavePart({ data: new Uint8Array([20, 21]), part: "sram", sha1 }),
+  ]);
+  expect(await readSave()).toMatchObject({
+    gameId: sha1,
+    gameName: sha1,
+    label: original.label,
+    state: new Uint8Array([10, 11]),
+    sram: new Uint8Array([20, 21]),
+  });
+  expect(await readSaveById(`${sha1}.chd`)).toBeUndefined();
+});
+
+it("preserves conflicting legacy CHD bytes without resurrecting a deleted canonical save", async () => {
+  await writeEmulatorSave({ ...original, gameId: `${sha1}.chd`, gameName: `${sha1}.chd`, updatedAt: 1 });
+  await writeEmulatorSave({ ...original, state: new Uint8Array([3]), updatedAt: 2 });
+  expect(await readSave()).toMatchObject({ state: new Uint8Array([3]) });
+  expect(await readSaveById(`${sha1}.chd-conflict`)).toMatchObject({
+    gameName: `${sha1}.chd`,
+    state: original.state,
+    sram: original.sram,
+  });
+  await deleteEmulatorSave(sha1);
+  expect(await readSave()).toBeUndefined();
 });
 
 it("atomically merges concurrent state and SRAM imports in real IndexedDB", async () => {

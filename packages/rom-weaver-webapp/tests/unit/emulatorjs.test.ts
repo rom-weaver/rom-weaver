@@ -58,6 +58,37 @@ describe("getEmulatorJsAspectRatio", () => {
 });
 
 describe("createEmulatorDocument", () => {
+  it("sends CHD saves and load requests under the canonical checksum", () => {
+    const checksum = "a".repeat(40);
+    const document = createEmulatorDocument("/data/", "blob:game", `${checksum}.chd`, "psx", { saveId: checksum });
+    expect(document).toContain(`EJS_gameName = "${checksum}.chd"`);
+    const source = document.indexOf('const source = "rom-weaver-emulator"');
+    const script = document.slice(document.lastIndexOf("(() => {", source), document.indexOf("})();", source) + 5);
+    const messages: unknown[] = [];
+    const window = {
+      parent: { postMessage: (message: unknown) => messages.push(message) },
+      addEventListener: () => undefined,
+    };
+    const handlers = runInNewContext(`${script}; [EJS_onSaveSave, EJS_onLoadSave];`, {
+      window,
+      Uint8Array,
+      ArrayBuffer,
+    }) as [(payload: unknown) => void, () => void];
+    handlers[0]({ save: new Uint8Array([1, 2]) });
+    handlers[1]();
+    expect(messages).toEqual([
+      {
+        source: "rom-weaver-emulator",
+        kind: "save-sram",
+        gameId: checksum,
+        gameName: checksum,
+        gameLabel: `${checksum}.chd`,
+        data: new Uint8Array([1, 2]),
+      },
+      { source: "rom-weaver-emulator", kind: "request-load-sram", gameId: checksum, gameName: checksum },
+    ]);
+  });
+
   it("selects the self-hosted threaded WebGL 2 core", () => {
     const document = createEmulatorDocument("/emulatorjs/data/", "blob:game", "game.nes", "nes");
 
@@ -191,6 +222,7 @@ describe("emulator game identity", () => {
     const checksum = "a9993e364706816aba3e25717850c26c9cd0d89d";
     const identity = createEmulatorGameIdentity({ checksum, fileName: "Game.CHD" });
     expect(identity.gameName).toBe(`${checksum}.chd`);
+    expect(identity.saveId).toBe(checksum);
     expect(identity.gameId).toBe(createEmulatorGameIdentity({ checksum }).gameId);
   });
 

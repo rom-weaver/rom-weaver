@@ -10,9 +10,13 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+
 import { join, resolve } from "node:path";
 import test from "node:test";
+
+const scratch = resolve(".agent/release-install");
+mkdirSync(scratch, { recursive: true });
+const tmpdir = () => scratch;
 
 const writeExecutable = (path, source) => {
   writeFileSync(path, source);
@@ -153,23 +157,28 @@ const setUpDarwinInstall = (directory, options = {}) => {
 // caller asserting on a warning should not have to know which stream it took.
 const runInstall = (directory, bin, environment = {}) => {
   const { PATH: extra = "", ...rest } = environment;
-  return execFileSync("/bin/sh", ["-c", `/bin/sh "${resolve("install.sh")}" 2>&1`], {
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      CURL_LOG: join(directory, "curl.log"),
-      ATTESTATION_STATUS: "200",
-      ATTESTATION_CURL_FAILS: "0",
-      HOME: directory,
-      PATH: `${bin}:${extra ? `${extra}:` : ""}/usr/bin:/bin`,
-      ROM_WEAVER_INSTALL_DIR: join(directory, "install"),
-      CLI_ASSET_ARCHIVE: join(directory, "cli-assets.tar.gz"),
-      BINARY_ASSET_ARCHIVE: join(directory, "binary-asset.tar.gz"),
-      IDENTIFY_DATA_ARCHIVE: join(directory, "identify-data.tar.br"),
-      ...rest,
+  return execFileSync(
+    "/bin/sh",
+    ["-c", `/bin/sh "${resolve(process.env.INSTALL_SCRIPT || "install.sh")}" 2>&1`],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        CURL_LOG: join(directory, "curl.log"),
+        ATTESTATION_STATUS: "200",
+        ATTESTATION_CURL_FAILS: "0",
+        HOME: directory,
+        TMPDIR: directory,
+        PATH: `${bin}:${extra ? `${extra}:` : ""}/usr/bin:/bin`,
+        ROM_WEAVER_INSTALL_DIR: join(directory, "install"),
+        CLI_ASSET_ARCHIVE: join(directory, "cli-assets.tar.gz"),
+        BINARY_ASSET_ARCHIVE: join(directory, "binary-asset.tar.gz"),
+        IDENTIFY_DATA_ARCHIVE: join(directory, "identify-data.tar.br"),
+        ...rest,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
     },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  );
 };
 
 test("installs the binary for the host platform", () => {
@@ -219,6 +228,7 @@ test("installs the binary for the host platform", () => {
       "https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-identify-data.tar.br",
       `https://api.github.com/repos/rom-weaver/rom-weaver/attestations/sha256:${DIGEST}?predicate_type=https://slsa.dev/provenance/v1`,
       "https://github.com/rom-weaver/rom-weaver/releases/latest/download/rom-weaver-cli-assets.tar.gz",
+      `https://api.github.com/repos/rom-weaver/rom-weaver/attestations/sha256:${DIGEST}?predicate_type=https://slsa.dev/provenance/v1`,
     ]);
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -272,11 +282,12 @@ esac
       );
       writeExecutable(join(bin, "sha256sum"), "#!/bin/sh\nexit 0\n");
 
-      execFileSync("/bin/sh", [resolve("install.sh")], {
+      execFileSync("/bin/sh", [resolve(process.env.INSTALL_SCRIPT || "install.sh")], {
         env: {
           ...process.env,
           CURL_LOG: curlLog,
           HOME: directory,
+          TMPDIR: directory,
           PATH: `${bin}:/usr/bin:/bin`,
           ROM_WEAVER_INSTALL_DIR: join(directory, "install"),
           CLI_ASSET_ARCHIVE: join(directory, "cli-assets.tar.gz"),
@@ -542,3 +553,62 @@ printf '500'
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+for (const strict of [false, true]) {
+  test(`refuses unproven docs before extraction (strict=${strict})`, () => {
+    withInstall({}, (directory, bin) => {
+      const stub = readFileSync(join(bin, "curl"), "utf8")
+        .replace(
+          'cat > "$output"',
+          `if [ -f "$HOME/docs-downloaded" ]; then echo '{"attestations":[]}' > "$output"; printf 200; exit 0; fi\n    cat > "$output"`,
+        )
+        .replace(
+          'cp "$CLI_ASSET_ARCHIVE" "$output"',
+          'touch "$HOME/docs-downloaded"; cp "$CLI_ASSET_ARCHIVE" "$output"',
+        );
+      writeExecutable(join(bin, "curl"), stub);
+      assert.throws(
+        () => runInstall(directory, bin, { ROM_WEAVER_REQUIRE_ATTESTATION: strict ? "1" : "0" }),
+        (error) => {
+          assert.match(error.stdout, /no build provenance.*rom-weaver-cli-assets/);
+          return true;
+        },
+      );
+      assert.equal(
+        existsSync(join(directory, ".local/share/bash-completion/completions/rom-weaver")),
+        false,
+      );
+    });
+  });
+}
+
+for (const strict of [false, true]) {
+  test(`docs API outage follows strict policy (strict=${strict})`, () => {
+    withInstall({}, (directory, bin) => {
+      const stub = readFileSync(join(bin, "curl"), "utf8")
+        .replace(
+          'cat > "$output"',
+          'if [ -f "$HOME/docs-downloaded" ]; then printf 503; exit 22; fi\n    cat > "$output"',
+        )
+        .replace(
+          'cp "$CLI_ASSET_ARCHIVE" "$output"',
+          'touch "$HOME/docs-downloaded"; cp "$CLI_ASSET_ARCHIVE" "$output"',
+        );
+      writeExecutable(join(bin, "curl"), stub);
+      const run = () =>
+        runInstall(directory, bin, { ROM_WEAVER_REQUIRE_ATTESTATION: strict ? "1" : "0" });
+      if (strict) {
+        assert.throws(run, (error) => {
+          assert.match(error.stdout, /could not reach.*rom-weaver-cli-assets/);
+          return true;
+        });
+      } else {
+        assert.match(run(), /continuing - this download is unverified/);
+      }
+      assert.equal(
+        existsSync(join(directory, ".local/share/bash-completion/completions/rom-weaver")),
+        !strict,
+      );
+    });
+  });
+}
