@@ -20,7 +20,21 @@ This tool cannot undo arbitrary patches or reconstruct bytes absent from the pat
 4. Enter a separate output filename. Choose its format in **Restore**; open **Options** to adjust compression.
 5. Select **Restore original ROM**.
 
-![PPF Undo with a restored 16-byte ROM ready to download](../screenshots/ppf-undo-restored.webp)
+<figure class="docs-screenshot">
+  <picture data-docs-screenshot-theme="light">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/ppf-undo-mobile-light.avif" width="1170" height="2532">
+    <source type="image/avif" srcset="../screenshots/ppf-undo-desktop-light.avif" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/ppf-undo-mobile-light.webp" width="1170" height="2532">
+    <img src="../screenshots/ppf-undo-desktop-light.webp" alt="PPF Undo with a restored ROM ready to download in the light theme" width="2328" height="1800">
+  </picture>
+  <picture data-docs-screenshot-theme="dark">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/ppf-undo-mobile-dark.avif" width="1170" height="2532">
+    <source type="image/avif" srcset="../screenshots/ppf-undo-desktop-dark.avif" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/ppf-undo-mobile-dark.webp" width="1170" height="2532">
+    <img src="../screenshots/ppf-undo-desktop-dark.webp" alt="PPF Undo with a restored ROM ready to download in the dark theme" width="2328" height="1800">
+  </picture>
+  <figcaption>PPF Undo restores the bytes saved in the patch.</figcaption>
+</figure>
 
 If an input is invalid, replace it before restoring. If the patch lacks undo data, use your clean backup. The tool cannot recover changes from other patches applied afterward.
 

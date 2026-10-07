@@ -458,6 +458,8 @@ for (const name of DOCS_SCREENSHOT_NAMES) {
   if (!fs.statSync(screenshotPath).isFile()) throw new Error(`docs screenshot is missing: ${name}`);
 }
 for (const { docsRoute, name } of DOCS_SCREENSHOT_CASES) {
+  // README-only captures have no published docs page.
+  if (!docsRoute) continue;
   const docsHtml = read(`${docsRoute}.html`);
   for (const { name: viewport } of DOCS_SCREENSHOT_VIEWPORTS) {
     for (const theme of DOCS_SCREENSHOT_THEMES) {

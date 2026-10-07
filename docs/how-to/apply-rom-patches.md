@@ -133,16 +133,16 @@ Each patch card shows its format and position. Open **Checks** to see the state 
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/apply-patches-mobile-light.avif" width="1170" height="1815">
-    <source type="image/avif" srcset="../screenshots/apply-patches-desktop-light.avif" width="1770" height="897">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/apply-patches-mobile-light.webp" width="1170" height="1815">
-    <img src="../screenshots/apply-patches-desktop-light.webp" alt="Cropped Apply patch stack with two ordered practice patches in the light theme" width="1770" height="897">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/apply-patches-mobile-light.avif" width="1170" height="2532">
+    <source type="image/avif" srcset="../screenshots/apply-patches-desktop-light.avif" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/apply-patches-mobile-light.webp" width="1170" height="2532">
+    <img src="../screenshots/apply-patches-desktop-light.webp" alt="Apply patch stack with two ordered practice patches in the light theme" width="2328" height="1800">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/apply-patches-mobile-dark.avif" width="1170" height="1815">
-    <source type="image/avif" srcset="../screenshots/apply-patches-desktop-dark.avif" width="1770" height="897">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/apply-patches-mobile-dark.webp" width="1170" height="1815">
-    <img src="../screenshots/apply-patches-desktop-dark.webp" alt="Cropped Apply patch stack with two ordered practice patches in the dark theme" width="1770" height="897">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/apply-patches-mobile-dark.avif" width="1170" height="2532">
+    <source type="image/avif" srcset="../screenshots/apply-patches-desktop-dark.avif" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/apply-patches-mobile-dark.webp" width="1170" height="2532">
+    <img src="../screenshots/apply-patches-desktop-dark.webp" alt="Apply patch stack with two ordered practice patches in the dark theme" width="2328" height="1800">
   </picture>
   <figcaption>Patches run from top to bottom. Each card shows the checks for that step.</figcaption>
 </figure>
@@ -193,16 +193,16 @@ In **Apply**:
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/apply-output-mobile-light.avif" width="1170" height="819">
-    <source type="image/avif" srcset="../screenshots/apply-output-desktop-light.avif" width="1770" height="676">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/apply-output-mobile-light.webp" width="1170" height="819">
-    <img src="../screenshots/apply-output-desktop-light.webp" alt="Cropped Apply output card with filename, format, options, and APPLY &amp; DOWNLOAD button in the light theme" width="1770" height="676">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/apply-output-mobile-light.avif" width="1170" height="2532">
+    <source type="image/avif" srcset="../screenshots/apply-output-desktop-light.avif" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/apply-output-mobile-light.webp" width="1170" height="2532">
+    <img src="../screenshots/apply-output-desktop-light.webp" alt="Apply output card with filename, format, options, and APPLY &amp; DOWNLOAD button in the light theme" width="2328" height="1800">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/apply-output-mobile-dark.avif" width="1170" height="819">
-    <source type="image/avif" srcset="../screenshots/apply-output-desktop-dark.avif" width="1770" height="676">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/apply-output-mobile-dark.webp" width="1170" height="819">
-    <img src="../screenshots/apply-output-desktop-dark.webp" alt="Cropped Apply output card with filename, format, options, and APPLY &amp; DOWNLOAD button in the dark theme" width="1770" height="676">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/apply-output-mobile-dark.avif" width="1170" height="2532">
+    <source type="image/avif" srcset="../screenshots/apply-output-desktop-dark.avif" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/apply-output-mobile-dark.webp" width="1170" height="2532">
+    <img src="../screenshots/apply-output-desktop-dark.webp" alt="Apply output card with filename, format, options, and APPLY &amp; DOWNLOAD button in the dark theme" width="2328" height="1800">
   </picture>
   <figcaption>Choose the output name and format before applying.</figcaption>
 </figure>

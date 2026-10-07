@@ -26,9 +26,17 @@ To decompress images, use [RVZ to ISO](convert-rvz-to-iso-browser.md) or [Extrac
 5. To add the archive itself without extracting it, turn on **Keep packed**, then select the **Add** button.
 
 <figure class="docs-screenshot">
-  <picture>
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/compress-select-files-mobile-dark.webp" width="358" height="386">
-    <img src="../screenshots/compress-select-files-desktop-light.webp" alt="File picker for an archive with three entries, two selected, a Keep packed switch, and an Add 2 files button" width="1117" height="375">
+  <picture data-docs-screenshot-theme="light">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/compress-select-files-mobile-light.avif" width="1170" height="2532">
+    <source type="image/avif" srcset="../screenshots/compress-select-files-desktop-light.avif" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/compress-select-files-mobile-light.webp" width="1170" height="2532">
+    <img src="../screenshots/compress-select-files-desktop-light.webp" alt="File picker for an archive with four entries, two selected, a Keep packed switch, and an Add 2 files button in the light theme" width="2328" height="1800">
+  </picture>
+  <picture data-docs-screenshot-theme="dark">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/compress-select-files-mobile-dark.avif" width="1170" height="2532">
+    <source type="image/avif" srcset="../screenshots/compress-select-files-desktop-dark.avif" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/compress-select-files-mobile-dark.webp" width="1170" height="2532">
+    <img src="../screenshots/compress-select-files-desktop-dark.webp" alt="File picker for an archive with four entries, two selected, a Keep packed switch, and an Add 2 files button in the dark theme" width="2328" height="1800">
   </picture>
   <figcaption>Select the files inside an archive that you want to compress.</figcaption>
 </figure>
@@ -43,9 +51,17 @@ ZIP and 7z accept arbitrary file sets. CHD accepts compatible disc images and RO
 4. Select **Compress**, then select **Download** when the output is ready.
 
 <figure class="docs-screenshot">
-  <picture>
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/compress-mobile-dark.webp" width="370" height="639">
-    <img src="../screenshots/compress-desktop-light.webp" alt="Compress with input files, output filename, format, codec, level, and download button" width="1133" height="775">
+  <picture data-docs-screenshot-theme="light">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/compress-mobile-light.avif" width="1170" height="2532">
+    <source type="image/avif" srcset="../screenshots/compress-desktop-light.avif" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/compress-mobile-light.webp" width="1170" height="2532">
+    <img src="../screenshots/compress-desktop-light.webp" alt="Compress with input files, output filename, format, codec, level, and download button in the light theme" width="2328" height="1800">
+  </picture>
+  <picture data-docs-screenshot-theme="dark">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/compress-mobile-dark.avif" width="1170" height="2532">
+    <source type="image/avif" srcset="../screenshots/compress-desktop-dark.avif" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/compress-mobile-dark.webp" width="1170" height="2532">
+    <img src="../screenshots/compress-desktop-dark.webp" alt="Compress with input files, output filename, format, codec, level, and download button in the dark theme" width="2328" height="1800">
   </picture>
   <figcaption>Choose a format and compression options, then download the finished file.</figcaption>
 </figure>
