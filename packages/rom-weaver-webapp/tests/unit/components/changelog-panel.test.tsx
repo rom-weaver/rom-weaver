@@ -85,6 +85,95 @@ describe("ChangelogPanel pending update", () => {
     expect(update.getByRole("link", { name: "Full changelog" }).getAttribute("href")).toBe(CHANGELOG_URL);
   });
 
+  it("shows only the highlights and collapses the other groups under All changes", async () => {
+    mockChangelog([
+      {
+        date: "2026-07-29T00:00:00Z",
+        hash: "release",
+        release: releaseOf("9.9.9", [
+          {
+            groups: [
+              { entries: [{ pr: "7", summary: "Headline change" }], title: "Highlights" },
+              { entries: [{ pr: "8", summary: "Small fix" }], title: "Bug Fixes" },
+            ],
+            version: "9.9.9",
+          },
+        ]),
+        subject: "release",
+      },
+    ]);
+
+    const update = await renderUpdate();
+    const allChanges = (await update.findByText("All changes")).closest("details") as HTMLDetailsElement;
+
+    expect(allChanges.open).toBe(false);
+    expect(allChanges.contains(update.getByText("Small fix"))).toBe(true);
+    expect(allChanges.contains(update.getByText("Headline change"))).toBe(false);
+  });
+
+  it("keeps the breaking-changes group visible next to the highlights", async () => {
+    mockChangelog([
+      {
+        date: "2026-07-29T00:00:00Z",
+        hash: "release",
+        release: releaseOf("9.9.9", [
+          {
+            groups: [
+              { entries: [{ pr: "7", summary: "Headline change" }], title: "Highlights" },
+              { entries: [{ summary: "Rename the flag" }], title: "⚠ BREAKING CHANGES" },
+              { entries: [{ pr: "8", summary: "Small fix" }], title: "Bug Fixes" },
+            ],
+            version: "9.9.9",
+          },
+        ]),
+        subject: "release",
+      },
+    ]);
+
+    const update = await renderUpdate();
+    const allChanges = (await update.findByText("All changes")).closest("details") as HTMLDetailsElement;
+
+    expect(allChanges.contains(update.getByText("Rename the flag"))).toBe(false);
+    expect(allChanges.contains(update.getByText("Small fix"))).toBe(true);
+  });
+
+  it("links the commit range from All changes to the previous release", async () => {
+    mockChangelog([
+      {
+        date: "2026-07-29T00:00:00Z",
+        hash: "release",
+        release: releaseOf("9.9.9", [
+          noteOf("9.9.9", [{ pr: "3", summary: "Newest entry" }]),
+          noteOf("9.9.8", [{ pr: "2", summary: "Older entry" }]),
+        ]),
+        subject: "release",
+      },
+    ]);
+
+    const update = await renderUpdate();
+    const compare = await update.findByRole("link", { name: /Compare v9\.9\.8…v9\.9\.9/ });
+
+    expect(compare.getAttribute("href")).toBe(`${REPOSITORY_URL}/compare/v9.9.8...v9.9.9`);
+    expect(compare.closest("details")?.open).toBe(false);
+  });
+
+  it("collapses every group when a release has no highlights", async () => {
+    mockChangelog([
+      {
+        date: "2026-07-29T00:00:00Z",
+        hash: "release",
+        release: releaseOf("9.9.9", [noteOf("9.9.9", [{ pr: "3", summary: "Only entry" }])]),
+        subject: "release",
+      },
+    ]);
+
+    const update = await renderUpdate();
+    const allChanges = (await update.findByText("All changes")).closest("details") as HTMLDetailsElement;
+
+    expect(allChanges.open).toBe(false);
+    expect(allChanges.contains(update.getByText("Only entry"))).toBe(true);
+  });
+
   it("offers the reload the update asks for", async () => {
     mockChangelog([{ date: "", hash: "a", subject: "feat(cli): add a flag" }]);
 

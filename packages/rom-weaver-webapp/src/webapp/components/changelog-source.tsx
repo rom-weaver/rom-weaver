@@ -21,6 +21,10 @@ type ChangelogEntry = { hash: string; subject: string; date: string; release?: u
 
 const releaseTagUrl = (repositoryUrl: string, version: string) => `${repositoryUrl}/releases/tag/v${version}`;
 
+// The commit range between two releases, which the version heading no longer links to.
+type CompareRange = { from: string; to: string };
+const compareUrl = (repositoryUrl: string, { from, to }: CompareRange) => `${repositoryUrl}/compare/v${from}...v${to}`;
+
 const isReleaseGroup = (value: unknown): value is ReleaseGroup => {
   if (!value || typeof value !== "object") return false;
   const group = value as ReleaseGroup;
@@ -173,5 +177,53 @@ const EntryGroups = ({
   </>
 );
 
-export { COMMIT_SECTIONS, commitGroups, EntryGroups, fetchChangelog, releaseTagUrl, REPOSITORY_URL };
-export type { ChangelogEntry, ReleaseChangelog, ReleaseNote };
+// A release leads with its hand-written `Highlights` group (see the release
+// skill). That group and any breaking-change group are shown up front, as on
+// the GitHub release; every other generated group sits in a collapsed
+// "All changes" block. A release or nightly with no highlights shows
+// just the collapsed block.
+const HIGHLIGHTS_TITLE = "Highlights";
+const isVisibleGroup = (group: ReleaseGroup) =>
+  group.title === HIGHLIGHTS_TITLE || /BREAKING CHANGES/.test(group.title);
+
+const ReleaseGroups = ({
+  compare,
+  groups,
+  keyPrefix,
+  repositoryUrl,
+}: {
+  /** The release's commit range, linked first inside All changes. */
+  compare?: CompareRange;
+  groups: ReleaseGroup[];
+  keyPrefix: string;
+  repositoryUrl: string;
+}) => {
+  const highlights = groups.filter(isVisibleGroup);
+  const rest = groups.filter((group) => !isVisibleGroup(group));
+  return (
+    <>
+      {highlights.length ? (
+        <EntryGroups groups={highlights} keyPrefix={`${keyPrefix}:highlights`} repositoryUrl={repositoryUrl} />
+      ) : null}
+      {rest.length ? (
+        <details className="release-all-changes">
+          <summary className="release-all-changes-summary">All changes</summary>
+          {compare ? (
+            <a
+              className="release-compare-link"
+              href={compareUrl(repositoryUrl, compare)}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Compare v{compare.from}…v{compare.to} ↗
+            </a>
+          ) : null}
+          <EntryGroups groups={rest} keyPrefix={keyPrefix} repositoryUrl={repositoryUrl} />
+        </details>
+      ) : null}
+    </>
+  );
+};
+
+export { COMMIT_SECTIONS, commitGroups, fetchChangelog, ReleaseGroups, releaseTagUrl, REPOSITORY_URL };
+export type { ChangelogEntry, CompareRange, ReleaseChangelog, ReleaseNote };

@@ -65,7 +65,8 @@ test("aggregates same-version prerelease sections into the stable section", () =
   const result = aggregatePrereleaseChangelog(changelog, "0.6.0");
 
   assert.equal(result.changed, true);
-  assert.match(result.changelog, /compare\/v0\.5\.0\.\.\.v0\.6\.0/);
+  assert.match(result.changelog, /\[Compare v0\.5\.0\.\.\.v0\.6\.0\]\(https:\/\/github\.com\/example\/project\/compare\/v0\.5\.0\.\.\.v0\.6\.0\)/);
+  assert.match(result.changelog, /^## \[0\.6\.0\]\(https:\/\/github\.com\/example\/project\/releases\/tag\/v0\.6\.0\)/m);
   assert.doesNotMatch(result.changelog, /0\.6\.0-alpha/);
   assert.match(result.changelog, /\* fix after alpha/);
   assert.match(result.changelog, /\* second feature/);
@@ -87,7 +88,7 @@ test("collapses a prerelease section without aggregating anything", () => {
 
   assert.equal(result.changed, true);
   assert.match(result.changelog, /## \[0\.6\.0-alpha\.1\]/);
-  assert.match(result.section, /<summary>All changes<\/summary>\n\n### Features\n\n\* second feature\n<\/details>/);
+  assert.match(result.section, /<summary>All changes<\/summary>\n\n\[Compare v0\.6\.0-alpha\.1\.\.\.v0\.6\.0-alpha\.2\]\([^)]+\)\n\n### Features\n\n\* second feature\n<\/details>/);
   assert.match(result.changelog, /\* first feature\n\n## \[0\.5\.0\]/);
 });
 
@@ -97,10 +98,12 @@ test("hides every generated entry behind All changes and nests Internal inside i
   assert.equal(result.changed, true);
   assert.equal(
     result.section,
-    `## [0.7.3](https://github.com/example/project/compare/v0.7.2...v0.7.3) (2026-07-24)
+    `## [0.7.3](https://github.com/example/project/releases/tag/v0.7.3) (2026-07-24)
 
 <details>
 <summary>All changes</summary>
+
+[Compare v0.7.2...v0.7.3](https://github.com/example/project/compare/v0.7.2...v0.7.3)
 
 ### Features
 
@@ -161,7 +164,7 @@ test("repairs a previously collapsed release boundary", () => {
   const result = aggregatePrereleaseChangelog(input, "0.7.3");
 
   assert.match(result.changelog, /<\/details>\n\n## \[0\.7\.2\]/);
-  assert.match(result.section, /<summary>All changes<\/summary>\n\n<details>\n<summary>Internal<\/summary>/);
+  assert.match(result.section, /<summary>All changes<\/summary>\n\n\[Compare [^\n]*\n\n<details>\n<summary>Internal<\/summary>/);
   assert.doesNotMatch(result.section, /^## \[0\.7\.2\]/m);
 });
 
@@ -183,10 +186,19 @@ test("keeps a breaking-change group visible above the collapsed list", () => {
 
   assert.match(
     result.section,
-    /### Highlights\n\n\* Only RWFP4[^\n]*\n\n### ⚠ BREAKING CHANGES\n\n\* \*\*identify:\*\* support only RWFP4 packs\n\n<details>\n<summary>All changes<\/summary>\n\n### Features/,
+    /### Highlights\n\n\* Only RWFP4[^\n]*\n\n### ⚠ BREAKING CHANGES\n\n\* \*\*identify:\*\* support only RWFP4 packs\n\n<details>\n<summary>All changes<\/summary>\n\n\[Compare v0\.7\.3\.\.\.v0\.8\.0\]\([^)]+\)\n\n### Features/,
   );
   assert.match(result.changelog, /<\/details>\n$/);
   assert.equal(aggregatePrereleaseChangelog(result.changelog, "0.8.0").changed, false);
+});
+
+test("keeps the commit range and highlight links across a rerun", () => {
+  const first = aggregatePrereleaseChangelog(release, "0.7.3", "A big feature (#12)");
+  const rerun = aggregatePrereleaseChangelog(first.changelog, "0.7.3", "Another (#13)");
+
+  assert.match(rerun.section, /\[Compare v0\.7\.2\.\.\.v0\.7\.3\]/);
+  assert.match(rerun.section, /\(\[#13\]\(https:\/\/github\.com\/example\/project\/issues\/13\)\)/);
+  assert.equal((rerun.section.match(/Compare v/g) || []).length, 1);
 });
 
 test("leaves the changelog alone when the version has no section", () => {

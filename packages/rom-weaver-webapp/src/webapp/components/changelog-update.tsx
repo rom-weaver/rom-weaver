@@ -3,9 +3,9 @@ import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH } from "../build-version.ts
 import {
   type ChangelogEntry,
   commitGroups,
-  EntryGroups,
   type ReleaseChangelog,
   type ReleaseNote,
+  ReleaseGroups,
   releaseTagUrl,
   REPOSITORY_URL,
 } from "./changelog-source.tsx";
@@ -135,18 +135,26 @@ const ReleaseNotes = ({ moreUrl, release }: { moreUrl: string; release: ReleaseC
   const { notes, truncated } = releaseNotesSince(release);
   return (
     <>
-      {notes.map((note) => (
-        <section className="release-changelog-section" key={note.version}>
-          {/* Always shown, even for a single section: it is what the entries
+      {notes.map((note) => {
+        const previous = release.notes[release.notes.findIndex((entry) => entry.version === note.version) + 1];
+        return (
+          <section className="release-changelog-section" key={note.version}>
+            {/* Always shown, even for a single section: it is what the entries
               under it belong to, and it is the way to that release on GitHub. */}
-          <h3 className="release-changelog-heading">
-            <a href={releaseTagUrl(release.repositoryUrl, note.version)} rel="noreferrer" target="_blank">
-              v{note.version}
-            </a>
-          </h3>
-          <EntryGroups groups={note.groups} keyPrefix={note.version} repositoryUrl={release.repositoryUrl} />
-        </section>
-      ))}
+            <h3 className="release-changelog-heading">
+              <a href={releaseTagUrl(release.repositoryUrl, note.version)} rel="noreferrer" target="_blank">
+                v{note.version}
+              </a>
+            </h3>
+            <ReleaseGroups
+              compare={previous ? { from: previous.version, to: note.version } : undefined}
+              groups={note.groups}
+              keyPrefix={note.version}
+              repositoryUrl={release.repositoryUrl}
+            />
+          </section>
+        );
+      })}
       {truncated ? <TruncatedNote moreUrl={moreUrl} /> : null}
     </>
   );
@@ -165,7 +173,7 @@ const CommitNotes = ({
   truncated: boolean;
 }) => (
   <>
-    <EntryGroups groups={commitGroups(entries)} keyPrefix="commits" repositoryUrl={repositoryUrl} />
+    <ReleaseGroups groups={commitGroups(entries)} keyPrefix="commits" repositoryUrl={repositoryUrl} />
     {truncated ? <TruncatedNote moreUrl={moreUrl} /> : null}
   </>
 );
