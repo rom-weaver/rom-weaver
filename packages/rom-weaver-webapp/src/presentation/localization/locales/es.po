@@ -335,6 +335,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.tutorial.new"
+#~ msgstr "¿Es tu primera visita?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", una extensión de salida. El selector de formato agrega la extensión; elimínala para evitar un nombre duplicado."
 
@@ -950,6 +955,11 @@ msgstr "Paquete + parches (.zip)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tutorial.tryBundle"
+msgstr "Crear paquete"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.outputFilename"
 msgstr "Nombre de salida del paquete (sin extensión)"
 
@@ -1432,6 +1442,11 @@ msgstr "Crear bundle {format} con ROM"
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.createDownload"
 msgstr "Crear y descargar"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.tryCreate"
+msgstr "Crear ejemplo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2580,11 +2595,6 @@ msgstr "Los archivos anidados se manejan de forma recursiva."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tutorial.new"
-msgstr "¿Es tu primera visita?"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.channel.nightly"
 msgstr "Compilación nocturna"
 
@@ -3040,6 +3050,11 @@ msgstr "Parche {position} de {total}. No se puede reordenar."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tutorial.tryApply"
+msgstr "Probar parche"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.actions"
 msgstr "Acciones del parche"
 
@@ -3182,6 +3197,11 @@ msgstr "Plataforma"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.platformCandidates"
 msgstr "Plataformas posibles"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.tryTest"
+msgstr "Jugar ejemplo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3821,7 +3841,7 @@ msgstr "Mostrar información detallada del archivo"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.onboardingEnabled"
-msgstr "Mostrar los consejos de inicio rápido («New here?»)"
+msgstr "Mostrar los enlaces de inicio rápido con ejemplos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

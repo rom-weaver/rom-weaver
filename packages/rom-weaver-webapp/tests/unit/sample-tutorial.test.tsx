@@ -116,6 +116,7 @@ describe("sample tutorial start", () => {
     const onSecondaryStart = vi.fn();
     render(
       <SampleTutorialStart
+        chipLabel="Patch a sample"
         downloadHref="/first-weave.zip"
         downloadLabel="Download a test bundle"
         downloadName="first-weave.zip"
@@ -130,7 +131,7 @@ describe("sample tutorial start", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /New here\?/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Patch a sample/ }));
     const download = screen.getByRole("link", { name: /Download a test bundle/ });
     expect(download.getAttribute("href")).toBe("/first-weave.zip");
     expect(download.hasAttribute("download")).toBe(true);
@@ -140,7 +141,7 @@ describe("sample tutorial start", () => {
     fireEvent.click(guidedApply);
     expect(onStart).toHaveBeenCalledOnce();
     expect(screen.queryByRole("link", { name: /Start guided Apply/ })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /New here\?/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Patch a sample/ }));
     const guidedBundle = screen.getByRole("link", { name: /Start guided bundle/ });
     expect(guidedBundle.getAttribute("href")).toBe("/bundle?guide=bundle");
     fireEvent.click(guidedBundle);
@@ -149,6 +150,7 @@ describe("sample tutorial start", () => {
   });
   it("reopens the sample menu when loading fails", async () => {
     const props = {
+      chipLabel: "Bundle a sample",
       downloadHref: "/first-weave.zip",
       downloadLabel: "Download a test bundle",
       downloadName: "first-weave.zip",
@@ -159,7 +161,7 @@ describe("sample tutorial start", () => {
       onStart: vi.fn(),
     };
     const { rerender } = render(<SampleTutorialStart {...props} />);
-    fireEvent.click(screen.getByRole("button", { name: /New here\?/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Bundle a sample/ }));
     fireEvent.click(screen.getByRole("link", { name: /Start guided bundle/ }));
     expect(screen.queryByRole("link", { name: /Start guided bundle/ })).toBeNull();
     rerender(<SampleTutorialStart {...props} error="Could not load practice files" />);

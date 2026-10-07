@@ -236,7 +236,7 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector(".drop.hero .formats")).toBeNull();
     expect(container.querySelector(".hero-formats-help .info-support")).toBeTruthy();
     const chip = container.querySelector(".sample-tutorial-start .sample-tutorial-start-chip") as HTMLButtonElement;
-    expect(chip.textContent).toContain("New here?");
+    expect(chip.textContent).toContain("Patch a sample");
     fireEvent.click(chip);
     expect(container.querySelector(".first-weave-demo")?.textContent).toContain("Start guided Apply");
     expect(container.querySelector(".first-weave-demo")?.textContent).not.toContain("Start guided bundle");
@@ -252,7 +252,9 @@ describe("apply workflow view - empty bench", () => {
     ["bundle", "/bundle-patches?guide=bundle", "Start guided bundle", "/docs/create-bundles", "Read the Bundle guide"],
   ] as const)("offers the %s guide and the test bundle download", (mode, href, label, docsHref, docsLabel) => {
     const { container } = renderView({ mode, ui: createEmptyPatcherUiState() });
-    fireEvent.click(container.querySelector(".sample-tutorial-start .sample-tutorial-start-chip") as HTMLButtonElement);
+    const chip = container.querySelector(".sample-tutorial-start .sample-tutorial-start-chip") as HTMLButtonElement;
+    expect(chip.textContent).toBe(mode === "apply" ? "Patch a sample" : "Bundle a sample");
+    fireEvent.click(chip);
     const actions = container.querySelectorAll(".sample-tutorial-start-action");
     expect(actions).toHaveLength(mode === "apply" ? 5 : 4);
     expect(actions[0].getAttribute("href")).toBe(href);

@@ -597,7 +597,7 @@
   font-size: 0.88rem;
   font-weight: 400;
 }
-/* Under the hero: "New here?", the workflow guide and the format list share
+/* Under the hero: the sample link, the workflow guide and the format list share
    one centred line, wrapping only when the viewport is too narrow. The list
    opens in flow on a full-width line of its own under the row, so opening it
    moves nothing above it. (`.panel` clips, so a positioned panel would be cut
@@ -740,47 +740,48 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   position: relative;
   z-index: 3;
   display: inline-flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
   min-height: 44px;
-  padding: 8px 14px;
+  padding: 8px 4px;
   font-size: 0.95rem;
   font-weight: 650;
   color: var(--thread-text);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-decoration-color: color-mix(in oklab, var(--thread) 50%, transparent);
+  text-underline-offset: 4px;
   cursor: pointer;
   background: transparent;
   border: 0;
+  transition: text-decoration-color 0.15s;
 }
-/* The onboarding entry point outranks the two plain links beside it: an
-   accent-tinted pill drawn inside the 44px hit area, so the target stays
-   full height while the pill reads as a compact chip. */
-.rw-app .sample-tutorial-start-chip::before {
-  position: absolute;
-  inset: 6px 0;
-  z-index: -1;
-  content: "";
-  background: color-mix(in oklab, var(--thread) 14%, transparent);
-  border: 1px solid color-mix(in oklab, var(--thread) 55%, transparent);
-  border-radius: 999px;
-  transition: background 0.15s;
-}
-.rw-app .sample-tutorial-start-bell {
+/* The onboarding entry point outranks the two plain links beside it in the
+   same link language: dyed with the thread, a heavier underline, and a knot
+   that pings twice on arrival. Each page names its own sample action. */
+.rw-app .sample-tutorial-start-knot {
   flex: none;
-  width: 20px;
-  height: 20px;
-  color: var(--thread-text);
-  transform-origin: 50% 15%;
-  animation: tutorial-bell-shake 0.9s ease-in-out 1;
+  width: 9px;
+  height: 9px;
+  background: var(--thread);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--thread) 22%, transparent);
+  animation: tutorial-knot-ping 1.2s ease-out 2;
+}
+.rw-app .sample-tutorial-start-arrow {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  transition: transform 0.15s var(--ease);
 }
 @media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
   /* The three help controls MUST stay on one line on a phone, so the text
      scales with the viewport: full size from ~420px up, shrinking just enough
      below that, with the icons scaling alongside it. phone-dock.css sizes the
-     "New here?" chip from this too. */
+     sample link from this too. */
   .rw-app {
-    --hero-help-font: clamp(0.58rem, 2.85vw, 0.82rem);
+    --hero-help-font: clamp(0.56rem, 2.65vw, 0.82rem);
   }
-  .rw-app .sample-tutorial-start-bell,
   .rw-app .simple-hero .hero-guide svg {
     width: 1.3em;
     height: 1.3em;
@@ -832,39 +833,38 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
     padding-block: 4px;
   }
 }
-@keyframes tutorial-bell-shake {
-  0%,
+@keyframes tutorial-knot-ping {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--thread) 60%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 9px color-mix(in oklab, var(--thread) 0%, transparent);
+  }
   100% {
-    transform: rotate(0deg);
-  }
-  15% {
-    transform: rotate(18deg);
-  }
-  30% {
-    transform: rotate(-15deg);
-  }
-  45% {
-    transform: rotate(11deg);
-  }
-  60% {
-    transform: rotate(-7deg);
-  }
-  75% {
-    transform: rotate(3deg);
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--thread) 22%, transparent);
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .rw-app .sample-tutorial-start-bell {
+  .rw-app .sample-tutorial-start-knot {
     animation: none;
+  }
+  .rw-app .sample-tutorial-start-arrow {
+    transition: none;
   }
 }
 @media (hover: hover) {
-  .rw-app .sample-tutorial-start-chip:hover::before {
-    background: color-mix(in oklab, var(--thread) 24%, transparent);
+  .rw-app .sample-tutorial-start-chip:hover {
+    text-decoration-color: currentColor;
+  }
+  .rw-app .sample-tutorial-start-chip:hover .sample-tutorial-start-arrow {
+    transform: translateX(2px);
   }
 }
-.rw-app .sample-tutorial-start-chip:active::before {
-  background: color-mix(in oklab, var(--thread) 30%, transparent);
+.rw-app .sample-tutorial-start-chip:active {
+  text-decoration-color: currentColor;
+}
+.rw-app .sample-tutorial-start-chip:active .sample-tutorial-start-arrow {
+  transform: translateX(2px);
 }
 /* A drag gesture owns the hero - the chip yields until the files land. */
 .rw-app .step-body:has(.drop.dragging) .sample-tutorial-start-chip {

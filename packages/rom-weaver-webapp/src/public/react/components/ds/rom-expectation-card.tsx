@@ -626,6 +626,7 @@ const RomSearch = ({
             ref={sampleRef}
             type="button"
           >
+            <span aria-hidden="true" className="sample-tutorial-start-knot" />
             {sampleLabel}
           </button>
         ) : null}

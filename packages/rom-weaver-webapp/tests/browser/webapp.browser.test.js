@@ -584,7 +584,7 @@ test("the mobile scroll reserve returns once the bench holds a card", async () =
 test.each([
   ["patcher", "/apply-patches?guide=apply", "/docs/apply-rom-patches"],
   ["bundle", "/bundle-patches?guide=bundle", "/docs/create-bundles"],
-])("the %s New here? beacon carries its own guide and the download", async (initialView, guideHref, docsPath) => {
+])("the %s sample link carries its own guide and the download", async (initialView, guideHref, docsPath) => {
   await page.viewport(1024, 900);
   mountWebappRoot({ initialView });
 

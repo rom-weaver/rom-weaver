@@ -243,7 +243,7 @@ describe("EmulatorTestView", () => {
     expect(screen.getByText("Play")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Play" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /New here\?/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Play a sample/ }));
     expect(screen.getByRole("link", { name: "Start guided Test" }).getAttribute("href")).toBe("/test-rom?guide=test");
     const download = screen.getByRole("link", { name: "Download the sample ROM" });
     expect(download.getAttribute("href")).toBe("/hello-world.nes");
@@ -263,7 +263,7 @@ describe("EmulatorTestView", () => {
     vi.stubGlobal("fetch", fetchSample);
 
     render(withSettings(<EmulatorTestView />));
-    fireEvent.click(screen.getByRole("button", { name: /New here\?/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Play a sample/ }));
     fireEvent.click(screen.getByRole("link", { name: "Start guided Test" }));
 
     expect(emulatorAudioMocks.prepareEmulatorAudioContext).toHaveBeenCalledWith();
@@ -326,7 +326,7 @@ describe("EmulatorTestView", () => {
     );
 
     render(withSettings(<EmulatorTestView />));
-    fireEvent.click(screen.getByRole("button", { name: /New here\?/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Play a sample/ }));
     fireEvent.click(screen.getByRole("link", { name: "Start guided Test" }));
     fireEvent.click(screen.getByRole("button", { name: "Leave the guide" }));
     fireEvent.change(screen.getByLabelText(/Drop or click to add a ROM or archive/), {

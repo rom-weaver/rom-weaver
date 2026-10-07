@@ -44,9 +44,19 @@
 
   .rw-app .sample-tutorial-start-chip {
     gap: 3px;
-    padding-inline: 7px;
+    padding-inline: 1px;
     font-size: var(--hero-help-font, 0.82rem);
     white-space: nowrap;
+  }
+  /* The phone help row has no room to spare: the knot alone carries the
+     accent and the arrow drops out. */
+  .rw-app .sample-tutorial-start-arrow {
+    display: none;
+  }
+  .rw-app .sample-tutorial-start-knot {
+    width: 0.6em;
+    height: 0.6em;
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--thread) 22%, transparent);
   }
   /* 16px is the iOS floor: a smaller focused input makes Safari zoom the page
      and leave it clipped on the right. */

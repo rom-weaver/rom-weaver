@@ -16,7 +16,7 @@ Use Settings to change app preferences, enable beta tools, and prepare local ass
 
 Open **Settings** from the app navigation. On a phone, select **Menu** at the right end of the bottom bar, then **Settings**. Change the required values, then select **Save**.
 
-The settings cover language, byte units, guided help, output defaults, and compression. Guided help is the **New here?** button that starts the [guided practice runs](../reference/guided-runs.md). Turn on **Advanced** to show worker threads, codecs, and the RVZ block size. Leave automatic thread selection enabled unless you need to limit resource use.
+The settings cover language, byte units, guided help, output defaults, and compression. Guided help is the sample link under each empty drop zone, such as **Patch a sample**, that starts the [guided practice runs](../reference/guided-runs.md). Turn on **Advanced** to show worker threads, codecs, and the RVZ block size. Leave automatic thread selection enabled unless you need to limit resource use.
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">

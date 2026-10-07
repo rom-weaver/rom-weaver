@@ -521,7 +521,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     kind: "checkbox",
     label: getSettingsLabel("onboardingEnabled"),
     labelId: "settings.onboardingEnabled",
-    labelDataLocalize: 'Show the "New here?" quick-start tips',
+    labelDataLocalize: "Show the sample quick-start links",
     layout: "large",
   },
   offlineCopyEnabled: {

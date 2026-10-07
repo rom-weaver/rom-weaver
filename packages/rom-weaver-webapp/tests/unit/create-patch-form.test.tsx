@@ -188,7 +188,7 @@ describe("CreatePatchForm", () => {
     expect(container.querySelectorAll(".step-num")).toHaveLength(1);
 
     const chip = container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement;
-    expect(chip).toBeTruthy();
+    expect(chip.textContent).toBe("Create a sample");
     await act(async () => {
       fireEvent.click(chip);
     });

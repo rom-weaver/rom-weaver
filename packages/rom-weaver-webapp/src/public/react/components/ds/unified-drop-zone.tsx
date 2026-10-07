@@ -45,7 +45,7 @@ type UnifiedDropZoneProps = {
   lead?: { line1: MessageId; line2: MessageId; description: MessageId };
   /** The workflow's how-to page, linked from the empty-state help row. `path` is relative to the app base. */
   guide?: WorkflowGuide;
-  /** Onboarding control (the "New here?" beacon) that leads the empty-state help row. */
+  /** Onboarding control (the per-page sample link) that leads the empty-state help row. */
   onboarding?: ReactNode;
   /** Step number/title; the inputs step is 0x01 in every workflow. */
   num?: string;
