@@ -915,6 +915,7 @@ const SampleTutorial = ({
   useLayoutEffect(() => {
     const dialog = dialogRef.current;
     const ring = ringRef.current;
+    if (dialog && dialog.dataset.step !== (live ? String(stepIndex + 1) : undefined)) return;
     const unanchor = () => {
       if (!dialog) return;
       delete dialog.dataset.anchored;
@@ -1119,7 +1120,7 @@ const SampleTutorial = ({
       // the next step's placement measure from the CSS-pinned bar and glide
       // across the screen instead of from the card the user is looking at.
     };
-  }, [stepLift, stepPlacement, stepTarget, targetEl]);
+  }, [live, stepIndex, stepLift, stepPlacement, stepTarget, targetEl]);
 
   if (!(portalTarget && step)) return null;
   const finalStep = live && stepIndex === steps.length - 1;

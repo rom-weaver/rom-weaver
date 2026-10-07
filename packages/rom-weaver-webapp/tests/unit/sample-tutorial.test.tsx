@@ -498,6 +498,36 @@ describe("sample tutorial", () => {
   });
 });
 
+describe("sample tutorial shared anchor motion", () => {
+  it("finishes moving when consecutive steps share their anchor", async () => {
+    const animate = vi
+      .spyOn(HTMLElement.prototype, "animate")
+      .mockImplementation(() => ({ cancel: vi.fn(), finished: Promise.resolve() }) as unknown as Animation);
+    const frame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      callback(0);
+      return 1;
+    });
+    try {
+      const sharedSteps = STEPS.map((step) => ({ ...step, target: "#tutorial-first" }));
+      render(
+        <div className="rw-app">
+          <TutorialSection id="tutorial-first" label="First drawer" />
+          <SampleTutorial loadingBody="Loading." onClose={vi.fn()} ready steps={sharedSteps} />
+        </div>,
+      );
+      await waitFor(() => expect(document.querySelector(".sample-tutorial-ring")).toBeTruthy());
+      fireEvent.click(document.querySelector(".sample-tutorial-next") as HTMLButtonElement);
+      await waitFor(() =>
+        expect(document.querySelector(".sample-tutorial-dialog")?.getAttribute("data-step")).toBe("2"),
+      );
+      expect(document.querySelector(".sample-tutorial-dialog")?.hasAttribute("data-moving")).toBe(false);
+    } finally {
+      animate.mockRestore();
+      frame.mockRestore();
+    }
+  });
+});
+
 describe("sample tutorial step card", () => {
   const ViewGuide = ({ steps }: { steps?: readonly SampleTutorialStep[] }) => {
     const localizer = useUiLocalizer();
