@@ -44,6 +44,7 @@ vi.mock("../../../src/public/react/components/emulator-document.ts", () => ({
   createEmulatorGameIdentity: ({ checksum }: { checksum: string }) => ({
     gameId: 1,
     gameName: checksum,
+    saveId: checksum,
   }),
 }));
 

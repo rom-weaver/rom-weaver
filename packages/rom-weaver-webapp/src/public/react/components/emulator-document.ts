@@ -3,6 +3,7 @@ const toScriptString = (value: string) => JSON.stringify(value).replace(/</g, "\
 type EmulatorDocumentOptions = {
   gameId?: number;
   gameLabel?: string;
+  saveId?: string;
 };
 
 type EmulatorGameIdentityInput = {
@@ -20,14 +21,8 @@ const hashString = (value: string): number => {
 };
 
 /**
- * EmulatorJS names the file it writes into the core's filesystem after
- * `EJS_gameName` whenever the game URL is a blob URL, which ours always is. A
- * CHD MUST therefore keep its extension on that name: the disc cores dispatch
- * the CHD reader on it (yabause matches `.CHD`, genesis_plus_gx `.chd`), and an
- * extensionless file is read as a raw image instead. No other input gets a
- * suffix - the name keys saved games and states, so changing it for a format
- * that already works would orphan every save made under the bare checksum.
- * `gameId` stays keyed by the checksum alone for the same reason.
+ * CHD filenames MUST retain their extension for core dispatch.
+ * App saves use the payload checksum independently of that filename.
  */
 const createEmulatorGameIdentity = ({ checksum, fileName }: EmulatorGameIdentityInput) => {
   const normalizedChecksum = checksum.replace(/[^a-f0-9]/gi, "").toLowerCase();
@@ -37,6 +32,7 @@ const createEmulatorGameIdentity = ({ checksum, fileName }: EmulatorGameIdentity
   const suffix = /\.chd$/i.test((fileName || "").trim()) ? ".chd" : "";
   return {
     gameId: hashString(normalizedChecksum),
+    saveId: normalizedChecksum,
     gameName: `${normalizedChecksum}${suffix}`,
   };
 };
@@ -109,10 +105,10 @@ const createEmulatorAudioContextBridgeScript = (gameName: string) => `
         window.webkitAudioContext = RomWeaverAudioContext;
       })();`;
 
-const createEmulatorBridgeScript = (gameName: string, gameLabel: string) => `
+const createEmulatorBridgeScript = (gameName: string, gameLabel: string, saveId: string) => `
       (() => {
         const source = "rom-weaver-emulator";
-        const gameId = ${toScriptString(gameName)};
+        const gameId = ${toScriptString(saveId)};
         const gameName = gameId;
         const gameLabel = ${toScriptString(gameLabel)};
         const toBytes = (value) => {
@@ -132,7 +128,7 @@ const createEmulatorBridgeScript = (gameName: string, gameLabel: string) => `
         EJS_onLoadSave = () => request("request-load-sram");
         EJS_ready = () => {
           const bridge = window.parent !== window ? window.parent.__romWeaverEmulatorAudio : null;
-          if (!bridge || !bridge.hasPrepared(gameId)) return;
+          if (!bridge || !bridge.hasPrepared(${toScriptString(gameName)})) return;
           const button = document.querySelector('.ejs_start_button');
           if (button && typeof button.click === "function") button.click();
         };
@@ -242,7 +238,7 @@ const createEmulatorDocument = (
     <script>${createEmulatorAudioContextBridgeScript(gameName)}</script>
     <script>${DISABLE_UPDATE_CHECK}</script>
     <script>${CLEAR_HIDDEN_SETTINGS}</script>
-    <script>${createEmulatorBridgeScript(gameName, options.gameLabel || gameName)}</script>
+    <script>${createEmulatorBridgeScript(gameName, options.gameLabel || gameName, options.saveId || gameName)}</script>
     <script src="${dataUrl}loader.js"></script>
   </body>
 </html>`;

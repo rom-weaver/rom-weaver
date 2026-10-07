@@ -297,12 +297,55 @@ const writeRecord = async (record: EmulatorSaveRecord): Promise<void> => {
 };
 
 /**
- * Read and normalize a saved record without changing the stored bytes or metadata.
+ * Conflicting legacy records MUST remain available for export instead of losing bytes or metadata.
  */
 const readEmulatorSave = async (gameId: string): Promise<EmulatorSaveRecord | undefined> => {
-  const result = await readTransaction<unknown>((store) => store.get(gameId));
-  const record = normalizeRecord(result);
-  return record ? copyRecord(record) : undefined;
+  if (!/^[a-f0-9]{40}$/.test(gameId)) {
+    return normalizeRecord(await readTransaction<unknown>((store) => store.get(gameId)));
+  }
+  const database = await openDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(STORE_NAME, "readwrite");
+    const store = transaction.objectStore(STORE_NAME);
+    let result: EmulatorSaveRecord | undefined;
+    const canonical = store.get(gameId);
+    canonical.onsuccess = () => {
+      result = normalizeRecord(canonical.result);
+      const legacy = store.get(`${gameId}.chd`);
+      legacy.onsuccess = () => {
+        const previous = normalizeRecord(legacy.result);
+        if (!previous) return;
+        const existing = result;
+        result = existing
+          ? { ...existing, state: existing.state || previous.state, sram: existing.sram || previous.sram }
+          : { ...previous, gameId, gameName: gameId };
+        store.put(copyRecord(result), gameId);
+        if (existing) {
+          const archive = (index: number) => {
+            const key = `${gameId}.chd-conflict${index ? `-${index}` : ""}`;
+            const request = store.get(key);
+            request.onsuccess = () => {
+              if (request.result !== undefined) {
+                archive(index + 1);
+                return;
+              }
+              store.put(copyRecord({ ...previous, gameId: key }), key);
+            };
+          };
+          archive(0);
+        }
+        store.delete(`${gameId}.chd`);
+      };
+    };
+    transaction.oncomplete = () => {
+      database.close();
+      resolve(result ? copyRecord(result) : undefined);
+    };
+    transaction.onabort = transaction.onerror = () => {
+      database.close();
+      reject(transaction.error || new Error("Could not migrate the emulator save identity."));
+    };
+  });
 };
 
 const updatePart = async (
@@ -310,6 +353,7 @@ const updatePart = async (
   update: EmulatorSaveUpdate,
   { preserveMetadata = false }: { preserveMetadata?: boolean } = {},
 ): Promise<EmulatorSaveRecord> => {
+  await readEmulatorSave(update.gameId);
   const database = await openDatabase();
   return new Promise((resolve, reject) => {
     let transaction: IDBTransaction;
@@ -364,7 +408,14 @@ const updatePart = async (
 };
 
 const listEmulatorSaves = async (): Promise<EmulatorSaveRecord[]> => {
-  const result = await readTransaction<unknown[]>((store) => store.getAll());
+  let result = await readTransaction<unknown[]>((store) => store.getAll());
+  for (const raw of result || []) {
+    const record = normalizeRecord(raw);
+    if (record && /^[a-f0-9]{40}\.chd$/.test(record.gameId)) {
+      await readEmulatorSave(record.gameId.slice(0, -4));
+    }
+  }
+  result = await readTransaction<unknown[]>((store) => store.getAll());
   return (result || [])
     .map((raw) => {
       return normalizeRecord(raw);
@@ -397,6 +448,7 @@ const replaceEmulatorSaveSram = async (
   data: Uint8Array,
   expected?: Uint8Array,
 ): Promise<EmulatorSaveRecord> => {
+  await readEmulatorSave(gameId);
   const database = await openDatabase();
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(STORE_NAME, "readwrite");

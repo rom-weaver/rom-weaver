@@ -214,6 +214,51 @@ beforeEach(() => {
 });
 
 describe("emulator saves", () => {
+  it("migrates suffixed CHD saves without losing bytes or metadata", async () => {
+    const database = new FakeDatabase();
+    const legacy = { ...record, gameId: `${sha1}.chd`, gameName: `${sha1}.chd` };
+    database.seed(legacy.gameId, legacy);
+    vi.stubGlobal("indexedDB", createFakeIndexedDb(database));
+    expect((await listEmulatorSaves()).find((save) => save.gameId === sha1)).toEqual({
+      ...legacy,
+      gameId: sha1,
+      gameName: sha1,
+    });
+    expect(database.stored(legacy.gameId)).toBeUndefined();
+  });
+
+  it("preserves conflicting CHD saves while filling missing canonical parts", async () => {
+    const database = new FakeDatabase();
+    const legacy = { ...record, gameId: `${sha1}.chd`, gameName: `${sha1}.chd` };
+    const canonical = {
+      ...record,
+      gameId: sha1,
+      gameName: sha1,
+      sram: undefined,
+      state: new Uint8Array([9]),
+      label: "Canonical",
+      updatedAt: 5,
+    };
+    database.seed(legacy.gameId, legacy);
+    database.seed(sha1, canonical);
+    vi.stubGlobal("indexedDB", createFakeIndexedDb(database));
+    expect((await listEmulatorSaves()).find((save) => save.gameId === sha1)).toEqual({
+      ...canonical,
+      sram: legacy.sram,
+    });
+    expect(database.stored(`${sha1}.chd-conflict`)).toEqual({ ...legacy, gameId: `${sha1}.chd-conflict` });
+    database.seed(legacy.gameId, { ...legacy, label: "Another legacy save" });
+    await listEmulatorSaves();
+    expect(database.stored(`${sha1}.chd-conflict`)).toEqual({ ...legacy, gameId: `${sha1}.chd-conflict` });
+    expect(database.stored(`${sha1}.chd-conflict-1`)).toEqual({
+      ...legacy,
+      gameId: `${sha1}.chd-conflict-1`,
+      label: "Another legacy save",
+    });
+    await deleteEmulatorSave(sha1);
+    expect((await listEmulatorSaves()).find((save) => save.gameId === sha1)).toBeUndefined();
+  });
+
   it("stages and reads a defensive copy of one pending test save", async () => {
     const data = new Uint8Array([1, 2, 3]);
     const staged = await stagePendingTestSave({
