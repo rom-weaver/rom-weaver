@@ -209,10 +209,10 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
 
 test("WebappRoot keeps the beta workflows out of the nav while the setting is off", async () => {
   mountWebappRoot();
-  // The dock keeps its three workflow slots plus Menu and Controls at every setting.
+  // The dock keeps its four workflow slots, then Menu, at every setting.
   await expect
     .poll(() => [...document.querySelectorAll(".dock .dock-tab")].map((tab) => tab.textContent))
-    .toEqual(["Apply", "Create", "Menu", "Test", "Controls"]);
+    .toEqual(["Apply", "Create", "Identify", "Test", "Menu"]);
   expect(navRow("PPF undo")).toBeTruthy();
   expect(navRow("PPF undo").querySelector(".nav-beta")).toBeNull();
   expect(navRow("Identify")).toBeTruthy();
@@ -266,9 +266,9 @@ test("mobile Docs docks one docs bar on the workflow dock and opens everything f
   expect([...dock.querySelectorAll(".dock-tab")].map((tab) => tab.textContent)).toEqual([
     "Apply",
     "Create",
-    "Menu",
+    "Identify",
     "Test",
-    "Controls",
+    "Menu",
   ]);
   // Flush on the dock: part of the bottom chrome, never floating over the article.
   expect(getComputedStyle(bar).position).toBe("fixed");
@@ -378,8 +378,8 @@ test("enabled PPF undo and Identify are named in the nav on desktop and phone", 
     // drop has exactly one consumer and the two cannot fight over the activity key.
     expect(document.querySelectorAll("#identify-input-picker")).toHaveLength(1);
     expect(document.querySelector("#ppf-undo-identify-input-picker")).toBeNull();
-    // Neither beta tool takes one of the dock's three workflow slots.
-    expect(document.querySelector(`.dock-tab[data-mode="identify"]`)).toBeNull();
+    // No beta tool takes a dock slot; Identify, not beta, holds one of the four.
+    expect(document.querySelector(`.dock-tab[data-mode="identify"]`)).toBeTruthy();
     expect(document.querySelector(`.dock-tab[data-mode="ppf-undo"]`)).toBeNull();
     expect(getComputedStyle(document.querySelector(".panel-view-toggle")).display).not.toBe("none");
     // Both layouts list every destination, App's included, under the same groups.
@@ -389,7 +389,8 @@ test("enabled PPF undo and Identify are named in the nav on desktop and phone", 
     }
     if (width < 1000) {
       expect(document.querySelector(".phone-runtime .sub-status")).toBeTruthy();
-      expect(document.querySelector(".dock-app")).toBeTruthy();
+      // Settings lives in Menu; the dock has no slot of its own for it.
+      expect(document.querySelector(".dock-app")).toBeNull();
     }
   }
   await page.viewport(1280, 900);
@@ -670,35 +671,36 @@ test("navigation Offline app keeps a plain label and opens the current offline v
   ).toContain("Update available");
 });
 
-test("the phone console keeps its five sections and Close on one bar at the foot", async () => {
+test("the phone console opens one section from Menu, with the dock at its foot reading Close", async () => {
   const height = 844;
   await page.viewport(393, height);
   mountWebappRoot();
 
-  await expect.poll(() => document.querySelector(".dock-app")).toBeTruthy();
-  document.querySelector(".dock-app").click();
-  await expect.poll(() => document.querySelector(".log-dlg[open] .console-nav")).toBeTruthy();
+  // Menu's Settings row opens the console on that section alone.
+  let sheet = await openMenuSheet();
+  navRow("Settings", ".menu-sheet").click();
+  await expect.poll(() => document.querySelector(".log-dlg[open] .console-pane")).toBeTruthy();
+  expect(getComputedStyle(document.querySelector(".log-dlg .console-nav")).display).toBe("none");
+  expect(document.querySelector("#console-pane-title")?.textContent).toBe("Settings");
 
-  const nav = document.querySelector(".log-dlg .console-nav");
-  const close = nav.querySelector(".console-close");
-  const items = [...nav.querySelectorAll(".console-tab"), close];
-  const visibleLabel = (item) => item.querySelector(item === close ? "span" : ".console-tab-short");
-  expect(items.map((item) => visibleLabel(item)?.textContent)).toEqual([
-    "Settings",
-    "Offline",
-    "Storage",
-    "Logs",
-    "About",
-    "Close",
-  ]);
-  // Close takes the bottom-right corner, after every section.
-  expect(close.getBoundingClientRect().right).toBeGreaterThan(nav.getBoundingClientRect().right - 20);
-  expect(new Set(items.map((item) => Math.round(item.getBoundingClientRect().top))).size).toBe(1);
-  expect(nav.getBoundingClientRect().bottom).toBeGreaterThan(height - 100);
-  expect(nav.querySelector(".console-nav-foot")?.getBoundingClientRect().height ?? 0).toBe(0);
+  // The dock again, its Menu slot reading Close in the bottom-right corner.
+  const dock = document.querySelector(".log-dlg .dock");
+  const slots = [...dock.querySelectorAll(".dock-tab")];
+  expect(slots.map((slot) => slot.textContent)).toEqual(["Apply", "Create", "Identify", "Test", "Close"]);
+  const close = dock.querySelector(".dock-menu");
+  expect(close.getAttribute("aria-expanded")).toBe("true");
+  expect(close.getBoundingClientRect().right).toBeGreaterThan(window.innerWidth - 90);
+  expect(new Set(slots.map((slot) => Math.round(slot.getBoundingClientRect().top))).size).toBe(1);
+  expect(dock.getBoundingClientRect().bottom).toBeGreaterThan(height - 100);
+
+  // Close shuts the console, not just back to Menu.
+  close.click();
+  await expect.poll(() => document.querySelector(".log-dlg")).toBeNull();
+  expect(document.querySelector(".menu-sheet").hidden).toBe(true);
 
   // Storage shows the saves; the raw OPFS listing waits for Advanced.
-  document.querySelector('[data-logtab="storage"]')?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  sheet = await openMenuSheet();
+  navRow("Saves & storage", ".menu-sheet").click();
   await expect.poll(() => document.querySelector("#logpanel-storage .emulator-saves-panel")).toBeTruthy();
   expect(document.querySelector("#logpanel-storage .opfs-inspector")).toBeNull();
   document.querySelector("#console-advanced-phone").click();
@@ -706,9 +708,9 @@ test("the phone console keeps its five sections and Close on one bar at the foot
   expect(document.querySelector("#storage-opfs-title")?.textContent).toBe("OPFS");
   document.querySelector("#console-advanced-phone").click();
 
-  // Close slides the page out and closes the console.
-  close.click();
+  document.querySelector(".log-dlg .dock-menu").click();
   await expect.poll(() => document.querySelector(".log-dlg")).toBeNull();
+  expect(sheet.hidden).toBe(true);
   await page.viewport(1280, 900);
 });
 
@@ -717,16 +719,18 @@ test("a phone console swipe closes past a quarter of the width and springs back 
   mountWebappRoot();
   const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   const openConsole = async () => {
-    document.querySelector(".dock-app").click();
-    await expect.poll(() => document.querySelector(".log-dlg[open] .console-nav")).toBeTruthy();
+    await openMenuSheet();
+    navRow("Settings", ".menu-sheet").click();
+    await expect.poll(() => document.querySelector(".log-dlg[open] .console-edge")).toBeTruthy();
     // The page MUST finish sliding in, or the swipe starts from a moving frame.
     await pause(400);
   };
   const swipe = async (points, holdMs) => {
-    const tab = document.querySelector('.log-dlg [data-logtab="storage"]');
-    const { top, height } = tab.getBoundingClientRect();
+    // The left edge starts the swipe back.
+    const edge = document.querySelector(".log-dlg .console-edge");
+    const { top, height } = edge.getBoundingClientRect();
     const send = (type, clientX) =>
-      tab.dispatchEvent(
+      edge.dispatchEvent(
         new PointerEvent(type, {
           bubbles: true,
           button: 0,
@@ -747,7 +751,6 @@ test("a phone console swipe closes past a quarter of the width and springs back 
     send("pointerup", points.at(-1));
   };
 
-  await expect.poll(() => document.querySelector(".dock-app")).toBeTruthy();
   await openConsole();
   // A quick 80px (about 20%) drag that stops before release is no flick.
   await swipe([40, 80, 120], 200);
@@ -846,7 +849,7 @@ test("the Menu sheet stays on screen and scrolls on a short screen", async () =>
   expect(document.querySelector(".phone-runtime .sub-status-text")?.textContent?.trim()).not.toBe("");
   expect(sheet.querySelector(".find-palette.is-embedded")).toBeTruthy();
 
-  document.querySelector(".dock-app").click();
+  navRow("Settings", ".menu-sheet").click();
   await expect.element(page.getByRole("dialog")).toBeInTheDocument();
   await page.viewport(1280, 900);
 });

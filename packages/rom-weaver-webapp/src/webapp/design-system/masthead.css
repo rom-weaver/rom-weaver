@@ -1038,8 +1038,8 @@
 }
 
 /* ── the phone dock ──
-   One row: two workflows, Menu, the third workflow, then App, which opens the
-   settings console from that edge. */
+   One row: the dock workflows, then Menu, which reads Close while the sheet or
+   a surface opened from it is up. */
 .rw-app .dock {
   position: fixed;
   inset-block-end: 0;
@@ -1232,10 +1232,21 @@
   font-size: 0.66rem;
   text-align: center;
 }
-.rw-app #menu-sheet .nav-row-label {
+.rw-app #menu-sheet .nav-row-label,
+.rw-app #menu-sheet .nav-row-short {
   max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   line-height: 1.15;
-  text-wrap: balance;
+  white-space: nowrap;
+}
+/* A tile too narrow for its full label shows the short one; the full one stays its name. */
+.rw-app .nav-row-short,
+.rw-app #menu-sheet .nav-row:has(.nav-row-short) .nav-row-label {
+  display: none;
+}
+.rw-app #menu-sheet .nav-row-short {
+  display: block;
 }
 /* A solid tag on the icon's top-right corner: an outline chip there drew its
    text across the icon's strokes. The ring in the sheet's colour cuts it off

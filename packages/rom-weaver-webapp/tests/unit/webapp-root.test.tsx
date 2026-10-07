@@ -642,15 +642,22 @@ describe("console history", () => {
 });
 
 describe("the phone dock", () => {
-  it("opens the settings console from the dock's App button", async () => {
+  it("opens the settings console from Menu, and the console's own dock reads Close", async () => {
     const { called, container } = await renderRoot();
 
-    fireEvent.click(container.querySelector(".dock-app") as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".dock-menu") as HTMLButtonElement);
+    fireEvent.click(container.querySelector('#menu-sheet [data-nav="settings"]') as HTMLButtonElement);
 
     expect(called("onOpenSettings")).toHaveBeenCalledTimes(1);
     await waitFor(() =>
       expect(container.querySelector('[data-logtab="settings"]')?.getAttribute("aria-selected")).toBe("true"),
     );
+    // The modal makes the page's dock inert, so the console repeats it with Menu reading Close.
+    const consoleDock = container.querySelector(".log-dlg .dock") as HTMLElement;
+    const slots = Array.from(consoleDock.querySelectorAll(".dock-tab")).map((slot) => slot.textContent);
+    expect(slots).toEqual(["Apply", "Create", "Identify", "Test", "Close"]);
+    fireEvent.click(consoleDock.querySelector(".dock-menu") as HTMLButtonElement);
+    await waitFor(() => expect(container.querySelector(".log-dlg")).toBeNull());
   });
 });
 

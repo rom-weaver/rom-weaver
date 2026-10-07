@@ -84,7 +84,7 @@ export const runAccessibleNavigationAudit = async (createContext, baseUrl) => {
       await expect(main).toBeFocused();
       expect(new URL(page.url()).pathname).toBe(workflowUrl.pathname);
 
-      const settings = page.locator(".dock-app:visible, .topbar-tools .settings-tool:visible");
+      const settings = page.locator(".shell-head-tools .settings-tool:visible, .topbar-tools .settings-tool:visible");
       const settingsDialog = page.getByRole("dialog", { name: "Settings", exact: true });
       await auditDialogKeyboard(page, settings, settingsDialog);
       await page.keyboard.press("Enter");

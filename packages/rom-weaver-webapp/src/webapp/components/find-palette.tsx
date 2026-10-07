@@ -113,8 +113,9 @@ const FindPalette = ({
       setActiveEntryId(null);
       return undefined;
     }
-    inputRef.current?.focus();
+    // Menu opens for browsing; its Find box takes focus only when the opener asks.
     if (embedded) return undefined;
+    inputRef.current?.focus();
     const dismiss = (event: Event) => {
       const target = event.target;
       if (!(target instanceof Node)) return;

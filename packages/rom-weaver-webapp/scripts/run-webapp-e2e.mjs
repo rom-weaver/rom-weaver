@@ -185,9 +185,12 @@ const requestStatus = (url, { headers = {}, maxRedirects = 5 } = {}) =>
     request.on("error", reject);
   });
 
+// The settings console repeats the phone dock, so the page's own Menu is the one that controls the sheet.
+const PAGE_DOCK_MENU = '.dock-menu[aria-controls="menu-sheet"]';
+
 const openSettingsPanel = async (page) => {
-  // Phones reach Settings through the dock's App button; desktop keeps the header tool.
-  const settings = page.locator(".dock-app:visible, .topbar-tools .settings-tool:visible");
+  // Both layouts keep a Settings tool in the header; phones also list it in Menu.
+  const settings = page.locator(".shell-head-tools .settings-tool:visible, .topbar-tools .settings-tool:visible");
   await settings.first().click();
   await page.getByRole("dialog").waitFor({ state: "visible" });
 };
@@ -621,7 +624,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
   /** Menu is the phone's index; the sidebar is always on screen on desktop. */
   const openNav = async () => {
     if (await page.locator(".side-nav:visible").count()) return;
-    if (!(await page.locator("#menu-sheet:visible").count())) await page.locator(".dock-menu").click();
+    // The page's Menu, not the console's copy, which lingers while the console slides out.
+    if (!(await page.locator("#menu-sheet:visible").count())) await page.locator(PAGE_DOCK_MENU).click();
     await page.locator("#menu-sheet:visible").waitFor({ state: "visible" });
   };
   const scanVariants = async (label) => {
@@ -763,8 +767,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     }
     await page.locator(".docs-article h1").waitFor({ state: "visible" });
     await page.locator(".dock").waitFor({ state: "visible" });
-    await page.locator(".dock-menu").waitFor({ state: "visible" });
-    await page.locator(".dock-app").waitFor({ state: "visible" });
+    await page.locator(PAGE_DOCK_MENU).waitFor({ state: "visible" });
+    await page.locator('.dock-tab[data-mode="identify"]').waitFor({ state: "visible" });
     const docsOpen = page.locator(".docs-bar-open");
     await docsOpen.waitFor({ state: "visible" });
     await docsOpen.click();
@@ -884,7 +888,8 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     const logDialog = page.locator("dialog.log-dlg");
     await logDialog.waitFor({ state: "visible" });
     await scanVariants("log dialog");
-    await logDialog.locator(".console-close:visible, .dlg-x:visible").click();
+    // A phone closes from the console's dock, where Menu was; desktop from the header.
+    await logDialog.locator(".dock-menu:visible, .dlg-x:visible").click();
 
     await page.locator(".reset-btn:visible").click();
     const resetConfirmation = page.locator(".rw-modal .confirm-card:visible");

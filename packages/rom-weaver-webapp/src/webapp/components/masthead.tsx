@@ -135,15 +135,17 @@ const Masthead = ({
     [betaToolsEnabled, donateHref, githubHref, homeHref, tabs],
   );
   const closeFind = useCallback(() => setFindOpen(false), []);
-  /* iOS raises the keyboard only for a focus made inside the tap, on a field
-     that is already rendered, so the sheet MUST commit before this returns. */
-  const openTools = useCallback(() => {
+  /* Menu opens for browsing, so the keyboard stays down; the Find shortcut
+     asks for the box. iOS raises the keyboard only for a focus made inside the
+     keypress, on a field that is already rendered, so the sheet MUST commit
+     before this returns. */
+  const openTools = useCallback((focusFind: boolean) => {
     flushSync(() => {
       setFindOpen(false);
       setMenuMounted(true);
       setMenuOpen(true);
     });
-    document.querySelector<HTMLInputElement>("#menu-sheet .find-input")?.focus();
+    if (focusFind) document.querySelector<HTMLInputElement>("#menu-sheet .find-input")?.focus();
   }, []);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const menuRoute = useRef(`${currentTab}:${docsSlug}`);
@@ -192,7 +194,7 @@ const Masthead = ({
       // the shortcut opens Menu; Escape then has a visible trigger to return to.
       if (window.matchMedia("(max-width: 999px)").matches) {
         if (document.getElementById("menu-sheet")?.hidden === false) setMenuOpen(false);
-        else openTools();
+        else openTools(true);
         return;
       }
       setMenuOpen(false);
@@ -336,12 +338,14 @@ const Masthead = ({
           id: "status",
           label: localizer.message("ui.console.offline"),
           onSelect: onOpenStatus,
+          shortLabel: localizer.message("ui.status.offline"),
         },
         {
           icon: <HardDrive aria-hidden="true" />,
           id: "storage",
           label: localizer.message("ui.console.storage"),
           onSelect: openStorage,
+          shortLabel: localizer.message("ui.log.tabStorage"),
         },
         {
           icon: <ScrollText aria-hidden="true" />,
@@ -629,22 +633,18 @@ const Masthead = ({
         </span>
       ) : null}
       <PhoneDock
-        appLabel={localizer.message("ui.tools.app")}
+        closeLabel={localizer.message("ui.common.close")}
         current={currentTab}
+        menuControls="menu-sheet"
         menuLabel={localizer.message("ui.tools.menu")}
         menuOpen={menuOpen}
         navLabel={navLabel}
-        onOpenApp={() => {
-          setFindOpen(false);
-          setMenuOpen(false);
-          onOpenSettings();
-        }}
         onSelect={onSelectTab}
         onToggleMenu={() => {
           setFindOpen(false);
           onPreloadLog?.();
           if (menuOpen) setMenuOpen(false);
-          else openTools();
+          else openTools(false);
         }}
         tabs={dockTabs}
         triggerRef={menuTriggerRef}

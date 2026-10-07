@@ -118,6 +118,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     label: "PPF undo",
   },
   {
+    dock: true,
     group: "roms",
     href: "identify-rom",
     icon: <ScanSearch aria-hidden="true" />,
@@ -517,6 +518,9 @@ function WebappRoot({
     () => (notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS),
     [notFound],
   );
+
+  // The settings console draws its own copy of the phone dock: a modal makes the real one inert.
+  const dockTabs = useMemo(() => mastheadTabs.filter((tab) => tab.dock && !tab.beta), [mastheadTabs]);
 
   // The nav's own tab switch. Shared with the related-links strips (workflow
   // results, the docs footer, the not-found page) so every "go here next"
@@ -921,6 +925,8 @@ function WebappRoot({
         {logOpen ? (
           <Suspense fallback={null}>
             <LogDialog
+              currentView={state.currentView}
+              dockTabs={dockTabs}
               initialTab={logTab}
               licensesHref={`${resolvedAssetBaseUrl}docs/notices`}
               onOpenWhatsNew={() => {
@@ -930,6 +936,11 @@ function WebappRoot({
               level={state.settings.logLevel}
               onClose={closeDialog}
               onLevelChange={actions.onLogLevelChange}
+              onSelectDockTab={(id) => {
+                // Like About's What's new: the console's entries stay, so Back returns to it.
+                closeDialogForNavigation();
+                handleSelectTab(id);
+              }}
               onRestoreDefaults={actions.onRestoreDefaults}
               onSaveSettings={saveSettings}
               onTabChange={handleDialogTabChange}

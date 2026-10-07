@@ -71,7 +71,8 @@ import {
   RUNTIME_STATES,
   RuntimeGlyph,
 } from "./shell.tsx";
-import type { OfflineWarmupDisplayProgress, RuntimeState } from "./shell.tsx";
+import type { OfflineWarmupDisplayProgress, RuntimeState, WorkflowTab } from "./shell.tsx";
+import { PhoneDock } from "./shell-nav.tsx";
 import type { Localizer } from "../../presentation/localization/index.ts";
 
 /**
@@ -246,14 +247,6 @@ const TAB_MESSAGES = {
   offline: "ui.console.offline",
   settings: "ui.settings.title",
   storage: "ui.console.storage",
-} as const;
-// Phone section bar: five columns beside Close, so every label is one short word.
-const TAB_SHORT_MESSAGES = {
-  about: "ui.console.about",
-  logs: "ui.log.tabLogs",
-  offline: "ui.status.offline",
-  settings: "ui.settings.title",
-  storage: "ui.log.tabStorage",
 } as const;
 const TAB_DESCRIPTIONS = {
   about: "ui.console.aboutDescription",
@@ -786,15 +779,14 @@ const HiddenNote = ({ children, localizer }: { children: ReactNode; localizer: L
 );
 
 /**
- * The console's section list. Desktop draws it as a sidebar with jump links
- * under Settings and the Advanced switch at its foot; a phone draws it as the
- * bar at the foot of the page, ended by Close (see dialogs.css).
+ * The console's section list: a sidebar with jump links under Settings and the
+ * Advanced switch at its foot. A phone hides it: Menu opens each section on
+ * its own, and the console's copy of the dock closes it (see dialogs.css).
  */
 const ConsoleNav = ({
   advanced,
   localizer,
   offlinePercent,
-  onClose,
   onJump,
   onSelect,
   runtimeState,
@@ -803,7 +795,6 @@ const ConsoleNav = ({
   advanced: boolean;
   localizer: Localizer;
   offlinePercent: number | null;
-  onClose: () => void;
   onJump: (title: string) => void;
   onSelect: (tab: LogDialogTab) => void;
   runtimeState: RuntimeState;
@@ -851,17 +842,10 @@ const ConsoleNav = ({
                 <TabIcon aria-hidden="true" />
               )}
               <span className="console-tab-label">{localizer.message(TAB_MESSAGES[entry])}</span>
-              <span aria-hidden="true" className="console-tab-short">
-                {localizer.message(TAB_SHORT_MESSAGES[entry])}
-              </span>
             </button>
           );
         })}
       </div>
-      <button className="console-close" onClick={onClose} type="button">
-        <X aria-hidden="true" />
-        <span>{localizer.message("ui.common.close")}</span>
-      </button>
       {tab === "settings" ? (
         <ul className="console-jumps">
           {visibleSettingsGroups(advanced).map((section) => (
@@ -882,8 +866,7 @@ const ConsoleNav = ({
 };
 
 /**
- * Phone only: drag the section bar or the page's left edge to the right to
- * close, the way a pushed page goes back. The frame follows the finger, and a
+ * Phone only: drag the page's left edge to the right to close, the way a pushed page goes back. The frame follows the finger, and a
  * release past a quarter of the width, or a light flick, finishes the close so
  * a deliberate swipe does not spring back.
  */
@@ -946,7 +929,7 @@ const useSwipeToClose = (frameRef: RefObject<HTMLDivElement | null>, onClose: ()
       suppressClick = false;
       if (!phone.matches || event.button !== 0) return;
       const target = event.target as Element | null;
-      if (!target?.closest(".console-nav, .console-edge")) return;
+      if (!target?.closest(".console-edge")) return;
       drag = {
         id: event.pointerId,
         lastTime: event.timeStamp,
@@ -1390,8 +1373,11 @@ const LogsStoragePanel = ({
 };
 
 const LogDialog = ({
+  currentView = "",
+  dockTabs = [],
   open,
   onClose,
+  onSelectDockTab,
   level,
   onLevelChange,
   initialTab = "offline",
@@ -1411,8 +1397,14 @@ const LogDialog = ({
   onPreviewRuntimeStateChange,
   onReloadUpdate,
 }: {
+  /** The page under the console, marked current in the console's copy of the phone dock. */
+  currentView?: string;
+  /** The phone dock's workflows; the console repeats the dock because the modal makes the real one inert. */
+  dockTabs?: WorkflowTab[];
   open: boolean;
   onClose: () => void;
+  /** A dock workflow chosen from inside the console: it closes the console and goes there. */
+  onSelectDockTab?: (id: string) => void;
   level?: string;
   onLevelChange: (level: string) => void;
   initialTab?: LogDialogTab;
@@ -1649,7 +1641,6 @@ const LogDialog = ({
         <ConsoleNav
           advanced={advanced}
           localizer={localizer}
-          onClose={close}
           offlinePercent={runtimeState === "installing" ? offlineWarmupPercent(offlineProgress) : null}
           onJump={jumpToGroup}
           onSelect={selectTab}
@@ -1806,6 +1797,20 @@ const LogDialog = ({
         </section>
         {/* Phone only: a strip on the left edge that starts the swipe back. */}
         <div aria-hidden="true" className="console-edge" />
+        {/* Phone only: the dock again, its Menu slot reading Close, so the way
+            out sits where the way in was (see dialogs.css). */}
+        {dockTabs.length > 0 ? (
+          <PhoneDock
+            closeLabel={localizer.message("ui.common.close")}
+            current={currentView}
+            menuLabel={localizer.message("ui.tools.menu")}
+            menuOpen
+            navLabel={localizer.message("ui.nav.primary")}
+            onSelect={(id) => onSelectDockTab?.(id)}
+            onToggleMenu={close}
+            tabs={dockTabs}
+          />
+        ) : null}
       </div>
     </dialog>
   );

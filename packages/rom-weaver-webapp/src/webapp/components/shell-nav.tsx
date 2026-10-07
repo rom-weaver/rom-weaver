@@ -1,6 +1,6 @@
-import { SlidersHorizontal, TextSearch } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import type { Localizer } from "../../presentation/localization/index.ts";
 import type { MessageId } from "../../presentation/localization/catalog.ts";
 import { join } from "./shell-common.tsx";
@@ -9,7 +9,7 @@ import { join } from "./shell-common.tsx";
  * One entry of the primary nav. Every workflow is named and reachable in both
  * layouts: `group` files it under a heading that carries the noun, so the entry
  * itself only needs the verb. `dock: true` also gives it one of the phone
- * dock's three workflow slots; everything else reaches the phone through Menu.
+ * dock's four workflow slots; everything else reaches the phone through Menu.
  * A `beta` entry stays behind the beta-tools setting and wears a chip while it
  * is on.
  */
@@ -53,6 +53,8 @@ type NavEntry = {
   onExternalClick?: (event: React.MouseEvent) => void;
   /** Extra accessible name where the visible label is deliberately short. */
   title?: string;
+  /** The phone Menu's label, where the full one would wrap its tile; the full one stays the name. */
+  shortLabel?: string;
 };
 type NavSectionData = { entries: NavEntry[]; id: string; title: string; content?: ReactNode };
 
@@ -97,10 +99,17 @@ const NavRow = ({
     <>
       {entry.icon}
       <span className="nav-row-label">{entry.label}</span>
+      {entry.shortLabel ? (
+        <span aria-hidden="true" className="nav-row-short">
+          {entry.shortLabel}
+        </span>
+      ) : null}
       {entry.beta ? <span className="nav-beta">{localizer.message("ui.tools.beta")}</span> : null}
     </>
   );
   const rowClass = join(className, entry.className);
+  // The phone Menu hides the full label behind the short one, so the full one names the row.
+  const name = entry.title ?? (entry.shortLabel ? entry.label : undefined);
   // The sidebar copy is found by its `tab-<id>`; the Menu sheet copy needs its own
   // handle, which stays off the sidebar so the prerendered shell does not carry it.
   const navId = idPrefix ? undefined : entry.id;
@@ -108,7 +117,7 @@ const NavRow = ({
     return (
       <a
         aria-current={entry.current ? "page" : undefined}
-        aria-label={entry.title}
+        aria-label={name}
         className={rowClass}
         data-nav={navId}
         hidden={entry.hidden}
@@ -131,7 +140,7 @@ const NavRow = ({
   }
   return (
     <button
-      aria-label={entry.title}
+      aria-label={name}
       className={rowClass}
       data-nav={navId}
       hidden={entry.hidden}
@@ -180,37 +189,35 @@ const SideNav = ({
 );
 
 /**
- * The phone dock: two workflows, Menu, the third workflow, then Controls. Menu
- * opens the menu sheet, which carries every destination and the Find box;
- * Controls opens the settings console from the right-hand edge, where a leftward
- * swipe across the dock also pulls it in.
+ * The phone dock: the dock workflows, then Menu. Menu opens the menu sheet,
+ * which carries every destination and the Find box; while the sheet or a
+ * surface opened from it is up, the same slot reads Close and shuts it, so the
+ * way out sits where the way in was.
  */
 const PhoneDock = ({
-  appLabel,
+  closeLabel,
   current,
+  menuControls,
   menuLabel,
   menuOpen,
   navLabel,
-  onOpenApp,
   onSelect,
   onToggleMenu,
   tabs,
   triggerRef,
 }: {
-  appLabel: string;
+  closeLabel: string;
   current: string;
+  /** The sheet the Menu slot opens; the settings console's copy of the dock has none. */
+  menuControls?: string;
   menuLabel: string;
   menuOpen: boolean;
   navLabel: string;
-  onOpenApp: () => void;
   onSelect: (id: string) => void;
   onToggleMenu: () => void;
   tabs: WorkflowTab[];
-  triggerRef: RefObject<HTMLButtonElement | null>;
+  triggerRef?: RefObject<HTMLButtonElement | null>;
 }) => {
-  const toolsIndex = Math.ceil(tabs.length / 2);
-  // Mostly-vertical drags are page scrolls, not a request for the console.
-  const swipeRef = useRef<{ x: number; y: number } | null>(null);
   const renderWorkflowTab = (tab: WorkflowTab) => (
     <a
       aria-current={tab.id === current ? "page" : undefined}
@@ -224,42 +231,22 @@ const PhoneDock = ({
       <span>{tab.railLabel ?? tab.label}</span>
     </a>
   );
+  const menuText = menuOpen ? closeLabel : menuLabel;
 
   return (
-    <nav
-      aria-label={navLabel}
-      className="dock"
-      onPointerCancel={() => {
-        swipeRef.current = null;
-      }}
-      onPointerDown={(event) => {
-        swipeRef.current = event.isPrimary ? { x: event.clientX, y: event.clientY } : null;
-      }}
-      onPointerUp={(event) => {
-        const start = swipeRef.current;
-        swipeRef.current = null;
-        if (!start) return;
-        const dx = event.clientX - start.x;
-        if (dx < -60 && Math.abs(dx) > 2 * Math.abs(event.clientY - start.y)) onOpenApp();
-      }}
-    >
-      {tabs.slice(0, toolsIndex).map(renderWorkflowTab)}
+    <nav aria-label={navLabel} className="dock">
+      {tabs.map(renderWorkflowTab)}
       <button
-        aria-controls="menu-sheet"
+        aria-controls={menuControls}
         aria-expanded={menuOpen}
-        aria-label={menuLabel}
+        aria-label={menuText}
         className="dock-tab dock-menu"
         onClick={onToggleMenu}
         ref={triggerRef}
         type="button"
       >
-        <TextSearch aria-hidden="true" />
-        <span>{menuLabel}</span>
-      </button>
-      {tabs.slice(toolsIndex).map(renderWorkflowTab)}
-      <button className="dock-tab dock-app" onClick={onOpenApp} type="button">
-        <SlidersHorizontal aria-hidden="true" />
-        <span>{appLabel}</span>
+        {menuOpen ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
+        <span>{menuText}</span>
       </button>
     </nav>
   );
