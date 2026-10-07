@@ -3,13 +3,13 @@
     "brotliQuality": 6,
     "budgets": [
       {
-        "_comment": "Re-baselined when the shell replaced its overflow menu with one named nav. Every destination is now in the prerendered HTML, which is what makes them crawlable and reachable without JavaScript, so ~15 labelled rows and their icons ship in the shell instead of 6. Raised again when theme and accent joined the navigation: the sidebar's copy of the pair ships in the shell, which is ~2 KiB of icon markup raw and nothing measurable brotli. The Menu sheet's copy waits for the sheet, so it costs the shell nothing. Header settings and project links add about 1.7 KiB of raw shell markup. The complete home-page bundle flow adds about 1.4 KiB of raw semantic markup while reducing the Brotli size below this budget's compressed target. The Extract workflow adds one labelled Files row to the shell. The guided cheat tours add about 0.2 KiB of raw home-shell markup; the approved raw limit is 56,000 bytes.",
+        "_comment": "Re-baselined when the shell replaced its overflow menu with one named nav. Every destination is now in the prerendered HTML, which is what makes them crawlable and reachable without JavaScript, so ~15 labelled rows and their icons ship in the shell instead of 6. Raised again when theme and accent joined the navigation: the sidebar's copy of the pair ships in the shell, which is ~2 KiB of icon markup raw and nothing measurable brotli. The Menu sheet's copy waits for the sheet, so it costs the shell nothing. Header settings and project links add about 1.7 KiB of raw shell markup. The complete home-page bundle flow adds about 1.4 KiB of raw semantic markup while reducing the Brotli size below this budget's compressed target. The Extract workflow adds one labelled Files row to the shell. The guided cheat tours add about 0.2 KiB of raw home-shell markup; the approved raw limit is 56,000 bytes. The file-type home page puts its file router, one-pass steps, format lists, privacy notes and FAQ in the prerendered shell so search engines can read them, bringing it to 57,082 raw and 11,378 Brotli bytes; the approved limits are 58,000 and 11,600 bytes.",
         "name": "HTML shell",
         "path": "index.html",
         "expectedRawBytes": 54750,
-        "maxRawBytes": 56000,
+        "maxRawBytes": 58000,
         "expectedBrotliBytes": 10550,
-        "maxBrotliBytes": 10900
+        "maxBrotliBytes": 11600
       },
       {
         "_comment": "Raised for the Extract workflow route and its browser archive selection UI. Raised again for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, whose rendered pages ship as docs route chunks. Raised again for the ISO to RVZ, Nintendo 3DS to Z3DS, and Extract Z3DS guides, whose route chunks add about 11 KiB raw and 3 KiB Brotli. Raised again for the Pro Action Rocky, Gold Finger, and GBA GameShark/Action Replay code types and the create form's code type picker. Raised for the WebMCP tools and eleven browser workflow adapters. Raised for the published native benchmarks and expanded format guides. The CI bundle measures 2,496,524 raw bytes and 639,096 Brotli bytes; the approved limits retain 70,000 raw and 9,000 Brotli bytes above the baseline. Raised again for guided Apply's add-files step and the Guided practice runs reference page: main measured 632.7 KiB Brotli, 1.1 KiB under the old 649,000-byte limit, and the change adds 3.2 KiB (the new page's route chunk is 1.5 KiB of it, the rest is the guide, its de/es copy, and the linking doc edits), bringing the bundle to 635.9 KiB. The Brotli limit rises by 5,000 bytes to keep about 2.8 KiB of headroom; the raw limit is unchanged. Raised by 2,000 Brotli bytes for PPF Undo archive ingestion, candidate selection, disc companions, and output compression after shared-helper reuse and route simplification. The measured production bundle was 2,559,908 raw and 655,107 Brotli bytes; no source modules were duplicated across chunks. The raw ceiling is unchanged.",
@@ -50,15 +50,15 @@
         "maxBrotliBytes": 11500
       },
       {
-        "_comment": "Raised for the patches-step cheat card layout and database picker added in the apply workflow. The mobile docs navigation measures 258,432 raw CSS bytes and 41,009 Brotli bytes; its approved limits are 260,000 and 42,000 bytes. The shared cheat picker and read-only inspection add about 0.7 KiB raw CSS; the approved raw limit is 262,000 bytes. The guided Simple/Detailed step on Apply and Create brings the PR bundle to 262,498 raw and 41,446 Brotli bytes; the approved limits of 264,500 raw and 42,300 Brotli bytes retain about 2 KiB and 0.8 KiB of headroom. The Identify sample button inside the empty search box adds about 110 raw bytes on top of #1020, which left about 50 bytes of raw headroom; the approved raw limit is 265,500 bytes.",
+        "_comment": "Raised for the patches-step cheat card layout and database picker added in the apply workflow. The mobile docs navigation measures 258,432 raw CSS bytes and 41,009 Brotli bytes; its approved limits are 260,000 and 42,000 bytes. The shared cheat picker and read-only inspection add about 0.7 KiB raw CSS; the approved raw limit is 262,000 bytes. The guided Simple/Detailed step on Apply and Create brings the PR bundle to 262,498 raw and 41,446 Brotli bytes; the approved limits of 264,500 raw and 42,300 Brotli bytes retain about 2 KiB and 0.8 KiB of headroom. The Identify sample button inside the empty search box adds about 110 raw bytes on top of #1020, which left about 50 bytes of raw headroom; the approved raw limit is 265,500 bytes. The file-type home page sections add about 4 KiB raw and 0.4 KiB Brotli CSS; the approved limits of 271,000 raw and 42,800 Brotli bytes keep about 1.8 KiB and 0.6 KiB of headroom.",
         "name": "CSS",
         "directory": "assets",
         "extension": ".css",
         "requireBrotliMinBytes": 1024,
         "expectedRawBytes": 245000,
-        "maxRawBytes": 265500,
+        "maxRawBytes": 271000,
         "expectedBrotliBytes": 38600,
-        "maxBrotliBytes": 42300
+        "maxBrotliBytes": 42800
       },
       {
         "_comment": "The WASM module MUST include the 70 compiled save profiles. After sharing field constructors, the measured build uses 9,002,546 raw bytes and 2,249,483 Brotli bytes.",
