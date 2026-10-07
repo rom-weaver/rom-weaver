@@ -361,7 +361,7 @@ const ringAroundTarget = (rect: GuideRect) => ({
   top: rect.top - GUIDE_RING_INSET,
   width: rect.width + GUIDE_RING_INSET * 2,
 });
-/** Desktop only - below 641px the card stays the full-width bar pinned by CSS. */
+/** Desktop anchor breakpoint; explicit below placement and tall phone cards also anchor. */
 const GUIDE_ANCHOR_QUERY = "(min-width: 641px)";
 
 const clampWithin = (value: number, limit: number) =>
@@ -536,6 +536,9 @@ const SampleTutorialStart = ({
   // after hydration so a sub-path deployment still links correctly.
   const [href, setHref] = useState(`/${downloadName}`);
   useEffect(() => setHref(downloadHref), [downloadHref]);
+  useEffect(() => {
+    if (error) setOpen(true);
+  }, [error]);
 
   // Re-enabling the setting revives a locally dismissed beacon: in the webapp
   // a dismissal flips onboardingEnabled off, so the transition back to true is
@@ -596,7 +599,10 @@ const SampleTutorialStart = ({
             onClick={(event) => {
               if (!isPlainLeftClick(event)) return;
               event.preventDefault();
-              if (!loading) onStart();
+              if (!loading) {
+                setOpen(false);
+                onStart();
+              }
             }}
           >
             <span aria-hidden="true" className="sample-tutorial-start-action-icon">
@@ -613,7 +619,10 @@ const SampleTutorialStart = ({
               onClick={(event) => {
                 if (!isPlainLeftClick(event)) return;
                 event.preventDefault();
-                if (!loading) onSecondaryStart();
+                if (!loading) {
+                  setOpen(false);
+                  onSecondaryStart();
+                }
               }}
             >
               <span aria-hidden="true" className="sample-tutorial-start-action-icon">
@@ -959,8 +968,9 @@ const SampleTutorial = ({
       if (Math.abs(left) < 1) revealTo = null;
       return revealTo === null ? 0 : left;
     };
-    // A tall phone card MUST ride the page so all its content remains reachable.
-    const anchorCard = () => desktop.matches || dialog.getBoundingClientRect().height > window.innerHeight * 0.6;
+    // A phone card placed below its target MUST ride the page to keep both reachable.
+    const anchorCard = () =>
+      desktop.matches || stepPlacement === "below" || dialog.getBoundingClientRect().height > window.innerHeight * 0.6;
     // Only when moving between steps - see the glide rules in dropzone.css.
     const setGlide = (element: HTMLElement, glide: boolean) => {
       if (glide) element.dataset.glide = "true";
@@ -975,7 +985,7 @@ const SampleTutorial = ({
     const place = (glide: boolean, shift = 0) => {
       const rect = targetEl.getBoundingClientRect();
       const card = anchorCard() ? anchorToTarget(shiftRect(rect, shift), dialog, prefer) : null;
-      // Tall phone cards MUST follow the row in page flow without covering its controls.
+      // Anchored phone cards MUST follow the row without covering its controls.
       if (card && !desktop.matches) card.top = rect.bottom - shift + GUIDE_GAP;
       const box = ringAroundTarget(rect);
       // Viewport to document. Every box is measured before anything is written,

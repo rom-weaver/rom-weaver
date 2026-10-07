@@ -139,10 +139,32 @@ describe("sample tutorial start", () => {
     expect(guidedApply.getAttribute("href")).toBe("/apply-patch?guide=apply");
     fireEvent.click(guidedApply);
     expect(onStart).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("link", { name: /Start guided Apply/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /New here\?/ }));
     const guidedBundle = screen.getByRole("link", { name: /Start guided bundle/ });
     expect(guidedBundle.getAttribute("href")).toBe("/bundle?guide=bundle");
     fireEvent.click(guidedBundle);
     expect(onSecondaryStart).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("link", { name: /Start guided bundle/ })).toBeNull();
+  });
+  it("reopens the sample menu when loading fails", async () => {
+    const props = {
+      downloadHref: "/first-weave.zip",
+      downloadLabel: "Download a test bundle",
+      downloadName: "first-weave.zip",
+      error: "",
+      guideHref: "/bundle?guide=bundle",
+      label: "Start guided bundle",
+      loading: false,
+      onStart: vi.fn(),
+    };
+    const { rerender } = render(<SampleTutorialStart {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: /New here\?/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Start guided bundle/ }));
+    expect(screen.queryByRole("link", { name: /Start guided bundle/ })).toBeNull();
+    rerender(<SampleTutorialStart {...props} error="Could not load practice files" />);
+    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Could not load practice files"));
+    expect(screen.getByRole("link", { name: /Start guided bundle/ })).toBeTruthy();
   });
 });
 

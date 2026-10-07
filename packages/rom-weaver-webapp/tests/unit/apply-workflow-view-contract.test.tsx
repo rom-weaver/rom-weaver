@@ -235,7 +235,7 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector("#rom-weaver-input-file-unified")).toBeTruthy();
     expect(container.querySelector(".drop.hero .formats")).toBeNull();
     expect(container.querySelector(".hero-formats-help .info-support")).toBeTruthy();
-    const chip = container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement;
+    const chip = container.querySelector(".sample-tutorial-start .sample-tutorial-start-chip") as HTMLButtonElement;
     expect(chip.textContent).toContain("New here?");
     fireEvent.click(chip);
     expect(container.querySelector(".first-weave-demo")?.textContent).toContain("Start guided Apply");
@@ -252,7 +252,7 @@ describe("apply workflow view - empty bench", () => {
     ["bundle", "/bundle-patches?guide=bundle", "Start guided bundle", "/docs/create-bundles", "Read the Bundle guide"],
   ] as const)("offers the %s guide and the test bundle download", (mode, href, label, docsHref, docsLabel) => {
     const { container } = renderView({ mode, ui: createEmptyPatcherUiState() });
-    fireEvent.click(container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".sample-tutorial-start .sample-tutorial-start-chip") as HTMLButtonElement);
     const actions = container.querySelectorAll(".sample-tutorial-start-action");
     expect(actions).toHaveLength(mode === "apply" ? 5 : 4);
     expect(actions[0].getAttribute("href")).toBe(href);
@@ -463,7 +463,7 @@ describe("apply workflow view - empty bench", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { container } = renderView({ onUnifiedDrop, ui: createEmptyPatcherUiState() });
 
-    fireEvent.click(container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".sample-tutorial-start .sample-tutorial-start-chip") as HTMLButtonElement);
     fireEvent.click(container.querySelector(".sample-tutorial-start-primary") as HTMLButtonElement);
     const dialog = document.querySelector(".sample-tutorial-dialog") as HTMLElement;
     expect(dialog.textContent).toContain("Add your files");
