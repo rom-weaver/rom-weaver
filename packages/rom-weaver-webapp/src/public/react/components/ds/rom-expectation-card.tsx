@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { identifyDumpTagLabel, identifyMatchCountLabel } from "../../../../presentation/identify-status.ts";
 import { uniqueIdentifyDisplayNames } from "../../../../presentation/identify-title.ts";
 import type { ParsedBundleChecks } from "../../../../types/bundle.ts";
@@ -494,12 +494,14 @@ const RomSearch = ({
   idPrefix = "rom-weaver-rom",
   lookup,
   localizer,
+  sampleChecksum,
   variant = "hero",
 }: {
   /** Owner-scoped id prefix: the apply and identify panels stay mounted side by side. */
   idPrefix?: string;
   lookup: ReturnType<typeof useRomLookup>;
   localizer: ReturnType<typeof useUiLocalizer>;
+  sampleChecksum?: string;
   variant?: "compact" | "hero" | "section";
 }) => {
   const [titlePage, setTitlePage] = useState({ titles: lookup.titles, count: 50 });
@@ -514,6 +516,27 @@ const RomSearch = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const resultButtonsRef = useRef<Array<HTMLButtonElement | null>>([]);
+  const sampleRef = useRef<HTMLButtonElement>(null);
+  const sampleLabel = sampleChecksum && !lookup.text ? localizer.message("ui.identify.trySample") : "";
+  // The sample button sits inside the empty box; reserve its measured width so
+  // the placeholder ellipsizes before it instead of running underneath.
+  useLayoutEffect(() => {
+    const input = inputRef.current;
+    const sample = sampleRef.current;
+    if (!input) return;
+    if (!(sampleLabel && sample)) {
+      input.style.paddingInlineEnd = "";
+      return;
+    }
+    const reserve = () => {
+      input.style.paddingInlineEnd = `${sample.offsetWidth + 8}px`;
+    };
+    reserve();
+    // A late web font or a locale change resizes the label after first paint.
+    const observer = new ResizeObserver(reserve);
+    observer.observe(sample);
+    return () => observer.disconnect();
+  }, [sampleLabel]);
   const resultKind = lookup.versions.length ? "version" : !chosen && lookup.titles.length ? "title" : "none";
   const resultCount =
     resultKind === "version"
@@ -592,6 +615,20 @@ const RomSearch = ({
           type="text"
           value={lookup.text}
         />
+        {sampleChecksum && sampleLabel ? (
+          <button
+            className="sample-tutorial-start-chip identify-search-sample"
+            disabled={searching}
+            onClick={() => {
+              inputRef.current?.focus();
+              lookup.setText(sampleChecksum);
+            }}
+            ref={sampleRef}
+            type="button"
+          >
+            {sampleLabel}
+          </button>
+        ) : null}
       </div>
       {searching || (lookup.incompleteHash && !lookup.error) ? (
         <p aria-live="polite" className="identify-search-status" role="status">

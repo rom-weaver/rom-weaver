@@ -1384,6 +1384,12 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.identify.searchDisclosure",
     message: "Identify by checksum or game name",
   }),
+  "ui.identify.drop": msg({ id: "ui.identify.drop", message: "Drop a ROM to identify it" }),
+  "ui.identify.tap": msg({ id: "ui.identify.tap", message: "Tap to add a ROM" }),
+  "ui.identify.trySample": msg({
+    id: "ui.identify.trySample",
+    message: "Try a sample",
+  }),
   "ui.identify.searchRefine": msg({ id: "ui.identify.searchRefine", message: "Not the ROM you meant?" }),
   "ui.identify.searchPlaceholder": msg({
     id: "ui.identify.searchPlaceholder",

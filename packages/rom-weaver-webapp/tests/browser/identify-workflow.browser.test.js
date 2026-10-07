@@ -316,6 +316,19 @@ test("an empty form shows the ghost steps next to the ROM search", async () => {
   expect(host.querySelector(".identify-search-label")?.textContent).toBe("Identify by checksum or game name");
 });
 
+test("the sample checksum searches and opens a match without a ROM", async () => {
+  lookupExpectedRom.mockResolvedValue({ matches: [gbaMatch("Tetris (World) (Rev 1)")], status: "matched" });
+  await mountIdentifyForm();
+  await page.getByRole("button", { name: "Try a sample" }).click();
+  await waitFor(() => lookupExpectedRom.mock.calls.length > 0);
+  expect(host.querySelector(".identify-search-input").value).toBe("46df91ad");
+  expect(lookupExpectedRom).toHaveBeenCalledWith({ checksums: { crc32: "46df91ad" } }, expect.anything());
+  expect(identifyRom).not.toHaveBeenCalled();
+  await chooseRelease("Tetris (World) (Rev 1)");
+  await waitFor(() => host.querySelector("#identify-container-expected-rom"));
+  expect(buttonMatching(/Try a sample/)).toBeUndefined();
+});
+
 test("a pasted checksum raises the expected-ROM card without a file", async () => {
   lookupExpectedRom.mockResolvedValue({ matches: [gbaMatch("Metroid Fusion (USA)")], status: "matched" });
   await mountIdentifyForm();

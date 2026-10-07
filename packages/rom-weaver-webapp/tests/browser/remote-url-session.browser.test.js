@@ -255,8 +255,10 @@ const startPracticeFiles = async () => {
 test("sample action applies with one patch disabled", async () => {
   mount(createElement(ApplyPatchForm));
   const href = location.href;
-  await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeInstanceOf(HTMLButtonElement);
-  document.querySelector(".sample-tutorial-start-chip").click();
+  await expect
+    .poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip"))
+    .toBeInstanceOf(HTMLButtonElement);
+  document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip").click();
   await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLAnchorElement);
   document.querySelector(".sample-tutorial-start-primary").click();
   expect(location.href).toBe(href);
@@ -282,8 +284,10 @@ test("sample action applies with one patch disabled", async () => {
 test("sample base patches apply after their order changes", async () => {
   mount(createElement(ApplyPatchForm));
   const href = location.href;
-  await expect.poll(() => document.querySelector(".sample-tutorial-start-chip")).toBeInstanceOf(HTMLButtonElement);
-  document.querySelector(".sample-tutorial-start-chip").click();
+  await expect
+    .poll(() => document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip"))
+    .toBeInstanceOf(HTMLButtonElement);
+  document.querySelector(".sample-tutorial-start .sample-tutorial-start-chip").click();
   await expect.poll(() => document.querySelector(".sample-tutorial-start-primary")).toBeInstanceOf(HTMLAnchorElement);
   document.querySelector(".sample-tutorial-start-primary").click();
   expect(location.href).toBe(href);

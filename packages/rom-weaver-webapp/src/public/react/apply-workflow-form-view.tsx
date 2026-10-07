@@ -111,7 +111,7 @@ const getApplySampleTutorialSteps = (
     locked: !inputs.ready,
     onContinue: inputs.loadPractice,
     placement: "below",
-    target: "#rom-weaver-row-unified-drop",
+    target: "#rom-weaver-container .unified-drop-step",
     title: localizer.message("ui.apply.tutorial.addFiles.title"),
     tryIt: localizer.message(
       inputs.ready ? "ui.apply.tutorial.addFiles.readyTryIt" : "ui.apply.tutorial.addFiles.tryIt",
@@ -789,7 +789,7 @@ function ApplyWorkflowFormView({
     <>
       <NeedsInput onClick={openUnifiedPicker}>{localizer.message("ui.apply.needsRom")}</NeedsInput>
       {canSearchRom && !manualRomLookup ? (
-        <RomSearch localizer={localizer} lookup={romLookup} variant="section" />
+        <RomSearch localizer={localizer} lookup={romLookup} sampleChecksum="46df91ad" variant="section" />
       ) : null}
     </>
   );
@@ -894,7 +894,9 @@ function ApplyWorkflowFormView({
             <ApplyDropAfter pendingDrops={pendingDrops} />
             {/* Apply keeps the search available without competing with the
                 primary file-drop action. The form moves to 0x02 after a match. */}
-            {canSearchRom && workflowEmpty ? <RomSearch localizer={localizer} lookup={romLookup} /> : null}
+            {canSearchRom && workflowEmpty ? (
+              <RomSearch localizer={localizer} lookup={romLookup} sampleChecksum="46df91ad" />
+            ) : null}
           </>
         }
         big={workflowEmpty}
@@ -971,7 +973,9 @@ function ApplyWorkflowFormView({
                       one line away until a real ROM makes the expectation
                       concrete. A bundle's or patch's check is not up for
                       revision, so those get no refine row. */}
-                  {manualRomLookup ? <RomSearch localizer={localizer} lookup={romLookup} variant="compact" /> : null}
+                  {manualRomLookup ? (
+                    <RomSearch localizer={localizer} lookup={romLookup} sampleChecksum="46df91ad" variant="compact" />
+                  ) : null}
                 </>
               ) : null
             }
