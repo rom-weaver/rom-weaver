@@ -276,6 +276,12 @@
 .rw-app .release-all-changes[open] > .release-all-changes-summary {
   margin-block-end: var(--sp-s);
 }
+.rw-app .release-compare-link {
+  display: block;
+  margin-block-end: var(--sp-m);
+  font-size: 0.8rem;
+  color: var(--thread-text);
+}
 @media (hover: hover) {
   .rw-app .release-all-changes-summary:hover {
     color: var(--ink);

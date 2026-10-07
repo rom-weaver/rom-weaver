@@ -21,6 +21,10 @@ type ChangelogEntry = { hash: string; subject: string; date: string; release?: u
 
 const releaseTagUrl = (repositoryUrl: string, version: string) => `${repositoryUrl}/releases/tag/v${version}`;
 
+// The commit range between two releases, which the version heading no longer links to.
+type CompareRange = { from: string; to: string };
+const compareUrl = (repositoryUrl: string, { from, to }: CompareRange) => `${repositoryUrl}/compare/v${from}...v${to}`;
+
 const isReleaseGroup = (value: unknown): value is ReleaseGroup => {
   if (!value || typeof value !== "object") return false;
   const group = value as ReleaseGroup;
@@ -183,10 +187,13 @@ const isVisibleGroup = (group: ReleaseGroup) =>
   group.title === HIGHLIGHTS_TITLE || /BREAKING CHANGES/.test(group.title);
 
 const ReleaseGroups = ({
+  compare,
   groups,
   keyPrefix,
   repositoryUrl,
 }: {
+  /** The release's commit range, linked first inside All changes. */
+  compare?: CompareRange;
   groups: ReleaseGroup[];
   keyPrefix: string;
   repositoryUrl: string;
@@ -201,6 +208,16 @@ const ReleaseGroups = ({
       {rest.length ? (
         <details className="release-all-changes">
           <summary className="release-all-changes-summary">All changes</summary>
+          {compare ? (
+            <a
+              className="release-compare-link"
+              href={compareUrl(repositoryUrl, compare)}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Compare v{compare.from}…v{compare.to} ↗
+            </a>
+          ) : null}
           <EntryGroups groups={rest} keyPrefix={keyPrefix} repositoryUrl={repositoryUrl} />
         </details>
       ) : null}
@@ -209,4 +226,4 @@ const ReleaseGroups = ({
 };
 
 export { COMMIT_SECTIONS, commitGroups, fetchChangelog, ReleaseGroups, releaseTagUrl, REPOSITORY_URL };
-export type { ChangelogEntry, ReleaseChangelog, ReleaseNote };
+export type { ChangelogEntry, CompareRange, ReleaseChangelog, ReleaseNote };

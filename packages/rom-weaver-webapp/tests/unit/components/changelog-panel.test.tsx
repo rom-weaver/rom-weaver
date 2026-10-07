@@ -137,6 +137,26 @@ describe("ChangelogPanel pending update", () => {
     expect(allChanges.contains(update.getByText("Small fix"))).toBe(true);
   });
 
+  it("links the commit range from All changes to the previous release", async () => {
+    mockChangelog([
+      {
+        date: "2026-07-29T00:00:00Z",
+        hash: "release",
+        release: releaseOf("9.9.9", [
+          noteOf("9.9.9", [{ pr: "3", summary: "Newest entry" }]),
+          noteOf("9.9.8", [{ pr: "2", summary: "Older entry" }]),
+        ]),
+        subject: "release",
+      },
+    ]);
+
+    const update = await renderUpdate();
+    const compare = await update.findByRole("link", { name: /Compare v9\.9\.8…v9\.9\.9/ });
+
+    expect(compare.getAttribute("href")).toBe(`${REPOSITORY_URL}/compare/v9.9.8...v9.9.9`);
+    expect(compare.closest("details")?.open).toBe(false);
+  });
+
   it("collapses every group when a release has no highlights", async () => {
     mockChangelog([
       {

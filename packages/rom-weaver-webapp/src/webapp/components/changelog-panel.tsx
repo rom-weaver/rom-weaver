@@ -4,6 +4,8 @@ import type { Localizer } from "../../presentation/localization/index.ts";
 import { APP_VERSION, COMMITS_SINCE_VERSION } from "../build-version.ts";
 import {
   type ChangelogEntry,
+  type CompareRange,
+  type ReleaseNote,
   commitGroups,
   fetchChangelog,
   ReleaseGroups,
@@ -31,7 +33,15 @@ type FetchState =
 // from the log's length, which is only where the emitter capped it.
 const AHEAD_COUNT = typeof COMMITS_SINCE_VERSION === "number" && COMMITS_SINCE_VERSION > 0 ? COMMITS_SINCE_VERSION : 0;
 
+// The range from the release listed just below this one; the oldest listed release has none.
+const previousNoteRange = (notes: ReleaseNote[], index: number): CompareRange | undefined => {
+  const previous = notes[index + 1];
+  const current = notes[index];
+  return previous && current ? { from: previous.version, to: current.version } : undefined;
+};
+
 const ReleaseSection = ({
+  compare,
   defaultOpen,
   groups,
   note,
@@ -39,6 +49,7 @@ const ReleaseSection = ({
   title,
   versionHref,
 }: {
+  compare?: CompareRange;
   defaultOpen: boolean;
   groups: ReturnType<typeof commitGroups>;
   /** Trails the title where it says something the title does not. */
@@ -53,7 +64,7 @@ const ReleaseSection = ({
       {note ? <span className="rel-summary-count">{note}</span> : null}
     </summary>
     <div className="rel-body">
-      <ReleaseGroups groups={groups} keyPrefix={title} repositoryUrl={repositoryUrl} />
+      <ReleaseGroups compare={compare} groups={groups} keyPrefix={title} repositoryUrl={repositoryUrl} />
       {versionHref ? (
         <a className="rel-link" href={versionHref} rel="noreferrer" target="_blank">
           View release ↗
@@ -138,6 +149,7 @@ const ChangelogPanel = ({
       ) : null}
       {notes.map((note, index) => (
         <ReleaseSection
+          compare={previousNoteRange(notes, index)}
           defaultOpen={!unreleased.length && index === 0}
           groups={note.groups}
           key={note.version}
