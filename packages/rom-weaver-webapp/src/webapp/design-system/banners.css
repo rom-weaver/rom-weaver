@@ -250,6 +250,40 @@
   background: repeating-linear-gradient(90deg, currentColor 0 3px, transparent 3px 5px);
   opacity: 0.5;
 }
+.rw-app .release-all-changes {
+  margin-block-start: var(--sp-m);
+}
+.rw-app .release-all-changes-summary {
+  display: inline-flex;
+  gap: var(--sp-xs);
+  align-items: center;
+  font-size: 0.8rem;
+  color: var(--ink-3);
+  cursor: pointer;
+  list-style: none;
+}
+/* the disclosure triangle is drawn by the marker, so Safari's default one goes */
+.rw-app .release-all-changes-summary::-webkit-details-marker {
+  display: none;
+}
+.rw-app .release-all-changes-summary::before {
+  font-size: 0.7rem;
+  content: "▸";
+}
+.rw-app .release-all-changes[open] > .release-all-changes-summary::before {
+  content: "▾";
+}
+.rw-app .release-all-changes[open] > .release-all-changes-summary {
+  margin-block-end: var(--sp-s);
+}
+@media (hover: hover) {
+  .rw-app .release-all-changes-summary:hover {
+    color: var(--ink);
+  }
+}
+.rw-app .release-all-changes-summary:active {
+  color: var(--ink);
+}
 .rw-app .release-changelog-entries {
   padding-inline-start: 1.25rem;
   margin: 0;

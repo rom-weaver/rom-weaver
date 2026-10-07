@@ -3,9 +3,9 @@ import { APP_BUILD_VERSION, APP_VERSION, COMMIT_HASH } from "../build-version.ts
 import {
   type ChangelogEntry,
   commitGroups,
-  EntryGroups,
   type ReleaseChangelog,
   type ReleaseNote,
+  ReleaseGroups,
   releaseTagUrl,
   REPOSITORY_URL,
 } from "./changelog-source.tsx";
@@ -144,7 +144,7 @@ const ReleaseNotes = ({ moreUrl, release }: { moreUrl: string; release: ReleaseC
               v{note.version}
             </a>
           </h3>
-          <EntryGroups groups={note.groups} keyPrefix={note.version} repositoryUrl={release.repositoryUrl} />
+          <ReleaseGroups groups={note.groups} keyPrefix={note.version} repositoryUrl={release.repositoryUrl} />
         </section>
       ))}
       {truncated ? <TruncatedNote moreUrl={moreUrl} /> : null}
@@ -165,7 +165,7 @@ const CommitNotes = ({
   truncated: boolean;
 }) => (
   <>
-    <EntryGroups groups={commitGroups(entries)} keyPrefix="commits" repositoryUrl={repositoryUrl} />
+    <ReleaseGroups groups={commitGroups(entries)} keyPrefix="commits" repositoryUrl={repositoryUrl} />
     {truncated ? <TruncatedNote moreUrl={moreUrl} /> : null}
   </>
 );

@@ -173,5 +173,40 @@ const EntryGroups = ({
   </>
 );
 
-export { COMMIT_SECTIONS, commitGroups, EntryGroups, fetchChangelog, releaseTagUrl, REPOSITORY_URL };
+// A release leads with its hand-written `Highlights` group (see the release
+// skill). That group and any breaking-change group are shown up front, as on
+// the GitHub release; every other generated group sits in a collapsed
+// "All changes" block. A release or nightly with no highlights shows
+// just the collapsed block.
+const HIGHLIGHTS_TITLE = "Highlights";
+const isVisibleGroup = (group: ReleaseGroup) =>
+  group.title === HIGHLIGHTS_TITLE || /BREAKING CHANGES/.test(group.title);
+
+const ReleaseGroups = ({
+  groups,
+  keyPrefix,
+  repositoryUrl,
+}: {
+  groups: ReleaseGroup[];
+  keyPrefix: string;
+  repositoryUrl: string;
+}) => {
+  const highlights = groups.filter(isVisibleGroup);
+  const rest = groups.filter((group) => !isVisibleGroup(group));
+  return (
+    <>
+      {highlights.length ? (
+        <EntryGroups groups={highlights} keyPrefix={`${keyPrefix}:highlights`} repositoryUrl={repositoryUrl} />
+      ) : null}
+      {rest.length ? (
+        <details className="release-all-changes">
+          <summary className="release-all-changes-summary">All changes</summary>
+          <EntryGroups groups={rest} keyPrefix={keyPrefix} repositoryUrl={repositoryUrl} />
+        </details>
+      ) : null}
+    </>
+  );
+};
+
+export { COMMIT_SECTIONS, commitGroups, fetchChangelog, ReleaseGroups, releaseTagUrl, REPOSITORY_URL };
 export type { ChangelogEntry, ReleaseChangelog, ReleaseNote };

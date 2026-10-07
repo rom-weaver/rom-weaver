@@ -5,8 +5,8 @@ import { APP_VERSION, COMMITS_SINCE_VERSION } from "../build-version.ts";
 import {
   type ChangelogEntry,
   commitGroups,
-  EntryGroups,
   fetchChangelog,
+  ReleaseGroups,
   type ReleaseChangelog,
   releaseTagUrl,
   REPOSITORY_URL,
@@ -53,7 +53,7 @@ const ReleaseSection = ({
       {note ? <span className="rel-summary-count">{note}</span> : null}
     </summary>
     <div className="rel-body">
-      <EntryGroups groups={groups} keyPrefix={title} repositoryUrl={repositoryUrl} />
+      <ReleaseGroups groups={groups} keyPrefix={title} repositoryUrl={repositoryUrl} />
       {versionHref ? (
         <a className="rel-link" href={versionHref} rel="noreferrer" target="_blank">
           View release ↗
