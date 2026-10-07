@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+
 import { join, resolve } from "node:path";
 import { brotliCompressSync } from "node:zlib";
 import test from "node:test";
+
+const scratch = resolve(".agent/release-install");
+mkdirSync(scratch, { recursive: true });
+const tmpdir = () => scratch;
 
 const hasPowerShell = spawnSync("pwsh", ["-NoProfile", "-Command", "exit 0"]).status === 0;
 const runtimeArchitecture = hasPowerShell
@@ -94,7 +98,7 @@ function Invoke-WebRequest {
     Set-Content -Path $OutFile -Value 'binary' -NoNewline
   }
 }
-${brotliStub()}& '${resolve("install.ps1")}'
+${brotliStub()}& '${resolve(process.env.INSTALL_PS1_SCRIPT || "install.ps1")}'
 `;
 
 test("installs the binary", { skip: hasPowerShell ? false : "pwsh not available" }, () => {
@@ -119,10 +123,7 @@ test("installs the binary", { skip: hasPowerShell ? false : "pwsh not available"
       readFileSync(join(installDirectory, "completions/rom-weaver.ps1"), "utf8"),
       "completion",
     );
-    assert.equal(
-      readFileSync(join(installDirectory, "docs/man/rom-weaver.1"), "utf8"),
-      "man page",
-    );
+    assert.equal(readFileSync(join(installDirectory, "docs/man/rom-weaver.1"), "utf8"), "man page");
     assert.ok(output.includes(`Installed rom-weaver to ${target}`));
     assert.deepEqual(readFileSync(urlLog, "utf8").trim().split("\n"), [
       `https://github.com/rom-weaver/rom-weaver/releases/latest/download/${asset}`,
@@ -158,7 +159,7 @@ function Invoke-RestMethod { return ('{"attestations":[]}' | ConvertFrom-Json) }
         [
           "-NoProfile",
           "-Command",
-          `$env:ROM_WEAVER_INSTALL_DIR = '${join(directory, "install")}'; ${script}\n& '${resolve("install.ps1")}'`,
+          `$env:ROM_WEAVER_INSTALL_DIR = '${join(directory, "install")}'; ${script}\n& '${resolve(process.env.INSTALL_PS1_SCRIPT || "install.ps1")}'`,
         ],
         { encoding: "utf8" },
       );
@@ -221,10 +222,11 @@ const runProvenance = (directory, script) =>
     [
       "-NoProfile",
       "-Command",
-      `${PROVENANCE_PREAMBLE(join(directory, "install"), createIdentifyArchive(directory))}${script}\n& '${resolve("install.ps1")}'`,
+      `${PROVENANCE_PREAMBLE(join(directory, "install"), createIdentifyArchive(directory))}${script}\n& '${resolve(process.env.INSTALL_PS1_SCRIPT || "install.ps1")}'`,
     ],
     {
       encoding: "utf8",
+      env: { ...process.env, HOME: directory, TMPDIR: directory, TEMP: directory, TMP: directory },
     },
   );
 
@@ -362,7 +364,7 @@ function Invoke-WebRequest {
     Set-Content -Path $OutFile -Value 'binary' -NoNewline
   }
 }
-& '${resolve("install.ps1")}'
+& '${resolve(process.env.INSTALL_PS1_SCRIPT || "install.ps1")}'
 `;
     const result = spawnSync("pwsh", ["-NoProfile", "-Command", script], { encoding: "utf8" });
 
@@ -393,7 +395,7 @@ function Invoke-WebRequest {
   Add-Content -Path '${urlLog}' -Value $Uri
   throw [System.Net.Http.HttpRequestException]::new('connection reset')
 }
-& '${resolve("install.ps1")}'
+& '${resolve(process.env.INSTALL_PS1_SCRIPT || "install.ps1")}'
 `;
     const result = spawnSync("pwsh", ["-NoProfile", "-Command", script], { encoding: "utf8" });
 
@@ -407,3 +409,29 @@ function Invoke-WebRequest {
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+for (const strict of [false, true]) {
+  test(`refuses docs with no provenance before extraction (strict=${strict})`, { skip }, () => {
+    withPwsh((directory) => {
+      const result = runProvenance(
+        directory,
+        `
+$env:ROM_WEAVER_REQUIRE_ATTESTATION = '${strict ? "1" : "0"}'
+$global:lookups = 0
+function Invoke-RestMethod {
+  param([string]$Uri, [switch]$UseBasicParsing)
+  $global:lookups++
+  if ($global:lookups -eq 3) { return ('{"attestations":[]}' | ConvertFrom-Json) }
+  return ('{"attestations":[{"repository_id":1}]}' | ConvertFrom-Json)
+}
+`,
+      );
+      assert.notEqual(result.status, 0);
+      assert.match(
+        result.stdout + result.stderr,
+        /no build provenance[\s\S]*rom-weaver-cli-assets/,
+      );
+      assert.equal(existsSync(join(directory, "install/completions/rom-weaver.ps1")), false);
+    });
+  });
+}
