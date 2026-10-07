@@ -229,6 +229,47 @@ fn gcz_block_map_offsets_and_checksums_describe_the_stored_payloads() {
 // --- Reader guards --------------------------------------------------------
 
 #[test]
+fn block_reader_rejects_zero_block_size_without_panicking() {
+    let data = hand_built_gcz(0, 0, &[]);
+    assert_eq!(data.len(), 32);
+    let stream = crate::nod::read::CloneableStream::new(std::io::Cursor::new(data));
+    let result = std::panic::catch_unwind(|| match BlockReaderGCZ::new(Box::new(stream)) {
+        Err(_) => true,
+        Ok(mut reader) => {
+            let mut out = vec![0; SECTOR_SIZE];
+            let _ = reader.read_block(&mut out, 0);
+            false
+        }
+    });
+    assert!(
+        matches!(result, Ok(true)),
+        "zero GCZ block size must return an error without panicking"
+    );
+}
+
+#[test]
+fn block_reader_rejects_invalid_geometry() {
+    for block_size in [1, SECTOR_SIZE as u32 - 1, SECTOR_SIZE as u32 + 1] {
+        let data = hand_built_gcz(block_size, 0, &[]);
+        assert!(
+            BlockReaderGCZ::new(Box::new(data)).is_err(),
+            "invalid GCZ block size {block_size} must be rejected"
+        );
+    }
+    for disc_size in [0, SECTOR_SIZE as u64 + 1] {
+        let data = hand_built_gcz(
+            SECTOR_SIZE as u32,
+            disc_size,
+            &[(true, vec![0; SECTOR_SIZE])],
+        );
+        assert!(
+            BlockReaderGCZ::new(Box::new(data)).is_err(),
+            "GCZ block count must match disc size {disc_size}"
+        );
+    }
+}
+
+#[test]
 fn block_reader_rejects_a_bad_magic() {
     let mut data = vec![0u8; 0x100];
     data[..4].copy_from_slice(b"NOPE");
