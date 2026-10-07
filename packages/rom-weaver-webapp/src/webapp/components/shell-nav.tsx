@@ -1,4 +1,4 @@
-import { Menu, X } from "lucide-react";
+import { TextSearch, X } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
 import { useEffect } from "react";
 import type { Localizer } from "../../presentation/localization/index.ts";
@@ -245,7 +245,7 @@ const PhoneDock = ({
         ref={triggerRef}
         type="button"
       >
-        {menuOpen ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
+        {menuOpen ? <X aria-hidden="true" /> : <TextSearch aria-hidden="true" />}
         <span>{menuText}</span>
       </button>
     </nav>
