@@ -650,6 +650,11 @@
   margin-top: 16px;
   font-size: 0.9rem;
 }
+.rw-app .home-faq-more a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
 
 @container home-page (min-width: 640px) {
   .rw-app .home-chain-steps {
