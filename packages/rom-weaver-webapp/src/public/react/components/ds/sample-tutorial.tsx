@@ -1,7 +1,7 @@
 import {
   Archive,
-  ArrowRight,
   BookOpen,
+  ChevronUp,
   Download,
   EllipsisVertical,
   FileDiff,
@@ -586,7 +586,7 @@ const SampleTutorialStart = ({
       >
         <span aria-hidden="true" className="sample-tutorial-start-knot" />
         {chipLabel}
-        <ArrowRight aria-hidden="true" className="sample-tutorial-start-arrow" />
+        <ChevronUp aria-hidden="true" className="sample-tutorial-start-caret" />
       </button>
       {/* Mounted only while open: the closed popover would otherwise ship in
           the prerendered shell - four inline SVGs and all - on every page. */}

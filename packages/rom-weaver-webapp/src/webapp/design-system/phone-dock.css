@@ -48,10 +48,11 @@
     font-size: var(--hero-help-font, 0.82rem);
     white-space: nowrap;
   }
-  /* The phone help row has no room to spare: the knot alone carries the
-     accent and the arrow drops out. */
-  .rw-app .sample-tutorial-start-arrow {
-    display: none;
+  /* The phone help row has no room to spare, but the caret stays: it is
+     what says the link opens a menu. It scales with the row's text. */
+  .rw-app .sample-tutorial-start-caret {
+    width: 1.15em;
+    height: 1.15em;
   }
   .rw-app .sample-tutorial-start-knot {
     width: 0.6em;

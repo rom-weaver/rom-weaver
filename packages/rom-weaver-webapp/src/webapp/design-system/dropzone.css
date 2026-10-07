@@ -758,7 +758,9 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
 }
 /* The onboarding entry point outranks the two plain links beside it in the
    same link language: dyed with the thread, a heavier underline, and a knot
-   that pings twice on arrival. Each page names its own sample action. */
+   that pings twice on arrival. Each page names its own sample action. It
+   opens a menu rather than a page, so it ends in a caret pointing where the
+   menu appears (above) that flips while the menu is open. */
 .rw-app .sample-tutorial-start-knot {
   flex: none;
   width: 9px;
@@ -768,11 +770,17 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   box-shadow: 0 0 0 4px color-mix(in oklab, var(--thread) 22%, transparent);
   animation: tutorial-knot-ping 1.2s ease-out 2;
 }
-.rw-app .sample-tutorial-start-arrow {
+.rw-app .sample-tutorial-start-caret {
   flex: none;
   width: 16px;
   height: 16px;
   transition: transform 0.15s var(--ease);
+}
+.rw-app .sample-tutorial-start-chip[aria-expanded="true"] {
+  text-decoration-color: currentColor;
+}
+.rw-app .sample-tutorial-start-chip[aria-expanded="true"] .sample-tutorial-start-caret {
+  transform: rotate(180deg);
 }
 @media (max-width: 720px), (max-width: 860px) and (max-height: 520px) {
   /* The three help controls MUST stay on one line on a phone, so the text
@@ -848,7 +856,7 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   .rw-app .sample-tutorial-start-knot {
     animation: none;
   }
-  .rw-app .sample-tutorial-start-arrow {
+  .rw-app .sample-tutorial-start-caret {
     transition: none;
   }
 }
@@ -856,15 +864,9 @@ html[data-onboarding-enabled="false"] .rw-app .first-weave-demo {
   .rw-app .sample-tutorial-start-chip:hover {
     text-decoration-color: currentColor;
   }
-  .rw-app .sample-tutorial-start-chip:hover .sample-tutorial-start-arrow {
-    transform: translateX(2px);
-  }
 }
 .rw-app .sample-tutorial-start-chip:active {
   text-decoration-color: currentColor;
-}
-.rw-app .sample-tutorial-start-chip:active .sample-tutorial-start-arrow {
-  transform: translateX(2px);
 }
 /* A drag gesture owns the hero - the chip yields until the files land. */
 .rw-app .step-body:has(.drop.dragging) .sample-tutorial-start-chip {
