@@ -155,24 +155,33 @@ describe("HomePage", () => {
         <HomePage baseUrl="https://example.com/tools/" />
       </RomWeaverSettingsProvider>,
     );
-    const links = Array.from(
-      container.querySelectorAll(
-        ".home-main-actions a[href^='/tools/']:not([href*='/docs']):not([href*='?']), " +
-          ".home-webapp a[href^='/tools/']:not([href*='/docs']):not([href*='?'])",
-      ),
-    ).map((link) => link.getAttribute("href"));
-    expect(links).toEqual([
+    const mainLinks = Array.from(
+      container.querySelectorAll(".home-main-actions a[href^='/tools/']:not([href*='?'])"),
+      (link) => link.getAttribute("href"),
+    );
+    expect(mainLinks).toEqual(["/tools/apply-patches"]);
+    expect(Array.from(container.querySelectorAll(".home-route-go"), (link) => link.getAttribute("href"))).toEqual([
       "/tools/apply-patches",
+      "/tools/compress",
+      "/tools/identify-rom",
       "/tools/create-patch",
-      "/tools/bundle-patches",
+      "/tools/apply-patches",
       "/tools/test-rom",
       "/tools/checksum",
+      "/tools/bundle-patches",
     ]);
     expect(container.querySelector("#home-title")?.textContent).toContain("Patch ROMs in your browser.");
-    expect(container.querySelectorAll("a[href='/tools/apply-patches']")).toHaveLength(1);
-    expect(container.querySelector("a[href='/tools/docs/features']")?.textContent).toContain("See what");
     expect(container.textContent).toContain("Keep your files on your device.");
-    expect(container.querySelector(".home-try")?.textContent).toContain("Walk through a sample");
+    expect(container.querySelector(".home-main-actions .btn.ghost")?.textContent).toContain("Walk through a sample");
+    expect(container.querySelector("a[href='/tools/docs/supported-formats']")?.textContent).toContain(
+      "See the full tables",
+    );
+    expect(container.querySelector("a[href='/tools/docs/features']")?.textContent).toContain("See what");
+    expect(container.querySelector("a[href='/tools/docs/faq']")).not.toBeNull();
+    const formatHeadings = Array.from(container.querySelectorAll(".home-format-group h3"), (item) => item.textContent);
+    expect(formatHeadings).toEqual(["20 patch formats", "23 archive and disc formats", "8 checksum types"]);
+    expect(container.querySelector(".home-format-group p")?.textContent).toContain(".bps");
+    expect(container.querySelectorAll(".home-faq details")).toHaveLength(4);
     expect(container.querySelector(".home-loom-caption")?.textContent).toContain("One pass");
     expect(container.querySelector(".home-loom-disc-flow")?.textContent).toContain("game.chdextractgame.iso");
     expect(container.textContent).toContain("translation.bps.rarunpacktranslation.bps");
@@ -191,7 +200,6 @@ describe("HomePage", () => {
     expect(container.querySelector(".home-loom-disc-flow .home-loom-source-swatch")).not.toBeNull();
     expect(container.querySelector(".home-loom-output-flow .home-loom-output-swatch")).not.toBeNull();
     expect(container.querySelector(".home-loom-result")?.textContent).toBe("result");
-    expect(container.querySelectorAll(".home-hero-capabilities a")).toHaveLength(5);
     expect(
       Array.from(container.querySelectorAll(".home-install-code")).every(
         (code) => code instanceof HTMLTextAreaElement && code.readOnly,
@@ -204,10 +212,11 @@ describe("HomePage", () => {
   });
 
   it.each([
-    ["Windows NT 10.0", "Windows (PowerShell)", "install.ps1"],
-    ["Macintosh; Intel Mac OS X", "macOS / Linux", "install.sh"],
-    ["Linux x86_64", "macOS / Linux", "install.sh"],
-  ])("shows the installer for %s after hydration", (userAgent, label, script) => {
+    ["Windows NT 10.0", "Windows (PowerShell)", "Windows", "install.ps1"],
+    ["Macintosh; Intel Mac OS X", "Homebrew", "Homebrew", "brew install"],
+    ["Linux x86_64", "macOS / Linux", "macOS / Linux", "install.sh"],
+    ["iPhone; CPU iPhone OS 17_0 like Mac OS X", "macOS / Linux", "macOS / Linux", "install.sh"],
+  ])("shows the installer for %s after hydration", (userAgent, label, tab, command) => {
     vi.spyOn(navigator, "userAgent", "get").mockReturnValue(userAgent);
     const page = (
       <RomWeaverSettingsProvider settings={{ language: "en" }}>
@@ -219,8 +228,27 @@ describe("HomePage", () => {
     const commands = container.querySelectorAll(".home-install-code");
     expect(commands).toHaveLength(1);
     expect(commands[0]?.getAttribute("aria-label")).toBe(label);
-    expect((commands[0] as HTMLTextAreaElement).value).toContain(script);
-    expect(container.querySelector(".home-install a")?.getAttribute("href")).toContain("/tools/docs/install#");
+    expect((commands[0] as HTMLTextAreaElement).value).toContain(command);
+    expect(container.querySelector(".home-install-methods [aria-pressed='true']")?.textContent).toBe(tab);
+    expect(container.querySelector(".home-install-doc")?.getAttribute("href")).toContain("/tools/docs/install#");
+  });
+
+  it("switches the install command when another method is picked", () => {
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Linux x86_64");
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{ language: "en" }}>
+        <HomePage baseUrl="https://example.com/tools/" />
+      </RomWeaverSettingsProvider>,
+    );
+    const npm = Array.from(container.querySelectorAll(".home-install-methods button")).find(
+      (button) => button.textContent === "npm",
+    ) as HTMLButtonElement;
+    fireEvent.click(npm);
+    expect(npm.getAttribute("aria-pressed")).toBe("true");
+    expect((container.querySelector(".home-install-code") as HTMLTextAreaElement).value).toBe(
+      "npm install --global rom-weaver",
+    );
+    expect(container.querySelector(".home-install-doc")?.getAttribute("href")).toBe("/tools/docs/install#npm");
   });
 
   it("falls back to root-relative routes when the base URL is invalid", () => {

@@ -137,6 +137,12 @@
     background 0.18s,
     color 0.18s;
 }
+/* Content-width segments for labels of uneven length (the home install
+   picker). The parent scrolls instead of clipping a label when space runs out. */
+.rw-app .seg.seg-fit .seg-btn {
+  flex: none;
+  padding-inline: 12px;
+}
 @media (hover: hover) {
   .rw-app .seg .seg-btn:not(:disabled):hover {
     color: var(--ink);
