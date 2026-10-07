@@ -20,6 +20,9 @@ const VERSION_FROM_HEADING = /^## \[?([0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?
 const HIGHLIGHTS_CATEGORY = "Highlights";
 const INTERNAL_CATEGORY = "Internal";
 const ALL_CHANGES_SUMMARY = "All changes";
+// The first line inside `All changes`: `[Compare v0.1.0...v0.2.0](<url>)`. The
+// version heading links to the tagged release, so the commit range lives here.
+const COMPARE_LINE = /^\[Compare [^\]]+\]\((https?:\/\/[^)\s]+\/compare\/[^)\s]+)\)$/;
 // Marks the pull request comment that keeps the highlights across dispatches:
 // Release Please rewrites both the branch and the pull request body on every
 // run, so the comment is the only place they survive.
@@ -58,10 +61,16 @@ const parseReleaseBody = (body) => {
   const categories = new Map();
   const uncategorized = [];
   let category;
+  let compare;
 
   for (const line of body.split(/\r?\n/)) {
     const text = line.trim();
     if (!text) continue;
+    const compareMatch = COMPARE_LINE.exec(text);
+    if (compareMatch) {
+      compare = compareMatch[1];
+      continue;
+    }
     if (text === "<details>" || text === "</details>") continue;
     if (text === `<summary>${ALL_CHANGES_SUMMARY}</summary>`) {
       category = undefined;
@@ -82,12 +91,13 @@ const parseReleaseBody = (body) => {
     else addUnique(uncategorized, text);
   }
 
-  return { categories, highlights, uncategorized };
+  return { categories, compare, highlights, uncategorized };
 };
 
 const mergeParsedBodies = (bodies) => {
-  const merged = { categories: new Map(), highlights: [], uncategorized: [] };
+  const merged = { categories: new Map(), compare: undefined, highlights: [], uncategorized: [] };
   for (const body of bodies) {
+    merged.compare ??= body.compare;
     for (const entry of body.highlights) addUnique(merged.highlights, entry);
     for (const entry of body.uncategorized) addUnique(merged.uncategorized, entry);
     for (const [category, entries] of body.categories) {
@@ -109,7 +119,9 @@ const renderGroup = (category, entries) => {
 // only skims the release page MUST still see what they have to change.
 const isBreakingCategory = (category) => /BREAKING CHANGES/.test(category);
 
-const renderReleaseBody = ({ categories, highlights, uncategorized }) => {
+const compareLabel = (compare) => `Compare ${compare.split("/compare/")[1]}`;
+
+const renderReleaseBody = ({ categories, compare, highlights, uncategorized }) => {
   const visible = [];
   const groups = [];
   if (uncategorized.length) groups.push(uncategorized);
@@ -121,12 +133,13 @@ const renderReleaseBody = ({ categories, highlights, uncategorized }) => {
   if (highlights.length) lines.push(`### ${HIGHLIGHTS_CATEGORY}`, "", ...highlights, "");
   for (const group of visible) lines.push(...group, "");
   lines.push("<details>", `<summary>${ALL_CHANGES_SUMMARY}</summary>`);
+  if (compare) lines.push("", `[${compareLabel(compare)}](${compare})`);
   for (const group of groups) lines.push("", ...group);
   lines.push("</details>");
   return lines.join("\n");
 };
 
-const repositoryUrlFromHeading = (heading) => heading.match(/(https?:\/\/[^)\s]+?)\/compare\//)?.[1];
+const repositoryUrlFromHeading = (heading) => heading.match(/(https?:\/\/[^)\s]+?)\/(?:compare|releases\/tag)\//)?.[1];
 
 // Turns free-form highlight text into changelog entries: one `* ` bullet per
 // line, a leading `### Highlights` heading dropped, and bare `(#123)` pull
@@ -156,13 +169,16 @@ const replaceSection = (changelog, section, heading, body) => {
 // left behind, so the next heading is a heading again.
 const repairBoundaries = (changelog) => changelog.replace(/<\/details>(?=## )/g, "</details>\n");
 
-const updateCompareHeading = (heading, previousVersion, version) => {
-  if (!previousVersion) return heading;
-  const compare = heading.match(/(https?:\/\/[^)]+\/compare\/)[^)]*/);
-  if (!compare) return heading;
-  const replacement = `${compare[1]}v${previousVersion}...v${version}`;
-  return heading.slice(0, compare.index) + replacement + heading.slice(compare.index + compare[0].length);
-};
+const compareFromHeading = (heading) => heading.match(/\((https?:\/\/[^)\s]+\/compare\/[^)\s]+)\)/)?.[1];
+
+// A stable release spans every prerelease before it, so its range starts at
+// the previous stable version.
+const rewriteCompare = (compare, previousVersion, version) =>
+  previousVersion ? `${compare.split("/compare/")[0]}/compare/v${previousVersion}...v${version}` : compare;
+
+// Points the version heading at the tagged release instead of the commit range.
+const tagHeading = (heading, version) =>
+  heading.replace(/\((https?:\/\/[^)\s]+?)\/(?:compare|releases\/tag)\/[^)\s]+\)/, `($1/releases/tag/v${version})`);
 
 const currentSection = (changelog, version) => {
   const section = parseSections(changelog).find((entry) => entry.version === version);
@@ -187,9 +203,11 @@ const aggregatePrereleaseChangelog = (changelog, version, highlights = "") => {
   if (explicit.length) merged.highlights = explicit;
 
   const previousStable = sections.slice(current.index + 1).find((section) => !section.version.includes("-"));
-  const heading = prereleases.length
-    ? updateCompareHeading(current.heading, previousStable?.version, version)
-    : current.heading;
+  const compareSource = compareFromHeading(current.heading) ?? merged.compare;
+  if (compareSource) {
+    merged.compare = prereleases.length ? rewriteCompare(compareSource, previousStable?.version, version) : compareSource;
+  }
+  const heading = tagHeading(current.heading, version);
 
   let updated = repaired;
   for (const section of [...prereleases].sort((left, right) => right.start - left.start)) {
