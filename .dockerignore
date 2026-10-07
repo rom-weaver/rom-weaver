@@ -51,6 +51,8 @@ docs/*
 !docs/reference/**
 !docs/development
 !docs/development/**
+!docs/samples
+!docs/samples/**
 !docs/screenshots
 !docs/screenshots/**
 !docs/legal

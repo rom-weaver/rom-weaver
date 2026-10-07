@@ -270,6 +270,26 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.apply.compressionType"
+#~ msgstr "Tipo de compresión"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.output.file"
+#~ msgstr "Archivo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.output.identified"
+#~ msgstr "Identificado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+#~ msgid "ui.output.name"
+#~ msgstr "Nombre"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", una extensión de salida. El selector de formato agrega la extensión; elimínala para evitar un nombre duplicado."
 
@@ -440,6 +460,11 @@ msgstr "Color de acento"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patch.addCheckLabel"
+msgstr "Añadir"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.addCheck"
 msgstr "Añadir comprobación de {side}"
 
@@ -462,11 +487,6 @@ msgstr "Añade una ROM compatible, sin comprimir o en un archivo comprimido, par
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.addCheats"
 msgstr "Añadir trucos al orden de parches"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patch.addCheckLabel"
-msgstr "Añadir comprobación"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -647,11 +667,6 @@ msgstr "Los archivos se descomprimen; encontramos la ROM o te dejamos elegir."
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.author"
 msgstr "Autor"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.input"
-msgstr "Comprobaciones de entrada creadas: {basis}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1110,6 +1125,11 @@ msgstr "Códecs, hilos, listas de archivos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.stackOutput"
+msgstr "Resultado combinado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.commandLine"
 msgstr "Línea de comandos"
 
@@ -1167,11 +1187,6 @@ msgstr "Los valores predeterminados de compresión provienen de Configuración �
 #: src/presentation/localization/messages.ts
 msgid "error.COMPRESSION_FAILED"
 msgstr "La compresión falló."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.apply.compressionType"
-msgstr "Tipo de compresión"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1545,11 +1560,6 @@ msgstr "Edita nombres de entrenador, dinero, medallas, corazones y equipo en una
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.embeddedOutput"
-msgstr "Comprobaciones de salida integradas: Resultado del parche independiente"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.test.tutorial.controls"
 msgstr "Controles del emulador"
 
@@ -1687,11 +1697,6 @@ msgstr "Extrayendo y {verb}…"
 #: src/presentation/localization/messages.ts
 msgid "ui.common.file"
 msgstr "archivo"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.output.file"
-msgstr "Archivo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1870,11 +1875,6 @@ msgstr "Inicio"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.output.identified"
-msgstr "Identificado"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.drop.identified"
 msgstr "Identificado"
 
@@ -1942,6 +1942,11 @@ msgstr "Gestión de entradas"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.inputHandling.title"
 msgstr "Manejo de entrada"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.input"
+msgstr "Entrada: {basis}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2352,11 +2357,6 @@ msgstr "Varios valores"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.n64ByteOrder"
 msgstr "Orden de bytes de N64 antes de aplicar el parche"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.output.name"
-msgstr "Nombre"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2852,6 +2852,11 @@ msgstr "El análisis del parche falló."
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.position"
 msgstr "Posición del parche"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.embeddedOutput"
+msgstr "Resultado del parche"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3521,7 +3526,7 @@ msgstr "en un parche comprimido y compartible que otros puedan aplicar."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.sharedInput"
-msgstr "Comprobaciones de entrada compartidas: {input}"
+msgstr "Entrada compartida: {input}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3587,11 +3592,6 @@ msgstr "origen"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.source"
 msgstr "Fuente"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.stackOutput"
-msgstr "Comprobaciones de salida de la pila: Resultado combinado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4100,6 +4100,21 @@ msgstr "Herramienta Recortar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.drop"
+msgstr "Suelta una ROM para identificarla"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.tap"
+msgstr "Toca para añadir una ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.trySample"
+msgstr "Probar un ejemplo"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tutorial.tryIt"
 msgstr "Pruébalo"
 
@@ -4406,3 +4421,16 @@ msgstr "Códec ZIP"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z y paquetes"
+
+
+#. js-lingui-explicit-id
+msgid "ui.apply.tutorial.identify.title"
+msgstr "Identifica tu ROM inicial"
+
+#. js-lingui-explicit-id
+msgid "ui.apply.tutorial.identify.body"
+msgstr "Antes de añadir una ROM, Identificar permite buscar por nombre del juego o suma de comprobación. Elige un título y luego su versión para fijar las comprobaciones esperadas. La búsqueda se oculta al añadir una ROM o si los parches ya aportan comprobaciones. En la vista Detallada, Identificar muestra coincidencias de la base de datos, región y revisión cuando están disponibles. La ROM homebrew de práctica no figura en la base de datos pública."
+
+#. js-lingui-explicit-id
+msgid "ui.apply.tutorial.identify.tryIt"
+msgstr "Elige Detallada y abre Identificar para consultar la información de la ROM. Abre Comprobaciones para comparar las sumas."

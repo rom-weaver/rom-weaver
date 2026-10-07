@@ -16,16 +16,20 @@ A guided run is a card that walks one browser workflow step by step on homebrew 
 
 | Run | Steps | Files |
 | --- | --- | --- |
-| [Apply](https://rom-weaver.com/apply-patches?guide=apply) | 4 | Waits for you to add files; **Continue** loads `first-weave.zip` |
+| [Apply](https://rom-weaver.com/apply-patches?guide=apply) | 5 | Waits for you to add files; **Continue** loads `first-weave.zip` |
 | [Apply cheats](https://rom-weaver.com/apply-patches?guide=apply-cheats) | 4 | Loads `hello-world.nes` |
-| [Bundle](https://rom-weaver.com/bundle-patches?guide=bundle) | 4 | Loads `first-weave.zip` |
+| [Bundle](https://rom-weaver.com/bundle-patches?guide=bundle) | 5 | Loads `first-weave.zip` |
 | [Create](https://rom-weaver.com/create-patch?guide=create) | 6 | Loads `hello-world.nes` and `modified-world.nes` |
 | [Create cheats](https://rom-weaver.com/create-patch?guide=create-cheats) | 4 | Loads `hello-world.nes` |
 | [Test](https://rom-weaver.com/test-rom?guide=test) | 2 | Loads `hello-world.nes` |
 
-Guided Apply's steps are add your files, check your starting ROM (with the Simple and Detailed views), patches and cheats, and apply. On its first step, **Continue** with no files in loads `first-weave.zip`; with files in, it moves on. [Your first patch in the browser](../tutorials/first-patch.md) follows it to a verified checksum.
+Guided Apply's steps are add your files, check your starting ROM (with the Simple and Detailed views), identify the starting ROM, patches and cheats, and apply. On its first step, **Continue** with no files in loads `first-weave.zip`; with files in, it moves on. [Your first patch in the browser](../tutorials/first-patch.md) follows it to a verified checksum.
 
-A step that needs a control the page does not show, such as the **Detailed** switch, is left out. **✕** or Esc ends a run; files already added stay.
+Apply, Create, and Bundle include a Simple/Detailed comparison. Its buttons change the live view without advancing the guide. Apply and Bundle explain the Identify search and the Detailed view’s Identify drawer.
+
+Guide cards fit their content without an internal scrollbar. The first step includes a click/drop demonstration; reduced-motion preferences disable its movement.
+
+A step that needs a control the page does not show, such as the **Detailed** switch, is left out. **✕** or Esc ends a run; files already added stay. Drawers opened by the guide close again when it ends, including after its final action.
 
 ## Where a run starts
 

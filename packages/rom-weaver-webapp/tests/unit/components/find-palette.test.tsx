@@ -202,6 +202,10 @@ describe("Find", () => {
 
     expect(container.querySelector('[role="option"][aria-selected="true"]')?.textContent).toBe(selectedBefore);
     expect(container.querySelector(".find-results")?.textContent).toContain("Checksum Hero");
+    const options = [...container.querySelectorAll('[role="option"]')];
+    expect(options.length).toBeGreaterThan(1);
+    expect(options.at(-1)?.textContent).toContain("Checksum Hero");
+    expect(options.slice(0, -1).every((option) => !option.classList.contains("is-identify"))).toBe(true);
   });
 
   it("opens the bundle page", () => {

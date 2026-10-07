@@ -235,7 +235,7 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector("#rom-weaver-input-file-unified")).toBeTruthy();
     expect(container.querySelector(".drop.hero .formats")).toBeNull();
     expect(container.querySelector(".hero-formats-help .info-support")).toBeTruthy();
-    const chip = container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement;
+    const chip = container.querySelector(".sample-tutorial-start .sample-tutorial-start-chip") as HTMLButtonElement;
     expect(chip.textContent).toContain("New here?");
     fireEvent.click(chip);
     expect(container.querySelector(".first-weave-demo")?.textContent).toContain("Start guided Apply");
@@ -252,7 +252,7 @@ describe("apply workflow view - empty bench", () => {
     ["bundle", "/bundle-patches?guide=bundle", "Start guided bundle", "/docs/create-bundles", "Read the Bundle guide"],
   ] as const)("offers the %s guide and the test bundle download", (mode, href, label, docsHref, docsLabel) => {
     const { container } = renderView({ mode, ui: createEmptyPatcherUiState() });
-    fireEvent.click(container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".sample-tutorial-start .sample-tutorial-start-chip") as HTMLButtonElement);
     const actions = container.querySelectorAll(".sample-tutorial-start-action");
     expect(actions).toHaveLength(mode === "apply" ? 5 : 4);
     expect(actions[0].getAttribute("href")).toBe(href);
@@ -463,12 +463,12 @@ describe("apply workflow view - empty bench", () => {
     vi.stubGlobal("fetch", fetchMock);
     const { container } = renderView({ onUnifiedDrop, ui: createEmptyPatcherUiState() });
 
-    fireEvent.click(container.querySelector(".sample-tutorial-start-chip") as HTMLButtonElement);
+    fireEvent.click(container.querySelector(".sample-tutorial-start .sample-tutorial-start-chip") as HTMLButtonElement);
     fireEvent.click(container.querySelector(".sample-tutorial-start-primary") as HTMLButtonElement);
     const dialog = document.querySelector(".sample-tutorial-dialog") as HTMLElement;
     expect(dialog.textContent).toContain("Add your files");
     expect(dialog.dataset.step).toBe("1");
-    expect(dialog.dataset.stepCount).toBe("4");
+    expect(dialog.dataset.stepCount).toBe("5");
     // Nothing reaches the bench the reader did not put there.
     expect(fetchMock).not.toHaveBeenCalled();
     expect(onUnifiedDrop).not.toHaveBeenCalled();
@@ -934,10 +934,10 @@ describe("apply workflow view - staged bench", () => {
     });
 
     const addOnCard = container.querySelectorAll("#rom-weaver-list-patch-stack .card.patch")[1];
-    expect(addOnCard?.textContent).toContain("Authored input checks: Original ROM");
-    expect(addOnCard?.textContent).toContain("Embedded output checks: Standalone patch result");
-    expect(addOnCard?.textContent).toContain("Stack output checks: Combined result");
-    expect(addOnCard?.textContent).toContain("Shared input checks: Base patch");
+    expect(addOnCard?.textContent).toContain("Input: Original ROM");
+    expect(addOnCard?.textContent).toContain("Patch result");
+    expect(addOnCard?.textContent).toContain("Combined result");
+    expect(addOnCard?.textContent).toContain("Shared input: Base patch");
     expect(addOnCard?.textContent).toContain("Checks during apply: Base patch");
     expect(addOnCard?.textContent).not.toContain("Verified: game.sfc / program.rom");
 
@@ -1083,7 +1083,7 @@ describe("apply workflow view - staged bench", () => {
     });
 
     const sharedChecks = container.querySelector("#rom-weaver-patch-shared-input-checks-0");
-    expect(sharedChecks?.textContent).toContain("Shared input checks: Original ROM / program.rom");
+    expect(sharedChecks?.textContent).toContain("Shared input: Original ROM / program.rom");
     expect(sharedChecks?.textContent).toContain("c6fb1252");
     expect(sharedChecks?.querySelector(".ck-mark")).toBeNull();
 
@@ -1362,14 +1362,11 @@ describe("apply workflow view - post-apply behavior selects", () => {
     const download = container.querySelector("#rom-weaver-select-post-apply-download") as HTMLSelectElement;
     const test = container.querySelector("#rom-weaver-select-post-apply-test") as HTMLSelectElement;
     expect(download.value).toBe("auto-show");
-    expect(Array.from(download.options, (option) => option.textContent)).toEqual([
-      "Auto Start & DL Again Button (Default)",
-      "DL Again Button",
-    ]);
+    expect(Array.from(download.options, (option) => option.textContent)).toEqual(["Auto + button", "Button only"]);
     expect(test.value).toBe("show");
     expect(Array.from(test.options, (option) => option.textContent)).toEqual([
-      "Show After Apply (Default)",
-      "Auto Test & Show After Apply",
+      "Button only",
+      "Auto + button",
       "Hide Button",
     ]);
   });
@@ -1490,12 +1487,10 @@ describe("apply workflow view - output and diagnostics notices", () => {
 });
 
 describe("apply workflow view - output options notice", () => {
-  it("tells the user the options are not saved and Settings holds the defaults", () => {
+  it("omits the defaults notice from output options", () => {
     const { container } = renderView({ ui: { ...createEmptyPatcherUiState(), romInputs: [romRow("game.nes")] } });
-    const note = container.querySelector(".outopts .optsnote");
-    expect(note?.textContent).toBe("These choices are not saved. Change your defaults in Settings.");
-    // It leads the body, so it covers every option below it rather than one field.
-    expect(note?.nextElementSibling?.className).toContain("optsgrid");
+    expect(container.querySelector(".outopts .optsnote")).toBeNull();
+    expect(container.querySelector(".outopts .optsgrid")).toBeTruthy();
   });
 });
 
@@ -1790,9 +1785,7 @@ describe("apply workflow view - bundle controls", () => {
     expect(selects).toHaveLength(2);
     expect(selects.every((select) => select.value === "auto")).toBe(true);
     expect(selects.every((select) => select.disabled)).toBe(true);
-    expect((container.querySelector("#rom-weaver-select-output-format-compress") as HTMLSelectElement)?.disabled).toBe(
-      true,
-    );
+    expect((container.querySelector("#rom-weaver-select-output-format") as HTMLSelectElement)?.disabled).toBe(true);
     fireEvent.change(selects[1] as HTMLSelectElement, { target: { value: "rom" } });
     expect(onPatchInputBasisChange).not.toHaveBeenCalled();
   });
@@ -1917,7 +1910,7 @@ describe("apply workflow view - bundle controls", () => {
     expect(setOutputCompression).toHaveBeenCalledWith("7z");
     fireEvent.click(job?.querySelector(".outopts .cks-head") as HTMLButtonElement);
     expect(job?.querySelector("#rom-weaver-bundle-export-bundle-rom")).toBeTruthy();
-    expect(job?.querySelector(".optsnote")?.textContent).toBe("Output header changes apply only to this session.");
+    expect(job?.querySelector(".optsnote")).toBeNull();
     expect(job?.querySelectorAll("#rom-weaver-select-bundle-output-header")).toHaveLength(1);
     expect(job?.contains(applyJob)).toBe(true);
     expect(applyJob?.querySelector(".cks-head")?.textContent).toContain("Apply");

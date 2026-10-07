@@ -125,3 +125,7 @@
   color: var(--ink-3);
   overflow-wrap: anywhere;
 }
+
+.rw-app:has(.sample-tutorial-layer) {
+  --info-pop-z: 1004;
+}

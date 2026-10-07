@@ -64,7 +64,7 @@ const FindPalette = ({
   const results: FindResult[] = useMemo(
     () =>
       showResults
-        ? [...identifyEntries.map((entry) => ({ entry, score: Number.MAX_SAFE_INTEGER })), ...searchFind(index, query)]
+        ? [...searchFind(index, query), ...identifyEntries.map((entry) => ({ entry, score: Number.MAX_SAFE_INTEGER }))]
         : [],
     [identifyEntries, index, query, showResults],
   );

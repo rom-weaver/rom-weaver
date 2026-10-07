@@ -20,7 +20,7 @@ import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { identifiedOutputBaseName } from "../../presentation/identify-title.ts";
 import type { TrimWorkflowSourceState } from "../../types/trim-workflow.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
-import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./components/ds/compress-panel.tsx";
+import { buildOutputCompressionPanel } from "./components/ds/compress-panel.tsx";
 import { type FileProgressProps, Notice } from "./components/ds/feedback.tsx";
 import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { InfoPopover } from "./components/ds/layout.tsx";
@@ -1063,9 +1063,6 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     () => createCompressionTypeOptions(formatOptions, rawExtensionOption),
     [formatOptions, rawExtensionOption],
   );
-  const compressHeaderFormat = getOutputCompressionFormatLabel(resolvedOutputFormat, compressFormatOptions, {
-    uncompressedValues: [rawExtensionOption],
-  });
   const trimTimingText = formatOptionalElapsedMs(completedTrimTimeMs ?? undefined);
   const compressTimingText = formatOptionalElapsedMs(completedCompressionTimeMs ?? undefined);
   const checksumProgress = progress?.stage === "checksum" ? progress : null;
@@ -1198,7 +1195,6 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     compress: buildOutputCompressionPanel({
       disabled: outputDisabled,
       fields: trimCompressPanel?.fields,
-      format: compressHeaderFormat,
       formatId: "trim-builder-select-output-compression",
       formatOptions: compressFormatOptions,
       formatValue: resolvedOutputFormat,

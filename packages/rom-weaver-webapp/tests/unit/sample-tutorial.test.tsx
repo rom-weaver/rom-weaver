@@ -139,10 +139,32 @@ describe("sample tutorial start", () => {
     expect(guidedApply.getAttribute("href")).toBe("/apply-patch?guide=apply");
     fireEvent.click(guidedApply);
     expect(onStart).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("link", { name: /Start guided Apply/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /New here\?/ }));
     const guidedBundle = screen.getByRole("link", { name: /Start guided bundle/ });
     expect(guidedBundle.getAttribute("href")).toBe("/bundle?guide=bundle");
     fireEvent.click(guidedBundle);
     expect(onSecondaryStart).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("link", { name: /Start guided bundle/ })).toBeNull();
+  });
+  it("reopens the sample menu when loading fails", async () => {
+    const props = {
+      downloadHref: "/first-weave.zip",
+      downloadLabel: "Download a test bundle",
+      downloadName: "first-weave.zip",
+      error: "",
+      guideHref: "/bundle?guide=bundle",
+      label: "Start guided bundle",
+      loading: false,
+      onStart: vi.fn(),
+    };
+    const { rerender } = render(<SampleTutorialStart {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: /New here\?/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Start guided bundle/ }));
+    expect(screen.queryByRole("link", { name: /Start guided bundle/ })).toBeNull();
+    rerender(<SampleTutorialStart {...props} error="Could not load practice files" />);
+    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Could not load practice files"));
+    expect(screen.getByRole("link", { name: /Start guided bundle/ })).toBeTruthy();
   });
 });
 
@@ -434,7 +456,7 @@ describe("sample tutorial", () => {
     expect(button.dataset.guideCta).toBeUndefined();
   });
 
-  it("leaves an opened drawer open when the final action ends the guide", async () => {
+  it("re-closes an opened drawer when the final action ends the guide", async () => {
     const ctaSteps: readonly SampleTutorialStep[] = [
       {
         body: "Press it.",
@@ -463,7 +485,7 @@ describe("sample tutorial", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(onClose).toHaveBeenCalledOnce();
     rerender(workbench(false));
-    expect(drawer.getAttribute("aria-expanded")).toBe("true");
+    expect(drawer.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("re-closes the drawers it opened when the guide ends", async () => {
@@ -565,6 +587,40 @@ describe("sample tutorial step card", () => {
     expect(screen.getByText(/You're in Detailed view/)).toBeTruthy();
     expect(document.querySelector(".sample-tutorial-compare [data-current='true']")?.textContent).toContain("Detailed");
     expect(screen.getByText(/Switch Detailed off/)).toBeTruthy();
+  });
+
+  it("changes the live view from the guide comparison without advancing", async () => {
+    const Workbench = () => {
+      const [detailed, setDetailed] = useState(false);
+      return (
+        <RomWeaverSettingsProvider settings={{ detailedViewEnabled: detailed }}>
+          <div className="rw-app">
+            <div className="workflow-panel-head">
+              <label className="panel-view-toggle">
+                <input
+                  checked={detailed}
+                  onChange={(event) => setDetailed(event.currentTarget.checked)}
+                  type="checkbox"
+                />
+                <span>Detailed</span>
+              </label>
+            </div>
+            <TutorialSection id="tutorial-first" label="First drawer" />
+            <ViewGuide />
+          </div>
+        </RomWeaverSettingsProvider>
+      );
+    };
+    render(<Workbench />);
+    await waitFor(() => expect(document.querySelector("#tutorial-first.sample-tutorial-target")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Detailed", pressed: false }));
+    expect(screen.getByRole("checkbox")).toHaveProperty("checked", true);
+    expect(screen.getByText(/You're in Detailed view/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Detailed", pressed: true }));
+    expect(screen.getByRole("checkbox")).toHaveProperty("checked", true);
+    fireEvent.click(screen.getByRole("button", { name: "Simple", pressed: false }));
+    expect(screen.getByRole("checkbox")).toHaveProperty("checked", false);
+    expect(document.querySelector(".sample-tutorial-dialog")?.getAttribute("data-step")).toBe("1");
   });
 
   it("lifts the switch in the target's own panel, not a hidden panel's earlier copy", async () => {

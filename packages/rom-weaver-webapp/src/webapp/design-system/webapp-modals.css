@@ -483,7 +483,6 @@ html:has(.rw-modal) {
 }
 .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name {
   display: block;
-  min-width: 0;
 }
 .rw-app #rom-weaver-list-patch-stack > .card.patch .card-name > .nmline {
   display: block;

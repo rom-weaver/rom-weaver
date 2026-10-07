@@ -813,6 +813,7 @@ jobs:
           rust-targets: wasm32-wasip1-threads
           wasi-sdk: "true"
           ccache: "true"
+          ccache-maxsize: 1G
           sccache: "true"
           webapp-deps: "true"
           emulatorjs-cache: ${{ github.ref_type != 'tag' && needs.changes.outputs.webapp == 'true' }}
@@ -1306,7 +1307,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # Same version as the .config/mise.toml pin; this leg cannot use mise.
-      - uses: taiki-e/install-action@v2.87.22
+      - uses: taiki-e/install-action@v2.87.24
         with:
           tool: cargo-nextest@0.9.140
 
