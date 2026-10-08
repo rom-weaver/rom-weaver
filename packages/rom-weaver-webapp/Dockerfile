@@ -148,18 +148,9 @@ RUN --mount=type=cache,id=webapp-cargo-registry,target=/root/.cargo/registry,sha
     --mount=type=cache,id=webapp-cargo-target-${TARGETARCH},target=/app/target,sharing=locked \
     node scripts/wasm/build-app.mjs prod
 
-# `--build-arg WASM=prebuilt` takes the module out of the build context instead
-# of compiling it, for a caller that already has the identical one. CI passes it
-# on the amd64 leg when its source-exact wasm cache hits: the same module was
-# already built (or restored) by the `wasm` job in the same run, and compiling a
-# second copy of it cost ~390s of the critical path.
-#
-# The toolchain layers above are deliberately still installed and still verify
-# this architecture's WASI SDK and binaryen checksums - those pins are the
-# fragile part, they are per-architecture, and the registry cache serves those
-# layers for free. Only the redundant compile is skipped. The arm64 leg always
-# builds from source, so every run still compiles the module through this
-# Dockerfile once.
+# Callers MUST stage the source-exact module before selecting WASM=prebuilt.
+# Toolchain layers still verify each architecture's SDK and binaryen checksums.
+# CI retains ARM source builds on main, manual runs, and PRs changing image plumbing.
 FROM identified AS wasm-prebuilt
 # A missing module here means the caller asked for `prebuilt` without staging
 # one. Falling through to an image built from whatever `COPY . .` happened to

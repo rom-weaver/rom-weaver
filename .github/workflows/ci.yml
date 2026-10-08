@@ -53,6 +53,7 @@ jobs:
       wasm_runtime: ${{ steps.classify.outputs.wasm_runtime }}
       security: ${{ steps.classify.outputs.security }}
       docker_matrix: ${{ steps.docker-matrix.outputs.matrix }}
+      docker_arm_wasm_cache: ${{ steps.classify.outputs.docker_arm_wasm_cache }}
       docker_prebuilt: ${{ steps.classify.outputs.docker_prebuilt }}
       repo_lint: ${{ steps.classify.outputs.repo_lint }}
       full: ${{ steps.classify.outputs.full }}
@@ -517,11 +518,11 @@ jobs:
           mkdir -p target/identify-data
           cp -a crates/rom-weaver-cli/data/identify/v1 target/identify-data/v1
 
-      # Restore WASM read-only on amd64; a cache miss uses the Dockerfile's source build.
-      # Selected arm64 legs compile WASM to check their toolchain, without delaying CLI legs.
+      # PRs MAY reuse a source-exact module from main or an earlier PR run.
+      # ARM MUST compile changed image plumbing and unknown diffs before merge.
       - name: Restore the built wasm module
         id: wasm
-        if: matrix.name == 'webapp' && matrix.arch == 'amd64'
+        if: matrix.name == 'webapp' && (matrix.arch == 'amd64' || (github.event_name == 'pull_request' && needs.changes.outputs.docker_arm_wasm_cache == 'true'))
         uses: ./.github/actions/wasm-cache
         with:
           variant: prod

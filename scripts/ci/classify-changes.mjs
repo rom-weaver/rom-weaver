@@ -93,6 +93,16 @@ const EMPTY = {
   full: false,
 };
 
+// Docker-only compiler inputs are outside the module fingerprint. ARM MUST
+// compile them before merge, including when the diff base is unavailable.
+export function canReuseArmDockerWasm(paths) {
+  return paths !== null && !paths.some((path) =>
+    path === "packages/rom-weaver-webapp/Dockerfile" ||
+    path === ".dockerignore" ||
+    path.startsWith(".github/"),
+  );
+}
+
 // Only ordinary pull requests narrow checks; missing event names and release pull requests preserve the full selected matrix.
 // The event default MUST agree with scripts/ci/cli-platform-matrix.mjs.
 export function classifyChanges(paths, all = false, eventName = undefined, headRef = undefined) {

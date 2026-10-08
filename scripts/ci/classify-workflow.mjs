@@ -8,6 +8,7 @@ import process from "node:process";
 
 import { runMain } from "../run-main.mjs";
 import {
+  canReuseArmDockerWasm,
   classifyChanges,
   coverageTiers,
   formatChanges,
@@ -50,7 +51,7 @@ runMain(() => {
   const changes = classifyChanges(paths ?? [], paths === null, eventName, headRef);
   const output = `${formatChanges(
     eventName === "schedule" ? scheduledSelection(changes) : changes,
-  )}full_matrix=${fullMatrix}\nfull_native=${fullNative}\n`;
+  )}full_matrix=${fullMatrix}\nfull_native=${fullNative}\ndocker_arm_wasm_cache=${canReuseArmDockerWasm(paths)}\n`;
   process.stdout.write(output);
   appendFileSync(process.env.GITHUB_OUTPUT, output);
 });
