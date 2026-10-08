@@ -1,6 +1,6 @@
-# Convert RVZ to ISO in the browser
+# Decompress RVZ to ISO online
 
-Use Extract to convert a GameCube or Wii `.rvz` disc image into an `.iso` file. The conversion runs locally in your browser.
+Extract a GameCube or Wii RVZ disc image to ISO locally in your browser. Use this RVZ to ISO converter without uploading your disc.
 
 <!-- START doctoc -->
 ## Table of contents

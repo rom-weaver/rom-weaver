@@ -1,6 +1,8 @@
-# Identify and check a ROM in the browser
+# Identify a ROM by checksum in the browser
 
-Identify a ROM by checksum to find its known game name, region, and revision in the available identification data. Your file stays on your device.
+Use the browser ROM identifier to identify a ROM by checksum. Find its recorded game name, region, and revision when the identification data contains a match. Your file stays on your device.
+
+Already have a hash? [Search ROM checksums](search-rom-checksums-browser.md) without adding a file.
 
 Choose [Checksum](checksum-roms-browser.md) to calculate a file's hash and compare it with a published value. Choose [Test](test-roms-in-browser.md) to run a supported game in an emulator; successful playback does not establish that it is the exact ROM a patch requires.
 
@@ -45,14 +47,7 @@ If several records share the checksums, read every candidate. If identification 
 
 ## Search without a file
 
-1. Open a fresh [Identify page](https://rom-weaver.com/identify-rom).
-2. Enter a checksum or game name in **Identify by checksum or game name**.
-3. For a name search, select the game, then its release.
-4. Read the expected ROM's details. Add your file to compare it with that expectation.
-
-Search finds database records. It does not download a game. A name match alone does not prove that you have the right revision.
-
-To try identification without a file, select **Try a sample** inside the empty search box, then choose the matching Tetris release. The same shortcut is available in the ROM search boxes on Apply and Bundle.
+Follow [Search ROM checksums](search-rom-checksums-browser.md) to look up an existing CRC32, MD5, or SHA-1 hash. That guide also covers finding releases by game name.
 
 ## Inspect known cheats
 

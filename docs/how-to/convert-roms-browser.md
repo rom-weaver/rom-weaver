@@ -6,7 +6,7 @@ To take every file out of an archive, use [Extract files](extract-files-browser.
 
 For specific formats, use [ISO or BIN/CUE to CHD](convert-to-chd-browser.md), [ISO to RVZ](convert-to-rvz-browser.md), or [Nintendo 3DS to Z3DS](convert-to-z3ds-browser.md).
 
-To decompress images, use [RVZ to ISO](convert-rvz-to-iso-browser.md) or [Extract Z3DS files](extract-z3ds-browser.md).
+To decompress images, use [CHD to ISO, BIN/CUE, or GDI](extract-chd-browser.md), [RVZ to ISO](convert-rvz-to-iso-browser.md), or [Extract Z3DS files](extract-z3ds-browser.md).
 
 <!-- START doctoc -->
 ## Table of contents

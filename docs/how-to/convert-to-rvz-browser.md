@@ -1,6 +1,6 @@
-# Convert ISO to RVZ in the browser
+# Compress ISO to RVZ online
 
-Compress a GameCube or Wii ISO to RVZ locally in your browser. No patch, upload, or account is needed.
+Convert a GameCube or Wii ISO to RVZ with local browser compression. Use this RVZ converter without uploads or an account.
 
 <!-- START doctoc -->
 ## Table of contents

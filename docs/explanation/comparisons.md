@@ -1,6 +1,8 @@
-# Comparison with similar tools
+# ROM patcher comparisons: rom-weaver, RomPatcher.js and other tools
 
-The useful distinction is the job each tool handles: a single patch, an embedded patcher, a disc conversion, or a complete ROM workflow. Format counts alone do not show whether a tool fits that job.
+The right ROM patcher depends on the job: one patch, an embedded patcher, or a complete workflow. This comparison covers RomPatcher.js, Flips, MultiPatch, and specialist disc converters. Format counts alone do not establish which tool fits your files.
+
+<a id="comparison-with-similar-tools"></a>
 
 <!-- START doctoc -->
 ## Table of contents
@@ -8,6 +10,7 @@ The useful distinction is the job each tool handles: a single patch, an embedded
 - [The tools](#the-tools)
 - [At a glance](#at-a-glance)
 - [Applying a patch](#applying-a-patch)
+- [rom-weaver as a RomPatcher.js alternative](#rom-weaver-as-a-rompatcherjs-alternative)
 - [Creating a patch](#creating-a-patch)
 - [Containers and disc images](#containers-and-disc-images)
 - [Native conversion speed against chdman and dolphin-tool](#native-conversion-speed-against-chdman-and-dolphin-tool)
@@ -42,6 +45,16 @@ An existing patch usually decides the format for you. The remaining choices conc
 ## Applying a patch
 
 For a single uncompressed ROM and a supported patch, a focused patcher can be sufficient. rom-weaver becomes useful when the input needs extraction, several patches must run in order, or a bundle carries expected checksums and optional patches.
+
+## rom-weaver as a RomPatcher.js alternative
+
+[RomPatcher.js](https://github.com/marcrobledo/RomPatcher.js) is Marc Robledo's project, branded [Rom Patcher JS](https://www.marcrobledo.com/RomPatcher.js/) on its website. rom-weaver is a separate project. Both apply and create ROM patches in a browser.
+
+RomPatcher.js documents IPS, UPS, APS, BPS, RUP, PPF, and VCDIFF support, among other formats. It displays CRC32, MD5, and SHA-1, handles headers, and extracts ZIP files. Its browser, Node.js, and embedding options suit focused patching and custom release pages.
+
+rom-weaver is an alternative when the job includes ordered patch chains, optional patches, or bundled checks. It combines these with supported archive and disc-container extraction, checksums, and output compression. The [format reference](../reference/formats.md) identifies which inputs and outputs it supports.
+
+For one supported patch, either tool may cover the job. RomPatcher.js explicitly documents embedding a custom patcher into another website. rom-weaver's [bundles](bundles.md) instead describe patch order, choices, and expected bytes across a workflow. Neither a format list nor checksum display alone proves that the starting ROM matches.
 
 ## Creating a patch
 
@@ -89,4 +102,4 @@ Keep a tool that already handles your input and produces the result you need. Co
 
 ## How this page was checked
 
-The project descriptions above use the linked upstream repositories and official chdman documentation, checked on 2026-09-05. rom-weaver's details are checked against this repository's command, format, and parity-test implementations. The links are the source for current upstream capabilities.
+The project descriptions above use the linked upstream repositories and official chdman documentation, checked on 2026-09-05. RomPatcher.js capabilities were rechecked against its [README](https://github.com/marcrobledo/RomPatcher.js) and [official webapp](https://www.marcrobledo.com/RomPatcher.js/) on 2026-10-08. rom-weaver's details are checked against this repository's command, format, and parity-test implementations. The links are the source for current upstream capabilities.

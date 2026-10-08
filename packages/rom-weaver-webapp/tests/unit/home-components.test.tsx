@@ -170,7 +170,7 @@ describe("HomePage", () => {
       "/tools/checksum",
       "/tools/bundle-patches",
     ]);
-    expect(container.querySelector("#home-title")?.textContent).toContain("Patch ROMs in your browser.");
+    expect(container.querySelector("#home-title")?.textContent).toContain("Online ROM patcher.");
     expect(container.textContent).toContain("Keep your files on your device.");
     expect(container.querySelector(".home-main-actions .btn.ghost")?.textContent).toContain("Walk through a sample");
     expect(container.querySelector("a[href='/tools/docs/supported-formats']")?.textContent).toContain(

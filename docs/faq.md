@@ -33,7 +33,9 @@ Find rom-weaver guides for ROM patching, checksum errors, supported files, priva
   - [Can a link open my hosted bundle?](#can-a-link-open-my-hosted-bundle)
 - [Identify, prepare, and save](#identify-prepare-and-save)
   - [Why is my ROM unknown?](#why-is-my-rom-unknown)
+  - [Can I find a ROM from its checksum without a file?](#can-i-find-a-rom-from-its-checksum-without-a-file)
   - [Can I compress or extract without a patch?](#can-i-compress-or-extract-without-a-patch)
+  - [Can I decompress CHD to ISO?](#can-i-decompress-chd-to-iso)
   - [Can I make a trimmed ROM larger again?](#can-i-make-a-trimmed-rom-larger-again)
   - [Can I undo a patch?](#can-i-undo-a-patch)
   - [Can I edit a save state?](#can-i-edit-a-save-state)
@@ -151,9 +153,17 @@ Work through [Fix a checksum error](how-to/fix-checksum-errors.md).
 
 [Read an identification result](how-to/identify-roms-browser.md#identify-a-file).
 
+### Can I find a ROM from its checksum without a file?
+
+[Search ROM checksums by CRC32, MD5, or SHA-1](how-to/search-rom-checksums-browser.md).
+
 ### Can I compress or extract without a patch?
 
 [Extract files in the browser](how-to/extract-files-browser.md) or [convert a ROM in the browser](how-to/convert-roms-browser.md). For disc formats, see [RVZ to ISO](how-to/convert-rvz-to-iso-browser.md) and [ISO or BIN/CUE to CHD](how-to/convert-to-chd-browser.md). For terminal workflows, use [CLI archive commands](how-to/work-with-archives.md).
+
+### Can I decompress CHD to ISO?
+
+[Extract CHD to ISO, BIN/CUE, or GDI](how-to/extract-chd-browser.md).
 
 ### Can I make a trimmed ROM larger again?
 

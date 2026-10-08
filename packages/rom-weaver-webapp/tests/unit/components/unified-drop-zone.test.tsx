@@ -28,7 +28,7 @@ describe("UnifiedDropZone", () => {
     );
     const step = container.querySelector("section.step.is-input.is-empty");
     expect(step).toBeTruthy();
-    expect(step?.querySelector("h1")?.textContent).toBe("Patch ROMs in your browser.");
+    expect(step?.querySelector("h1")?.textContent).toBe("Online ROM patcher.");
     expect(step?.querySelector("h1")?.closest("label, button")).toBeNull();
     expect(step?.querySelector(".step-num")?.textContent).toBe("0x01");
     expect(step?.querySelector(".step-title")?.textContent).toBe("Inputs");
@@ -46,7 +46,7 @@ describe("UnifiedDropZone", () => {
     );
     const step = container.querySelector("section.step.is-input");
     expect(step?.classList.contains("is-empty")).toBe(false);
-    expect(step?.querySelector("h1.sr-only")?.textContent).toBe("Patch ROMs in your browser.");
+    expect(step?.querySelector("h1.sr-only")?.textContent).toBe("Online ROM patcher.");
     expect(step?.querySelector(".drop.hero")).toBeNull();
     expect(step?.querySelector(".drop .main.btnish")).toBeTruthy();
     expect(step?.querySelector(".hero-formats-help")).toBeNull();

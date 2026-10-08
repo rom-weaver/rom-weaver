@@ -1,10 +1,14 @@
-# Play and test a ROM in your browser
+# ROM tester online: play and test a patched ROM
 
-Play a local NES, SNES, Game Boy, GBA, Nintendo 64, Nintendo DS, PlayStation, or other supported ROM in your browser with EmulatorJS. Use [Test](https://rom-weaver.com/test-rom) to try a patched game before downloading it. Your ROM stays on your device; no upload or account is required.
+Use rom-weaver's ROM tester online to test a patched ROM before downloading it. Open [Test](https://rom-weaver.com/test-rom) to play local games through EmulatorJS. Play NES, SNES, Game Boy, GBA, Nintendo 64, Nintendo DS, and PlayStation games.
+
+Your ROM stays on your device; no upload or account is required.
 
 To verify the exact file a patch requires, use [Checksum](checksum-roms-browser.md) to compare its hash with the author's expected value, or [Identify](identify-roms-browser.md) to look up a known game, region, and revision. Playing a game successfully does not verify its checksum.
 
 If you need a practice file, open [guided Test](https://rom-weaver.com/test-rom?guide=test). It loads a tiny homebrew NES ROM from this project.
+
+<a id="play-and-test-a-rom-in-your-browser"></a>
 
 <!-- START doctoc -->
 ## Table of contents
@@ -56,6 +60,8 @@ A PlayStation or Saturn disc image in CHD opens without extraction. The emulator
 </figure>
 
 ## Test an Apply result
+
+To test a patched ROM online, send the Apply result directly to the browser player:
 
 1. Load your ROM and patches on the [Apply Patches page](https://rom-weaver.com/apply-patches).
 2. Check **Post Apply Test** under **Options**, then apply the patches. If the option warns that the platform cannot be tested, use another emulator or the target hardware.

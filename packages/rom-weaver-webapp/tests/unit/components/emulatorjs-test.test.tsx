@@ -238,7 +238,7 @@ describe("EmulatorTestView", () => {
 
     render(withSettings(<EmulatorTestView />));
 
-    expect(screen.getByRole("heading", { level: 1, name: "Try your ROM." })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Test your ROM online." })).toBeTruthy();
     expect(screen.getByText("Next:")).toBeTruthy();
     expect(screen.getByText("Play")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Play" })).toBeNull();
@@ -378,7 +378,7 @@ describe("EmulatorTestView", () => {
     });
 
     expect((await screen.findByRole("alert")).textContent).toContain("Cannot play game.iso.");
-    expect(screen.getByRole("heading", { level: 1, name: "Try your ROM." })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Test your ROM online." })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Play" })).toBeNull();
   });
 
@@ -471,7 +471,7 @@ describe("EmulatorTestView", () => {
     );
 
     expect(getEmulatorSessionState()).toEqual({ currentGameId: null, entries: [] });
-    expect(screen.getByRole("heading", { level: 1, name: "Try your ROM." })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Test your ROM online." })).toBeTruthy();
   });
 
   it("keeps a WebGL 2 error visible and blocks the player", async () => {
@@ -516,7 +516,7 @@ describe("EmulatorTestView", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Stop and unload game" }));
 
     expect(getEmulatorSessionState()).toEqual({ currentGameId: null, entries: [] });
-    expect(screen.getByRole("heading", { level: 1, name: "Try your ROM." })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Test your ROM online." })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Play" })).toBeNull();
   });
 

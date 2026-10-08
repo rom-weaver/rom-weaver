@@ -78,6 +78,12 @@ const DOC_SOURCES = Object.freeze([
   }),
   Object.freeze({
     audience: "browser",
+    file: "how-to/search-rom-checksums-browser.md",
+    label: "Search ROM checksums (browser)",
+    slug: "docs/search-rom-checksums",
+  }),
+  Object.freeze({
+    audience: "browser",
     file: "how-to/extract-files-browser.md",
     label: "Extract files (browser)",
     slug: "docs/extract-files-browser",
@@ -93,6 +99,12 @@ const DOC_SOURCES = Object.freeze([
     file: "how-to/convert-rvz-to-iso-browser.md",
     label: "Convert RVZ to ISO (browser)",
     slug: "docs/convert-rvz-to-iso",
+  }),
+  Object.freeze({
+    audience: "browser",
+    file: "how-to/extract-chd-browser.md",
+    label: "Decompress CHD (browser)",
+    slug: "docs/extract-chd",
   }),
   Object.freeze({
     audience: "browser",
@@ -357,6 +369,7 @@ const HOW_TO_NAVIGATION_GROUPS = Object.freeze({
   "docs/create-game-saves-cli": "Saves",
   "docs/create-rom-patches": "Patching & bundles",
   "docs/edit-gen3-saves": "Saves",
+  "docs/extract-chd": "Conversion & files",
   "docs/extract-files-browser": "Conversion & files",
   "docs/extract-z3ds": "Conversion & files",
   "docs/fix-checksum-errors": "Troubleshooting",
@@ -364,6 +377,7 @@ const HOW_TO_NAVIGATION_GROUPS = Object.freeze({
   "docs/identify-and-hash-files": "ROM checks",
   "docs/identify-roms-browser": "ROM checks",
   "docs/install": "Setup & offline",
+  "docs/search-rom-checksums": "ROM checks",
   "docs/test-roms": "ROM checks",
   "docs/trim-roms-browser": "ROM checks",
   "docs/undo-ppf-browser": "Patching & bundles",

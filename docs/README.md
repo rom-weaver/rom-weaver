@@ -41,14 +41,15 @@ Guided runs in the app: [Apply](https://rom-weaver.com/apply-patches?guide=apply
 | --- | --- |
 | Add a translation or other game change | [Apply a patch](how-to/apply-rom-patches.md) |
 | Share changes I made | [Create a patch](how-to/create-rom-patches.md) or [bundle a recipe](how-to/create-bundles.md) |
-| Find which game or revision a file contains | [Identify and compare checksums](how-to/identify-roms-browser.md) |
+| Find which game or revision a file contains | [Identify a ROM by checksum](how-to/identify-roms-browser.md) |
+| Find a ROM from an existing CRC32, MD5, or SHA-1 hash | [Search ROM checksums](how-to/search-rom-checksums-browser.md) |
 | Check a file against an expected checksum | [Checksum a file](how-to/checksum-roms-browser.md) |
 | Take files out of an archive | [Extract files](how-to/extract-files-browser.md) |
 | Package files or compress a disc image | [Compress files](how-to/convert-roms-browser.md) |
 | Make a game's file smaller | [Compress files](how-to/convert-roms-browser.md), or [trim padding](how-to/trim-roms-browser.md) |
 | Convert RVZ to ISO | [Extract an ISO from RVZ](how-to/convert-rvz-to-iso-browser.md) |
 | Convert ISO or BIN/CUE to CHD | [Create a CHD](how-to/convert-to-chd-browser.md) |
-| Convert CHD to ISO or BIN/CUE | [Extract a disc from CHD](how-to/extract-files-browser.md#convert-chd-to-iso-or-bincue) |
+| Decompress CHD to ISO, BIN/CUE, or GDI | [Extract a disc from CHD](how-to/extract-chd-browser.md) |
 | Compress a GameCube or Wii ISO | [Convert ISO to RVZ](how-to/convert-to-rvz-browser.md) |
 | Compress a Nintendo 3DS ROM | [Create a Z3DS file](how-to/convert-to-z3ds-browser.md) |
 | Decompress Z3DS, ZCCI, ZCXI, ZCIA, or Z3DSX | [Extract a Nintendo 3DS file](how-to/extract-z3ds-browser.md) |
@@ -78,18 +79,20 @@ Procedures for specific tasks.
 - [Use cheats in the browser](how-to/use-browser-cheats.md)
 - [Create a ROM patch](how-to/create-rom-patches.md)
 - [Create and share a patch bundle](how-to/create-bundles.md)
-- [Identify a ROM and compare checksums](how-to/identify-roms-browser.md)
+- [Identify a ROM by checksum](how-to/identify-roms-browser.md)
+- [Search ROM checksums](how-to/search-rom-checksums-browser.md)
 - [Checksum a file](how-to/checksum-roms-browser.md)
 - [Extract files from an archive or disc image](how-to/extract-files-browser.md)
 - [Compress files or disc images](how-to/convert-roms-browser.md)
 - [Convert RVZ to ISO](how-to/convert-rvz-to-iso-browser.md)
+- [Decompress CHD to ISO, BIN/CUE, or GDI](how-to/extract-chd-browser.md)
 - [Convert ISO or BIN/CUE to CHD](how-to/convert-to-chd-browser.md)
 - [Convert GameCube or Wii ISO to RVZ](how-to/convert-to-rvz-browser.md)
 - [Compress Nintendo 3DS ROMs to Z3DS](how-to/convert-to-z3ds-browser.md)
 - [Extract Z3DS, ZCCI, ZCXI, ZCIA, and Z3DSX files](how-to/extract-z3ds-browser.md)
 - [Trim a ROM](how-to/trim-roms-browser.md)
 - [Undo a PPF patch](how-to/undo-ppf-browser.md)
-- [Test a ROM in the browser](how-to/test-roms-in-browser.md)
+- [Use the online ROM tester](how-to/test-roms-in-browser.md)
 - [Fix a checksum error](how-to/fix-checksum-errors.md)
 - [Edit a game save](how-to/edit-gen3-saves.md)
 - [Create game saves in the browser](how-to/create-game-saves-browser.md)
@@ -139,13 +142,13 @@ Background on the engine, formats, and design decisions.
 - [How ROM patching works](explanation/how-patching-works.md): why the exact starting file matters, what a checksum proves, why order matters, and what every term means.
 - [ROM cheats](explanation/rom-cheats.md): why rom-weaver bakes cheats into the ROM instead of running them at emulation time.
 - [Why your files stay on your device](explanation/local-first.md): the benefits and limits of local processing.
-- [Choosing a patch format](explanation/patch-formats.md): what actually separates BPS, IPS, xdelta, PPF, and the rest.
+- [ROM patch formats compared](explanation/patch-formats.md): checksum protection, size limits, and suitable uses for BPS, IPS, UPS, xdelta, and PPF.
 - [Choosing a compression format](explanation/compression-formats.md): CHD, RVZ, Z3DS, ZIP, 7z, and when trimming beats compressing.
 - [What a bundle is](explanation/bundles.md): the portable patch recipe.
 - [Browser and CLI](explanation/browser-and-cli.md): one engine, two front ends, and how to pick.
 - [Where identify data comes from](explanation/identify-sources.md): Libretro metadata, OpenGood fallback records, and local lookup.
 - [Release provenance](explanation/release-provenance.md): what download verification proves and why the checks are shaped the way they are.
-- [Comparison with similar tools](explanation/comparisons.md): where rom-weaver overlaps with RomPatcher.js, Flips, MultiPatch, xdelta3, chdman, and Dolphin tool, and which one fits your job.
+- [ROM patcher comparison](explanation/comparisons.md): where rom-weaver overlaps with RomPatcher.js, Flips, MultiPatch, xdelta3, chdman, and Dolphin tool, and which one fits your job.
 
 ## Quick answers
 
