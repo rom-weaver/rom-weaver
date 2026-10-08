@@ -133,16 +133,16 @@ Each patch card shows its format and position. Open **Checks** to see the state 
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/apply-patches-mobile-light.avif" width="1170" height="1424">
-    <source type="image/avif" srcset="../screenshots/apply-patches-desktop-light.avif" width="1770" height="914">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/apply-patches-mobile-light.webp" width="1170" height="1424">
-    <img src="../screenshots/apply-patches-desktop-light.webp" alt="Cropped Apply patch stack with two ordered practice patches in the light theme" width="1770" height="914">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/apply-patches-mobile-light.avif" width="1170" height="1433">
+    <source type="image/avif" srcset="../screenshots/apply-patches-desktop-light.avif" width="1770" height="788">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/apply-patches-mobile-light.webp" width="1170" height="1433">
+    <img src="../screenshots/apply-patches-desktop-light.webp" alt="Cropped Apply patch stack with two ordered practice patches in the light theme" width="1770" height="788">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/apply-patches-mobile-dark.avif" width="1170" height="1424">
-    <source type="image/avif" srcset="../screenshots/apply-patches-desktop-dark.avif" width="1770" height="779">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/apply-patches-mobile-dark.webp" width="1170" height="1424">
-    <img src="../screenshots/apply-patches-desktop-dark.webp" alt="Cropped Apply patch stack with two ordered practice patches in the dark theme" width="1770" height="779">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/apply-patches-mobile-dark.avif" width="1170" height="1433">
+    <source type="image/avif" srcset="../screenshots/apply-patches-desktop-dark.avif" width="1770" height="788">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/apply-patches-mobile-dark.webp" width="1170" height="1433">
+    <img src="../screenshots/apply-patches-desktop-dark.webp" alt="Cropped Apply patch stack with two ordered practice patches in the dark theme" width="1770" height="788">
   </picture>
   <figcaption>Patches run from top to bottom. Each card shows the checks for that step.</figcaption>
 </figure>
