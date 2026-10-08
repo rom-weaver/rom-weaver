@@ -93,6 +93,12 @@ const captureRegion = async (page, selector) => {
   };
 };
 
+// Full-screen cases show the first screen exactly as a visitor sees it.
+const captureScreen = async (page) => {
+  await page.evaluate(() => window.scrollTo(0, 0));
+  return { shot: await page.screenshot({ animations: "disabled", type: "png" }) };
+};
+
 const prepareScreenshot = async (page, name) => {
   if (name === "identify-checks") {
     await page.locator("#identify-input-picker").setInputFiles({
@@ -180,14 +186,19 @@ const capture = async () => {
             await waitForStableContent(page);
             await assertNoDevBadge(page);
             await page.locator(".skip-link").evaluate((element) => element.setAttribute("hidden", ""));
-            await page.locator(".dock").evaluate((element) => {
-              element.style.visibility = "hidden";
-            });
-            const { crop, shot } = await captureRegion(page, captureCase.target);
-            const cropped = execFileSync(IMAGE_MAGICK, ["png:-", "-crop", crop, "+repage", "-depth", "8", "PNG24:-"], {
-              input: shot,
-              maxBuffer: 64 * 1024 * 1024,
-            });
+            if (!captureCase.fullScreen) {
+              await page.locator(".dock").evaluate((element) => {
+                element.style.visibility = "hidden";
+              });
+            }
+            const { crop, shot } = captureCase.fullScreen
+              ? await captureScreen(page)
+              : await captureRegion(page, captureCase.target);
+            const cropped = execFileSync(
+              IMAGE_MAGICK,
+              ["png:-", ...(crop ? ["-crop", crop, "+repage"] : []), "-depth", "8", "PNG24:-"],
+              { input: shot, maxBuffer: 64 * 1024 * 1024 },
+            );
             for (const { extension } of DOCS_SCREENSHOT_FORMATS) {
               const image =
                 extension === "avif"

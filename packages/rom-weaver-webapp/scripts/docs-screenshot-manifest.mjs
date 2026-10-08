@@ -63,6 +63,15 @@ const DOCS_SCREENSHOT_CASES = [
     route: "/apply-patches?guide=apply",
     target: "#rom-weaver-row-patch-stack",
   },
+  // The README shows this whole first screen; no docs guide embeds it.
+  {
+    dismissGuide: true,
+    fullScreen: true,
+    practiceFiles: true,
+    name: "apply-page",
+    route: "/apply-patches?guide=apply",
+    target: "#rom-weaver-row-patch-stack",
+  },
 ];
 const PRACTICE_FILES_BUTTON = ".sample-tutorial-actions .btn.primary";
 const waitForDocsScreenshotReady = async (page, captureCase) => {

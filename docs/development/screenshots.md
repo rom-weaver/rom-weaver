@@ -22,6 +22,7 @@ Documentation images show real app controls with homebrew samples or a generated
 
 | Subject | Owning guide | What the image explains |
 | --- | --- | --- |
+| `apply-page` | [README](../../README.md#screenshots) | The whole first Apply screen with two ordered patches |
 | `apply-patches` | [Apply patches](../how-to/apply-rom-patches.md#read-the-rom-and-patch-cards) | Patch order, input basis, and checks |
 | `apply-output` | [Apply output](../how-to/apply-rom-patches.md#choose-the-output-and-apply) | File name, container, and download action |
 | `create-inputs` | [Create a patch](../how-to/create-rom-patches.md) | Original and Modified inputs |
@@ -92,7 +93,7 @@ Clear that filter before the next full capture:
 unset ROM_WEAVER_SCREENSHOT_CASE
 ```
 
-The capture script waits for the displayed result and crops the relevant controls. Desktop uses 2x resolution; mobile uses 3x. Playback is muted.
+The capture script waits for the displayed result and crops the relevant controls. `apply-page` instead keeps the whole first screen, dock included. Desktop uses 2x resolution; mobile uses 3x. Playback is muted.
 
 The crop hides the floating navigation dock so it cannot cover tool controls. ImageMagick crops images and encodes WebP; the bundled WebAssembly encoder creates AVIF.
 

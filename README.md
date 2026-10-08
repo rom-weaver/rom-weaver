@@ -157,6 +157,24 @@ Localized translations are early and may be entirely wrong in places. Manual edi
   </thead>
   <tbody>
     <tr>
+      <td>Desktop: Apply with two ordered patches</td>
+      <td>
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/apply-page-desktop-dark.webp">
+          <img src="docs/screenshots/apply-page-desktop-light.webp" alt="The whole Apply screen with a sample ROM and two ordered patches on desktop">
+        </picture>
+      </td>
+    </tr>
+    <tr>
+      <td>Mobile: Apply with two ordered patches</td>
+      <td align="center">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/apply-page-mobile-dark.webp">
+          <img src="docs/screenshots/apply-page-mobile-light.webp" alt="The whole Apply screen with a sample ROM and two ordered patches on mobile" width="390">
+        </picture>
+      </td>
+    </tr>
+    <tr>
       <td>Desktop: ordered patch stack</td>
       <td>
         <picture>
