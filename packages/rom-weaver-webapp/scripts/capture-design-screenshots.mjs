@@ -44,17 +44,21 @@ const assertNoDevBadge = async (page) => {
   if (badges.some((badge) => badge.trim() === "DEV")) throw new Error("Screenshot page still shows the DEV badge");
 };
 
-const waitForStableContent = (page) =>
+// Practice files start checking after their cards render, so a quiet moment
+// before the checks begin is not a settled page; wait for the patch verdicts.
+const waitForStableContent = (page, { practiceFiles = false } = {}) =>
   page.waitForFunction(
-    () => {
-      if (/(Reading|Checksumming)(?:…|\.\.\.)/.test(document.body.innerText)) {
+    (waitForPatchChecks) => {
+      const text = document.body.innerText;
+      const patchChecksPending = waitForPatchChecks && (!/Verified/.test(text) || /Not checked yet:/.test(text));
+      if (/(Reading|Checksumming)(?:…|\.\.\.)/.test(text) || patchChecksPending) {
         globalThis.__romWeaverScreenshotStableAt = undefined;
         return false;
       }
       globalThis.__romWeaverScreenshotStableAt ??= performance.now();
       return performance.now() - globalThis.__romWeaverScreenshotStableAt >= 500;
     },
-    undefined,
+    practiceFiles,
     { polling: 50, timeout: 30_000 },
   );
 
@@ -183,7 +187,7 @@ const capture = async () => {
               await exitGuide.waitFor({ state: "detached" });
             }
             await prepareScreenshot(page, captureCase.name);
-            await waitForStableContent(page);
+            await waitForStableContent(page, captureCase);
             await assertNoDevBadge(page);
             await page.locator(".skip-link").evaluate((element) => element.setAttribute("hidden", ""));
             if (!captureCase.fullScreen) {
