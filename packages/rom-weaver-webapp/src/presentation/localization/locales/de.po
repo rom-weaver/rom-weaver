@@ -428,7 +428,6 @@ msgstr "7z"
 msgid "settings.sevenZipCodec"
 msgstr "7z-Codec"
 
-#. One-letter badge on the theme button while it follows the system theme; abbreviates ui.theme.auto.
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.theme.autoBadge"

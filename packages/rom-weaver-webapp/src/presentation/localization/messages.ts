@@ -1728,11 +1728,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.status.version": msg({ id: "ui.status.version", message: "Version" }),
   "ui.theme.toLight": msg({ id: "ui.theme.toLight", message: "Switch to light theme" }),
   "ui.theme.auto": msg({ id: "ui.theme.auto", message: "Auto" }),
-  "ui.theme.autoBadge": msg({
-    id: "ui.theme.autoBadge",
-    comment: "One-letter badge on the theme button while it follows the system theme; abbreviates ui.theme.auto.",
-    message: "A",
-  }),
+  "ui.theme.autoBadge": msg({ id: "ui.theme.autoBadge", message: "A" }),
   "ui.theme.dark": msg({ id: "ui.theme.dark", message: "Dark" }),
   "ui.theme.light": msg({ id: "ui.theme.light", message: "Light" }),
   "ui.theme.matchSystem": msg({ id: "ui.theme.matchSystem", message: "Match system" }),
