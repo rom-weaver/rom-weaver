@@ -157,20 +157,38 @@ Localized translations are early and may be entirely wrong in places. Manual edi
   </thead>
   <tbody>
     <tr>
-      <td>Desktop: Apply with two ordered patches</td>
+      <td>Desktop: ordered patch stack</td>
       <td>
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/apply-page-desktop-dark.webp">
-          <img src="docs/screenshots/apply-page-desktop-light.webp" alt="The full Apply page with a sample ROM, two ordered patches, and output controls on desktop">
+          <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/apply-patches-desktop-dark.webp">
+          <img src="docs/screenshots/apply-patches-desktop-light.webp" alt="Focused Apply patch stack with two ordered sample patches on desktop">
         </picture>
       </td>
     </tr>
     <tr>
-      <td>Mobile: Apply with two ordered patches</td>
+      <td>Desktop: create output</td>
+      <td>
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/create-output-desktop-dark.webp">
+          <img src="docs/screenshots/create-output-desktop-light.webp" alt="Focused Create output card with BPS selected on desktop">
+        </picture>
+      </td>
+    </tr>
+    <tr>
+      <td>Mobile: Original and Modified</td>
       <td align="center">
         <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/apply-page-mobile-dark.webp">
-          <img src="docs/screenshots/apply-page-mobile-light.webp" alt="The full Apply page with a sample ROM, two ordered patches, and output controls on mobile" width="390">
+          <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/create-inputs-mobile-dark.webp">
+          <img src="docs/screenshots/create-inputs-mobile-light.webp" alt="Focused Create Original and Modified cards on mobile" width="390">
+        </picture>
+      </td>
+    </tr>
+    <tr>
+      <td>Mobile: bundle output options</td>
+      <td align="center">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/bundle-output-mobile-dark.webp">
+          <img src="docs/screenshots/bundle-output-mobile-light.webp" alt="Focused patch-only bundle controls on mobile" width="390">
         </picture>
       </td>
     </tr>

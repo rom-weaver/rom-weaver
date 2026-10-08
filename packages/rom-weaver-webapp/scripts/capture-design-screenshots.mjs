@@ -57,99 +57,42 @@ const waitForStableContent = (page) =>
     { polling: 50, timeout: 30_000 },
   );
 
-// Every docs capture is one whole viewport, so each viewport's images share
-// one size and the docs markup can never disagree with a crop. The README's
-// full-page capture shows the complete page instead.
-const captureView = async (page, { fullPage = false, target: selector }) => {
-  if (fullPage) return page.screenshot({ animations: "disabled", fullPage: true, type: "png" });
-  await page
-    .locator(selector)
-    .first()
-    .evaluate((element) => {
-      if (element.closest("dialog")) return;
-      const top = element.getBoundingClientRect().top + window.scrollY;
-      window.scrollTo({ behavior: "instant", top: Math.max(0, top - 16) });
-    });
-  return page.screenshot({ animations: "disabled", type: "png" });
-};
-
-// A PPF3 patch with undo data, so PPF Undo can restore the original sample ROM.
-const createPpfUndoSample = () => {
-  const { firstPatchResult, originalRom } = createFirstSampleAssets();
-  const header = Buffer.alloc(60);
-  header.write("PPF30", 0, "ascii");
-  header[5] = 2;
-  header.write("rom-weaver PPF undo sample", 6, "ascii");
-  header[58] = 1;
-  const records = [];
-  for (let offset = 0; offset < originalRom.length;) {
-    if (originalRom[offset] === firstPatchResult[offset]) {
-      offset += 1;
-      continue;
-    }
-    let end = offset;
-    while (end < originalRom.length && end - offset < 255 && originalRom[end] !== firstPatchResult[end]) end += 1;
-    const position = Buffer.alloc(9);
-    position.writeBigUInt64LE(BigInt(offset));
-    position[8] = end - offset;
-    records.push(position, firstPatchResult.subarray(offset, end), originalRom.subarray(offset, end));
-    offset = end;
-  }
-  return { patch: Buffer.concat([header, ...records]), patchedRom: firstPatchResult };
-};
-
-const openConsoleTab = async (page, tab) => {
-  await page.evaluate((hash) => {
-    window.location.hash = hash;
-  }, `#console-${tab}`);
-  await page.locator("dialog[open]").waitFor({ state: "visible" });
+const captureRegion = async (page, selector) => {
+  const target = page.locator(selector);
+  await target.first().scrollIntoViewIfNeeded();
+  const { bounds, deviceScaleFactor, pageSize } = await target.evaluateAll((elements) => {
+    const boxes = elements.map((element) => element.getBoundingClientRect());
+    if (!boxes.length) throw new Error("Screenshot target has no elements");
+    return {
+      bounds: {
+        bottom: Math.max(...boxes.map((box) => box.bottom)) + window.scrollY,
+        left: Math.min(...boxes.map((box) => box.left)) + window.scrollX,
+        right: Math.max(...boxes.map((box) => box.right)) + window.scrollX,
+        top: Math.min(...boxes.map((box) => box.top)) + window.scrollY,
+      },
+      deviceScaleFactor: window.devicePixelRatio,
+      pageSize: {
+        height: document.documentElement.scrollHeight,
+        width: document.documentElement.scrollWidth,
+      },
+    };
+  });
+  const padding = 14;
+  const x = Math.max(0, bounds.left - padding);
+  const y = Math.max(0, bounds.top - padding);
+  const height = Math.min(pageSize.height, bounds.bottom + padding) - y;
+  const width = Math.min(pageSize.width, bounds.right + padding) - x;
+  const cropWidth = Math.round(width * deviceScaleFactor);
+  const cropHeight = Math.round(height * deviceScaleFactor);
+  const cropX = Math.round(x * deviceScaleFactor);
+  const cropY = Math.round(y * deviceScaleFactor);
+  return {
+    crop: `${cropWidth}x${cropHeight}+${cropX}+${cropY}`,
+    shot: await page.screenshot({ animations: "disabled", fullPage: true, type: "png" }),
+  };
 };
 
 const prepareScreenshot = async (page, name) => {
-  if (name === "settings" || name === "offline") {
-    await openConsoleTab(page, name);
-    return;
-  }
-  if (name === "cheat-apply-cheats") {
-    await page.getByRole("button", { name: /Add cheats to the patch order/ }).click();
-    await page.getByRole("button", { name: "Add code manually", exact: true }).waitFor();
-    return;
-  }
-  if (name === "cheat-create-cheats") {
-    await page.getByRole("button", { name: "Cheat codes", exact: true }).click();
-    await page.getByRole("button", { name: /Pick from the cheat database/ }).click();
-    await page.getByRole("button", { name: "Add code manually", exact: true }).waitFor();
-    return;
-  }
-  if (name === "compress-select-files" || name === "compress") {
-    await page.locator("#compress-input-picker").setInputFiles({
-      buffer: createFirstSampleAssets().firstWeaveZip,
-      mimeType: "application/zip",
-      name: "rom-weaver-sample.zip",
-    });
-    await page.getByText("rom-weaver-bundle.json", { exact: true }).click();
-    await page.getByText("world-to-weaver.ips", { exact: true }).click();
-    const addFiles = page.getByRole("button", { name: "Add 2 files", exact: true });
-    await addFiles.waitFor();
-    if (name === "compress") {
-      await addFiles.click();
-      await addFiles.waitFor({ state: "detached" });
-    }
-    return;
-  }
-  if (name === "ppf-undo") {
-    const { patch, patchedRom } = createPpfUndoSample();
-    await page.locator("#ppf-undo-input-picker").setInputFiles([
-      { buffer: patchedRom, mimeType: "application/octet-stream", name: "rom-world.nes" },
-      { buffer: patch, mimeType: "application/octet-stream", name: "hello-to-rom.ppf" },
-    ]);
-    await page.getByRole("button", { name: /Restore original ROM/i }).click();
-    await page
-      .getByRole("button", { name: /Download/i })
-      .first()
-      .waitFor();
-    return;
-  }
   if (name === "identify-checks") {
     await page.locator("#identify-input-picker").setInputFiles({
       buffer: createFirstSampleAssets().originalRom,
@@ -236,22 +179,22 @@ const capture = async () => {
             await waitForStableContent(page);
             await assertNoDevBadge(page);
             await page.locator(".skip-link").evaluate((element) => element.setAttribute("hidden", ""));
-            await page.locator(".dock").evaluateAll((elements) => {
-              for (const element of elements) element.style.visibility = "hidden";
+            await page.locator(".dock").evaluate((element) => {
+              element.style.visibility = "hidden";
             });
-            const shot = await captureView(page, captureCase);
-            const png = execFileSync(IMAGE_MAGICK, ["png:-", "-depth", "8", "PNG24:-"], {
+            const { crop, shot } = await captureRegion(page, captureCase.target);
+            const cropped = execFileSync(IMAGE_MAGICK, ["png:-", "-crop", crop, "+repage", "-depth", "8", "PNG24:-"], {
               input: shot,
               maxBuffer: 64 * 1024 * 1024,
             });
             for (const { extension } of DOCS_SCREENSHOT_FORMATS) {
               const image =
                 extension === "avif"
-                  ? Buffer.from(await avifEncode(decodeRgba(png), { quality: 80 }))
+                  ? Buffer.from(await avifEncode(decodeRgba(cropped), { quality: 80 }))
                   : execFileSync(
                       IMAGE_MAGICK,
                       ["png:-", "-define", "webp:lossless=true", "-define", "webp:method=6", "webp:-"],
-                      { input: png, maxBuffer: 64 * 1024 * 1024 },
+                      { input: cropped, maxBuffer: 64 * 1024 * 1024 },
                     );
               if (!image.length) throw new Error(`Screenshot encoder returned no ${extension} data for ${outputName}`);
               fs.writeFileSync(path.join(OUTPUT_DIR, `${outputName}.${extension}`), image);

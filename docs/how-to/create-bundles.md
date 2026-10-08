@@ -63,16 +63,16 @@ The expected filename helps users find the ROM. Checksums establish whether its 
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/bundle-output-mobile-light.avif" width="1170" height="2532">
-    <source type="image/avif" srcset="../screenshots/bundle-output-desktop-light.avif" width="2328" height="1800">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/bundle-output-mobile-light.webp" width="1170" height="2532">
-    <img src="../screenshots/bundle-output-desktop-light.webp" alt="Bundle sharing controls with Include ROM in bundle left clear in the light theme" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/bundle-output-mobile-light.avif" width="1170" height="453">
+    <source type="image/avif" srcset="../screenshots/bundle-output-desktop-light.avif" width="1770" height="302">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/bundle-output-mobile-light.webp" width="1170" height="453">
+    <img src="../screenshots/bundle-output-desktop-light.webp" alt="Bundle sharing controls with Include ROM in bundle left clear in the light theme" width="1770" height="302">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/bundle-output-mobile-dark.avif" width="1170" height="2532">
-    <source type="image/avif" srcset="../screenshots/bundle-output-desktop-dark.avif" width="2328" height="1800">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/bundle-output-mobile-dark.webp" width="1170" height="2532">
-    <img src="../screenshots/bundle-output-desktop-dark.webp" alt="Bundle sharing controls with Include ROM in bundle left clear in the dark theme" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/bundle-output-mobile-dark.avif" width="1170" height="453">
+    <source type="image/avif" srcset="../screenshots/bundle-output-desktop-dark.avif" width="1770" height="302">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/bundle-output-mobile-dark.webp" width="1170" height="453">
+    <img src="../screenshots/bundle-output-desktop-dark.webp" alt="Bundle sharing controls with Include ROM in bundle left clear in the dark theme" width="1770" height="302">
   </picture>
   <figcaption>Bundle creation packages the staged recipe without applying the patches.</figcaption>
 </figure>

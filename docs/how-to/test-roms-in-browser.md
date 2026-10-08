@@ -41,16 +41,16 @@ A PlayStation or Saturn disc image in CHD opens without extraction. The emulator
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/test-player-mobile-light.avif" width="1170" height="2532">
-    <source type="image/avif" srcset="../screenshots/test-player-desktop-light.avif" width="2328" height="1800">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/test-player-mobile-light.webp" width="1170" height="2532">
-    <img src="../screenshots/test-player-desktop-light.webp" alt="Test player showing the HELLO WORLD homebrew ROM and its SHA-1 fingerprint in the light theme" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/test-player-mobile-light.avif" width="1170" height="2356">
+    <source type="image/avif" srcset="../screenshots/test-player-desktop-light.avif" width="1770" height="1489">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/test-player-mobile-light.webp" width="1170" height="2356">
+    <img src="../screenshots/test-player-desktop-light.webp" alt="Test player showing the HELLO WORLD homebrew ROM and its SHA-1 fingerprint in the light theme" width="1770" height="1489">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/test-player-mobile-dark.avif" width="1170" height="2532">
-    <source type="image/avif" srcset="../screenshots/test-player-desktop-dark.avif" width="2328" height="1800">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/test-player-mobile-dark.webp" width="1170" height="2532">
-    <img src="../screenshots/test-player-desktop-dark.webp" alt="Test player showing the HELLO WORLD homebrew ROM and its SHA-1 fingerprint in the dark theme" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/test-player-mobile-dark.avif" width="1170" height="2356">
+    <source type="image/avif" srcset="../screenshots/test-player-desktop-dark.avif" width="1770" height="1489">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/test-player-mobile-dark.webp" width="1170" height="2356">
+    <img src="../screenshots/test-player-desktop-dark.webp" alt="Test player showing the HELLO WORLD homebrew ROM and its SHA-1 fingerprint in the dark theme" width="1770" height="1489">
   </picture>
   <figcaption>The supplied homebrew ROM runs in Test. The fingerprint identifies the file used for stored saves.</figcaption>
 </figure>

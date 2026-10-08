@@ -25,7 +25,7 @@ test("guided captures wait for loaded sample data independently of tutorial copy
     ]);
     assert.equal("waitFor" in captureCase, false);
   }
-  assert.equal(DOCS_SCREENSHOT_CASES.length, 18);
+  assert.equal(DOCS_SCREENSHOT_CASES.length, 9);
 });
 
 test("a loading tutorial cannot advance to target capture", async () => {

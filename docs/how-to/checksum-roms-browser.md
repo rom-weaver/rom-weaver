@@ -24,18 +24,7 @@ For ROM title lookup, use [Identify a ROM](identify-roms-browser.md). For termin
 You can add a text file, patch, ROM, archive, or any other file. Select a checksum row to copy its value.
 
 <figure class="docs-screenshot">
-  <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/checksum-initial-mobile-light.avif" width="1170" height="2532">
-    <source type="image/avif" srcset="../screenshots/checksum-initial-desktop-light.avif" width="2328" height="1800">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/checksum-initial-mobile-light.webp" width="1170" height="2532">
-    <img src="../screenshots/checksum-initial-desktop-light.webp" alt="The checksum page shows 0x01 Input and 0x02 Options, with algorithm choices and Auto extract checked in the light theme" width="2328" height="1800">
-  </picture>
-  <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/checksum-initial-mobile-dark.avif" width="1170" height="2532">
-    <source type="image/avif" srcset="../screenshots/checksum-initial-desktop-dark.avif" width="2328" height="1800">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/checksum-initial-mobile-dark.webp" width="1170" height="2532">
-    <img src="../screenshots/checksum-initial-desktop-dark.webp" alt="The checksum page shows 0x01 Input and 0x02 Options, with algorithm choices and Auto extract checked in the dark theme" width="2328" height="1800">
-  </picture>
+  <img src="../screenshots/checksum-initial-light.webp" alt="The checksum page shows 0x01 Input and 0x02 Options, with algorithm choices and Auto extract checked" width="1280" height="960">
   <figcaption>Choose algorithms and extraction in Options before adding a file.</figcaption>
 </figure>
 
