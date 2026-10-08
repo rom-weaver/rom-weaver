@@ -212,30 +212,32 @@ const ThemeSetting = () => {
       <span className="slabel">
         <span id="settings-theme-label">{localizer.message("settings.theme")}</span>
       </span>
-      <span className="sctl theme-picker">
-        <fieldset aria-labelledby="settings-theme-label" className="seg seg-fit" id="settings-theme">
-          {THEME_CHOICES.map((choice) => {
-            const name = localizer.message(choice.label);
-            return (
-              <button
-                aria-label={name}
-                aria-pressed={choice.value === preference}
-                className="seg-btn"
-                data-theme-choice={choice.value}
-                key={choice.value}
-                onClick={(event) => {
-                  const next: ThemePreference = choice.value;
-                  runAppearanceTransition(() => setPreference(next), "theme", event.currentTarget);
-                }}
-                title={name}
-                type="button"
-              >
-                {choice.icon(localizer, theme)}
-              </button>
-            );
-          })}
-        </fieldset>
-        <span className="theme-picker-name">{selected ? localizer.message(selected.label) : null}</span>
+      <span className="sctl">
+        <span className="theme-picker">
+          <fieldset aria-labelledby="settings-theme-label" className="seg seg-fit" id="settings-theme">
+            {THEME_CHOICES.map((choice) => {
+              const name = localizer.message(choice.label);
+              return (
+                <button
+                  aria-label={name}
+                  aria-pressed={choice.value === preference}
+                  className="seg-btn"
+                  data-theme-choice={choice.value}
+                  key={choice.value}
+                  onClick={(event) => {
+                    const next: ThemePreference = choice.value;
+                    runAppearanceTransition(() => setPreference(next), "theme", event.currentTarget);
+                  }}
+                  title={name}
+                  type="button"
+                >
+                  {choice.icon(localizer, theme)}
+                </button>
+              );
+            })}
+          </fieldset>
+          <span className="theme-picker-name">{selected ? localizer.message(selected.label) : null}</span>
+        </span>
       </span>
     </div>
   );
