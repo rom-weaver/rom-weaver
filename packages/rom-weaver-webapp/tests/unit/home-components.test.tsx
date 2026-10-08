@@ -213,7 +213,7 @@ describe("HomePage", () => {
 
   it.each([
     ["Windows NT 10.0", "Windows (PowerShell)", "Windows", "install.ps1"],
-    ["Macintosh; Intel Mac OS X", "Homebrew", "Homebrew", "brew install"],
+    ["Macintosh; Intel Mac OS X", "macOS / Linux", "macOS / Linux", "install.sh"],
     ["Linux x86_64", "macOS / Linux", "macOS / Linux", "install.sh"],
     ["iPhone; CPU iPhone OS 17_0 like Mac OS X", "macOS / Linux", "macOS / Linux", "install.sh"],
   ])("shows the installer for %s after hydration", (userAgent, label, tab, command) => {

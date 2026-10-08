@@ -81,11 +81,11 @@ Native release assets cover macOS arm64 and x86-64; Linux x86-64 GNU plus x86-64
 Three recommended ways to install:
 
 ```bash
-brew install rom-weaver/tap/rom-weaver
+curl -fsSL https://rom-weaver.com/install.sh | sh
 ```
 
 ```bash
-curl -fsSL https://rom-weaver.com/install.sh | sh
+brew install rom-weaver/tap/rom-weaver
 ```
 
 ```bash
@@ -93,7 +93,7 @@ npm install --global rom-weaver
 ```
 
 
-Homebrew covers macOS arm64/Intel and Linux arm64/x86-64. The install script covers macOS and Linux: it downloads the latest release to `~/.local/bin` and checks its build provenance, refusing a definite verification failure. If the check cannot run, it warns and continues unless strict verification is enabled; see [Verify a download](docs/how-to/verify-downloads.md). npm is the only channel covering every supported target at once, and needs Node.js 22+.
+The install script covers macOS and Linux: it downloads the latest release to `~/.local/bin` and checks its build provenance, refusing a definite verification failure. If the check cannot run, it warns and continues unless strict verification is enabled; see [Verify a download](docs/how-to/verify-downloads.md). Homebrew covers macOS arm64/Intel and Linux arm64/x86-64. npm is the only channel covering every supported target at once, and needs Node.js 22+.
 
 <a name="build-from-source"></a>
 
