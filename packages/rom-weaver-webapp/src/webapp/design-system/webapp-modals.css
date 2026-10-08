@@ -109,23 +109,8 @@ html:has(.rw-modal) {
   width: 100%;
   min-width: 0;
 }
-/* Theme: three icon segments plus the chosen name, like the accent picker. */
-.rw-app .theme-picker {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-s);
-  align-items: center;
-}
-.rw-app .theme-picker .seg-btn svg {
-  width: 17px;
-  height: 17px;
-}
-.rw-app .theme-picker-name {
-  font-size: 0.82rem;
-  color: var(--ink-2);
-}
 /* On the pressed accent fill the dye badge would vanish: invert it. */
-.rw-app .theme-picker .seg-btn[aria-pressed="true"] .theme-auto-badge {
+.rw-app [aria-pressed="true"] .theme-auto-badge {
   color: var(--thread-fill);
   background: var(--thread-ink);
 }

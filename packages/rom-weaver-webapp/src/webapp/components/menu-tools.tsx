@@ -112,12 +112,12 @@ const ThemeTile = ({
         ref={buttonRef}
         type="button"
       >
-        <Moon aria-hidden="true" className="ico-moon" />
-        <SunMedium aria-hidden="true" className="ico-sun" />
-        {/* Always rendered: html[data-theme-preference] shows it, so the
-            prerendered shell is right before hydration. */}
-        <span aria-hidden="true" className="theme-auto-badge">
-          {localizer.message("ui.theme.autoBadge")}
+        {/* The badge is always rendered and html[data-theme-preference] shows
+            it, so the prerendered shell is right before hydration. */}
+        <span aria-hidden="true" className="theme-auto-icon">
+          <Moon className="ico-moon" />
+          <SunMedium className="ico-sun" />
+          <span className="theme-auto-badge">{localizer.message("ui.theme.autoBadge")}</span>
         </span>
         {navRow ? (
           <span className="nav-row-label">{label}</span>

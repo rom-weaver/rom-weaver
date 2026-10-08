@@ -903,7 +903,8 @@
   border: 0;
   border-radius: var(--r-s);
 }
-.rw-app .tool-pop-item svg {
+.rw-app .tool-pop-item svg,
+.rw-app .theme-picker svg {
   flex: none;
   width: 17px;
   height: 17px;
@@ -1037,62 +1038,40 @@
   transform: rotate(-90deg) scale(0.5);
 }
 
-/* Auto badge: an "A" on the icon's lower corner while the theme follows the
-   system. The icon is masked away around it, so the gap reads on every surface
-   and hover state the button sits on. Offsets scale with the icon. */
-.rw-app .theme-tool,
-.rw-app .theme-auto-icon {
-  --theme-icon: 17px;
-  --theme-icon-x: 50%;
-  --theme-badge: 13px;
-  --theme-badge-offset: calc(var(--theme-icon) * 0.35);
-}
-.rw-app .topbar-tools .theme-tool {
-  --theme-icon: 24px;
-}
-.rw-app .nav-tool-anchor .theme-tool.nav-tool {
-  --theme-icon: 18px;
-  /* the 8px row padding plus half the 18px icon column */
-  --theme-icon-x: 17px;
-}
-.rw-app .theme-auto-badge {
-  position: absolute;
-  top: calc(50% + var(--theme-badge-offset) - var(--theme-badge) / 2);
-  left: calc(var(--theme-icon-x) + var(--theme-badge-offset) - var(--theme-badge) / 2);
-  display: none;
-  width: var(--theme-badge);
-  height: var(--theme-badge);
-  font-size: 9px;
-  font-weight: 800;
-  line-height: var(--theme-badge);
-  color: var(--thread-ink);
-  text-align: center;
-  pointer-events: none;
-  background: var(--thread);
-  border-radius: 50%;
-}
-:root[data-theme-preference="auto"] .rw-app .theme-auto-badge,
-.rw-app .theme-auto-icon .theme-auto-badge {
-  display: block;
-}
-/* The Match system menu item: the same mark, always badged. The badge hangs
-   past the icon box, so the box keeps that room from the label. */
+/* Auto badge: an "A" on the icon's lower corner. The icon is masked away
+   around it, so the gap reads on any surface; both scale with the icon box. */
 .rw-app .theme-auto-icon {
   position: relative;
   display: grid;
-  flex: none;
   place-items: center;
-  margin-inline-end: calc(var(--theme-icon) * 0.35 + var(--theme-badge) / 2 - var(--theme-icon) / 2);
 }
-:root[data-theme-preference="auto"] .rw-app .theme-tool svg,
+.rw-app .theme-auto-badge {
+  position: absolute;
+  top: calc(85% - 6.5px);
+  left: calc(85% - 6.5px);
+  width: 13px;
+  height: 13px;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 13px;
+  color: var(--thread-ink);
+  text-align: center;
+  background: var(--thread);
+  border-radius: 50%;
+}
 .rw-app .theme-auto-icon svg {
-  --theme-badge-cut: radial-gradient(
-    circle at calc(50% + var(--theme-badge-offset)) calc(50% + var(--theme-badge-offset)),
-    transparent calc(var(--theme-badge) / 2 + 1.5px),
-    #000 calc(var(--theme-badge) / 2 + 2px)
-  );
-  -webkit-mask-image: var(--theme-badge-cut);
-  mask-image: var(--theme-badge-cut);
+  mask-image: radial-gradient(circle at 85% 85%, #0000 8px, #000 8.5px);
+}
+/* The top-bar button carries the mark always; it shows only while auto. */
+:root:not([data-theme-preference="auto"]) .rw-app .theme-tool .theme-auto-badge {
+  display: none;
+}
+:root:not([data-theme-preference="auto"]) .rw-app .theme-tool svg {
+  mask-image: none;
+}
+/* In the menu the badge hangs past the icon box: keep it off the label. */
+.rw-app .tool-pop-item .theme-auto-icon {
+  margin-inline-end: 4px;
 }
 
 /* ── the phone dock ──
@@ -1432,9 +1411,6 @@
   .rw-app .shell-head-tools .tool svg {
     width: 24px;
     height: 24px;
-  }
-  .rw-app .shell-head-tools .theme-tool {
-    --theme-icon: 24px;
   }
   .rw-app .topbar-tools {
     display: none;
