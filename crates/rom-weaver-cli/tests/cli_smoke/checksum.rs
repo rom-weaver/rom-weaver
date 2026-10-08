@@ -1096,7 +1096,7 @@ fn checksum_headered_roms_include_remove_header_variant() {
             json["details"]["checksums"]["sha1"].as_str(),
             label_digest_value(label, "sha1")
         );
-        assert!(!label.contains("Remove header"));
+        assert!(!label.contains("Header removed"));
         let remove_header = checksum_variant_row(&json, "remove-header");
         assert_eq!(remove_header["checksums"]["sha1"], expected_sha1);
         assert_eq!(remove_header["applyCompatibility"]["removeHeader"], true);

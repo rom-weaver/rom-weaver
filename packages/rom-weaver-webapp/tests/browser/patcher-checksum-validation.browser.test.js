@@ -316,22 +316,22 @@ test("ROM info panel shows checksum variant rows", async () => {
               sha1: "0123456789abcdef0123456789abcdef01234567",
             },
             id: "remove-header",
-            label: "Remove header",
+            label: "Header removed",
           },
         ],
       },
     ),
   );
 
-  // Variants render as labeled sub-groups ("Remove header") inside the single
+  // Variants render as labeled sub-groups ("Header removed") inside the single
   // "Checks" drawer with their own BYTES/CRC32/MD5/SHA-1 value table; the raw
   // variant is folded into the main checksums.
   const inputRow = await waitForState(() => {
     const row = getInputStackRows()[0];
     if (!(row instanceof HTMLElement)) return null;
-    return row.textContent?.includes("Checks") && row.textContent.includes("Remove header") ? row : null;
+    return row.textContent?.includes("Checks") && row.textContent.includes("Header removed") ? row : null;
   }, 30000);
-  expect(inputRow.textContent).toContain("Remove header");
+  expect(inputRow.textContent).toContain("Header removed");
   expect(inputRow.textContent).toContain("12345678");
   expect(inputRow.textContent).toContain("0123456789abcdef0123456789abcdef");
   expect(inputRow.textContent).toContain("0123456789abcdef0123456789abcdef01234567");

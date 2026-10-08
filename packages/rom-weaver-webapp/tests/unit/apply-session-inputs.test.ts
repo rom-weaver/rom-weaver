@@ -87,14 +87,14 @@ describe("getProgressStagedInputInfo checksumVariantPlan from probe-variant-plan
       event({
         checksum_variant_plan: [
           { id: "raw", label: "Raw" },
-          { id: "remove-header", label: "Remove header" },
+          { id: "remove-header", label: "Header removed" },
         ],
         sourceId: "input-1",
       }),
     );
     expect(info.checksumVariantPlan).toEqual([
       { id: "raw", label: "Raw" },
-      { id: "remove-header", label: "Remove header" },
+      { id: "remove-header", label: "Header removed" },
     ]);
   });
 

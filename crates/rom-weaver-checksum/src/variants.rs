@@ -850,7 +850,7 @@ impl StreamingVariantChecksums {
             || header.get(..stripped).is_some_and(header_has_nsrt_metadata);
         Ok(Some(VariantHasher {
             id: "remove-header".to_string(),
-            label: "Remove header".to_string(),
+            label: "Header removed".to_string(),
             apply_compatibility: json!({
                 "removeHeader": true,
                 "strip_header": true,
