@@ -517,11 +517,11 @@ jobs:
           mkdir -p target/identify-data
           cp -a crates/rom-weaver-cli/data/identify/v1 target/identify-data/v1
 
-      # Restore WASM read-only on amd64; a cache miss uses the Dockerfile's source build.
-      # Selected arm64 legs compile WASM to check their toolchain, without delaying CLI legs.
+      # PRs MAY reuse main's architecture-independent module on either runner.
+      # Main and manual arm64 builds retain the full source-toolchain check.
       - name: Restore the built wasm module
         id: wasm
-        if: matrix.name == 'webapp' && matrix.arch == 'amd64'
+        if: matrix.name == 'webapp' && (matrix.arch == 'amd64' || github.event_name == 'pull_request')
         uses: ./.github/actions/wasm-cache
         with:
           variant: prod
