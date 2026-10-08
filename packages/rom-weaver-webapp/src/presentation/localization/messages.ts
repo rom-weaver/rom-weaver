@@ -10,19 +10,19 @@ import type { MessageId } from "./catalog.ts";
  * during Babel transforms. Plurals use ICU `{count, plural, ...}` messages.
  */
 const MESSAGES: Record<MessageId, MessageDescriptor> = {
-  "ui.hero.checksumThesis": msg({ id: "ui.hero.checksumThesis", message: "Checksum any file." }),
+  "ui.hero.checksumThesis": msg({ id: "ui.hero.checksumThesis", message: "Calculate file checksums." }),
   "ui.hero.checksumThesis2": msg({ id: "ui.hero.checksumThesis2", message: "Compare it with the expected value." }),
   "ui.hero.checksumDescription": msg({
     id: "ui.hero.checksumDescription",
     message:
-      "Choose checksums for any file. Auto extract opens archives and containers. Everything runs locally in your browser.",
+      "Calculate CRC32, MD5, SHA-1, SHA-256, and other file hashes. Compare them with expected checksums. Auto extract opens archives and containers. Everything runs locally in your browser.",
   }),
-  "ui.hero.compressThesis": msg({ id: "ui.hero.compressThesis", message: "Compress your files." }),
-  "ui.hero.compressThesis2": msg({ id: "ui.hero.compressThesis2", message: "Choose the output format." }),
+  "ui.hero.compressThesis": msg({ id: "ui.hero.compressThesis", message: "Compress ROMs and disc images." }),
+  "ui.hero.compressThesis2": msg({ id: "ui.hero.compressThesis2", message: "Create CHD, RVZ, or archives." }),
   "ui.hero.compressDescription": msg({
     id: "ui.hero.compressDescription",
     message:
-      "Create ZIP or 7z archives from your files. Compress compatible disc images and ROMs to CHD, RVZ, or Z3DS. Everything runs locally in your browser.",
+      "Compress ISO, BIN/CUE, or GDI disc images to CHD, and GameCube or Wii ISO to RVZ. Create Z3DS ROMs, ZIP, or 7z archives. Everything runs locally in your browser.",
   }),
   "ui.compress.drop": msg({ id: "ui.compress.drop", message: "Drop files to compress them" }),
   "ui.compress.tap": msg({ id: "ui.compress.tap", message: "Tap to add files to compress" }),
@@ -1400,13 +1400,14 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.hero.extractDescription": msg({
     id: "ui.hero.extractDescription",
     message:
-      "Extract every file from a ZIP, 7z, CHD, or other supported archive or disc image. Archives inside it are extracted too. Download one file, or several as one ZIP.",
+      "Convert GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, BIN/CUE for CDs, or GDI with tracks for GD-ROMs. Extract ZIP, 7z, Z3DS, and other supported formats locally in your browser.",
   }),
-  "ui.hero.extractThesis": msg({ id: "ui.hero.extractThesis", message: "Open the archive." }),
-  "ui.hero.extractThesis2": msg({ id: "ui.hero.extractThesis2", message: "Keep only the files you need." }),
+  "ui.hero.extractThesis": msg({ id: "ui.hero.extractThesis", message: "Decompress CHD and RVZ." }),
+  "ui.hero.extractThesis2": msg({ id: "ui.hero.extractThesis2", message: "Extract disc images and archives." }),
   "ui.hero.identifyDescription": msg({
     id: "ui.hero.identifyDescription",
-    message: "Match your ROM’s checksum against the local database to find its exact dump name.",
+    message:
+      "Identify a ROM file or paste a CRC32, MD5, or SHA-1 checksum to search the local ROM database. Find known dump names, regions, and revisions. Find games also searches by name or checksum.",
   }),
   "ui.hero.trimDescription": msg({
     id: "ui.hero.trimDescription",
@@ -1446,11 +1447,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.hero.testThesis2": msg({ id: "ui.hero.testThesis2", message: "See your changes in play." }),
   "ui.hero.identifyThesis": msg({
     id: "ui.hero.identifyThesis",
-    message: "Know your ROM.",
+    message: "Identify your ROM.",
   }),
   "ui.hero.identifyThesis2": msg({
     id: "ui.hero.identifyThesis2",
-    message: "Find its exact match.",
+    message: "Look up its checksum.",
   }),
   "ui.hero.toolsThesis": msg({
     id: "ui.hero.toolsThesis",

@@ -1161,7 +1161,7 @@ msgstr "Checksum {timing}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.checksumThesis"
-msgstr "Checksum any file."
+msgstr "Calculate file checksums."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1201,7 +1201,7 @@ msgstr "Choose another ROM"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.checksumDescription"
-msgstr "Choose checksums for any file. Auto extract opens archives and containers. Everything runs locally in your browser."
+msgstr "Calculate CRC32, MD5, SHA-1, SHA-256, and other file hashes. Compare them with expected checksums. Auto extract opens archives and containers. Everything runs locally in your browser."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1221,7 +1221,7 @@ msgstr "Choose the game you need"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.compressThesis2"
-msgstr "Choose the output format."
+msgstr "Create CHD, RVZ, or archives."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1341,7 +1341,7 @@ msgstr "Compress the result"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.compressThesis"
-msgstr "Compress your files."
+msgstr "Compress ROMs and disc images."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1466,7 +1466,7 @@ msgstr "Create tool"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.compressDescription"
-msgstr "Create ZIP or 7z archives from your files. Compress compatible disc images and ROMs to CHD, RVZ, or Z3DS. Everything runs locally in your browser."
+msgstr "Compress ISO, BIN/CUE, or GDI disc images to CHD, and GameCube or Wii ISO to RVZ. Create Z3DS ROMs, ZIP, or 7z archives. Everything runs locally in your browser."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1861,7 +1861,7 @@ msgstr "extract"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.extractDescription"
-msgstr "Extract every file from a ZIP, 7z, CHD, or other supported archive or disc image. Archives inside it are extracted too. Download one file, or several as one ZIP."
+msgstr "Convert GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, BIN/CUE for CDs, or GDI with tracks for GD-ROMs. Extract ZIP, 7z, Z3DS, and other supported formats locally in your browser."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1946,7 +1946,7 @@ msgstr "Find games (by name/checksum), tools, docs, or settings..."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyThesis2"
-msgstr "Find its exact match."
+msgstr "Look up its checksum."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2251,7 +2251,7 @@ msgstr "Keep header: the patched output carries the ROM header."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.extractThesis2"
-msgstr "Keep only the files you need."
+msgstr "Extract disc images and archives."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2286,7 +2286,7 @@ msgstr "Keeps this selection"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyThesis"
-msgstr "Know your ROM."
+msgstr "Identify your ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2431,7 +2431,7 @@ msgstr "Match system"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.identifyDescription"
-msgstr "Match your ROM’s checksum against the local database to find its exact dump name."
+msgstr "Identify a ROM file or paste a CRC32, MD5, or SHA-1 checksum to search the local ROM database. Find known dump names, regions, and revisions. Find games also searches by name or checksum."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2851,7 +2851,7 @@ msgstr "Open source, forever"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.extractThesis"
-msgstr "Open the archive."
+msgstr "Decompress CHD and RVZ."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -1,6 +1,6 @@
-# Convert ISO or BIN/CUE to CHD in the browser
+# Compress ISO or BIN/CUE to CHD online
 
-Convert ISO or BIN/CUE to CHD with Compress, locally in your browser. No patch, upload, or account is needed.
+Compress ISO or BIN/CUE disc images to CHD locally in your browser. Use this CHD converter without uploads or an account.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -39,4 +39,4 @@ CHD can reduce disc storage while preserving the disc layout. Emulator support v
 
 The browser needs working space for the source, staged tracks, and output. Keep the source files until you test the CHD.
 
-To reverse this workflow, follow [Convert CHD to ISO or BIN/CUE](extract-files-browser.md#convert-chd-to-iso-or-bincue). [Choosing a compression format](../explanation/compression-formats.md) compares CHD with RVZ and archives.
+To reverse this workflow, follow [Extract CHD to ISO, BIN/CUE, or GDI](extract-chd-browser.md). [Choosing a compression format](../explanation/compression-formats.md) compares CHD with RVZ and archives.

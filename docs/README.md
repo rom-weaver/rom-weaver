@@ -41,14 +41,15 @@ Guided runs in the app: [Apply](https://rom-weaver.com/apply-patches?guide=apply
 | --- | --- |
 | Add a translation or other game change | [Apply a patch](how-to/apply-rom-patches.md) |
 | Share changes I made | [Create a patch](how-to/create-rom-patches.md) or [bundle a recipe](how-to/create-bundles.md) |
-| Find which game or revision a file contains | [Identify and compare checksums](how-to/identify-roms-browser.md) |
+| Find which game or revision a file contains | [Identify a ROM by checksum](how-to/identify-roms-browser.md) |
+| Find a ROM from an existing CRC32, MD5, or SHA-1 hash | [Search ROM checksums](how-to/search-rom-checksums-browser.md) |
 | Check a file against an expected checksum | [Checksum a file](how-to/checksum-roms-browser.md) |
 | Take files out of an archive | [Extract files](how-to/extract-files-browser.md) |
 | Package files or compress a disc image | [Compress files](how-to/convert-roms-browser.md) |
 | Make a game's file smaller | [Compress files](how-to/convert-roms-browser.md), or [trim padding](how-to/trim-roms-browser.md) |
 | Convert RVZ to ISO | [Extract an ISO from RVZ](how-to/convert-rvz-to-iso-browser.md) |
 | Convert ISO or BIN/CUE to CHD | [Create a CHD](how-to/convert-to-chd-browser.md) |
-| Convert CHD to ISO or BIN/CUE | [Extract a disc from CHD](how-to/extract-files-browser.md#convert-chd-to-iso-or-bincue) |
+| Decompress CHD to ISO, BIN/CUE, or GDI | [Extract a disc from CHD](how-to/extract-chd-browser.md) |
 | Compress a GameCube or Wii ISO | [Convert ISO to RVZ](how-to/convert-to-rvz-browser.md) |
 | Compress a Nintendo 3DS ROM | [Create a Z3DS file](how-to/convert-to-z3ds-browser.md) |
 | Decompress Z3DS, ZCCI, ZCXI, ZCIA, or Z3DSX | [Extract a Nintendo 3DS file](how-to/extract-z3ds-browser.md) |
@@ -78,11 +79,13 @@ Procedures for specific tasks.
 - [Use cheats in the browser](how-to/use-browser-cheats.md)
 - [Create a ROM patch](how-to/create-rom-patches.md)
 - [Create and share a patch bundle](how-to/create-bundles.md)
-- [Identify a ROM and compare checksums](how-to/identify-roms-browser.md)
+- [Identify a ROM by checksum](how-to/identify-roms-browser.md)
+- [Search ROM checksums](how-to/search-rom-checksums-browser.md)
 - [Checksum a file](how-to/checksum-roms-browser.md)
 - [Extract files from an archive or disc image](how-to/extract-files-browser.md)
 - [Compress files or disc images](how-to/convert-roms-browser.md)
 - [Convert RVZ to ISO](how-to/convert-rvz-to-iso-browser.md)
+- [Decompress CHD to ISO, BIN/CUE, or GDI](how-to/extract-chd-browser.md)
 - [Convert ISO or BIN/CUE to CHD](how-to/convert-to-chd-browser.md)
 - [Convert GameCube or Wii ISO to RVZ](how-to/convert-to-rvz-browser.md)
 - [Compress Nintendo 3DS ROMs to Z3DS](how-to/convert-to-z3ds-browser.md)

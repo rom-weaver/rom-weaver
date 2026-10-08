@@ -16,21 +16,21 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
   checksum: Object.freeze({
     description:
-      "Calculate CRC32, MD5, SHA-1, SHA-256, and other checksums of any file locally in your browser, with optional archive extraction. Compare them with an expected value. No uploads or account required.",
+      "Calculate and compare CRC32, MD5, SHA-1, SHA-256, and other file hashes locally in your browser. Check ROMs or archive contents against expected checksums. No uploads.",
     slug: "checksum",
-    title: `${SITE_NAME}: Checksum a file online`,
+    title: `CRC32, MD5 & SHA checksum calculator online | ${SITE_NAME}`,
   }),
   compress: Object.freeze({
     description:
-      "Compress ISO or BIN/CUE to CHD, GameCube and Wii ISO to RVZ, and Nintendo 3DS ROMs to Z3DS in your browser. Create ZIP and 7z archives. No uploads.",
+      "Compress ISO, BIN/CUE, or GDI disc images to CHD and GameCube or Wii ISO to RVZ locally in your browser. Create Z3DS ROMs, ZIP, and 7z archives. No uploads.",
     slug: "compress",
-    title: `${SITE_NAME}: Compress ROMs to CHD, RVZ, and Z3DS online`,
+    title: `ISO to CHD & RVZ: Compress ROMs online | ${SITE_NAME}`,
   }),
   extract: Object.freeze({
     description:
-      "Convert RVZ to ISO, extract CHD to ISO or BIN/CUE, and decompress Z3DS, ZCCI, ZCXI, ZCIA, and Z3DSX locally in your browser. No uploads.",
+      "Convert GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, BIN/CUE for CDs, or GDI with tracks for GD-ROMs locally in your browser. Extract archives and Z3DS.",
     slug: "extract",
-    title: `RVZ to ISO, CHD & Z3DS extractor online | ${SITE_NAME}`,
+    title: `RVZ to ISO & CHD decompression online | ${SITE_NAME}`,
   }),
   // The apex. An empty slug is deliberate: the canonical URL is the bare origin.
   home: Object.freeze({
@@ -41,9 +41,9 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
   identify: Object.freeze({
     description:
-      "Identify a ROM by checksum: look up its game, region, revision, and known dump name, then inspect known cheat codes. Your file stays in your browser.",
+      "Identify ROMs or search CRC32, MD5, and SHA-1 hashes. Find known games, regions, and revisions, then inspect known cheat codes. No uploads.",
     slug: "identify-rom",
-    title: `${SITE_NAME}: Identify ROMs online`,
+    title: `ROM identification & checksum lookup online | ${SITE_NAME}`,
   }),
   patcher: Object.freeze({
     description:

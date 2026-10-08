@@ -1,8 +1,8 @@
-# Checksum a file in the browser
+# Calculate and compare ROM checksums in the browser
 
 Calculate CRC32, MD5, SHA-1, and other file checksums in your browser, then compare them with an expected value. Your file stays on your device.
 
-For ROM title lookup, use [Identify a ROM](identify-roms-browser.md). For terminal procedures, see [Hash a file](identify-and-hash-files.md#hash-a-file).
+To identify your file, use [Identify a ROM by checksum](identify-roms-browser.md). Already have a hash? Use [ROM checksum search](search-rom-checksums-browser.md) to find database records. For terminal procedures, see [Hash a file](identify-and-hash-files.md#hash-a-file).
 
 <!-- START doctoc -->
 ## Table of contents

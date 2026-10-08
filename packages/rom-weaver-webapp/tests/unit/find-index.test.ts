@@ -91,7 +91,7 @@ describe("searchFind", () => {
     expect(identify[0]?.entry).toMatchObject({
       id: "tool:identify",
       kind: "tool",
-      hint: "Match your ROM’s checksum against the local database to find its exact dump name.",
+      hint: "Identify a ROM file or paste a CRC32, MD5, or SHA-1 checksum to search the local ROM database. Find known dump names, regions, and revisions. Find games also searches by name or checksum.",
     });
   });
 
