@@ -1371,6 +1371,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       onFiles: handleUnifiedDrop,
       onboarding: createSourcesActuallyEmpty ? (
         <SampleTutorialStart
+          chipLabel={localizer.message("ui.tutorial.tryCreate")}
           documentation={{
             href: resolveAssetUrl(resolvedAssetBaseUrl, WORKFLOW_GUIDES.create.path),
             label: localizer.message(WORKFLOW_GUIDES.create.label),

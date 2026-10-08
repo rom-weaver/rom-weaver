@@ -1052,14 +1052,17 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.tutorial.loading": msg({ id: "ui.tutorial.loading", message: "Loading sample files…" }),
   "ui.tutorial.loadingProgress": msg({ id: "ui.tutorial.loadingProgress", message: "Loading sample files" }),
   "ui.tutorial.loadingTitle": msg({ id: "ui.tutorial.loadingTitle", message: "Loading the sample files" }),
-  "ui.tutorial.new": msg({ id: "ui.tutorial.new", message: "New here?" }),
   "ui.tutorial.practiceFiles": msg({ id: "ui.tutorial.practiceFiles", message: "Practice files:" }),
   "ui.tutorial.downloadPractice": msg({ id: "ui.tutorial.downloadPractice", message: "Download {file}" }),
   "ui.tutorial.preparing": msg({ id: "ui.tutorial.preparing", message: "Getting the sample ready…" }),
   "ui.tutorial.preparingProgress": msg({ id: "ui.tutorial.preparingProgress", message: "Getting the sample ready" }),
   "ui.tutorial.start": msg({ id: "ui.tutorial.start", message: "Practice with sample files" }),
   "ui.tutorial.step": msg({ id: "ui.tutorial.step", message: "Practice run · Step {step} of {total}" }),
+  "ui.tutorial.tryApply": msg({ id: "ui.tutorial.tryApply", message: "Patch a sample" }),
+  "ui.tutorial.tryBundle": msg({ id: "ui.tutorial.tryBundle", message: "Bundle a sample" }),
+  "ui.tutorial.tryCreate": msg({ id: "ui.tutorial.tryCreate", message: "Create a sample" }),
   "ui.tutorial.tryIt": msg({ id: "ui.tutorial.tryIt", message: "Try it" }),
+  "ui.tutorial.tryTest": msg({ id: "ui.tutorial.tryTest", message: "Play a sample" }),
   "ui.tutorial.view.title": msg({ id: "ui.tutorial.view.title", message: "Choose how much to see" }),
   "ui.tutorial.view.simpleBody": msg({
     id: "ui.tutorial.view.simpleBody",
@@ -1152,7 +1155,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "settings.logLevel": msg({ id: "settings.logLevel", message: "Log level" }),
   "settings.onboardingEnabled": msg({
     id: "settings.onboardingEnabled",
-    message: 'Show the "New here?" quick-start tips',
+    message: "Show the sample quick-start links",
   }),
   "settings.offlineCopyEnabled": msg({ id: "settings.offlineCopyEnabled", message: "Keep an offline copy" }),
   "settings.offlineCopyHelp": msg({

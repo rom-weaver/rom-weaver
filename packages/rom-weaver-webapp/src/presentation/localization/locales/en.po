@@ -335,6 +335,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.tutorial.new"
+#~ msgstr "New here?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", an output extension. The format selector adds the extension; remove it to avoid a doubled name."
 
@@ -950,6 +955,11 @@ msgstr "Bundle + patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tutorial.tryBundle"
+msgstr "Bundle a sample"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.outputFilename"
 msgstr "Bundle output name (without extension)"
 
@@ -1432,6 +1442,11 @@ msgstr "Create {format} ROM Bundle"
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.createDownload"
 msgstr "Create & download"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.tryCreate"
+msgstr "Create a sample"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2580,11 +2595,6 @@ msgstr "Nested archives are handled recursively."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tutorial.new"
-msgstr "New here?"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.channel.nightly"
 msgstr "Nightly build"
 
@@ -3040,6 +3050,11 @@ msgstr "Patch {position} of {total}. Reordering unavailable."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tutorial.tryApply"
+msgstr "Patch a sample"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.actions"
 msgstr "Patch actions"
 
@@ -3182,6 +3197,11 @@ msgstr "Platform"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.platformCandidates"
 msgstr "Platform candidates"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.tryTest"
+msgstr "Play a sample"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3821,7 +3841,7 @@ msgstr "Show detailed file information"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.onboardingEnabled"
-msgstr "Show the \"New here?\" quick-start tips"
+msgstr "Show the sample quick-start links"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

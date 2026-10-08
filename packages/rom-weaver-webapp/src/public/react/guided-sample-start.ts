@@ -55,7 +55,7 @@ const clearGuidedSampleQuery = () => {
   window.history.replaceState(window.history.state, "", url);
 };
 
-/** "Hide this button" on the New here? beacon. The webapp shell persists it
+/** "Hide this button" on the sample link. The webapp shell persists it
     into the onboardingEnabled setting; embeds without a listener lose nothing -
     the beacon still hides itself for the session. */
 const requestOnboardingDismiss = () => {

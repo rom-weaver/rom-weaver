@@ -335,6 +335,11 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+#~ msgid "ui.tutorial.new"
+#~ msgstr "Neu hier?"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", eine Ausgabe-Endung. Die Formatauswahl fügt die Endung hinzu; entferne sie, um einen doppelten Namen zu vermeiden."
 
@@ -950,6 +955,11 @@ msgstr "Bundle + Patches (.zip)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tutorial.tryBundle"
+msgstr "Bündeln"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.bundleExport.outputFilename"
 msgstr "Bundle-Ausgabename (ohne Erweiterung)"
 
@@ -1432,6 +1442,11 @@ msgstr "{format}-ROM-Bundle erstellen"
 #: src/presentation/localization/messages.ts
 msgid "ui.create.tutorial.createDownload"
 msgstr "Erstellen und herunterladen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.tryCreate"
+msgstr "Patch bauen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2580,11 +2595,6 @@ msgstr "Verschachtelte Archive werden rekursiv verarbeitet."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tutorial.new"
-msgstr "Neu hier?"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.channel.nightly"
 msgstr "Nightly-Build"
 
@@ -3040,6 +3050,11 @@ msgstr "Patch {position} von {total}. Sortieren nicht verfügbar."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.tutorial.tryApply"
+msgstr "Patch testen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.actions"
 msgstr "Patch-Aktionen"
 
@@ -3182,6 +3197,11 @@ msgstr "Plattform"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.platformCandidates"
 msgstr "Mögliche Plattformen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.tutorial.tryTest"
+msgstr "Spiel testen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3821,7 +3841,7 @@ msgstr "Detaillierte Dateiinformationen anzeigen"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.onboardingEnabled"
-msgstr "Schnellstart-Tipps („New here?“) anzeigen"
+msgstr "Schnellstart-Links mit Beispielen anzeigen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

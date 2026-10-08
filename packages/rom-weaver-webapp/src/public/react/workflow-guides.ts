@@ -1,7 +1,7 @@
 import type { WorkflowGuide } from "./components/ds/unified-drop-zone.tsx";
 
 /**
- * Each workflow's browser how-to page. The hero help row and the "New here?"
+ * Each workflow's browser how-to page. The hero help row and the sample-link
  * menu both link it, so the two MUST stay on the same page. Paths are
  * published doc slugs (see `DOC_SOURCES` in `webapp/docs-routing.mjs`).
  */

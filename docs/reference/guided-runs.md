@@ -33,10 +33,10 @@ A step that needs a control the page does not show, such as the **Detailed** swi
 
 ## Where a run starts
 
-- A link with `?guide=`, as in the table above. It works even when **New here?** is hidden.
-- **New here?** below an empty drop zone: Apply offers Apply and Apply cheats, Create offers Create and Create cheats, and Bundle and Test offer their own run.
+- A link with `?guide=`, as in the table above. It works even when the sample link is hidden.
+- The sample link below an empty drop zone, named for its page: **Patch a sample** offers Apply and Apply cheats, **Create a sample** offers Create and Create cheats, and **Bundle a sample** and **Play a sample** offer their own run.
 
-**Hide this button** in that menu removes **New here?**; the **Show the "New here?" quick-start tips** [setting](../how-to/browser-settings.md) brings it back.
+**Hide this button** in that menu removes the sample link; the **Show the sample quick-start links** [setting](../how-to/browser-settings.md) brings it back.
 
 ## Ways files get into Apply
 
@@ -53,7 +53,7 @@ All of these feed **0x01 Inputs**, which puts each file on its card.
 
 ## Practice files
 
-| File | Contents | **New here?** download |
+| File | Contents | Sample link download |
 | --- | --- | --- |
 | `first-weave.zip` | `hello-world.nes`, two IPS patches, and a bundle manifest | **Download a test bundle** (Apply, Bundle) |
 | `first-create.zip` | `hello-world.nes` and `modified-world.nes` | **Download samples** (Create) |

@@ -641,7 +641,7 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
     if (typeof localStorage !== "undefined" && event.storageArea && event.storageArea !== localStorage) return;
     webappController.reloadPersistedSettings();
   });
-  // "Hide this button" on the New here? beacon persists through the
+  // "Hide this button" on the sample link persists through the
   // settings so the Settings panel checkbox can bring it back.
   window.addEventListener(ONBOARDING_DISMISS_EVENT, () => webappController.setOnboardingEnabled(false));
   if (!isNotFoundPage) {

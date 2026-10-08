@@ -156,6 +156,7 @@ export const ApplySampleStart = ({
   const guide = bundlePage ? WORKFLOW_GUIDES.bundle : WORKFLOW_GUIDES.apply;
   return (
     <SampleTutorialStart
+      chipLabel={localizer.message(bundlePage ? "ui.tutorial.tryBundle" : "ui.tutorial.tryApply")}
       documentation={{ href: resolveAssetUrl(assetBaseUrl, guide.path), label: localizer.message(guide.label) }}
       downloadHref={downloadHref}
       downloadLabel={localizer.message("ui.apply.tutorial.downloadTestBundle")}

@@ -528,8 +528,13 @@ const RomSearch = ({
       input.style.paddingInlineEnd = "";
       return;
     }
+    // Measured from the box's end edge, so the CSS inset is included and the
+    // placeholder keeps a 6px gap before the button.
     const reserve = () => {
-      input.style.paddingInlineEnd = `${sample.offsetWidth + 8}px`;
+      const box = input.getBoundingClientRect();
+      const button = sample.getBoundingClientRect();
+      const span = getComputedStyle(input).direction === "rtl" ? button.right - box.left : box.right - button.left;
+      input.style.paddingInlineEnd = `${Math.ceil(span) + 6}px`;
     };
     reserve();
     // A late web font or a locale change resizes the label after first paint.
@@ -626,6 +631,7 @@ const RomSearch = ({
             ref={sampleRef}
             type="button"
           >
+            <span aria-hidden="true" className="sample-tutorial-start-knot" />
             {sampleLabel}
           </button>
         ) : null}

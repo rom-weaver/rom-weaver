@@ -808,11 +808,14 @@
   min-width: 0;
   text-overflow: ellipsis;
 }
-/* The no-file sample reuses the onboarding chip's pill and 44px target, set
-   inside the empty box's end; the row's centering places it vertically. */
+/* The no-file sample reuses the onboarding sample link's look and 44px
+   target, set inside the empty box's end; the row's centering places it
+   vertically. It shows only while the box is empty, so typed text never runs
+   under it. The inset keeps its text about as far from the box's end as
+   the placeholder sits from its start. */
 .rw-app .identify-search-sample {
   position: absolute;
-  inset-inline-end: 2px;
+  inset-inline-end: 10px;
 }
 .rw-app .identify-search-error {
   flex-basis: 100%;

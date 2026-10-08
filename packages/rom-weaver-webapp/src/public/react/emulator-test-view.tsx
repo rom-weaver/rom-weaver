@@ -701,6 +701,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
         onboarding={
           loadProgress ? null : (
             <SampleTutorialStart
+              chipLabel={localizer.message("ui.tutorial.tryTest")}
               documentation={{
                 href: resolveAssetUrl(assetBaseUrl, WORKFLOW_GUIDES.test.path),
                 label: localizer.message(WORKFLOW_GUIDES.test.label),

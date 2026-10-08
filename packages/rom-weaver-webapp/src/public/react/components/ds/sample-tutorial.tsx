@@ -1,7 +1,7 @@
 import {
   Archive,
-  Bell,
   BookOpen,
+  ChevronUp,
   Download,
   EllipsisVertical,
   FileDiff,
@@ -489,6 +489,7 @@ const unionRect = (rect: GuideRect, other: GuideRect | undefined): GuideRect => 
 };
 
 const SampleTutorialStart = ({
+  chipLabel,
   documentation,
   downloadHref,
   downloadLabel,
@@ -504,6 +505,8 @@ const SampleTutorialStart = ({
   startAction = "apply",
   secondaryAction = "package",
 }: {
+  /** The page's own call to action on the closed chip ("Patch a sample"). */
+  chipLabel: string;
   documentation?: { href: string; label: string };
   downloadHref: string;
   downloadLabel: string;
@@ -581,8 +584,9 @@ const SampleTutorialStart = ({
         ref={chipRef}
         type="button"
       >
-        <Bell aria-hidden="true" className="sample-tutorial-start-bell" />
-        {localizer.message("ui.tutorial.new")}
+        <span aria-hidden="true" className="sample-tutorial-start-knot" />
+        {chipLabel}
+        <ChevronUp aria-hidden="true" className="sample-tutorial-start-caret" />
       </button>
       {/* Mounted only while open: the closed popover would otherwise ship in
           the prerendered shell - four inline SVGs and all - on every page. */}
