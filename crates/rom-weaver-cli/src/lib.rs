@@ -172,9 +172,10 @@ detected platform pick the pack. Nothing is uploaded."
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
-            about = "Install the offline identify database",
+            about = "Install the offline identify and cheat databases",
             long_about = "\
-Install the identify database this build's `identify` command searches.
+Install the identify database this build's `identify` command searches, plus
+the cheat shards that `cheat` and bundle cheat steps read.
 
 Run it once after installing rom-weaver by a method that ships only the
 executable, such as `cargo binstall` or `cargo install`. The Homebrew, scoop,
