@@ -1040,7 +1040,8 @@
 /* Auto badge: an "A" on the icon's lower corner while the theme follows the
    system. The icon is masked away around it, so the gap reads on every surface
    and hover state the button sits on. Offsets scale with the icon. */
-.rw-app .theme-tool {
+.rw-app .theme-tool,
+.rw-app .theme-auto-icon {
   --theme-icon: 17px;
   --theme-icon-x: 50%;
   --theme-badge: 13px;
@@ -1070,10 +1071,21 @@
   background: var(--thread);
   border-radius: 50%;
 }
-:root[data-theme-preference="auto"] .rw-app .theme-auto-badge {
+:root[data-theme-preference="auto"] .rw-app .theme-auto-badge,
+.rw-app .theme-auto-icon .theme-auto-badge {
   display: block;
 }
-:root[data-theme-preference="auto"] .rw-app .theme-tool svg {
+/* The Match system menu item: the same mark, always badged. The badge hangs
+   past the icon box, so the box keeps that room from the label. */
+.rw-app .theme-auto-icon {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  margin-inline-end: calc(var(--theme-icon) * 0.35 + var(--theme-badge) / 2 - var(--theme-icon) / 2);
+}
+:root[data-theme-preference="auto"] .rw-app .theme-tool svg,
+.rw-app .theme-auto-icon svg {
   --theme-badge-cut: radial-gradient(
     circle at calc(50% + var(--theme-badge-offset)) calc(50% + var(--theme-badge-offset)),
     transparent calc(var(--theme-badge) / 2 + 1.5px),
