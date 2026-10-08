@@ -9,6 +9,7 @@ import { ACCENTS } from "./accent.ts";
 import { setAdvancedSettings, useAdvancedSettings } from "./advanced-settings.ts";
 import { runAppearanceTransition } from "./appearance-transition.ts";
 import { InfoToggle } from "./components/info-toggle.tsx";
+import { THEME_CHOICES } from "./components/menu-tools.tsx";
 import { useUiLocalizer } from "../public/react/settings-context.tsx";
 import type { IdentifyPackGroupState } from "../platform/browser/identify-packs.ts";
 import { useTheme, type ThemePreference } from "./theme.ts";
@@ -202,33 +203,41 @@ const AccentPicker = ({ fieldKey, draftSettings, uiState, onDraftChange }: Field
 
 const ThemeSetting = () => {
   const localizer = useUiLocalizer();
-  const { preference, setPreference } = useTheme();
-  const themeOptions: Array<{ value: ThemePreference; label: string }> = [
-    { label: localizer.message("ui.theme.auto"), value: "auto" },
-    { label: localizer.message("ui.theme.light"), value: "light" },
-    { label: localizer.message("ui.theme.dark"), value: "dark" },
-  ];
+  const { preference, setPreference, theme } = useTheme();
+  const selected = THEME_CHOICES.find((choice) => choice.value === preference);
+  /* The same three marks as the top bar's theme menu, so Match system reads
+     as the badged icon in both places. It commits at once, like the menu. */
   return (
     <div className="setrow">
       <span className="slabel">
-        <label htmlFor="settings-theme">{localizer.message("settings.theme")}</label>
+        <span id="settings-theme-label">{localizer.message("settings.theme")}</span>
       </span>
       <span className="sctl">
-        <DropdownSelect
-          className="select"
-          id="settings-theme"
-          onChange={(event) => {
-            const preference = event.currentTarget.value as ThemePreference;
-            runAppearanceTransition(() => setPreference(preference), "theme", event.currentTarget);
-          }}
-          value={preference}
-        >
-          {themeOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </DropdownSelect>
+        <span className="theme-picker">
+          <fieldset aria-labelledby="settings-theme-label" className="seg seg-fit" id="settings-theme">
+            {THEME_CHOICES.map((choice) => {
+              const name = localizer.message(choice.label);
+              return (
+                <button
+                  aria-label={name}
+                  aria-pressed={choice.value === preference}
+                  className="seg-btn"
+                  data-theme-choice={choice.value}
+                  key={choice.value}
+                  onClick={(event) => {
+                    const next: ThemePreference = choice.value;
+                    runAppearanceTransition(() => setPreference(next), "theme", event.currentTarget);
+                  }}
+                  title={name}
+                  type="button"
+                >
+                  {choice.icon(localizer, theme)}
+                </button>
+              );
+            })}
+          </fieldset>
+          <span className="theme-picker-name">{selected ? localizer.message(selected.label) : null}</span>
+        </span>
       </span>
     </div>
   );

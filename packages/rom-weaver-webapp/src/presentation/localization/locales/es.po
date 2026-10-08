@@ -430,6 +430,11 @@ msgstr "Códec 7z"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.theme.autoBadge"
+msgstr "A"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.inputHandling.bundleContents"
 msgstr "Un paquete puede ser un archivo JSON o un archivo con ese archivo y sus parches. Puede incluir la ROM; de lo contrario, proporciona la ROM coincidente por separado."
 

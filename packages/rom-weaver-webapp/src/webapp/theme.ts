@@ -2,7 +2,8 @@ import { useSyncExternalStore } from "react";
 import { createLogger } from "../lib/logging.ts";
 
 /**
- * Persist an explicit theme or follow the OS preference, and reflect it on html[data-theme].
+ * Persist an explicit theme or follow the OS preference, and reflect it on html[data-theme]
+ * (the resolved theme) and html[data-theme-preference] (the choice, auto included).
  * The store can be used directly or through its React hook.
  */
 
@@ -63,6 +64,13 @@ const applyTheme = (theme: Theme) => {
   logger.trace("Applied theme", { theme, userPreference });
 };
 
+// The theme button's Auto badge keys off this, as index.html sets it pre-paint.
+const applyPreference = (preference: ThemePreference) => {
+  if (typeof document !== "undefined" && document.documentElement) {
+    document.documentElement.setAttribute("data-theme-preference", preference);
+  }
+};
+
 const notify = () => {
   for (const listener of listeners) listener();
 };
@@ -77,6 +85,7 @@ const setTheme = (theme: Theme): boolean => {
 const setPreference = (preference: ThemePreference) => {
   userPreference = preference;
   writeStoredPreference(preference);
+  applyPreference(preference);
   const changed = setTheme(preference === "auto" ? getSystemTheme() : preference);
   if (!changed) notify();
 };
@@ -89,6 +98,7 @@ const initTheme = () => {
   if (initialized) return;
   initialized = true;
   userPreference = readStoredPreference() ?? "auto";
+  applyPreference(userPreference);
   applyTheme(userPreference === "auto" ? getSystemTheme() : userPreference);
   if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
     const media = window.matchMedia(DARK_QUERY);

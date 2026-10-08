@@ -1,4 +1,4 @@
-import { Heart, MonitorCog, Moon, Paintbrush, Settings, SunMedium } from "lucide-react";
+import { Heart, Moon, Paintbrush, Settings, SunMedium } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { ACCENTS, useAccent } from "../accent.ts";
@@ -10,10 +10,26 @@ import { useTheme } from "../theme.ts";
 import { Github } from "./shell-common.tsx";
 import { guardExternalClick } from "./runtime-status.tsx";
 
-const THEME_CHOICES: ReadonlyArray<{ icon: ReactNode; label: MessageId; value: ThemePreference }> = [
-  { icon: <SunMedium aria-hidden="true" />, label: "ui.theme.light", value: "light" },
-  { icon: <Moon aria-hidden="true" />, label: "ui.theme.dark", value: "dark" },
-  { icon: <MonitorCog aria-hidden="true" />, label: "ui.theme.matchSystem", value: "auto" },
+/** Match system wears the button's auto look: the live sun or moon plus the badge. */
+const ThemeAutoIcon = ({ localizer, theme }: { localizer: Localizer; theme: "dark" | "light" }) => (
+  <span aria-hidden="true" className="theme-auto-icon">
+    {theme === "dark" ? <Moon /> : <SunMedium />}
+    <span className="theme-auto-badge">{localizer.message("ui.theme.autoBadge")}</span>
+  </span>
+);
+
+const THEME_CHOICES: ReadonlyArray<{
+  icon: (localizer: Localizer, theme: "dark" | "light") => ReactNode;
+  label: MessageId;
+  value: ThemePreference;
+}> = [
+  { icon: () => <SunMedium aria-hidden="true" />, label: "ui.theme.light", value: "light" },
+  { icon: () => <Moon aria-hidden="true" />, label: "ui.theme.dark", value: "dark" },
+  {
+    icon: (localizer, theme) => <ThemeAutoIcon localizer={localizer} theme={theme} />,
+    label: "ui.theme.matchSystem",
+    value: "auto",
+  },
 ];
 
 /** Nav panels MUST enter the top layer so the scroll boxes cannot clip them. */
@@ -96,8 +112,13 @@ const ThemeTile = ({
         ref={buttonRef}
         type="button"
       >
-        <Moon aria-hidden="true" className="ico-moon" />
-        <SunMedium aria-hidden="true" className="ico-sun" />
+        {/* The badge is always rendered and html[data-theme-preference] shows
+            it, so the prerendered shell is right before hydration. */}
+        <span aria-hidden="true" className="theme-auto-icon">
+          <Moon className="ico-moon" />
+          <SunMedium className="ico-sun" />
+          <span className="theme-auto-badge">{localizer.message("ui.theme.autoBadge")}</span>
+        </span>
         {navRow ? (
           <span className="nav-row-label">{label}</span>
         ) : (
@@ -145,7 +166,7 @@ const ThemeTile = ({
               role="menuitemradio"
               type="button"
             >
-              {choice.icon}
+              {choice.icon(localizer, theme)}
               {localizer.message(choice.label)}
               {choice.value === "auto" ? (
                 <span className="tool-pop-note">
@@ -310,4 +331,4 @@ const SettingsTile = ({ localizer, onOpenSettings }: { localizer: Localizer; onO
   );
 };
 
-export { AccentTile, ProjectTiles, SettingsTile, ThemeTile };
+export { AccentTile, ProjectTiles, SettingsTile, THEME_CHOICES, ThemeTile };

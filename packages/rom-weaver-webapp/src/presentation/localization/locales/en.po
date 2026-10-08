@@ -430,6 +430,11 @@ msgstr "7z codec"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.theme.autoBadge"
+msgstr "A"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.inputHandling.bundleContents"
 msgstr "A bundle can be a JSON file or an archive with that file and its patches. It may include the ROM; otherwise, provide the matching ROM separately."
 

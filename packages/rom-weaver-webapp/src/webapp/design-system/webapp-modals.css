@@ -109,6 +109,11 @@ html:has(.rw-modal) {
   width: 100%;
   min-width: 0;
 }
+/* On the pressed accent fill the dye badge would vanish: invert it. */
+.rw-app [aria-pressed="true"] .theme-auto-badge {
+  color: var(--thread-fill);
+  background: var(--thread-ink);
+}
 .rw-app .setrow .sctl .select {
   height: 34px;
   font-size: var(--dropdown-fs, 0.85rem);

@@ -903,7 +903,8 @@
   border: 0;
   border-radius: var(--r-s);
 }
-.rw-app .tool-pop-item svg {
+.rw-app .tool-pop-item svg,
+.rw-app .theme-picker svg {
   flex: none;
   width: 17px;
   height: 17px;
@@ -1035,6 +1036,42 @@
 :root[data-theme="light"] .ico-moon {
   opacity: 0;
   transform: rotate(-90deg) scale(0.5);
+}
+
+/* Auto badge: an "A" on the icon's lower corner. The icon is masked away
+   around it, so the gap reads on any surface; both scale with the icon box. */
+.rw-app .theme-auto-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.rw-app .theme-auto-badge {
+  position: absolute;
+  top: calc(85% - 6.5px);
+  left: calc(85% - 6.5px);
+  width: 13px;
+  height: 13px;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 13px;
+  color: var(--thread-ink);
+  text-align: center;
+  background: var(--thread);
+  border-radius: 50%;
+}
+.rw-app .theme-auto-icon svg {
+  mask-image: radial-gradient(circle at 85% 85%, #0000 8px, #000 8.5px);
+}
+/* The top-bar button carries the mark always; it shows only while auto. */
+:root:not([data-theme-preference="auto"]) .rw-app .theme-tool .theme-auto-badge {
+  display: none;
+}
+:root:not([data-theme-preference="auto"]) .rw-app .theme-tool svg {
+  mask-image: none;
+}
+/* In the menu the badge hangs past the icon box: keep it off the label. */
+.rw-app .tool-pop-item .theme-auto-icon {
+  margin-inline-end: 4px;
 }
 
 /* ── the phone dock ──
