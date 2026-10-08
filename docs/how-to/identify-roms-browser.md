@@ -29,16 +29,16 @@ If several records share the checksums, read every candidate. If identification 
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/identify-checks-mobile-light.avif" width="1170" height="2532">
-    <source type="image/avif" srcset="../screenshots/identify-checks-desktop-light.avif" width="2328" height="1800">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/identify-checks-mobile-light.webp" width="1170" height="2532">
-    <img src="../screenshots/identify-checks-desktop-light.webp" alt="Identify result for the homebrew sample with no database match and visible checksum rows in the light theme" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/identify-checks-mobile-light.avif" width="1170" height="2048">
+    <source type="image/avif" srcset="../screenshots/identify-checks-desktop-light.avif" width="1770" height="1396">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/identify-checks-mobile-light.webp" width="1170" height="2048">
+    <img src="../screenshots/identify-checks-desktop-light.webp" alt="Identify result for the homebrew sample with no database match and visible checksum rows in the light theme" width="1770" height="1396">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/identify-checks-mobile-dark.avif" width="1170" height="2532">
-    <source type="image/avif" srcset="../screenshots/identify-checks-desktop-dark.avif" width="2328" height="1800">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/identify-checks-mobile-dark.webp" width="1170" height="2532">
-    <img src="../screenshots/identify-checks-desktop-dark.webp" alt="Identify result for the homebrew sample with no database match and visible checksum rows in the dark theme" width="2328" height="1800">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/identify-checks-mobile-dark.avif" width="1170" height="2048">
+    <source type="image/avif" srcset="../screenshots/identify-checks-desktop-dark.avif" width="1770" height="1396">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/identify-checks-mobile-dark.webp" width="1170" height="2048">
+    <img src="../screenshots/identify-checks-desktop-dark.webp" alt="Identify result for the homebrew sample with no database match and visible checksum rows in the dark theme" width="1770" height="1396">
   </picture>
   <figcaption>An unknown ROM still has checksums. This example uses the supplied homebrew ROM.</figcaption>
 </figure>
