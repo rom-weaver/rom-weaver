@@ -109,9 +109,9 @@ The CLI reads the same shards the webapp serves, from a directory on disk.
 
 Each shard may also be a plain `<slug>.json`, or carry the `cheats-<slug>` prefix the repository's own data directory uses. When several forms are present the CLI reads the `.json.br` copy.
 
-The directory comes from `--cheat-database DIR`, then `$ROM_WEAVER_CHEAT_DATABASE`, then `cheats` inside the [identify database directory](cli.md#identify-database-directory). `ROM_WEAVER_DATA_DIR` moves the base the same way it moves the identify data.
+The directory comes from `--cheat-database DIR`, then `$ROM_WEAVER_CHEAT_DATABASE`, then matching shards in user and packaged data trees. [CLI cheat discovery](cli.md#cheats) lists their lookup order. `ROM_WEAVER_DATA_DIR` moves the user data base.
 
-`rom-weaver setup` installs the shards there along with the identify packs; they travel in the same archive. A missing shard is an error naming the file it looked for and the command that installs it.
+`rom-weaver setup` installs shards in `<identify database directory>/full-v1/cheats`, alongside the identify packs from the same archive. A missing shard is an error naming the file and installation command.
 
 [ROM identify data](../development/identify-data.md) documents how to build the identify packs and cheat shards from their pinned sources.
 

@@ -3241,7 +3241,7 @@ pub struct CheatSelectionArgs {
             long = "cheat-database",
             value_name = "DIR",
             help_heading = "Cheats",
-            help = "Directory holding manifest.json and the <system>.json cheat shards. Defaults to $ROM_WEAVER_CHEAT_DATABASE, then the per-user data directory"
+            help = "Directory holding the cheat shards and optional manifest.json. Defaults to $ROM_WEAVER_CHEAT_DATABASE, then matching shards in per-user and packaged data trees"
         )
     )]
     pub cheat_database: Option<PathBuf>,

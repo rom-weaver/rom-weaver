@@ -290,6 +290,15 @@ The application includes every supported save definition. `save list-games` repo
 
 `rom-weaver setup` installs the shards along with the identify packs. A shard may be Brotli compressed (`<slug>.json.br`) or plain (`<slug>.json`); the compressed copy wins when both are present.
 
+Without an override, discovery uses the first directory containing the detected system's shard, in this order:
+
+1. `<identify database directory>/cheats` (legacy user shards).
+2. `<identify database directory>/full-v1/cheats` (the copy installed by `setup`).
+3. `<executable directory>/share/rom-weaver/identify/v1/cheats` (packaged data).
+4. `<executable directory>/../share/rom-weaver/identify/v1/cheats` (prefix-installed data).
+
+Executable-relative discovery requires the `bundled-identify-data` build feature, enabled in published packages. An explicit directory or environment override is used even when its shard is missing.
+
 Delivery is `rom` or `unsupported`. The match class is `exact` (a checksum matched), `title` (the file name matched a game title), or `manual` (`--game`). Every run prints the CC-BY-SA-4.0 attribution line once.
 
 The shared flags below are also on `patch apply` and `patch create`, under the `Cheats` help heading.
@@ -297,7 +306,7 @@ The shared flags below are also on `patch apply` and `patch create`, under the `
 | Flag | Meaning |
 | --- | --- |
 | `--cheat ID_OR_DESCRIPTION` | Select one cheat by record ID or by exact description. Repeatable. A description that matches more than one entry fails with `cheat_selector_ambiguous`. |
-| `--cheat-database DIR` | The directory holding the shards. Defaults to `$ROM_WEAVER_CHEAT_DATABASE`, then `<identify database directory>/cheats`. |
+| `--cheat-database DIR` | The directory holding the shards. Defaults to `$ROM_WEAVER_CHEAT_DATABASE`, then matching shards in the local data trees above. |
 | `--cheat-system SYS` | `nes`, `snes`, `genesis`, `32x`, `sms`, `gamegear`, `gameboy`, `gameboy-color`, or `gba`, when the ROM header does not say. |
 | `--game ID` | Use this database game ID instead of matching by checksum or title. |
 | `--allow-cheat-conflicts` | Let a later cheat overwrite an earlier one at the same offset. Without it, two `rom` cheats writing different values to one byte fail with `cheat_write_conflict`. |

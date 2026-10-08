@@ -108,7 +108,9 @@ rom-weaver man --install
 rom-weaver setup
 ```
 
-`rom-weaver setup` downloads this version's identify packs and cheat shards from its GitHub release into the per-user data directory. Running it again reports what is installed instead of downloading again; `--force` refreshes it. The Homebrew, scoop, npm, install-script, and Docker packages already carry that data, so `setup` only reports on those.
+`rom-weaver setup` downloads this version's identify packs and cheat shards into the per-user data directory. Running it again reports the installed copy; `--force` refreshes it.
+
+The Homebrew, scoop, npm, install-script, and Docker packages already carry that data and need no setup. Running `setup` with those packages installs a separate per-user copy.
 
 ## mise
 
