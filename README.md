@@ -160,7 +160,9 @@ Localized translations are early and may be entirely wrong in places. Manual edi
       <td>Desktop: Apply with two ordered patches</td>
       <td>
         <picture>
+          <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="docs/screenshots/apply-page-desktop-dark.avif">
           <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/apply-page-desktop-dark.webp">
+          <source type="image/avif" srcset="docs/screenshots/apply-page-desktop-light.avif">
           <img src="docs/screenshots/apply-page-desktop-light.webp" alt="The whole Apply screen with a sample ROM and two ordered patches on desktop">
         </picture>
       </td>
@@ -169,7 +171,9 @@ Localized translations are early and may be entirely wrong in places. Manual edi
       <td>Mobile: Apply with two ordered patches</td>
       <td align="center">
         <picture>
+          <source media="(prefers-color-scheme: dark)" type="image/avif" srcset="docs/screenshots/apply-page-mobile-dark.avif">
           <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/apply-page-mobile-dark.webp">
+          <source type="image/avif" srcset="docs/screenshots/apply-page-mobile-light.avif">
           <img src="docs/screenshots/apply-page-mobile-light.webp" alt="The whole Apply screen with a sample ROM and two ordered patches on mobile" width="390">
         </picture>
       </td>

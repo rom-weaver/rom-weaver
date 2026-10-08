@@ -21,8 +21,8 @@ These competitor comparisons measure the native CLI, not the browser app. They d
     - [Extract](#extract)
     - [Compress](#compress)
   - [RVZ vs dolphin-tool](#rvz-vs-dolphin-tool)
-    - [Extract (RVZ → ISO)](#extract-rvz-%E2%86%92-iso)
-    - [Compress (ISO → RVZ)](#compress-iso-%E2%86%92-rvz)
+    - [Extract (RVZ to ISO)](#extract-rvz-to-iso)
+    - [Compress (ISO to RVZ)](#compress-iso-to-rvz)
   - [7z vs 7zz](#7z-vs-7zz)
     - [Compress](#compress-1)
     - [Extract](#extract-1)
@@ -145,7 +145,7 @@ Compression ranges from 8% slower to 20% faster across the four discs, with outp
 
 Two GameCube titles. The `.rvz` sources are third-party dumps; the `.iso` compress inputs were produced by extracting them.
 
-#### Extract (RVZ → ISO)
+#### Extract (RVZ to ISO)
 
 | Disc | rom-weaver | dolphin-tool | Time change | Output |
 | --- | --- | --- | --- | --- |
@@ -154,7 +154,7 @@ Two GameCube titles. The `.rvz` sources are third-party dumps; the `.iso` compre
 
 rom-weaver extracts these two discs 1.6–2.0× faster.
 
-#### Compress (ISO → RVZ)
+#### Compress (ISO to RVZ)
 
 | Disc | rom-weaver | dolphin-tool | Time change | rom-weaver | dolphin | Size change |
 | --- | --- | --- | --- | --- | --- | --- |

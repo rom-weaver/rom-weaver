@@ -33,7 +33,7 @@ How rom-weaver is put together: one Rust command core shipped two ways (native C
 - [Patch apply: ROM copier headers](#patch-apply-rom-copier-headers)
 - [Dreamcast `.dcp` patches (the filesystem-level apply path)](#dreamcast-dcp-patches-the-filesystem-level-apply-path)
 - [rom-weaver-bundle.json bundles](#rom-weaver-bundlejson-bundles)
-- [Rust ⇄ TypeScript boundary](#rust-%E2%87%84-typescript-boundary)
+- [Rust and TypeScript boundary](#rust-and-typescript-boundary)
 - [Build graph](#build-graph)
 - [Webapp UI - the loom workbench](#webapp-ui---the-loom-workbench)
 - [Testing](#testing)
@@ -171,7 +171,7 @@ Bundles describe ordered patch workflows. The shared schema and parser live in `
 
 The [webapp integration guide](../hosting/webapp-integration.md) documents URL and same-origin OPFS inputs. A hosted bundle must not replace the app's `manifest.json`, which the service worker runtime-caches.
 
-## Rust ⇄ TypeScript boundary
+## Rust and TypeScript boundary
 
 - **Type generation.** `mise run typegen` (or `npm run typegen`) emits `rom-weaver-rust-types.d.ts`, `rom-weaver-format-metadata.ts`, and `rom-weaver-command-types.ts` into `packages/rom-weaver-webapp/src/wasm/generated/`. CI runs `--check`; any change to a `#[derive(TS)]` type or format registry metadata requires regenerating and committing. The generated format metadata is the single source for codec pickers and format tables in the webapp - do not hand-maintain duplicates.
 - **Event protocol.** The WASM entrypoint reads one typed `RomWeaverRunRequest` JSON document from stdin and calls `run_request`. It always emits the shared `ProgressEvent` JSON-lines stream (`RomWeaverRunJsonEvent`) on stdout. The browser passes the typed request through the runner's stdin/stdout surface; it does not call Rust command functions directly. This event stream stays separate from the native CLI's `--json` result-document format.
