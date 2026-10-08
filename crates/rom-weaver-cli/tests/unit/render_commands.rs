@@ -543,15 +543,15 @@ fn checksum_variant_results_keep_each_nonraw_digest_and_label() {
         Some(json!({
             "checksum_variants": [
                 { "id": "raw", "label": "Raw", "checksums": { "crc32": "primary" } },
-                { "id": "remove_header", "label": "Remove header", "checksums": { "crc32": "headerless", "sha1": "headerless-sha1" } },
+                { "id": "remove_header", "label": "Header removed", "checksums": { "crc32": "headerless", "sha1": "headerless-sha1" } },
             ],
         })),
     );
     assert_eq!(
         checksum_variant_pairs(&checksum),
         vec![
-            ("Remove header / CRC32".into(), "headerless".into()),
-            ("Remove header / SHA1".into(), "headerless-sha1".into()),
+            ("Header removed / CRC32".into(), "headerless".into()),
+            ("Header removed / SHA1".into(), "headerless-sha1".into()),
         ]
     );
 }
