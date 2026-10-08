@@ -98,6 +98,11 @@ const ThemeTile = ({
       >
         <Moon aria-hidden="true" className="ico-moon" />
         <SunMedium aria-hidden="true" className="ico-sun" />
+        {/* Always rendered: html[data-theme-preference] shows it, so the
+            prerendered shell is right before hydration. */}
+        <span aria-hidden="true" className="theme-auto-badge">
+          {localizer.message("ui.theme.autoBadge")}
+        </span>
         {navRow ? (
           <span className="nav-row-label">{label}</span>
         ) : (

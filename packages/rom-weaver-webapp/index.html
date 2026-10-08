@@ -22,7 +22,7 @@
       }
     </style>
     <script>
-      // Resolve data-theme/data-accent before first paint so the prerendered shell
+      // Resolve data-theme/data-theme-preference/data-accent before first paint so the prerendered shell
       // inside #webapp-root paints with the :root[data-theme] design tokens instead
       // of waiting for theme.ts in the bundle. Mirrors theme.ts (stored preference,
       // else prefers-color-scheme, dark default) and accent.ts (settings store's
@@ -35,6 +35,7 @@
           const preferred = stored === "light" || stored === "dark" ? stored : "";
           const system = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
           document.documentElement.setAttribute("data-theme", preferred || system);
+          document.documentElement.setAttribute("data-theme-preference", preferred || "auto");
           const settings = JSON.parse(localStorage.getItem("rom-weaver-settings") || "null");
           const common = settings && settings.common ? settings.common : null;
           // Read these fields without a schema-version gate so compatible saved
@@ -55,6 +56,7 @@
           else document.documentElement.setAttribute("data-accent", accent);
         } catch (error) {
           document.documentElement.setAttribute("data-theme", "dark");
+          document.documentElement.setAttribute("data-theme-preference", "auto");
           document.documentElement.dataset.betaToolsEnabled = "false";
           document.documentElement.dataset.onboardingEnabled = "true";
         }

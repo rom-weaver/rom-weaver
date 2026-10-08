@@ -1037,6 +1037,52 @@
   transform: rotate(-90deg) scale(0.5);
 }
 
+/* Auto badge: an "A" on the icon's lower corner while the theme follows the
+   system. The icon is masked away around it, so the gap reads on every surface
+   and hover state the button sits on. Offsets scale with the icon. */
+.rw-app .theme-tool {
+  --theme-icon: 17px;
+  --theme-icon-x: 50%;
+  --theme-badge: 13px;
+  --theme-badge-offset: calc(var(--theme-icon) * 0.35);
+}
+.rw-app .topbar-tools .theme-tool {
+  --theme-icon: 24px;
+}
+.rw-app .nav-tool-anchor .theme-tool.nav-tool {
+  --theme-icon: 18px;
+  /* the 8px row padding plus half the 18px icon column */
+  --theme-icon-x: 17px;
+}
+.rw-app .theme-auto-badge {
+  position: absolute;
+  top: calc(50% + var(--theme-badge-offset) - var(--theme-badge) / 2);
+  left: calc(var(--theme-icon-x) + var(--theme-badge-offset) - var(--theme-badge) / 2);
+  display: none;
+  width: var(--theme-badge);
+  height: var(--theme-badge);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: var(--theme-badge);
+  color: var(--thread-ink);
+  text-align: center;
+  pointer-events: none;
+  background: var(--thread);
+  border-radius: 50%;
+}
+:root[data-theme-preference="auto"] .rw-app .theme-auto-badge {
+  display: block;
+}
+:root[data-theme-preference="auto"] .rw-app .theme-tool svg {
+  --theme-badge-cut: radial-gradient(
+    circle at calc(50% + var(--theme-badge-offset)) calc(50% + var(--theme-badge-offset)),
+    transparent calc(var(--theme-badge) / 2 + 1.5px),
+    #000 calc(var(--theme-badge) / 2 + 2px)
+  );
+  -webkit-mask-image: var(--theme-badge-cut);
+  mask-image: var(--theme-badge-cut);
+}
+
 /* ── the phone dock ──
    One row: the dock workflows, then Menu, which reads Close while the sheet or
    a surface opened from it is up. */
@@ -1374,6 +1420,9 @@
   .rw-app .shell-head-tools .tool svg {
     width: 24px;
     height: 24px;
+  }
+  .rw-app .shell-head-tools .theme-tool {
+    --theme-icon: 24px;
   }
   .rw-app .topbar-tools {
     display: none;
