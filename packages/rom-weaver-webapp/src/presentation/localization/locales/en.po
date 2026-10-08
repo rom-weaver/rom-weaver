@@ -581,7 +581,7 @@ msgstr "Add a ROM and at least one patch, or press Continue to use the practice 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.testDescription"
-msgstr "Add a supported ROM, raw or in an archive, to test the game in the browser emulator."
+msgstr "Use the ROM tester to play supported games in your browser. Open a ROM, ZIP, or 7z file. Your files stay on your device."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -711,7 +711,7 @@ msgstr "Apply anyway despite patch and ROM check mismatch"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.applyDescription"
-msgstr "Apply BPS, IPS, UPS, and xdelta patches. Open archives, apply patches in order, and choose your output format. Your files stay on your device."
+msgstr "Apply BPS, IPS, UPS, xdelta, PPF, and other ROM patches online. Open archives, apply patches in order, and choose your output format. Your files stay on your device."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3101,12 +3101,12 @@ msgstr "Patch result"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.title"
-msgstr "Patch ROMs in your browser."
+msgstr "Online ROM patcher."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.thesis"
-msgstr "Patch ROMs in your browser."
+msgstr "Online ROM patcher."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3741,7 +3741,7 @@ msgstr "See what’s supported"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis2"
-msgstr "See your changes in play."
+msgstr "Play your patched game."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4426,7 +4426,7 @@ msgstr "Try it"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.testThesis"
-msgstr "Try your ROM."
+msgstr "Test your ROM online."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

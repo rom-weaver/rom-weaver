@@ -59,9 +59,9 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
   test: Object.freeze({
     description:
-      "Play and test NES, SNES, Game Boy, GBA, N64, Nintendo DS, PlayStation, and other supported ROMs online with EmulatorJS. Try patched games locally. No uploads or account required.",
+      "Test a ROM or patched game online with EmulatorJS. Play supported NES, SNES, Game Boy, GBA, N64, DS, and PlayStation games locally. No uploads.",
     slug: "test-rom",
-    title: `Play and test ROMs online in your browser | ${SITE_NAME}`,
+    title: `ROM tester online: Play and test ROMs | ${SITE_NAME}`,
   }),
 });
 

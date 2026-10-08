@@ -860,7 +860,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.home.reads": msg({ id: "ui.home.reads", message: "reads" }),
   "ui.home.readsAndWrites": msg({ id: "ui.home.readsAndWrites", message: "reads and writes" }),
   "ui.home.selfHostingGuide": msg({ id: "ui.home.selfHostingGuide", message: "Self-hosting guide" }),
-  "ui.home.title": msg({ id: "ui.home.title", message: "Patch ROMs in your browser." }),
+  "ui.home.title": msg({ id: "ui.home.title", message: "Online ROM patcher." }),
   "ui.home.titleEmphasis": msg({ id: "ui.home.titleEmphasis", message: "Keep your files on your device." }),
   "ui.home.tryLink": msg({ id: "ui.home.tryLink", message: "Walk through a sample" }),
   "ui.home.webappFoot": msg({
@@ -1374,7 +1374,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.hero.applyDescription": msg({
     id: "ui.hero.applyDescription",
     message:
-      "Apply BPS, IPS, UPS, and xdelta patches. Open archives, apply patches in order, and choose your output format. Your files stay on your device.",
+      "Apply BPS, IPS, UPS, xdelta, PPF, and other ROM patches online. Open archives, apply patches in order, and choose your output format. Your files stay on your device.",
   }),
   "ui.hero.applyGuide": msg({ id: "ui.hero.applyGuide", message: "Read the Apply guide" }),
   "ui.hero.bundleDescription": msg({
@@ -1423,7 +1423,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.hero.testDescription": msg({
     id: "ui.hero.testDescription",
-    message: "Add a supported ROM, raw or in an archive, to test the game in the browser emulator.",
+    message:
+      "Use the ROM tester to play supported games in your browser. Open a ROM, ZIP, or 7z file. Your files stay on your device.",
   }),
   "ui.hero.supportedFormats": msg({ id: "ui.hero.supportedFormats", message: "Supported formats" }),
   "ui.hero.createThesis": msg({
@@ -1438,13 +1439,13 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.footer.local",
     message: "On-device. Offline support. No telemetry.",
   }),
-  "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Patch ROMs in your browser." }),
+  "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Online ROM patcher." }),
   "ui.hero.thesis2": msg({ id: "ui.hero.thesis2", message: "One toolkit." }),
   "ui.hero.testThesis": msg({
     id: "ui.hero.testThesis",
-    message: "Try your ROM.",
+    message: "Test your ROM online.",
   }),
-  "ui.hero.testThesis2": msg({ id: "ui.hero.testThesis2", message: "See your changes in play." }),
+  "ui.hero.testThesis2": msg({ id: "ui.hero.testThesis2", message: "Play your patched game." }),
   "ui.hero.identifyThesis": msg({
     id: "ui.hero.identifyThesis",
     message: "Identify your ROM.",

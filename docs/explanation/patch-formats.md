@@ -1,6 +1,8 @@
-# Choosing a patch format
+# ROM patch formats compared: BPS, IPS, UPS, xdelta and PPF
 
-BPS, IPS, xdelta, PPF, and a dozen more. This guide explains what actually separates them and which one to publish in.
+ROM patch formats differ in checksums, size limits, and compatible patchers. BPS is a strong cartridge default; IPS, UPS, xdelta, and PPF serve different release needs.
+
+<a id="choosing-a-patch-format"></a>
 
 <!-- START doctoc -->
 ## Table of contents
@@ -33,7 +35,17 @@ Every format on this page records the same thing: which bytes changed. What sepa
 
 Some store a checksum of the original inside the patch. When a user feeds in the wrong file, the patcher stops and says so. Others have no source checks, so the patcher can apply changes to the wrong ROM without detecting the mistake.
 
-That difference decides most of your choice. For cartridge-sized files, size and speed usually matter less than whether users can detect a mistake. Disc-sized files make patch size and tool support more important.
+That difference decides most of your choice. For cartridge releases, built-in validation helps users detect a wrong starting file. Disc-sized files make patch size and tool support more important.
+
+| Format | Built-in validation | Size and layout limits | Compatibility and common use |
+| --- | --- | --- | --- |
+| BPS | CRC32 for source, output, and patch | Variable-length sizes and offsets; creator memory limits still apply | Cartridge releases with a BPS-compatible patcher |
+| IPS / IPS32 | No source, output, or patch checksum | IPS record starts use 24-bit offsets, below 16 MiB; IPS32 uses 32-bit offsets | IPS for older patchers; IPS32 requires explicit tool support |
+| UPS | CRC32 for source, output, and patch | Variable-length sizes and offsets, without IPS's 24-bit boundary | Releases whose community tools expect UPS |
+| xdelta / VCDIFF | Checks vary by encoder and options; output-window checks are not a whole-source checksum | Windowed encoding supports large files; decoder limits and extensions vary | Large binaries and disc images with compatible VCDIFF tools |
+| PPF | PPF1 has no source check; PPF2 checks size and a sample block; PPF3 can check a sample block | PPF1/2 use 32-bit offsets; PPF3 uses 64-bit offsets; exact disc layout matters | Disc releases using PPF-compatible tools |
+
+These are format differences, not promises about every patcher's limits or validation settings. A sample block cannot prove that the whole source file matches. The [implementation references](../development/references.md#patch-reference-implementations) document the parsers and external format sources.
 
 No format records every human requirement. Region, revision, header state, patch order, and expected checksums still need clear [release notes](../how-to/create-rom-patches.md#write-useful-release-notes).
 
@@ -53,7 +65,7 @@ IPS also has a hard limit built into its 24-bit offsets: it cannot encode a chan
 
 ## UPS
 
-UPS stores checksums of the input and the output, so it can catch a wrong starting file the way BPS does.
+UPS stores CRC32 checksums of the input, output, and patch itself. Like BPS, it can detect a wrong starting file and a damaged patch.
 
 UPS remains useful in communities whose tools expect it. rom-weaver applies and creates it.
 
@@ -63,11 +75,11 @@ VCDIFF is a general-purpose format for describing the difference between any two
 
 It handles large binaries and disc images well, which is why disc projects reach for it. Patches turn up as `.xdelta`, `.delta`, `.dat`, and `.vcdiff`.
 
-An xdelta patch's source checks depend on how it was made. Separate published checksums remove that uncertainty. rom-weaver applies and creates xdelta and VCDIFF.
+An xdelta patch's checks depend on its encoder and options. Optional output-window checks do not identify the entire original file. Separate published source and output checksums remove that uncertainty. rom-weaver applies and creates xdelta and VCDIFF.
 
 ## PPF
 
-PPF was designed for disc patching and remains in use. Different PPF versions can do different things, so your release notes carry more weight than usual here.
+PPF was designed for disc patching and remains in use. PPF1 lacks source validation; PPF2 checks source size and a sample block. PPF3 supports optional block checking, 64-bit offsets, and undo data. These block checks are not whole-file checksums.
 
 Disc layouts add another source of mismatch. A `.bin` or `.iso` extension does not identify the track layout, image format, or dump. Those differences change the bytes a patch expects.
 

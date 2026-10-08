@@ -1,6 +1,10 @@
-# Apply BPS, IPS, UPS, and xdelta ROM patches online
+# ROM patcher online: apply BPS, IPS, UPS, and xdelta patches
 
-Apply BPS, IPS, UPS, xdelta, PPF, and other supported ROM patches locally in your browser. Your original stays untouched. No uploads or account are needed.
+Use rom-weaver as an online ROM patcher. Supported formats include BPS, IPS, UPS, xdelta, and PPF. Apply a ROM patch locally in your browser, then download the patched game.
+
+Your original stays untouched. No uploads or account are needed.
+
+<a id="apply-bps-ips-ups-and-xdelta-rom-patches-online"></a>
 
 <!-- START doctoc -->
 ## Table of contents
@@ -38,6 +42,8 @@ You need the patch and your own copy of the exact game release it was made for. 
 - **Archive:** a ZIP, 7z, or RAR that can contain a ROM, a patch, or both. Its extension identifies the archive, not the patch format.
 - **Output ROM:** the new game file created by applying the patch. This is the result you download and use in a compatible emulator or on supported hardware.
 
+Use the patch format supplied by its author. Changing formats does not fix a ROM mismatch. [Patch format differences](../explanation/patch-formats.md) explains which formats carry checksums. For other tools, see the [ROM patcher comparison](../explanation/comparisons.md#applying-a-patch).
+
 Keep the patch author's notes open. Look for:
 
 - region, such as USA, Japan, or Europe;
@@ -71,7 +77,7 @@ For a practice run, open [guided Apply](https://rom-weaver.com/apply-patches?gui
 
 ## Apply a BPS patch
 
-To apply a BPS patch to a ROM:
+Apply a BPS patch online using the clean source ROM specified by its author:
 
 1. Open [Apply](https://rom-weaver.com/apply-patches).
 2. Add the `.bps` patch and the clean ROM named by its author to **0x01 Inputs**. You can add them together, including inside a supported archive.
@@ -95,7 +101,7 @@ If the check fails, compare the required region, revision, and header state with
 
 ## Apply an xdelta or VCDIFF patch
 
-Add the patch as supplied, including an `.xdelta`, `.delta`, `.dat`, or `.vcdiff` file. For disc patches, use the exact image or track named by the author.
+To use the xdelta patcher online, add the patch as supplied. Accepted extensions include `.xdelta`, `.delta`, `.dat`, and `.vcdiff`. For disc patches, use the exact image or track named by the author.
 
 Compare any published source checksum before applying. Source checks depend on how the patch was made. Select a plain output file unless the author or emulator requires compression, then use **APPLY & DOWNLOAD**.
 
@@ -223,7 +229,9 @@ Follow [Fix a checksum error](fix-checksum-errors.md) before applying. That guid
 
 ## Use the result safely
 
-Open the downloaded result in the emulator or hardware you trust. Reaching the title screen is a useful first check, but play far enough to exercise the change when you can. Some bad combinations fail later.
+For supported systems, [test the patched ROM in your browser](test-roms-in-browser.md#test-an-apply-result). Otherwise, open the downloaded result in the emulator or hardware you trust.
+
+Reaching the title screen is a useful first check, but play far enough to exercise the change when you can. Some bad combinations fail later.
 
 Do not delete the clean original. Give the patched result a name that includes the project and version so you can tell it apart later.
 

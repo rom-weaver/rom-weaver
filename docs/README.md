@@ -92,7 +92,7 @@ Procedures for specific tasks.
 - [Extract Z3DS, ZCCI, ZCXI, ZCIA, and Z3DSX files](how-to/extract-z3ds-browser.md)
 - [Trim a ROM](how-to/trim-roms-browser.md)
 - [Undo a PPF patch](how-to/undo-ppf-browser.md)
-- [Test a ROM in the browser](how-to/test-roms-in-browser.md)
+- [Use the online ROM tester](how-to/test-roms-in-browser.md)
 - [Fix a checksum error](how-to/fix-checksum-errors.md)
 - [Edit a game save](how-to/edit-gen3-saves.md)
 - [Create game saves in the browser](how-to/create-game-saves-browser.md)
@@ -142,13 +142,13 @@ Background on the engine, formats, and design decisions.
 - [How ROM patching works](explanation/how-patching-works.md): why the exact starting file matters, what a checksum proves, why order matters, and what every term means.
 - [ROM cheats](explanation/rom-cheats.md): why rom-weaver bakes cheats into the ROM instead of running them at emulation time.
 - [Why your files stay on your device](explanation/local-first.md): the benefits and limits of local processing.
-- [Choosing a patch format](explanation/patch-formats.md): what actually separates BPS, IPS, xdelta, PPF, and the rest.
+- [ROM patch formats compared](explanation/patch-formats.md): checksum protection, size limits, and suitable uses for BPS, IPS, UPS, xdelta, and PPF.
 - [Choosing a compression format](explanation/compression-formats.md): CHD, RVZ, Z3DS, ZIP, 7z, and when trimming beats compressing.
 - [What a bundle is](explanation/bundles.md): the portable patch recipe.
 - [Browser and CLI](explanation/browser-and-cli.md): one engine, two front ends, and how to pick.
 - [Where identify data comes from](explanation/identify-sources.md): Libretro metadata, OpenGood fallback records, and local lookup.
 - [Release provenance](explanation/release-provenance.md): what download verification proves and why the checks are shaped the way they are.
-- [Comparison with similar tools](explanation/comparisons.md): where rom-weaver overlaps with RomPatcher.js, Flips, MultiPatch, xdelta3, chdman, and Dolphin tool, and which one fits your job.
+- [ROM patcher comparison](explanation/comparisons.md): where rom-weaver overlaps with RomPatcher.js, Flips, MultiPatch, xdelta3, chdman, and Dolphin tool, and which one fits your job.
 
 ## Quick answers
 
