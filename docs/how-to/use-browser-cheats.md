@@ -46,16 +46,16 @@ Use each card's inclusion control to leave a step out without removing it. Patch
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/cheat-step-mobile-light.avif" width="1170" height="2141">
-    <source type="image/avif" srcset="../screenshots/cheat-step-desktop-light.avif" width="1770" height="1180">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/cheat-step-mobile-light.webp" width="1170" height="2141">
-    <img src="../screenshots/cheat-step-desktop-light.webp" alt="Two sample patches followed by a manual ROM cheat in the same ordered list in the light theme" width="1770" height="1180">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/cheat-step-mobile-light.avif" width="1170" height="1749">
+    <source type="image/avif" srcset="../screenshots/cheat-step-desktop-light.avif" width="1770" height="1062">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/cheat-step-mobile-light.webp" width="1170" height="1749">
+    <img src="../screenshots/cheat-step-desktop-light.webp" alt="Two sample patches followed by a manual ROM cheat in the same ordered list in the light theme" width="1770" height="1062">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/cheat-step-mobile-dark.avif" width="1170" height="2141">
-    <source type="image/avif" srcset="../screenshots/cheat-step-desktop-dark.avif" width="1770" height="1180">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/cheat-step-mobile-dark.webp" width="1170" height="2141">
-    <img src="../screenshots/cheat-step-desktop-dark.webp" alt="Two sample patches followed by a manual ROM cheat in the same ordered list in the dark theme" width="1770" height="1180">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/cheat-step-mobile-dark.avif" width="1170" height="1749">
+    <source type="image/avif" srcset="../screenshots/cheat-step-desktop-dark.avif" width="1770" height="1062">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/cheat-step-mobile-dark.webp" width="1170" height="1749">
+    <img src="../screenshots/cheat-step-desktop-dark.webp" alt="Two sample patches followed by a manual ROM cheat in the same ordered list in the dark theme" width="1770" height="1062">
   </picture>
   <figcaption>Cheats occupy numbered steps beside patches. This homebrew example demonstrates the controls, not a recommended gameplay code.</figcaption>
 </figure>

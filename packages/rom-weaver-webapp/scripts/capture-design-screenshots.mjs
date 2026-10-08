@@ -9,6 +9,7 @@ import avifEncode, { init as initAvif } from "@jsquash/avif/encode.js";
 import { chromium } from "playwright";
 import { createFirstSampleAssets } from "./first-sample-assets.mjs";
 import { decodeRgba } from "./optimize-png.mjs";
+import { SCREENSHOT_DIR, syncDocsScreenshotSizes } from "./sync-docs-screenshot-sizes.mjs";
 import {
   DOCS_SCREENSHOT_CASES,
   DOCS_SCREENSHOT_FORMATS,
@@ -228,7 +229,16 @@ const capture = async () => {
   }
 };
 
-capture().catch((error) => {
-  process.stderr.write(`${error?.stack || String(error)}\n`);
-  process.exitCode = 1;
-});
+// Crops change size between captures, so rewrite the docs markup to match.
+const syncSizes = () => {
+  if (OUTPUT_DIR !== SCREENSHOT_DIR) return;
+  const changed = syncDocsScreenshotSizes();
+  if (changed.length) console.log(`Synced screenshot sizes in ${changed.join(", ")}`);
+};
+
+capture()
+  .then(syncSizes)
+  .catch((error) => {
+    process.stderr.write(`${error?.stack || String(error)}\n`);
+    process.exitCode = 1;
+  });

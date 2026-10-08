@@ -41,16 +41,16 @@ Filtering does not discard changes in hidden fields. Use [Create game saves](cre
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/save-editor-mobile-light.avif" width="1170" height="2627">
-    <source type="image/avif" srcset="../screenshots/save-editor-desktop-light.avif" width="1770" height="1669">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/save-editor-mobile-light.webp" width="1170" height="2627">
-    <img src="../screenshots/save-editor-desktop-light.webp" alt="Save Editor filtered to the player name with a checked LINK to HERO change in the light theme" width="1770" height="1669">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/save-editor-mobile-light.avif" width="1170" height="2917">
+    <source type="image/avif" srcset="../screenshots/save-editor-desktop-light.avif" width="1770" height="1813">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/save-editor-mobile-light.webp" width="1170" height="2917">
+    <img src="../screenshots/save-editor-desktop-light.webp" alt="Save Editor filtered to the player name with a checked LINK to HERO change in the light theme" width="1770" height="1813">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/save-editor-mobile-dark.avif" width="1170" height="2627">
-    <source type="image/avif" srcset="../screenshots/save-editor-desktop-dark.avif" width="1770" height="1669">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/save-editor-mobile-dark.webp" width="1170" height="2627">
-    <img src="../screenshots/save-editor-desktop-dark.webp" alt="Save Editor filtered to the player name with a checked LINK to HERO change in the dark theme" width="1770" height="1669">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/save-editor-mobile-dark.avif" width="1170" height="2917">
+    <source type="image/avif" srcset="../screenshots/save-editor-desktop-dark.avif" width="1770" height="1813">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/save-editor-mobile-dark.webp" width="1170" height="2917">
+    <img src="../screenshots/save-editor-desktop-dark.webp" alt="Save Editor filtered to the player name with a checked LINK to HERO change in the dark theme" width="1770" height="1813">
   </picture>
   <figcaption>A generated Zelda save, filtered to one property, with an edit preview. The original stays unchanged.</figcaption>
 </figure>

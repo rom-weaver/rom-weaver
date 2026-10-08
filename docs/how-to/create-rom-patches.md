@@ -42,16 +42,16 @@ Each card shows the selected file, size, detected system, and checksums. Open **
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/create-inputs-mobile-light.avif" width="1170" height="1313">
-    <source type="image/avif" srcset="../screenshots/create-inputs-desktop-light.avif" width="1770" height="1205">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/create-inputs-mobile-light.webp" width="1170" height="1313">
-    <img src="../screenshots/create-inputs-desktop-light.webp" alt="Cropped Create workflow showing the Original and Modified homebrew sample cards in the light theme" width="1770" height="1205">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/create-inputs-mobile-light.avif" width="1170" height="869">
+    <source type="image/avif" srcset="../screenshots/create-inputs-desktop-light.avif" width="1770" height="795">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/create-inputs-mobile-light.webp" width="1170" height="869">
+    <img src="../screenshots/create-inputs-desktop-light.webp" alt="Cropped Create workflow showing the Original and Modified homebrew sample cards in the light theme" width="1770" height="795">
   </picture>
   <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/create-inputs-mobile-dark.avif" width="1170" height="1313">
-    <source type="image/avif" srcset="../screenshots/create-inputs-desktop-dark.avif" width="1770" height="1205">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/create-inputs-mobile-dark.webp" width="1170" height="1313">
-    <img src="../screenshots/create-inputs-desktop-dark.webp" alt="Cropped Create workflow showing the Original and Modified homebrew sample cards in the dark theme" width="1770" height="1205">
+    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/create-inputs-mobile-dark.avif" width="1170" height="869">
+    <source type="image/avif" srcset="../screenshots/create-inputs-desktop-dark.avif" width="1770" height="795">
+    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/create-inputs-mobile-dark.webp" width="1170" height="869">
+    <img src="../screenshots/create-inputs-desktop-dark.webp" alt="Cropped Create workflow showing the Original and Modified homebrew sample cards in the dark theme" width="1770" height="795">
   </picture>
   <figcaption>Original is the clean starting file. Modified is the result your patch must rebuild.</figcaption>
 </figure>

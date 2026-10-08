@@ -98,6 +98,6 @@ The crop hides the floating navigation dock so it cannot cover tool controls. Im
 
 Keep image paths relative to the Markdown page. The documentation renderer rewrites Markdown images and HTML picture sources for the published site.
 
-After regeneration, update each image's `width` and `height` to its measured pixel size. Keep alt text and captions specific to the state shown.
+After a full capture, the script rewrites each image's `width` and `height` in `README.md` and `docs/` to its measured pixel size. Run `node packages/rom-weaver-webapp/scripts/sync-docs-screenshot-sizes.mjs` after replacing images by hand. Keep alt text and captions specific to the state shown.
 
 The build checks that each subject has every required format, viewport, and theme variant, and that its owning guide references them.
