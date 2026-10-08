@@ -150,7 +150,7 @@ RUN --mount=type=cache,id=webapp-cargo-registry,target=/root/.cargo/registry,sha
 
 # Callers MUST stage the source-exact module before selecting WASM=prebuilt.
 # Toolchain layers still verify each architecture's SDK and binaryen checksums.
-# CI retains ARM source builds on main and manual runs; PRs may reuse main's module.
+# CI retains ARM source builds on main, manual runs, and PRs changing image plumbing.
 FROM identified AS wasm-prebuilt
 # A missing module here means the caller asked for `prebuilt` without staging
 # one. Falling through to an image built from whatever `COPY . .` happened to
