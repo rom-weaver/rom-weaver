@@ -11,7 +11,7 @@ use super::*;
 const WEAVE_CREATE_DEFAULT_ALGORITHMS: [&str; 3] = ["crc32", "md5", "sha1"];
 
 const WEAVE_CREATE_OP: OperationLabel<'static> = OperationLabel {
-    command: "weave-create",
+    command: "bundle-create",
     family: OperationFamily::Command,
     format: None,
 };
@@ -24,12 +24,14 @@ const WEAVE_CREATE_PROGRESS_INTERVAL: u64 = 8 * 1024 * 1024;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct WeaveCreateResult {
-    pub weave_path: String,
+    #[cfg_attr(feature = "typescript-types", ts(rename = "weave_path"))]
+    pub bundle_path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub archive_path: Option<String>,
     /// The canonical weave as written (checksums computed and normalized).
-    pub weave: RomWeaverWeave,
+    #[cfg_attr(feature = "typescript-types", ts(rename = "weave"))]
+    pub bundle: RomWeaverWeave,
     pub warnings: Vec<String>,
 }
 
@@ -52,11 +54,11 @@ impl CliApp {
         // unchanged.
         if let Err(error) = self.apply_weave_create_spec(&mut args) {
             return self.finish(
-                "weave-create",
+                "bundle-create",
                 OperationReport::failed_with_error(
                     OperationFamily::Command,
-                    Some("weave-create".to_string()),
-                    "weave-create",
+                    Some("bundle-create".to_string()),
+                    "bundle-create",
                     error,
                     thread_execution,
                 ),
@@ -69,7 +71,7 @@ impl CliApp {
             patches = args.patch.len(),
             patch_specs = args.patch_specs.len(),
             output = %args.output.display(),
-            weave = ?args.weave,
+            weave = ?args.bundle,
             checksum_algorithms = args.checksum.len(),
             threads = %args.threads,
             "starting weave create command"
@@ -78,14 +80,14 @@ impl CliApp {
             Ok(result) => {
                 let label = format!(
                     "wrote weave `{}` ({} patch entr{}{}{})",
-                    result.weave_path,
-                    result.weave.patches.len(),
-                    if result.weave.patches.len() == 1 {
+                    result.bundle_path,
+                    result.bundle.patches.len(),
+                    if result.bundle.patches.len() == 1 {
                         "y"
                     } else {
                         "ies"
                     },
-                    cheat_entry_summary(result.weave.cheats.len()),
+                    cheat_entry_summary(result.bundle.cheats.len()),
                     result
                         .archive_path
                         .as_deref()
@@ -94,24 +96,27 @@ impl CliApp {
                 );
                 let mut report = OperationReport::succeeded(
                     OperationFamily::Command,
-                    Some("weave-create".to_string()),
-                    "weave-create",
+                    Some("bundle-create".to_string()),
+                    "bundle-create",
                     label,
                     Some(100.0),
                     thread_execution.clone(),
                 );
                 match serde_json::to_value(&result) {
-                    Ok(value) => {
-                        report.details = Some(json!({ "weave_create": value }));
+                    Ok(mut value) => {
+                        value["weave"] = value["bundle"].clone();
+                        value["weave_path"] = value["bundle_path"].clone();
+                        report.details =
+                            Some(json!({ "bundle_create": value, "weave_create": value }));
                         Self::append_report_warnings(&mut report, result.warnings);
-                        let mut paths = vec![PathBuf::from(result.weave_path)];
+                        let mut paths = vec![PathBuf::from(result.bundle_path)];
                         paths.extend(result.archive_path.map(PathBuf::from));
                         Self::attach_emitted_files_details(report, paths, None)
                     }
                     Err(error) => OperationReport::failed(
                         OperationFamily::Command,
-                        Some("weave-create".to_string()),
-                        "weave-create",
+                        Some("bundle-create".to_string()),
+                        "bundle-create",
                         format!("failed to serialize weave create result: {error}"),
                         thread_execution,
                     ),
@@ -119,13 +124,13 @@ impl CliApp {
             }
             Err(error) => OperationReport::failed_with_error(
                 OperationFamily::Command,
-                Some("weave-create".to_string()),
-                "weave-create",
+                Some("bundle-create".to_string()),
+                "bundle-create",
                 error,
                 thread_execution,
             ),
         };
-        self.finish("weave-create", report)
+        self.finish("bundle-create", report)
     }
 
     /// Hydrate a `weave create` command from a `--from` spec: read the file
@@ -367,11 +372,11 @@ impl CliApp {
         let mut patches = weave_create_patch_entries(&specs, patch_basis)?;
 
         let packaged_rom_source = args
-            .weave_rom
+            .bundle_rom
             .as_deref()
             .or(args.rom.as_deref())
-            .filter(|_| args.rom_url.is_none() && !args.no_weave_rom);
-        if args.weave.is_some() {
+            .filter(|_| args.rom_url.is_none() && !args.no_bundle_rom);
+        if args.bundle.is_some() {
             assign_weave_member_paths(&mut rom, packaged_rom_source, &mut patches, &specs)?;
         } else {
             require_unique_weave_source_names(rom.as_ref(), &patches)?;
@@ -408,7 +413,7 @@ impl CliApp {
         };
         let bytes = write_weave_create_output(args, &weave, &mut warnings)?;
 
-        let weave_path = match &args.weave {
+        let bundle_path = match &args.bundle {
             Some(weave_archive) => Some(self.create_weave_weave(
                 weave_archive,
                 &bytes,
@@ -421,10 +426,10 @@ impl CliApp {
         };
 
         Ok(WeaveCreateResult {
-            weave_path: Self::normalize_emitted_path_string(&args.output.to_string_lossy()),
-            archive_path: weave_path
+            bundle_path: Self::normalize_emitted_path_string(&args.output.to_string_lossy()),
+            archive_path: bundle_path
                 .map(|path| Self::normalize_emitted_path_string(&path.to_string_lossy())),
-            weave,
+            bundle: weave,
             warnings,
         })
     }
@@ -437,14 +442,14 @@ impl CliApp {
         context: &OperationContext,
         warnings: &mut Vec<String>,
     ) -> Result<Option<WeaveRom>> {
-        if args.weave_rom.is_some() && args.rom.is_none() {
+        if args.bundle_rom.is_some() && args.rom.is_none() {
             return Err(RomWeaverError::Validation(
                 "--weave-rom requires --input so the recorded checksums describe the real ROM"
                     .to_string(),
             ));
         }
 
-        if args.no_weave_rom && args.rom.is_none() {
+        if args.no_bundle_rom && args.rom.is_none() {
             warnings.push("--no-weave-rom ignored: no local ROM given with --input".to_string());
         }
         // Trusted rom checksums/size from a prior staging pass, so export skips
@@ -504,7 +509,7 @@ impl CliApp {
             )));
         }
         let resolved_member = if let Some(member) = args.rom_member.as_ref()
-            && args.weave_rom.is_none()
+            && args.bundle_rom.is_none()
             && (cached_rom_checks.is_none() || rom_assume.size.is_none())
         {
             Some(self.resolve_weave_create_rom_member(path, member, context)?)
@@ -537,7 +542,7 @@ impl CliApp {
             Self::cleanup_temp_paths(&resolved.cleanup_paths);
         }
         let checks = checks_result?;
-        let weave_source = args.weave_rom.as_deref().unwrap_or(path);
+        let weave_source = args.bundle_rom.as_deref().unwrap_or(path);
         if !weave_source.is_file() {
             return Err(RomWeaverError::Validation(format!(
                 "weave rom path does not exist: `{}`",
@@ -549,7 +554,7 @@ impl CliApp {
         // source: the applying user supplies the ROM themselves. A
         // sourceless entry always gets a name (the local file's base
         // name) so consumers can tell the user WHICH ROM to supply.
-        let distribute_path = url_override.is_none() && !args.no_weave_rom;
+        let distribute_path = url_override.is_none() && !args.no_bundle_rom;
         let sourceless_name = (url_override.is_none() && !distribute_path)
             .then(|| required_base_name(path, "rom"))
             .transpose()?;
@@ -585,7 +590,7 @@ impl CliApp {
             member,
             context,
             AutoExtractResolutionLabels {
-                command: "weave-create",
+                command: "bundle-create",
                 family: OperationFamily::Command,
                 format: None,
                 source_label: "weave ROM member",
@@ -603,7 +608,7 @@ impl CliApp {
     /// The definition and archive MUST name different files. Both destinations
     /// need validation before source hashing or either output is written.
     fn preflight_weave_create_outputs(&self, args: &WeaveCreateCommand) -> Result<()> {
-        if let Some(weave) = args.weave.as_deref() {
+        if let Some(weave) = args.bundle.as_deref() {
             if weave_create_outputs_alias(&args.output, weave) {
                 return Err(RomWeaverError::Validation(
                     "--output and --weave must name different files".to_string(),
@@ -623,7 +628,7 @@ impl CliApp {
         }
         ensure_output_available(&args.output, args.force)?;
         for output in
-            std::iter::once(args.output.as_path()).chain(args.weave.iter().map(PathBuf::as_path))
+            std::iter::once(args.output.as_path()).chain(args.bundle.iter().map(PathBuf::as_path))
         {
             if let Some(parent) = output
                 .parent()
@@ -632,7 +637,7 @@ impl CliApp {
                 super::path_access::check_writable_dir(parent)?;
             }
         }
-        if let Some(weave) = args.weave.as_deref()
+        if let Some(weave) = args.bundle.as_deref()
             && weave_create_outputs_alias_after_parent_checks(&args.output, weave)
         {
             return Err(RomWeaverError::Validation(
@@ -715,9 +720,11 @@ impl CliApp {
     ) -> Result<PathBuf> {
         let staging = context.temp_paths().next_path("weave-weave", None);
         fs::create_dir_all(&staging)?;
-        let weave_path = staging.join("rom-weaver-weave.json");
-        fs::write(&weave_path, weave_bytes)?;
-        let mut inputs = vec![weave_path];
+        let bundle_path = staging.join("rom-weaver-weave.json");
+        fs::write(&bundle_path, weave_bytes)?;
+        let legacy_path = staging.join("rom-weaver-bundle.json");
+        fs::write(&legacy_path, weave_bytes)?;
+        let mut inputs = vec![bundle_path, legacy_path];
         if let (Some(rom), Some(member)) = (
             rom,
             definition.rom.as_ref().and_then(|rom| rom.path.as_deref()),
@@ -757,7 +764,7 @@ impl CliApp {
         // the stage as indeterminate rather than sitting on the last percent.
         self.emit_running(
             WEAVE_CREATE_OP,
-            "weave",
+            "bundle",
             format!(
                 "bundling {} file(s) into `{}`",
                 inputs.len(),
@@ -995,7 +1002,9 @@ fn assign_weave_member_paths(
         {
             return Ok(member.clone());
         }
-        let member = if members.iter().all(|(member, _)| member != &preferred) {
+        let member = if weave_file_name_codec(&preferred).is_none()
+            && members.iter().all(|(member, _)| member != &preferred)
+        {
             preferred
         } else {
             let stem = Path::new(&preferred)

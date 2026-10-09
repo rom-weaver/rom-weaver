@@ -185,7 +185,7 @@ const setWorkflowSettingsIfChanged = async ({
 
 function ApplyPatchForm(props: ApplyPatchFormProps) {
   const { onApplyComplete, onInputsChange, onPatchesChange, onProgress: onProgressChange, threads } = props;
-  const mode = props.mode ?? "apply";
+  const mode = props.mode === "bundle" ? "weave" : (props.mode ?? "apply");
   const providerSettings = useApplySettings();
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
   const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;
@@ -335,12 +335,13 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   // Controllers are created further down, so the hook reads them through a ref.
   const [localWeaveSession, setLocalWeaveSession] = useState<WeaveApplySession | null>(null);
   const [weaveDismissed, setWeaveDismissed] = useState(false);
-  const weaveSessionKey = props.weaveSession?.key;
+  const propWeaveSession = props.weaveSession ?? props.bundleSession;
+  const weaveSessionKey = propWeaveSession?.key;
   // biome-ignore lint/correctness/useExhaustiveDependencies: The bundle session key intentionally triggers a dismissal reset.
   useEffect(() => {
     setWeaveDismissed(false);
   }, [weaveSessionKey]);
-  const activeWeaveSession = weaveDismissed ? null : localWeaveSession || props.weaveSession || null;
+  const activeWeaveSession = weaveDismissed ? null : localWeaveSession || propWeaveSession || null;
   const activeWeaveSessionRef = useRef(activeWeaveSession);
   activeWeaveSessionRef.current = activeWeaveSession;
   useEffect(() => {

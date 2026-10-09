@@ -319,7 +319,7 @@ impl CliApp {
         let Some(rom) = &weave.rom else {
             if matches!(source.mode, WeaveApplySourceKind::InputIsWeave) {
                 return Err(RomWeaverError::ValidationCode(
-                    ValidationCodeError::new("weave.rom.missing").with_message(
+                    ValidationCodeError::new("bundle.rom.missing").with_message(
                         "weave defines no rom entry; pass the ROM as the apply input and the weave via --weave",
                     ),
                 ));
@@ -360,7 +360,7 @@ impl CliApp {
             return Ok(());
         }
 
-        let mut coded = ValidationCodeError::new("weave.rom.missing").with_message(
+        let mut coded = ValidationCodeError::new("bundle.rom.missing").with_message(
             "weave rom entry provides no source; pass the ROM as the apply input and the weave via --weave",
         );
         if let Some(name) = rom
@@ -461,7 +461,7 @@ impl CliApp {
         &self,
         args: &PatchApplyCommand,
     ) -> Result<Option<WeaveApplySource>> {
-        if let Some(weave) = &args.weave {
+        if let Some(weave) = &args.bundle {
             return Ok(Some(WeaveApplySource::Explicit(weave.clone())));
         }
         let input_name = args
@@ -504,7 +504,7 @@ impl CliApp {
                 Ok(Some(WeaveApplySource::InputArchive(Box::new(loaded))))
             }
             Ok(_) => Ok(None),
-            Err(RomWeaverError::ValidationCode(coded)) if coded.code() == "weave.missing" => {
+            Err(RomWeaverError::ValidationCode(coded)) if coded.code() == "bundle.missing" => {
                 Ok(None)
             }
             // A malformed bundled weave (compressed member, size cap) is a
@@ -569,7 +569,7 @@ impl CliApp {
                 .expect("archive kind always carries a format name");
             let Some(entry) = Self::find_weave_archive_entry(&loaded.archive_entries, path) else {
                 return Err(RomWeaverError::ValidationCode(
-                    ValidationCodeError::new("weave.path.unresolved")
+                    ValidationCodeError::new("bundle.path.unresolved")
                         .with_message("weave path entry matches no archive member")
                         .with_field("entry", entry_label.to_owned())
                         .with_field("path", path.to_owned()),
@@ -591,7 +591,7 @@ impl CliApp {
         let resolved = weave_dir.join(path);
         if !resolved.is_file() {
             return Err(RomWeaverError::ValidationCode(
-                ValidationCodeError::new("weave.path.unresolved")
+                ValidationCodeError::new("bundle.path.unresolved")
                     .with_message("weave path entry matches no file next to the weave")
                     .with_field("entry", entry_label.to_owned())
                     .with_field("path", path.to_owned()),
@@ -691,8 +691,8 @@ fn validate_weave_patch_producers(weave: &RomWeaverWeave, selected: &[usize]) ->
             {
                 return Err(RomWeaverError::ValidationCode(
                     ValidationCodeError::new(match selector_name {
-                        "input" => "weave.patch.input.patch.unavailable",
-                        "target" => "weave.patch.target.patch.unavailable",
+                        "input" => "bundle.patch.input.patch.unavailable",
+                        "target" => "bundle.patch.target.patch.unavailable",
                         _ => unreachable!("only input and target selectors are checked"),
                     })
                     .with_message("patch selector references an earlier patch that is not selected")
@@ -813,7 +813,7 @@ fn resolve_weave_checks(
         .map(Some)
         .ok_or_else(|| {
             RomWeaverError::ValidationCode(
-                ValidationCodeError::new("weave.checks.reference.unresolved")
+                ValidationCodeError::new("bundle.checks.reference.unresolved")
                     .with_message("checks reference matches no weave checkStates id")
                     .with_field("ref", reference.to_owned()),
             )
@@ -933,7 +933,7 @@ pub(super) fn weave_ref_as_url(path: &Path) -> Option<&str> {
 #[cfg(target_arch = "wasm32")]
 fn weave_url_unsupported(entry_label: &str, url: &str) -> RomWeaverError {
     RomWeaverError::ValidationCode(
-        ValidationCodeError::new("weave.url.unsupported")
+        ValidationCodeError::new("bundle.url.unsupported")
             .with_message("weave url sources cannot be downloaded here; fetch the file and use a path entry instead")
             .with_field("entry", entry_label.to_owned())
             .with_field("url", url.to_owned()),
@@ -1364,7 +1364,7 @@ mod tests {
             checksums: BTreeMap::from([("crc32".to_string(), "3610a686".to_string())]),
             size: Some(5),
         };
-        let mut coded = ValidationCodeError::new("weave.rom.missing");
+        let mut coded = ValidationCodeError::new("bundle.rom.missing");
 
         push_expected_state_fields(&checks, &databases, &mut coded);
 
@@ -1446,7 +1446,7 @@ mod tests {
             checksums: BTreeMap::from([("crc32".to_string(), "deadbeef".to_string())]),
             size: Some(5),
         };
-        let mut coded = ValidationCodeError::new("weave.rom.missing");
+        let mut coded = ValidationCodeError::new("bundle.rom.missing");
 
         push_expected_state_fields(&checks, &databases, &mut coded);
 

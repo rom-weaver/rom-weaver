@@ -496,7 +496,7 @@ cheat_records?: Array<CheatRecord>,
  * number of ordinary patches that run before the corresponding cheat.
  * An empty list keeps the compatibility behavior: all cheats run last.
  */
-cheat_positions?: Array<number>, threads?: ThreadBudget, force?: boolean, dry_run?: boolean, };
+cheat_positions?: Array<number>, threads?: ThreadBudget, force?: boolean, dry_run?: boolean, } & { bundle?: string };
 
 export type PatchValidateCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches: Array<string>, patch_select?: Array<string>, assume_in?: Array<string>, expect_in?: Array<string>, strip_header?: boolean, n64_byte_order?: PatchN64ByteOrderMode, ignore_checksum_validation?: boolean, independent?: boolean, plan?: boolean, patch_basis?: Array<PatchBasisMode>, default_patch_basis?: PatchBasisMode, patch_input_check?: Array<string>, patch_output_check?: Array<string>, threads?: ThreadBudget, };
 
@@ -830,7 +830,7 @@ export type WeaveCommands = { "type": "create", "args": WeaveCreateCommand } | {
 
 export type PlanExtractBatchCommand = { job_sizes?: Array<bigint>, threads?: ThreadBudget, max_concurrency?: number | null, total_memory_bytes?: bigint | null, memory_ceiling_bytes?: bigint | null, };
 
-export type Commands = { "type": "probe", "args": ProbeCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "identify", "args": IdentifyCommand } | { "type": "ingest", "args": IngestCommand } | { "type": "cheat", "args": CheatCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "patch", "args": PatchCommands } | { "type": "weave", "args": WeaveCommands } | { "type": "save", "args": SaveCommands } | { "type": "tools", "args": ToolsCommands } | { "type": "plan-extract-batch", "args": PlanExtractBatchCommand };
+export type Commands = { "type": "probe", "args": ProbeCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "identify", "args": IdentifyCommand } | { "type": "ingest", "args": IngestCommand } | { "type": "cheat", "args": CheatCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "patch", "args": PatchCommands } | { "type": "weave", "args": WeaveCommands } | { "type": "save", "args": SaveCommands } | { "type": "tools", "args": ToolsCommands } | { "type": "plan-extract-batch", "args": PlanExtractBatchCommand } | { type: "bundle"; args: BundleCommands };
 
 export type RomWeaverRunOutputOptions = { json?: boolean, progress?: boolean, log_level?: LogLevel, dep_trace?: boolean, interactive_selection_enabled?: boolean,
 /**
@@ -844,6 +844,38 @@ export type RomWeaverRunRequest = { command: Commands,
  * Plan a command without changing files or downloading data.
  */
 dry_run?: boolean, output?: RomWeaverRunOutputOptions, };
+
+export type RomWeaverBundle = RomWeaverWeave;
+
+export type BundleCheatEntry = WeaveCheatEntry;
+
+export type BundleCheckState = WeaveCheckState;
+
+export type BundleChecks = WeaveChecks;
+
+export type BundleOutput = WeaveOutput;
+
+export type BundlePatchEntry = WeavePatchEntry;
+
+export type BundlePatchInput = WeavePatchInput;
+
+export type BundleRom = WeaveRom;
+
+export type BundleSourceKind = WeaveSourceKind;
+
+export type BundleSourceRef = WeaveSourceRef;
+
+export type BundlePatchSource = WeavePatchSource;
+
+export type BundleParseCommand = WeaveParseCommand;
+
+export type BundleCreateCommand = Omit<WeaveCreateCommand, 'weave' | 'weave_rom' | 'no_weave_rom'> & { bundle?: string | null; bundle_rom?: string | null; no_bundle_rom?: boolean; };
+
+export type BundleParseResult = Omit<WeaveParseResult, 'weave'> & { bundle: RomWeaverBundle; };
+
+export type BundleCreateResult = Omit<WeaveCreateResult, 'weave' | 'weave_path'> & { bundle: RomWeaverBundle; bundle_path: string; };
+
+export type BundleCommands = { type: 'create'; args: BundleCreateCommand } | { type: 'parse'; args: BundleParseCommand };
 
 export type RomWeaverCommand = Commands;
 

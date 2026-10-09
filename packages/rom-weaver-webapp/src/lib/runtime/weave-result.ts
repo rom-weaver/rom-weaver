@@ -18,6 +18,8 @@ import type {
 } from "../../types/weave.ts";
 import type {
   WeaveCreateResult,
+  BundleCreateResult,
+  BundleParseResult,
   WeaveOutput,
   WeaveParseResult,
   WeavePatchEntry,
@@ -210,9 +212,12 @@ const cheatWarnings = (weaveRecord: unknown): string[] => {
  * result).
  */
 const parseWeaveParseResult = (details: unknown): ParsedWeaveParseResult | undefined => {
-  const record = asRecord(asRecord(details)?.weave) as WireRecord<WeaveParseResult> | undefined;
+  const fields = asRecord(details);
+  const record = asRecord(fields?.weave ?? fields?.bundle) as
+    | WireRecord<WeaveParseResult & BundleParseResult>
+    | undefined;
   if (!record) return undefined;
-  const weave = parseWeave(record.weave);
+  const weave = parseWeave(record.weave ?? record.bundle);
   if (!weave) return undefined;
   const sourceKindRaw = record.source_kind;
   const sourceKind: WeaveSourceKind =
@@ -226,7 +231,7 @@ const parseWeaveParseResult = (details: unknown): ParsedWeaveParseResult | undef
     weave,
     patchSources,
     sourceKind,
-    warnings: [...toWarnings(record.warnings), ...cheatWarnings(record.weave)],
+    warnings: [...toWarnings(record.warnings), ...cheatWarnings(record.weave ?? record.bundle)],
   };
   const archiveMember = toStringValue(record.archive_member);
   if (archiveMember !== undefined) result.archiveMember = archiveMember;
@@ -237,15 +242,18 @@ const parseWeaveParseResult = (details: unknown): ParsedWeaveParseResult | undef
 
 /** Parse the `weave_create` object from a terminal event's `details`. */
 const parseWeaveCreateResult = (details: unknown): ParsedWeaveCreateResult | undefined => {
-  const record = asRecord(asRecord(details)?.weave_create) as WireRecord<WeaveCreateResult> | undefined;
+  const fields = asRecord(details);
+  const record = asRecord(fields?.weave_create ?? fields?.bundle_create) as
+    | WireRecord<WeaveCreateResult & BundleCreateResult>
+    | undefined;
   if (!record) return undefined;
-  const weavePath = toStringValue(record.weave_path);
-  const weave = parseWeave(record.weave);
+  const weavePath = toStringValue(record.weave_path ?? record.bundle_path);
+  const weave = parseWeave(record.weave ?? record.bundle);
   if (!(weavePath && weave)) return undefined;
   const result: ParsedWeaveCreateResult = {
     weave,
     weavePath,
-    warnings: [...toWarnings(record.warnings), ...cheatWarnings(record.weave)],
+    warnings: [...toWarnings(record.warnings), ...cheatWarnings(record.weave ?? record.bundle)],
   };
   const archivePath = toStringValue(record.archive_path);
   if (archivePath !== undefined) result.archivePath = archivePath;

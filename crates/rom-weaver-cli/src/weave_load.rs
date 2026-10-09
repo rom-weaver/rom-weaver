@@ -95,6 +95,16 @@ impl CliApp {
         // must parse+validate as a weave to be accepted (content probing), so
         // pre-rename `rw.json` weaves and other names keep working without
         // misclassifying a stray JSON.
+        let read_member = |entry: &RegularArchiveFileEntry| -> Result<Vec<u8>> {
+            with_regular_archive_file_entry_reader(
+                source,
+                format_name,
+                entry.index,
+                &entry.name,
+                |reader| read_weave_bytes_capped(reader, &entry.name),
+            )
+        };
+
         let mut root_canonical: Option<&RegularArchiveFileEntry> = None;
         let mut root_candidates: Vec<&RegularArchiveFileEntry> = Vec::new();
         for entry in &entries {
@@ -113,7 +123,7 @@ impl CliApp {
                 }
                 if codec.is_some() {
                     return Err(weave_validation(
-                        "weave.member.unsupported",
+                        "bundle.member.unsupported",
                         "compressed weave members inside archives are not supported; store rom-weaver-weave.json uncompressed",
                     ));
                 }
@@ -126,10 +136,18 @@ impl CliApp {
                     } else {
                         (entry, existing)
                     };
-                    warnings.push(format!(
-                        "ignoring extra weave member `{}`: using `{}`",
-                        ignored.name, selected.name
-                    ));
+                    let selected_name = normalize_entry_name(&selected.name);
+                    let ignored_name = normalize_entry_name(&ignored.name);
+                    let identical_legacy_alias = selected_name
+                        .eq_ignore_ascii_case(WEAVE_BASE_FILE_NAME)
+                        && ignored_name.eq_ignore_ascii_case("rom-weaver-bundle.json")
+                        && matches!((read_member(selected), read_member(ignored)), (Ok(selected), Ok(ignored)) if selected == ignored);
+                    if !identical_legacy_alias {
+                        warnings.push(format!(
+                            "ignoring extra weave member `{}`: using `{}`",
+                            ignored.name, selected.name
+                        ));
+                    }
                     root_canonical = Some(selected);
                     continue;
                 }
@@ -138,16 +156,6 @@ impl CliApp {
                 root_candidates.push(entry);
             }
         }
-
-        let read_member = |entry: &RegularArchiveFileEntry| -> Result<Vec<u8>> {
-            with_regular_archive_file_entry_reader(
-                source,
-                format_name,
-                entry.index,
-                &entry.name,
-                |reader| read_weave_bytes_capped(reader, &entry.name),
-            )
-        };
 
         let (member, bytes) = if let Some(entry) = root_canonical {
             trace!(
@@ -182,7 +190,7 @@ impl CliApp {
             }
             let Some((entry, bytes)) = chosen else {
                 return Err(RomWeaverError::ValidationCode(
-                    rom_weaver_core::ValidationCodeError::new("weave.missing")
+                    rom_weaver_core::ValidationCodeError::new("bundle.missing")
                         .with_message("archive contains no rom-weaver-weave.json weave at its root")
                         .with_field("source", source.to_string_lossy().into_owned()),
                 ));
@@ -253,7 +261,7 @@ impl CliApp {
 
 fn weave_too_large(label: &str, size: u64) -> RomWeaverError {
     RomWeaverError::ValidationCode(
-        rom_weaver_core::ValidationCodeError::new("weave.parse")
+        rom_weaver_core::ValidationCodeError::new("bundle.parse")
             .with_message("weave exceeds the maximum supported size")
             .with_field("source", label.to_owned())
             .with_field("size", size)

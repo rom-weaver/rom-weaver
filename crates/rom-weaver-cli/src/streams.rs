@@ -212,7 +212,7 @@ fn validate(command: &Commands, options: &RunCommandOptions, name: Option<&str>)
             }
         }
         Commands::Patch(PatchCommands::Apply(args)) => {
-            if args.tui || args.emit_weave.is_some() {
+            if args.tui || args.emit_bundle.is_some() {
                 return Err(invalid(
                     "patch apply output - cannot use --tui or --emit-weave",
                 ));

@@ -56,7 +56,7 @@ pub(crate) fn weave_validation(code: &'static str, message: &'static str) -> Rom
 pub(crate) fn parse_weave_bytes(bytes: &[u8]) -> Result<RomWeaverWeave> {
     let mut weave: RomWeaverWeave = serde_json::from_slice(bytes).map_err(|error| {
         RomWeaverError::ValidationCode(
-            ValidationCodeError::new("weave.parse")
+            ValidationCodeError::new("bundle.parse")
                 .with_message("weave JSON is invalid")
                 .with_field("detail", error.to_string()),
         )
@@ -76,7 +76,7 @@ pub(crate) fn parse_weave_bytes(bytes: &[u8]) -> Result<RomWeaverWeave> {
 fn validate_weave(weave: &mut RomWeaverWeave) -> Result<()> {
     if !matches!(weave.version, 1 | WEAVE_VERSION) {
         return Err(RomWeaverError::ValidationCode(
-            ValidationCodeError::new("weave.version.unsupported")
+            ValidationCodeError::new("bundle.version.unsupported")
                 .with_message("unsupported weave version")
                 .with_field("found", weave.version)
                 .with_field("supported", WEAVE_VERSION),
@@ -85,13 +85,13 @@ fn validate_weave(weave: &mut RomWeaverWeave) -> Result<()> {
     match weave.version {
         1 if weave.patch_basis.is_some() => {
             return Err(weave_validation(
-                "weave.patch_basis.unsupported",
+                "bundle.patch_basis.unsupported",
                 "version 1 weaves cannot declare patchBasis",
             ));
         }
         WEAVE_VERSION if weave.patch_basis.is_none() => {
             return Err(weave_validation(
-                "weave.patch_basis.missing",
+                "bundle.patch_basis.missing",
                 "version 2 weaves must declare patchBasis",
             ));
         }
@@ -99,7 +99,7 @@ fn validate_weave(weave: &mut RomWeaverWeave) -> Result<()> {
     }
     if weave.patches.is_empty() && weave.cheats.is_empty() {
         return Err(weave_validation(
-            "weave.patches.empty",
+            "bundle.patches.empty",
             "weave defines no patches and no cheats",
         ));
     }
@@ -108,13 +108,13 @@ fn validate_weave(weave: &mut RomWeaverWeave) -> Result<()> {
         let id = state.id.trim();
         if id.is_empty() {
             return Err(weave_validation(
-                "weave.check_state.id.empty",
+                "bundle.check_state.id.empty",
                 "weave checkStates entries need a non-empty id",
             ));
         }
         if !check_states.insert(id.to_owned()) {
             return Err(RomWeaverError::ValidationCode(
-                ValidationCodeError::new("weave.check_state.id.duplicate")
+                ValidationCodeError::new("bundle.check_state.id.duplicate")
                     .with_message("weave checkStates IDs must be unique")
                     .with_field("id", id.to_owned()),
             ));
@@ -126,7 +126,7 @@ fn validate_weave(weave: &mut RomWeaverWeave) -> Result<()> {
         )?;
         if state.checks.checksums.is_empty() && state.checks.size.is_none() {
             return Err(weave_validation(
-                "weave.check_state.checks.empty",
+                "bundle.check_state.checks.empty",
                 "weave checkStates entries need checksums or a size",
             ));
         }
@@ -158,7 +158,7 @@ fn validate_weave(weave: &mut RomWeaverWeave) -> Result<()> {
             && !patch_ids.insert(id.to_owned())
         {
             return Err(RomWeaverError::ValidationCode(
-                ValidationCodeError::new("weave.patch.id.duplicate")
+                ValidationCodeError::new("bundle.patch.id.duplicate")
                     .with_message("weave patch IDs must be unique when target references use them")
                     .with_field("id", id.to_owned()),
             ));
@@ -198,9 +198,9 @@ fn validate_weave(weave: &mut RomWeaverWeave) -> Result<()> {
                     if !*rom {
                         return Err(weave_validation(
                             if selector_name == "input" {
-                                "weave.patch.input.rom.invalid"
+                                "bundle.patch.input.rom.invalid"
                             } else {
-                                "weave.patch.target.rom.invalid"
+                                "bundle.patch.target.rom.invalid"
                             },
                             "patch input or target rom must be true",
                         ));
@@ -215,9 +215,9 @@ fn validate_weave(weave: &mut RomWeaverWeave) -> Result<()> {
                     if producer_id.is_empty() || !prior_patch_ids.contains(&producer_id) {
                         return Err(RomWeaverError::ValidationCode(
                             ValidationCodeError::new(if selector_name == "input" {
-                                "weave.patch.input.patch.unresolved"
+                                "bundle.patch.input.patch.unresolved"
                             } else {
-                                "weave.patch.target.patch.unresolved"
+                                "bundle.patch.target.patch.unresolved"
                             })
                             .with_message(
                                 "patch selector must reference an earlier patch with a stable id",
@@ -243,7 +243,7 @@ fn validate_weave(weave: &mut RomWeaverWeave) -> Result<()> {
     for (index, cheat) in weave.cheats.iter().enumerate() {
         if cheat.id.trim().is_empty() {
             return Err(RomWeaverError::ValidationCode(
-                ValidationCodeError::new("weave.cheat.id.missing")
+                ValidationCodeError::new("bundle.cheat.id.missing")
                     .with_message("weave cheat entry has an empty id")
                     .with_field("entry", format!("cheats[{index}]")),
             ));
@@ -275,14 +275,14 @@ fn validate_check_reference(
     let reference = reference.trim();
     if inline.is_some() {
         return Err(RomWeaverError::ValidationCode(
-            ValidationCodeError::new("weave.checks.reference.conflict")
+            ValidationCodeError::new("bundle.checks.reference.conflict")
                 .with_message("a checks reference cannot also carry inline checks")
                 .with_field("entry", entry.to_owned()),
         ));
     }
     if reference.is_empty() || !states.contains(reference) {
         return Err(RomWeaverError::ValidationCode(
-            ValidationCodeError::new("weave.checks.reference.unresolved")
+            ValidationCodeError::new("bundle.checks.reference.unresolved")
                 .with_message("checks reference matches no weave checkStates id")
                 .with_field("entry", entry.to_owned())
                 .with_field("ref", reference.to_owned()),
@@ -308,7 +308,7 @@ pub(super) fn normalized_member_path(value: &str, entry: &str) -> Result<String>
         || value.split('/').all(|part| part.is_empty() || part == ".")
     {
         return Err(RomWeaverError::ValidationCode(
-            ValidationCodeError::new("weave.member.invalid")
+            ValidationCodeError::new("bundle.member.invalid")
                 .with_message("weave member selectors must be non-empty relative paths")
                 .with_field("entry", entry.to_owned()),
         ));
@@ -325,7 +325,7 @@ fn validate_source_ref(url: &Option<String>, path: &Option<String>, entry: &str)
     validate_source_conflict(url, path, entry)?;
     if !(has_source_value(url) || has_source_value(path)) {
         return Err(RomWeaverError::ValidationCode(
-            ValidationCodeError::new("weave.source.missing")
+            ValidationCodeError::new("bundle.source.missing")
                 .with_message("weave entry provides neither url nor path")
                 .with_field("entry", entry),
         ));
@@ -341,7 +341,7 @@ fn validate_source_conflict(
 ) -> Result<()> {
     if has_source_value(url) && has_source_value(path) {
         return Err(RomWeaverError::ValidationCode(
-            ValidationCodeError::new("weave.source.conflict")
+            ValidationCodeError::new("bundle.source.conflict")
                 .with_message("weave entry provides both url and path")
                 .with_field("entry", entry),
         ));
@@ -371,7 +371,7 @@ fn validate_relative_path(path: &Option<String>, entry: &str) -> Result<()> {
         || path.split(['/', '\\']).any(|component| component == "..");
     if invalid {
         return Err(RomWeaverError::ValidationCode(
-            ValidationCodeError::new("weave.path.invalid")
+            ValidationCodeError::new("bundle.path.invalid")
                 .with_message("weave path entries must be relative and must not traverse upward")
                 .with_field("entry", entry.to_owned())
                 .with_field("path", path.to_owned()),
@@ -398,7 +398,7 @@ fn normalize_checksum_map(checksums: &mut BTreeMap<String, String>, entry: &str)
                 other => other.to_string(),
             };
             RomWeaverError::ValidationCode(
-                ValidationCodeError::new("weave.checks.invalid")
+                ValidationCodeError::new("bundle.checks.invalid")
                     .with_message("weave checksum values are invalid")
                     .with_field("entry", entry.to_owned())
                     .with_field("detail", detail),
@@ -518,7 +518,7 @@ mod tests {
                     { "id": "translation", "path": "translation.ips" }
                 ] }"#
             ),
-            "weave.patch.input.patch.unresolved"
+            "bundle.patch.input.patch.unresolved"
         );
     }
 
@@ -528,11 +528,11 @@ mod tests {
             parse_err(
                 r#"{ "version": 1, "patchBasis": "base", "patches": [ { "path": "x.ips" } ] }"#
             ),
-            "weave.patch_basis.unsupported"
+            "bundle.patch_basis.unsupported"
         );
         assert_eq!(
             parse_err(r#"{ "version": 2, "patches": [ { "path": "x.ips" } ] }"#),
-            "weave.patch_basis.missing"
+            "bundle.patch_basis.missing"
         );
     }
 
@@ -552,7 +552,7 @@ mod tests {
     fn rejects_invalid_basis_value() {
         assert_eq!(
             parse_err(r#"{ "version": 1, "patches": [ { "path": "x.ips", "basis": "root" } ] }"#),
-            "weave.parse"
+            "bundle.parse"
         );
     }
 
@@ -610,7 +610,7 @@ mod tests {
         assert_eq!(weave.cheats.len(), 1);
         assert_eq!(
             parse_err(r#"{ "version": 1, "patches": [], "cheats": [] }"#),
-            "weave.patches.empty"
+            "bundle.patches.empty"
         );
     }
 
@@ -618,15 +618,15 @@ mod tests {
     fn rejects_cheat_entries_that_name_nothing() {
         assert_eq!(
             parse_err(r#"{ "version": 1, "patches": [], "cheats": [ { "id": " " } ] }"#),
-            "weave.cheat.id.missing"
+            "bundle.cheat.id.missing"
         );
         assert_eq!(
             parse_err(r#"{ "version": 1, "patches": [], "cheats": [ {} ] }"#),
-            "weave.parse"
+            "bundle.parse"
         );
         assert_eq!(
             parse_err(r#"{ "version": 1, "patches": [], "cheats": [ { "id": "c", "who": 1 } ] }"#),
-            "weave.parse"
+            "bundle.parse"
         );
     }
 
@@ -634,7 +634,7 @@ mod tests {
     fn rejects_missing_version_as_parse_error() {
         assert_eq!(
             parse_err(r#"{ "patches": [ { "path": "x.ips" } ] }"#),
-            "weave.parse"
+            "bundle.parse"
         );
     }
 
@@ -645,7 +645,7 @@ mod tests {
                 parse_err(&format!(
                     r#"{{ "version": {version}, "patches": [ {{ "path": "x.ips" }} ] }}"#
                 )),
-                "weave.version.unsupported"
+                "bundle.version.unsupported"
             );
         }
     }
@@ -654,13 +654,13 @@ mod tests {
     fn rejects_unknown_fields() {
         assert_eq!(
             parse_err(r#"{ "version": 1, "patchez": [], "patches": [ { "path": "x.ips" } ] }"#),
-            "weave.parse"
+            "bundle.parse"
         );
         assert_eq!(
             parse_err(
                 r#"{ "version": 1, "patches": [ { "path": "x.ips", "descriptin": "typo" } ] }"#
             ),
-            "weave.parse"
+            "bundle.parse"
         );
     }
 
@@ -670,7 +670,7 @@ mod tests {
             parse_err(
                 r#"{ "version": 1, "patches": [ { "path": "x.ips", "status": "sometimes" } ] }"#
             ),
-            "weave.parse"
+            "bundle.parse"
         );
     }
 
@@ -678,7 +678,7 @@ mod tests {
     fn rejects_empty_patches() {
         assert_eq!(
             parse_err(r#"{ "version": 1, "patches": [] }"#),
-            "weave.patches.empty"
+            "bundle.patches.empty"
         );
     }
 
@@ -690,7 +690,7 @@ mod tests {
                      "rom": { "url": "https://example.test/rom.sfc", "path": "rom.sfc" },
                      "patches": [ { "path": "x.ips" } ] }"#
             ),
-            "weave.source.conflict"
+            "bundle.source.conflict"
         );
     }
 
@@ -698,11 +698,11 @@ mod tests {
     fn rejects_missing_source_and_treats_blank_as_missing() {
         assert_eq!(
             parse_err(r#"{ "version": 1, "patches": [ { "name": "x" } ] }"#),
-            "weave.source.missing"
+            "bundle.source.missing"
         );
         assert_eq!(
             parse_err(r#"{ "version": 1, "patches": [ { "url": "  " } ] }"#),
-            "weave.source.missing"
+            "bundle.source.missing"
         );
     }
 
@@ -753,7 +753,7 @@ mod tests {
                 r#"{ "version": 1,
                      "patches": [ { "path": "x.ips", "inputChecks": { "checksums": { "crc32": "abcd" } } } ] }"#
             ),
-            "weave.checks.invalid"
+            "bundle.checks.invalid"
         );
         // Unsupported algorithm.
         assert_eq!(
@@ -761,7 +761,7 @@ mod tests {
                 r#"{ "version": 1,
                      "patches": [ { "path": "x.ips", "outputChecks": { "checksums": { "crc99": "aabbccdd" } } } ] }"#
             ),
-            "weave.checks.invalid"
+            "bundle.checks.invalid"
         );
     }
 

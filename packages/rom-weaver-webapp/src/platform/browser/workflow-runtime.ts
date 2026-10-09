@@ -1,3 +1,4 @@
+import { createBundleRuntime } from "../../lib/runtime/bundle-runtime.ts";
 import { invokeRomWeaverChecksumWorker } from "../../lib/runtime/wasm-checksum-command.ts";
 import { getPathBaseName } from "../../lib/path-utils.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
@@ -391,7 +392,10 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
 // Parse a rom-weaver-weave.json source (plain/compressed/archive). Weaved ROM/patch leaves land under
 // a unique per-parse OPFS scope. Disk-backed File views carry their path into the normal drop pipeline;
 // final workflow ownership releases each member and removes the scope after the last member is gone.
-const createBrowserWeaveRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["weave"] => ({
+const createBrowserWeaveRuntime = (
+  workerIo: RuntimeWorkerIo,
+  jsonFileName = "rom-weaver-weave.json",
+): NonNullable<WorkflowRuntime["weave"]> => ({
   create: async ({
     rom,
     weaveRom,
@@ -430,10 +434,12 @@ const createBrowserWeaveRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["
         workerIo,
       });
       staged.push(...stagedInputs);
-      const outputPath = outputScope.selectOutputPath("", "rom-weaver-weave.json", inputPaths);
+      const outputPath = outputScope.selectOutputPath("", jsonFileName, inputPaths);
       // The weave name comes from the caller (its extension picks the archive
       // format); only its base name is honored so it stays inside the mount.
-      const weaveBaseName = weaveFileName ? getPathBaseName(weaveFileName, "rom-weaver-weave.zip") : undefined;
+      const weaveBaseName = weaveFileName
+        ? getPathBaseName(weaveFileName, jsonFileName.replace(/\.json$/, ".zip"))
+        : undefined;
       const weavePath = weaveBaseName
         ? outputScope.selectOutputPath("", weaveBaseName, [...inputPaths, outputPath])
         : undefined;
@@ -505,7 +511,7 @@ const createBrowserWeaveRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["
   parse: async ({ source, fileName, logLevel, onLog, onProgress, signal }) => {
     const extractDirPath = joinVfsPath(WORKER_OPFS_MOUNTPOINT, "weave-parse", createVfsPathId());
     const staged = await workerIo.stageSource({
-      fallbackFileName: fileName || "rom-weaver-weave.json",
+      fallbackFileName: fileName || jsonFileName,
       pathPrefix: "weave-input",
       scope: "archive",
       source,
@@ -638,11 +644,13 @@ const createBrowserRuntime = (): WorkflowRuntime => {
     mountPoint: WORKER_OPFS_MOUNTPOINT,
     vfs: browserVfs,
   });
+  const weave = createBrowserWeaveRuntime(workerIo);
   return {
     binary: {
       assertSource: assertBrowserBinarySource,
     },
-    weave: createBrowserWeaveRuntime(workerIo),
+    weave,
+    bundle: createBundleRuntime(createBrowserWeaveRuntime(workerIo, "rom-weaver-bundle.json")),
     cheat: createBrowserCheatRuntime(workerIo),
     checksum: createBrowserChecksumRuntime(workerIo),
     compression: createBrowserCompressionRuntime(workerIo),

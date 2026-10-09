@@ -257,9 +257,9 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
     latestFakeWorkflow = null;
   });
 
-  it("uses legacy defaults for the rendered weave ROM choice", async () => {
+  it.each(["weave", "bundle"] as const)("uses legacy defaults for the rendered %s ROM choice", async (mode) => {
     const { container } = renderForm({
-      mode: "weave",
+      mode,
       defaultSettings: { output: { bundlePackage: "rom" } } as unknown as Parameters<
         typeof ApplyPatchForm
       >[0]["defaultSettings"],

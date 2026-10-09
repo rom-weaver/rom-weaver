@@ -58,3 +58,9 @@ describe("parseWeaveParseResult", () => {
     ).toBeUndefined();
   });
 });
+
+it("accepts an existing bundle event document", () => {
+  expect(
+    parseWeaveParseResult({ bundle: { bundle: { version: 1, patches: [] }, source_kind: "json", warnings: [] } }),
+  ).toMatchObject({ weave: { version: 1, patches: [] } });
+});

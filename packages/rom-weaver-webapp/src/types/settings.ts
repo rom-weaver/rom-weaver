@@ -46,6 +46,7 @@ type CommonSettings = {
   input?: InputSettings;
   logging?: LoggingSettings;
   weavePackage?: WeavePackage;
+  bundlePackage?: WeavePackage;
   storage?: StorageSettings;
   workers?: WorkerSettings;
 };
@@ -90,6 +91,7 @@ type OutputSettings = {
    * headers, drop junk copier headers), keep, or strip (headerless output). */
   header?: "auto" | "keep" | "strip";
   weavePackage?: WeavePackage;
+  bundlePackage?: WeavePackage;
   /**
    * Name the output after the ROM's identified title instead of its file name.
    * Absent means on - a confident title is a better name than `rom_final_v2`.

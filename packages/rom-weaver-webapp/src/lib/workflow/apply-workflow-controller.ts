@@ -182,6 +182,10 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
 
   /** Export the exact leaves staging prepared, so a weave export right after apply needs no
    * second archive extraction/ingest pass. */
+  getBundleExportSources(): ApplyWorkflowWeaveSources {
+    return this.getWeaveExportSources();
+  }
+
   getWeaveExportSources(): ApplyWorkflowWeaveSources {
     const session = this.inputSession;
     const selectedOwner = this.getSelectedInputOwner();

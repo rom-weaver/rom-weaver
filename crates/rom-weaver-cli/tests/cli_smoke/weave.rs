@@ -259,7 +259,7 @@ fn weave_parse_archive_without_weave_fails() {
     assert_eq!(terminal["status"], "failed");
     let label = terminal["label"].as_str().expect("failure label");
     assert!(
-        label.contains("weave.missing"),
+        label.contains("bundle.missing"),
         "expected weave.missing code in label: {label}"
     );
 }
@@ -660,7 +660,7 @@ fn weave_apply_missing_output_fails_with_code() {
         terminal["label"]
             .as_str()
             .expect("label")
-            .contains("weave.output.missing"),
+            .contains("bundle.output.missing"),
         "unexpected label: {}",
         terminal["label"]
     );
@@ -901,7 +901,7 @@ fn weave_create_computes_checks_and_aligns_metadata() {
     assert_eq!(terminal["status"], "succeeded");
     let created = &terminal["details"]["weave_create"];
     assert!(
-        created["weave_path"]
+        created["bundle_path"]
             .as_str()
             .expect("weave path")
             .ends_with("rom-weaver-weave.json")
@@ -1859,7 +1859,7 @@ fn weave_apply_rejects_disabled_named_patch_input_producer() {
         events.last().expect("terminal")["label"]
             .as_str()
             .expect("label")
-            .contains("weave.patch.input.patch.unavailable")
+            .contains("bundle.patch.input.patch.unavailable")
     );
 }
 
@@ -3695,14 +3695,17 @@ fn weave_archive_prefers_canonical_over_legacy_in_either_order() {
         r#"{"version":1,"patches":[{"url":"https://example.test/old.ips"}]}"#,
     )
     .expect("legacy fixture");
-    for reverse in [false, true] {
-        let archive = temp.child(if reverse {
-            "reverse.tar.gz"
-        } else {
-            "forward.tar.gz"
-        });
+    for (reverse, identical) in [(false, false), (true, false), (false, true), (true, true)] {
+        let archive = temp.child(format!("archive-{reverse}-{identical}.tar.gz"));
         let mut entries = vec![
-            (legacy.path(), "ROM-WEAVER-BUNDLE.JSON"),
+            (
+                if identical {
+                    canonical.path()
+                } else {
+                    legacy.path()
+                },
+                "ROM-WEAVER-BUNDLE.JSON",
+            ),
             (canonical.path(), "ROM-WEAVER-WEAVE.JSON"),
         ];
         if reverse {
@@ -3724,6 +3727,47 @@ fn weave_archive_prefers_canonical_over_legacy_in_either_order() {
             terminal["details"]["weave"]["archive_member"],
             "ROM-WEAVER-WEAVE.JSON"
         );
-        assert!(terminal["details"].get("bundle").is_none());
+        assert_eq!(terminal["details"]["bundle"]["bundle"]["version"], 1);
+        assert_eq!(terminal["command"], "bundle-parse");
+        let restored: rom_weaver_app::BundleParseResult =
+            serde_json::from_value(terminal["details"]["bundle"].clone())
+                .expect("old typed parse reader");
+        assert_eq!(restored.bundle.version, 1);
+        assert_eq!(restored.warnings.len(), usize::from(!identical));
     }
+}
+
+#[test]
+fn oversized_legacy_member_does_not_reject_valid_canonical_recipe() {
+    let temp = setup_temp_dir();
+    let canonical = temp.child("canonical.json");
+    let oversized = temp.child("oversized.json");
+    let archive = temp.child("oversized-alias.tar.gz");
+    fs::write(
+        canonical.path(),
+        r#"{"version":1,"patches":[{"url":"https://example.test/new.ips"}]}"#,
+    )
+    .expect("canonical");
+    fs::write(oversized.path(), vec![b' '; 4 * 1024 * 1024 + 1]).expect("oversized alias");
+    write_tar_gz_fixture(
+        &[
+            (oversized.path(), "rom-weaver-bundle.json"),
+            (canonical.path(), "rom-weaver-weave.json"),
+        ],
+        archive.path(),
+    );
+    let events = run_json_events(
+        &[
+            "bundle",
+            "parse",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    let result = &events.last().expect("terminal")["details"]["bundle"];
+    assert_eq!(result["bundle"]["version"], 1);
+    assert_eq!(result["archive_member"], "rom-weaver-weave.json");
+    assert_eq!(result["warnings"].as_array().expect("warnings").len(), 1);
 }

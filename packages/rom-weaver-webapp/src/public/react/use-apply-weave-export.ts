@@ -1,3 +1,4 @@
+import { toBundleCreateResult } from "../../lib/runtime/bundle-runtime.ts";
 import { type RefObject, useCallback, useEffect } from "react";
 import type { ApplyWorkflow } from "../../platform/browser/browser-api.ts";
 import type { ApplyWorkflowWeaveSources } from "../../types/apply-workflow.ts";
@@ -27,7 +28,10 @@ type ApplyWeaveExportInput = {
   outputState: ReturnType<ApplyFormSession["localOutputController"]["getState"]>;
   patchInputBasis: PatchInputBasis;
   preparedWorkflowRef: RefObject<ApplyWorkflow | null>;
-  props: Pick<ApplyPatchFormProps, "onWeaveExportComplete" | "onWeavePackageChange">;
+  props: Pick<
+    ApplyPatchFormProps,
+    "onWeaveExportComplete" | "onWeavePackageChange" | "onBundleExportComplete" | "onBundlePackageChange"
+  >;
   resolvedOutputController: ApplyFormSession["localOutputController"];
   resolvedStackController: ApplyFormSession["localStackController"];
   workflowHandle: ReturnType<typeof createWorkflowHandle<ApplyWorkflow>>;
@@ -89,7 +93,10 @@ const useApplyWeaveExport = ({
     initialWeaveRom: defaultWeaveContents === "rom",
     initialFormat: defaultWeaveFormat,
     ready: weaveExportReady,
-    ...(props.onWeaveExportComplete ? { onComplete: props.onWeaveExportComplete } : {}),
+    onComplete: (result) => {
+      props.onWeaveExportComplete?.(result);
+      props.onBundleExportComplete?.(toBundleCreateResult(result));
+    },
   });
   const { setFormat: setWeaveExportFormat } = weaveExport;
 
@@ -100,14 +107,15 @@ const useApplyWeaveExport = ({
   // The weave package controls live in the separate sharing job. Compression
   // type selects the archive format; this callback persists only ROM inclusion.
   const { setWeaveRom: setWeaveExportRom } = weaveExport;
-  const { onWeavePackageChange } = props;
+  const { onWeavePackageChange, onBundlePackageChange } = props;
   const changeWeavePackage = useCallback(
     (value: string) => {
       const contents = value === "rom" || value.endsWith(":rom") ? "rom" : "patches";
       setWeaveExportRom(contents === "rom");
       onWeavePackageChange?.(contents);
+      onBundlePackageChange?.(contents);
     },
-    [onWeavePackageChange, setWeaveExportRom],
+    [onWeavePackageChange, onBundlePackageChange, setWeaveExportRom],
   );
 
   return { weaveExport, changeWeavePackage };

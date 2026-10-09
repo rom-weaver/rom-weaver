@@ -29,7 +29,7 @@ impl CliApp {
     ) -> Result<PathBuf> {
         if !(url.starts_with("http://") || url.starts_with("https://")) {
             return Err(RomWeaverError::ValidationCode(
-                ValidationCodeError::new("weave.url.unsupported")
+                ValidationCodeError::new("bundle.url.unsupported")
                     .with_message("weave url entries must use http or https")
                     .with_field("entry", entry_label.to_owned())
                     .with_field("url", url.to_owned()),
@@ -131,7 +131,7 @@ pub(super) fn resolve_weave_entry_url(
     }
     if url.starts_with('/') || url.starts_with('\\') {
         return Err(RomWeaverError::ValidationCode(
-            ValidationCodeError::new("weave.url.unsupported")
+            ValidationCodeError::new("bundle.url.unsupported")
                 .with_message(
                     "relative weave urls must not start with a slash; use a full http(s) url or a plain relative reference",
                 )
@@ -141,7 +141,7 @@ pub(super) fn resolve_weave_entry_url(
     }
     let Some(base) = weave_base_url else {
         return Err(RomWeaverError::ValidationCode(
-            ValidationCodeError::new("weave.url.unsupported")
+            ValidationCodeError::new("bundle.url.unsupported")
                 .with_message(
                     "relative weave urls only resolve when the weave itself was fetched from a url",
                 )

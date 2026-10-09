@@ -1,3 +1,4 @@
+import { getWeaveRuntime } from "../runtime/bundle-runtime.ts";
 import { createCleanupOnce } from "../../storage/shared/disposal.ts";
 import type {
   ParsedWeave,
@@ -246,7 +247,7 @@ async function loadLocalWeaveSession(
   { probe = false, signal }: LoadLocalWeaveOptions = {},
 ): Promise<LoadedLocalWeave | null> {
   const { browserRuntime } = await import("../../platform/browser/workflow-runtime.ts");
-  const parse = browserRuntime.weave?.parse;
+  const parse = getWeaveRuntime(browserRuntime)?.parse;
   if (!parse) throw new Error("Weave parsing is not available in this runtime");
   let parsed: Awaited<ReturnType<typeof parse>>;
   const parseStartedAt = performance.now();

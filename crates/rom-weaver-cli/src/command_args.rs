@@ -1288,9 +1288,10 @@ You can usually skip this flag. A weave is picked up automatically when
 archive with one at its root, and you passed no --patch of your own."
         )
     )]
-    #[serde(default, alias = "bundle")]
+    #[serde(default, alias = "weave")]
+    #[cfg_attr(feature = "typescript-types", ts(rename = "weave"))]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub weave: Option<PathBuf>,
+    pub bundle: Option<PathBuf>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -1719,7 +1720,7 @@ output is written back in the order the input arrived in."
     )]
     #[serde(skip)]
     #[cfg_attr(feature = "typescript-types", ts(skip))]
-    pub emit_weave: Option<PathBuf>,
+    pub emit_bundle: Option<PathBuf>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -2913,14 +2914,15 @@ Record one input ROM rule for every patch. An individual --patch-basis overrides
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
-            long,
+            long = "weave",
             visible_alias = "bundle",
             help = "Also pack the weave and its ROM and patches into one shareable archive, such as release.zip"
         )
     )]
-    #[serde(default, alias = "bundle")]
+    #[serde(default, alias = "weave")]
+    #[cfg_attr(feature = "typescript-types", ts(rename = "weave"))]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub weave: Option<PathBuf>,
+    pub bundle: Option<PathBuf>,
     /// Optional packaged ROM payload. Checks are still calculated from `rom`.
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -2930,9 +2932,10 @@ Record one input ROM rule for every patch. An individual --patch-basis overrides
             help = "Pack this file into --weave as the ROM, while --input supplies the checksums and metadata"
         )
     )]
-    #[serde(default, alias = "bundle_rom")]
+    #[serde(default, alias = "weave_rom")]
+    #[cfg_attr(feature = "typescript-types", ts(rename = "weave_rom"))]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub weave_rom: Option<PathBuf>,
+    pub bundle_rom: Option<PathBuf>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -2941,9 +2944,10 @@ Record one input ROM rule for every patch. An individual --patch-basis overrides
             help = "Keep the ROM out of --weave and record only its checksums, so whoever applies the weave brings their own copy"
         )
     )]
-    #[serde(default, alias = "no_bundle_rom")]
+    #[serde(default, alias = "no_weave_rom")]
+    #[cfg_attr(feature = "typescript-types", ts(rename = "no_weave_rom"))]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub no_weave_rom: bool,
+    pub no_bundle_rom: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -3034,6 +3038,10 @@ impl WeaveCreateCommand {
     /// `--patch` (clap's parsed `Vec`s lose the interleave order, so this
     /// re-derives it from the raw argv indices). The last occurrence bound to
     /// a patch wins; an occurrence before any `--patch` binds to the first.
+    pub fn align_bundle_patch_metadata(&mut self, matches: &clap::ArgMatches) {
+        self.align_weave_patch_metadata(matches);
+    }
+
     pub fn align_weave_patch_metadata(&mut self, matches: &clap::ArgMatches) {
         let patch_indices: Vec<usize> = matches
             .indices_of("patch")

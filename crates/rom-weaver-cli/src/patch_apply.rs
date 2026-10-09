@@ -689,7 +689,7 @@ impl CliApp {
             patch_filter,
             patch_count = args.patches.len(),
             output = ?args.output,
-            weave = ?args.weave,
+            weave = ?args.bundle,
             with_patches = args.with_patches.len(),
             without_patches = args.without_patches.len(),
             no_extract = args.no_extract,
@@ -717,7 +717,7 @@ impl CliApp {
         // archive members, so it must outlive the whole apply.
         let mut args = args;
         let original_input = args.input.clone();
-        let local_weave = args.weave.as_ref().filter(|path| path.exists()).cloned();
+        let local_weave = args.bundle.as_ref().filter(|path| path.exists()).cloned();
         let weave_context = self.context(args.threads);
         let weave_resolution = match self.resolve_weave_apply(&mut args, &weave_context) {
             Ok(resolution) => resolution,
@@ -743,7 +743,7 @@ impl CliApp {
         ) {
             return outcome;
         }
-        let emit_weave = args.emit_weave.clone();
+        let emit_bundle = args.emit_bundle.clone();
         let mut emit_steps = weave_resolution
             .as_ref()
             .map(|resolution| resolution.steps.clone())
@@ -762,7 +762,7 @@ impl CliApp {
             step.emit_header = args.patch_header.get(index).copied();
             step.emit_basis = args.patch_basis.get(index).copied();
         }
-        let mut emit_inputs = emit_weave.as_ref().map(|_| EmitWeaveInputs {
+        let mut emit_inputs = emit_bundle.as_ref().map(|_| EmitWeaveInputs {
             input: args.input.clone(),
             patches: args.patches.clone(),
             steps: emit_steps,
@@ -799,7 +799,7 @@ impl CliApp {
         Self::append_report_warnings(&mut report, weave_warnings);
         // A failed sidecar MUST preserve the completed ROM and report its warning
         // before the terminal result is emitted.
-        if let (Some(emit_path), Some(mut inputs)) = (emit_weave, emit_inputs)
+        if let (Some(emit_path), Some(mut inputs)) = (emit_bundle, emit_inputs)
             && report.status == OperationStatus::Succeeded
         {
             inputs.output = final_output.or(inputs.output);
@@ -1081,7 +1081,7 @@ impl CliApp {
                         None,
                         "validate",
                         weave_validation(
-                            "weave.output.missing",
+                            "bundle.output.missing",
                             "patch apply requires --output or a weave output.name",
                         )
                         .to_string(),
@@ -2899,8 +2899,8 @@ enum ChainSourceRole {
 impl ChainSourceRole {
     fn rom_member_code(self) -> &'static str {
         match self {
-            Self::Target => "weave.patch.target.rom.member.unavailable",
-            Self::Input => "weave.patch.input.rom.member.unavailable",
+            Self::Target => "bundle.patch.target.rom.member.unavailable",
+            Self::Input => "bundle.patch.input.rom.member.unavailable",
         }
     }
 
@@ -2913,8 +2913,8 @@ impl ChainSourceRole {
 
     fn patch_code(self) -> &'static str {
         match self {
-            Self::Target => "weave.patch.target.patch.unavailable",
-            Self::Input => "weave.patch.input.patch.unavailable",
+            Self::Target => "bundle.patch.target.patch.unavailable",
+            Self::Input => "bundle.patch.input.patch.unavailable",
         }
     }
 

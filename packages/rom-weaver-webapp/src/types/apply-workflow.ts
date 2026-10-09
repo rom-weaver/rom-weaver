@@ -199,3 +199,5 @@ export type {
   ApplyWorkflowPatchState,
   ApplyWorkflowResolvedInput,
 };
+
+export type { ApplyWorkflowWeaveSources as ApplyWorkflowBundleSources };
