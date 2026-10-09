@@ -320,9 +320,9 @@ fn shard_candidates(slug: &str) -> [String; 4] {
 }
 
 /// The directory holding the shards: `--cheat-database`, else
-/// `$ROM_WEAVER_CHEAT_DATABASE`, else `cheats` inside the identify database
-/// directory that `rom-weaver setup` installs into.
-pub(crate) fn resolve_directory(explicit: Option<&Path>) -> Result<PathBuf> {
+/// `$ROM_WEAVER_CHEAT_DATABASE`, else the first local data tree with this
+/// system's shard. Explicit overrides stay authoritative even when absent.
+pub(crate) fn resolve_directory(explicit: Option<&Path>, system: CheatSystem) -> Result<PathBuf> {
     if let Some(directory) = explicit {
         trace!(directory = %directory.display(), "cheat database directory from --cheat-database");
         return Ok(directory.to_path_buf());
@@ -332,15 +332,29 @@ pub(crate) fn resolve_directory(explicit: Option<&Path>) -> Result<PathBuf> {
         trace!(directory = %directory.display(), "cheat database directory from environment");
         return Ok(directory);
     }
-    let directory = default_directory()?;
-    trace!(directory = %directory.display(), "cheat database directory from the identify database directory");
+    let directory = default_directory(system)?;
+    trace!(directory = %directory.display(), "cheat database directory from local data trees");
     Ok(directory)
 }
 
-/// `<identify database directory>/cheats`, which is where `rom-weaver setup`
-/// unpacks the cheat shards that travel in the identify archive.
-pub(crate) fn default_directory() -> Result<PathBuf> {
-    Ok(crate::identify_database::default_database_dir()?.join("cheats"))
+/// Preserve legacy user shards before the setup and executable-relative trees.
+/// A directory for another system must not hide an installed matching shard.
+fn default_directory(system: CheatSystem) -> Result<PathBuf> {
+    let database_dir = crate::identify_database::default_database_dir()?;
+    if let Some(slug) = shard_slug(system) {
+        let candidates = shard_candidates(slug);
+        let directories = std::iter::once(database_dir.join("cheats")).chain(
+            crate::identify_builtin::data_roots(&database_dir)
+                .into_iter()
+                .map(|root| root.join("cheats")),
+        );
+        for directory in directories {
+            if candidates.iter().any(|name| directory.join(name).is_file()) {
+                return Ok(directory);
+            }
+        }
+    }
+    Ok(database_dir.join("full-v1/cheats"))
 }
 
 /// Read the manifest when it is present. A missing manifest is not fatal: the

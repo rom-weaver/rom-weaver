@@ -286,21 +286,30 @@ The application includes every supported save definition. `save list-games` repo
 
 ## Cheats
 
-`cheat list --input ROM` detects the ROM's system, reads that system's shard from the cheat-database directory, matches the game, and prints one row per cheat: ID, delivery, raw code, description. `--json` puts the same data in `details.cheat_list`.
+`cheat list --input ROM` detects the system, loads its shard, and matches the game. Each row contains ID, delivery, raw code, and description. `--json` returns these in `details.cheat_list`.
 
-`rom-weaver setup` installs the shards along with the identify packs. A shard may be Brotli compressed (`<slug>.json.br`) or plain (`<slug>.json`); the compressed copy wins when both are present.
+`rom-weaver setup` installs shards alongside identify packs. The [cheat database reference](cheat-database.md#cli-database-directory) lists filenames and compression precedence.
 
-Delivery is `rom` or `unsupported`. The match class is `exact` (a checksum matched), `title` (the file name matched a game title), or `manual` (`--game`). Every run prints the CC-BY-SA-4.0 attribution line once.
+Without an override, the first matching system shard wins:
 
-The shared flags below are also on `patch apply` and `patch create`, under the `Cheats` help heading.
+1. `<identify database directory>/cheats` (legacy user shards).
+2. `<identify database directory>/full-v1/cheats` (the copy installed by `setup`).
+3. `<executable directory>/share/rom-weaver/identify/v1/cheats` (packaged data).
+4. `<executable directory>/../share/rom-weaver/identify/v1/cheats` (prefix-installed data).
+
+Executable-relative lookup requires `bundled-identify-data`, enabled in published packages. Explicit directory and environment overrides win even with a missing shard.
+
+Delivery is `rom` or `unsupported`. Matches are `exact` (checksum), `title` (filename), or `manual` (`--game`). Each run prints CC-BY-SA-4.0 attribution once.
+
+These flags also appear under `Cheats` in `patch apply` and `patch create` help.
 
 | Flag | Meaning |
 | --- | --- |
-| `--cheat ID_OR_DESCRIPTION` | Select one cheat by record ID or by exact description. Repeatable. A description that matches more than one entry fails with `cheat_selector_ambiguous`. |
-| `--cheat-database DIR` | The directory holding the shards. Defaults to `$ROM_WEAVER_CHEAT_DATABASE`, then `<identify database directory>/cheats`. |
+| `--cheat ID_OR_DESCRIPTION` | Select by record ID or exact description. Repeatable. Multiple description matches fail with `cheat_selector_ambiguous`. |
+| `--cheat-database DIR` | Shard directory. Defaults to `$ROM_WEAVER_CHEAT_DATABASE`, then the discovery order above. |
 | `--cheat-system SYS` | `nes`, `snes`, `genesis`, `32x`, `sms`, `gamegear`, `gameboy`, `gameboy-color`, or `gba`, when the ROM header does not say. |
 | `--game ID` | Use this database game ID instead of matching by checksum or title. |
-| `--allow-cheat-conflicts` | Let a later cheat overwrite an earlier one at the same offset. Without it, two `rom` cheats writing different values to one byte fail with `cheat_write_conflict`. |
+| `--allow-cheat-conflicts` | Later cheats win at conflicting offsets. Otherwise, different `rom` cheat values for one byte fail with `cheat_write_conflict`. |
 
 `patch apply --cheat` bakes the selected entries into the output ROM, after the patch chain. Selecting an `unsupported` entry fails the run.
 

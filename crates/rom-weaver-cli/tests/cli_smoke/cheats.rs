@@ -425,6 +425,218 @@ fn cheat_entry(description: &str, code: &str, index: usize) -> Value {
     })
 }
 
+fn copy_cheat_cli(temp: &TempDir) {
+    let executable = temp.child(format!(
+        "install/bin/rom-weaver{}",
+        std::env::consts::EXE_SUFFIX
+    ));
+    fs::create_dir_all(executable.path().parent().expect("binary directory"))
+        .expect("binary directory");
+    fs::copy(env!("CARGO_BIN_EXE_rom-weaver"), executable.path()).expect("installed binary");
+}
+
+fn cheat_data_command(temp: &TempDir) -> Command {
+    let mut command = Command::new(
+        temp.child(format!(
+            "install/bin/rom-weaver{}",
+            std::env::consts::EXE_SUFFIX
+        ))
+        .path(),
+    );
+    command
+        .env("ROM_WEAVER_DATA_DIR", temp.child("data").path())
+        .env_remove("ROM_WEAVER_CHEAT_DATABASE")
+        .env("HOME", temp.child("home").path())
+        .env("XDG_CONFIG_HOME", temp.child("config").path())
+        .env("XDG_DATA_HOME", temp.child("data").path())
+        .env("XDG_CACHE_HOME", temp.child("cache").path())
+        .env("XDG_STATE_HOME", temp.child("state").path());
+    command
+}
+
+fn install_cheat_shard(temp: &TempDir, directory: &str) {
+    let database = write_cheat_database(temp, &nes_rom());
+    let shard = fs::read(Path::new(&database).join("nintendo-nintendo-entertainment-system.json"))
+        .expect("cheat shard");
+    let destination = temp.child(directory);
+    fs::create_dir_all(destination.path()).expect("installed cheat directory");
+    let output = File::create(
+        destination
+            .child("nintendo-nintendo-entertainment-system.json.br")
+            .path(),
+    )
+    .expect("compressed shard");
+    let mut encoder = brotli::CompressorWriter::new(output, 4096, 5, 22);
+    encoder.write_all(&shard).expect("compress cheat shard");
+}
+
+fn assert_default_cheat_workflows(temp: &TempDir) {
+    let input = temp.child("game.nes");
+    fs::write(input.path(), nes_rom()).expect("ROM fixture");
+    let list = cheat_data_command(temp)
+        .args(["cheat", "list", "--input"])
+        .arg(input.path())
+        .arg("--json")
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let report = parse_single_json_line(&list);
+    assert_eq!(report["details"]["cheat_list"]["game_id"], "game_test");
+    assert_eq!(
+        report["details"]["cheat_list"]["entries"][0]["id"],
+        CHEAT_ROM
+    );
+
+    let applied = temp.child("applied.nes");
+    cheat_data_command(temp)
+        .args(["patch", "apply", "--input"])
+        .arg(input.path())
+        .args(["--cheat", CHEAT_ROM, "--output"])
+        .arg(applied.path())
+        .arg("--no-compress")
+        .assert()
+        .success();
+    let mut expected = nes_rom();
+    expected[0x3D96] = 0x48;
+    assert_eq!(fs::read(applied.path()).expect("applied ROM"), expected);
+
+    let patch = temp.child("cheat.ips");
+    cheat_data_command(temp)
+        .args(["patch", "create", "--original"])
+        .arg(input.path())
+        .args(["--cheat", CHEAT_ROM, "--output"])
+        .arg(patch.path())
+        .assert()
+        .success();
+    let roundtrip = temp.child("roundtrip.nes");
+    cheat_data_command(temp)
+        .args(["patch", "apply", "--input"])
+        .arg(input.path())
+        .arg("--patch")
+        .arg(patch.path())
+        .arg("--output")
+        .arg(roundtrip.path())
+        .arg("--no-compress")
+        .assert()
+        .success();
+    assert_eq!(fs::read(roundtrip.path()).expect("roundtrip ROM"), expected);
+}
+
+#[test]
+fn cheat_data_default_reads_setup_shards() {
+    let temp = setup_temp_dir();
+    copy_cheat_cli(&temp);
+    install_cheat_shard(&temp, "data/identify/full-v1/cheats");
+    assert_default_cheat_workflows(&temp);
+}
+
+#[cfg(feature = "bundled-identify-data")]
+#[test]
+fn cheat_data_default_reads_packaged_shards() {
+    for directory in [
+        "install/bin/share/rom-weaver/identify/v1/cheats",
+        "install/share/rom-weaver/identify/v1/cheats",
+    ] {
+        let temp = setup_temp_dir();
+        copy_cheat_cli(&temp);
+        install_cheat_shard(&temp, directory);
+        assert_default_cheat_workflows(&temp);
+    }
+}
+
+#[test]
+fn cheat_data_default_skips_user_directories_without_the_system_shard() {
+    let temp = setup_temp_dir();
+    copy_cheat_cli(&temp);
+    install_cheat_shard(&temp, "data/identify/full-v1/cheats");
+    let legacy = temp.child("data/identify/cheats");
+    fs::create_dir_all(legacy.path()).expect("legacy cheat directory");
+    fs::write(legacy.child("nintendo-game-boy.json").path(), b"{}").expect("other system shard");
+    assert_default_cheat_workflows(&temp);
+}
+
+#[test]
+fn cheat_data_default_prefers_legacy_user_shards() {
+    let temp = setup_temp_dir();
+    copy_cheat_cli(&temp);
+    install_cheat_shard(&temp, "data/identify/cheats");
+    let setup = temp.child("data/identify/full-v1/cheats");
+    fs::create_dir_all(setup.path()).expect("setup cheat directory");
+    fs::write(
+        setup
+            .child("nintendo-nintendo-entertainment-system.json")
+            .path(),
+        b"{}",
+    )
+    .expect("invalid lower-priority shard");
+    assert_default_cheat_workflows(&temp);
+}
+
+#[cfg(feature = "bundled-identify-data")]
+#[test]
+fn cheat_data_default_prefers_setup_shards_over_packaged_data() {
+    let temp = setup_temp_dir();
+    copy_cheat_cli(&temp);
+    install_cheat_shard(&temp, "data/identify/full-v1/cheats");
+    let packaged = temp.child("install/bin/share/rom-weaver/identify/v1/cheats");
+    fs::create_dir_all(packaged.path()).expect("packaged cheat directory");
+    fs::write(
+        packaged
+            .child("nintendo-nintendo-entertainment-system.json")
+            .path(),
+        b"{}",
+    )
+    .expect("invalid lower-priority shard");
+    assert_default_cheat_workflows(&temp);
+}
+
+#[test]
+fn cheat_data_explicit_and_environment_overrides_remain_authoritative() {
+    let temp = setup_temp_dir();
+    copy_cheat_cli(&temp);
+    install_cheat_shard(&temp, "data/identify/full-v1/cheats");
+    let input = temp.child("game.nes");
+    fs::write(input.path(), nes_rom()).expect("ROM fixture");
+    let missing = temp.child("missing-cheats");
+    let installed = temp.child("data/identify/full-v1/cheats");
+    for explicit in [false, true] {
+        let mut command = cheat_data_command(&temp);
+        command
+            .args(["cheat", "list", "--input"])
+            .arg(input.path())
+            .arg("--json");
+        if explicit {
+            command.arg("--cheat-database").arg(missing.path());
+        } else {
+            command.env("ROM_WEAVER_CHEAT_DATABASE", missing.path());
+        }
+        let output = command.assert().code(1).get_output().stdout.clone();
+        let report = parse_single_json_line(&output);
+        assert!(
+            report["error"]["message"]
+                .as_str()
+                .expect("error")
+                .contains("missing-cheats")
+        );
+    }
+    cheat_data_command(&temp)
+        .env("ROM_WEAVER_CHEAT_DATABASE", missing.path())
+        .args(["cheat", "list", "--input"])
+        .arg(input.path())
+        .arg("--cheat-database")
+        .arg(installed.path())
+        .assert()
+        .success();
+    cheat_data_command(&temp)
+        .env("ROM_WEAVER_CHEAT_DATABASE", installed.path())
+        .args(["cheat", "list", "--input"])
+        .arg(input.path())
+        .assert()
+        .success();
+}
+
 #[test]
 fn cheat_list_matches_by_checksum_and_reports_delivery() {
     let temp = setup_temp_dir();

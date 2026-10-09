@@ -179,11 +179,12 @@ the cheat shards that `cheat` and bundle cheat steps read.
 
 Run it once after installing rom-weaver by a method that ships only the
 executable, such as `cargo binstall` or `cargo install`. The Homebrew, scoop,
-npm, and install-script packages already place the database beside the binary,
-so this only reports what is there.
+npm, install-script, and Docker packages already carry the database and need
+no setup. Running setup still installs a separate per-user copy.
 
 The download comes from this version's GitHub release and lands in the per-user
-data directory; `identify database install-group` adds the optional packs."
+data directory. Repeating setup reports the existing per-user copy;
+`identify database install-group` adds the optional packs."
         )
     )]
     // Database installation uses native data directories; the browser stages packs separately.

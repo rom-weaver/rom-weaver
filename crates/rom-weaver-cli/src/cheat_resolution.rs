@@ -77,7 +77,7 @@ impl CliApp {
             selectors = args.cheats.len(),
             "resolving a cheat selection"
         );
-        let directory = cheat_database::resolve_directory(args.cheat_database.as_deref())?;
+        let directory = cheat_database::resolve_directory(args.cheat_database.as_deref(), system)?;
         let shard = cheat_database::load_shard(&directory, system)?;
         let (match_kind, game) = match args.game.as_deref() {
             Some(id) => (
