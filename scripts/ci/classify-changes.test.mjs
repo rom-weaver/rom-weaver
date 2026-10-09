@@ -567,3 +567,19 @@ test("real lifecycle host helper changes select WASM without selecting unrelated
     false,
   );
 });
+
+test("Docker runtime smoke changes select both image builds and the prebuilt bundle", () => {
+  const result = classifyFor("pull_request", "scripts/ci/docker-smoke.mjs");
+  assert.equal(result.full, "false");
+  for (const key of [
+    "webapp",
+    "docker_cli",
+    "docker_webapp",
+    "docker_cli_arm64",
+    "docker_webapp_arm64",
+    "docker_prebuilt",
+    "repo_lint",
+  ]) {
+    assert.equal(result[key], "true", key);
+  }
+});

@@ -76,31 +76,17 @@ The container listens on port 8080 over plain HTTP. This is suitable when an HTT
 
 ```nginx
 location = /rom-weaver {
-    return 308 /rom-weaver/;
-}
-
-location = /rom-weaver/weave {
-    return 301 /rom-weaver/apply-patches$is_args$args;
-}
-
-location = /rom-weaver/weave/ {
-    return 301 /rom-weaver/apply-patches$is_args$args;
-}
-
-location = /rom-weaver/weave.html {
-    return 301 /rom-weaver/apply-patches$is_args$args;
-}
-
-location = /rom-weaver/weave/index.html {
-    return 301 /rom-weaver/apply-patches$is_args$args;
+    return 308 /rom-weaver/$is_args$args;
 }
 
 location /rom-weaver/ {
     proxy_pass http://127.0.0.1:8080/;
+    proxy_redirect default;
+    proxy_redirect / /rom-weaver/;
 }
 ```
 
-The trailing slashes on both `location` and `proxy_pass` are significant: the proxy removes `/rom-weaver/` before forwarding the request. The container adds the required COOP/COEP headers, serves SPA fallbacks, and serves the build's precompressed Brotli files.
+The trailing slashes on both `location` and `proxy_pass` are significant: the proxy removes `/rom-weaver/` before forwarding the request. The `proxy_redirect` rules keep container redirects under `/rom-weaver/`, including legacy workflow URLs. The container adds the required COOP/COEP headers, serves SPA fallbacks, and serves the build's precompressed Brotli files.
 
 For a dedicated subdomain, route its `/` location to the same container.
 

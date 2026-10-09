@@ -48,6 +48,9 @@ inputs:
   cache-to:
     description: Export the layer cache to the image's per-arch buildcache ref.
     default: "false"
+  smoke-kind:
+    description: Runtime smoke check to run after loading the image (`cli` or `webapp`).
+    default: ""
   registry-owner:
     description: GHCR namespace, normally `github.repository_owner`.
     required: true
@@ -90,6 +93,30 @@ runs:
         cache-from: ${{ inputs.cache-from == 'true' && format('type=registry,ref=ghcr.io/{0}/{1}:buildcache-{2}', inputs.registry-owner, inputs.image, inputs.arch) || '' }}
         cache-to: ${{ inputs.cache-to == 'true' && format('type=registry,ref=ghcr.io/{0}/{1}:buildcache-{2},mode=max', inputs.registry-owner, inputs.image, inputs.arch) || '' }}
 
+    # The Docker exporter cannot carry attestations. A separate cached export
+    # MUST keep the published digest and its attestations on the image exporter.
+    - name: Load image for runtime smoke
+      if: inputs.smoke-kind != ''
+      uses: docker/build-push-action@v7
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.file }}
+        build-args: ${{ inputs.build-args }}
+        labels: ${{ inputs.labels }}
+        platforms: linux/${{ inputs.arch }}
+        provenance: false
+        sbom: false
+        load: true
+        tags: rom-weaver-smoke:${{ inputs.image }}-${{ inputs.arch }}
+
+    - name: Check image runtime
+      if: inputs.smoke-kind != ''
+      shell: bash
+      env:
+        SMOKE_IMAGE: rom-weaver-smoke:${{ inputs.image }}-${{ inputs.arch }}
+        SMOKE_KIND: ${{ inputs.smoke-kind }}
+      run: node scripts/ci/docker-smoke.mjs --image "$SMOKE_IMAGE" --kind "$SMOKE_KIND"
+
     # An artifact rather than a job output: a matrix leg's outputs collapse to
     # whichever leg finished last, so the two digests would overwrite each
     # other. The file name is the digest; its contents are never read.
@@ -100,14 +127,14 @@ runs:
         DIGEST: ${{ steps.build.outputs.digest }}
       run: |
         set -euo pipefail
-        mkdir -p /tmp/digests
-        touch "/tmp/digests/${DIGEST#sha256:}"
+        mkdir -p "${{ github.workspace }}/.cache/agents/scratch/docker-sweep/digests"
+        touch "${{ github.workspace }}/.cache/agents/scratch/docker-sweep/digests/${DIGEST#sha256:}"
 
     - name: Upload the digest
       if: inputs.push == 'true'
       uses: actions/upload-artifact@v7
       with:
         name: docker-digest-${{ inputs.image }}-${{ inputs.arch }}
-        path: /tmp/digests/*
+        path: ${{ github.workspace }}/.cache/agents/scratch/docker-sweep/digests/*
         if-no-files-found: error
         retention-days: 1

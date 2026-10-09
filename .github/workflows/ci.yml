@@ -503,7 +503,17 @@ jobs:
           node-version: 24
           package-manager-cache: false
 
+      - name: Install webapp smoke browser
+        if: matrix.name == 'webapp'
+        run: |
+          npm --prefix packages/rom-weaver-webapp ci --ignore-scripts --no-audit --no-fund
+          npm --prefix packages/rom-weaver-webapp exec -- playwright install --with-deps --only-shell chromium
+
       - uses: ./.github/actions/download-identify-data
+
+      - name: Check clean CLI identify source inputs
+        if: matrix.name == 'CLI' && matrix.arch == 'amd64'
+        run: docker build --file Dockerfile --target identify-data-verify .
 
       # The release tree the CLI image copies to /share. Tree only: the
       # .tar.br archives are a release-fan-out product nothing here consumes.
@@ -542,6 +552,7 @@ jobs:
         uses: ./.github/actions/docker-build-arch
         with:
           image: ${{ matrix.image }}
+          smoke-kind: ${{ matrix.name == 'CLI' && 'cli' || 'webapp' }}
           file: ${{ matrix.file }}
           arch: ${{ matrix.arch }}
           registry-owner: ${{ github.repository_owner }}
@@ -689,12 +700,23 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install webapp smoke browser
+        run: |
+          npm --prefix packages/rom-weaver-webapp ci --ignore-scripts --no-audit --no-fund
+          npm --prefix packages/rom-weaver-webapp exec -- playwright install --with-deps --only-shell chromium
+
       - name: Build the prebuilt path
         uses: ./.github/actions/docker-build-arch
         with:
           image: rom-weaver-webapp
           file: packages/rom-weaver-webapp/Dockerfile
           build-args: DIST=prebuilt
+          smoke-kind: webapp
           arch: ${{ matrix.arch }}
           registry-owner: ${{ github.repository_owner }}
           push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

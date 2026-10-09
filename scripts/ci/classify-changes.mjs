@@ -96,10 +96,14 @@ const EMPTY = {
 // Docker-only compiler inputs are outside the module fingerprint. ARM MUST
 // compile them before merge, including when the diff base is unavailable.
 export function canReuseArmDockerWasm(paths) {
-  return paths !== null && !paths.some((path) =>
-    path === "packages/rom-weaver-webapp/Dockerfile" ||
-    path === ".dockerignore" ||
-    path.startsWith(".github/"),
+  return (
+    paths !== null &&
+    !paths.some(
+      (path) =>
+        path === "packages/rom-weaver-webapp/Dockerfile" ||
+        path === ".dockerignore" ||
+        path.startsWith(".github/"),
+    )
   );
 }
 
@@ -123,7 +127,8 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
         !path.endsWith(".test.mjs") &&
         !REPO_LINT_CI_HELPERS.has(path) &&
         path !== "scripts/ci/cli-platform-matrix.mjs" &&
-        path !== "scripts/ci/docker-matrix.mjs")
+        path !== "scripts/ci/docker-matrix.mjs" &&
+        path !== "scripts/ci/docker-smoke.mjs")
     )
       result.full = true;
 
@@ -161,7 +166,7 @@ export function classifyChanges(paths, all = false, eventName = undefined, headR
       path === "packages/rom-weaver-alias/package.json"
     )
       result.rust = true;
-    if (path === "scripts/ci/docker-matrix.mjs") {
+    if (path === "scripts/ci/docker-matrix.mjs" || path === "scripts/ci/docker-smoke.mjs") {
       result.webapp = true;
       result.docker_cli = true;
       result.docker_webapp = true;

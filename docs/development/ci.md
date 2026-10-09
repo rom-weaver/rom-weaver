@@ -301,6 +301,10 @@ CI and `npm-publish.yml` both use it, sharing one cache key per platform, so a r
 
 The two halves of every image build in the repository. `docker-build-arch` builds one architecture on a runner of that architecture and, when pushing, publishes it **by digest** under no tag; `docker-manifest` collects both digests and joins them into the manifest list that does claim the tags. `ci.yml` uses them for the `nightly` channel and `docker-publish.yml` for everything else, so the exporter, the per-architecture cache refs, and the digest hand-off are defined once. See [Multi-arch images](#multi-arch-images) for why the split exists and what it is worth.
 
+CI enables `smoke-kind` for source images and the prebuilt webapp image. A cached export loads the image locally without replacing its published digest or attestations. `scripts/ci/docker-smoke.mjs` checks CLI aliases, both archive recipe names, and exact patched bytes. Webapp checks cover HTTP and HTTPS health, invalid certificate settings, legacy redirects with query strings, published schemas, and browser import/apply/download behavior.
+
+The proxy checks execute the Nginx example extracted from the self-hosting guide. They verify subpath redirects as well as direct container requests. The CLI amd64 job also builds `identify-data-verify`, which imports the source data builders inside their clean image stage. This catches omitted modules and eagerly loaded data files even when the main build consumes prebuilt identify data.
+
 ### `.github/actions/attest-retry`
 
 Every build-provenance attestation in the repository goes through this, and nothing calls `actions/attest*` directly. It runs the attestation, and on failure runs it once more.
