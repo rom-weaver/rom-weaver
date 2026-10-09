@@ -74,22 +74,42 @@ kind = 301
 
 [[advanced.redirects]]
 source = "/bundle"
-destination = "/bundle-patches"
+destination = "/weave-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/bundle/"
-destination = "/bundle-patches"
+destination = "/weave-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/bundle.html"
-destination = "/bundle-patches"
+destination = "/weave-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/bundle/index.html"
-destination = "/bundle-patches"
+destination = "/weave-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/bundle-patches"
+destination = "/weave-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/bundle-patches/"
+destination = "/weave-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/bundle-patches.html"
+destination = "/weave-patches"
+kind = 301
+
+[[advanced.redirects]]
+source = "/bundle-patches/index.html"
+destination = "/weave-patches"
 kind = 301
 
 [[advanced.redirects]]
@@ -174,22 +194,22 @@ kind = 301
 
 [[advanced.redirects]]
 source = "/weave"
-destination = "/apply-patches"
+destination = "/weave-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/weave/"
-destination = "/apply-patches"
+destination = "/weave-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/weave.html"
-destination = "/apply-patches"
+destination = "/weave-patches"
 kind = 301
 
 [[advanced.redirects]]
 source = "/weave/index.html"
-destination = "/apply-patches"
+destination = "/weave-patches"
 kind = 301
 
 # Cross-origin isolation - required for SharedArrayBuffer (wasm threads).
