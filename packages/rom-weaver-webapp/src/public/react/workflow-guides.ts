@@ -7,7 +7,7 @@ import type { WorkflowGuide } from "./components/ds/unified-drop-zone.tsx";
  */
 const WORKFLOW_GUIDES = {
   apply: { path: "docs/apply-rom-patches", label: "ui.hero.applyGuide" },
-  bundle: { path: "docs/create-bundles", label: "ui.hero.bundleGuide" },
+  weave: { path: "docs/create-bundles", label: "ui.hero.weaveGuide" },
   compress: { path: "docs/convert-roms-browser", label: "ui.hero.compressGuide" },
   create: { path: "docs/create-rom-patches", label: "ui.hero.createGuide" },
   extract: { path: "docs/extract-files-browser", label: "ui.hero.extractGuide" },

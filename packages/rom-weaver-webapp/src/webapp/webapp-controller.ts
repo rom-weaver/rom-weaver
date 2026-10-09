@@ -36,7 +36,7 @@ import {
 const DEFAULT_WORKFLOW_VIEW: WebappView = "patcher";
 const VALID_WORKFLOW_VIEWS: readonly WebappView[] = [
   "home",
-  "bundle",
+  "weave",
   "patcher",
   "creator",
   "checksum",
@@ -53,6 +53,7 @@ const VALID_WORKFLOW_VIEWS: readonly WebappView[] = [
 
 const normalizeWorkflowView = (value: unknown): WebappView | null => {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (normalized === "bundle") return "weave";
   return VALID_WORKFLOW_VIEWS.includes(normalized as WebappView) ? (normalized as WebappView) : null;
 };
 
@@ -62,7 +63,7 @@ const normalizeWorkflowViewForSettings = (view: WebappView, settings: SettingsSt
   !settings.betaToolsEnabled && isBetaWorkflowView(view) ? DEFAULT_WORKFLOW_VIEW : view;
 
 const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
-  bundle: "bundle-patches",
+  weave: "weave-patches",
   creator: "create-patch",
   checksum: "checksum",
   compress: "compress",
@@ -81,47 +82,37 @@ const VIEW_TO_ROUTE_SLUG: Record<WebappView, string> = {
 };
 const ROUTE_SLUG_TO_VIEW: Record<string, WebappView> = {
   "apply-patches": "patcher",
-  "apply-patches.html": "patcher",
-  "bundle-patches": "bundle",
-  "bundle-patches.html": "bundle",
+  "bundle-patches": "weave",
+  bundle: "weave",
+  "weave-patches": "weave",
   "apply-patch": "patcher",
-  "apply-patch.html": "patcher",
-  bundle: "bundle",
-  "bundle.html": "bundle",
+  weave: "weave",
   "create-patch": "creator",
-  "create-patch.html": "creator",
   checksum: "checksum",
-  "checksum.html": "checksum",
   compress: "compress",
-  "compress.html": "compress",
   extract: "extract",
-  "extract.html": "extract",
   "identify-rom": "identify",
-  "identify-rom.html": "identify",
   "test-rom": "test",
-  "test-rom.html": "test",
   "trim-rom": "trim",
-  "trim-rom.html": "trim",
   apply: "patcher",
-  "apply.html": "patcher",
   create: "creator",
-  "create.html": "creator",
   docs: "docs",
-  "docs.html": "docs",
   identify: "identify",
-  "identify.html": "identify",
   "ppf-undo": "ppf-undo",
   "save-editor": "save-editor",
   test: "test",
-  "test.html": "test",
   trim: "trim",
-  "trim.html": "trim",
   "whats-new": "whats-new",
-  "whats-new.html": "whats-new",
   // Keep old links usable when a host has not applied the server redirect.
   tools: "ppf-undo",
-  weave: "patcher",
-  "weave.html": "patcher",
+};
+
+const lookupWorkflowRoute = (slug: string): WebappView | null => {
+  if (slug.endsWith(".html")) {
+    slug = slug.slice(0, -5);
+    if (slug === "ppf-undo" || slug === "save-editor" || slug === "tools") return null;
+  }
+  return Object.hasOwn(ROUTE_SLUG_TO_VIEW, slug) ? (ROUTE_SLUG_TO_VIEW[slug] ?? null) : null;
 };
 
 const readRouteSegments = (pathname?: string): string[] => {
@@ -140,13 +131,13 @@ const readWorkflowViewFromPath = (pathname?: string): WebappView | null => {
   // ("/rom-weaver/") is indistinguishable from a missing page by pathname
   // alone, so it stays unresolved and callers fall back to DEFAULT_WORKFLOW_VIEW.
   if (!slug) return "home";
-  return ROUTE_SLUG_TO_VIEW[slug] || null;
+  return lookupWorkflowRoute(slug);
 };
 
 /**
  * Where the app itself is served, with the route segment stripped: `/apply/`
  * and `/create` both resolve to `/`, and a sub-path deployment keeps its
- * prefix. Anything the app addresses by a bare name - route links, `?bundle=`
+ * prefix. Anything the app addresses by a bare name - route links, `?weave=`
  * targets, sample assets - has to resolve against this rather than
  * `location.href`, which points inside the current route.
  */
@@ -164,7 +155,7 @@ const readAppBaseUrl = (): string => {
   if (docsIndex >= 0) pathSegments.splice(docsIndex);
   else {
     const currentSlug = (pathSegments.at(-1) || "").toLowerCase();
-    if (ROUTE_SLUG_TO_VIEW[currentSlug]) pathSegments.pop();
+    if (lookupWorkflowRoute(currentSlug)) pathSegments.pop();
   }
   baseUrl.pathname = `${pathSegments.join("/")}/`;
   baseUrl.hash = "";
@@ -506,15 +497,15 @@ const createWebappRootController = (options: ControllerOptions) => {
         draftSettings: { ...state.draftSettings, accent },
       });
     },
-    setBundlePackage(value: string) {
+    setWeavePackage(value: string) {
       const state = store.getState();
-      if (state.settings.bundlePackage === value) return;
-      const validValues = new Set(SETTINGS_FIELD_METADATA.bundlePackage.validValues || []);
+      if (state.settings.weavePackage === value) return;
+      const validValues = new Set(SETTINGS_FIELD_METADATA.weavePackage.validValues || []);
       if (!validValues.has(value)) return;
-      const nextSettings = { ...copySettings(state.settings), bundlePackage: value };
+      const nextSettings = { ...copySettings(state.settings), weavePackage: value };
       persistSettings(nextSettings);
       applyCommittedSettings(nextSettings, {
-        draftSettings: { ...state.draftSettings, bundlePackage: value },
+        draftSettings: { ...state.draftSettings, weavePackage: value },
       });
     },
     setCreatorModifiedState(file: unknown) {

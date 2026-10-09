@@ -16,7 +16,7 @@ type Probe = {
   emitChange: () => void;
   finalizeInputStableState: () => Promise<boolean>;
   flushPendingOwnedSourceReleases: () => Promise<void>;
-  getBundleExportSources: () => Record<string, unknown>;
+  getWeaveExportSources: () => Record<string, unknown>;
   getEffectiveInputSources: () => Source[];
   getInput: () => Record<string, unknown> | null;
   getPatchSources: () => Source[];
@@ -184,7 +184,7 @@ describe("apply controller snapshots and execution inputs", () => {
       selectedCandidateId: "input-choice",
     });
     expect(controller.getPatchSources()).toEqual([source("update.ips")]);
-    expect(controller.getBundleExportSources()).toMatchObject({
+    expect(controller.getWeaveExportSources()).toMatchObject({
       rom: {
         fileName: "rom.sfc",
         originalSource: source("rom.sfc"),
@@ -353,12 +353,12 @@ describe("apply controller source and option mutations", () => {
 describe("apply controller selection and staging internals", () => {
   it("maps candidate requests to stable public ids and preserves group links", () => {
     const controller = makeController();
-    const stage = controller.createInitialSource("patch", source("bundle.zip"), 0);
+    const stage = controller.createInitialSource("patch", source("weave.zip"), 0);
     controller.addCandidateRequest(stage, {
       candidates: [
         {
           candidateIds: ["leaf-a", "leaf-b"],
-          fileName: "bundle",
+          fileName: "weave",
           id: "group",
           kind: "patch",
           patchable: true,
@@ -388,7 +388,7 @@ describe("apply controller selection and staging internals", () => {
       ],
       multiSelect: true,
       role: "patch",
-      sourceName: "bundle.zip",
+      sourceName: "weave.zip",
       warnings: ["choose patches"],
     });
     expect(stage.state.multiSelect).toBe(true);
@@ -404,7 +404,7 @@ describe("apply controller selection and staging internals", () => {
   it("resolves a multi-select choice, rejects unknown ids, and applies valid picks", async () => {
     const selected = vi.fn(async () => ({ id: "public-a", ids: ["public-a", "public-b"] }));
     const controller = makeController({ selectFile: selected });
-    const stage = controller.createInitialSource("patch", source("bundle.zip"), 0);
+    const stage = controller.createInitialSource("patch", source("weave.zip"), 0);
     stage.state.status = "needsSelection";
     stage.state.candidates = [candidate("public-a", "a.ips", "patch"), candidate("public-b", "b.ips", "patch")];
     stage.internalCandidates.set("public-a", { candidate: { id: "a", fileName: "a.ips", type: "file" }, owner: stage });

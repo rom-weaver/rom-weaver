@@ -60,14 +60,14 @@ describe("apply controller staged patch paths", () => {
     mocks.prepareInputFile.mockResolvedValue({
       decompressionTimeMs: 9,
       file: prepared,
-      parentCompressions: [{ depth: 0, kind: "zip", fileName: "bundle.zip", outputSize: 6 }],
+      parentCompressions: [{ depth: 0, kind: "zip", fileName: "weave.zip", outputSize: 6 }],
       sourceSize: 20,
       wasDecompressed: true,
     });
-    const stage = controller.createInitialSource("patch", source("bundle.zip"), 0);
+    const stage = controller.createInitialSource("patch", source("weave.zip"), 0);
     await controller.stageSource(stage);
     expect(mocks.prepareInputFile).toHaveBeenCalledWith(
-      source("bundle.zip"),
+      source("weave.zip"),
       "patch",
       expect.objectContaining({ onCandidatesFound: expect.any(Function) }),
       expect.anything(),

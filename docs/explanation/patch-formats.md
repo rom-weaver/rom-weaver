@@ -95,7 +95,7 @@ The [full format table](../reference/formats.md#patch-formats) is the authoritat
 
 Some dumps contain a copier header before the ROM data. Others, especially Nintendo 64 dumps, store the same data in different byte orders. A patch needs the form its author used.
 
-rom-weaver first compares the available expected checksums against supported variants. Explicit checks and bundle checks take precedence over a patch's own source checks. File size alone can distinguish two candidate layouts, but cannot identify a ROM.
+rom-weaver first compares the available expected checksums against supported variants. Explicit checks and weave checks take precedence over a patch's own source checks. File size alone can distinguish two candidate layouts, but cannot identify a ROM.
 
 For the first patch, missing checksum evidence can trigger inference from patch records, validation failures, and the resulting platform header. N64 inference can also use a rewritten boot checksum. These are fallbacks, not checksum proof. Later chain steps use checksum evidence rather than repeating first-patch inference.
 
@@ -115,6 +115,6 @@ rom-weaver therefore does not offer a headerless form behind an `.smd` header. I
 - **Publishing for a cartridge game:** BPS, for the checksums it carries.
 - **Publishing where old patchers must work:** IPS, with checksums in your release notes.
 - **Publishing for a disc or a very large file:** xdelta/VCDIFF or PPF, or whatever that platform's community already uses.
-- **Publishing several patches at once:** any of the above, plus a rom-weaver bundle to record the order, the optional pieces, and the checksums.
+- **Publishing several patches at once:** any of the above, plus a rom-weaver weave to record the order, the optional pieces, and the checksums.
 
 [Create a patch](../how-to/create-rom-patches.md) covers creation and reconstruction checks.

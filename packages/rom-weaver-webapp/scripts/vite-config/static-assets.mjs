@@ -92,14 +92,14 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         createWorkflowRouteHtml(patcherHtml, WORKFLOW_SEO_ROUTES.patcher, channel, channelLabel),
         WORKFLOW_SEO_ROUTES.patcher,
       );
-      const bundleHtml = injectLdJson(
+      const weaveHtml = injectLdJson(
         createWorkflowRouteHtml(
-          withRoutePreloadLinks(withShell("bundle"), routePreloadLinks.get("bundle")),
-          WORKFLOW_SEO_ROUTES.bundle,
+          withRoutePreloadLinks(withShell("weave"), routePreloadLinks.get("weave")),
+          WORKFLOW_SEO_ROUTES.weave,
           channel,
           channelLabel,
         ),
-        WORKFLOW_SEO_ROUTES.bundle,
+        WORKFLOW_SEO_ROUTES.weave,
       );
       fs.writeFileSync(
         path.join(distDir, "404.html"),
@@ -187,7 +187,7 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
       }
       for (const [slug, html] of [
         ["apply-patches", applyHtml],
-        ["bundle-patches", bundleHtml],
+        ["weave-patches", weaveHtml],
         ["create-patch", createHtml],
         ["checksum", checksumHtml],
         ["compress", compressHtml],

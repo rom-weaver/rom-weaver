@@ -1,4 +1,4 @@
-import type { ParsedBundlePatchInput } from "../../types/bundle.ts";
+import type { ParsedWeavePatchInput } from "../../types/weave.ts";
 import type { ChecksumVariant } from "../../types/checksum.ts";
 import type { ParsedIdentifyResolution, IdentifyStatus } from "../../types/identify.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
@@ -154,7 +154,7 @@ type LocalApplyPatchFormSessionOptions = Pick<
     /** Index-aligned per-patch run options (header/PPF-undo/checks) replayed onto re-staged runs. */
     patchOptions?: Array<{
       id?: string;
-      input?: ParsedBundlePatchInput;
+      input?: ParsedWeavePatchInput;
       inputChecks?: string;
       outputChecks?: string;
       basis?: "base" | "previous";
@@ -223,7 +223,7 @@ type LocalApplyPatchFormSessionOptions = Pick<
     patchIndex: number,
     option: {
       id?: string;
-      input?: ParsedBundlePatchInput;
+      input?: ParsedWeavePatchInput;
       inputChecks?: string;
       outputChecks?: string;
       basis?: "base" | "previous";

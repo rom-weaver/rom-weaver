@@ -26,7 +26,7 @@ type RomInputInfoPanelProps = {
   /** Identify-record checks that fill the rows the run did not compute. */
   database?: IdentifyRecordChecks;
   defaultOpen?: boolean;
-  /** Bundle-expected ROM checks, rendered as an "Expected" group with match marks. */
+  /** Weave-expected ROM checks, rendered as an "Expected" group with match marks. */
   expected?: SourceInfoExpectedChecks;
   extractTiming?: ExtractTiming;
   lead?: ReactNode;

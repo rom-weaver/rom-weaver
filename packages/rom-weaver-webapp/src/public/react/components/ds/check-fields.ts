@@ -1,7 +1,7 @@
 /**
- * Shared vocabulary for the editable bundle verification fields:
+ * Shared vocabulary for the editable weave verification fields:
  * the three hash algorithms plus the exact byte size, with the input
- * normalization/validation the patch cards and the ROM bundle-checks editor
+ * normalization/validation the patch cards and the ROM weave-checks editor
  * both apply before committing a value.
  */
 const CHECK_ALGORITHMS = ["crc32", "md5", "sha1"] as const;

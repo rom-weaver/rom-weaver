@@ -66,7 +66,7 @@ describe("SettingsPanel sections", () => {
     );
     const groupFor = (id: string) => container.querySelector(id)?.closest(".setgroup");
     const webappGroup = groupFor("#settings-theme");
-    const behaviorGroup = groupFor("#settings-bundle-package");
+    const behaviorGroup = groupFor("#settings-weave-package");
 
     expect(webappGroup?.querySelector(".gtitle")?.textContent).toBe("Webapp");
     for (const id of [

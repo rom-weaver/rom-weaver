@@ -11,7 +11,7 @@ vi.mock("../../src/lib/apply/expected-rom-lookup.ts", () => identifyMocks);
 
 const TABS = [
   { href: "apply-patch", icon: null, id: "patcher", label: "Apply Patch" },
-  { href: "bundle", icon: null, id: "bundle", label: "Bundles" },
+  { href: "weave", icon: null, id: "weave", label: "Weaves" },
   { href: "create-patch", icon: null, id: "creator", label: "Create Patch" },
   {
     beta: true,
@@ -62,7 +62,7 @@ describe("createFindIndex", () => {
     const index = createFindIndex(sources);
     expect(index.browse.map((entry) => entry.id).slice(0, 7)).toEqual([
       "tool:patcher",
-      "tool:bundle",
+      "tool:weave",
       "tool:creator",
       "tool:identify",
       "tool:test",
@@ -97,13 +97,13 @@ describe("searchFind", () => {
 
   it("maps browser and CLI command aliases to the matching tool or guide", () => {
     const index = createFindIndex(sources, GUIDES);
-    expect(searchFind(index, "weave")[0]?.entry).toMatchObject({ id: "tool:patcher", href: "apply-patch" });
-    expect(searchFind(index, "bundle")[0]?.entry).toMatchObject({
-      action: { type: "view", view: "bundle" },
-      hint: "Build patch bundles and optionally apply them.",
-      href: "bundle",
-      id: "tool:bundle",
-      label: "Bundle Patches",
+    expect(searchFind(index, "bundle")[0]?.entry).toMatchObject({ id: "tool:weave", href: "weave" });
+    expect(searchFind(index, "weave")[0]?.entry).toMatchObject({
+      action: { type: "view", view: "weave" },
+      hint: "Build patch weaves and optionally apply them.",
+      href: "weave",
+      id: "tool:weave",
+      label: "Weave Patches",
     });
     expect(searchFind(index, "patch create")[0]?.entry).toMatchObject({ id: "tool:creator", href: "create-patch" });
     expect(searchFind(index, "play emulator")[0]?.entry).toMatchObject({ id: "tool:test" });

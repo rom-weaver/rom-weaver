@@ -1,6 +1,6 @@
 # rom-weaver
 
-> A local-first ROM toolkit. Apply and create patches, identify files, extract or compress ROMs, share bundles, bake supported cheats, and edit game saves in the browser or CLI. The browser also plays supported games. Files stay on-device without uploads or accounts.
+> A local-first ROM toolkit. Apply and create patches, identify files, extract or compress ROMs, share weaves, bake supported cheats, and edit game saves in the browser or CLI. The browser also plays supported games. Files stay on-device without uploads or accounts.
 
 ## Markdown pages
 
@@ -11,7 +11,7 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 ## Web app
 
 - [Online ROM patcher](https://rom-weaver.com/apply-patches): Apply BPS, IPS, IPS32, UPS, xdelta, VCDIFF, PPF, APS, RUP, and other supported ROM patches with format detection and ordered patch chains.
-- [Create ROM patches](https://rom-weaver.com/create-patch): Create patches with format-aware settings and distributable bundles.
+- [Create ROM patches](https://rom-weaver.com/create-patch): Create patches with format-aware settings and distributable weaves.
 - [Compress files](https://rom-weaver.com/compress): Convert ISO or BIN/CUE to CHD, GameCube and Wii ISO to RVZ, and Nintendo 3DS ROMs to Z3DS; create ZIP or 7z archives.
 - [Extract files](https://rom-weaver.com/extract): Decompress Z3DS, ZCCI, ZCXI, ZCIA, Z3DSX, CHD, RVZ, and supported archives locally in the browser.
 - [Checksum a file](https://rom-weaver.com/checksum): Calculate CRC32, MD5, SHA-1, SHA-256, and other checksums of any file, with optional archive extraction, and compare them with an expected value.
@@ -42,12 +42,12 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 - [Apply Dreamcast DCP patches (CLI)](https://rom-weaver.com/docs/cli-apply#apply-a-dreamcast-dcp-patch): Rebuild a Dreamcast disc from one DCP patch and its CUE or GDI input. DCP must run alone and is unavailable in browser Apply.
 - [Use cheats guide](https://rom-weaver.com/docs/use-cheats): Bake ROM cheats into a ROM from the browser Apply workflow.
 - [Create patches guide](https://rom-weaver.com/docs/create-rom-patches): Compare Original and Modified, create a patch, then test the downloaded artifact.
-- [Create bundles guide](https://rom-weaver.com/docs/create-bundles): Build, download, test, and publish a patch-only bundle in the browser's Apply workflow.
+- [Create weaves guide](https://rom-weaver.com/docs/create-bundles): Build, download, test, and publish a patch-only weave in the browser's Apply workflow.
 - [ROM tester guide](https://rom-weaver.com/docs/test-roms): Test a local ROM or an Apply result in the browser, check platform support, and manage local saves.
 - [FAQ](https://rom-weaver.com/docs/faq): Common questions, each pointing at the page that owns the answer.
 - [How patching works](https://rom-weaver.com/docs/how-patching-works): Why the exact starting file matters, what a checksum proves, and why patch order matters.
 - [Why files stay on your device](https://rom-weaver.com/docs/local-first): How local-first processing works in the browser and what it costs.
-- [What a bundle is](https://rom-weaver.com/docs/bundles): The portable patch recipe, what it contains, and when to make one.
+- [What a weave is](https://rom-weaver.com/docs/bundles): The portable patch recipe, what it contains, and when to make one.
 - [Browser and CLI](https://rom-weaver.com/docs/browser-and-cli): One engine, two front ends, and how to choose.
 - [Identify data sources](https://rom-weaver.com/docs/identify-sources): How pinned Libretro and OpenGood data provides local ROM identification.
 - [ROM patcher comparison](https://rom-weaver.com/docs/comparisons): Compare rom-weaver with RomPatcher.js (Rom Patcher JS), Flips, MultiPatch, and specialist converters by workflow and tool support.
@@ -56,7 +56,7 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 - [Compression formats guide](https://rom-weaver.com/docs/compression-formats): Pick format-specific compression such as CHD, RVZ, or Z3DS, plus ZIP and 7z, and learn when trimming beats compressing.
 - [Install the CLI](https://rom-weaver.com/docs/install): Install rom-weaver with package managers, verified scripts, npm, Docker, or from source.
 - [Verify a download](https://rom-weaver.com/docs/verify-downloads): Check that a release archive, npm package, or container image carries the repository's build provenance.
-- [Your first apply in the terminal](https://rom-weaver.com/docs/cli-get-started): Tutorial covering Apply, Create, and Bundle in the terminal with the same test assets.
+- [Your first apply in the terminal](https://rom-weaver.com/docs/cli-get-started): Tutorial covering Apply, Create, and Weave in the terminal with the same test assets.
 - [Identify and hash ROMs (CLI)](https://rom-weaver.com/docs/identify-and-hash-files): Match an exact dump name, inspect a file, or compute checksums.
 - [Bake cheat codes (CLI)](https://rom-weaver.com/docs/bake-cheat-codes): Write Game Genie, GameShark/Pro Action Replay, or supported Xploder codes permanently into a ROM.
 - [Edit a game save (CLI)](https://rom-weaver.com/docs/cli-save): Inspect a supported save, preview changes, and write an edited copy.

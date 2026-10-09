@@ -154,7 +154,7 @@ const getViewTutorialStep = (
 
 /**
  * The match for a step's selector that is actually on screen. Every visited
- * workflow panel stays mounted (hidden), and Apply and Bundle render the same
+ * workflow panel stays mounted (hidden), and Apply and Weave render the same
  * form, so a document-wide lookup can land on a hidden panel's copy of the row:
  * the ring would then frame an empty box and the row the reader sees would stay
  * under the scrim.

@@ -1,6 +1,8 @@
-# What a bundle is
+# What a weave is
 
-A rom-weaver bundle records a patch recipe so another user can repeat it.
+A rom-weaver weave records a patch recipe so another user can repeat it.
+
+<a id="what-a-bundle-is"></a>
 
 <!-- START doctoc -->
 ## Table of contents
@@ -19,13 +21,11 @@ A rom-weaver bundle records a patch recipe so another user can repeat it.
 
 ## The problem it solves
 
-A multi-patch release needs the right ROM, the patch order, the optional choices, and the expected checksums. If that information is spread across filenames and release notes, users must reconstruct the workflow themselves. A missed step can produce an incorrect ROM even when patching finishes.
-
-A bundle moves that knowledge out of the release notes and into a file the tool can read.
+Multi-patch releases depend on the right ROM, patch order, options, and checksums. A weave records these requirements in a file rom-weaver can read, preventing missed steps.
 
 ## What it contains
 
-The JSON recipe, conventionally named `rom-weaver-bundle.json`, can record:
+The JSON recipe, conventionally named `rom-weaver-weave.json`, can record:
 
 - which clean ROM is expected;
 - the patch files and their order;
@@ -36,15 +36,17 @@ The JSON recipe, conventionally named `rom-weaver-bundle.json`, can record:
 
 An archive can carry the recipe and its patch files together. A recipe can also reference local paths or download URLs.
 
-The machine-readable definition is [`rom-weaver-bundle-v2.schema.json`](../rom-weaver-bundle-v2.schema.json).
+Older `rom-weaver-bundle.json` recipes remain readable with the same version 1 and version 2 fields.
+
+The machine-readable definition is [`rom-weaver-weave-v2.schema.json`](../rom-weaver-weave-v2.schema.json).
 
 ## What it is not
 
-**A bundle is not a pre-patched game.** It is a recipe. A patch-only bundle records the expected ROM's checksums without including the ROM bytes. Each user supplies the matching ROM.
+**A weave is not a pre-patched game.** Patch-only weaves record ROM checksums; users supply matching ROM bytes.
 
-A bundle can include ROM bytes, but packaging does not grant redistribution rights.
+A weave can include ROM bytes, but packaging does not grant redistribution rights.
 
-**A bundle is not release notes.** It tells rom-weaver what to do; it does not tell a person what your patch changes or why they would want it. Both still have to exist.
+**A weave is not release notes.** Release notes still explain what the patches change.
 
 ## Why the order lives in the file
 
@@ -52,36 +54,34 @@ By default, each patch reads the accumulated result of the selected patches befo
 
 A fixed input has a different contract. A patch that explicitly reads patch A's output keeps that dependency when unrelated patches move or optional choices change. Its producer must be enabled and must run first. Both ROM inputs and generated outputs can select an exact member. A member identifies bytes inside its source; a matching filename in another source is not interchangeable.
 
-For example, A, optional B, and C can form a chain on Track 1 while D modifies Track 2. With B enabled, C reads B's result. With B disabled, C reads A's result. A deliberate dependency on A always reads A, regardless of B's selection. The bundle preserves these relationships across saving and reopening.
+For example, A, optional B, and C can form a chain on Track 1 while D modifies Track 2. With B enabled, C reads B's result. With B disabled, C reads A's result. A deliberate dependency on A always reads A, regardless of B's selection. The weave preserves these relationships across saving and reopening.
 
 ### Authored checks and execution inputs
 
-The authored basis describes the source against which a patch was made. Its execution input describes the bytes that the operation modifies. Several patches can have the same authored source while modifying an accumulated result. A standalone patch's embedded output checksum does not prove that combined result.
+The authored basis is the source used to make a patch. Its execution input is what it modifies. Patches can share an authored basis while modifying accumulated results. Their embedded output checksums do not verify the combined result.
 
 Version 2 records a shared authored basis rule, with per-patch exceptions. Automatic inference uses available checks. Version 1 remains readable with its automatic behavior.
 
-The identify database can stand in for checks a recipe does not declare. When the expected ROM's checks name a multi-track disc record, each track chain that starts from the ROM without checks of its own inherits that track's checks from the record, and a failed check names the title the declared state belongs to. The recipe itself is not changed; the database only adds evidence at apply time. The exact rules are in the [CLI reference](../reference/cli.md#bundle-execution-targets).
+The identify database can supply missing checks without changing the recipe. For matched multi-track discs, ROM-based chains inherit their track's checks unless they declare their own. Failures name the declared state's title. See [execution targets](../reference/cli.md#bundle-execution-targets) for the exact rules.
 
 ### Shared data and repeated evidence
 
-A check state can have several consumers. The recipe stores its values once and uses references from each consumer. The interface can show that same evidence on the ROM, each consuming patch, and a result without copying those values into the recipe. Equal digests alone do not make two separately authored states the same state.
+ROMs, patches, and results can reference one stored check state. The interface displays its evidence wherever needed. Equal digests do not merge separately authored states.
 
-Packaged payloads are separate from check states. Several patch entries can reference one stored file when their payload bytes are equal. Selecting a track retains its parent source instead of adding a second copy of the ROM.
+Payloads remain separate from check states. Patches with identical bytes can share one stored file. Selecting a track retains its parent source without duplicating the ROM.
 
 ## When to make one
 
-Bundles are useful for releases with several patches, optional pieces, or a specific ROM that needs automatic checks.
-
-A single patch with no options already has a simple handoff: one file and a documented checksum. A bundle adds less value in that case.
+Weaves help releases with several patches, optional pieces, or automatic ROM checks. A single patch without options may only need its file and a documented checksum.
 
 ## Links can carry them
 
 A link can preload a remotely hosted recipe. The browser downloads the recipe and referenced patches, then applies them locally. Cross-origin downloads depend on the host's CORS policy.
 
-[Open a hosted bundle in Apply](../how-to/create-bundles.md#open-a-hosted-bundle-in-apply) gives the link format. [Webapp integration](../hosting/webapp-integration.md) documents the host requirements.
+[Open a hosted weave in Apply](../how-to/create-bundles.md#open-a-hosted-bundle-in-apply) gives the link format. [Webapp integration](../hosting/webapp-integration.md) documents the host requirements.
 
 ## Related
 
-- [Create and share a patch bundle](../how-to/create-bundles.md) in the browser.
-- [Create bundles from the CLI](../how-to/cli-bundles.md) for scripted releases.
+- [Create and share a patch weave](../how-to/create-bundles.md) in the browser.
+- [Create weaves from the CLI](../how-to/cli-bundles.md) for scripted releases.
 - [Choosing a patch format](patch-formats.md) for what goes inside one.

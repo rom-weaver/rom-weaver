@@ -11,14 +11,14 @@ import type { ChecksumFormProps } from "./components/checksum-form.tsx";
 import type { CompressFormProps } from "./components/compress-form.tsx";
 
 /**
- * Each workflow loads in a separate chunk so the entry bundle does not include every form.
+ * Each workflow loads in a separate chunk so the entry weave does not include every form.
  * Client boot and prerender MUST preload the initial route to avoid replacing its rendered shell with a Suspense fallback.
  */
 
 const logger = createLogger("workflow-routes");
 
 type WorkflowRouteProps = {
-  bundle: ApplyPatchFormProps;
+  weave: ApplyPatchFormProps;
   creator: CreatePatchFormProps;
   checksum: ChecksumFormProps;
   compress: CompressFormProps;
@@ -100,7 +100,7 @@ const DocsRoute = createWorkflowRoute("docs", () =>
 const PatcherRoute = createWorkflowRoute("patcher", () =>
   import("../public/react/apply-patch-form.tsx").then((module) => ({ default: module.ApplyPatchForm })),
 );
-const BundleWorkflowRoute = createWorkflowRoute("bundle", () =>
+const WeaveWorkflowRoute = createWorkflowRoute("weave", () =>
   import("../public/react/apply-patch-form.tsx").then((module) => ({ default: module.ApplyPatchForm })),
 );
 const HomeRoute = createWorkflowRoute("home", () =>
@@ -135,7 +135,7 @@ const WhatsNewRoute = createWorkflowRoute("whats-new", () =>
 );
 
 const WORKFLOW_ROUTES = {
-  bundle: BundleWorkflowRoute,
+  weave: WeaveWorkflowRoute,
   creator: CreatorRoute,
   checksum: ChecksumRoute,
   compress: CompressRoute,
@@ -156,7 +156,7 @@ const ChecksumRouteForm = ChecksumRoute.Component;
 const CompressRouteForm = CompressRoute.Component;
 const DocsPageRoute = DocsRoute.Component;
 const ApplyPatchRoute = PatcherRoute.Component;
-const BundleRoute = BundleWorkflowRoute.Component;
+const WeaveRoute = WeaveWorkflowRoute.Component;
 const EmulatorTestRoute = TestRoute.Component;
 const ExtractRouteForm = ExtractRoute.Component;
 const HomePageRoute = HomeRoute.Component;
@@ -179,7 +179,7 @@ const preloadDocsRouteHtml = (slug?: string): Promise<unknown> =>
 
 export {
   ApplyPatchRoute,
-  BundleRoute,
+  WeaveRoute,
   ChecksumRouteForm,
   CreatePatchRoute,
   CompressRouteForm,

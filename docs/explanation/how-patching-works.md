@@ -55,11 +55,11 @@ Overrides exist for authors doing controlled research and recovery. For normal u
 
 Patch sets use two relationships. Independent patches are made from the same original ROM. Dependent patches are made from the result of an earlier patch.
 
-By default, rom-weaver applies both kinds to one accumulated result. It uses the authored basis to verify each patch against the state that its author used. A bundle can scope an accumulated chain to a specific track or select a fixed earlier output. [Bundle execution targets](bundles.md#why-the-order-lives-in-the-file) explains those relationships.
+By default, rom-weaver applies both kinds to one accumulated result. It uses the authored basis to verify each patch against the state that its author used. A weave can scope an accumulated chain to a specific track or select a fixed earlier output. [Weave execution targets](bundles.md#why-the-order-lives-in-the-file) explains those relationships.
 
 Order still matters. Later changes can overlap earlier changes, and a dependent patch must follow the result it expects.
 
-Only the author knows the intended rule and order. A bundle records both values so users do not reconstruct them from filenames.
+Only the author knows the intended rule and order. A weave records both values so users do not reconstruct them from filenames.
 
 ## Compression changes the bytes
 
@@ -78,7 +78,7 @@ A compressed file does not hash the same as the dump inside it, so a `.chd` will
 - **Revision**: a later printing of the same game.
 - **Header**: extra bytes added to the front of some cartridge dumps.
 - **Patch order**: the sequence used when several patches build on one another.
-- **Bundle**: a recipe that records a ROM's checks, patch files, order, choices, and output settings. See [What a bundle is](bundles.md).
+- **Weave**: a recipe that records a ROM's checks, patch files, order, choices, and output settings. See [What a weave is](bundles.md).
 
 ## Related
 

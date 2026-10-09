@@ -1,6 +1,6 @@
 # Your first apply in the terminal
 
-Run a complete patch job in the terminal with the same tiny homebrew ROMs the webapp uses, then practice creating a patch and packaging it as a shareable bundle. The practice ROMs are homebrew files supplied by this project.
+Run a complete patch job in the terminal with the same tiny homebrew ROMs the webapp uses, then practice creating a patch and packaging it as a shareable weave. The practice ROMs are homebrew files supplied by this project.
 
 Install first if you have not: [Install the CLI](../how-to/install-cli.md).
 
@@ -10,7 +10,7 @@ You need an internet connection to download the practice files. [Sample asset ge
 ## Table of contents
 
 - [First apply](#first-apply)
-- [Practice patch creation and bundles](#practice-patch-creation-and-bundles)
+- [Practice patch creation and weaves](#practice-patch-creation-and-weaves)
 - [What you learned](#what-you-learned)
 - [Next](#next)
 
@@ -21,7 +21,7 @@ You need an internet connection to download the practice files. [Sample asset ge
 Follow these steps in a new working directory. The archive contains the ROM, two patches, and the expected result checksums.
 
 1. Download `first-weave.zip`.
-2. Apply its bundled recipe.
+2. Apply its packaged recipe.
 3. Calculate the output SHA-256 with `checksum`.
 
 ```bash
@@ -36,7 +36,9 @@ The original ROM displays `HELLO WORLD`. One IPS patch changes `HELLO` to `ROM`,
 | :---: | :---: | :---: |
 | ![The original sample ROM displaying HELLO WORLD in an NES emulator](../screenshots/first-sample-hello-world.webp) | ![The sample ROM displaying ROM WORLD after the first patch](../screenshots/first-sample-rom-world.webp) | ![The sample ROM displaying ROM WEAVER after both patches](../screenshots/first-sample-rom-weaver.webp) |
 
-## Practice patch creation and bundles
+<a id="practice-patch-creation-and-bundles"></a>
+
+## Practice patch creation and weaves
 
 Use the two loose homebrew ROMs from guided Create. The first is the clean Original. The second is Modified:
 
@@ -63,18 +65,18 @@ rom-weaver checksum --input rebuilt.nes --algo sha256
 
 The final SHA-256 should be `00639b0b8586e10c67d6d15217478786cebed6e2cd6495ed94b6a338c0de0afd`. That match proves the patch rebuilt Modified byte for byte.
 
-Now package that tested patch as a patch-only bundle. `--no-bundle-rom` keeps the Original out of the ZIP while recording its checksums:
+Now package that tested patch as a patch-only weave. `--no-weave-rom` keeps the Original out of the ZIP while recording its checksums:
 
 ```bash
-rom-weaver bundle create \
+rom-weaver weave create \
   --input hello-world.nes \
   --patch sample.bps \
   --patch-id sample \
   --patch-name "HELLO to MODIFIED" \
   --expect-out sha256=00639b0b8586e10c67d6d15217478786cebed6e2cd6495ed94b6a338c0de0afd \
-  --output rom-weaver-bundle.json \
-  --bundle sample-bundle.zip \
-  --no-bundle-rom
+  --output rom-weaver-weave.json \
+  --weave sample-weave.zip \
+  --no-weave-rom
 ```
 
 Test the finished archive from the same clean Original:
@@ -82,10 +84,10 @@ Test the finished archive from the same clean Original:
 ```bash
 rom-weaver patch apply \
   --input hello-world.nes \
-  --bundle sample-bundle.zip \
-  --output bundle-rebuilt.nes \
+  --weave sample-weave.zip \
+  --output weave-rebuilt.nes \
   --no-compress
-rom-weaver checksum --input bundle-rebuilt.nes --algo sha256
+rom-weaver checksum --input weave-rebuilt.nes --algo sha256
 ```
 
 The result should have the same SHA-256 as `rebuilt.nes`:
@@ -98,12 +100,12 @@ This sequence uses the same generated assets as the browser tours, so both inter
 
 ## What you learned
 
-You applied a patch chain, created and checked a patch, and packaged it as a bundle. For your own release, repeat those checks with the documented Original and each supported patch combination.
+You applied a patch chain, created and checked a patch, and packaged it as a weave. For your own release, repeat those checks with the documented Original and each supported patch combination.
 
 ## Next
 
 - [Apply patches from the CLI](../how-to/cli-apply.md): patch order, headers, byte order, checksum checks, and validation.
 - [Create patches from the CLI](../how-to/cli-create.md): build and test a patch for release.
-- [Bundles from the CLI](../how-to/cli-bundles.md): package patches into a repeatable, verifiable recipe.
+- [Weaves from the CLI](../how-to/cli-bundles.md): package patches into a repeatable, verifiable recipe.
 - [CLI reference](../reference/cli.md): the command map, global behavior, and output formats.
 - [How patching works](../explanation/how-patching-works.md): what these checksums actually prove.

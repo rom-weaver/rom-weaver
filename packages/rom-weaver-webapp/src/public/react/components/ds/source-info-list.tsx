@@ -75,7 +75,7 @@ type SourceInfoChecksums = {
   sha1?: string;
 };
 
-/** What a bundle expects this file to be (its rom/chain-input checks). */
+/** What a weave expects this file to be (its rom/chain-input checks). */
 type SourceInfoExpectedChecks = {
   checksums?: Record<string, string>;
   name?: string;
@@ -261,7 +261,7 @@ const DatabaseCheckRows = ({ checksums }: { checksums?: Record<string, string> }
   );
 };
 
-/* The bundle's expected-ROM rows inside the same Checks drawer, each carrying a
+/* The weave's expected-ROM rows inside the same Checks drawer, each carrying a
    per-row match/mismatch mark against the computed checksums - so the
    expectation survives the ghost card once the real ROM is staged. */
 const ExpectedChecksGroup = ({
@@ -336,7 +336,7 @@ const ExpectedChecksGroup = ({
 
    - the base rows are bare only while they stand ALONE; a variant group or an "Expected" group
      promotes them to a labeled `ck-group`, which costs a head line;
-   - "Expected" is not a hash result - it is what the bundle declares - so it is known before the
+   - "Expected" is not a hash result - it is what the weave declares - so it is known before the
      checksums land and renders for real, not as shimmer. It is given no computed values here: the
      per-row match marks are exactly the part that has to wait.
 
@@ -526,7 +526,7 @@ const SourceInfoList = ({
    * a record matched through a transform speaks for that variant, not the file. */
   database?: IdentifyRecordChecks;
   defaultOpen?: boolean;
-  /** Bundle-expected checks for this file, rendered as an "Expected" group with
+  /** Weave-expected checks for this file, rendered as an "Expected" group with
    * per-row match marks against the computed values. */
   expected?: SourceInfoExpectedChecks;
   extractTiming?: ExtractTiming;
@@ -564,7 +564,7 @@ const SourceInfoList = ({
   if (!(hasBytes || checksums || database || hasExpected || lead || progress || trim?.detected)) return null;
   const byteValue = hasBytes ? String(Math.floor(bytes as number)) : "";
   // When transform variants (headerless, auto-trimmed…) are present - or the
-  // bundle contributes an "Expected" group - the base checksums become one of
+  // weave contributes an "Expected" group - the base checksums become one of
   // several groups, so they get their own labeled head ("Unchanged"/"Computed")
   // to match - an unlabeled block alongside labeled groups reads as if it
   // belonged to the first one.

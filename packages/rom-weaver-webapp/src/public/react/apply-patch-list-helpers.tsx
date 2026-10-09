@@ -2,7 +2,7 @@ import { Check, X } from "lucide-react";
 import type { Localizer } from "../../presentation/localization/index.ts";
 import { InfoToggle } from "../../presentation/react/info-toggle.tsx";
 import { createTiming, formatTiming } from "../../storage/shared/timing.ts";
-import type { ParsedBundleChecks } from "../../types/bundle.ts";
+import type { ParsedWeaveChecks } from "../../types/weave.ts";
 import { CHECK_ALGORITHMS, type CHECK_FIELDS, CHECK_LABELS } from "./components/ds/check-fields.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
@@ -30,7 +30,7 @@ const PATCH_OUTPUT_VERIFICATION_LABELS: Record<string, string> = {
   "out size": "BYTES",
 };
 
-const BUNDLE_CHECK_LABELS: Record<string, string> = {
+const WEAVE_CHECK_LABELS: Record<string, string> = {
   crc32: CHECK_LABELS.crc32,
   md5: CHECK_LABELS.md5,
   sha1: CHECK_LABELS.sha1,
@@ -149,11 +149,11 @@ export const getEmbeddedChecks = (item: PatchStackItemState, side: "input" | "ou
   return checks;
 };
 
-export const bundleCheckRows = (checks: ParsedBundleChecks | undefined) => {
+export const weaveCheckRows = (checks: ParsedWeaveChecks | undefined) => {
   const rows: Array<{ label: string; value: string }> = [];
   for (const [algorithm, value] of Object.entries(checks?.checksums || {})) {
     const normalized = algorithm.toLowerCase().replace("sha-1", "sha1");
-    const label = BUNDLE_CHECK_LABELS[normalized];
+    const label = WEAVE_CHECK_LABELS[normalized];
     if (label && value.trim()) rows.push({ label, value: value.trim() });
   }
   if (typeof checks?.size === "number") rows.push({ label: "BYTES", value: String(checks.size) });

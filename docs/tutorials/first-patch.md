@@ -30,7 +30,7 @@ That is all you need to know to start. [How patching works](../explanation/how-p
 
 Open [guided Apply Patches](https://rom-weaver.com/apply-patches?guide=apply). On the plain [Apply Patches](https://rom-weaver.com/apply-patches) page, the same guide is **Patch a sample** › **Start guided Apply** under the empty drop zone.
 
-The guide opens on **Add your files**, the drop area every file goes through. It lists the ways in: drop files or a whole folder, drop a ZIP, 7z, or bundle, or choose **Add files** to pick them.
+The guide opens on **Add your files**, the drop area every file goes through. It lists the ways in: drop files or a whole folder, drop a ZIP, 7z, or weave, or choose **Add files** to pick them.
 
 For this tutorial, choose **Continue** without adding anything. That loads the practice files, a tiny homebrew NES ROM and two patches written for this guide, and moves to the next tip. To add them the way you would add your own, choose **Download first-weave.zip** on the guide card instead, then drop the ZIP on the drop area and choose **Continue**. Nothing is uploaded, and no commercial game data is involved.
 
@@ -81,14 +81,14 @@ For a tool that reports SHA-256, the same file has this value:
 
 A match checks that you downloaded the expected result. [Checksums](../explanation/how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not) explains what this comparison establishes.
 
-To see the sample files for yourself, choose **Download a test bundle** from **Patch a sample** on the empty Apply page, or [download `first-weave.zip`](https://rom-weaver.com/first-weave.zip).
+To see the sample files for yourself, choose **Download a test weave** from **Patch a sample** on the empty Apply page, or [download `first-weave.zip`](https://rom-weaver.com/first-weave.zip).
 
 ## Step 5: try the other two samples
 
 The same practice files drive two more guided runs:
 
 - [Guided Create](https://rom-weaver.com/create-patch?guide=create) makes a patch from two homebrew ROMs.
-- [Guided Bundle Patches](https://rom-weaver.com/bundle-patches?guide=bundle) turns the Apply Patches sample into a patch-only release archive.
+- [Guided Weave Patches](https://rom-weaver.com/weave-patches?guide=weave) turns the Apply Patches sample into a patch-only release archive.
 
 These are optional follow-up exercises. [Guided practice runs](../reference/guided-runs.md) lists every guided run, its steps, and its files.
 

@@ -61,15 +61,15 @@ describe("RomExpectationCard", () => {
     expect(container.textContent).not.toContain("From the database");
   });
 
-  it("names the bundle or the patch as the authority", () => {
+  it("names the weave or the patch as the authority", () => {
     const { container } = render(
       <RomExpectationCard
-        expectation={{ checks: { checksums: { crc32: "abcd1234" } }, name: "game.gba", source: "bundle" }}
+        expectation={{ checks: { checksums: { crc32: "abcd1234" } }, name: "game.gba", source: "weave" }}
         identification={matched([{ md5: "0".repeat(32) }])}
       />,
     );
 
-    expect(expectedGroups(container)[0]?.querySelector(".ck-head-note")?.textContent).toBe("by the bundle · No-Intro");
+    expect(expectedGroups(container)[0]?.querySelector(".ck-head-note")?.textContent).toBe("by the weave · No-Intro");
   });
 
   it("renders the expectation's own rows alone when nothing identified it", () => {
@@ -132,7 +132,7 @@ describe("RomExpectationCard", () => {
   it("keeps the authored size with the matching header variant", () => {
     const { container } = render(
       <RomExpectationCard
-        expectation={{ checks: { checksums: { crc32: "abcd1234" }, size: 1024 }, source: "bundle" }}
+        expectation={{ checks: { checksums: { crc32: "abcd1234" }, size: 1024 }, source: "weave" }}
         identification={matched([
           { crc32: "abcd1234", filename: "Game.unh", ordinal: 0, size: 16384 },
           { crc32: "deadbeef", filename: "Game.nes", ordinal: 1, size: 16400 },

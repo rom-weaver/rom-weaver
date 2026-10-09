@@ -14,7 +14,7 @@ Supported cheat-code systems, match types, and ROM patch export limits in rom-we
 - [Storage and network behavior](#storage-and-network-behavior)
 - [Shard file](#shard-file)
 - [Preserved source fields](#preserved-source-fields)
-- [Bundles](#bundles)
+- [Weaves](#weaves)
 
 <!-- END doctoc -->
 
@@ -147,7 +147,7 @@ The file stores each cheat record without the values a reader derives. The CLI a
 | `rawFields.enable` | stored only when it is not `false` |
 | `id` | `cheat_` plus the first 24 hex digits of SHA-256 over `system`, `gameId`, `codeKind`, and the raw fields without `enable`, as key-sorted JSON, joined by NUL bytes |
 
-Record IDs do not depend on the file layout, so a bundle written against an earlier layout still names the same records.
+Record IDs do not depend on the file layout, so a weave written against an earlier layout still names the same records.
 
 ## Preserved source fields
 
@@ -155,11 +155,13 @@ Each imported record keeps the original code, every `cheatN_*` value, unknown fi
 
 rom-weaver does not synthesize RetroArch memory handlers. It only decodes the native code fields the source record already carries.
 
-## Bundles
+<a id="bundles"></a>
 
-A bundle's optional top-level `cheats` array records a selection: each entry carries the record `id`, the `source` database and `revision`, the `description`, and a `code` snapshot with its optional `codeKind`.
+## Weaves
 
-`bundle create --cheat` and `patch apply --emit-bundle` write the array. Applying the bundle resolves each entry by `id` against the database at `--cheat-database`, and falls back to its `code` snapshot when the database is absent. An unresolvable entry fails the apply unless it is marked `optional`.
+A weave's optional top-level `cheats` array records a selection: each entry carries the record `id`, the `source` database and `revision`, the `description`, and a `code` snapshot with its optional `codeKind`.
+
+`weave create --cheat` and `patch apply --emit-weave` write the array. Applying the weave resolves each entry by `id` against the database at `--cheat-database`, and falls back to its `code` snapshot when the database is absent. An unresolvable entry fails the apply unless it is marked `optional`.
 
 For the field list, see [CLI reference](cli.md#bundle-cheats).
 

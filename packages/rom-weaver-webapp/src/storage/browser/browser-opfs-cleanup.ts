@@ -3,6 +3,7 @@ import { requestBrowserOpfsStorage, type BrowserOpfsEntry } from "../../workers/
 // These are application scratch buckets. Host-ingested files live under rom-weaver-imports and are
 // deliberately preserved across reload/reset because they are user-owned input, not transient state.
 const TRANSIENT_OPFS_PATHS = [
+  "/work/weave-parse",
   "/work/bundle-parse",
   "/work/input",
   "/work/operations",

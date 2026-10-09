@@ -29,7 +29,10 @@ export const rootStaticAssetSourcesForChannel = (channel) => ({
   "/manifest.json": rootManifestSourcePath,
   "/emulatorjs/LICENSE": path.join(rootDir, "vendor", "emulatorjs", "LICENSE"),
   "/emulatorjs/NOTICE": path.join(rootDir, "vendor", "emulatorjs", "NOTICE"),
+  "/rom-weaver-bundle-v1.schema.json": path.join(repoRoot, "docs", "rom-weaver-bundle-v1.schema.json"),
   "/rom-weaver-bundle-v2.schema.json": path.join(repoRoot, "docs", "rom-weaver-bundle-v2.schema.json"),
+  "/rom-weaver-weave-v1.schema.json": path.join(repoRoot, "docs", "rom-weaver-weave-v1.schema.json"),
+  "/rom-weaver-weave-v2.schema.json": path.join(repoRoot, "docs", "rom-weaver-weave-v2.schema.json"),
   "/social-preview.avif": generatedSocialPreviewPath("social-preview.avif"),
   "/social-preview.png": generatedSocialPreviewPath("social-preview.png"),
   "/social-preview.webp": generatedSocialPreviewPath("social-preview.webp"),
@@ -79,12 +82,13 @@ const setRootStaticAssetContentType = (requestPath, res) => {
 export const LEGACY_WORKFLOW_ROUTES = {
   apply: "apply-patches",
   "apply-patch": "apply-patches",
-  bundle: "bundle-patches",
+  bundle: "weave-patches",
+  "bundle-patches": "weave-patches",
   create: "create-patch",
   identify: "identify-rom",
   test: "test-rom",
   trim: "trim-rom",
-  weave: "apply-patches",
+  weave: "weave-patches",
 };
 
 const applyRootStaticAssetMiddleware = (middlewares, channel, channelLabel) => {

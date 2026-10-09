@@ -139,7 +139,7 @@ describe("StagedRomSourceController stage construction", () => {
       id: candidates[1]?.id,
     }));
     const { controller } = makeController({ selectFile: selection });
-    const stage = await controller.stageSource(controller.createInitialSource("input", { name: "bundle.zip" }, 0));
+    const stage = await controller.stageSource(controller.createInitialSource("input", { name: "weave.zip" }, 0));
 
     expect(stage.state.status).toBe("needsSelection");
     expect(stage.state.candidates).toHaveLength(2);

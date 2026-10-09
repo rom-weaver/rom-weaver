@@ -154,13 +154,25 @@ describe("selectView with a leave guard", () => {
 });
 
 describe("the landing route at the app base", () => {
+  it.each(["constructor", "toString", "__proto__"])("rejects inherited route names %s", (slug) => {
+    expect(readWorkflowViewFromPath(`/roms/${slug}.html`)).toBeNull();
+    expect(readWorkflowViewFromPath(`/roms/${slug}`)).toBeNull();
+  });
+
+  it.each(["weave", "weave-patches", "bundle", "bundle-patches"])("preserves the HTML alias for %s", (slug) => {
+    expect(readWorkflowViewFromPath(`/roms/${slug}.html`)).toBe("weave");
+  });
+  it.each(["ppf-undo", "save-editor", "tools"])("keeps the unsupported HTML suffix for %s unresolved", (slug) => {
+    expect(readWorkflowViewFromPath(`/roms/${slug}.html`)).toBeNull();
+  });
+
   it("resolves a bare app base to the landing page, and every workflow slug to its own view", () => {
     expect(readWorkflowViewFromPath("/")).toBe("home");
     expect(readWorkflowViewFromPath("/index.html")).toBe("home");
     for (const [route, view] of [
       ["/apply", "patcher"],
       ["/apply-patch", "patcher"],
-      ["/bundle", "bundle"],
+      ["/weave", "weave"],
       ["/create", "creator"],
       ["/create-patch", "creator"],
       ["/checksum", "checksum"],

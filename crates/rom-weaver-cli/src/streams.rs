@@ -31,7 +31,7 @@ pub(crate) fn decorate(command: clap::Command) -> clap::Command {
     });
     command
         .mut_subcommand("trim", decorate_output)
-        .mut_subcommand("weave", decorate_output)
+        .mut_subcommand("legacy-weave-apply", decorate_output)
         .mut_subcommand("patch", |command| {
             command
                 .mut_subcommand("apply", decorate_output)
@@ -212,9 +212,9 @@ fn validate(command: &Commands, options: &RunCommandOptions, name: Option<&str>)
             }
         }
         Commands::Patch(PatchCommands::Apply(args)) => {
-            if args.tui || args.emit_bundle.is_some() {
+            if args.tui || args.emit_weave.is_some() {
                 return Err(invalid(
-                    "patch apply output - cannot use --tui or --emit-bundle",
+                    "patch apply output - cannot use --tui or --emit-weave",
                 ));
             }
             if !args.no_compress && args.compress_format.is_none() {

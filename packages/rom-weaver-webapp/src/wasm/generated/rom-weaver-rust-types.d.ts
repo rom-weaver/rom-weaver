@@ -339,7 +339,7 @@ execution?: PatchEndpointSelection, message: string,
  */
 expected_predecessor?: number, };
 
-export type OutputEnforceableEntry = { patch_index: number, source: string, checks: BundleChecks, enforceable: boolean, standdown_reason?: string, };
+export type OutputEnforceableEntry = { patch_index: number, source: string, checks: WeaveChecks, enforceable: boolean, standdown_reason?: string, };
 
 export type PatchValidationPlan = { plan: boolean, per_patch: Array<PatchPlanVerdict>, suggested_order?: Array<number>, output_verification: Array<OutputEnforceableEntry>, status: string, patch_count: number, passed_count: number, failed_count: number, formats: Array<string>, };
 
@@ -464,7 +464,7 @@ export type TrimCommand = { input: Array<string>, output?: string, extension?: s
  */
 rom_filter?: boolean, no_extract?: boolean, revert_marker?: boolean, threads?: ThreadBudget, force?: boolean, };
 
-export type PatchApplyCommand = { input: string, select?: Array<string>, target?: string, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches?: Array<string>, patch_select?: Array<string>, output?: string, bundle?: string, with_patches?: Array<string>, without_patches?: Array<string>, without_cheats?: boolean, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, assume_in?: Array<string>, expect_in?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>,
+export type PatchApplyCommand = { input: string, select?: Array<string>, target?: string, filter?: Array<FilterKind>, no_extract?: boolean, no_ignore?: boolean, patches?: Array<string>, patch_select?: Array<string>, output?: string, weave?: string, with_patches?: Array<string>, without_patches?: Array<string>, without_cheats?: boolean, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, assume_in?: Array<string>, expect_in?: Array<string>, patch_header?: Array<PatchApplyHeaderMode>, patch_basis?: Array<PatchBasisMode>,
 /**
  * Stable patch output IDs for direct JSON/WASM apply runs.
  */
@@ -472,11 +472,11 @@ patch_id?: Array<string>,
 /**
  * Concrete execution inputs for direct JSON/WASM apply runs.
  */
-patch_input?: Array<BundlePatchInput | null>,
+patch_input?: Array<WeavePatchInput | null>,
 /**
  * Cumulative execution targets for direct JSON/WASM apply runs.
  */
-patch_target?: Array<BundlePatchInput | null>,
+patch_target?: Array<WeavePatchInput | null>,
 /**
  * Index-aligned authored pre-apply checks for the patch apply JSON wire.
  * They verify the selected execution input without changing it.
@@ -564,16 +564,16 @@ export type SaveExportSchemaCommand = { input?: string, game?: string, rom_sha1?
 
 export type SaveCommands = { "type": "list-games", "args": SaveListGamesCommand } | { "type": "create", "args": SaveCreateCommand } | { "type": "identify", "args": SaveIdentifyCommand } | { "type": "inspect", "args": SaveInspectCommand } | { "type": "get", "args": SaveGetCommand } | { "type": "set", "args": SaveSetCommand } | { "type": "export-schema", "args": SaveExportSchemaCommand };
 
-export type BundleChecks = { checksums?: { [key in string]: string },
+export type WeaveChecks = { checksums?: { [key in string]: string },
 /**
  * Exact byte size. Emitted as a JSON `number` on the wasm wire, so
  * override the default ts-rs `bigint` mapping.
  */
 size?: number | null, };
 
-export type BundleCheckState = { id: string, checks: BundleChecks, };
+export type WeaveCheckState = { id: string, checks: WeaveChecks, };
 
-export type BundleRom = {
+export type WeaveRom = {
 /**
  * Display / output-naming file name. For a separately supplied ROM, this
  * is also an advisory expected basename (defaults to the source basename).
@@ -584,7 +584,7 @@ name?: string,
  */
 url?: string,
 /**
- * Bundle-relative path (archive member for bundled bundles).
+ * Weave-relative path (archive member for bundled weaves).
  */
 path?: string,
 /**
@@ -595,22 +595,22 @@ member?: string,
 /**
  * Expected checksums/size of the ROM itself (also verifies downloads).
  */
-checks?: BundleChecks,
+checks?: WeaveChecks,
 /**
  * Named state carrying this ROM's expected checks. New writers use this
  * instead of repeating a `checks` object on every consumer.
  */
 checksRef?: string, };
 
-export type BundlePatchInput = { rom: boolean, member?: string, } | { patch: string, member?: string, };
+export type WeavePatchInput = { rom: boolean, member?: string, } | { patch: string, member?: string, };
 
-export type BundlePatchEntry = {
+export type WeavePatchEntry = {
 /**
  * Stable identity for this patch slot across source replacements.
  */
 id?: string,
 /**
- * Author-controlled release version; distinct from the bundle schema version.
+ * Author-controlled release version; distinct from the weave schema version.
  */
 version?: string,
 /**
@@ -631,25 +631,25 @@ label?: string,
  */
 url?: string,
 /**
- * Bundle-relative path (archive member for bundled bundles).
+ * Weave-relative path (archive member for bundled weaves).
  */
 path?: string,
 /**
  * Fixed execution input for this patch. Omitted keeps the target lane's
  * cumulative output.
  */
-input?: BundlePatchInput,
+input?: WeavePatchInput,
 /**
  * Cumulative execution lane for this patch. Omitted retains the legacy
  * single sequential lane. A patch target seeds its lane from the named
  * producer's output when the lane first runs.
  */
-target?: BundlePatchInput,
+target?: WeavePatchInput,
 /**
  * Expected checksums and size of the authored input state for this step.
- * These checks supplement the bundle's ROM checks and embedded patch checks.
+ * These checks supplement the weave's ROM checks and embedded patch checks.
  */
-inputChecks?: BundleChecks,
+inputChecks?: WeaveChecks,
 /**
  * Named authored input state. Mutually exclusive with inline
  * `inputChecks`; it does not select execution bytes.
@@ -658,7 +658,7 @@ inputChecksRef?: string,
 /**
  * Expected checksums and size after the authored chain prefix ends at this step.
  */
-outputChecks?: BundleChecks,
+outputChecks?: WeaveChecks,
 /**
  * Named authored output state. Mutually exclusive with inline
  * `outputChecks`.
@@ -676,10 +676,10 @@ header?: PatchApplyHeaderMode,
  */
 basis?: PatchInputBasis, };
 
-export type BundleCheatEntry = {
+export type WeaveCheatEntry = {
 /**
  * Cheat database record ID. An exact description is also accepted, so a
- * hand-authored bundle can name a cheat the way `cheat list` prints it.
+ * hand-authored weave can name a cheat the way `cheat list` prints it.
  */
 id: string,
 /**
@@ -706,29 +706,29 @@ codeKind?: CheatKind,
  */
 optional?: boolean, };
 
-export type BundleOutput = {
+export type WeaveOutput = {
 /**
  * Default output file name.
  */
 name?: string, header?: PatchApplyOutputHeaderMode,
 /**
  * Expected checksums/size of the final output once the full patch chain
- * (every patch, in bundle order) has been applied. A partial selection
+ * (every patch, in weave order) has been applied. A partial selection
  * validates against its last patch's `outputChecks` instead.
  */
-checks?: BundleChecks,
+checks?: WeaveChecks,
 /**
  * Named expected final-output state. Mutually exclusive with inline
  * `checks`.
  */
 checksRef?: string, };
 
-export type RomWeaverBundle = {
+export type RomWeaverWeave = {
 /**
  * Optional JSON Schema reference so editors bind autocomplete/validation
- * when a bundle is hand-authored. A named field satisfies
+ * when a weave is hand-authored. A named field satisfies
  * `deny_unknown_fields` (an unknown `$schema` key would otherwise fail
- * parse); the value is preserved verbatim through `bundle create --from`
+ * parse); the value is preserved verbatim through `weave create --from`
  * but never auto-injected by create (keeps emitted bytes stable). First
  * field so it serializes at the top, the conventional position.
  */
@@ -742,56 +742,56 @@ patchBasis?: PatchBasisMode,
  * Named checksum states. References preserve the authored relationship
  * between states even when two states currently have equal digests.
  */
-checkStates?: Array<BundleCheckState>, rom?: BundleRom,
+checkStates?: Array<WeaveCheckState>, rom?: WeaveRom,
 /**
  * Ordered: array order is the apply order.
  */
-patches: Array<BundlePatchEntry>,
+patches: Array<WeavePatchEntry>,
 /**
  * Cheat selections baked into the ROM after the patch chain, in selection
- * order. Optional: a bundle without it is a plain patch recipe.
+ * order. Optional: a weave without it is a plain patch recipe.
  */
-cheats?: Array<BundleCheatEntry>, output?: BundleOutput, };
+cheats?: Array<WeaveCheatEntry>, output?: WeaveOutput, };
 
-export type BundleSourceKind = "json" | "compressed-json" | "archive";
+export type WeaveSourceKind = "json" | "compressed-json" | "archive";
 
-export type BundleSourceRef = { url: string, } | { extracted_path: string, } | { path: string, };
+export type WeaveSourceRef = { url: string, } | { extracted_path: string, } | { path: string, };
 
-export type BundlePatchSource = { source: BundleSourceRef,
+export type WeavePatchSource = { source: WeaveSourceRef,
 /**
- * Ingest-grade descriptor for entries extracted from the bundle
+ * Ingest-grade descriptor for entries extracted from the weave
  * archive (spares the host a second describe round-trip). `None` for
  * URL / unresolved-path entries.
  */
 descriptor?: PatchDescriptor | null, };
 
-export type BundleParseResult = {
+export type WeaveParseResult = {
 /**
- * The validated bundle, checksum values normalized.
+ * The validated weave, checksum values normalized.
  */
-bundle: RomWeaverBundle, source_kind: BundleSourceKind,
+weave: RomWeaverWeave, source_kind: WeaveSourceKind,
 /**
- * Entry name of the bundle member when the source was an archive.
+ * Entry name of the weave member when the source was an archive.
  */
 archive_member?: string | null,
 /**
- * Resolved ROM source; `None` when the bundle defines no ROM.
+ * Resolved ROM source; `None` when the weave defines no ROM.
  */
-rom_source?: BundleSourceRef | null,
+rom_source?: WeaveSourceRef | null,
 /**
- * Index-aligned with `bundle.patches`.
+ * Index-aligned with `weave.patches`.
  */
-patch_sources: Array<BundlePatchSource>,
+patch_sources: Array<WeavePatchSource>,
 /**
- * Non-fatal issues (ignored members, extra bundles, …).
+ * Non-fatal issues (ignored members, extra weaves, …).
  */
 warnings: Array<string>, };
 
-export type BundleParseCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, output?: string, threads?: ThreadBudget, };
+export type WeaveParseCommand = { input: string, select?: Array<string>, filter?: Array<FilterKind>, no_extract?: boolean, output?: string, threads?: ThreadBudget, };
 
-export type BundleCreateCommand = { rom?: string,
+export type WeaveCreateCommand = { rom?: string,
 /**
- * Trusted ROM checksum/size values from a prior staging pass, so bundle
+ * Trusted ROM checksum/size values from a prior staging pass, so weave
  * export skips re-hashing the same prepared leaf. `algo=hex` tokens supply
  * the emitted rom checks; a `size=N` token supplies the prepared size.
  */
@@ -805,32 +805,32 @@ rom_member?: string, patch?: Array<string>, patch_id?: Array<string>, patch_vers
  * Index-aligned concrete execution inputs from the JSON/WASM surface.
  * Native flags currently author the legacy ordered chain.
  */
-patch_input?: Array<BundlePatchInput | null>,
+patch_input?: Array<WeavePatchInput | null>,
 /**
  * Index-aligned cumulative execution targets from the JSON/WASM surface.
  */
-patch_target?: Array<BundlePatchInput | null>, default_patch_basis?: PatchBasisMode, patch_input_check?: Array<string>, patch_output_check?: Array<string>, output_check?: Array<string>, output_name?: string, output_header?: PatchApplyOutputHeaderMode,
+patch_target?: Array<WeavePatchInput | null>, default_patch_basis?: PatchBasisMode, patch_input_check?: Array<string>, patch_output_check?: Array<string>, output_check?: Array<string>, output_name?: string, output_header?: PatchApplyOutputHeaderMode,
 /**
- * Cheat selections to record in the bundle. The wasm/JSON boundary sets
+ * Cheat selections to record in the weave. The wasm/JSON boundary sets
  * this directly; the native CLI fills it from `--cheat`/`--cht`.
  */
-cheats?: Array<BundleCheatEntry>, output: string, bundle?: string,
+cheats?: Array<WeaveCheatEntry>, output: string, weave?: string,
 /**
  * Optional packaged ROM payload. Checks are still calculated from `rom`.
  */
-bundle_rom?: string, no_bundle_rom?: boolean, checksum?: Array<string>, threads?: ThreadBudget, force?: boolean, };
+weave_rom?: string, no_weave_rom?: boolean, checksum?: Array<string>, threads?: ThreadBudget, force?: boolean, };
 
-export type BundleCreateResult = { bundle_path: string, archive_path?: string | null,
+export type WeaveCreateResult = { weave_path: string, archive_path?: string | null,
 /**
- * The canonical bundle as written (checksums computed and normalized).
+ * The canonical weave as written (checksums computed and normalized).
  */
-bundle: RomWeaverBundle, warnings: Array<string>, };
+weave: RomWeaverWeave, warnings: Array<string>, };
 
-export type BundleCommands = { "type": "create", "args": BundleCreateCommand } | { "type": "parse", "args": BundleParseCommand };
+export type WeaveCommands = { "type": "create", "args": WeaveCreateCommand } | { "type": "parse", "args": WeaveParseCommand };
 
 export type PlanExtractBatchCommand = { job_sizes?: Array<bigint>, threads?: ThreadBudget, max_concurrency?: number | null, total_memory_bytes?: bigint | null, memory_ceiling_bytes?: bigint | null, };
 
-export type Commands = { "type": "probe", "args": ProbeCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "identify", "args": IdentifyCommand } | { "type": "ingest", "args": IngestCommand } | { "type": "cheat", "args": CheatCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "patch", "args": PatchCommands } | { "type": "bundle", "args": BundleCommands } | { "type": "save", "args": SaveCommands } | { "type": "tools", "args": ToolsCommands } | { "type": "plan-extract-batch", "args": PlanExtractBatchCommand };
+export type Commands = { "type": "probe", "args": ProbeCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "identify", "args": IdentifyCommand } | { "type": "ingest", "args": IngestCommand } | { "type": "cheat", "args": CheatCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "patch", "args": PatchCommands } | { "type": "weave", "args": WeaveCommands } | { "type": "save", "args": SaveCommands } | { "type": "tools", "args": ToolsCommands } | { "type": "plan-extract-batch", "args": PlanExtractBatchCommand };
 
 export type RomWeaverRunOutputOptions = { json?: boolean, progress?: boolean, log_level?: LogLevel, dep_trace?: boolean, interactive_selection_enabled?: boolean,
 /**

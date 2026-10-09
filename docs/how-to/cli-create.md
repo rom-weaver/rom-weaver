@@ -68,5 +68,5 @@ The SHA-256 values must match. Test the rebuilt file in the emulator or hardware
 ## Where next
 
 - Unsure which format to publish in? [Pick a patch format](../explanation/patch-formats.md).
-- Ship several patches with checksums and ordering as one file: [Bundles from the CLI](cli-bundles.md).
+- Ship several patches with checksums and ordering as one file: [Weaves from the CLI](cli-bundles.md).
 - Run `rom-weaver patch create --help` for every flag; the [CLI reference](../reference/cli.md) covers shared behavior.

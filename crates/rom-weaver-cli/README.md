@@ -41,7 +41,7 @@ This crate ships the `rom-weaver` binary and the shared `rom_weaver_app` command
 - **Create compressed output.** ZIP, 7z, CHD, RVZ, and Z3DS. CHD and RVZ output is validated against `chdman` and `dolphin-tool`, respectively.
 - **Checksum and verify.** CRC-32, CRC-32C, CRC-16, Adler-32, MD5, SHA-1, SHA-256, and BLAKE3, with copier-header detection and header-aware checksum variants.
 - **Trim and restore.** Trimming for NDS, GBA, 3DS, and XISO, plus lossless GameCube/Wii conversion to RVZ without sector scrubbing. NDS, GBA, and 3DS support padding restoration. An opt-in footer stores the original size and a fill byte; it does not store removed data.
-- **Share workflows.** `rom-weaver-bundle.json` bundles pin patch order, checksums, and output naming so others can replay the exact workflow.
+- **Share workflows.** `rom-weaver-weave.json` weaves pin patch order, checksums, and output naming so others can replay the exact workflow.
 - **Scriptable.** `--json` emits one complete result document and `--jsonl` emits line-delimited events; generated assets use result details in JSON modes.
 
 Everything runs locally. Nothing is uploaded.
@@ -121,4 +121,4 @@ Before v1.0, breaking changes increase the minor version. CLI flags and JSON out
 
 ## License
 
-Copyright © Brandon Casey. Licensed under [AGPL-3.0-or-later](https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE). Bundled third-party components retain their own licenses; release builds ship a generated `CLI_NOTICE` attribution and license inventory.
+Copyright © Brandon Casey. Licensed under [AGPL-3.0-or-later](https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE). Weaved third-party components retain their own licenses; release builds ship a generated `CLI_NOTICE` attribution and license inventory.

@@ -51,7 +51,7 @@ describe("readAppBaseUrl", () => {
   });
 
   test("drops any query and hash so it is usable as a base", () => {
-    const base = new URL(at("/apply-patch/?bundle=first-weave.zip#frag"));
+    const base = new URL(at("/apply-patch/?weave=first-weave.zip#frag"));
     expect(base.search).toBe("");
     expect(base.hash).toBe("");
   });
@@ -95,7 +95,7 @@ describe("resolveGuidedSampleHref", () => {
 
 describe("readGuidedSampleFromSearch", () => {
   test("reads a supported guide and rejects unknown values", () => {
-    expect(readGuidedSampleFromSearch("?guide=bundle")).toBe("bundle");
+    expect(readGuidedSampleFromSearch("?guide=weave")).toBe("weave");
     expect(readGuidedSampleFromSearch("?guide=unknown")).toBeNull();
     expect(readGuidedSampleFromSearch("?guide=toString")).toBeNull();
   });

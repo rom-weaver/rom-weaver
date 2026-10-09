@@ -169,11 +169,22 @@ describe("createWebappRootController over the vanilla store", () => {
 
   it("normalizes a static-host index page to its clean route", () => {
     window.history.replaceState({}, "", "/rom-weaver/weave/index.html");
-    expect(readWorkflowViewFromPath()).toBe("patcher");
+    expect(readWorkflowViewFromPath()).toBe("weave");
     const controller = createController();
-    expect(controller.getState().currentView).toBe("patcher");
-    expect(window.location.pathname).toBe("/rom-weaver/apply-patches");
+    expect(controller.getState().currentView).toBe("weave");
+    expect(window.location.pathname).toBe("/rom-weaver/weave-patches");
   });
+
+  it.each(["bundle", "bundle-patches", "bundle.html", "bundle-patches/index.html"])(
+    "canonicalizes the legacy route %s and preserves its query",
+    (route) => {
+      window.history.replaceState({}, "", `/rom-weaver/${route}?bundle=old.json`);
+      const controller = createController();
+      expect(controller.getState().currentView).toBe("weave");
+      expect(window.location.pathname).toBe("/rom-weaver/weave-patches");
+      expect(window.location.search).toBe("?bundle=old.json");
+    },
+  );
 
   it("keeps nested docs routes and returns to the app root", () => {
     window.history.replaceState({}, "", "/rom-weaver/docs/apply-rom-patches");
@@ -187,11 +198,11 @@ describe("createWebappRootController over the vanilla store", () => {
   });
 
   it("preserves URL session parameters without emitting hash routes", () => {
-    window.history.replaceState({}, "", "/apply-patch?bundle=first-weave.zip");
+    window.history.replaceState({}, "", "/apply-patch?weave=first-weave.zip");
     const controller = createController();
     controller.selectView("creator");
     expect(window.location.pathname).toBe("/create-patch");
-    expect(window.location.search).toBe("?bundle=first-weave.zip");
+    expect(window.location.search).toBe("?weave=first-weave.zip");
     expect(window.location.hash).toBe("");
   });
 
@@ -283,7 +294,7 @@ describe("createWebappRootController over the vanilla store", () => {
     expect(controller.getState().settings.accent).toBe("woad");
   });
 
-  it("commits and persists the bundle package selection from the output card", () => {
+  it("commits and persists the weave package selection from the output card", () => {
     const storage = createStorage();
     const controller = createWebappRootController({
       onApplySettings: vi.fn(),
@@ -292,13 +303,13 @@ describe("createWebappRootController over the vanilla store", () => {
       onLocalizationChange: vi.fn(),
       storage,
     });
-    controller.setBundlePackage("rom");
-    expect(controller.getState().settings.bundlePackage).toBe("rom");
-    expect(controller.getState().draftSettings.bundlePackage).toBe("rom");
-    expect(JSON.parse(storage.getItem("rom-weaver-settings") ?? "{}").apply?.output?.bundlePackage).toBe("rom");
+    controller.setWeavePackage("rom");
+    expect(controller.getState().settings.weavePackage).toBe("rom");
+    expect(controller.getState().draftSettings.weavePackage).toBe("rom");
+    expect(JSON.parse(storage.getItem("rom-weaver-settings") ?? "{}").apply?.output?.weavePackage).toBe("rom");
     // An unknown package is rejected rather than persisted.
-    controller.setBundlePackage("tar:rom");
-    expect(controller.getState().settings.bundlePackage).toBe("rom");
+    controller.setWeavePackage("tar:rom");
+    expect(controller.getState().settings.weavePackage).toBe("rom");
   });
 
   it("notifies subscribers on a state mutation and stops after unsubscribe", () => {

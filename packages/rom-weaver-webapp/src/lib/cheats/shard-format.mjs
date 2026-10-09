@@ -28,7 +28,7 @@
  * `rawFields.code`, and `rawFields.enable` from the record itself, and the
  * record `id` by hashing the restored fields. The native CLI performs the same
  * expansion in `crates/rom-weaver-cli/src/cheat_database.rs`; the two MUST
- * produce identical IDs, because bundles store them.
+ * produce identical IDs, because weaves store them.
  */
 
 export const CHEAT_SHARD_SCHEMA_VERSION = 2;

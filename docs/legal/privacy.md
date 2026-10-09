@@ -40,7 +40,7 @@ Opening the site downloads what any site downloads: HTML, styles, scripts, the W
 
 There are no analytics, advertising, or tracking scripts in the deployed app.
 
-If you open a sample workflow, a bundle from a URL, or any other remote file, your browser fetches that one thing from wherever it lives, and that server sees the same ordinary request information.
+If you open a sample workflow, a weave from a URL, or any other remote file, your browser fetches that one thing from wherever it lives, and that server sees the same ordinary request information.
 
 ## Links to other sites
 

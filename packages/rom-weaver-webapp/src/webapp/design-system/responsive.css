@@ -124,7 +124,7 @@
   .rw-app .workflow-file-list:not(:empty) + .drop {
     margin-top: 9px;
   }
-  .rw-app .bundle-rom-expectation {
+  .rw-app .weave-rom-expectation {
     margin-block-start: 9px;
   }
   /* Override user-agent dialog limits with an edge-to-edge sheet on phones.

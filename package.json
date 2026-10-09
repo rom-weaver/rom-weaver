@@ -70,7 +70,10 @@
     "docs/man/rom-weaver-tools.1",
     "docs/man/rom-weaver-tools-ppf-undo.1",
     "docs/man/rom-weaver-trim.1",
-    "docs/man/rom-weaver-weave.1"
+    "docs/man/rom-weaver-weave.1",
+    "docs/man/rom-weaver-weave-create.1",
+    "docs/man/rom-weaver-weave-parse.1",
+    "docs/man/rom-weaver-weave-schema.1"
   ],
   "files": [
     "bin/rom-weaver.mjs",

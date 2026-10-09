@@ -37,7 +37,7 @@ fn apply_args(input: &Path, dcp: &Path) -> PatchApplyCommand {
         "input": input.to_string_lossy(),
         "patches": [dcp.to_string_lossy()],
         "compress_format": null,
-        "emit_bundle": null,
+        "emit_weave": null,
         "tui": false,
     }))
     .expect("patch apply args")

@@ -21,7 +21,7 @@ const approvalSnapshotReplacer = (key: string, value: unknown) => (progressKeys.
 const workflowPages = {
   patcher: "apply-patches",
   creator: "create-patch",
-  bundle: "bundle-patches",
+  weave: "weave-patches",
   compress: "compress",
   extract: "extract",
   checksum: "checksum",

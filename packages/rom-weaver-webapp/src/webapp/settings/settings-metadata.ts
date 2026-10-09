@@ -48,7 +48,7 @@ type SettingsState = {
   language: string;
   byteUnits: ByteUnitSystem;
   logLevel: string;
-  bundlePackage: string;
+  weavePackage: string;
   postApplyDownloadBehavior: PostApplyActionBehavior;
   postApplyTestBehavior: PostApplyActionBehavior;
   betaToolsEnabled: boolean;
@@ -178,7 +178,7 @@ const SETTINGS_FIELD_ORDER = [
   "fixChecksum",
   "identifiedOutputName",
   "requireInputChecksumMatch",
-  "bundlePackage",
+  "weavePackage",
   "postApplyDownloadBehavior",
   "postApplyTestBehavior",
   "compressionProfile",
@@ -252,7 +252,7 @@ const SETTINGS_PANEL_SECTIONS: ReadonlyArray<{ fields: SettingsFieldKey[]; title
   },
   {
     fields: [
-      "bundlePackage",
+      "weavePackage",
       "postApplyDownloadBehavior",
       "postApplyTestBehavior",
       "emulatorSaveStorageEnabled",
@@ -313,20 +313,20 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     validationLabel: "File size units",
     validValues: ["decimal", "binary"],
   },
-  bundlePackage: {
+  weavePackage: {
     defaultValue: "patches",
-    id: "settings-bundle-package",
-    key: "bundlePackage",
+    id: "settings-weave-package",
+    key: "weavePackage",
     kind: "select",
-    label: getSettingsLabel("bundlePackage"),
-    labelId: "settings.bundlePackage",
+    label: getSettingsLabel("weavePackage"),
+    labelId: "settings.weavePackage",
     options: [
-      { label: "Bundle + patches", value: "patches" },
-      { label: "Bundle + ROM + patches", value: "rom" },
+      { label: "Weave + patches", value: "patches" },
+      { label: "Weave + ROM + patches", value: "rom" },
     ],
     suggestion:
-      "Choose whether to include the ROM in a shared bundle. The Compression type controls its archive format.",
-    validationLabel: "Bundle",
+      "Choose whether to include the ROM in a shared weave. The Compression type controls its archive format.",
+    validationLabel: "Weave",
     validValues: ["patches", "rom"],
   },
   emulatorSaveStorageEnabled: {

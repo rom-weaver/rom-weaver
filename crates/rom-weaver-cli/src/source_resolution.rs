@@ -1,7 +1,7 @@
 use rom_weaver_containers::libarchive::{RegularArchiveProbeFormat, probe_regular_archive_format};
 
-use super::bundle_load::is_stream_codec_format_name;
 use super::selection_resolution::{SelectionExtract, SelectionResolutionOptions};
+use super::weave_load::is_stream_codec_format_name;
 use super::*;
 
 #[derive(Debug)]
@@ -79,7 +79,7 @@ impl CliApp {
         labels: AutoExtractResolutionLabels<'_>,
         flags: AutoExtractResolutionFlags,
     ) -> Result<ResolvedChecksumSource> {
-        let member = super::bundle_parse::normalized_member_path(member, labels.source_label)?;
+        let member = super::weave_parse::normalized_member_path(member, labels.source_label)?;
         if flags.no_extract {
             return Err(RomWeaverError::Validation(format!(
                 "{} `{member}` requires extraction; remove --no-extract",

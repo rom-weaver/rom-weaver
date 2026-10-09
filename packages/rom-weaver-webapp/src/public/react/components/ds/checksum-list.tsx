@@ -203,8 +203,8 @@ const ChecksumList = ({
 type ChecksumPendingGroup = {
   id: string;
   label?: ReactNode;
-  /** A group whose values are already known while the file stages (a bundle's "Expected" checks
-   * come from the bundle, not the hash), rendered as-is in place of shimmer rows. */
+  /** A group whose values are already known while the file stages (a weave's "Expected" checks
+   * come from the weave, not the hash), rendered as-is in place of shimmer rows. */
   content?: ReactNode;
   rows?: Array<{ id?: string; label: ReactNode; length: number }>;
 };

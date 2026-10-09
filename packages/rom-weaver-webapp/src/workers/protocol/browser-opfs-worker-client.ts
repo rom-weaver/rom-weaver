@@ -1,6 +1,6 @@
 import { createWorkerRequestId } from "../shared/worker-request-id.ts";
 // `?worker&url`, never `new URL(..., import.meta.url)` - see "Worker URLs" in docs/development/ARCHITECTURE.md.
-import BUNDLED_STAGING_WORKER_URL from "../storage/browser-opfs-staging.worker.ts?worker&url";
+import WEAVED_STAGING_WORKER_URL from "../storage/browser-opfs-staging.worker.ts?worker&url";
 
 type WorkerAssetRoot = typeof globalThis & {
   __romWeaverWorkerBaseUrl?: string;
@@ -51,7 +51,7 @@ const createOpfsWorker = () => {
       // Fall through to the bundled worker.
     }
   }
-  return new Worker(BUNDLED_STAGING_WORKER_URL, {
+  return new Worker(WEAVED_STAGING_WORKER_URL, {
     name: "rpjs-opfs-storage-worker",
     type: "module",
   });

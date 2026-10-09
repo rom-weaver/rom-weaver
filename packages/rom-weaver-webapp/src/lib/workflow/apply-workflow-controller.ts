@@ -1,6 +1,6 @@
 import { createVfsFileRef, isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type {
-  ApplyWorkflowBundleSources,
+  ApplyWorkflowWeaveSources,
   ApplyWorkflowInputState,
   ApplyWorkflowPatchState,
 } from "../../types/apply-workflow.ts";
@@ -180,9 +180,9 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
     this.recomputeOutputState();
   }
 
-  /** Export the exact leaves staging prepared, so a bundle export right after apply needs no
+  /** Export the exact leaves staging prepared, so a weave export right after apply needs no
    * second archive extraction/ingest pass. */
-  getBundleExportSources(): ApplyWorkflowBundleSources {
+  getWeaveExportSources(): ApplyWorkflowWeaveSources {
     const session = this.inputSession;
     const selectedOwner = this.getSelectedInputOwner();
     const inputStage = selectedOwner || session?.view;
@@ -1376,7 +1376,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
   private getPreparedInputAssets(): InputAsset[] {
     const session = this.inputSession;
     if (!session) return [];
-    // A synthetic session bundles several separately-provided ROMs. Apply keeps only the chosen one
+    // A synthetic session weaves several separately-provided ROMs. Apply keeps only the chosen one
     // ("ask which one"), so once a pick is made expose just that stage's assets - patch targeting,
     // checksums, and the run all operate on the single selected ROM, not every uploaded file.
     if (session.synthetic) {
@@ -1450,7 +1450,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
    * Disabled patches wait until they are re-enabled.
    */
   async validatePatches(options?: {
-    /** Index-aligned declared chain metadata (bundle/user basis + checks) per staged patch. */
+    /** Index-aligned declared chain metadata (weave/user basis + checks) per staged patch. */
     chainMeta?: ReadonlyMap<
       number,
       { basis?: "auto" | "base" | "previous"; inputChecks?: string; outputChecks?: string }
@@ -1610,7 +1610,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
 
   private getEffectiveInputSources(): TSource[] {
     const session = this.inputSession;
-    // Synthetic sessions bundle several separately-provided ROMs; apply keeps only the chosen one,
+    // Synthetic sessions weave several separately-provided ROMs; apply keeps only the chosen one,
     // so the run (and its size accounting) sees just that source rather than every uploaded file.
     if (session?.synthetic) {
       const selectedOwner = this.getSelectedInputOwner();

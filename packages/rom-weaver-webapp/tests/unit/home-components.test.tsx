@@ -168,7 +168,7 @@ describe("HomePage", () => {
       "/tools/apply-patches",
       "/tools/test-rom",
       "/tools/checksum",
-      "/tools/bundle-patches",
+      "/tools/weave-patches",
     ]);
     expect(container.querySelector("#home-title")?.textContent).toContain("Online ROM patcher.");
     expect(container.textContent).toContain("Keep your files on your device.");

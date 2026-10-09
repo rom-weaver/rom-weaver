@@ -18,7 +18,7 @@ rom-weaver's browser and CLI share one engine.
 
 Rust implements patches, containers, checksums, and validation. The CLI links it natively; the webapp runs it as WebAssembly in browser workers.
 
-Both interfaces read each other's patches and bundles. Format, options, and backend can change output bytes, so compressed files may differ.
+Both interfaces read each other's patches and weaves. Format, options, and backend can change output bytes, so compressed files may differ.
 
 ## What the browser is good at
 

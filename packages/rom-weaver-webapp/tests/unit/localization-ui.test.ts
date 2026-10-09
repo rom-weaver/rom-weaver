@@ -57,7 +57,7 @@ const LOAD_BEARING_UI_IDS = [
   "ui.patch.bulkSelectionUnchanged",
   "ui.step.apply",
   "settings.accent",
-  "settings.bundlePackage",
+  "settings.weavePackage",
   "settings.byteUnits",
   "settings.defaultCompression",
   "settings.emulatorSaveStorageEnabled",
@@ -104,7 +104,7 @@ describe("ui catalog", () => {
     const es = createLocalizer("es");
     const de = createLocalizer("de");
     expect(getSettingsFieldLabel("accent", es)).toBe("Color de acento");
-    expect(getSettingsFieldLabel("bundlePackage", es)).toBe("Paquete");
+    expect(getSettingsFieldLabel("weavePackage", es)).toBe("Paquete");
     expect(getSettingsFieldLabel("emulatorSaveStorageEnabled", de)).toBe(
       "Emulator-Spielstände auf diesem Gerät speichern",
     );

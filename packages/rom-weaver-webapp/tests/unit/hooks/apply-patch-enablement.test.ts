@@ -31,7 +31,7 @@ describe("useApplyPatchEnablement", () => {
     expect(result.current.filterEnabledPatchRun([second, first])).toEqual({ patches: [first] });
   });
 
-  it("seeds bundle defaults and drops toggles for removed slots", () => {
+  it("seeds weave defaults and drops toggles for removed slots", () => {
     const { result } = renderHook(() => useApplyPatchEnablement());
     const first = source("first.ips");
     const second = source("second.ips");

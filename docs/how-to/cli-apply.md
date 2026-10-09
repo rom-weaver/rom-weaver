@@ -39,7 +39,7 @@ rom-weaver patch apply \
 
 An output extension matching the selected ROM leaf writes a plain ROM, so `translated.sfc` does not need `--no-compress`. A registered container extension such as `.zip` still compresses the result. Use `--no-compress` to force raw bytes. The [output reference](../reference/cli.md#output-and-compression) lists compression overrides and aliases.
 
-For an ordinary file apply, omit `--output` to write a sibling such as `original-patched.sfc`. Existing names are preserved by adding a numeric suffix. Bundle applies keep their bundle-provided output name; a bundle without one still requires `--output`.
+For an ordinary file apply, omit `--output` to write a sibling such as `original-patched.sfc`. Existing names are preserved by adding a numeric suffix. Weave applies keep their weave-provided output name; a weave without one still requires `--output`.
 
 Formats that carry their own checksums are verified strictly, so a wrong starting ROM stops the run - see [Fix a checksum error](fix-checksum-errors.md) when that happens.
 
@@ -186,5 +186,5 @@ The [tools reference](../reference/cli.md#tools) lists the inputs and limits.
 ## Where next
 
 - A checksum mismatch is almost always a wrong starting file; see [Fix a checksum error](fix-checksum-errors.md).
-- Record a finished run as a shareable recipe with [Bundles from the CLI](cli-bundles.md).
-- Bake cheat codes into a ROM (`--code`), write a bundle alongside the patched ROM (`--emit-bundle`, `--tui`), or patch straight from a `rom-weaver-bundle.json`: the [patching flags](../reference/cli.md#patching) cover every option, and `rom-weaver patch apply --help` is authoritative.
+- Record a finished run as a shareable recipe with [Weaves from the CLI](cli-bundles.md).
+- Bake cheat codes into a ROM (`--code`), write a weave alongside the patched ROM (`--emit-weave`, `--tui`), or patch straight from a `rom-weaver-weave.json`: the [patching flags](../reference/cli.md#patching) cover every option, and `rom-weaver patch apply --help` is authoritative.

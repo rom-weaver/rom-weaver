@@ -216,15 +216,15 @@ const applySettingsToRuntime = (settings: SettingsState) => {
 };
 
 const isNotFoundPage = document.documentElement.dataset.page === "not-found";
-// Old bundle links used the Apply route's query/hash state. Keep guided
+// Old weave links used the Apply route's query/hash state. Keep guided
 // samples and URL sessions shareable, but replace their route before React
 // chooses a workflow. Direct ROM/patch sessions remain on Apply.
-const replaceLegacyBundleRoute = (): boolean => {
+const replaceLegacyWeaveRoute = (): boolean => {
   if (isNotFoundPage) return false;
   let currentUrl = new URL(window.location.href);
   const renamedPath = currentUrl.pathname
     .replace(/\/apply-patch(?:\.html|\/index\.html|\/)?$/iu, "/apply-patches")
-    .replace(/\/bundle(?:\.html|\/index\.html|\/)?$/iu, "/bundle-patches");
+    .replace(/\/(?:bundle-patches|bundle|weave)(?:\.html|\/index\.html|\/)?$/iu, "/weave-patches");
   const routeWasRenamed = renamedPath !== currentUrl.pathname;
   if (routeWasRenamed) {
     currentUrl.pathname = renamedPath;
@@ -233,24 +233,24 @@ const replaceLegacyBundleRoute = (): boolean => {
   }
   const params = currentUrl.searchParams;
   const currentView = readWorkflowViewFromPath(currentUrl.pathname);
-  const hasBundleSession = params.has("bundle");
-  const hasDirectSession = !hasBundleSession && (params.has("rom") || params.has("patch"));
-  const hasLegacyBundleGuide = currentView === "patcher" && params.get("guide") === "bundle";
-  const hasLegacyBundleHash = currentView === "patcher" && currentUrl.hash.toLowerCase() === "#bundle";
+  const hasWeaveSession = params.has("weave") || params.has("bundle");
+  const hasDirectSession = !hasWeaveSession && (params.has("rom") || params.has("patch"));
+  const hasLegacyWeaveGuide = currentView === "patcher" && ["weave", "bundle"].includes(params.get("guide") || "");
+  const hasLegacyWeaveHash = currentView === "patcher" && ["#weave", "#bundle"].includes(currentUrl.hash.toLowerCase());
   const targetView =
-    hasBundleSession || hasLegacyBundleGuide || hasLegacyBundleHash ? "bundle" : hasDirectSession ? "patcher" : null;
+    hasWeaveSession || hasLegacyWeaveGuide || hasLegacyWeaveHash ? "weave" : hasDirectSession ? "patcher" : null;
   if (!targetView || currentView === targetView) return routeWasRenamed;
-  const nextUrl = new URL(targetView === "bundle" ? "bundle-patches" : "apply-patches", readAppBaseUrl());
+  const nextUrl = new URL(targetView === "weave" ? "weave-patches" : "apply-patches", readAppBaseUrl());
   nextUrl.search = currentUrl.search;
   window.history.replaceState(window.history.state, "", nextUrl);
   return true;
 };
-const bundleRouteWasReplaced = replaceLegacyBundleRoute();
-// Which static document the host actually served, captured after legacy bundle
+const weaveRouteWasReplaced = replaceLegacyWeaveRoute();
+// Which static document the host actually served, captured after legacy weave
 // links have been normalized but before the controller writes its route.
 const servedDocumentView: WebappView = readWorkflowViewFromPath() ?? "home";
 
-// `?bundle=` / `?rom=&patch=` URL API, parsed once per page lifetime. The
+// `?weave=` / `?rom=&patch=` URL API, parsed once per page lifetime. The
 // params stay in the address bar so the session URL remains shareable; only
 // this boot-time read consumes them.
 const urlSessionParse =
@@ -412,7 +412,7 @@ import.meta.hot?.on("vite:beforeFullReload", (payload) => {
 // Every direct route gets a shell for its own view. A route shell MUST match
 // the view used for hydration or React discards the server-rendered content.
 const PRERENDERED_VIEWS = new Set<WebappView>([
-  "bundle",
+  "weave",
   "checksum",
   "compress",
   "creator",
@@ -453,7 +453,7 @@ const renderWebappRoot = (): undefined => {
       hadPrerenderedShell = appRootElement.childElementCount > 0;
       // Always drained, shell or not, so the inline capture listener stops here.
       captureShellClicks();
-      shouldHydrate = hadPrerenderedShell && !bundleRouteWasReplaced;
+      shouldHydrate = hadPrerenderedShell && !weaveRouteWasReplaced;
       if (!shouldHydrate) appRoot = createRoot(appRootElement);
     }
   }
@@ -521,7 +521,7 @@ const renderWebappRoot = (): undefined => {
       onLogLevelChange: (level) => webappController.setLogLevel(level),
       onOfflineCopyEnabledChange: (enabled) => webappController.setOfflineCopyEnabled(enabled),
       onOpenSettings: () => webappController.openSettings(),
-      onPatcherBundlePackageChange: (value) => webappController.setBundlePackage(value),
+      onPatcherWeavePackageChange: (value) => webappController.setWeavePackage(value),
       onPatcherInputsChange: (inputs) => webappController.setPatcherInputState(inputs),
       onPatcherPatchesChange: (patches) => webappController.setPatcherPatchState(patches),
       onPatcherSettingsChange: (settings) => webappController.setPatcherSettingsState(settings),
@@ -654,7 +654,7 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
       event.preventDefault();
     });
     const syncRouteFromUrl = (scrollTo?: () => void) => {
-      replaceLegacyBundleRoute();
+      replaceLegacyWeaveRoute();
       const view = readWorkflowViewFromPath();
       if (!view) return;
       const guide = readGuidedSampleFromSearch(window.location.search);
@@ -721,8 +721,8 @@ const initializeWebapp = () => {
   webappController.setStartupState("loading");
   renderWebappRoot();
 
-  // Bundle sessions open the bundle workflow. Direct ROM/patch sessions use Apply.
-  const initialMode = urlSessionParse.request?.kind === "bundle" ? "bundle" : readWorkflowViewFromPath() || "patcher";
+  // Weave sessions open the weave workflow. Direct ROM/patch sessions use Apply.
+  const initialMode = urlSessionParse.request?.kind === "weave" ? "weave" : readWorkflowViewFromPath() || "patcher";
   webappController.setStartupState("ready");
   webappController.activateInitialView(initialMode, {
     fallbackOnError: true,

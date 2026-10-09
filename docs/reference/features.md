@@ -22,7 +22,7 @@ The browser needs no account or installation. The CLI is the terminal version, u
 | Create patches | Compare an original file with your edited file to make a patch. | [Create](../how-to/create-rom-patches.md) | [Create](../how-to/cli-create.md) |
 | Ordered patches | Run several changes in order, with input and output checks when available. | [Patch order](../how-to/apply-rom-patches.md#put-several-patches-in-order) | [Patch chains](../how-to/cli-apply.md) |
 | Cheat codes | Bake supported codes into a ROM, or turn them into a patch. | [Cheats](../how-to/use-browser-cheats.md) | [Cheats](../how-to/bake-cheat-codes.md) |
-| Patch bundles | Package patches with their order, names, choices, and expected ROM checks. | [Bundles](../how-to/create-bundles.md) | [Bundles](../how-to/cli-bundles.md) |
+| Patch weaves | Package patches with their order, names, choices, and expected ROM checks. | [Weaves](../how-to/create-bundles.md) | [Weaves](../how-to/cli-bundles.md) |
 
 Applying and creating have different format limits. The [patch format table](formats.md#patch-formats) lists both, including the specialized Dreamcast DCP workflow.
 
@@ -63,9 +63,9 @@ Patching support, emulator support, cheat support, and save editing support are 
 | --- | --- |
 | Offline use | Cached app files, databases, and emulator cores work offline. Remote links and uncached assets need a connection. [Offline setup](../how-to/browser-settings.md#prepare-for-offline-use). |
 | Browser preferences | Theme, accent, language, byte units, guided help, output defaults, compression settings, and worker threads. [Settings](../how-to/browser-settings.md). |
-| Guided practice runs | Step-by-step cards for Apply, Create, Bundle, Test, and the two cheat workflows, using homebrew practice files. Guided Apply waits for you to add files. [Guided practice runs](guided-runs.md). |
+| Guided practice runs | Step-by-step cards for Apply, Create, Weave, Test, and the two cheat workflows, using homebrew practice files. Guided Apply waits for you to add files. [Guided practice runs](guided-runs.md). |
 | Beta tools | Trim and Save Editor are behind the browser's beta setting. PPF Undo and cheat tools in Apply, Create, and Identify are available without it. |
 | Scripts and pipelines | The CLI has file selection, dry runs, standard input/output, JSON results, JSON event streams, shell completions, and man pages. [CLI reference](cli.md). |
-| Hosting and integration | Static or Docker hosting, subpaths, URL-loaded ROMs and patches, bundles, and same-origin file integration. [Hosting](../hosting/self-hosting.md), [integration](../hosting/webapp-integration.md). |
+| Hosting and integration | Static or Docker hosting, subpaths, URL-loaded ROMs and patches, weaves, and same-origin file integration. [Hosting](../hosting/self-hosting.md), [integration](../hosting/webapp-integration.md). |
 
 There is no account, cloud synchronization, or ROM download library. The supplied [practice files](guided-runs.md#practice-files) are homebrew samples. [Privacy](../legal/privacy.md) lists storage and network behavior.

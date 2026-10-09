@@ -88,7 +88,7 @@ describe("groupDocNavigationRoutes", () => {
     expect(shelves.map((shelf) => shelf.title)).toEqual([
       "Start here",
       "Walkthroughs",
-      "Patching & bundles",
+      "Patching & weaves",
       "ROM checks",
       "Conversion & files",
       "Saves",
@@ -110,7 +110,7 @@ describe("groupDocNavigationRoutes", () => {
     const topicSlugs = shelves
       .filter((shelf) =>
         [
-          "Patching & bundles",
+          "Patching & weaves",
           "ROM checks",
           "Conversion & files",
           "Saves",

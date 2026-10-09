@@ -11,7 +11,7 @@ import {
   loadFixtureFile,
   MULTI_PATCH_ZIP,
   mount,
-  NESTED_BUNDLE_ZIP,
+  NESTED_WEAVE_ZIP,
   NESTED_CHAIN_ZIP,
   NESTED_ROOT_ZIP,
   ONE_PATCH_7Z,
@@ -116,14 +116,14 @@ test("re-uploading the same patch archive can add a second different patch", asy
   expect(errorText, errorText).toBe("");
 });
 
-test("nested patch bundle lists every branch patch and multi-selects into separate stack entries", async () => {
+test("nested patch weave lists every branch patch and multi-selects into separate stack entries", async () => {
   mount(createElement(ApplyPatchForm));
 
   await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
 
   selectFileInput(
     document.getElementById("rom-weaver-input-file-unified"),
-    await loadFixtureFile(NESTED_BUNDLE_ZIP, "application/zip"),
+    await loadFixtureFile(NESTED_WEAVE_ZIP, "application/zip"),
   );
 
   const listText = () => getCandidateSelectionList()?.textContent || "";

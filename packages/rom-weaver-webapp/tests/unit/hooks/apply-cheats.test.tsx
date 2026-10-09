@@ -44,7 +44,7 @@ const deferred = () => {
 const renderApplyCheats = () => {
   let stagedSource: Blob | undefined;
   const mutationQueueRef = { current: Promise.resolve() };
-  const workflow = { getBundleExportSources: () => ({ rom: stagedSource ? { source: stagedSource } : null }) };
+  const workflow = { getWeaveExportSources: () => ({ rom: stagedSource ? { source: stagedSource } : null }) };
   const { result } = renderHook(() =>
     useApplyCheats({
       mutationQueueRef,

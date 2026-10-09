@@ -28,8 +28,8 @@ mod identify_database;
 #[path = "cli_smoke/ingest.rs"]
 mod ingest;
 
-#[path = "cli_smoke/bundle.rs"]
-mod bundle;
+#[path = "cli_smoke/weave.rs"]
+mod weave;
 
 #[path = "cli_smoke/compress.rs"]
 mod compress;

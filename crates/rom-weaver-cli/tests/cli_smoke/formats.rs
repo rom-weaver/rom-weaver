@@ -95,7 +95,7 @@ fn closed_stdout_does_not_panic_or_interrupt_file_outputs() {
         vec!["formats", "--json"],
         vec!["completions", "bash"],
         vec!["man", "patch", "apply"],
-        vec!["bundle", "schema"],
+        vec!["weave", "schema"],
         vec!["formats", "--dry-run", "--json"],
         vec!["checksum", "-i", input_path],
         vec!["checksum", "-i", input_path, "--json"],

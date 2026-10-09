@@ -60,7 +60,7 @@ const presentationTypes = new Map([
   ],
   ["platform/browser/workflow-runtime-helpers.ts", ["ExtractedFileEntry"]],
   ["public/react/patch-input-basis.ts", ["PatchInputBasis"]],
-  ["types/bundle.ts", ["BundleSourceKind"]],
+  ["types/weave.ts", ["WeaveSourceKind"]],
   ["types/identify.ts", ["IdentifyStatus"]],
   ["types/ingest.ts", ["IngestKind"]],
   ["types/logging.ts", ["LogLevel"]],

@@ -64,7 +64,7 @@ const countVisibleWords = (source) =>
 // index.html is the apex landing page; the patcher lives at apply-patches.html.
 const homeHtml = read("index.html");
 const applyHtml = read("apply-patches.html");
-const bundleHtml = read("bundle-patches.html");
+const weaveHtml = read("weave-patches.html");
 const notFoundHtml = read("404.html");
 const createHtml = read("create-patch.html");
 const checksumHtml = read("checksum.html");
@@ -126,7 +126,7 @@ for (const route of DOC_ROUTES) {
 
 for (const route of [
   "apply-patches",
-  "bundle-patches",
+  "weave-patches",
   "checksum",
   "create-patch",
   "extract",
@@ -143,7 +143,7 @@ for (const route of [
   "tools",
   "weave",
   "apply-patch",
-  "bundle",
+  "weave",
 ]) {
   assertIncludes(read(`${route}/index.html`), '<base href="../" />', `${route} static-host route`);
 }
@@ -283,7 +283,7 @@ assertIncludes(notFoundHtml, 'class="nav-row" href="/apply-patches" id="tab-patc
 if (notFoundHtml.includes('aria-current="page"')) throw new Error("404 page marks a destination as current");
 if (notFoundHtml.includes("\u2014")) throw new Error("404 page contains an em dash");
 for (const source of ["/weave", "/weave/", "/weave.html", "/weave/index.html"]) {
-  assertIncludes(redirects, `${source} /apply-patches 301`, `${source} compatibility redirect`);
+  assertIncludes(redirects, `${source} /weave-patches 301`, `${source} compatibility redirect`);
 }
 for (const source of ["/apply-patch", "/apply-patch/", "/apply-patch.html", "/apply-patch/index.html"]) {
   assertIncludes(redirects, `${source} /apply-patches 301`, `${source} renamed Apply Patches redirect`);
@@ -346,9 +346,9 @@ if (currentHomeRows.length !== 1 || currentHomeRows[0] !== "tab-home") {
 }
 assertIncludes(applyHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.patcher.slug}"`, "apply canonical");
 assertIncludes(applyHtml, WORKFLOW_SEO_ROUTES.patcher.description, "apply description");
-assertIncludes(bundleHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.bundle.slug}"`, "bundle canonical");
-assertIncludes(bundleHtml, WORKFLOW_SEO_ROUTES.bundle.description, "bundle description");
-assertIncludes(read("bundle/index.html"), WORKFLOW_SEO_ROUTES.bundle.description, "static-host bundle description");
+assertIncludes(weaveHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.weave.slug}"`, "weave canonical");
+assertIncludes(weaveHtml, WORKFLOW_SEO_ROUTES.weave.description, "weave description");
+assertIncludes(read("weave/index.html"), WORKFLOW_SEO_ROUTES.weave.description, "static-host weave description");
 assertIncludes(createHtml, `href="https://rom-weaver.com/${WORKFLOW_SEO_ROUTES.creator.slug}"`, "create canonical");
 assertIncludes(createHtml, WORKFLOW_SEO_ROUTES.creator.description, "create description");
 assertIncludes(
@@ -397,8 +397,8 @@ assertIncludes(
   "apply prerendered workflow",
 );
 assertIncludes(
-  bundleHtml,
-  'aria-current="page" aria-label="Bundle Patches" class="nav-row" href="bundle-patches" id="tab-bundle"',
+  weaveHtml,
+  'aria-current="page" aria-label="Weave Patches" class="nav-row" href="weave-patches" id="tab-weave"',
   "bundle prerendered workflow",
 );
 assertIncludes(
@@ -529,7 +529,7 @@ for (const route of DOC_ROUTES) {
   if (route.slug === "docs") {
     assertIncludes(docsHtml, 'href="/apply-patches?guide=apply"', `${route.slug} guided Apply Patches link`);
     assertIncludes(docsHtml, 'href="/create-patch?guide=create"', `${route.slug} guided Create link`);
-    assertIncludes(docsHtml, 'href="/bundle-patches?guide=bundle"', `${route.slug} guided Bundle Patches link`);
+    assertIncludes(docsHtml, 'href="/weave-patches?guide=weave"', `${route.slug} guided Weave Patches link`);
     assertIncludes(docsHtml, 'href="/docs/faq"', `${route.slug} FAQ link`);
     assertIncludes(docsHtml, 'href="/docs/get-started"', `${route.slug} tutorial link`);
     assertIncludes(docsHtml, 'href="/docs/cli"', `${route.slug} CLI usage link`);
@@ -608,28 +608,29 @@ for (const [route, panel] of Object.entries({
 for (const [legacy, canonical] of Object.entries({
   apply: "apply-patches",
   "apply-patch": "apply-patches",
-  bundle: "bundle-patches",
+  bundle: "weave-patches",
+  "bundle-patches": "weave-patches",
   create: "create-patch",
   identify: "identify-rom",
   test: "test-rom",
   trim: "trim-rom",
-  weave: "apply-patches",
+  weave: "weave-patches",
 })) {
   for (const file of [`${legacy}.html`, `${legacy}/index.html`]) {
     assertIncludes(read(file), 'name="robots" content="noindex,follow"', `${file} noindex`);
     assertIncludes(read(file), `rel="canonical" href="https://rom-weaver.com/${canonical}"`, `${file} canonical`);
   }
 }
-// The retired /weave/ slug serves the patcher, whose shell it must hydrate as.
+// The short /weave/ alias hydrates the canonical weave workflow.
 // index.html is the landing page, so a host that applies neither the redirect
 // nor this document would serve landing markup to a patcher route.
 for (const weave of ["weave/index.html", "weave.html"]) {
   assertIncludes(
     read(weave),
-    'aria-current="page" aria-label="Apply Patches" class="nav-row" href="apply-patches" id="tab-patcher"',
-    `${weave} patcher shell`,
+    'aria-current="page" aria-label="Weave Patches" class="nav-row" href="weave-patches" id="tab-weave"',
+    `${weave} weave shell`,
   );
-  assertIncludes(read(weave), 'rel="canonical" href="https://rom-weaver.com/apply-patches"', `${weave} canonical`);
+  assertIncludes(read(weave), 'rel="canonical" href="https://rom-weaver.com/weave-patches"', `${weave} canonical`);
 }
 // The retired /tools/ slug serves the PPF undo page and canonicalizes to it.
 assertIncludes(read("tools/index.html"), 'name="robots" content="noindex, nofollow"', "tools alias noindex");

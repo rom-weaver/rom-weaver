@@ -137,7 +137,7 @@ describe("resolveArchiveInput", () => {
     runtime.compression.extract.mockResolvedValue({ output: output("payload.sfc"), outputs: [output("payload.sfc")] });
     const progress = vi.fn();
     const result = await resolveArchiveInput(
-      archive("bundle.zip") as never,
+      archive("weave.zip") as never,
       "rom",
       { input: { containerInputsEnabled: true }, onProgress: progress } as never,
       runtime as never,
@@ -149,7 +149,7 @@ describe("resolveArchiveInput", () => {
         descendSinglePayload: true,
         entries: ["payload.sfc"],
         format: "zip",
-        source: expect.objectContaining({ fileName: "bundle.zip" }),
+        source: expect.objectContaining({ fileName: "weave.zip" }),
         options: expect.objectContaining({ romFilter: true }),
       }),
     );
@@ -164,7 +164,7 @@ describe("resolveArchiveInput", () => {
     const extracted = { fileName: "payload.bin", fileSize: 8 };
     mocks.createPatchFileFromPublicOutput.mockResolvedValue(extracted);
     runtime.compression.extract.mockResolvedValue({ outputs: [output("payload.bin", 8)] });
-    await expect(resolveArchiveInput(archive("bundle.zip") as never, "rom", undefined, runtime as never)).resolves.toBe(
+    await expect(resolveArchiveInput(archive("weave.zip") as never, "rom", undefined, runtime as never)).resolves.toBe(
       extracted,
     );
     expect(extracted).toMatchObject({ fileName: "payload.bin", _extractTimeMs: 3.2 });
@@ -283,7 +283,7 @@ describe("resolveArchiveInputAssets", () => {
     );
   });
 
-  it("attaches extracted sidecar patches and reclassifies patch-only bundles", async () => {
+  it("attaches extracted sidecar patches and reclassifies patch-only weaves", async () => {
     const sidecar = { file: { fileName: "game.ips", fileSize: 4 }, parentCompressions: [], sidecarOrder: 1 };
     mocks.buildPatchArchiveLeaves.mockResolvedValue([sidecar]);
     runtime.ingest.run.mockResolvedValue({
@@ -310,7 +310,7 @@ describe("resolveArchiveInputAssets", () => {
     });
     await expect(
       resolveArchiveInputAssets(archive("only-patches.zip") as never, undefined, 0, runtime as never),
-    ).rejects.toThrow("only-patches.zip is a patch-only bundle");
+    ).rejects.toThrow("only-patches.zip is a patch-only weave");
     expect(runtime.ingest.run).toHaveBeenCalled();
   });
 });

@@ -122,9 +122,9 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.sourceInfo.database": msg({ id: "ui.sourceInfo.database", message: "database" }),
   "ui.sourceInfo.decode": msg({ id: "ui.sourceInfo.decode", message: "DECODE" }),
-  "ui.sourceInfo.expectationAuthorityBundle": msg({
-    id: "ui.sourceInfo.expectationAuthorityBundle",
-    message: "by the bundle",
+  "ui.sourceInfo.expectationAuthorityWeave": msg({
+    id: "ui.sourceInfo.expectationAuthorityWeave",
+    message: "by the weave",
   }),
   "ui.sourceInfo.expectationAuthorityManual": msg({
     id: "ui.sourceInfo.expectationAuthorityManual",
@@ -138,8 +138,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.sourceInfo.expectationAuthorityPatch",
     message: "by the patch",
   }),
-  "ui.sourceInfo.expectationMetaBundle": msg({
-    id: "ui.sourceInfo.expectationMetaBundle",
+  "ui.sourceInfo.expectationMetaWeave": msg({
+    id: "ui.sourceInfo.expectationMetaWeave",
     message: "ROM not included - provide it yourself",
   }),
   "ui.sourceInfo.expectationMetaManual": msg({
@@ -281,7 +281,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.patch.output": msg({ id: "ui.patch.output", message: "Output" }),
   "ui.patch.outputCheckHint": msg({
     id: "ui.patch.outputCheckHint",
-    message: "The expected output is verified only when every patch in the bundle is applied.",
+    message: "The expected output is verified only when every patch in the weave is applied.",
   }),
   "ui.patch.pdsUnsupported": msg({
     id: "ui.patch.pdsUnsupported",
@@ -338,86 +338,86 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.add.romOrPatches": msg({ id: "ui.apply.add.romOrPatches", message: "Add the ROM or patches" }),
   "ui.apply.archive.info.apply": msg({
     id: "ui.apply.archive.info.apply",
-    message: "The bundle supplies instructions and verification data; rom-weaver still applies the patches.",
+    message: "The weave supplies instructions and verification data; rom-weaver still applies the patches.",
   }),
   "ui.apply.archive.info.contents": msg({
     id: "ui.apply.archive.info.contents",
     message:
-      "The archive holds that index and the patch files. Including the original ROM is optional; a patch-only bundle asks the player for a matching file.",
+      "The archive holds that index and the patch files. Including the original ROM is optional; a patch-only weave asks the player for a matching file.",
   }),
   "ui.apply.archive.info.index": msg({
     id: "ui.apply.archive.info.index",
     message:
-      "The required rom-weaver-bundle.json index contains the schema version, ROM details and checks, ordered patches, and output defaults and checks.",
+      "The required rom-weaver-weave.json index contains the schema version, ROM details and checks, ordered patches, and output defaults and checks.",
   }),
   "ui.apply.archive.info.recipe": msg({
     id: "ui.apply.archive.info.recipe",
     message:
-      "A rom-weaver bundle is a portable recipe for applying a patch chain to a ROM; it is not a pre-patched ROM.",
+      "A rom-weaver weave is a portable recipe for applying a patch chain to a ROM; it is not a pre-patched ROM.",
   }),
   "ui.apply.archive.summary": msg({
     id: "ui.apply.archive.summary",
-    message: "Exports this session as a portable rom-weaver bundle defined by rom-weaver-bundle.json.",
+    message: "Exports this session as a portable rom-weaver weave defined by rom-weaver-weave.json.",
   }),
   "ui.apply.archive.title": msg({ id: "ui.apply.archive.title", message: "Archive" }),
   "ui.apply.archive.type": msg({ id: "ui.apply.archive.type", message: "Archive type" }),
-  "ui.apply.bundleTutorial.bundlePatches": msg({
-    id: "ui.apply.bundleTutorial.bundlePatches",
-    message: "Bundle + patches",
+  "ui.apply.weaveTutorial.weavePatches": msg({
+    id: "ui.apply.weaveTutorial.weavePatches",
+    message: "Weave + patches",
   }),
-  "ui.apply.bundleTutorial.download.body": msg({
-    id: "ui.apply.bundleTutorial.download.body",
+  "ui.apply.weaveTutorial.download.body": msg({
+    id: "ui.apply.weaveTutorial.download.body",
     message:
-      "Exporting a recipe does not apply patches. Press Share bundle to check and download the setup; the control then becomes Download ZIP Bundle.",
+      "Exporting a recipe does not apply patches. Press Share weave to check and download the setup; the control then becomes Download ZIP Weave.",
   }),
-  "ui.apply.bundleTutorial.download.title": msg({
-    id: "ui.apply.bundleTutorial.download.title",
+  "ui.apply.weaveTutorial.download.title": msg({
+    id: "ui.apply.weaveTutorial.download.title",
     message: "Build and download",
   }),
-  "ui.apply.bundleTutorial.optional": msg({ id: "ui.apply.bundleTutorial.optional", message: "Required or optional" }),
-  "ui.apply.bundleTutorial.patches.body": msg({
-    id: "ui.apply.bundleTutorial.patches.body",
+  "ui.apply.weaveTutorial.optional": msg({ id: "ui.apply.weaveTutorial.optional", message: "Required or optional" }),
+  "ui.apply.weaveTutorial.patches.body": msg({
+    id: "ui.apply.weaveTutorial.patches.body",
     message:
       "These patches target the original ROM, so players can change their order or skip either one. Use Patch details to edit each patch's label, version, author, and description.",
   }),
-  "ui.apply.bundleTutorial.patches.title": msg({
-    id: "ui.apply.bundleTutorial.patches.title",
+  "ui.apply.weaveTutorial.patches.title": msg({
+    id: "ui.apply.weaveTutorial.patches.title",
     message: "Describe the patch recipe",
   }),
-  "ui.apply.bundleTutorial.rom.body": msg({
-    id: "ui.apply.bundleTutorial.rom.body",
+  "ui.apply.weaveTutorial.rom.body": msg({
+    id: "ui.apply.weaveTutorial.rom.body",
     message:
-      "A bundle is a recipe, so it starts with the ROM the patches expect. The sample uses a tiny legal practice ROM.",
+      "A weave is a recipe, so it starts with the ROM the patches expect. The sample uses a tiny legal practice ROM.",
   }),
-  "ui.apply.bundleTutorial.rom.title": msg({
-    id: "ui.apply.bundleTutorial.rom.title",
+  "ui.apply.weaveTutorial.rom.title": msg({
+    id: "ui.apply.weaveTutorial.rom.title",
     message: "Check the starting ROM",
   }),
-  "ui.apply.bundleTutorial.safeBundle.body": msg({
-    id: "ui.apply.bundleTutorial.safeBundle.body",
+  "ui.apply.weaveTutorial.safeWeave.body": msg({
+    id: "ui.apply.weaveTutorial.safeWeave.body",
     message:
-      "The bundle download is separate from Apply. Bundle + patches shares the recipe and patches without putting a copyrighted ROM in the download.",
+      "The weave download is separate from Apply. Weave + patches shares the recipe and patches without putting a copyrighted ROM in the download.",
   }),
-  "ui.apply.bundleTutorial.safeBundle.title": msg({
-    id: "ui.apply.bundleTutorial.safeBundle.title",
-    message: "Choose a safe bundle",
+  "ui.apply.weaveTutorial.safeWeave.title": msg({
+    id: "ui.apply.weaveTutorial.safeWeave.title",
+    message: "Choose a safe weave",
   }),
-  "ui.apply.cancelBundleExport": msg({ id: "ui.apply.cancelBundleExport", message: "Cancel bundle export" }),
+  "ui.apply.cancelWeaveExport": msg({ id: "ui.apply.cancelWeaveExport", message: "Cancel weave export" }),
   "ui.apply.clearExpectedRom": msg({ id: "ui.apply.clearExpectedRom", message: "Clear the expected ROM" }),
   "ui.apply.drop.hero": msg({
     id: "ui.apply.drop.hero",
-    message: "Drop or click to add ROMs, patches, bundles, or archives",
+    message: "Drop or click to add ROMs, patches, weaves, or archives",
   }),
   "ui.apply.drop.heroCoarse": msg({
     id: "ui.apply.drop.heroCoarse",
-    message: "Tap to add ROMs, patches, bundles, or archives",
+    message: "Tap to add ROMs, patches, weaves, or archives",
   }),
   "ui.apply.drop.identified": msg({ id: "ui.apply.drop.identified", message: "Identified" }),
   "ui.apply.drop.identifying": msg({ id: "ui.apply.drop.identifying", message: "Identifying" }),
-  "ui.apply.drop.info.bundle": msg({
-    id: "ui.apply.drop.info.bundle",
+  "ui.apply.drop.info.weave": msg({
+    id: "ui.apply.drop.info.weave",
     message:
-      "A rom-weaver bundle is a portable patch recipe: a rom-weaver-bundle.json index, archived with its patches and optionally a ROM.",
+      "A rom-weaver weave is a portable patch recipe: a rom-weaver-weave.json index, archived with its patches and optionally a ROM.",
   }),
   "ui.apply.drop.info.compressed": msg({
     id: "ui.apply.drop.info.compressed",
@@ -431,7 +431,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.apply.drop.info.retroArch",
     message: "RetroArch softpatch naming is supported.",
   }),
-  "ui.apply.drop.readingBundle": msg({ id: "ui.apply.drop.readingBundle", message: "Reading bundle" }),
+  "ui.apply.drop.readingWeave": msg({ id: "ui.apply.drop.readingWeave", message: "Reading weave" }),
   "ui.apply.emulator.missingChecksum": msg({
     id: "ui.apply.emulator.missingChecksum",
     message: "The retained ROM has no SHA-1 checksum.",
@@ -489,15 +489,15 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.apply.inputHandling.archives",
     message: "Archives are decompressed; we find the ROM or let you choose.",
   }),
-  "ui.apply.inputHandling.bundleContents": msg({
-    id: "ui.apply.inputHandling.bundleContents",
+  "ui.apply.inputHandling.weaveContents": msg({
+    id: "ui.apply.inputHandling.weaveContents",
     message:
-      "A bundle can be a JSON file or an archive with that file and its patches. It may include the ROM; otherwise, provide the matching ROM separately.",
+      "A weave can be a JSON file or an archive with that file and its patches. It may include the ROM; otherwise, provide the matching ROM separately.",
   }),
-  "ui.apply.inputHandling.bundleIndex": msg({
-    id: "ui.apply.inputHandling.bundleIndex",
+  "ui.apply.inputHandling.weaveIndex": msg({
+    id: "ui.apply.inputHandling.weaveIndex",
     message:
-      "A rom-weaver bundle is a recipe for applying a patch chain to a ROM. Its rom-weaver-bundle.json file is the required index.",
+      "A rom-weaver weave is a recipe for applying a patch chain to a ROM. Its rom-weaver-weave.json file is the required index.",
   }),
   "ui.apply.inputHandling.compressed": msg({
     id: "ui.apply.inputHandling.compressed",
@@ -538,16 +538,16 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.tutorial.addFiles.body": msg({
     id: "ui.apply.tutorial.addFiles.body",
     message:
-      "Drop a ROM and its patches here: single files, a whole folder, a ZIP or 7z archive, or a bundle. Or press Add files to pick them. rom-weaver works out what each file is and puts it on the right card. Nothing leaves your browser.",
+      "Drop a ROM and its patches here: single files, a whole folder, a ZIP or 7z archive, or a weave. Or press Add files to pick them. rom-weaver works out what each file is and puts it on the right card. Nothing leaves your browser.",
   }),
   "ui.apply.tutorial.addFiles.title": msg({ id: "ui.apply.tutorial.addFiles.title", message: "Add your files" }),
   "ui.apply.tutorial.applyDownload": msg({ id: "ui.apply.tutorial.applyDownload", message: "Apply & download" }),
   "ui.apply.tutorial.browse": msg({ id: "ui.apply.tutorial.browse", message: "Add files" }),
   "ui.apply.tutorial.checks": msg({ id: "ui.apply.tutorial.checks", message: "Checks" }),
-  "ui.apply.tutorial.createBundle": msg({ id: "ui.apply.tutorial.createBundle", message: "Start guided bundle" }),
-  "ui.apply.tutorial.downloadTestBundle": msg({
-    id: "ui.apply.tutorial.downloadTestBundle",
-    message: "Download a test bundle",
+  "ui.apply.tutorial.createWeave": msg({ id: "ui.apply.tutorial.createWeave", message: "Start guided weave" }),
+  "ui.apply.tutorial.downloadTestWeave": msg({
+    id: "ui.apply.tutorial.downloadTestWeave",
+    message: "Download a test weave",
   }),
   "ui.apply.tutorial.dropFiles": msg({ id: "ui.apply.tutorial.dropFiles", message: "Drop files or a folder" }),
   "ui.apply.tutorial.header": msg({ id: "ui.apply.tutorial.header", message: "Header options" }),
@@ -613,7 +613,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.apply.tutorial.addFiles.readyTryIt",
     message: "Your files are in. Continue to look at them.",
   }),
-  "ui.apply.tutorial.archives": msg({ id: "ui.apply.tutorial.archives", message: "ZIP, 7z and bundles" }),
+  "ui.apply.tutorial.archives": msg({ id: "ui.apply.tutorial.archives", message: "ZIP, 7z and weaves" }),
   "ui.apply.tutorial.practiceFiles": msg({ id: "ui.apply.tutorial.practiceFiles", message: "Practice files" }),
   "ui.apply.tutorial.addCheats": msg({ id: "ui.apply.tutorial.addCheats", message: "Add cheats to the patch order" }),
   "ui.apply.tutorial.output.tryIt": msg({
@@ -736,11 +736,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.file.files": msg({ id: "ui.file.files", message: "Files" }),
   "ui.file.patchTarget": msg({ id: "ui.file.patchTarget", message: "Apply patch into" }),
   "ui.home.bring": msg({ id: "ui.home.bring", message: "Bring" }),
-  "ui.home.bundleProof": msg({ id: "ui.home.bundleProof", message: "The bundle is the proof" }),
-  "ui.home.bundleProofDescription": msg({
-    id: "ui.home.bundleProofDescription",
+  "ui.home.weaveProof": msg({ id: "ui.home.weaveProof", message: "The weave is the proof" }),
+  "ui.home.weaveProofDescription": msg({
+    id: "ui.home.weaveProofDescription",
     message:
-      "A bundle records the input checksum, every patch in order, and the expected output. Months later you can show where a file came from, or hand the bundle to someone and they get the same bytes.",
+      "A weave records the input checksum, every patch in order, and the expected output. Months later you can show where a file came from, or hand the weave to someone and they get the same bytes.",
   }),
   "ui.home.cliFoot": msg({
     id: "ui.home.cliFoot",
@@ -775,15 +775,15 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.home.flowApplyGet": msg({
     id: "ui.home.flowApplyGet",
-    message: "The patched ROM with checksums checked. Save the chain as a bundle to replay or share it.",
+    message: "The patched ROM with checksums checked. Save the chain as a weave to replay or share it.",
   }),
-  "ui.home.flowBundleBringAfter": msg({ id: "ui.home.flowBundleBringAfter", message: "someone sent you." }),
-  "ui.home.flowBundleBringBefore": msg({
-    id: "ui.home.flowBundleBringBefore",
+  "ui.home.flowWeaveBringAfter": msg({ id: "ui.home.flowWeaveBringAfter", message: "someone sent you." }),
+  "ui.home.flowWeaveBringBefore": msg({
+    id: "ui.home.flowWeaveBringBefore",
     message: "A patch chain you have set up in Apply, or a",
   }),
-  "ui.home.flowBundleGet": msg({
-    id: "ui.home.flowBundleGet",
+  "ui.home.flowWeaveGet": msg({
+    id: "ui.home.flowWeaveGet",
     message:
       "One file that pins patch order, expected checksums, and output names. Open it and the workflow is ready to run.",
   }),
@@ -835,7 +835,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.home.loomCaption": msg({
     id: "ui.home.loomCaption",
     message:
-      "One pass, no unpacking by hand, no intermediate files. Save it as a bundle and the order is kept for the next person.",
+      "One pass, no unpacking by hand, no intermediate files. Save it as a weave and the order is kept for the next person.",
   }),
   "ui.home.loomOriginalRom": msg({ id: "ui.home.loomOriginalRom", message: "Original ROM" }),
   "ui.home.loomPatch": msg({ id: "ui.home.loomPatch", message: "patch {n}" }),
@@ -881,7 +881,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.home.webappItem4": msg({
     id: "ui.home.webappItem4",
-    message: "Open a bundle link and the patch chain is staged for you.",
+    message: "Open a weave link and the patch chain is staged for you.",
   }),
   "ui.home.workflowsEyebrow": msg({ id: "ui.home.workflowsEyebrow", message: "Pick a workflow" }),
   "ui.home.writes": msg({ id: "ui.home.writes", message: "writes" }),
@@ -934,7 +934,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.home.formatsHeading": msg({ id: "ui.home.formatsHeading", message: "Every format you will meet" }),
   "ui.home.formatsLink": msg({ id: "ui.home.formatsLink", message: "See the full tables" }),
   "ui.home.goApply": msg({ id: "ui.home.goApply", message: "Apply" }),
-  "ui.home.goBundle": msg({ id: "ui.home.goBundle", message: "Bundle" }),
+  "ui.home.goWeave": msg({ id: "ui.home.goWeave", message: "Weave" }),
   "ui.home.goCheats": msg({ id: "ui.home.goCheats", message: "Add cheats" }),
   "ui.home.goChecksum": msg({ id: "ui.home.goChecksum", message: "Checksum" }),
   "ui.home.goCompress": msg({ id: "ui.home.goCompress", message: "Compress" }),
@@ -943,10 +943,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.home.goTest": msg({ id: "ui.home.goTest", message: "Test" }),
   "ui.home.installMethod": msg({ id: "ui.home.installMethod", message: "Install method" }),
   "ui.home.patchFormats": msg({ id: "ui.home.patchFormats", message: "{count} patch formats" }),
-  "ui.home.routeBundle": msg({ id: "ui.home.routeBundle", message: "Patches to hand on" }),
-  "ui.home.routeBundleBody": msg({
-    id: "ui.home.routeBundleBody",
-    message: "Pin patch order and checksums in one bundle someone can replay.",
+  "ui.home.routeWeave": msg({ id: "ui.home.routeWeave", message: "Patches to hand on" }),
+  "ui.home.routeWeaveBody": msg({
+    id: "ui.home.routeWeaveBody",
+    message: "Pin patch order and checksums in one weave someone can replay.",
   }),
   "ui.home.routeCheats": msg({ id: "ui.home.routeCheats", message: "A game that needs cheat codes" }),
   "ui.home.routeCheatsBody": msg({
@@ -1059,7 +1059,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.tutorial.start": msg({ id: "ui.tutorial.start", message: "Practice with sample files" }),
   "ui.tutorial.step": msg({ id: "ui.tutorial.step", message: "Practice run · Step {step} of {total}" }),
   "ui.tutorial.tryApply": msg({ id: "ui.tutorial.tryApply", message: "Patch a sample" }),
-  "ui.tutorial.tryBundle": msg({ id: "ui.tutorial.tryBundle", message: "Bundle a sample" }),
+  "ui.tutorial.tryWeave": msg({ id: "ui.tutorial.tryWeave", message: "Weave a sample" }),
   "ui.tutorial.tryCreate": msg({ id: "ui.tutorial.tryCreate", message: "Create a sample" }),
   "ui.tutorial.tryIt": msg({ id: "ui.tutorial.tryIt", message: "Try it" }),
   "ui.tutorial.tryTest": msg({ id: "ui.tutorial.tryTest", message: "Play a sample" }),
@@ -1131,7 +1131,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Enable beta tools (Trim and Save Editor)",
   }),
   "settings.accent": msg({ id: "settings.accent", message: "Accent" }),
-  "settings.bundlePackage": msg({ id: "settings.bundlePackage", message: "Bundle" }),
+  "settings.weavePackage": msg({ id: "settings.weavePackage", message: "Weave" }),
   "settings.byteUnits": msg({ id: "settings.byteUnits", message: "File size units" }),
   "settings.chdCreateCdCodecs": msg({ id: "settings.chdCreateCdCodecs", message: "CD Codecs" }),
   "settings.chdCreateDvdCodecs": msg({ id: "settings.chdCreateDvdCodecs", message: "DVD Codecs" }),
@@ -1219,27 +1219,27 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.patchChecks.autoPrevious",
     message: "Previous patch output (automatic)",
   }),
-  "ui.bundleExport.create": msg({ id: "ui.bundleExport.create", message: "Create {format} Bundle" }),
-  "ui.bundleExport.createRom": msg({ id: "ui.bundleExport.createRom", message: "Create {format} ROM Bundle" }),
-  "ui.bundleExport.download": msg({ id: "ui.bundleExport.download", message: "Download {format} Bundle" }),
-  "ui.bundleExport.downloadRom": msg({ id: "ui.bundleExport.downloadRom", message: "Download {format} ROM Bundle" }),
-  "ui.bundleExport.includeRom": msg({ id: "ui.bundleExport.includeRom", message: "Include ROM in bundle" }),
-  "ui.bundleExport.headerNotSaved": msg({
-    id: "ui.bundleExport.headerNotSaved",
+  "ui.weaveExport.create": msg({ id: "ui.weaveExport.create", message: "Create {format} Weave" }),
+  "ui.weaveExport.createRom": msg({ id: "ui.weaveExport.createRom", message: "Create {format} ROM Weave" }),
+  "ui.weaveExport.download": msg({ id: "ui.weaveExport.download", message: "Download {format} Weave" }),
+  "ui.weaveExport.downloadRom": msg({ id: "ui.weaveExport.downloadRom", message: "Download {format} ROM Weave" }),
+  "ui.weaveExport.includeRom": msg({ id: "ui.weaveExport.includeRom", message: "Include ROM in weave" }),
+  "ui.weaveExport.headerNotSaved": msg({
+    id: "ui.weaveExport.headerNotSaved",
     message: "Output header changes apply only to this session.",
   }),
-  "ui.bundleExport.romDistributionWarning": msg({
-    id: "ui.bundleExport.romDistributionWarning",
+  "ui.weaveExport.romDistributionWarning": msg({
+    id: "ui.weaveExport.romDistributionWarning",
     message: "Only include a ROM if you have the right to distribute it. Sharing copyrighted ROMs may be illegal.",
   }),
-  "ui.bundleExport.optional": msg({ id: "ui.bundleExport.optional", message: "optional" }),
-  "ui.bundleExport.outputFilename": msg({
-    id: "ui.bundleExport.outputFilename",
-    message: "Bundle output name (without extension)",
+  "ui.weaveExport.optional": msg({ id: "ui.weaveExport.optional", message: "optional" }),
+  "ui.weaveExport.outputFilename": msg({
+    id: "ui.weaveExport.outputFilename",
+    message: "Weave output name (without extension)",
   }),
-  "ui.bundleExport.share": msg({ id: "ui.bundleExport.share", message: "Share bundle" }),
-  "ui.bundleExport.shareTitle": msg({
-    id: "ui.bundleExport.shareTitle",
+  "ui.weaveExport.share": msg({ id: "ui.weaveExport.share", message: "Share weave" }),
+  "ui.weaveExport.shareTitle": msg({
+    id: "ui.weaveExport.shareTitle",
     message: "Share this patch recipe (for patch creators)",
   }),
   "ui.chain.appliesAfter": msg({ id: "ui.chain.appliesAfter", message: "applies after patch {n}" }),
@@ -1282,11 +1282,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.env.threads": msg({ id: "ui.env.threads", message: "threads" }),
   "ui.env.thread": msg({ id: "ui.env.thread", message: "thread" }),
   "ui.find.empty": msg({ id: "ui.find.empty", message: "Nothing matches" }),
-  "ui.find.bundleHint": msg({
-    id: "ui.find.bundleHint",
-    message: "Build patch bundles and optionally apply them.",
+  "ui.find.weaveHint": msg({
+    id: "ui.find.weaveHint",
+    message: "Build patch weaves and optionally apply them.",
   }),
-  "ui.find.bundlesApplyPatch": msg({ id: "ui.find.bundlesApplyPatch", message: "Bundle Patches" }),
+  "ui.find.weavesApplyPatch": msg({ id: "ui.find.weavesApplyPatch", message: "Weave Patches" }),
   "ui.find.cliArchiveHint": msg({
     id: "ui.find.cliArchiveHint",
     message: "The CLI can extract and compress archives.",
@@ -1377,13 +1377,13 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
       "Apply BPS, IPS, UPS, xdelta, PPF, and other ROM patches online. Open archives, apply patches in order, and choose your output format. Your files stay on your device.",
   }),
   "ui.hero.applyGuide": msg({ id: "ui.hero.applyGuide", message: "Read the Apply guide" }),
-  "ui.hero.bundleDescription": msg({
-    id: "ui.hero.bundleDescription",
-    message: "Stage a ROM and its patches, describe the recipe, and share a reusable bundle.",
+  "ui.hero.weaveDescription": msg({
+    id: "ui.hero.weaveDescription",
+    message: "Stage a ROM and its patches, describe the recipe, and share a reusable weave.",
   }),
-  "ui.hero.bundleGuide": msg({ id: "ui.hero.bundleGuide", message: "Read the Bundle guide" }),
-  "ui.hero.bundleThesis": msg({ id: "ui.hero.bundleThesis", message: "Bundle your patches." }),
-  "ui.hero.bundleThesis2": msg({ id: "ui.hero.bundleThesis2", message: "Share a reusable recipe." }),
+  "ui.hero.weaveGuide": msg({ id: "ui.hero.weaveGuide", message: "Read the Weave guide" }),
+  "ui.hero.weaveThesis": msg({ id: "ui.hero.weaveThesis", message: "Weave your patches." }),
+  "ui.hero.weaveThesis2": msg({ id: "ui.hero.weaveThesis2", message: "Share a reusable recipe." }),
   "ui.hero.createDescription": msg({
     id: "ui.hero.createDescription",
     message:
@@ -1540,9 +1540,9 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.log.viewCurrent": msg({ id: "ui.log.viewCurrent", message: "Now" }),
   "ui.log.viewLabel": msg({ id: "ui.log.viewLabel", message: "Page Logs" }),
   "ui.log.viewPrevious": msg({ id: "ui.log.viewPrevious", message: "Last" }),
-  "ui.output.bundleDiverged": msg({
-    id: "ui.output.bundleDiverged",
-    message: "Output won't be verified - the patch chain differs from the bundle.",
+  "ui.output.weaveDiverged": msg({
+    id: "ui.output.weaveDiverged",
+    message: "Output won't be verified - the patch chain differs from the weave.",
   }),
   "ui.output.differentChain": msg({
     id: "ui.output.differentChain",
@@ -1605,7 +1605,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.settings.zipCodec": msg({ id: "ui.settings.zipCodec", message: "ZIP" }),
   "ui.status.doneMsg": msg({ id: "ui.status.doneMsg", message: "rom-weaver finished in {t}" }),
   "ui.step.apply": msg({ id: "ui.step.apply", message: "Apply" }),
-  "ui.step.bundle": msg({ id: "ui.step.bundle", message: "Bundle" }),
+  "ui.step.weave": msg({ id: "ui.step.weave", message: "Weave" }),
   "ui.step.cheats": msg({ id: "ui.step.cheats", message: "Cheats as a Patch" }),
   "ui.step.identify": msg({ id: "ui.step.identify", message: "Identify" }),
   "ui.step.modified": msg({ id: "ui.step.modified", message: "Modified" }),

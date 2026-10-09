@@ -91,7 +91,7 @@ fn apply_command(input: &Path, patches: Vec<PathBuf>) -> PatchApplyCommand {
         no_ignore: false,
         patches,
         output: None,
-        bundle: None,
+        weave: None,
         with_patches: Vec::new(),
         without_patches: Vec::new(),
         without_cheats: false,
@@ -120,7 +120,7 @@ fn apply_command(input: &Path, patches: Vec<PathBuf>) -> PatchApplyCommand {
         cheat_records: Vec::new(),
         cheat_positions: Vec::new(),
         cheat_selection: Default::default(),
-        emit_bundle: None,
+        emit_weave: None,
         tui: false,
         threads: ThreadBudget::Fixed(1),
         force: false,
@@ -288,7 +288,7 @@ fn direct_patch_target_without_inputs_aligns_to_the_patch_list() {
     fs::write(&patch, ips_patch(&[(0, b"X")])).expect("patch fixture");
     let output = temp.path().join("out.sfc");
     let mut args = apply_command(&input, vec![patch]);
-    args.patch_target = vec![Some(BundlePatchInput::Rom {
+    args.patch_target = vec![Some(WeavePatchInput::Rom {
         rom: true,
         member: None,
     })];
@@ -368,59 +368,44 @@ fn the_output_alias_message_names_whichever_input_the_output_collides_with() {
     let input = temp.path().join("game.sfc");
     let original = temp.path().join("archive.zip");
     let patch = temp.path().join("fix.ips");
-    let bundle = temp.path().join("run.json");
-    for path in [&input, &original, &patch, &bundle] {
+    let weave = temp.path().join("run.json");
+    for path in [&input, &original, &patch, &weave] {
         fs::write(path, b"x").expect("fixture");
     }
     let patches = vec![patch.clone()];
 
-    let same_input = CliApp::patch_apply_output_alias_message(
-        &input,
-        &patches,
-        &original,
-        Some(&bundle),
-        &input,
-    )
-    .expect("input alias");
+    let same_input =
+        CliApp::patch_apply_output_alias_message(&input, &patches, &original, Some(&weave), &input)
+            .expect("input alias");
     assert!(same_input.contains("input and output resolve to the same file"));
 
     let same_original = CliApp::patch_apply_output_alias_message(
         &input,
         &patches,
         &original,
-        Some(&bundle),
+        Some(&weave),
         &original,
     )
     .expect("original alias");
     assert!(same_original.contains("input and output resolve to the same file"));
 
-    let same_patch = CliApp::patch_apply_output_alias_message(
-        &input,
-        &patches,
-        &original,
-        Some(&bundle),
-        &patch,
-    )
-    .expect("patch alias");
+    let same_patch =
+        CliApp::patch_apply_output_alias_message(&input, &patches, &original, Some(&weave), &patch)
+            .expect("patch alias");
     assert!(same_patch.contains("patch file"));
     assert!(same_patch.contains(&patch.display().to_string()));
 
-    let same_bundle = CliApp::patch_apply_output_alias_message(
-        &input,
-        &patches,
-        &original,
-        Some(&bundle),
-        &bundle,
-    )
-    .expect("bundle alias");
-    assert!(same_bundle.contains("bundle source"));
+    let same_weave =
+        CliApp::patch_apply_output_alias_message(&input, &patches, &original, Some(&weave), &weave)
+            .expect("weave alias");
+    assert!(same_weave.contains("weave source"));
 
     assert!(
         CliApp::patch_apply_output_alias_message(
             &input,
             &patches,
             &original,
-            Some(&bundle),
+            Some(&weave),
             &temp.path().join("fresh.sfc"),
         )
         .is_none()
@@ -1220,7 +1205,7 @@ fn a_chain_step_verifies_an_intermediate_against_its_declared_state() {
 #[test]
 fn probing_an_unhandled_patch_names_both_the_original_and_resolved_paths() {
     let temp = assert_fs::TempDir::new().expect("temp dir");
-    let requested = temp.path().join("bundle.zip");
+    let requested = temp.path().join("weave.zip");
     let resolved = temp.path().join("member.bin");
     fs::write(&resolved, b"not a patch").expect("fixture");
     let app = app();
@@ -1625,11 +1610,11 @@ fn requirements(pairs: &[(&str, &str)], size: Option<u64>) -> FilenameRequiremen
     }
 }
 
-fn bundle_resolution(
+fn weave_resolution(
     checks: Vec<(String, FilenameRequirements)>,
     output_checks: Option<(String, FilenameRequirements)>,
-) -> BundleApplyResolution {
-    BundleApplyResolution {
+) -> WeaveApplyResolution {
+    WeaveApplyResolution {
         warnings: Vec::new(),
         patch_basis: PatchBasisMode::Auto,
         cheats: Vec::new(),
@@ -1642,20 +1627,20 @@ fn bundle_resolution(
 }
 
 #[test]
-fn a_bundle_output_check_that_contradicts_expect_out_is_rejected() {
+fn a_weave_output_check_that_contradicts_expect_out_is_rejected() {
     let mut expected_input = BTreeMap::new();
     let mut expected_size = None;
     let mut expected_output = BTreeMap::from([("crc32".to_string(), "deadbeef".to_string())]);
-    let resolution = bundle_resolution(
+    let resolution = weave_resolution(
         Vec::new(),
         Some((
-            "bundle output.checks".to_string(),
+            "weave output.checks".to_string(),
             requirements(&[("crc32", "a684c7c6")], None),
         )),
     );
 
     let report = app()
-        .merge_patch_apply_bundle_requirements(
+        .merge_patch_apply_weave_requirements(
             &resolution,
             false,
             &mut expected_input,
@@ -1667,7 +1652,7 @@ fn a_bundle_output_check_that_contradicts_expect_out_is_rejected() {
 
     assert_eq!(report.status, OperationStatus::Failed);
     assert_eq!(report.stage, "validate");
-    assert!(report.label.contains("bundle output.checks"));
+    assert!(report.label.contains("weave output.checks"));
     assert!(report.label.contains("was already requested"));
     assert_eq!(
         expected_output.get("crc32").map(String::as_str),
@@ -1676,24 +1661,24 @@ fn a_bundle_output_check_that_contradicts_expect_out_is_rejected() {
 }
 
 #[test]
-fn a_bundle_output_check_fills_in_what_expect_out_left_open() {
+fn a_weave_output_check_fills_in_what_expect_out_left_open() {
     let mut expected_input = BTreeMap::new();
     let mut expected_size = None;
     let mut expected_output = BTreeMap::from([("crc32".to_string(), "a684c7c6".to_string())]);
-    let resolution = bundle_resolution(
+    let resolution = weave_resolution(
         vec![(
-            "bundle rom.checks".to_string(),
+            "weave rom.checks".to_string(),
             requirements(&[("md5", &"ab".repeat(16))], Some(64)),
         )],
         Some((
-            "bundle output.checks".to_string(),
+            "weave output.checks".to_string(),
             requirements(&[("crc32", "a684c7c6"), ("sha1", &"cd".repeat(20))], None),
         )),
     );
 
     assert!(
         app()
-            .merge_patch_apply_bundle_requirements(
+            .merge_patch_apply_weave_requirements(
                 &resolution,
                 false,
                 &mut expected_input,
@@ -1717,21 +1702,21 @@ fn a_bundle_output_check_fills_in_what_expect_out_left_open() {
 }
 
 #[test]
-fn a_disc_apply_drops_the_bundle_output_checks_it_cannot_verify() {
+fn a_disc_apply_drops_the_weave_output_checks_it_cannot_verify() {
     let mut expected_input = BTreeMap::new();
     let mut expected_size = None;
     let mut expected_output = BTreeMap::new();
-    let resolution = bundle_resolution(
+    let resolution = weave_resolution(
         Vec::new(),
         Some((
-            "bundle output.checks".to_string(),
+            "weave output.checks".to_string(),
             requirements(&[("crc32", "a684c7c6")], None),
         )),
     );
 
     assert!(
         app()
-            .merge_patch_apply_bundle_requirements(
+            .merge_patch_apply_weave_requirements(
                 &resolution,
                 true,
                 &mut expected_input,

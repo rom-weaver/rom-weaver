@@ -115,7 +115,7 @@ The [development guide](./docs/development/development.md) covers the full toolc
 
 ## Why
 
-A patch job can require extraction, several patches in order, checksum checks, and compression. rom-weaver runs those steps together and can save the recipe as a bundle.
+A patch job can require extraction, several patches in order, checksum checks, and compression. rom-weaver runs those steps together and can save the recipe as a weave.
 
 [Browser and CLI](docs/explanation/browser-and-cli.md) explains the two interfaces. [Comparison with similar tools](docs/explanation/comparisons.md) covers alternatives.
 
@@ -134,7 +134,7 @@ The CLI and browser share one Rust engine. Browser workers and storage add costs
 - **Handle dump differences.** Resolve supported copier headers and N64 byte orders. Optionally repair supported ROM compatibility fields.
 - **Bake in cheats.** Apply supported ROM-writing codes, or turn them into patches. Live-memory codes cannot be baked.
 - **Try the result.** Play supported games in your browser with EmulatorJS. Import and export emulator saves.
-- **Reuse patch bundles.** Preserve patches, order, choices, and ROM checksums. Patch-only bundles omit the ROM; each user supplies their matching original.
+- **Reuse patch weaves.** Preserve patches, order, choices, and ROM checksums. Patch-only weaves omit the ROM; each user supplies their matching original.
 - **Trim and edit saves (beta).** Trim supported ROM padding, edit supported saves, and generate saves within [game-specific limits](docs/reference/save-editor.md#save-generation). Browser Trim and Save Editor require the beta setting.
 - **Undo patches.** Reverse PPF3 patches containing undo data.
 - **Automate or self-host.** CLI scripts, JSON output, and your own webapp hosting. Both interfaces share one Rust engine.
@@ -145,7 +145,7 @@ The [plain-language feature map](docs/reference/features.md) links every feature
 
 ### Beta status
 
-rom-weaver is beta software and follows Semantic Versioning, but until v1.0, breaking changes may still happen between minor releases. Patching, compressing, extracting, and bundling are covered by automated tests. Hands-on testing happens on macOS and Linux; Windows is covered by hosted CI but has seen much less real-world use, so expect rougher edges there and please report anything Windows-specific. If you rely on the APIs or CLI flags, expect things to be a bit tougher: those interfaces may still change as the project heads toward v1.0. Some browser features are hidden behind [the beta setting](docs/how-to/browser-settings.md#enable-beta-tools). The [feature map](docs/reference/features.md#app-and-automation) lists them. The `rom-weaver-core`, `-checksum`, `-containers`, and `-patches` crates are published to crates.io only so `rom-weaver-cli` can use them. The CLI and the webapp are the supported interfaces; using those crates as libraries in another project is not supported.
+rom-weaver is beta software and follows Semantic Versioning, but until v1.0, breaking changes may still happen between minor releases. Patching, compressing, extracting, and creating weaves are covered by automated tests. Hands-on testing happens on macOS and Linux; Windows is covered by hosted CI but has seen much less real-world use, so expect rougher edges there and please report anything Windows-specific. If you rely on the APIs or CLI flags, expect things to be a bit tougher: those interfaces may still change as the project heads toward v1.0. Some browser features are hidden behind [the beta setting](docs/how-to/browser-settings.md#enable-beta-tools). The [feature map](docs/reference/features.md#app-and-automation) lists them. The `rom-weaver-core`, `-checksum`, `-containers`, and `-patches` crates are published to crates.io only so `rom-weaver-cli` can use them. The CLI and the webapp are the supported interfaces; using those crates as libraries in another project is not supported.
 
 ### First complete public release
 
@@ -221,11 +221,11 @@ Localized translations are early and may be entirely wrong in places. Manual edi
       </td>
     </tr>
     <tr>
-      <td>Mobile: bundle output options</td>
+      <td>Mobile: weave output options</td>
       <td align="center">
         <picture>
           <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/bundle-output-mobile-dark.webp">
-          <img src="docs/screenshots/bundle-output-mobile-light.webp" alt="Focused patch-only bundle controls on mobile" width="390">
+          <img src="docs/screenshots/bundle-output-mobile-light.webp" alt="Focused patch-only weave controls on mobile" width="390">
         </picture>
       </td>
     </tr>

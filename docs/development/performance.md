@@ -87,7 +87,7 @@ Additional measurement conditions:
 - **Archive extraction is capped at one layer.** rom-weaver unpacks archives found inside archives; `7zz` and `unzip` stop after one. The harness passes `--no-nested-extract` so both sides do the same work.
 - **The 7z extract path keeps rom-weaver's default common-file filter.** This skips sidecars such as provenance text files. `7zz` extracts every member. Add `--no-ignore` to the rom-weaver command in the harness for a pure decoder comparison.
 - **The zip suite uses two reference binaries**, `zip` to write and `unzip` to read, since Info-ZIP splits them.
-- **Sources under 1 MB are skipped** (`--min-size`). A ROM corpus carries patch bundles and manifest fixtures that are not ROMs. `--min-size 0` benchmarks everything.
+- **Sources under 1 MB are skipped** (`--min-size`). A ROM corpus carries patch weaves and manifest fixtures that are not ROMs. `--min-size 0` benchmarks everything.
 
 ### Two chdman behaviors the harness works around
 
@@ -209,7 +209,7 @@ Deflate at level 6 on both sides; `zip` writes, `unzip` reads.
 | Input | Input size | rom-weaver | unzip | Time change | Output |
 | --- | --- | --- | --- | --- | --- |
 | GBA ROM `.zip` | 6.7 MB | 0.065 s ± 0.001 | 0.120 s ± 0.000 | −0.055 s (−45.9%) | 16.0 MB |
-| Patch bundle `.zip` | 8.9 MB | 0.060 s ± 0.001 | 0.095 s ± 0.001 | −0.035 s (−37.0%) | 10.1 MB |
+| Patch weave `.zip` | 8.9 MB | 0.060 s ± 0.001 | 0.095 s ± 0.001 | −0.035 s (−37.0%) | 10.1 MB |
 | GBA ROM (romhack) `.zip` | 11.7 MB | 0.110 s ± 0.001 | 0.224 s ± 0.001 | −0.114 s (−51.0%) | 32.0 MB |
 | N64 ROM `.zip` | 24.9 MB | 0.177 s ± 0.003 | 0.479 s ± 0.024 | −0.303 s (−63.2%) | 32.0 MB |
 | DS ROM `.zip` | 106 MB | 0.843 s ± 0.003 | 1.723 s ± 0.022 | −0.880 s (−51.1%) | 256.0 MB |

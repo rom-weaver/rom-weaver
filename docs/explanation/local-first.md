@@ -20,7 +20,7 @@ Reading, checksumming, patching, compressing, and writing all happen inside your
 
 The patching engine is compiled to WebAssembly and runs in your browser's workers. There is no server-side patching endpoint for your files to go to, and no account to attach them to.
 
-Remote bundles and their sources are downloaded from their hosts. Identify packs and emulator cores are downloaded as app assets when needed. These downloads do not upload your local files.
+Remote weaves and their sources are downloaded from their hosts. Identify packs and emulator cores are downloaded as app assets when needed. These downloads do not upload your local files.
 
 ## Where files live while a job runs
 
@@ -46,7 +46,7 @@ When a browser cannot finish a large job, the CLI is the same engine without the
 
 ## Offline
 
-Cached app code and local files can be used offline. Uncached identify packs, emulator cores, sample files, and remote bundle sources still need a connection. Browser storage eviction can remove cached assets.
+Cached app code and local files can be used offline. Uncached identify packs, emulator cores, sample files, and remote weave sources still need a connection. Browser storage eviction can remove cached assets.
 
 [Set up offline use](../how-to/browser-settings.md#prepare-for-offline-use) covers preparation. [Back up emulator saves](../how-to/test-roms-in-browser.md#export-and-restore-a-save) covers progress stored in the browser.
 

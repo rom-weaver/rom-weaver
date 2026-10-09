@@ -14,9 +14,9 @@ export const RAW_ROM = "tests/fixtures/archive_sources/game.bin";
 export const RAW_PATCH = "tests/fixtures/archive_sources/change.ips";
 export const ONE_PATCH_7Z = "tests/fixtures/archives/one-patch.7z";
 export const MULTI_PATCH_ZIP = "tests/fixtures/archives/multi-patch.zip";
-// Nested patch bundles: B_bundle = three nested zips with one patch each; C_root = a nested zip with
+// Nested patch weaves: B_weave = three nested zips with one patch each; C_root = a nested zip with
 // two sibling patches plus a deeper nested patch; A_outer = a deep single-patch chain.
-export const NESTED_BUNDLE_ZIP = "tests/fixtures/archives/B_bundle.zip";
+export const NESTED_WEAVE_ZIP = "tests/fixtures/archives/B_weave.zip";
 export const NESTED_ROOT_ZIP = "tests/fixtures/archives/C_root.zip";
 export const NESTED_CHAIN_ZIP = "tests/fixtures/archives/A_outer.zip";
 export const MULTI_ROM_ZIP = "tests/fixtures/archives/multi-rom.zip";

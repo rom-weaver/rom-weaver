@@ -198,7 +198,7 @@ const identifyCheckHashes = (check: BrowserIdentifyCheck): string[] =>
 
 /**
  * Identify from checks alone - a bare crc32/md5/sha1 digest, or the whole rom
- * check a bundle entry or a patch's source requirement carries - through the
+ * check a weave entry or a patch's source requirement carries - through the
  * `identify --hash` command. The checksum router picks the packs a digest can
  * be in, so only those load; a router that names none is a definitive
  * `unknown`. An unloadable database reports `unavailable`, never a false

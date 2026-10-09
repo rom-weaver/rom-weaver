@@ -31,10 +31,10 @@ const buildN64Rom = () => {
   return new File([bytes], "game.z64", { type: "application/octet-stream" });
 };
 
-test("strip-header toggle settles inside an everything archive bundle session", async () => {
+test("strip-header toggle settles inside an everything archive weave session", async () => {
   const patchFile = await loadFixtureFile(RAW_PATCH);
   const romFile = buildInesRom();
-  const bundleJson = {
+  const weaveJson = {
     output: { name: "hack.nes" },
     patches: [{ name: "Core", path: "change.ips" }],
     rom: {
@@ -43,18 +43,18 @@ test("strip-header toggle settles inside an everything archive bundle session", 
     },
     version: 1,
   };
-  const bundleArchive = await buildZip(
+  const weaveArchive = await buildZip(
     [
       {
-        file: new File([JSON.stringify(bundleJson)], "rom-weaver-bundle.json", { type: "application/json" }),
-        fileName: "rom-weaver-bundle.json",
+        file: new File([JSON.stringify(weaveJson)], "rom-weaver-weave.json", { type: "application/json" }),
+        fileName: "rom-weaver-weave.json",
       },
       { file: romFile, fileName: "game.nes" },
       { file: patchFile, fileName: "change.ips" },
     ],
     "with-rom.zip",
   );
-  mount(createElement(ApplyPatchForm, { pageDrop: { files: [bundleArchive], id: 2 } }));
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [weaveArchive], id: 2 } }));
   await waitForApplyButtonEnabled();
 
   const headerSelect = await waitForState(() => document.getElementById("rom-weaver-patch-header-mode-0"));

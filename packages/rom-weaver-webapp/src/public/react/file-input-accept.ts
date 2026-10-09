@@ -9,7 +9,7 @@ import { ARCHIVE_FILE_EXTENSIONS, PATCH_FILE_EXTENSION_VARIANTS, ROM_FILE_EXTENS
 /**
  * Picker accept attributes derived from the drop classifier's extension sets:
  *
- *   - `unifiedApply` - ROMs, patches, bundles, and archives (`--rom-filter`
+ *   - `unifiedApply` - ROMs, patches, weaves, and archives (`--rom-filter`
  *     + `--patch-filter`), used by the Apply tab.
  *   - `unifiedRom` - ROMs and archives only (`--rom-filter`), used by the
  *     Make Patch and Trim tabs, which have no patch bucket.

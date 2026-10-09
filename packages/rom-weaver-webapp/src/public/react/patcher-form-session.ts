@@ -943,7 +943,7 @@ const useLocalApplyPatchFormSession = ({
     const previous = previousDisabledPatchIdsRef.current;
     const current = disabledPatchIds ?? new Set<string>();
     previousDisabledPatchIdsRef.current = current;
-    // Bundle bootstrapping may seed its initial optional state after the first patch stage. That is
+    // Weave bootstrapping may seed its initial optional state after the first patch stage. That is
     // initial configuration, not a user edit, so it must not launch a competing validation pass.
     if (!previous) return;
     if (!(validatePatches && activePatches.length)) return;

@@ -12,10 +12,10 @@ struct ChainLoopState {
     current_input: PathBuf,
     initial_output: ProducedPatchOutput,
     producer_outputs: BTreeMap<String, ProducedPatchOutput>,
-    target_outputs: BTreeMap<BundlePatchInput, ProducedPatchOutput>,
-    lane_seeds: BTreeMap<Option<BundlePatchInput>, ProducedPatchOutput>,
+    target_outputs: BTreeMap<WeavePatchInput, ProducedPatchOutput>,
+    lane_seeds: BTreeMap<Option<WeavePatchInput>, ProducedPatchOutput>,
     lane_plans:
-        BTreeMap<Option<BundlePatchInput>, BTreeMap<usize, patch_plan::PatchStepVerification>>,
+        BTreeMap<Option<WeavePatchInput>, BTreeMap<usize, patch_plan::PatchStepVerification>>,
     legacy_output: ProducedPatchOutput,
     applied_formats: Vec<&'static str>,
     disc_track_replacements: BTreeMap<PathBuf, PathBuf>,
@@ -27,8 +27,8 @@ struct ChainLoopState {
 struct ChainStep<'s> {
     index: usize,
     apply_step: &'s PatchApplyStep,
-    target: Option<&'s BundlePatchInput>,
-    explicit_input: Option<&'s BundlePatchInput>,
+    target: Option<&'s WeavePatchInput>,
+    explicit_input: Option<&'s WeavePatchInput>,
     lane_position: usize,
     verification: Option<patch_plan::PatchStepVerification>,
     handler: Arc<dyn rom_weaver_core::PatchHandler>,
@@ -587,13 +587,13 @@ impl CliApp {
         let member_lane_start = step.lane_position == 0
             && matches!(
                 step.target,
-                Some(BundlePatchInput::Rom {
+                Some(WeavePatchInput::Rom {
                     member: Some(_),
                     ..
                 })
             )
             && verification.is_some_and(|step| step.is_chain_prefix || step.lane_source_input);
-        // An unbased bundle input check still describes the real
+        // An unbased weave input check still describes the real
         // intermediate even when embedded evidence independently infers
         // Base. Only an explicit Base declaration verifies once up front.
         if context.strict_patch_checksums()
@@ -608,7 +608,7 @@ impl CliApp {
                 .with_field("patch_index", step.index as u64)
                 .with_field("patch", step.patch_path().display().to_string())
                 .with_field("detail", error.to_string());
-            super::super::bundle_apply::describe_expected_state(
+            super::super::weave_apply::describe_expected_state(
                 &declared.checksums,
                 declared.size,
                 &mut coded,
@@ -656,7 +656,7 @@ impl CliApp {
                 .verification()
                 .and_then(|step| step.declared_output.as_ref())
             {
-                super::super::bundle_apply::describe_expected_state(
+                super::super::weave_apply::describe_expected_state(
                     &declared.checksums,
                     declared.size,
                     &mut coded,

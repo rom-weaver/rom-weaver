@@ -75,6 +75,11 @@ pub fn generated_man_pages() -> BTreeMap<String, Vec<u8>> {
     assert_documented(&command, std::slice::from_ref(&root));
     let mut pages = BTreeMap::new();
     collect_pages(&command, &[root], &mut pages);
+    for suffix in ["", "-create", "-parse", "-schema"] {
+        let canonical = format!("rom-weaver-weave{suffix}.1");
+        let legacy = format!("rom-weaver-bundle{suffix}.1");
+        pages.insert(legacy, pages[&canonical].clone());
+    }
     pages
 }
 
@@ -145,6 +150,17 @@ mod tests {
         let pages = generated_man_pages();
         assert!(pages.contains_key("rom-weaver.1"));
         assert!(pages.contains_key("rom-weaver-man.1"));
+    }
+
+    #[test]
+    fn legacy_recipe_pages_match_canonical_pages() {
+        let pages = generated_man_pages();
+        for suffix in ["", "-create", "-parse", "-schema"] {
+            assert_eq!(
+                pages[&format!("rom-weaver-bundle{suffix}.1")],
+                pages[&format!("rom-weaver-weave{suffix}.1")],
+            );
+        }
     }
 
     #[test]

@@ -52,13 +52,13 @@ fn parses_patch_apply_execution_target_fields() {
     assert_eq!(args.patch_id, ["a", "b"]);
     assert!(matches!(
         args.patch_input.as_slice(),
-        [Some(rom_weaver_app::BundlePatchInput::Rom { rom: true, member: None }),
-         Some(rom_weaver_app::BundlePatchInput::Patch { patch, member: None })] if patch == "a"
+        [Some(rom_weaver_app::WeavePatchInput::Rom { rom: true, member: None }),
+         Some(rom_weaver_app::WeavePatchInput::Patch { patch, member: None })] if patch == "a"
     ));
     assert!(matches!(
         args.patch_target.as_slice(),
-        [Some(rom_weaver_app::BundlePatchInput::Rom { rom: true, member: Some(rom_member) }),
-         Some(rom_weaver_app::BundlePatchInput::Patch { patch, member: Some(patch_member) })]
+        [Some(rom_weaver_app::WeavePatchInput::Rom { rom: true, member: Some(rom_member) }),
+         Some(rom_weaver_app::WeavePatchInput::Patch { patch, member: Some(patch_member) })]
             if rom_member == "track.bin" && patch == "a" && patch_member == "game.bin"
     ));
     assert_eq!(args.patch_input_check, ["size=16", "crc32=12345678"]);

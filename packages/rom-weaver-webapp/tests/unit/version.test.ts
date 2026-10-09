@@ -18,7 +18,7 @@ const FIXTURE_CHANGELOG = `# Changelog
 
 ### ⚠ BREAKING CHANGES
 
-* **bundle:** reset bundle format to v1
+* **weave:** reset weave format to v1
 
 ### Features
 
@@ -106,8 +106,8 @@ describe("readReleaseNotes", () => {
 
   it("keeps a link-less breaking-change line", () => {
     expect(notesFor("2.0.0")?.notes[0]?.groups[0]?.entries[0]).toEqual({
-      scope: "bundle",
-      summary: "reset bundle format to v1",
+      scope: "weave",
+      summary: "reset weave format to v1",
     });
   });
 

@@ -18,6 +18,14 @@ const asCommand = (command: unknown) => command as RomWeaverCommand;
 const asRequest = (request: unknown) => request as RomWeaverRunRequest;
 
 describe("createRomWeaverCommand", () => {
+  it.each(["bundle-parse", "bundle-create"] as const)("accepts legacy input label %s", (label) => {
+    const command = createRomWeaverCommand(label, { input: "old.json", output: "new.json" } as never);
+    expect(command).toEqual({
+      type: "weave",
+      args: { type: label === "bundle-parse" ? "parse" : "create", args: { input: "old.json", output: "new.json" } },
+    });
+  });
+
   it("passes a top-level command straight through", () => {
     for (const type of ["probe", "extract", "checksum", "identify", "ingest", "compress", "trim"] as const) {
       expect(createRomWeaverCommand(type, { input: "/rom.sfc" } as never)).toEqual({
@@ -44,13 +52,13 @@ describe("createRomWeaverCommand", () => {
       args: { args: {}, type: "create" },
       type: "patch",
     });
-    expect(createRomWeaverCommand("bundle-parse", {} as never)).toEqual({
+    expect(createRomWeaverCommand("weave-parse", {} as never)).toEqual({
       args: { args: {}, type: "parse" },
-      type: "bundle",
+      type: "weave",
     });
-    expect(createRomWeaverCommand("bundle-create", {} as never)).toEqual({
+    expect(createRomWeaverCommand("weave-create", {} as never)).toEqual({
       args: { args: {}, type: "create" },
-      type: "bundle",
+      type: "weave",
     });
     expect(createRomWeaverCommand("tools-ppf-undo", {} as never)).toEqual({
       args: { args: {}, type: "ppf-undo" },
@@ -135,6 +143,31 @@ describe("normalizeRomWeaverRunRequest", () => {
     ).toEqual({});
   });
 
+  it("normalizes legacy bundle commands and fields to canonical weave names", () => {
+    const request = normalizeRomWeaverRunRequest({
+      command: {
+        type: "bundle",
+        args: {
+          type: "create",
+          args: {
+            output: "new.json",
+            bundle: "old.zip",
+            weave: "new.zip",
+            bundle_rom: "game.bin",
+            no_bundle_rom: true,
+          },
+        },
+      },
+    } as unknown as RomWeaverRunRequest);
+    expect(request.command).toEqual({
+      type: "weave",
+      args: {
+        type: "create",
+        args: { output: "new.json", weave: "new.zip", weave_rom: "game.bin", no_weave_rom: true },
+      },
+    });
+  });
+
   it("normalizes each nested sub-command", () => {
     expect(
       normalizeRomWeaverRunRequest(asCommand({ args: { args: { input: "/a" }, type: "apply" }, type: "patch" }))
@@ -147,13 +180,13 @@ describe("normalizeRomWeaverRunRequest", () => {
       args: { args: {}, type: "create" },
       type: "patch",
     });
-    expect(normalizeRomWeaverRunRequest(asCommand({ args: { type: "parse" }, type: "bundle" })).command).toEqual({
+    expect(normalizeRomWeaverRunRequest(asCommand({ args: { type: "parse" }, type: "weave" })).command).toEqual({
       args: { args: {}, type: "parse" },
-      type: "bundle",
+      type: "weave",
     });
-    expect(normalizeRomWeaverRunRequest(asCommand({ args: { type: "create" }, type: "bundle" })).command).toEqual({
+    expect(normalizeRomWeaverRunRequest(asCommand({ args: { type: "create" }, type: "weave" })).command).toEqual({
       args: { args: {}, type: "create" },
-      type: "bundle",
+      type: "weave",
     });
     expect(normalizeRomWeaverRunRequest(asCommand({ args: { type: "ppf-undo" }, type: "tools" })).command).toEqual({
       args: { args: {}, type: "ppf-undo" },
@@ -190,8 +223,8 @@ describe("normalizeRomWeaverRunRequest", () => {
     expect(() => normalizeRomWeaverRunRequest(asCommand({ args: [], type: "patch" }))).toThrow(
       "rom-weaver patch command requires an object `args` payload",
     );
-    expect(() => normalizeRomWeaverRunRequest(asCommand({ args: [], type: "bundle" }))).toThrow(
-      "rom-weaver bundle command requires an object `args` payload",
+    expect(() => normalizeRomWeaverRunRequest(asCommand({ args: [], type: "weave" }))).toThrow(
+      "rom-weaver weave command requires an object `args` payload",
     );
     expect(() => normalizeRomWeaverRunRequest(asCommand({ args: [], type: "tools" }))).toThrow(
       "rom-weaver tools command requires an object `args` payload",
@@ -205,8 +238,8 @@ describe("normalizeRomWeaverRunRequest", () => {
     expect(() => normalizeRomWeaverRunRequest(asCommand({ args: { type: "reverse" }, type: "patch" }))).toThrow(
       /rom-weaver patch command has unsupported nested `type` field: reverse/,
     );
-    expect(() => normalizeRomWeaverRunRequest(asCommand({ args: { type: "reverse" }, type: "bundle" }))).toThrow(
-      /rom-weaver bundle command has unsupported nested `type` field: reverse/,
+    expect(() => normalizeRomWeaverRunRequest(asCommand({ args: { type: "reverse" }, type: "weave" }))).toThrow(
+      /rom-weaver weave command has unsupported nested `type` field: reverse/,
     );
     expect(() => normalizeRomWeaverRunRequest(asCommand({ args: { type: "reverse" }, type: "tools" }))).toThrow(
       "unsupported tools command: reverse",
@@ -243,11 +276,11 @@ describe("command readers", () => {
     expect(getRomWeaverCommandLabel(asCommand({ args: { args: {}, type: "create" }, type: "patch" }))).toBe(
       "patch-create",
     );
-    expect(getRomWeaverCommandLabel(asCommand({ args: { args: {}, type: "parse" }, type: "bundle" }))).toBe(
-      "bundle-parse",
+    expect(getRomWeaverCommandLabel(asCommand({ args: { args: {}, type: "parse" }, type: "weave" }))).toBe(
+      "weave-parse",
     );
-    expect(getRomWeaverCommandLabel(asCommand({ args: { args: {}, type: "create" }, type: "bundle" }))).toBe(
-      "bundle-create",
+    expect(getRomWeaverCommandLabel(asCommand({ args: { args: {}, type: "create" }, type: "weave" }))).toBe(
+      "weave-create",
     );
     expect(getRomWeaverCommandLabel(asCommand({ args: { args: {}, type: "ppf-undo" }, type: "tools" }))).toBe(
       "tools-ppf-undo",
@@ -261,7 +294,7 @@ describe("command readers", () => {
     expect(() => getRomWeaverCommandLabel(asCommand({ args: { type: "reverse" }, type: "patch" }))).toThrow(
       /Unhandled rom-weaver command shape/,
     );
-    expect(() => getRomWeaverCommandLabel(asCommand({ args: { type: "reverse" }, type: "bundle" }))).toThrow(
+    expect(() => getRomWeaverCommandLabel(asCommand({ args: { type: "reverse" }, type: "weave" }))).toThrow(
       /Unhandled rom-weaver command shape/,
     );
     expect(() => getRomWeaverCommandLabel(asCommand({ args: { type: "reverse" }, type: "tools" }))).toThrow(
@@ -325,12 +358,12 @@ describe("collectRomWeaverRunInputPaths", () => {
     ).toEqual(["/old.sfc", "/new.sfc"]);
     expect(
       collectRomWeaverRunInputPaths(
-        asCommand({ args: { args: { input: "/pack.rwfp" }, type: "parse" }, type: "bundle" }),
+        asCommand({ args: { args: { input: "/pack.rwfp" }, type: "parse" }, type: "weave" }),
       ),
     ).toEqual(["/pack.rwfp"]);
     expect(
       collectRomWeaverRunInputPaths(
-        asCommand({ args: { args: { patch: ["/p.ips"], rom: "/rom.sfc" }, type: "create" }, type: "bundle" }),
+        asCommand({ args: { args: { patch: ["/p.ips"], rom: "/rom.sfc" }, type: "create" }, type: "weave" }),
       ),
     ).toEqual(["/rom.sfc", "/p.ips"]);
     expect(
@@ -365,7 +398,7 @@ describe("collectRomWeaverRunInputPaths", () => {
     expect(() => collectRomWeaverRunInputPaths(asCommand({ args: { type: "reverse" }, type: "patch" }))).toThrow(
       /Unhandled rom-weaver command shape/,
     );
-    expect(() => collectRomWeaverRunInputPaths(asCommand({ args: { type: "reverse" }, type: "bundle" }))).toThrow(
+    expect(() => collectRomWeaverRunInputPaths(asCommand({ args: { type: "reverse" }, type: "weave" }))).toThrow(
       /Unhandled rom-weaver command shape/,
     );
   });
@@ -385,7 +418,7 @@ describe("romWeaverCommandSupportsThreads", () => {
       expect(romWeaverCommandSupportsThreads(asCommand({ args: { args: {}, type }, type: "patch" }))).toBe(true);
     }
     for (const type of ["parse", "create"] as const) {
-      expect(romWeaverCommandSupportsThreads(asCommand({ args: { args: {}, type }, type: "bundle" }))).toBe(true);
+      expect(romWeaverCommandSupportsThreads(asCommand({ args: { args: {}, type }, type: "weave" }))).toBe(true);
     }
   });
 
@@ -396,7 +429,7 @@ describe("romWeaverCommandSupportsThreads", () => {
     expect(() => romWeaverCommandSupportsThreads(asCommand({ args: { type: "reverse" }, type: "patch" }))).toThrow(
       /Unhandled rom-weaver command shape/,
     );
-    expect(() => romWeaverCommandSupportsThreads(asCommand({ args: { type: "reverse" }, type: "bundle" }))).toThrow(
+    expect(() => romWeaverCommandSupportsThreads(asCommand({ args: { type: "reverse" }, type: "weave" }))).toThrow(
       /Unhandled rom-weaver command shape/,
     );
   });
@@ -507,10 +540,10 @@ describe("withRomWeaverForcedThreads", () => {
     });
     expect(
       withRomWeaverForcedThreads(
-        asRequest({ command: { args: { args: {}, type: "parse" }, type: "bundle" }, output: {} }),
+        asRequest({ command: { args: { args: {}, type: "parse" }, type: "weave" }, output: {} }),
         2,
       ),
-    ).toEqual({ command: { args: { args: { threads: 2 }, type: "parse" }, type: "bundle" }, output: {} });
+    ).toEqual({ command: { args: { args: { threads: 2 }, type: "parse" }, type: "weave" }, output: {} });
   });
 
   it("floors the count and never drops below one", () => {
@@ -571,5 +604,46 @@ describe("readRomWeaverRequestedThreadCount", () => {
         asRequest({ command: { args: { threads: "auto" }, type: "extract" }, output: {} }),
       ),
     ).toBe(4);
+  });
+});
+
+describe("legacy raw command inspection", () => {
+  it("normalizes legacy commands through thread modifiers and preserves output options", () => {
+    const command = asCommand({
+      type: "bundle",
+      args: { type: "parse", args: { input: "/recipe.json", output: "/out" } },
+    });
+    const request = { command, output: { json: true } };
+    const injected = withRomWeaverDefaultThreads(request, 3);
+    expect(injected.command.type).toBe("weave");
+    expect(readRomWeaverRequestedThreadCount(injected)).toBe(3);
+    expect(injected.output).toEqual({ json: true });
+    expect(withRomWeaverForcedThreads(request, 2)).toEqual({
+      ...injected,
+      command: { type: "weave", args: { type: "parse", args: { input: "/recipe.json", output: "/out", threads: 2 } } },
+    });
+    expect(clampRomWeaverBrowserThreadRequest(request).command.type).toBe("weave");
+  });
+  it("removes legacy fields when creating a command using a legacy label", () => {
+    const command = createRomWeaverCommand("bundle-create", { output: "recipe.json", bundle: "old.zip" } as never);
+    expect(command).toEqual({
+      type: "weave",
+      args: { type: "create", args: { output: "recipe.json", weave: "old.zip" } },
+    });
+  });
+
+  it.each([false, true])("normalizes raw legacy inputs before helpers inspect them (request: %s)", (request) => {
+    const command = asCommand({
+      type: "bundle",
+      args: { type: "parse", args: { input: "/work/recipe.json", output: "/work/out", threads: 3 } },
+    });
+    const input = request ? { command, output: { json: true } } : command;
+    expect(collectRomWeaverRunInputPaths(input)).toEqual(["/work/recipe.json"]);
+    expect(readRomWeaverRequestedThreadCount(input)).toBe(3);
+    expect(getRomWeaverCommandLabel(command)).toBe("weave-parse");
+    expect(romWeaverCommandSupportsThreads(command)).toBe(true);
+    expect(readRomWeaverRunInputCommand(input)).toEqual({ type: "weave", args: command.args });
+    expect(normalizeRomWeaverRunRequest(input).command).toEqual({ type: "weave", args: command.args });
+    expect((command as { type: unknown }).type).toBe("bundle");
   });
 });

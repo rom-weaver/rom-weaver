@@ -26,7 +26,7 @@ import {
   useMemo,
 } from "react";
 import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activity-store.ts";
-import type { BundleApplySession } from "../lib/bundle/bundle-session-model.ts";
+import type { WeaveApplySession } from "../lib/weave/weave-session-model.ts";
 import { readDataTransferFiles } from "../lib/input/dropped-files.ts";
 import { createLogger } from "../lib/logging.ts";
 import { markDropReceived, markResultPaintedAfterFinish } from "../lib/perf/op-perf-marks.ts";
@@ -66,7 +66,7 @@ import { loadLogDialog, loadSettingsPanel, useUnifiedDialog } from "./use-unifie
 import type { WebappRootProps } from "./webapp-root-types.ts";
 import {
   ApplyPatchRoute,
-  BundleRoute,
+  WeaveRoute,
   ChecksumRouteForm,
   CreatePatchRoute,
   CompressRouteForm,
@@ -104,11 +104,11 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   },
   {
     group: "patches",
-    href: "bundle-patches",
+    href: "weave-patches",
     icon: <Package aria-hidden="true" />,
-    id: "bundle",
-    label: "Bundle Patches",
-    railLabel: "Bundle",
+    id: "weave",
+    label: "Weave Patches",
+    railLabel: "Weave",
   },
   {
     group: "patches",
@@ -186,7 +186,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   },
 ];
 
-// Keep the trace inspector out of the initial bundle, but share its loader so
+// Keep the trace inspector out of the initial weave, but share its loader so
 // the masthead and idle post-boot preload can fetch the same promise.
 const LogDialog = lazy(loadLogDialog);
 const SettingsPanel = lazy(loadSettingsPanel);
@@ -204,7 +204,7 @@ const syncWorkflowSeoMetadata = (view: WebappView) => {
   }
   let route = null;
   if (view === "creator") route = WORKFLOW_SEO_ROUTES.creator;
-  else if (view === "bundle") route = WORKFLOW_SEO_ROUTES.bundle;
+  else if (view === "weave") route = WORKFLOW_SEO_ROUTES.weave;
   else if (view === "checksum") route = WORKFLOW_SEO_ROUTES.checksum;
   else if (view === "compress") route = WORKFLOW_SEO_ROUTES.compress;
   else if (view === "extract") route = WORKFLOW_SEO_ROUTES.extract;
@@ -562,7 +562,7 @@ function WebappRoot({
   // like a page-level drop (classification and routing stay Rust-driven).
   const deliverUrlSessionFiles = useCallback(
     (files: File[]) => {
-      const sessionView = urlSession?.request?.kind === "bundle" ? "bundle" : "patcher";
+      const sessionView = urlSession?.request?.kind === "weave" ? "weave" : "patcher";
       actions.onSelectView(sessionView);
       pageDropIdRef.current += 1;
       setPageDrop({
@@ -584,13 +584,13 @@ function WebappRoot({
       }),
     [deliverUrlSessionFiles],
   );
-  // The `?bundle=` boot's decorated session (enablement seed + output defaults + patch metadata);
-  // the apply form consumes it once its patch list matches the bundle's delivery.
-  const [bundleSession, setBundleSession] = useState<BundleApplySession | null>(null);
+  // The `?weave=` boot's decorated session (enablement seed + output defaults + patch metadata);
+  // the apply form consumes it once its patch list matches the weave's delivery.
+  const [weaveSession, setWeaveSession] = useState<WeaveApplySession | null>(null);
   const urlSessionBoot = useUrlSessionBoot(
     notFound ? null : (urlSession?.request ?? null),
     deliverUrlSessionFiles,
-    setBundleSession,
+    setWeaveSession,
   );
 
   useEffect(() => {
@@ -678,10 +678,10 @@ function WebappRoot({
           <div
             className="workflow-panel-head"
             data-threads={
-              view === "bundle" || view === "patcher" || view === "creator" || view === "trim" ? "" : undefined
+              view === "weave" || view === "patcher" || view === "creator" || view === "trim" ? "" : undefined
             }
           >
-            {view === "bundle" || view === "patcher" || view === "creator" || view === "trim" ? (
+            {view === "weave" || view === "patcher" || view === "creator" || view === "trim" ? (
               <PanelThreadCount
                 count={threadCount}
                 onOpenThreads={() => openSettingsTab(SETTINGS_FIELD_METADATA.threads.id)}
@@ -817,8 +817,8 @@ function WebappRoot({
                 {workflowPanel(
                   "patcher",
                   <ApplyPatchRoute
-                    bundleSession={bundleSession}
-                    onBundlePackageChange={actions.onPatcherBundlePackageChange}
+                    weaveSession={weaveSession}
+                    onWeavePackageChange={actions.onPatcherWeavePackageChange}
                     onInputsChange={actions.onPatcherInputsChange}
                     onPatchesChange={actions.onPatcherPatchesChange}
                     onSelectTab={handleSelectTab}
@@ -830,17 +830,17 @@ function WebappRoot({
                   />,
                 )}
                 {workflowPanel(
-                  "bundle",
-                  <BundleRoute
-                    mode="bundle"
-                    bundleSession={bundleSession}
-                    onBundlePackageChange={actions.onPatcherBundlePackageChange}
+                  "weave",
+                  <WeaveRoute
+                    mode="weave"
+                    weaveSession={weaveSession}
+                    onWeavePackageChange={actions.onPatcherWeavePackageChange}
                     onInputsChange={actions.onPatcherInputsChange}
                     onPatchesChange={actions.onPatcherPatchesChange}
                     onSelectTab={handleSelectTab}
                     onSelectView={() => actions.onSelectView("test")}
                     onSettingsChange={actions.onPatcherSettingsChange}
-                    pageDrop={pageDropFor("bundle")}
+                    pageDrop={pageDropFor("weave")}
                     startup={state.startup}
                   />,
                 )}

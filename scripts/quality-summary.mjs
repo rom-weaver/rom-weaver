@@ -107,7 +107,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
     details.coverage = read("dist/coverage/changed-lines.json");
     details.selection = read("dist/coverage/rust/selection.json");
     details.reference = read(".agent/quality-signals/reference.json");
-    details.fuzz = ["ips_apply", "save_parse", "disc_sheet", "bundle_parse", "dcp_zip", "iso9660"]
+    details.fuzz = ["ips_apply", "save_parse", "disc_sheet", "weave_parse", "dcp_zip", "iso9660"]
       .map((target) => read(`.agent/quality-fuzz/${target}.json`))
       .filter(Boolean);
     details.runtime = Object.fromEntries(

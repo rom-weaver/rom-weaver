@@ -182,10 +182,10 @@ describe("resolveCompressedInputAssets", () => {
   });
 
   it("returns multiple extracted assets and carries harvested sidecar patches onto the primary asset", async () => {
-    const input = file("bundle.zip", 500);
+    const input = file("weave.zip", 500);
     const sidecar = {
       file: file("fix.ips", 8),
-      parentCompressions: [{ depth: 0, kind: "zip", fileName: "bundle.zip" }],
+      parentCompressions: [{ depth: 0, kind: "zip", fileName: "weave.zip" }],
     };
     archiveMocks.resolveArchiveInputAssets.mockResolvedValueOnce([
       {

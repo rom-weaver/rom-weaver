@@ -364,17 +364,17 @@ impl CliApp {
     pub(super) fn disc_target_path(
         &self,
         disc: &DiscContext,
-        target: Option<&BundlePatchInput>,
+        target: Option<&WeavePatchInput>,
     ) -> Result<Option<PathBuf>> {
         match target {
-            Some(BundlePatchInput::Rom {
+            Some(WeavePatchInput::Rom {
                 member: Some(member),
                 ..
             }) => self.disc_member_path(disc, member).map(Some),
-            Some(BundlePatchInput::Rom { member: None, .. }) | None => {
+            Some(WeavePatchInput::Rom { member: None, .. }) | None => {
                 Ok(Some(disc.target_file.clone()))
             }
-            Some(BundlePatchInput::Patch { .. }) => Ok(None),
+            Some(WeavePatchInput::Patch { .. }) => Ok(None),
         }
     }
 

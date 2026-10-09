@@ -12,7 +12,7 @@ import { preloadDocsRouteHtml, preloadWorkflowRoute } from "./workflow-routes.ts
  * Build-time prerender of the landing shell: the exact markup the client's
  * first committed render produces (startup ready, requested public tab, no session),
  * rendered through react-dom/server so index.html can ship it inside
- * #webapp-root and the browser can paint the real shell before the bundle
+ * #webapp-root and the browser can paint the real shell before the weave
  * executes. The client hydrates this markup in place; see renderWebappRoot in
  * webapp.ts.
  *
@@ -39,7 +39,7 @@ const createPrerenderActions = (): WebappRootProps["actions"] => ({
   onLogLevelChange: noop,
   onOfflineCopyEnabledChange: noop,
   onOpenSettings: noop,
-  onPatcherBundlePackageChange: noop,
+  onPatcherWeavePackageChange: noop,
   onPatcherInputsChange: noop,
   onPatcherPatchesChange: noop,
   onPatcherSettingsChange: noop,

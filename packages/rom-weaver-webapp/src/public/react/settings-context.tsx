@@ -182,6 +182,8 @@ const getNormalizedWorkflowSettings = (
 ) => {
   const source = toRecord(settings as RuntimeValue);
   const output = toRecord(source.output);
+  const canonicalOutput = { ...output };
+  delete canonicalOutput.bundlePackage;
   const outputContainer = toRecord(output.container);
   const workers = toRecord(source.workers);
   const compatibility = toRecord(source.compatibility);
@@ -239,8 +241,13 @@ const getNormalizedWorkflowSettings = (
       sink: (configuredLogSink || emitDefaultWorkflowLog) as ApplyLoggingSettings["sink"] | undefined,
     },
     output: {
-      ...output,
-      bundlePackage: readFirstDefined(output.bundlePackage, source.bundlePackage),
+      ...canonicalOutput,
+      weavePackage: readFirstDefined(
+        output.weavePackage,
+        source.weavePackage,
+        output.bundlePackage,
+        source.bundlePackage,
+      ),
       identifiedName: readFirstDefined(output.identifiedName, source.identifiedOutputName) as boolean | undefined,
       compression: readFirstDefined(output.compression, "auto"),
       container: {
@@ -275,9 +282,11 @@ const getNormalizedWorkflowSettings = (
 
 const toApplyWorkflowSettings = (settings: ApplyPatchFormSettings, threads?: RuntimeValue): ApplyWorkflowSettings => {
   const normalized = getNormalizedWorkflowSettings(settings, threads);
+  const canonicalSettings = { ...settings } as ApplyPatchFormSettings & { bundlePackage?: unknown };
+  delete canonicalSettings.bundlePackage;
   const defaultCompression = getDefaultCompressionMode(settings as RuntimeValue);
   return {
-    ...settings,
+    ...canonicalSettings,
     compatibility: normalized.compatibility,
     defaultCompression,
     logging: normalized.logging,

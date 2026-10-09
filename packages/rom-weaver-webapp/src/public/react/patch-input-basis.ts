@@ -1,7 +1,7 @@
 export type PatchInputBasis = "auto" | "base" | "previous";
 type PatchInputOverride = "base" | "previous" | undefined;
 
-/** Resolve the bundle's shared rule and its per-patch exceptions. Disabled
+/** Resolve the weave's shared rule and its per-patch exceptions. Disabled
  * patches do not consume a position in a previous-output chain. */
 const resolvePatchInputBasis = ({
   mode,

@@ -1,7 +1,7 @@
 import { Lexer, Marked, Parser, Renderer } from "marked";
 import { docGroupTitle, DOC_SOURCES, SITE_ORIGIN } from "./docs-routing.mjs";
 
-// Build-time only. `marked` must never reach a browser bundle: the client
+// Build-time only. `marked` must never reach a browser weave: the client
 // imports already-rendered HTML from `virtual:rom-weaver-docs` instead. Build
 // tooling sits outside the webapp's shipped dependency graph, so anything
 // imported here is absent from the generated attribution inventories.
@@ -150,8 +150,8 @@ const rewriteDocHref = (href, slug, sourceFile) => {
 
   const resolved = new URL(href, `https://repository.invalid/docs/${sourceFile}`);
   const repositoryPath = resolved.pathname.slice(1);
-  if (repositoryPath === "docs/rom-weaver-bundle-v2.schema.json") {
-    return `/rom-weaver-bundle-v2.schema.json${resolved.hash}`;
+  if (/^docs\/rom-weaver-(?:weave|bundle)-v[12]\.schema\.json$/.test(repositoryPath)) {
+    return `/${repositoryPath.slice("docs/".length)}${resolved.hash}`;
   }
   const docsPath = repositoryPath.startsWith("docs/") ? repositoryPath.slice("docs/".length) : "";
   const route = DOC_SOURCES.find((entry) => entry.file === docsPath);

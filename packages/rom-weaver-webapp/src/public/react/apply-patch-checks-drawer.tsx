@@ -1,6 +1,6 @@
 import { Plus, TriangleAlert } from "lucide-react";
 import { Fragment, useState } from "react";
-import type { ParsedBundleChecks } from "../../types/bundle.ts";
+import type { ParsedWeaveChecks } from "../../types/weave.ts";
 import {
   CHECK_FIELDS_PAIRED,
   CHECK_LABELS,
@@ -15,14 +15,14 @@ import { DropdownSelect } from "./components/ds/dropdown-select.tsx";
 import type { PatcherStackController } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
-import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
+import type { WeavePatchMeta } from "./use-weave-apply-session.ts";
 import type { PatchInputBasis } from "./patch-input-basis.ts";
 import {
   CHECKSUM_TIMING_LABEL,
   getPatchVerificationRows,
   PreflightSuccess,
   getEmbeddedChecks,
-  bundleCheckRows,
+  weaveCheckRows,
 } from "./apply-patch-list-helpers.tsx";
 import { checkInputBasisLabel, IdentifiedCheckTitle } from "./apply-patch-chain-labels.tsx";
 import { type RomCheckActuals, matchInputCheck } from "./apply-patch-input-checks.ts";
@@ -64,8 +64,8 @@ const PatchChecksDrawer = ({
   isChainInput?: boolean;
   isChainOutput?: boolean;
   item: PatchStackItemState;
-  meta?: BundlePatchMeta;
-  onMetaChange?: (updates: Partial<BundlePatchMeta>) => void;
+  meta?: WeavePatchMeta;
+  onMetaChange?: (updates: Partial<WeavePatchMeta>) => void;
   /** Chain-output card of a run with optional/skipped patches: remind that the
    * expected output only describes the full chain. */
   outputCheckHint?: boolean;
@@ -75,7 +75,7 @@ const PatchChecksDrawer = ({
    * user-entered INPUT check is compared against for its per-row match mark. */
   romActuals?: RomCheckActuals;
   /** Checks declared by the predecessor for the same explicit input state. */
-  sharedInputChecks?: ParsedBundleChecks;
+  sharedInputChecks?: ParsedWeaveChecks;
   sharedInputLabel?: string;
 }) => {
   const setOption = patchStack.setPatchOption;
@@ -111,7 +111,7 @@ const PatchChecksDrawer = ({
     onMetaChange?.({ [field]: { ...meta?.[field], checksums } });
     syncEndpointValidation(side, checksums);
   };
-  // The bytes field carries the endpoint's exact size into the bundle metadata
+  // The bytes field carries the endpoint's exact size into the weave metadata
   // (inputChecks/outputChecks.size); it is descriptive, not a live run gate.
   const commitSize = (side: "input" | "output", raw: string) => {
     const value = raw.trim();
@@ -165,7 +165,7 @@ const PatchChecksDrawer = ({
   const ok = !disabled && item.validationState === "valid" && !userMismatch;
   const match = ok ? { label: null, ok: true } : bad ? { label: null, ok: false } : undefined;
   const hasBuiltIn = !!(inputRows.length || outputRows.length);
-  const sharedInputRows = bundleCheckRows(sharedInputChecks);
+  const sharedInputRows = weaveCheckRows(sharedInputChecks);
   const compact =
     !hasUserChecks &&
     inputRows.length > 0 &&

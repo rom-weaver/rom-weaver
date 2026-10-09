@@ -39,13 +39,13 @@ const docsShell = (slug: string, currentTab = "docs", language = "en") => (
 
 const renderDocsShell = (slug: string) => render(docsShell(slug));
 
-const BUNDLE_GUIDE_ANCHORS = [
+const WEAVE_GUIDE_ANCHORS = [
   "choose-what-to-include",
   "build-the-patch-recipe",
-  "turn-on-bundle-output-and-download-it",
+  "turn-on-weave-output-and-download-it",
   "test-the-finished-download",
   "publish-a-useful-release",
-  "open-a-hosted-bundle-in-apply",
+  "open-a-hosted-weave-in-apply",
 ];
 
 const routeFor = (slug: string) => {
@@ -57,7 +57,7 @@ const routeFor = (slug: string) => {
 const shelfTitles = [...new Set(DOC_ROUTES.map((route) => route.group))];
 const navShelfTitles = [
   "Walkthroughs",
-  "Patching & bundles",
+  "Patching & weaves",
   "ROM checks",
   "Conversion & files",
   "Saves",
@@ -142,7 +142,7 @@ describe("DocsPage", () => {
     expect(introduction?.textContent).toBe("Introduction");
     expect(introduction?.getAttribute("href")).toBe("/docs/apply-rom-patches");
     expect(rail.querySelector(".warp-rail-title")?.textContent).toMatch(
-      new RegExp(`^Patching & bundles\\d+ of ${routeFor("docs/apply-rom-patches").sections.length + 1}$`),
+      new RegExp(`^Patching & weaves\\d+ of ${routeFor("docs/apply-rom-patches").sections.length + 1}$`),
     );
     expect(railLinks.length).toBeGreaterThan(0);
     for (const link of railLinks) {
@@ -412,15 +412,24 @@ Fixture description.
     expect(sections.filter((section) => !section.label.trim())).toEqual([]);
   });
 
-  it("keeps the bundle guide's published anchors stable", () => {
-    expect(routeFor("docs/create-bundles").sections.map((section) => section.id)).toEqual(BUNDLE_GUIDE_ANCHORS);
+  it("exposes canonical weave sections and preserves published bundle anchors", () => {
+    const route = routeFor("docs/create-bundles");
+    expect(route.sections.map((section) => section.id)).toEqual(WEAVE_GUIDE_ANCHORS);
+    render(<DocsPage active slug="docs/create-bundles" />);
+    for (const legacy of [
+      "create-and-share-a-patch-bundle-in-the-browser",
+      "turn-on-bundle-output-and-download-it",
+      "open-a-hosted-bundle-in-apply",
+    ]) {
+      expect(document.getElementById(legacy)).not.toBeNull();
+    }
   });
 
-  it("publishes the browser bundle guide as one topic with self-linked sections", () => {
+  it("publishes the browser weave guide as one topic with self-linked sections", () => {
     render(<DocsPage active slug="docs/create-bundles" />);
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "Create and share a patch bundle in the browser" }),
+      screen.getByRole("heading", { level: 1, name: "Create and share a patch weave in the browser" }),
     ).toBeTruthy();
     expect(document.querySelectorAll(".docs-article > h2 > .docs-section-link")).toHaveLength(
       routeFor("docs/create-bundles").sections.length,
@@ -479,7 +488,7 @@ Fixture description.
 [Install](../reference/cli.md#install)
 [Maintainer notes](../development/mobile-safari-verification.md)
 [Source](../../crates/rom-weaver-patches/src/lib.rs)
-[Schema](../rom-weaver-bundle-v2.schema.json)
+[Schema](../rom-weaver-weave-v2.schema.json)
 ![Sample](../screenshots/first-sample-rom-world.webp)
 `,
     );
@@ -491,7 +500,7 @@ Fixture description.
     expect(route.html).toContain(
       'href="https://github.com/rom-weaver/rom-weaver/blob/main/crates/rom-weaver-patches/src/lib.rs"',
     );
-    expect(route.html).toContain('href="/rom-weaver-bundle-v2.schema.json"');
+    expect(route.html).toContain('href="/rom-weaver-weave-v2.schema.json"');
     expect(route.html).toContain('src="/docs/screenshots/first-sample-rom-world.webp"');
   });
 
@@ -774,9 +783,7 @@ Fixture description.
     const currentLink = document.querySelector('.side-nav .guide-nav a[aria-current="page"]');
     expect(currentLink?.getAttribute("href")).toBe("/docs/apply-rom-patches");
     await vi.waitFor(() => expect(currentLink?.closest<HTMLDetailsElement>(".guide-shelf")?.open).toBe(true));
-    expect(currentLink?.closest("details")?.querySelector(".guide-shelf-title")?.textContent).toBe(
-      "Patching & bundles",
-    );
+    expect(currentLink?.closest("details")?.querySelector(".guide-shelf-title")?.textContent).toBe("Patching & weaves");
   });
 
   it("keeps Find in the global Menu sheet beside the separate docs drawer", async () => {

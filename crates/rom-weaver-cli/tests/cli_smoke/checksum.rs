@@ -692,7 +692,7 @@ fn checksum_auto_extract_ignores_sidecars_unless_no_ignore() {
     fs::write(temp.child("maxcso-report.bin").path(), b"skip me").expect("maxcso sidecar");
     fs::write(temp.child("__MACOSX/ghost.bin").path(), b"ghost").expect("macosx sidecar");
 
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",

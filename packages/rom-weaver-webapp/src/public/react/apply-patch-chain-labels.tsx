@@ -1,5 +1,5 @@
 import type { Localizer } from "../../presentation/localization/index.ts";
-import type { ParsedBundleChecks } from "../../types/bundle.ts";
+import type { ParsedWeaveChecks } from "../../types/weave.ts";
 import { useExpectedRomIdentification } from "./use-expected-rom-identification.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import { useUiLocalizer } from "./settings-context.tsx";
@@ -95,7 +95,7 @@ export const checkInputBasisLabel = (
  * only partially, and the title is still the right one, so any `matched`
  * resolution is shown.
  */
-export const IdentifiedCheckTitle = ({ checks, enabled }: { checks?: ParsedBundleChecks; enabled: boolean }) => {
+export const IdentifiedCheckTitle = ({ checks, enabled }: { checks?: ParsedWeaveChecks; enabled: boolean }) => {
   const localizer = useUiLocalizer();
   const hasChecksums = !!Object.keys(checks?.checksums || {}).length;
   const identification = useExpectedRomIdentification(hasChecksums ? checks : undefined, enabled && hasChecksums);

@@ -80,7 +80,7 @@ test("releases held requests after a failed scan and allows the next audit", asy
   await pending;
   assert.deepEqual(harness.continued, ["first-weave.zip"]);
   fail = false;
-  await harness.run(harness.page, ["first-weave.zip"], "Bundle", start);
+  await harness.run(harness.page, ["first-weave.zip"], "Weave", start);
   await pending;
   assert.deepEqual(harness.continued, ["first-weave.zip", "first-weave.zip"]);
 });

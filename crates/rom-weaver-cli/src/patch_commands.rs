@@ -544,8 +544,8 @@ impl CliApp {
 
     /// Merge one source's expected input-ROM requirements into the accumulated
     /// expectation, failing on any conflicting value. Shared by the
-    /// patch-file-name requirements and rom-weaver-bundle.json bundle checks; merge order
-    /// (CLI flags, then bundle rom/patch checks, then file names) decides
+    /// patch-file-name requirements and rom-weaver-weave.json weave checks; merge order
+    /// (CLI flags, then weave rom/patch checks, then file names) decides
     /// which source a conflict is reported against.
     pub(super) fn merge_expected_input_requirements(
         &self,

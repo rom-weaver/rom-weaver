@@ -111,14 +111,14 @@ const renderAnchored = async (row: { height: number; left: number; top: number; 
 };
 
 describe("sample tutorial start", () => {
-  it("offers the bundle as a download alongside the guided run", () => {
+  it("offers the weave as a download alongside the guided run", () => {
     const onStart = vi.fn();
     const onSecondaryStart = vi.fn();
     render(
       <SampleTutorialStart
         chipLabel="Patch a sample"
         downloadHref="/first-weave.zip"
-        downloadLabel="Download a test bundle"
+        downloadLabel="Download a test weave"
         downloadName="first-weave.zip"
         error=""
         guideHref="/apply-patch?guide=apply"
@@ -126,13 +126,13 @@ describe("sample tutorial start", () => {
         loading={false}
         onStart={onStart}
         onSecondaryStart={onSecondaryStart}
-        secondaryLabel="Start guided bundle"
-        secondaryHref="/bundle?guide=bundle"
+        secondaryLabel="Start guided weave"
+        secondaryHref="/weave?guide=weave"
       />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Patch a sample/ }));
-    const download = screen.getByRole("link", { name: /Download a test bundle/ });
+    const download = screen.getByRole("link", { name: /Download a test weave/ });
     expect(download.getAttribute("href")).toBe("/first-weave.zip");
     expect(download.hasAttribute("download")).toBe(true);
 
@@ -142,31 +142,31 @@ describe("sample tutorial start", () => {
     expect(onStart).toHaveBeenCalledOnce();
     expect(screen.queryByRole("link", { name: /Start guided Apply/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Patch a sample/ }));
-    const guidedBundle = screen.getByRole("link", { name: /Start guided bundle/ });
-    expect(guidedBundle.getAttribute("href")).toBe("/bundle?guide=bundle");
-    fireEvent.click(guidedBundle);
+    const guidedWeave = screen.getByRole("link", { name: /Start guided weave/ });
+    expect(guidedWeave.getAttribute("href")).toBe("/weave?guide=weave");
+    fireEvent.click(guidedWeave);
     expect(onSecondaryStart).toHaveBeenCalledOnce();
-    expect(screen.queryByRole("link", { name: /Start guided bundle/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Start guided weave/ })).toBeNull();
   });
   it("reopens the sample menu when loading fails", async () => {
     const props = {
-      chipLabel: "Bundle a sample",
+      chipLabel: "Weave a sample",
       downloadHref: "/first-weave.zip",
-      downloadLabel: "Download a test bundle",
+      downloadLabel: "Download a test weave",
       downloadName: "first-weave.zip",
       error: "",
-      guideHref: "/bundle?guide=bundle",
-      label: "Start guided bundle",
+      guideHref: "/weave?guide=weave",
+      label: "Start guided weave",
       loading: false,
       onStart: vi.fn(),
     };
     const { rerender } = render(<SampleTutorialStart {...props} />);
-    fireEvent.click(screen.getByRole("button", { name: /Bundle a sample/ }));
-    fireEvent.click(screen.getByRole("link", { name: /Start guided bundle/ }));
-    expect(screen.queryByRole("link", { name: /Start guided bundle/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Weave a sample/ }));
+    fireEvent.click(screen.getByRole("link", { name: /Start guided weave/ }));
+    expect(screen.queryByRole("link", { name: /Start guided weave/ })).toBeNull();
     rerender(<SampleTutorialStart {...props} error="Could not load practice files" />);
     await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Could not load practice files"));
-    expect(screen.getByRole("link", { name: /Start guided bundle/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Start guided weave/ })).toBeTruthy();
   });
 });
 

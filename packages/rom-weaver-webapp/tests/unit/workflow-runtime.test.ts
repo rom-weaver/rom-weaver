@@ -30,8 +30,8 @@ const state = vi.hoisted(() => {
   };
   return {
     browserVfs,
-    bundleCreate: vi.fn(async () => ({ archivePath: "/work/result.zip", bundlePath: "/work/result.json" })),
-    bundleParse: vi.fn(async () => ({
+    weaveCreate: vi.fn(async () => ({ archivePath: "/work/result.zip", weavePath: "/work/result.json" })),
+    weaveParse: vi.fn(async () => ({
       patchSources: [{ source: { extractedPath: "/work/extracted/patch.ips", kind: "extracted" } }],
       romSource: { extractedPath: "/work/extracted/game.bin", kind: "extracted" },
     })),
@@ -130,8 +130,8 @@ vi.mock("../../src/lib/runtime/source-normalization.ts", () => ({
   assertBrowserBinarySource: state.sourceAssert,
 }));
 vi.mock("../../src/lib/runtime/wasm-command-runtime.ts", () => ({
-  invokeRomWeaverBundleCreateWorker: state.bundleCreate,
-  invokeRomWeaverBundleParseWorker: state.bundleParse,
+  invokeRomWeaverWeaveCreateWorker: state.weaveCreate,
+  invokeRomWeaverWeaveParseWorker: state.weaveParse,
   invokeRomWeaverIngestWorker: state.ingest,
   runRomWeaverProbeWorker: state.probe,
   invokeRomWeaverCreatePatchCandidatesWorker: vi.fn(),
@@ -257,7 +257,7 @@ describe("browser workflow runtime construction and outputs", () => {
   });
 });
 
-describe("browser ingest and bundle runtime", () => {
+describe("browser ingest and weave runtime", () => {
   it("stages identify packs, annotates extracted members, and adopts outputs", async () => {
     const result = await browserRuntime.ingest.run({
       checksumAlgorithms: ["crc32"],
@@ -309,11 +309,11 @@ describe("browser ingest and bundle runtime", () => {
     );
   });
 
-  it("creates and parses bundles, then releases extracted members and their scope", async () => {
-    const created = await browserRuntime.bundle.create?.({
-      bundleFileName: "exports/bundle.zip",
-      bundleRom: { fileName: "bundle.rom", source: "bundle" },
-      noBundleRom: true,
+  it("creates and parses weaves, then releases extracted members and their scope", async () => {
+    const created = await browserRuntime.weave.create?.({
+      weaveFileName: "exports/weave.zip",
+      weaveRom: { fileName: "weave.rom", source: "weave" },
+      noWeaveRom: true,
       outputName: "named",
       patches: [
         {
@@ -329,13 +329,13 @@ describe("browser ingest and bundle runtime", () => {
       romMember: "disc/track01.bin",
     } as never);
     expect(created).toMatchObject({
-      bundleOutput: { path: "/work/result.json" },
+      weaveOutput: { path: "/work/result.json" },
       archiveOutput: { path: "/work/result.zip" },
     });
-    expect(state.bundleCreate).toHaveBeenCalledWith(
+    expect(state.weaveCreate).toHaveBeenCalledWith(
       expect.objectContaining({
-        bundlePath: "/work/output-scope/bundle.zip",
-        noBundleRom: true,
+        weavePath: "/work/output-scope/weave.zip",
+        noWeaveRom: true,
         patchInputs: [{ member: "disc/track01.bin", rom: true }],
         patchPaths: expect.any(Array),
         patchTargets: [{ member: "generated/track01.bin", patch: "first" }],
@@ -345,19 +345,19 @@ describe("browser ingest and bundle runtime", () => {
       undefined,
     );
 
-    const parsed = await browserRuntime.bundle.parse?.({ fileName: "bundle.json", source: "bundle" } as never);
+    const parsed = await browserRuntime.weave.parse?.({ fileName: "weave.json", source: "weave" } as never);
     expect(parsed?.extractedFiles.size).toBe(2);
     expect(parsed?.extractedFiles.get("/work/extracted/game.bin")).toMatchObject({ name: "game.bin" });
     await parsed?.cleanup();
     expect(state.browserVfs.remove).toHaveBeenCalledWith("/work/extracted/game.bin");
     expect(state.browserVfs.remove).toHaveBeenCalledWith("/work/extracted/patch.ips");
-    expect(state.browserVfs.remove).toHaveBeenCalledWith(expect.stringContaining("bundle-parse"));
+    expect(state.browserVfs.remove).toHaveBeenCalledWith(expect.stringContaining("weave-parse"));
   });
 
-  it("cleans a bundle create failure after output creation", async () => {
-    state.bundleCreate.mockRejectedValueOnce(new Error("bundle failed"));
-    await expect(browserRuntime.bundle.create?.({ patches: [], rom: { source: "rom" } } as never)).rejects.toThrow(
-      "bundle failed",
+  it("cleans a weave create failure after output creation", async () => {
+    state.weaveCreate.mockRejectedValueOnce(new Error("weave failed"));
+    await expect(browserRuntime.weave.create?.({ patches: [], rom: { source: "rom" } } as never)).rejects.toThrow(
+      "weave failed",
     );
     expect(state.createOutputScope).toHaveBeenCalled();
   });

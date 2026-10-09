@@ -122,14 +122,14 @@ fn patch_apply_chain_transition_preserves_contextual_error_kind() {
 }
 
 #[test]
-fn patch_apply_dry_run_does_not_emit_bundle_or_create_output_directory() {
+fn patch_apply_dry_run_does_not_emit_weave_or_create_output_directory() {
     let temp = setup_temp_dir();
     let source = temp.child("source.sfc");
     source.write_str("source bytes").expect("fixture");
     let patch = temp.child("change.ips");
     patch.write_str("PATCHEOF").expect("patch fixture");
     let destination = temp.child("missing/patched.sfc");
-    let bundle = temp.child("preview.json");
+    let weave = temp.child("preview.json");
     let output = command_stdout(
         &[
             "patch",
@@ -140,8 +140,8 @@ fn patch_apply_dry_run_does_not_emit_bundle_or_create_output_directory() {
             patch.path().to_str().expect("path"),
             "--output",
             destination.path().to_str().expect("path"),
-            "--emit-bundle",
-            bundle.path().to_str().expect("path"),
+            "--emit-weave",
+            weave.path().to_str().expect("path"),
             "--no-compress",
             "--dry-run",
             "--jsonl",
@@ -153,7 +153,7 @@ fn patch_apply_dry_run_does_not_emit_bundle_or_create_output_directory() {
     let terminal = &events[0];
     assert_eq!(terminal["details"]["dry_run"], true);
     assert!(!temp.child("missing").path().exists());
-    assert!(!bundle.path().exists());
+    assert!(!weave.path().exists());
     assert_eq!(fs::read(source.path()).expect("source"), b"source bytes");
 }
 
@@ -1975,10 +1975,10 @@ fn patch_apply_infers_z3ds_subtype_from_source_extension() {
 }
 
 #[test]
-fn patch_apply_emit_bundle_records_inferred_container_output() {
+fn patch_apply_emit_weave_records_inferred_container_output() {
     let temp = setup_temp_dir();
     let (original, patch) = make_bps_patch_fixture(&temp);
-    let bundle = temp.child("rom-weaver-bundle.json");
+    let weave = temp.child("rom-weaver-weave.json");
     let output = temp.child("old-patched.zip");
 
     let events = parse_json_lines(&command_stdout(
@@ -1993,8 +1993,8 @@ fn patch_apply_emit_bundle_records_inferred_container_output() {
             "zip",
             "--default-patch-basis",
             "previous",
-            "--emit-bundle",
-            bundle.path().to_str().expect("path"),
+            "--emit-weave",
+            weave.path().to_str().expect("path"),
             "--jsonl",
         ],
         0,
@@ -2006,17 +2006,17 @@ fn patch_apply_emit_bundle_records_inferred_container_output() {
     assert_patch_envelope(apply_json, "patch-apply", "BPS", "succeeded");
     assert!(output.path().is_file());
 
-    let emitted: Value = serde_json::from_slice(&fs::read(bundle.path()).expect("bundle bytes"))
-        .expect("valid emitted bundle");
+    let emitted: Value = serde_json::from_slice(&fs::read(weave.path()).expect("weave bytes"))
+        .expect("valid emitted weave");
     assert_eq!(emitted["patchBasis"], "previous");
     assert_eq!(emitted["output"]["name"], "old-patched.zip");
 }
 
 #[test]
-fn patch_apply_emit_bundle_records_appended_output_extension() {
+fn patch_apply_emit_weave_records_appended_output_extension() {
     let temp = setup_temp_dir();
     let (original, patch) = make_bps_patch_fixture(&temp);
-    let bundle = temp.child("rom-weaver-bundle.json");
+    let weave = temp.child("rom-weaver-weave.json");
     let requested_output = temp.child("custom-output");
 
     command_stdout(
@@ -2031,15 +2031,15 @@ fn patch_apply_emit_bundle_records_appended_output_extension() {
             requested_output.path().to_str().expect("path"),
             "--format",
             "zip",
-            "--emit-bundle",
-            bundle.path().to_str().expect("path"),
+            "--emit-weave",
+            weave.path().to_str().expect("path"),
             "--jsonl",
         ],
         0,
     );
 
-    let emitted: Value = serde_json::from_slice(&fs::read(bundle.path()).expect("bundle bytes"))
-        .expect("valid emitted bundle");
+    let emitted: Value = serde_json::from_slice(&fs::read(weave.path()).expect("weave bytes"))
+        .expect("valid emitted weave");
     assert_eq!(emitted["output"]["name"], "custom-output.zip");
     assert!(temp.child("custom-output.zip").path().is_file());
 }
@@ -4835,9 +4835,9 @@ fn patch_apply_discovers_libretro_sidecar_patches_inside_input_archive() {
 
     write_tar_gz_fixture(
         &[
-            (original.path(), "bundle/game.bin"),
-            (patch.path(), "bundle/game [Hack].bps"),
-            (patch.path(), "bundle/other.bps"),
+            (original.path(), "weave/game.bin"),
+            (patch.path(), "weave/game [Hack].bps"),
+            (patch.path(), "weave/other.bps"),
         ],
         archive.path(),
     );
@@ -4940,7 +4940,7 @@ fn patch_apply_auto_extract_ambiguity_requires_select() {
     let alpha_modified = temp.child("alpha-modified.bin");
     let beta = temp.child("beta.bin");
     let patch = temp.child("update.bps");
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     let output = temp.child("output.bin");
     fs::write(alpha.path(), b"alpha payload").expect("alpha fixture");
     fs::write(alpha_modified.path(), b"alpha payload patched").expect("alpha modified fixture");
@@ -5073,7 +5073,7 @@ fn patch_apply_auto_extract_select_resolves_ambiguity() {
     let alpha_modified = temp.child("alpha-modified.bin");
     let beta = temp.child("beta.bin");
     let patch = temp.child("update.bps");
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     let output = temp.child("output.bin");
     fs::write(alpha.path(), b"alpha payload").expect("alpha fixture");
     fs::write(alpha_modified.path(), b"alpha payload patched").expect("alpha modified fixture");
@@ -5150,8 +5150,8 @@ fn patch_apply_auto_extract_filters_input_and_patch_roles() {
     let original = temp.child("game.bin");
     let modified = temp.child("game-modified.bin");
     let patch = temp.child("update.bps");
-    let input_archive = temp.child("input-bundle.zip");
-    let patch_archive = temp.child("patch-bundle.zip");
+    let input_archive = temp.child("input-weave.zip");
+    let patch_archive = temp.child("patch-weave.zip");
     let output = temp.child("output.bin");
     fs::write(original.path(), b"game payload").expect("original fixture");
     fs::write(modified.path(), b"game payload patched").expect("modified fixture");
@@ -5613,7 +5613,7 @@ fn patch_apply_auto_extract_ignores_sidecars_unless_no_ignore() {
     let sidecar_txt = temp.child("notes.txt");
     let sidecar_json = temp.child("meta.json");
     let patch = temp.child("update.bps");
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     let output = temp.child("output.bin");
     fs::write(original.path(), b"game payload").expect("fixture");
     fs::write(modified.path(), b"game payload patched").expect("fixture");

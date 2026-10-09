@@ -95,7 +95,7 @@ impl CliApp {
         // or archive expansion can change the resolved count, in which case
         // declarations cannot be attributed and only inference applies.
         let aligned = |declared_len: usize| declared_len == user_count;
-        let bundle_steps_applied = user_count > 0
+        let weave_steps_applied = user_count > 0
             && steps
                 .iter()
                 .skip(cheat_steps)
@@ -103,7 +103,7 @@ impl CliApp {
         for step in steps.iter_mut().take(cheat_steps) {
             step.metadata.verification = Some(patch_plan::PatchStepVerification::default());
         }
-        if !bundle_steps_applied {
+        if !weave_steps_applied {
             for step in steps.iter_mut().skip(cheat_steps) {
                 let verification = step
                     .metadata
@@ -157,7 +157,7 @@ impl CliApp {
                 let handler = self.patches.probe(resolved_patch_path);
                 let verification = step.metadata.verification.as_ref();
                 let declared_basis = verification.and_then(|verification| verification.basis);
-                // Unbased bundle checks constrain inference and remain a
+                // Unbased weave checks constrain inference and remain a
                 // previous-step runtime gate; only explicit declarations may
                 // use them as independent base evidence. Ignore mode retains
                 // endpoint planning without turning declarations back into
@@ -280,7 +280,7 @@ impl CliApp {
                     .with_field("patch", patch_path.display().to_string())
                     .with_field("detail", resolved.per_patch[index].message.clone());
                 let declared = &plan_inputs[index].declared_input;
-                super::super::bundle_apply::describe_expected_state(
+                super::super::weave_apply::describe_expected_state(
                     &declared.checksums,
                     declared.size,
                     &mut coded,
