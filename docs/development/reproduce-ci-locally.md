@@ -100,7 +100,23 @@ Retry browser crashes or connection failures only after checking the first error
 
 `docker` is conditional on image-plumbing changes and is most directly reproduced with the source-build commands in the [self-hosting guide](../hosting/self-hosting.md). The `docker` job passes `IDENTIFY_DATA=prebuilt` to every leg it builds. For the CLI image it stages `target/identify-release/share`; run `mise run identify-data` and `node scripts/build-identify-release-data.mjs --tree-only` before that variant. For the webapp image it stages the built packs under `target/identify-data/v1`; run `mise run identify-data` and `cp -a crates/rom-weaver-cli/data/identify/v1 target/identify-data/v1` before that variant.
 
-`docker-prebuilt` is `docker build --build-arg DIST=prebuilt .` with the bundle staged under `prebuilt/`. The CLI job uses `BINARY=prebuilt` when its packaging inputs change.
+`docker-prebuilt` is `docker build --file packages/rom-weaver-webapp/Dockerfile --build-arg DIST=prebuilt .` with the bundle staged under `prebuilt/`. The CLI job uses `BINARY=prebuilt` when its packaging inputs change.
+
+Build the clean source-input check even when using prebuilt identify data:
+
+```bash
+docker build --target identify-data-verify .
+```
+
+Run the container checks against your locally tagged images:
+
+```bash
+node scripts/ci/docker-smoke.mjs --image rom-weaver-cli:local --kind cli
+node scripts/ci/docker-smoke.mjs --image rom-weaver-webapp:local --kind webapp
+```
+
+Both commands need Docker, Node.js, and Python 3. The webapp check also needs the webapp dependencies and Playwright Chromium installed. It runs HTTP, HTTPS, the documented Nginx subpath configuration, and a browser import/apply/download journey. It creates and removes its own containers, network, and synthetic fixtures.
+
 
 <a id="run-the-broad-gate-first"></a>
 

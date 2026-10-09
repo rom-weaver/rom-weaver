@@ -4,7 +4,7 @@ ARG BINARY=source
 ARG IDENTIFY_DATA=source
 ARG DOCS=source
 
-FROM node:24-bookworm AS identify-data-source
+FROM node:24-bookworm AS identify-data-inputs
 WORKDIR /src
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends curl unzip zstd \
@@ -14,6 +14,13 @@ RUN apt-get update \
 COPY package.json package-lock.json /src/
 RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY scripts /src/scripts
+COPY packages/rom-weaver-webapp/src/lib /src/packages/rom-weaver-webapp/src/lib
+COPY crates/rom-weaver-checksum/src/platform-names.json /src/crates/rom-weaver-checksum/src/platform-names.json
+
+FROM identify-data-inputs AS identify-data-verify
+RUN node --input-type=module -e "await import('./scripts/ensure-identify-data.mjs'); await import('./scripts/build-identify-release-data.mjs')"
+
+FROM identify-data-inputs AS identify-data-source
 RUN node scripts/ensure-identify-data.mjs \
     && node scripts/build-identify-release-data.mjs \
     && cp -a target/identify-release/share /share

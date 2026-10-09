@@ -61,10 +61,70 @@ test("the default source build prepares identify data before WASM attribution", 
 test("source builds install the pinned icon renderer before building the webapp", () => {
   for (const wasm of ["source", "prebuilt"]) {
     const instructions = inheritedInstructions("app", { WASM: wasm, IDENTIFY_DATA: "source" });
-    const install = instructions.findIndex((line) =>
-      line.includes("npm ci") && line.includes("npm exec -- playwright install --with-deps --only-shell chromium"),
+    const install = instructions.findIndex(
+      (line) =>
+        line.includes("npm ci") &&
+        line.includes("npm exec -- playwright install --with-deps --only-shell chromium"),
     );
-    const build = instructions.findIndex((line) => line.includes("npm --prefix packages/rom-weaver-webapp run build"));
-    assert.ok(install >= 0 && build > install, `WASM=${wasm} needs the package-pinned renderer before its build`);
+    const build = instructions.findIndex((line) =>
+      line.includes("npm --prefix packages/rom-weaver-webapp run build"),
+    );
+    assert.ok(
+      install >= 0 && build > install,
+      `WASM=${wasm} needs the package-pinned renderer before its build`,
+    );
+  }
+});
+
+const buildAction = readFileSync(
+  new URL("../../.github/actions/docker-build-arch/action.yml", import.meta.url),
+  "utf8",
+);
+const workflow = readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
+
+function assertRuntimeSmoke(action) {
+  assert.match(action, /name: Load image for runtime smoke[\s\S]*?load: true/u);
+  assert.match(action, /tags: rom-weaver-smoke:\$\{\{ inputs.image \}\}-\$\{\{ inputs.arch \}\}/u);
+  assert.match(
+    action,
+    /run: node scripts\/ci\/docker-smoke\.mjs --image "\$SMOKE_IMAGE" --kind "\$SMOKE_KIND"/u,
+  );
+}
+
+test("Docker action loads and exercises runtime images without replacing published attestations", () => {
+  assertRuntimeSmoke(buildAction);
+  assert.match(
+    buildAction,
+    /provenance: \$\{\{ inputs.push == 'true' && 'mode=max' \|\| 'false' \}\}/u,
+  );
+  assert.match(buildAction, /push-by-digest=true,name-canonical=true,push=true/u);
+  assert.match(buildAction, /value: \$\{\{ steps.build.outputs.digest \}\}/u);
+});
+
+test("runtime smoke wiring rejects a discarded image or missing invocation", () => {
+  assert.throws(() => assertRuntimeSmoke(buildAction.replace("load: true", "load: false")));
+  assert.throws(() =>
+    assertRuntimeSmoke(
+      buildAction.replace("run: node scripts/ci/docker-smoke.mjs", "run: echo skipped"),
+    ),
+  );
+});
+
+test("CI smokes source and prebuilt images and checks clean identify source imports", () => {
+  const source = workflow.split("\n  docker:\n")[1].split(/\n  [\w-]+:\n/u)[0];
+  const prebuilt = workflow.split("\n  docker-prebuilt:\n")[1].split(/\n  [\w-]+:\n/u)[0];
+  assert.match(source, /smoke-kind: \$\{\{ matrix.name == 'CLI' && 'cli' \|\| 'webapp' \}\}/u);
+  assert.match(
+    source,
+    /if: matrix.name == 'CLI' && matrix.arch == 'amd64'\n\s+run: docker build --file Dockerfile --target identify-data-verify \./u,
+  );
+  assert.match(prebuilt, /build-args: DIST=prebuilt\n\s+smoke-kind: webapp/u);
+  for (const job of [source, prebuilt]) {
+    assert.match(job, /uses: actions\/setup-node@/u);
+    assert.match(
+      job,
+      /npm --prefix packages\/rom-weaver-webapp ci --ignore-scripts --no-audit --no-fund/u,
+    );
+    assert.match(job, /playwright install --with-deps --only-shell chromium/u);
   }
 });
