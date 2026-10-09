@@ -27,6 +27,7 @@ describe("rom-weaver command boundary helpers", () => {
       "save",
       "tools",
       "plan-extract-batch",
+      "bundle",
     ]);
     expect(KNOWN_PATCH_COMMAND_TYPES).toEqual(["apply", "validate", "create"]);
   });
