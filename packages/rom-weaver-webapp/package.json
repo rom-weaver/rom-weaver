@@ -49,6 +49,7 @@
     "brand:check": "node scripts/render-brand-marks.mjs --check",
     "brand:render": "node scripts/render-brand-marks.mjs",
     "build": "npm run accents:generate && node ../../scripts/ensure-identify-data.mjs && node scripts/ensure-emulatorjs.mjs && npm run icons:channels && vite build && node scripts/verify-seo-build.mjs",
+    "capture:video": "node scripts/capture-apply-video.mjs",
     "capture:screenshots": "node scripts/capture-design-screenshots.mjs",
     "check:size": "node scripts/check-size-budget.mjs",
     "dev": "npm run accents:generate && node ../../scripts/ensure-identify-data.mjs && node scripts/ensure-emulatorjs.mjs && node scripts/ensure-wasm-build.mjs && node scripts/dev-server.mjs",

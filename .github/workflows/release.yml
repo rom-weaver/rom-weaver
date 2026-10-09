@@ -214,7 +214,7 @@ jobs:
         uses: ./.github/actions/setup-build-env
         with:
           tools: node
-          apt-packages: imagemagick
+          apt-packages: imagemagick ffmpeg libarchive-tools
           cargo-cache: "false"
           cache-save: "false"
           webapp-deps: "true"
@@ -305,17 +305,26 @@ jobs:
             exit 1
           fi
           npm --prefix packages/rom-weaver-webapp run capture:screenshots
+          npm --prefix packages/rom-weaver-webapp run capture:video
 
       - name: Upload screenshot failure diagnostics
         if: failure() && steps.screenshot-capture.outcome == 'failure'
         uses: actions/upload-artifact@v7
         with:
           name: screenshot-failure-diagnostics
+          include-hidden-files: true
           path: |
             docs/screenshots/*-failure.png
             screenshot-server.log
+            .cache/agents/scratch/release-video/
           retention-days: 7
           if-no-files-found: warn
+
+      - name: Publish README apply video
+        if: steps.release-pr.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+        run: node scripts/ci/publish-apply-video.mjs
 
       - name: Commit docs screenshots
         if: steps.release-pr.outputs.found == 'true'
