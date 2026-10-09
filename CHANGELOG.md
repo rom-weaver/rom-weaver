@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.20.1](https://github.com/rom-weaver/rom-weaver/compare/v0.20.0...v0.20.1) (2026-10-09)
+
+
+### User Experience
+
+* improve search discovery for ROM tools ([#1047](https://github.com/rom-weaver/rom-weaver/issues/1047)) ([76cd3db](https://github.com/rom-weaver/rom-weaver/commit/76cd3db9926182b3e3a602981a6dde2a191e6a62))
+* rename variant to header removed ([#1046](https://github.com/rom-weaver/rom-weaver/issues/1046)) ([776c889](https://github.com/rom-weaver/rom-weaver/commit/776c889765deb2029afef87a09b42f6edf4558d4))
+
+
+### Bug Fixes
+
+* **cli:** discover installed cheat data ([#1048](https://github.com/rom-weaver/rom-weaver/issues/1048)) ([c93eef7](https://github.com/rom-weaver/rom-weaver/commit/c93eef7216d67234410464ffd8ec93accc7de4bd))
+
+
+### Documentation
+
+* fix broken anchors and stale FAQ entry ([#1044](https://github.com/rom-weaver/rom-weaver/issues/1044)) ([fe138ec](https://github.com/rom-weaver/rom-weaver/commit/fe138ec2dedea76589d03f72f115e0171e2d1ec3))
+
+
+### Internal
+
+* reuse cached wasm for eligible arm PR builds ([#1045](https://github.com/rom-weaver/rom-weaver/issues/1045)) ([5a742a3](https://github.com/rom-weaver/rom-weaver/commit/5a742a38dca3e7a8a679bfbae4bfcad743eb5923))
+
 ## [0.20.0](https://github.com/rom-weaver/rom-weaver/releases/tag/v0.20.0) (2026-10-08)
 
 ### Highlights
