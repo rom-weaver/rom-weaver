@@ -23,7 +23,7 @@ Do not mount rom-weaver at the root of an origin that also serves other apps. At
 
 ### Run the published image
 
-The release image includes the built webapp and its static server. Run it on port 8080 for an HTTPS reverse proxy or local testing:
+Run the published image behind an HTTPS reverse proxy, or locally on port 8080:
 
 ```bash
 docker run --detach --name rom-weaver-webapp \
@@ -47,7 +47,7 @@ docker run --detach --name rom-weaver-webapp \
   ghcr.io/rom-weaver/rom-weaver-webapp:latest
 ```
 
-With `fullchain.pem` and `privkey.pem` in `./certs`, open `https://localhost:8443/`. The image can generate a temporary self-signed certificate when `/certs` does not contain both files; use a trusted certificate for anything beyond local testing.
+Place `fullchain.pem` and `privkey.pem` in `./certs`, then open `https://localhost:8443/`. Without both files, the image generates a self-signed certificate for local testing only.
 
 ### Run with Compose
 
@@ -64,7 +64,7 @@ docker compose up --detach
 curl --fail --silent --show-error http://localhost:8080/health
 ```
 
-Only Docker with Compose is required. To build the image from source instead, clone the repository and add `--build` to the `docker compose up` command from its checkout. That advanced path installs the required Rust, WASI SDK, Binaryen, and Node.js toolchains; the first build compiles the full WASM application and can take several minutes.
+Only Docker with Compose is required. For a source build, clone the repository and run `docker compose up --build --detach` there. Docker installs Rust, WASI SDK, Binaryen, and Node.js; the first WASM build takes several minutes.
 
 To use another host port:
 
@@ -72,7 +72,7 @@ To use another host port:
 PORT=3000 docker compose up --detach
 ```
 
-The container listens on port 8080 over plain HTTP. This is suitable when an HTTPS reverse proxy terminates TLS. The proxy must present a certificate that the browser trusts and forward the request to the container. For an Nginx subpath route:
+The container serves HTTP on port 8080. Configure your HTTPS proxy with a browser-trusted certificate. For an Nginx subpath route:
 
 ```nginx
 location = /rom-weaver {
@@ -86,26 +86,26 @@ location /rom-weaver/ {
 }
 ```
 
-The trailing slashes on both `location` and `proxy_pass` are significant: the proxy removes `/rom-weaver/` before forwarding the request. The `proxy_redirect` rules keep container redirects under `/rom-weaver/`, including legacy workflow URLs. The container adds the required COOP/COEP headers, serves SPA fallbacks, and serves the build's precompressed Brotli files.
+Keep both trailing slashes: they remove `/rom-weaver/` from forwarded requests. The `proxy_redirect` rules preserve that prefix on redirects, including legacy URLs. The container supplies COOP/COEP headers, SPA fallbacks, and precompressed Brotli files.
 
 For a dedicated subdomain, route its `/` location to the same container.
 
-If you do not have a reverse proxy, Compose can terminate HTTPS in the container. If you do not provide a certificate pair, it generates a temporary self-signed certificate for `localhost` that expires after seven days:
+Without a proxy, enable container HTTPS. Without a certificate pair, it generates a seven-day self-signed certificate for `localhost`:
 
 ```bash
 HTTPS_PORT=8443 docker compose up --detach
 ```
 
-Open `https://localhost:8443/`. A browser may allow you to proceed through the warning for local testing, but an expired or untrusted certificate can still prevent service-worker registration. For reliable service-worker and WASM thread support, install/trust the certificate or use a trusted certificate.
+Open `https://localhost:8443/`. Bypassing the browser warning may still block service-worker registration. Install/trust the certificate for local testing; use a trusted certificate elsewhere.
 
-For a trusted certificate, put `fullchain.pem` and `privkey.pem` in a host directory and mount it with `HTTPS_CERT_DIR`. The container uses those default filenames when both are present:
+Mount a trusted `fullchain.pem` and `privkey.pem` pair using `HTTPS_CERT_DIR`:
 
 ```bash
 HTTPS_PORT=8443 HTTPS_CERT_DIR=/path/to/certs \
   docker compose up --detach
 ```
 
-To use different filenames or mounted paths, set both `HTTPS_CERT` and `HTTPS_KEY` to paths inside `/certs`. `HTTPS_PORT` is the host port and enables the container's TLS listener; it is not used together with `PORT`. The generated certificate is never suitable for production or public/LAN use.
+For other filenames, set both `HTTPS_CERT` and `HTTPS_KEY` to paths inside `/certs`. Use `HTTPS_PORT` instead of `PORT` to select the host port and enable TLS. Generated certificates are unsuitable for production or public/LAN use.
 
 Useful lifecycle commands:
 
