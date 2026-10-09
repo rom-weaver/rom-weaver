@@ -15,6 +15,7 @@ Documentation images show real app controls with homebrew samples or a generated
 - [Create a bundle](#create-a-bundle)
 - [Sample ROMs](#sample-roms)
 - [Regenerate the captures](#regenerate-the-captures)
+- [Refresh the README video](#refresh-the-readme-video)
 
 <!-- END doctoc -->
 
@@ -102,3 +103,17 @@ Keep image paths relative to the Markdown page. The documentation renderer rewri
 After a full capture, the script rewrites each image's `width` and `height` in `README.md` and `docs/` to its measured pixel size. Run `node packages/rom-weaver-webapp/scripts/sync-docs-screenshot-sizes.mjs` after replacing images by hand. Keep alt text and captions specific to the state shown.
 
 The build checks that each subject has every required format, viewport, and theme variant, and that its owning guide references them.
+
+## Refresh the README video
+
+Start the production preview server, then run:
+
+```bash
+npm --prefix packages/rom-weaver-webapp run capture:video
+```
+
+Install FFmpeg and `bsdtar` first (`ffmpeg` and `libarchive-tools` on Ubuntu). Set `ROM_WEAVER_VIDEO_BASE_URL` when the preview uses a different address. Set `ROM_WEAVER_FFMPEG` when FFmpeg is outside your executable search path. The default preview address is `https://localhost:4173/`.
+
+The capture imports the bundled test archive, applies both patches, and selects 7z. It ends with the download ready, then verifies the downloaded archive's ROM bytes. The MP4 uses H.264, 30 fps, and 1200 × 900 pixels. Output and capture evidence live under `.cache/agents/scratch/release-video/`.
+
+Release dispatch captures this video alongside screenshots on the release PR. It uploads the validated MP4 and replaces the README's `apply-video` marker block. The upload uses `RELEASE_PLEASE_TOKEN`; GitHub attachments require a user token. The installation `GITHUB_TOKEN` cannot upload these attachments. Capture or upload failures stop the refresh before the documentation commit. Re-dispatch creates a new attachment; previous links remain valid.

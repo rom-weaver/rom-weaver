@@ -32,9 +32,11 @@ Files stay on your device. No uploads, accounts, or telemetry. Works offline aft
   <a href="LICENSE"><img alt="AGPL-3.0-or-later license" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-365d82"></a>
 </p>
 
+<!-- apply-video:start -->
 Apply two sample patches and download the result as 7z.
 
 <https://github.com/user-attachments/assets/558b4f4d-640c-410e-a866-cd9ff97ac84c>
+<!-- apply-video:end -->
 
 <details>
 <summary>Contents</summary>
