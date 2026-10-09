@@ -568,6 +568,14 @@ test("real lifecycle host helper changes select WASM without selecting unrelated
   );
 });
 
+test("self-hosting guide changes exercise the documented Docker proxy", () => {
+  const result = classifyFor("pull_request", "docs/hosting/self-hosting.md");
+  assert.equal(result.webapp, "true");
+  assert.equal(result.docker_webapp, "true");
+  assert.equal(result.docker_prebuilt, "true");
+  assert.equal(result.docker_cli, "false");
+});
+
 test("Docker runtime smoke changes select both image builds and the prebuilt bundle", () => {
   const result = classifyFor("pull_request", "scripts/ci/docker-smoke.mjs");
   assert.equal(result.full, "false");
