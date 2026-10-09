@@ -1,3 +1,4 @@
+import { getWeaveRuntime } from "../../lib/runtime/bundle-runtime.ts";
 import { validatePatchDependencies } from "../../lib/weave/weave-targets.ts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -430,7 +431,7 @@ const useWeaveExport = ({
     const patchIds = getPatchIds();
     const outputHeader = getOutputHeader?.();
     const browserRuntime = await loadBrowserRuntime();
-    const create = browserRuntime.weave?.create;
+    const create = getWeaveRuntime(browserRuntime)?.create;
     const validation = validateWeaveExportStart({ create, patches, rom });
     if ("error" in validation) {
       setError(validation.error);

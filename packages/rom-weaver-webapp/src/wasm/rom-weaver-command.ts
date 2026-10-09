@@ -17,6 +17,16 @@ import type {
 
 export { KNOWN_COMMAND_TYPES, KNOWN_PATCH_COMMAND_TYPES } from "./generated/rom-weaver-command-types.ts";
 
+type CanonicalRomWeaverCommand = Exclude<RomWeaverCommand, { type: "bundle" }>;
+type RomWeaverBundleCommand = Extract<RomWeaverCommand, { type: "bundle" }>["args"];
+type RomWeaverBundleCommandType = RomWeaverBundleCommand["type"];
+type RomWeaverBundleCommandBranch = {
+  [TType in RomWeaverBundleCommandType]: {
+    args: Extract<RomWeaverBundleCommand, { type: TType }>["args"];
+    type: `bundle-${TType}`;
+  };
+}[RomWeaverBundleCommandType];
+
 type RomWeaverPatchCommand = Extract<RomWeaverCommand, { type: "patch" }>["args"];
 type RomWeaverPatchCommandType = RomWeaverPatchCommand["type"];
 type RomWeaverWeaveCommand = Extract<RomWeaverCommand, { type: "weave" }>["args"];
@@ -26,7 +36,7 @@ type RomWeaverToolsCommandType = RomWeaverToolsCommand["type"];
 type RomWeaverSaveCommand = Extract<RomWeaverCommand, { type: "save" }>["args"];
 type RomWeaverSaveCommandType = RomWeaverSaveCommand["type"];
 type RomWeaverTopLevelCommand = Exclude<
-  RomWeaverCommand,
+  CanonicalRomWeaverCommand,
   { type: "weave" } | { type: "patch" } | { type: "save" } | { type: "tools" }
 >;
 type RomWeaverTopLevelCommandType = RomWeaverTopLevelCommand["type"];
@@ -68,12 +78,14 @@ export type RomWeaverCommandLabel =
   | RomWeaverTopLevelCommandType
   | RomWeaverPatchCommandLabel
   | RomWeaverWeaveCommandLabel
+  | `bundle-${RomWeaverBundleCommandType}`
   | RomWeaverToolsCommandLabel
   | `save-${RomWeaverSaveCommandType}`;
 type RomWeaverCommandBranch =
   | RomWeaverTopLevelCommandBranch
   | RomWeaverPatchCommandBranch
   | RomWeaverWeaveCommandBranch
+  | RomWeaverBundleCommandBranch
   | RomWeaverToolsCommandBranch
   | RomWeaverSaveCommandBranch;
 export type RomWeaverCommandBranchArgs<TType extends RomWeaverCommandLabel> = Extract<
@@ -91,15 +103,9 @@ export type RomWeaverBrowserThreadRequestOptions = {
   maxThreads?: number | null | undefined;
 };
 
-export function createRomWeaverCommand<TType extends RomWeaverCommandLabel | "bundle-parse" | "bundle-create">(
+export function createRomWeaverCommand<TType extends RomWeaverCommandLabel>(
   type: TType,
-  args: RomWeaverCommandBranchArgs<
-    TType extends "bundle-parse"
-      ? "weave-parse"
-      : TType extends "bundle-create"
-        ? "weave-create"
-        : Extract<TType, RomWeaverCommandLabel>
-  >,
+  args: RomWeaverCommandBranchArgs<TType>,
 ): RomWeaverCommand {
   switch (type) {
     case "probe":
@@ -111,7 +117,7 @@ export function createRomWeaverCommand<TType extends RomWeaverCommandLabel | "bu
     case "compress":
     case "trim":
     case "plan-extract-batch":
-      return { args, type } as RomWeaverCommand;
+      return { args, type } as CanonicalRomWeaverCommand;
     case "patch-apply":
     case "patch-validate":
     case "patch-create":
@@ -131,9 +137,9 @@ export function createRomWeaverCommand<TType extends RomWeaverCommandLabel | "bu
       const family = type.slice(0, separator);
       const command = {
         args: { args, type: type.slice(separator + 1) },
-        type: family === "bundle" ? "weave" : family,
+        type: family,
       } as RomWeaverCommand;
-      return family === "bundle" ? normalizeRomWeaverCommand(command) : command;
+      return command;
     }
     default:
       return assertNever(type);
@@ -164,7 +170,7 @@ export function normalizeRomWeaverRunRequest(
   return { command, output };
 }
 
-function normalizeRomWeaverCommand(command: RomWeaverCommand): RomWeaverCommand {
+function normalizeRomWeaverCommand(command: RomWeaverCommand): CanonicalRomWeaverCommand {
   if (!isObjectRecord(command)) {
     throw new TypeError("rom-weaver typed command must be an object");
   }
@@ -175,7 +181,7 @@ function normalizeRomWeaverCommand(command: RomWeaverCommand): RomWeaverCommand 
   }
 
   const args = isObjectRecord(command.args) ? { ...command.args } : {};
-  return { args, type } as RomWeaverCommand;
+  return { args, type } as CanonicalRomWeaverCommand;
 }
 
 function normalizeRomWeaverRunOutputOptions(
@@ -192,27 +198,20 @@ function normalizeRomWeaverRunOutputOptions(
   return normalized;
 }
 
-function normalizeLegacyRomWeaverCommand(command: RomWeaverCommand): RomWeaverCommand {
-  if ((command as { type: unknown }).type === "bundle") return normalizeRomWeaverCommand(command);
-  if (command.type !== "weave" && command.type !== "patch") return command;
-  const args = command.args?.args;
-  if (!isObjectRecord(args)) return command;
-  if (LEGACY_WEAVE_FIELDS.some(([legacy]) => Object.hasOwn(args, legacy))) {
-    return normalizeRomWeaverCommand(command);
-  }
-  return command;
-}
-
 export function readRomWeaverRunInputCommand(input: RomWeaverRunInput): RomWeaverCommand {
-  return normalizeLegacyRomWeaverCommand(isRomWeaverRunRequestLike(input) ? input.command : input);
+  return isRomWeaverRunRequestLike(input) ? input.command : input;
 }
 
 export function readRomWeaverRunRequestCommand(request: RomWeaverRunRequest): RomWeaverCommand {
-  return normalizeLegacyRomWeaverCommand(request.command);
+  return request.command;
 }
 
-function readRomWeaverCommandBranch(command: RomWeaverCommand): RomWeaverCommandBranch {
-  command = normalizeLegacyRomWeaverCommand(command);
+function readRomWeaverCommandBranch(inputCommand: RomWeaverCommand): RomWeaverCommandBranch {
+  if (inputCommand.type === "bundle") {
+    assertKnownRomWeaverWeaveCommandType(inputCommand.args.type, "rom-weaver bundle command");
+    return { type: `bundle-${inputCommand.args.type}`, args: inputCommand.args.args } as RomWeaverBundleCommandBranch;
+  }
+  const command = inputCommand;
   switch (command.type) {
     case "probe":
     case "extract":
@@ -281,6 +280,7 @@ export function collectRomWeaverRunInputPaths(
       collectRomWeaverPatchInputPaths(paths, command.args);
       break;
     case "weave":
+    case "bundle":
       collectRomWeaverWeaveInputPaths(paths, command.args);
       break;
     case "tools":
@@ -309,8 +309,6 @@ export function withRomWeaverDefaultThreads(
   request: RomWeaverRunRequest,
   defaultThreads: RomWeaverDefaultThreads,
 ): RomWeaverRunRequest {
-  const command = normalizeLegacyRomWeaverCommand(request.command);
-  if (command !== request.command) request = { ...request, command };
   if (!(defaultThreads && romWeaverCommandSupportsThreads(request.command))) return request;
   const args = readRomWeaverCommandArgs(request.command);
   if (Object.hasOwn(args, "threads") && args.threads !== undefined && args.threads !== null) {
@@ -326,8 +324,6 @@ export function clampRomWeaverBrowserThreadRequest(
   request: RomWeaverRunRequest,
   options: RomWeaverBrowserThreadRequestOptions = {},
 ): RomWeaverRunRequest {
-  const command = normalizeLegacyRomWeaverCommand(request.command);
-  if (command !== request.command) request = { ...request, command };
   if (!romWeaverCommandSupportsThreads(request.command)) return request;
   const args = readRomWeaverCommandArgs(request.command);
   if (!Object.hasOwn(args, "threads") || args.threads === undefined || args.threads === null) {
@@ -366,8 +362,8 @@ export function readRomWeaverRequestedThreadCount(
   return parseRomWeaverThreadBudgetCount(readRomWeaverCommandArgs(command).threads, options);
 }
 
-export function romWeaverCommandSupportsThreads(command: RomWeaverCommand): boolean {
-  command = normalizeLegacyRomWeaverCommand(command);
+export function romWeaverCommandSupportsThreads(inputCommand: RomWeaverCommand): boolean {
+  const command = inputCommand;
   switch (command.type) {
     case "probe":
     case "cheat":
@@ -381,6 +377,7 @@ export function romWeaverCommandSupportsThreads(command: RomWeaverCommand): bool
       return true;
     case "patch":
     case "weave":
+    case "bundle":
       if (!NESTED_COMMAND_TYPES[command.type](command.args.type)) return unhandledCommandShape(command.args);
       return true;
     case "tools":
@@ -399,6 +396,7 @@ export function romWeaverCommandSupportsThreads(command: RomWeaverCommand): bool
 const NESTED_COMMAND_TYPES = {
   patch: isKnownRomWeaverPatchCommandType,
   weave: isKnownRomWeaverWeaveCommandType,
+  bundle: isKnownRomWeaverWeaveCommandType,
   tools: isKnownRomWeaverToolsCommandType,
   save: isKnownRomWeaverSaveCommandType,
 };
@@ -420,7 +418,7 @@ function normalizeLegacyWeaveFields(args: Record<string, unknown>): void {
 function normalizeRomWeaverNestedCommand(
   family: "patch" | "weave" | "tools" | "save",
   command: unknown,
-): RomWeaverCommand {
+): CanonicalRomWeaverCommand {
   const label = `rom-weaver ${family} command`;
   if (!isObjectRecord(command)) throw new TypeError(`${label} requires an object \`args\` payload`);
   let type = command.type;
@@ -434,16 +432,22 @@ function normalizeRomWeaverNestedCommand(
   }
   const args = isObjectRecord(command.args) ? { ...command.args } : {};
   if (family === "weave" || (family === "patch" && type === "apply")) normalizeLegacyWeaveFields(args);
-  return { args: { args, type }, type: family } as RomWeaverCommand;
+  return { args: { args, type }, type: family } as CanonicalRomWeaverCommand;
 }
 
-function collectRomWeaverWeaveInputPaths(paths: Set<string>, command: RomWeaverWeaveCommand) {
+function collectRomWeaverWeaveInputPaths(paths: Set<string>, command: RomWeaverWeaveCommand | RomWeaverBundleCommand) {
   switch (command.type) {
     case "parse":
       pushPathValue(paths, command.args.input);
       return;
     case "create":
       pushPathValue(paths, command.args.rom);
+      pushPathValue(
+        paths,
+        Object.hasOwn(command.args, "weave_rom")
+          ? (command.args as Record<string, unknown>).weave_rom
+          : (command.args as Record<string, unknown>).bundle_rom,
+      );
       pushPathValues(paths, command.args.patch);
       return;
     default:
@@ -477,8 +481,11 @@ function replaceRomWeaverRunRequestCommandArgs(
   };
 }
 
-function replaceRomWeaverCommandArgs(command: RomWeaverCommand, args: Record<string, unknown>): RomWeaverCommand {
-  command = normalizeLegacyRomWeaverCommand(command);
+function replaceRomWeaverCommandArgs(inputCommand: RomWeaverCommand, args: Record<string, unknown>): RomWeaverCommand {
+  if (inputCommand.type === "bundle") {
+    return { ...inputCommand, args: { ...inputCommand.args, args } } as RomWeaverCommand;
+  }
+  const command = inputCommand;
   switch (command.type) {
     case "probe":
     case "extract":

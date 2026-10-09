@@ -1412,7 +1412,7 @@ fn weave_selection_flags_suppress_prompt() {
 }
 
 #[test]
-fn legacy_weave_command_tag_and_fields_serialize_canonically() {
+fn legacy_bundle_command_tag_and_fields_keep_serialized_contract() {
     let command: Commands = serde_json::from_value(serde_json::json!({
         "type": "bundle", "args": {"type": "create", "args": {
             "output": "rom-weaver-weave.json", "bundle": "release.zip",
@@ -1421,17 +1421,56 @@ fn legacy_weave_command_tag_and_fields_serialize_canonically() {
     }))
     .expect("legacy command");
     let value = serde_json::to_value(command).expect("canonical command");
-    assert_eq!(value["type"], "weave");
+    assert_eq!(value["type"], "bundle");
     let args = &value["args"]["args"];
-    assert_eq!(args["weave"], "release.zip");
-    assert_eq!(args["weave_rom"], "game.bin");
-    assert_eq!(args["no_weave_rom"], true);
-    assert!(args.get("bundle").is_none());
+    assert_eq!(args["bundle"], "release.zip");
+    assert_eq!(args["bundle_rom"], "game.bin");
+    assert_eq!(args["no_bundle_rom"], true);
+    assert!(args.get("weave").is_none());
     let apply: super::PatchApplyCommand = serde_json::from_value(serde_json::json!({
         "input": "game.bin", "bundle": "rom-weaver-bundle.json"
     }))
     .expect("legacy apply field");
     let value = serde_json::to_value(apply).expect("canonical apply");
-    assert_eq!(value["weave"], "rom-weaver-bundle.json");
-    assert!(value.get("bundle").is_none());
+    assert_eq!(value["bundle"], "rom-weaver-bundle.json");
+    assert!(value.get("weave").is_none());
+}
+
+#[test]
+fn old_bundle_source_and_typed_result_contracts_remain_usable() {
+    let recipe: super::RomWeaverBundle = serde_json::from_value(serde_json::json!({
+        "version": 1, "patches": [{ "path": "a.ips" }]
+    }))
+    .expect("recipe");
+    let command = super::BundleCreateCommand {
+        bundle: Some(PathBuf::from("release.zip")),
+        bundle_rom: Some(PathBuf::from("game.bin")),
+        no_bundle_rom: false,
+        ..serde_json::from_value(serde_json::json!({"output": "recipe.json"})).expect("create")
+    };
+    let command = super::Commands::Bundle(super::BundleCommands::Create(Box::new(command)));
+    assert!(matches!(
+        command,
+        super::Commands::Bundle(super::BundleCommands::Create(_))
+    ));
+    let serialized = serde_json::to_value(command).expect("command");
+    assert_eq!(serialized["type"], "bundle");
+    assert_eq!(serialized["args"]["args"]["bundle"], "release.zip");
+    let result = super::BundleCreateResult {
+        bundle_path: "recipe.json".to_string(),
+        archive_path: None,
+        bundle: recipe.clone(),
+        warnings: Vec::new(),
+    };
+    let mut serialized = serde_json::to_value(result).expect("result");
+    serialized["weave"] = serialized["bundle"].clone();
+    serialized["weave_path"] = serialized["bundle_path"].clone();
+    let restored: super::BundleCreateResult =
+        serde_json::from_value(serialized).expect("old typed reader");
+    assert_eq!(restored.bundle, recipe);
+    assert_eq!(restored.bundle_path, "recipe.json");
+    let schema: serde_json::Value =
+        serde_json::from_str(super::BUNDLE_JSON_SCHEMA).expect("schema");
+    assert_eq!(schema["$id"], super::BUNDLE_JSON_SCHEMA_URL);
+    assert_ne!(super::BUNDLE_JSON_SCHEMA_URL, super::WEAVE_JSON_SCHEMA_URL);
 }

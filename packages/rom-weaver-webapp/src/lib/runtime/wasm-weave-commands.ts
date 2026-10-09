@@ -3,7 +3,7 @@ import type { LogLevel } from "../../types/logging.ts";
 import type { WorkflowRuntimeLog } from "../../types/workflow-runtime-adapter.ts";
 import type { PatchInputRef } from "../../types/workflow-runtime-types.ts";
 import { createRomWeaverCommand } from "../../wasm/index.ts";
-import type { PatchBasisMode } from "../../wasm/index.ts";
+import type { RomWeaverCommandBranchArgs } from "../../wasm/index.ts";
 import { getRomWeaverRunEventDetails } from "../../workers/rom-weaver/rom-weaver-run-events.ts";
 import { withRomWeaverFailureKind } from "../../workers/rom-weaver/runner-errors.ts";
 import { parseWeaveCreateResult, parseWeaveParseResult } from "./weave-result.ts";
@@ -31,41 +31,6 @@ const weaveRomExpectationArgs = (romChecksums: string | undefined, romSize: numb
   ];
   return tokens.length ? { assume_in: tokens } : {};
 };
-
-/**
- * Index-aligned per-patch metadata. `createAlignedWeaveMetadata` returns
- * undefined for a field nothing declared, and an absent flag is what tells Rust
- * to skip that array entirely.
- */
-const perPatchMetadataArgs = (fields: {
-  patchAuthors?: string[];
-  patchBases?: PatchBasisMode[];
-  patchDescriptions?: string[];
-  patchHeaders?: WeaveHeaderMode[];
-  patchIds?: string[];
-  patchInputs?: Array<PatchInputRef | null>;
-  patchTargets?: Array<PatchInputRef | null>;
-  patchInputChecks?: string[];
-  patchLabels?: string[];
-  patchNames?: string[];
-  patchOptionals?: boolean[];
-  patchOutputChecks?: string[];
-  patchVersions?: string[];
-}) => ({
-  ...(fields.patchNames ? { patch_name: fields.patchNames } : {}),
-  ...(fields.patchIds ? { patch_id: fields.patchIds } : {}),
-  ...(fields.patchInputs ? { patch_input: fields.patchInputs } : {}),
-  ...(fields.patchTargets ? { patch_target: fields.patchTargets } : {}),
-  ...(fields.patchDescriptions ? { patch_description: fields.patchDescriptions } : {}),
-  ...(fields.patchVersions ? { patch_version: fields.patchVersions } : {}),
-  ...(fields.patchAuthors ? { patch_author: fields.patchAuthors } : {}),
-  ...(fields.patchLabels ? { patch_label: fields.patchLabels } : {}),
-  ...(fields.patchOptionals ? { patch_optional: fields.patchOptionals } : {}),
-  ...(fields.patchHeaders ? { patch_header: fields.patchHeaders } : {}),
-  ...(fields.patchBases ? { patch_basis: fields.patchBases } : {}),
-  ...(fields.patchInputChecks ? { patch_input_check: fields.patchInputChecks } : {}),
-  ...(fields.patchOutputChecks ? { patch_output_check: fields.patchOutputChecks } : {}),
-});
 
 // Parse a rom-weaver-weave.json weave (plain, compressed, or bundled in an archive) via the `weave parse`
 // command. Weaved ROM/patch members are extracted into `extractDirPath`; the parsed result's
@@ -154,23 +119,27 @@ const createAlignedWeaveMetadata = (input: WeaveCreateMetadataInput, patchCount:
     input.patchBases?.length && input.patchBases.some((mode) => mode !== "auto")
       ? Array.from({ length: patchCount }, (_, index) => input.patchBases?.[index] || "auto")
       : undefined;
-  return {
-    patchAuthors: alignedStrings(input.patchAuthors),
-    patchBases,
-    patchDescriptions: alignedStrings(input.patchDescriptions),
-    patchHeaders,
-    patchIds: alignedStrings(input.patchIds),
-    patchInputs:
+  const args: Partial<RomWeaverCommandBranchArgs<"weave-create">> = {
+    patch_author: alignedStrings(input.patchAuthors),
+    patch_basis: patchBases,
+    patch_description: alignedStrings(input.patchDescriptions),
+    patch_header: patchHeaders,
+    patch_id: alignedStrings(input.patchIds),
+    patch_input:
       input.patchInputs?.length === patchCount && input.patchInputs.some(Boolean) ? input.patchInputs : undefined,
-    patchTargets:
+    patch_target:
       input.patchTargets?.length === patchCount && input.patchTargets.some(Boolean) ? input.patchTargets : undefined,
-    patchInputChecks: alignedStrings(input.patchInputChecks),
-    patchLabels: alignedStrings(input.patchLabels),
-    patchNames: alignedStrings(input.patchNames),
-    patchOptionals: getAlignedOptionalFlags(input.patchOptionals, patchCount),
-    patchOutputChecks: alignedStrings(input.patchOutputChecks),
-    patchVersions: alignedStrings(input.patchVersions),
+    patch_input_check: alignedStrings(input.patchInputChecks),
+    patch_label: alignedStrings(input.patchLabels),
+    patch_name: alignedStrings(input.patchNames),
+    patch_optional: getAlignedOptionalFlags(input.patchOptionals, patchCount),
+    patch_output_check: alignedStrings(input.patchOutputChecks),
+    patch_version: alignedStrings(input.patchVersions),
   };
+  for (const key of Object.keys(args) as Array<keyof typeof args>) {
+    if (args[key] === undefined) delete args[key];
+  }
+  return args;
 };
 
 const invokeRomWeaverWeaveCreateWorker = async (
@@ -222,21 +191,6 @@ const invokeRomWeaverWeaveCreateWorker = async (
   ) as [string, string, string];
   // The Rust side requires each metadata array to match the patch count exactly (or be empty), so a
   // partially-filled array is padded with empty strings; empty values round-trip as absent metadata.
-  const {
-    patchAuthors,
-    patchBases,
-    patchDescriptions,
-    patchHeaders,
-    patchIds,
-    patchInputs,
-    patchTargets,
-    patchInputChecks,
-    patchLabels,
-    patchNames,
-    patchOptionals,
-    patchOutputChecks,
-    patchVersions,
-  } = createAlignedWeaveMetadata(input, patchPaths.length);
   const outputCheck = String(input.outputCheck || "").trim();
   const command = createRomWeaverCommand("weave-create", {
     output: outputPath,
@@ -248,21 +202,7 @@ const invokeRomWeaverWeaveCreateWorker = async (
     ...weaveOutputNamingArgs(input),
     ...weaveRomExpectationArgs(input.romChecksums, input.romSize),
     ...(outputCheck ? { output_check: [outputCheck] } : {}),
-    ...perPatchMetadataArgs({
-      patchAuthors,
-      patchBases,
-      patchDescriptions,
-      patchHeaders,
-      patchIds,
-      patchInputs,
-      patchTargets,
-      patchInputChecks,
-      patchLabels,
-      patchNames,
-      patchOptionals,
-      patchOutputChecks,
-      patchVersions,
-    }),
+    ...createAlignedWeaveMetadata(input, patchPaths.length),
     ...(input.patchBasis ? { default_patch_basis: input.patchBasis } : {}),
     ...(input.noWeaveRom ? { no_weave_rom: true } : {}),
   });

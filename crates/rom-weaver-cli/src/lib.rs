@@ -276,12 +276,14 @@ footer recording what was cut."
         not(target_arch = "wasm32"),
         command(
             subcommand,
+            name = "weave",
             visible_alias = "bundle",
             about = "Build and read rom-weaver-weave.json patch recipes"
         )
     )]
-    #[serde(alias = "bundle")]
-    Weave(WeaveCommands),
+    #[serde(alias = "weave")]
+    #[cfg_attr(feature = "typescript-types", ts(rename = "weave"))]
+    Bundle(WeaveCommands),
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(subcommand, about = "Inspect and edit supported persistent game saves")
@@ -1702,6 +1704,21 @@ pub use weave_command::{WeaveParseResult, WeavePatchSource, WeaveSourceKind, Wea
 mod weave_create;
 pub use weave_create::WeaveCreateResult;
 
+pub use self::{
+    RomWeaverWeave as RomWeaverBundle, WEAVE_VERSION as BUNDLE_VERSION,
+    WeaveCheatEntry as BundleCheatEntry, WeaveCheckState as BundleCheckState,
+    WeaveChecks as BundleChecks, WeaveCommands as BundleCommands,
+    WeaveCreateCommand as BundleCreateCommand, WeaveCreatePatchSpec as BundleCreatePatchSpec,
+    WeaveCreateResult as BundleCreateResult, WeaveOutput as BundleOutput,
+    WeaveParseCommand as BundleParseCommand, WeaveParseResult as BundleParseResult,
+    WeavePatchEntry as BundlePatchEntry, WeavePatchInput as BundlePatchInput,
+    WeavePatchSource as BundlePatchSource, WeaveRom as BundleRom,
+    WeaveSourceKind as BundleSourceKind, WeaveSourceRef as BundleSourceRef,
+};
+
+#[cfg(feature = "fuzzing")]
+pub use parse_weave_for_fuzzing as parse_bundle_for_fuzzing;
+
 mod command_args;
 pub use command_args::{
     CheatAction, CheatCommand, CheatSelectionArgs, ChecksumCommand, CompressCommand,
@@ -1800,3 +1817,6 @@ mod header_repair_tests;
 #[cfg(test)]
 #[path = "../tests/unit/cli.rs"]
 mod cli_tests;
+
+pub const BUNDLE_JSON_SCHEMA: &str = include_str!("../rom-weaver-bundle-v2.schema.json");
+pub const BUNDLE_JSON_SCHEMA_URL: &str = "https://raw.githubusercontent.com/rom-weaver/rom-weaver/main/docs/rom-weaver-bundle-v2.schema.json";

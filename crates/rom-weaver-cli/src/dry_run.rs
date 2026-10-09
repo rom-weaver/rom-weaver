@@ -29,10 +29,10 @@ impl CliApp {
             Commands::Patch(PatchCommands::Create(args)) => {
                 Some(self.plan_patch_create_dry_run(args))
             }
-            Commands::Weave(WeaveCommands::Create(args)) => {
+            Commands::Bundle(WeaveCommands::Create(args)) => {
                 Some(self.plan_weave_create_dry_run(args))
             }
-            Commands::Weave(WeaveCommands::Parse(args)) => {
+            Commands::Bundle(WeaveCommands::Parse(args)) => {
                 Some(self.plan_weave_parse_dry_run(args))
             }
             Commands::Tools(ToolsCommands::PpfUndo(args)) => Some(self.plan_ppf_undo_dry_run(args)),
@@ -46,9 +46,9 @@ impl CliApp {
     /// without network or persistent writes. More indirect forms are planned
     /// here before weave loading can download or extract a member.
     fn plain_patch_plan(args: &PatchApplyCommand) -> bool {
-        args.weave.is_none()
+        args.bundle.is_none()
             && (!args.patches.is_empty() || !args.codes.is_empty())
-            && args.emit_weave.is_none()
+            && args.emit_bundle.is_none()
             && !args.tui
             && !args.patches.iter().any(|path| {
                 path.extension()
@@ -67,7 +67,7 @@ impl CliApp {
             }
         }
         let mut downloads = Vec::new();
-        if let Some(weave) = &args.weave {
+        if let Some(weave) = &args.bundle {
             if let Some(url) = super::weave_apply::weave_ref_as_url(weave) {
                 downloads.push(url.to_string());
             } else if let Some(outcome) = self.plan_readable(command, OperationFamily::Patch, weave)
@@ -80,7 +80,7 @@ impl CliApp {
             .as_ref()
             .map(|path| vec![path.display().to_string()])
             .unwrap_or_default();
-        if let Some(weave) = &args.emit_weave {
+        if let Some(weave) = &args.emit_bundle {
             writes.push(weave.display().to_string());
         }
         self.plan_succeeded_with_downloads(
@@ -172,7 +172,7 @@ impl CliApp {
     }
 
     fn plan_weave_create_dry_run(&self, args: &WeaveCreateCommand) -> AppRunOutcome {
-        let command = "weave-create";
+        let command = "bundle-create";
         if let Some(rom) = &args.rom
             && let Some(outcome) = self.plan_readable(command, OperationFamily::Command, rom)
         {
@@ -183,13 +183,13 @@ impl CliApp {
                 return outcome;
             }
         }
-        if let Some(weave_rom) = &args.weave_rom
-            && let Some(outcome) = self.plan_readable(command, OperationFamily::Command, weave_rom)
+        if let Some(bundle_rom) = &args.bundle_rom
+            && let Some(outcome) = self.plan_readable(command, OperationFamily::Command, bundle_rom)
         {
             return outcome;
         }
         let mut writes = vec![args.output.display().to_string()];
-        if let Some(weave) = &args.weave {
+        if let Some(weave) = &args.bundle {
             writes.push(weave.display().to_string());
         }
         self.plan_succeeded(
@@ -202,7 +202,7 @@ impl CliApp {
     }
 
     fn plan_weave_parse_dry_run(&self, args: &WeaveParseCommand) -> AppRunOutcome {
-        let command = "weave-parse";
+        let command = "bundle-parse";
         if let Some(outcome) = self.plan_readable(command, OperationFamily::Command, &args.input) {
             return outcome;
         }
@@ -531,12 +531,12 @@ impl CliApp {
                 | "checksum"
                 | "identify"
                 | "patch-validate"
-                | "weave-schema"
+                | "bundle-schema"
                 | "formats"
                 | "completions"
                 | "man"
                 | "plan-extract-batch"
-        ) || (command == "weave-parse" && writes.is_empty());
+        ) || (command == "bundle-parse" && writes.is_empty());
         report.details = Some(json!({
             "dry_run": true,
             "command": command,

@@ -40,12 +40,13 @@ pub struct WeavePatchSource {
 }
 
 /// The consolidated result of one `weave parse` command, returned under
-/// `details.weave`. Same envelope pattern as `details.ingest`.
+/// `details.bundle`. Same envelope pattern as `details.ingest`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct WeaveParseResult {
     /// The validated weave, checksum values normalized.
-    pub weave: RomWeaverWeave,
+    #[cfg_attr(feature = "typescript-types", ts(rename = "weave"))]
+    pub bundle: RomWeaverWeave,
     pub source_kind: WeaveSourceKind,
     /// Entry name of the weave member when the source was an archive.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -102,25 +103,26 @@ impl CliApp {
                 let label = format!(
                     "parsed weave `{}` ({} patch entr{}{})",
                     args.input.display(),
-                    result.weave.patches.len(),
-                    if result.weave.patches.len() == 1 {
+                    result.bundle.patches.len(),
+                    if result.bundle.patches.len() == 1 {
                         "y"
                     } else {
                         "ies"
                     },
-                    cheat_entry_summary(&result.weave.cheats)
+                    cheat_entry_summary(&result.bundle.cheats)
                 );
                 let mut report = OperationReport::succeeded(
                     OperationFamily::Command,
-                    Some("weave-parse".to_string()),
-                    "weave-parse",
+                    Some("bundle-parse".to_string()),
+                    "bundle-parse",
                     label,
                     Some(100.0),
                     thread_execution.clone(),
                 );
                 match serde_json::to_value(&result) {
-                    Ok(value) => {
-                        report.details = Some(json!({ "weave": value }));
+                    Ok(mut value) => {
+                        value["weave"] = value["bundle"].clone();
+                        report.details = Some(json!({ "bundle": value, "weave": value }));
                         Self::append_report_warnings(&mut report, result.warnings);
                         let paths = result
                             .rom_source
@@ -137,8 +139,8 @@ impl CliApp {
                     }
                     Err(error) => OperationReport::failed(
                         OperationFamily::Command,
-                        Some("weave-parse".to_string()),
-                        "weave-parse",
+                        Some("bundle-parse".to_string()),
+                        "bundle-parse",
                         format!("failed to serialize weave parse result: {error}"),
                         thread_execution,
                     ),
@@ -146,13 +148,13 @@ impl CliApp {
             }
             Err(error) => OperationReport::failed_with_error(
                 OperationFamily::Command,
-                Some("weave-parse".to_string()),
-                "weave-parse",
+                Some("bundle-parse".to_string()),
+                "bundle-parse",
                 error,
                 thread_execution,
             ),
         };
-        self.finish("weave-parse", report)
+        self.finish("bundle-parse", report)
     }
 
     pub(super) fn run_weave_schema(&self) -> AppRunOutcome {
@@ -160,8 +162,8 @@ impl CliApp {
         let thread_execution = context.single_thread_execution();
         let mut report = OperationReport::succeeded(
             OperationFamily::Command,
-            Some("weave-schema".to_string()),
-            "weave-schema",
+            Some("bundle-schema".to_string()),
+            "bundle-schema",
             "rom-weaver-weave.json schema".to_string(),
             Some(100.0),
             thread_execution,
@@ -169,7 +171,7 @@ impl CliApp {
         // The CLI prints the raw schema to stdout; the details carry it for the
         // wasm/JSON path.
         report.details = Some(json!({ "schema": WEAVE_JSON_SCHEMA }));
-        self.finish("weave-schema", report)
+        self.finish("bundle-schema", report)
     }
 
     fn weave_parse_inner(
@@ -245,7 +247,7 @@ impl CliApp {
             });
         }
         Ok(WeaveParseResult {
-            weave,
+            bundle: weave,
             source_kind: loaded.kind,
             archive_member: loaded.archive_member,
             rom_source,
@@ -282,7 +284,7 @@ impl CliApp {
         }
         let Some(entry) = Self::find_weave_archive_entry(&loaded.archive_entries, path) else {
             return Err(RomWeaverError::ValidationCode(
-                rom_weaver_core::ValidationCodeError::new("weave.path.unresolved")
+                rom_weaver_core::ValidationCodeError::new("bundle.path.unresolved")
                     .with_message("weave path entry matches no archive member")
                     .with_field("entry", entry_label.to_owned())
                     .with_field("path", path.to_owned()),

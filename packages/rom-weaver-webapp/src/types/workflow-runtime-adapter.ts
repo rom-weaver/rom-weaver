@@ -1,3 +1,4 @@
+import type { ParsedBundleCreateResult, ParsedBundleParseResult } from "./bundle.ts";
 import type { LargeFileVfs } from "../storage/vfs/types.ts";
 import type { CheatRecord, ClassifiedCheatRecord } from "../lib/cheats/model.ts";
 import type {
@@ -395,6 +396,28 @@ type WorkflowRuntimeBinary = {
   assertSource: (source: SourceRef, context: string) => void;
 };
 
+type WorkflowRuntimeBundle = {
+  parse?: (input: Parameters<NonNullable<WorkflowRuntimeWeave["parse"]>>[0]) => Promise<{
+    cleanup: () => Promise<void>;
+    result: ParsedBundleParseResult;
+    extractedFiles: Map<string, File>;
+  }>;
+  create?: (
+    input: Omit<
+      Parameters<NonNullable<WorkflowRuntimeWeave["create"]>>[0],
+      "weaveRom" | "weaveFileName" | "noWeaveRom"
+    > & {
+      bundleRom?: { source: unknown; fileName?: string };
+      bundleFileName?: string;
+      noBundleRom?: boolean;
+    },
+  ) => Promise<{
+    result: ParsedBundleCreateResult;
+    bundleOutput: PublicOutput;
+    archiveOutput?: PublicOutput;
+  }>;
+};
+
 type WorkflowRuntimeCheat = {
   run: (input: { records: CheatRecord[]; signal?: AbortSignal; source: SourceRef }) => Promise<{
     conflicts: CheatWriteConflict[];
@@ -659,6 +682,7 @@ type WorkflowRuntime = {
   ingest?: WorkflowRuntimeIngest;
   checksum?: WorkflowRuntimeChecksum;
   weave?: WorkflowRuntimeWeave;
+  bundle?: WorkflowRuntimeBundle;
   cheat?: WorkflowRuntimeCheat;
   /** Declare a simultaneous I/O drop (source sizes in bytes) so the scheduler plans the whole batch as
    * one unit even though each file is staged independently. Optional - runtimes without a batch planner

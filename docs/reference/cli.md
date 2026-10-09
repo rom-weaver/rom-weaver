@@ -350,7 +350,7 @@ DCP patches need a Dreamcast `.cue` or `.gdi` input. They rebuild the GD-ROM dat
 
 When `patch apply` detects a weave from its positional input, the canonical `rom-weaver-weave.json` name is the fast path. It also content-probes valid plain `.json` files and root-level `.json` members inside archives. A stream-compressed positional weave needs a canonical name such as `rom-weaver-weave.json.gz`; pass a differently named one explicitly with `--weave`.
 
-The legacy `rom-weaver-bundle.json` name and its compressed forms remain readable. Both recipe names use the same version 1 and version 2 fields.
+The legacy `rom-weaver-bundle.json` name and its compressed forms remain readable. Both recipe names use the same version 1 and version 2 fields. Created archives contain identical `rom-weaver-weave.json` and `rom-weaver-bundle.json` members.
 
 Weave version 2 requires `patchBasis`. Weave version 1 remains readable and uses automatic inference. Per-entry `basis` values override the shared weave rule.
 
@@ -455,7 +455,7 @@ Applying a weave resolves each entry by `id` through the cheat database at `--ch
 
 When every recorded cheat is `optional` and none resolves, a weave with no patches fails and names each skipped entry.
 
-`weave parse` names each cheat and whether it is optional. JSON reports use `details.weave`; exported types use weave names. Legacy bundle spellings remain accepted as inputs.
+`weave parse` names each cheat and whether it is optional. JSON reports expose both `details.weave` and `details.bundle`; creation reports expose both `details.weave_create` and `details.bundle_create`. Recipe and output-path fields retain their bundle aliases. Command identifiers and validation codes retain their published `bundle` spellings. Legacy command, flag, Rust, and TypeScript names remain available.
 
 `weave parse` accepts archive selection options for packaged weaves. A plain JSON recipe references paths and has no archive members to unpack. [Weaves from the CLI](../how-to/cli-bundles.md) gives creation, parsing, and apply examples.
 

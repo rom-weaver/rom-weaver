@@ -21,7 +21,7 @@ describe("createRomWeaverCommand", () => {
   it.each(["bundle-parse", "bundle-create"] as const)("accepts legacy input label %s", (label) => {
     const command = createRomWeaverCommand(label, { input: "old.json", output: "new.json" } as never);
     expect(command).toEqual({
-      type: "weave",
+      type: "bundle",
       args: { type: label === "bundle-parse" ? "parse" : "create", args: { input: "old.json", output: "new.json" } },
     });
   });
@@ -608,31 +608,31 @@ describe("readRomWeaverRequestedThreadCount", () => {
 });
 
 describe("legacy raw command inspection", () => {
-  it("normalizes legacy commands through thread modifiers and preserves output options", () => {
+  it("preserves legacy commands through thread modifiers and preserves output options", () => {
     const command = asCommand({
       type: "bundle",
       args: { type: "parse", args: { input: "/recipe.json", output: "/out" } },
     });
     const request = { command, output: { json: true } };
     const injected = withRomWeaverDefaultThreads(request, 3);
-    expect(injected.command.type).toBe("weave");
+    expect(injected.command.type).toBe("bundle");
     expect(readRomWeaverRequestedThreadCount(injected)).toBe(3);
     expect(injected.output).toEqual({ json: true });
     expect(withRomWeaverForcedThreads(request, 2)).toEqual({
       ...injected,
-      command: { type: "weave", args: { type: "parse", args: { input: "/recipe.json", output: "/out", threads: 2 } } },
+      command: { type: "bundle", args: { type: "parse", args: { input: "/recipe.json", output: "/out", threads: 2 } } },
     });
-    expect(clampRomWeaverBrowserThreadRequest(request).command.type).toBe("weave");
+    expect(clampRomWeaverBrowserThreadRequest(request).command.type).toBe("bundle");
   });
-  it("removes legacy fields when creating a command using a legacy label", () => {
+  it("preserves legacy fields when creating a command using a legacy label", () => {
     const command = createRomWeaverCommand("bundle-create", { output: "recipe.json", bundle: "old.zip" } as never);
     expect(command).toEqual({
-      type: "weave",
-      args: { type: "create", args: { output: "recipe.json", weave: "old.zip" } },
+      type: "bundle",
+      args: { type: "create", args: { output: "recipe.json", bundle: "old.zip" } },
     });
   });
 
-  it.each([false, true])("normalizes raw legacy inputs before helpers inspect them (request: %s)", (request) => {
+  it.each([false, true])("preserves raw legacy inputs while helpers inspect them (request: %s)", (request) => {
     const command = asCommand({
       type: "bundle",
       args: { type: "parse", args: { input: "/work/recipe.json", output: "/work/out", threads: 3 } },
@@ -640,9 +640,9 @@ describe("legacy raw command inspection", () => {
     const input = request ? { command, output: { json: true } } : command;
     expect(collectRomWeaverRunInputPaths(input)).toEqual(["/work/recipe.json"]);
     expect(readRomWeaverRequestedThreadCount(input)).toBe(3);
-    expect(getRomWeaverCommandLabel(command)).toBe("weave-parse");
+    expect(getRomWeaverCommandLabel(command)).toBe("bundle-parse");
     expect(romWeaverCommandSupportsThreads(command)).toBe(true);
-    expect(readRomWeaverRunInputCommand(input)).toEqual({ type: "weave", args: command.args });
+    expect(readRomWeaverRunInputCommand(input)).toEqual({ type: "bundle", args: command.args });
     expect(normalizeRomWeaverRunRequest(input).command).toEqual({ type: "weave", args: command.args });
     expect((command as { type: unknown }).type).toBe("bundle");
   });

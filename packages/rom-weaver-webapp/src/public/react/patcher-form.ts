@@ -1,4 +1,6 @@
+import type { ParsedBundleCreateResult } from "../../types/bundle.ts";
 import type { WeaveApplySession } from "../../lib/weave/weave-session-model.ts";
+import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
 import type { ParsedWeaveCreateResult, ParsedWeavePatchInput } from "../../types/weave.ts";
 import type { ApplySettings } from "../../types/settings.ts";
 import type { RomLookupResultRequest } from "./use-rom-lookup.ts";
@@ -7,7 +9,7 @@ import type { PatcherOutputState, PatchStackItemState, PatchStackState } from ".
 import type { NoticeState, PatcherSectionNoticeKey, PatcherUiState, StoreController } from "./patcher-ui-state.ts";
 
 type ApplyPatchFormSettings = ApplySettings;
-type ApplyPatchFormMode = "apply" | "weave";
+type ApplyPatchFormMode = "apply" | "weave" | "bundle";
 type BinarySource = File | FileSystemFileHandle;
 type PageFileDrop = {
   files: File[];
@@ -92,6 +94,7 @@ type ApplyPatchFormProps = {
   startup?: StartupState;
   /** A `?weave=` boot session: seeds enablement/output defaults once its files land. */
   weaveSession?: WeaveApplySession | null;
+  bundleSession?: BundleApplySession | null;
   onInputsChange?: (inputs: BinarySource[]) => void;
   onPatchesChange?: (patches: BinarySource[]) => void;
   onSelectView?: (view: "test") => void;
@@ -100,10 +103,12 @@ type ApplyPatchFormProps = {
   onSettingsChange?: (settings: ApplyPatchFormSettings) => void;
   /** Fires when the output-card weave dropdown changes, to persist the "Weave" setting ("" hides it). */
   onWeavePackageChange?: (value: string) => void;
+  onBundlePackageChange?: (value: string) => void;
   onProgress?: (event: ProgressEvent) => void;
   onApplyComplete?: (result: ApplyWorkflowResult) => void;
   /** Fires after an "Export weave…" run with the parsed create result (before the download). */
   onWeaveExportComplete?: (result: ParsedWeaveCreateResult) => void;
+  onBundleExportComplete?: (result: ParsedBundleCreateResult) => void;
   onError?: (error: Error) => void;
 };
 

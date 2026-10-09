@@ -29,3 +29,5 @@ export {
   invokeRomWeaverSaveInspectWorker,
   invokeRomWeaverSaveSetWorker,
 } from "./wasm-save-commands.ts";
+
+export { invokeRomWeaverBundleCreateWorker, invokeRomWeaverBundleParseWorker } from "./wasm-bundle-commands.ts";

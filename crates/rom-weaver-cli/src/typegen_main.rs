@@ -247,7 +247,10 @@ fn render_types() -> String {
         export_decl::<CheatCommand>(&config),
         export_decl::<CompressCommand>(&config),
         export_decl::<TrimCommand>(&config),
-        export_decl::<PatchApplyCommand>(&config),
+        format!(
+            "{} & {{ bundle?: string }};",
+            export_decl::<PatchApplyCommand>(&config).trim_end_matches(';')
+        ),
         export_decl::<PatchValidateCommand>(&config),
         export_decl::<PatchCreateCommand>(&config),
         export_decl::<PatchCommands>(&config),
@@ -298,10 +301,31 @@ fn render_types() -> String {
         export_decl::<WeaveCreateResult>(&config),
         export_decl::<WeaveCommands>(&config),
         export_decl::<PlanExtractBatchCommand>(&config),
-        export_decl::<Commands>(&config),
+        format!(
+            "{} | {{ type: \"bundle\"; args: BundleCommands }};",
+            export_decl::<Commands>(&config).trim_end_matches(';')
+        ),
         export_decl::<RomWeaverRunOutputOptions>(&config),
         export_decl::<RomWeaverRunRequest>(&config),
     ];
+    declarations.extend([
+        "export type RomWeaverBundle = RomWeaverWeave;",
+        "export type BundleCheatEntry = WeaveCheatEntry;",
+        "export type BundleCheckState = WeaveCheckState;",
+        "export type BundleChecks = WeaveChecks;",
+        "export type BundleOutput = WeaveOutput;",
+        "export type BundlePatchEntry = WeavePatchEntry;",
+        "export type BundlePatchInput = WeavePatchInput;",
+        "export type BundleRom = WeaveRom;",
+        "export type BundleSourceKind = WeaveSourceKind;",
+        "export type BundleSourceRef = WeaveSourceRef;",
+        "export type BundlePatchSource = WeavePatchSource;",
+        "export type BundleParseCommand = WeaveParseCommand;",
+        "export type BundleCreateCommand = Omit<WeaveCreateCommand, 'weave' | 'weave_rom' | 'no_weave_rom'> & { bundle?: string | null; bundle_rom?: string | null; no_bundle_rom?: boolean; };",
+        "export type BundleParseResult = Omit<WeaveParseResult, 'weave'> & { bundle: RomWeaverBundle; };",
+        "export type BundleCreateResult = Omit<WeaveCreateResult, 'weave' | 'weave_path'> & { bundle: RomWeaverBundle; bundle_path: string; };",
+        "export type BundleCommands = { type: 'create'; args: BundleCreateCommand } | { type: 'parse'; args: BundleParseCommand };",
+    ].into_iter().map(str::to_string));
     declarations.extend(RUNTIME_ALIAS_DECLS.iter().map(|decl| (*decl).to_string()));
 
     format!("{TYPES_HEADER}{}\n", declarations.join("\n\n"))
@@ -351,6 +375,7 @@ fn render_command_types() -> String {
         render_command_discriminant::<Commands>(&config, "", "command"),
         render_command_discriminant::<PatchCommands>(&config, "Patch", "patch command"),
         render_command_discriminant::<WeaveCommands>(&config, "Weave", "weave command"),
+        render_command_discriminant::<WeaveCommands>(&config, "Bundle", "bundle command"),
         render_command_discriminant::<SaveCommands>(&config, "Save", "save command"),
         render_command_discriminant::<ToolsCommands>(&config, "Tools", "tools command"),
     ];
@@ -373,7 +398,11 @@ fn render_command_discriminant<T: TS>(config: &ts_rs::Config, family: &str, labe
     let type_name = format!("KnownRomWeaver{family}CommandType");
     let is_function = format!("isKnownRomWeaver{family}CommandType");
     let assert_function = format!("assertKnownRomWeaver{family}CommandType");
-    let values = Value::Array(string_values(tagged_enum_type_literals::<T>(config)));
+    let mut literals = tagged_enum_type_literals::<T>(config);
+    if family.is_empty() {
+        literals.push("bundle".to_string());
+    }
+    let values = Value::Array(string_values(literals));
     format!(
         r#"{}
 

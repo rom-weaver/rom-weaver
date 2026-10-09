@@ -607,9 +607,9 @@ fn run_native_command(cli: &Cli, mode: OutputMode, command: &str) -> ExitCode {
     }
     // `weave schema` prints the raw JSON Schema to stdout (redirect it to a
     // file / point an editor at it), before any command runs.
-    if let CliCommand::App(Commands::Weave(WeaveCommands::Schema)) = &cli.command {
+    if let CliCommand::App(Commands::Bundle(WeaveCommands::Schema)) = &cli.command {
         if cli.dry_run {
-            return print_native_dry_run_plan("weave-schema", Vec::new(), mode);
+            return print_native_dry_run_plan("bundle-schema", Vec::new(), mode);
         }
         if mode.is_json() {
             let schema = match serde_json::from_str::<serde_json::Value>(
@@ -619,7 +619,7 @@ fn run_native_command(cli: &Cli, mode: OutputMode, command: &str) -> ExitCode {
                 Err(error) => {
                     return native_output::print_error(
                         mode,
-                        "weave-schema",
+                        "bundle-schema",
                         "schema",
                         "cli.schema",
                         &error.to_string(),
@@ -630,7 +630,7 @@ fn run_native_command(cli: &Cli, mode: OutputMode, command: &str) -> ExitCode {
             return native_output::print_event(
                 mode,
                 native_output::result_event(
-                    "weave-schema",
+                    "bundle-schema",
                     "schema",
                     "weave schema",
                     Some(serde_json::json!({ "schema": schema })),
@@ -690,7 +690,7 @@ fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
         CliCommand::Completions { .. } => Some("completions"),
         CliCommand::Man { .. } => Some("man"),
         CliCommand::Formats => Some("formats"),
-        CliCommand::App(Commands::Weave(WeaveCommands::Schema)) => Some("weave-schema"),
+        CliCommand::App(Commands::Bundle(WeaveCommands::Schema)) => Some("bundle-schema"),
         _ => None,
     };
     if let Some(command) = native_command {
@@ -715,7 +715,7 @@ fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
         command.align_patch_header_modes(apply_matches);
         command.align_patch_basis(apply_matches);
     }
-    if let CliCommand::App(Commands::Weave(WeaveCommands::Create(command))) = &mut cli.command
+    if let CliCommand::App(Commands::Bundle(WeaveCommands::Create(command))) = &mut cli.command
         && let Some((_, weave_matches)) = matches.subcommand()
         && let Some((_, create_matches)) = weave_matches.subcommand()
     {
@@ -1022,7 +1022,7 @@ fn run_apply_tui(
     };
     // Run the apply itself without the tui/emit hooks, then author the weave.
     apply.tui = false;
-    apply.emit_weave = None;
+    apply.emit_bundle = None;
     let apply_outcome = run_command_outcome(
         Commands::Patch(PatchCommands::Apply(apply)),
         options,
@@ -1033,7 +1033,7 @@ fn run_apply_tui(
         return ExitCode::from(apply_outcome.exit_code);
     }
     let create_outcome = run_command_outcome(
-        Commands::Weave(WeaveCommands::Create(Box::new(weave_command))),
+        Commands::Bundle(WeaveCommands::Create(Box::new(weave_command))),
         options,
         reporter,
         prompter,

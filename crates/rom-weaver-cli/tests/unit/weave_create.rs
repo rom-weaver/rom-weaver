@@ -461,7 +461,7 @@ fn weave_rom_without_an_input_rom_is_rejected() {
     let app = test_app();
     let args = WeaveCreateCommand {
         patch: vec![patch],
-        weave_rom: Some(dir.join("rom.nes")),
+        bundle_rom: Some(dir.join("rom.nes")),
         ..base_args(&dir)
     };
     let context = app.context(args.threads);
@@ -482,7 +482,7 @@ fn weave_create_warns_when_rom_only_flags_have_no_rom() {
     let app = test_app();
     let args = WeaveCreateCommand {
         patch: vec![patch],
-        no_weave_rom: true,
+        no_bundle_rom: true,
         rom_name: Some("Game.nes".to_string()),
         ..base_args(&dir)
     };
@@ -495,8 +495,8 @@ fn weave_create_warns_when_rom_only_flags_have_no_rom() {
             "--rom-name ignored: no ROM given with --input or --rom-url".to_string(),
         ]
     );
-    assert!(result.weave.rom.is_none());
-    assert_eq!(result.weave.version, WEAVE_VERSION);
+    assert!(result.bundle.rom.is_none());
+    assert_eq!(result.bundle.version, WEAVE_VERSION);
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -548,19 +548,19 @@ fn weave_create_hashes_the_rom_and_records_a_path_entry() {
     let context = app.context(args.threads);
     let result = app.weave_create_inner(&args, &context).expect("create");
 
-    let weave_rom = result.weave.rom.as_ref().expect("rom entry");
-    assert_eq!(weave_rom.path.as_deref(), Some("game.nes"));
-    assert_eq!(weave_rom.name, None, "a distributed rom needs no name");
-    let rom_checks = referenced_checks(&result.weave, weave_rom.checks_ref.as_deref());
+    let bundle_rom = result.bundle.rom.as_ref().expect("rom entry");
+    assert_eq!(bundle_rom.path.as_deref(), Some("game.nes"));
+    assert_eq!(bundle_rom.name, None, "a distributed rom needs no name");
+    let rom_checks = referenced_checks(&result.bundle, bundle_rom.checks_ref.as_deref());
     assert_eq!(rom_checks.size, Some(32));
     let algorithms: Vec<&str> = rom_checks.checksums.keys().map(String::as_str).collect();
     assert_eq!(algorithms, vec!["crc32", "md5", "sha1"]);
     assert!(result.warnings.is_empty());
     assert!(result.archive_path.is_none());
     assert!(
-        result.weave_path.ends_with("rom-weaver-weave.json"),
+        result.bundle_path.ends_with("rom-weaver-weave.json"),
         "{}",
-        result.weave_path
+        result.bundle_path
     );
     fs::remove_dir_all(&dir).ok();
 }
@@ -574,19 +574,19 @@ fn no_weave_rom_keeps_checks_and_names_the_rom_the_user_must_supply() {
     let args = WeaveCreateCommand {
         patch: vec![patch],
         rom: Some(rom),
-        no_weave_rom: true,
+        no_bundle_rom: true,
         ..base_args(&dir)
     };
     let context = app.context(args.threads);
     let result = app.weave_create_inner(&args, &context).expect("create");
 
-    let weave_rom = result.weave.rom.as_ref().expect("rom entry");
-    assert_eq!(weave_rom.path, None);
-    assert_eq!(weave_rom.url, None);
-    assert_eq!(weave_rom.name.as_deref(), Some("game.nes"));
-    assert!(weave_rom.checks_ref.is_some());
+    let bundle_rom = result.bundle.rom.as_ref().expect("rom entry");
+    assert_eq!(bundle_rom.path, None);
+    assert_eq!(bundle_rom.url, None);
+    assert_eq!(bundle_rom.name.as_deref(), Some("game.nes"));
+    assert!(bundle_rom.checks_ref.is_some());
     assert!(
-        !referenced_checks(&result.weave, weave_rom.checks_ref.as_deref())
+        !referenced_checks(&result.bundle, bundle_rom.checks_ref.as_deref())
             .checksums
             .is_empty()
     );
@@ -609,9 +609,9 @@ fn assume_in_tokens_replace_the_rom_hash_and_size() {
     let result = app.weave_create_inner(&args, &context).expect("create");
 
     let rom_checks = referenced_checks(
-        &result.weave,
+        &result.bundle,
         result
-            .weave
+            .bundle
             .rom
             .as_ref()
             .and_then(|rom| rom.checks_ref.as_deref()),
@@ -639,18 +639,18 @@ fn a_url_only_rom_records_the_url_and_no_checks() {
     let context = app.context(args.threads);
     let result = app.weave_create_inner(&args, &context).expect("create");
 
-    let weave_rom = result.weave.rom.as_ref().expect("rom entry");
+    let bundle_rom = result.bundle.rom.as_ref().expect("rom entry");
     assert_eq!(
-        weave_rom.url.as_deref(),
+        bundle_rom.url.as_deref(),
         Some("https://example.invalid/game.nes")
     );
     assert_eq!(
-        weave_rom.name.as_deref(),
+        bundle_rom.name.as_deref(),
         Some("Game.nes"),
         "name is trimmed"
     );
-    assert!(weave_rom.checks.is_none());
-    assert!(weave_rom.path.is_none());
+    assert!(bundle_rom.checks.is_none());
+    assert!(bundle_rom.path.is_none());
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -663,14 +663,14 @@ fn an_empty_rom_name_suppresses_the_sourceless_default() {
     let args = WeaveCreateCommand {
         patch: vec![patch],
         rom: Some(rom),
-        no_weave_rom: true,
+        no_bundle_rom: true,
         rom_name: Some("   ".to_string()),
         ..base_args(&dir)
     };
     let context = app.context(args.threads);
     let result = app.weave_create_inner(&args, &context).expect("create");
     assert_eq!(
-        result.weave.rom.as_ref().and_then(|rom| rom.name.clone()),
+        result.bundle.rom.as_ref().and_then(|rom| rom.name.clone()),
         None
     );
     fs::remove_dir_all(&dir).ok();
@@ -685,7 +685,7 @@ fn a_weave_rom_override_must_exist() {
     let args = WeaveCreateCommand {
         patch: vec![patch],
         rom: Some(rom),
-        weave_rom: Some(dir.join("other.nes")),
+        bundle_rom: Some(dir.join("other.nes")),
         ..base_args(&dir)
     };
     let context = app.context(args.threads);
@@ -749,7 +749,7 @@ fn entry_checks_are_preserved_as_named_states() {
     let context = app.context(args.threads);
     let result = app.weave_create_inner(&args, &context).expect("create");
 
-    let entry = &result.weave.patches[0];
+    let entry = &result.bundle.patches[0];
     assert!(
         entry.input_checks.is_none(),
         "input values live in a named state"
@@ -758,10 +758,10 @@ fn entry_checks_are_preserved_as_named_states() {
         entry.output_checks.is_none(),
         "output values live in a named state"
     );
-    let output = result.weave.output.as_ref().expect("output block");
+    let output = result.bundle.output.as_ref().expect("output block");
     assert_eq!(output.name.as_deref(), Some("patched.nes"));
     assert_eq!(
-        referenced_checks(&result.weave, output.checks_ref.as_deref())
+        referenced_checks(&result.bundle, output.checks_ref.as_deref())
             .checksums
             .get("crc32")
             .map(String::as_str),
@@ -785,16 +785,16 @@ fn distinct_entry_checks_keep_distinct_named_states() {
     let context = app.context(args.threads);
     let result = app.weave_create_inner(&args, &context).expect("create");
 
-    let entry = &result.weave.patches[0];
+    let entry = &result.bundle.patches[0];
     assert_eq!(
-        referenced_checks(&result.weave, entry.input_checks_ref.as_deref())
+        referenced_checks(&result.bundle, entry.input_checks_ref.as_deref())
             .checksums
             .get("crc32")
             .map(String::as_str),
         Some("11111111")
     );
     assert_eq!(
-        referenced_checks(&result.weave, entry.output_checks_ref.as_deref())
+        referenced_checks(&result.bundle, entry.output_checks_ref.as_deref())
             .checksums
             .get("crc32")
             .map(String::as_str),
@@ -818,7 +818,7 @@ fn a_patch_with_a_source_url_carries_no_path_entry() {
     let context = app.context(args.threads);
     let result = app.weave_create_inner(&args, &context).expect("create");
 
-    let entry = &result.weave.patches[0];
+    let entry = &result.bundle.patches[0];
     assert_eq!(entry.path, None);
     assert_eq!(entry.url.as_deref(), Some("https://example.invalid/a.ips"));
     assert!(entry.optional);
@@ -900,7 +900,7 @@ fn weave_create_refuses_an_existing_archive_before_writing_the_definition() {
     let app = test_app();
     let args = WeaveCreateCommand {
         patch: vec![patch],
-        weave: Some(archive.clone()),
+        bundle: Some(archive.clone()),
         ..base_args(&dir)
     };
     let context = app.context(args.threads);
@@ -925,7 +925,7 @@ fn weave_create_validates_the_archive_format_before_writing_the_definition() {
     let app = test_app();
     let args = WeaveCreateCommand {
         patch: vec![patch],
-        weave: Some(dir.join("release.unknown")),
+        bundle: Some(dir.join("release.unknown")),
         ..base_args(&dir)
     };
     let context = app.context(args.threads);
@@ -945,7 +945,7 @@ fn weave_create_force_allows_replacing_both_outputs() {
     let app = test_app();
     let args = WeaveCreateCommand {
         patch: vec![patch],
-        weave: Some(archive.clone()),
+        bundle: Some(archive.clone()),
         force: true,
         ..base_args(&dir)
     };
@@ -971,7 +971,7 @@ fn weave_create_rejects_aliasing_definition_and_archive_outputs() {
     let app = test_app();
     let args = WeaveCreateCommand {
         patch: vec![patch],
-        weave: Some(dir.join("rom-weaver-weave.json")),
+        bundle: Some(dir.join("rom-weaver-weave.json")),
         ..base_args(&dir)
     };
     let context = app.context(args.threads);
@@ -1000,7 +1000,7 @@ fn weave_create_rejects_nonexistent_outputs_with_equivalent_paths() {
     let args = WeaveCreateCommand {
         patch: vec![patch],
         output: output.clone(),
-        weave: Some(dir.join("sub").join("..").join("release.zip")),
+        bundle: Some(dir.join("sub").join("..").join("release.zip")),
         ..Default::default()
     };
     let context = app.context(args.threads);
@@ -1033,7 +1033,7 @@ fn weave_create_resolves_symlink_parent_before_comparing_outputs() {
     let args = WeaveCreateCommand {
         patch: vec![patch],
         output: output.clone(),
-        weave: Some(link.join("..").join("release.zip")),
+        bundle: Some(link.join("..").join("release.zip")),
         ..Default::default()
     };
     let context = app.context(args.threads);
@@ -1060,7 +1060,7 @@ fn weave_create_checks_the_archive_parent_before_writing_the_definition() {
     let app = test_app();
     let args = WeaveCreateCommand {
         patch: vec![patch],
-        weave: Some(blocked_parent.join("release.zip")),
+        bundle: Some(blocked_parent.join("release.zip")),
         ..base_args(&dir)
     };
     let context = app.context(args.threads);
@@ -1084,7 +1084,7 @@ fn a_schema_ref_is_stamped_at_the_top_of_the_written_weave() {
     };
     let context = app.context(args.threads);
     let result = app.weave_create_inner(&args, &context).expect("create");
-    assert_eq!(result.weave.schema.as_deref(), Some(WEAVE_JSON_SCHEMA_URL));
+    assert_eq!(result.bundle.schema.as_deref(), Some(WEAVE_JSON_SCHEMA_URL));
     let written = fs::read_to_string(&args.output).expect("read weave");
     assert!(written.contains("\"$schema\""), "{written}");
     assert!(written.ends_with("}\n"), "weaves end with one newline");
@@ -1146,7 +1146,7 @@ fn bundling_packs_the_weave_rom_and_patches_into_one_archive() {
     let args = WeaveCreateCommand {
         patch: vec![patch],
         rom: Some(rom),
-        weave: Some(archive.clone()),
+        bundle: Some(archive.clone()),
         ..base_args(&dir)
     };
     let context = app.context(args.threads);
@@ -1176,9 +1176,66 @@ fn bundling_packs_the_weave_rom_and_patches_into_one_archive() {
         .into_iter()
         .collect::<BTreeSet<_>>();
     assert!(entries.contains("rom-weaver-weave.json"), "{entries:?}");
+    assert!(entries.contains("rom-weaver-bundle.json"), "{entries:?}");
     assert!(entries.contains("game.nes"), "{entries:?}");
     assert!(entries.contains("a.ips"), "{entries:?}");
     fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn archive_payload_names_cannot_replace_recipe_members() {
+    for name in [
+        "rom-weaver-bundle.json",
+        "rom-weaver-weave.json",
+        "ROM-WEAVER-BUNDLE.JSON",
+        "rom-weaver-bundle.json.gz",
+        "rom-weaver-weave.json.gz",
+    ] {
+        let dir = scratch_dir("reserved-recipe-name");
+        let rom = write_fixture(&dir, name, &[0x77; 64]);
+        let patch = write_fixture(&dir, "a.ips", &ips_patch_bytes());
+        let archive = dir.join("pack.zip");
+        let app = test_app();
+        let args = WeaveCreateCommand {
+            patch: vec![patch],
+            rom: Some(rom),
+            bundle: Some(archive.clone()),
+            output: dir.join("recipe.json"),
+            ..Default::default()
+        };
+        let context = app.context(args.threads);
+        let result = app.weave_create_inner(&args, &context).expect("create");
+        let payload = result.bundle.rom.as_ref().unwrap().path.as_ref().unwrap();
+        assert_ne!(payload, name, "reserved payload name {name}");
+        let loaded = app.load_weave_source(&archive).expect("parse archive");
+        for member in ["rom-weaver-weave.json", "rom-weaver-bundle.json", payload] {
+            let entries: Vec<_> = loaded
+                .archive_entries
+                .iter()
+                .filter(|entry| entry.name == member)
+                .collect();
+            assert_eq!(entries.len(), 1, "duplicate member {member}");
+            let entry = entries[0];
+            let bytes = with_regular_archive_file_entry_reader(
+                &archive,
+                loaded.archive_format.unwrap(),
+                entry.index,
+                &entry.name,
+                |reader| {
+                    let mut bytes = Vec::new();
+                    reader.read_to_end(&mut bytes)?;
+                    Ok(bytes)
+                },
+            )
+            .expect("read archive member");
+            if member == payload {
+                assert_eq!(bytes, vec![0x77; 64]);
+            } else {
+                assert_eq!(bytes, loaded.bytes);
+            }
+        }
+        fs::remove_dir_all(&dir).ok();
+    }
 }
 
 #[test]
@@ -1188,7 +1245,7 @@ fn a_weave_path_without_an_extension_is_rejected() {
     let app = test_app();
     let args = WeaveCreateCommand {
         patch: vec![patch],
-        weave: Some(dir.join("weave")),
+        bundle: Some(dir.join("weave")),
         ..base_args(&dir)
     };
     let context = app.context(args.threads);
@@ -1409,6 +1466,12 @@ fn run_weave_create_reports_the_written_weave_in_its_details() {
         .and_then(|details| details.get("weave_create"))
         .expect("weave_create details");
     assert_eq!(created["weave"]["version"], json!(WEAVE_VERSION));
+    let legacy = &terminal.details.as_ref().expect("details")["bundle_create"];
+    assert_eq!(legacy["bundle"], created["weave"]);
+    assert_eq!(legacy["bundle_path"], created["weave_path"]);
+    let restored: BundleCreateResult =
+        serde_json::from_value(legacy.clone()).expect("old typed create reader");
+    assert_eq!(restored.bundle.version, WEAVE_VERSION);
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -1474,7 +1537,7 @@ fn plural_patch_entries_are_counted_in_the_success_label() {
     let app = reporting_app(sink.clone());
     let args = WeaveCreateCommand {
         patch: vec![first, second],
-        weave: Some(dir.join("weave.zip")),
+        bundle: Some(dir.join("weave.zip")),
         ..base_args(&dir)
     };
 

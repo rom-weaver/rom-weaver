@@ -14,7 +14,8 @@ export const KNOWN_COMMAND_TYPES = [
   "weave",
   "save",
   "tools",
-  "plan-extract-batch"
+  "plan-extract-batch",
+  "bundle"
 ] as const;
 
 export type KnownRomWeaverCommandType = typeof KNOWN_COMMAND_TYPES[number];
@@ -77,6 +78,28 @@ export function assertKnownRomWeaverWeaveCommandType(
   if (!type) throw new TypeError(`${label} requires a string ${field}`);
   if (isKnownRomWeaverWeaveCommandType(type)) return type;
   throw new TypeError(`${label} has unsupported ${field}: ${type} (known: ${formatKnownTypes(KNOWN_WEAVE_COMMAND_TYPES)})`);
+}
+
+export const KNOWN_BUNDLE_COMMAND_TYPES = [
+  "create",
+  "parse"
+] as const;
+
+export type KnownRomWeaverBundleCommandType = typeof KNOWN_BUNDLE_COMMAND_TYPES[number];
+
+export function isKnownRomWeaverBundleCommandType(value: unknown): value is KnownRomWeaverBundleCommandType {
+  return typeof value === 'string' && (KNOWN_BUNDLE_COMMAND_TYPES as readonly string[]).includes(value);
+}
+
+export function assertKnownRomWeaverBundleCommandType(
+  value: unknown,
+  label = 'rom-weaver bundle command',
+  field = '`type` field',
+): KnownRomWeaverBundleCommandType {
+  const type = typeof value === 'string' ? value.trim() : '';
+  if (!type) throw new TypeError(`${label} requires a string ${field}`);
+  if (isKnownRomWeaverBundleCommandType(type)) return type;
+  throw new TypeError(`${label} has unsupported ${field}: ${type} (known: ${formatKnownTypes(KNOWN_BUNDLE_COMMAND_TYPES)})`);
 }
 
 export const KNOWN_SAVE_COMMAND_TYPES = [
