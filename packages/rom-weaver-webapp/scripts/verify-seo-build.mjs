@@ -620,6 +620,16 @@ for (const [legacy, canonical] of Object.entries({
     assertIncludes(read(file), 'name="robots" content="noindex,follow"', `${file} noindex`);
     assertIncludes(read(file), `rel="canonical" href="https://rom-weaver.com/${canonical}"`, `${file} canonical`);
   }
+  // Pages (_redirects) and the Docker image (sws.toml) must send every legacy
+  // spelling to the same workflow.
+  for (const source of [`/${legacy}`, `/${legacy}/`, `/${legacy}.html`, `/${legacy}/index.html`]) {
+    assertIncludes(redirects, `${source} /${canonical} 301`, `${source} Pages redirect`);
+    assertIncludes(
+      swsConfig,
+      `source = "${source}"\ndestination = "/${canonical}"\nkind = 301`,
+      `${source} Docker redirect`,
+    );
+  }
 }
 // The short /weave/ alias hydrates the canonical weave workflow.
 // index.html is the landing page, so a host that applies neither the redirect
