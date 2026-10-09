@@ -11,9 +11,11 @@
 
 Your ROM workflow. One toolkit.
 
-Patch, compress, extract, convert, and identify ROMs and disc images. Bake in cheat codes and edit supported game saves in your browser or CLI. Play supported games in the browser with EmulatorJS.
+An open-source ROM, cheat, patch, and save toolkit for desktop browsers, supported mobile browsers, and CLI.
 
-Works offline in your browser or CLI. Your files stay on your device. No telemetry.
+Drop in a compressed ROM and your patches, apply them in order, and recompress the result. One workflow, without unpacking each file by hand.
+
+Files stay on your device. No uploads, accounts, or telemetry. Works offline after caching needed browser assets, databases, and emulator cores, or setting up the CLI.
 
 <p>
   <a href="https://rom-weaver.com/apply-patches"><img alt="Open the webapp" src="https://img.shields.io/badge/Open_the_webapp-d9690f?logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwYXRoIGQ9Ik0xNCAzaDd2N00yMSAzIDEwIDE0Ii8%2BPHBhdGggZD0iTTEwIDNINWEyIDIgMCAwIDAtMiAydjE0YTIgMiAwIDAgMCAyIDJoMTRhMiAyIDAgMCAwIDItMnYtNSIvPjwvc3ZnPg%3D%3D"></a>
@@ -119,10 +121,17 @@ The CLI and browser share one Rust engine. Browser workers and storage add costs
 
 ## Features
 
-- **Change games.** Apply or create patches, arrange patch chains, bake supported cheats, and share patch bundles.
-- **Prepare files.** Identify games and revisions, compare checksums, extract archives, convert containers, compress files, trim padding, and undo PPF3 patches with undo data.
-- **Play and manage progress.** Test supported games in the browser. Import or export emulator saves, edit supported game saves, and create fresh supported saves.
-- **Work locally.** Process files without uploads or accounts. Cached app assets work offline; CLI commands support scripts and JSON output.
+- **Apply and create patches.** IPS, BPS, UPS, PPF, RUP, xdelta, and more. Chain compatible patches in order: a weave.
+- **Open archives directly.** Read ROMs and patches inside ZIP, 7z, RAR, and nested archives. Extract many formats through libarchive; create ZIP and 7z.
+- **Convert game images.** Extract and create RVZ, CHD, and Z3DS. Read CSO, PBP, GCZ, WIA, and more. See [format limits](docs/reference/formats.md#container-and-compression-formats) and [benchmarks](#performance).
+- **Identify and verify ROMs.** Match checksums to known games, regions, and revisions. Compare fingerprints and check patch requirements.
+- **Handle dump differences.** Resolve supported copier headers and N64 byte orders. Optionally repair supported ROM compatibility fields.
+- **Bake in cheats.** Apply supported ROM-writing codes, or turn them into patches. Live-memory codes cannot be baked.
+- **Try the result.** Play supported games in your browser with EmulatorJS. Import and export emulator saves.
+- **Reuse patch bundles.** Preserve patches, order, choices, and ROM checksums. Patch-only bundles omit the ROM; each user supplies their matching original.
+- **Trim and edit saves (beta).** Trim supported ROM padding, edit supported saves, and generate saves within [game-specific limits](docs/reference/save-editor.md#save-generation). Browser Trim and Save Editor require the beta setting.
+- **Undo patches.** Reverse PPF3 patches containing undo data.
+- **Automate or self-host.** CLI scripts, JSON output, and your own webapp hosting. Both interfaces share one Rust engine.
 
 The [plain-language feature map](docs/reference/features.md) links every feature to its browser or CLI guide. Exact limits live in the [format tables](docs/reference/formats.md), [cheat reference](docs/reference/cheat-database.md), and [save reference](docs/reference/save-editor.md).
 
