@@ -28,7 +28,7 @@ Documentation images show real app controls with homebrew samples or a generated
 | `apply-output` | [Apply output](../how-to/apply-rom-patches.md#choose-the-output-and-apply) | File name, container, and download action |
 | `create-inputs` | [Create a patch](../how-to/create-rom-patches.md) | Original and Modified inputs |
 | `create-output` | [Create output](../how-to/create-rom-patches.md) | Patch format and output controls |
-| `weave-output` | [Share a weave](../how-to/create-bundles.md#turn-on-bundle-output-and-download-it) | ROM inclusion and the separate sharing action |
+| `bundle-output` | [Share a weave](../how-to/create-bundles.md#turn-on-bundle-output-and-download-it) | ROM inclusion and the separate sharing action |
 | `identify-checks` | [Identify a ROM](../how-to/identify-roms-browser.md) | An unknown homebrew ROM with usable checksums |
 | `cheat-step` | [Use cheats](../how-to/use-browser-cheats.md) | A manual ROM-write step in the patch order |
 | `save-editor` | [Edit a save](../how-to/edit-gen3-saves.md) | Filtered fields and a checked edit preview |

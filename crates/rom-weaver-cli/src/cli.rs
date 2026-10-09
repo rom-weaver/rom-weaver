@@ -237,6 +237,7 @@ enum CliCommand {
     /// before dispatch, so it never reaches the shared `Commands` enum.
     #[command(
         name = "legacy-weave-apply",
+        override_usage = "rom-weaver weave [OPTIONS] --input <PATH>",
         hide = true,
         about = "Apply one or more patches to a ROM, in order (same as `patch apply`)",
         long_about = PATCH_APPLY_LONG_ABOUT,
@@ -309,6 +310,23 @@ pub fn cli_command() -> clap::Command {
             )
         },
     )))
+}
+
+// Some shell generators include hidden subcommands. Build their tree without
+// the internal parser shim, retaining the same arguments and public commands.
+#[cfg(not(target_arch = "wasm32"))]
+fn completion_command() -> clap::Command {
+    let command = cli_command();
+    clap::Command::new("rom-weaver")
+        .version(env!("CARGO_PKG_VERSION"))
+        .args(command.get_arguments().cloned())
+        .groups(command.get_groups().cloned())
+        .subcommands(
+            command
+                .get_subcommands()
+                .filter(|sub| !sub.is_hide_set())
+                .cloned(),
+        )
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -414,11 +432,53 @@ fn normalize_legacy_weave_args(args: Vec<std::ffi::OsString>) -> Vec<std::ffi::O
             clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
         )
     };
-    match cli_command().try_get_matches_from(&args) {
+    let command = cli_command();
+    let canonical_error = match command.clone().try_get_matches_from(&args) {
         Ok(_) => return args,
         Err(error) if is_display(&error) => return args,
-        Err(_) => {}
+        Err(error) => error,
+    };
+    // Partial matches retain a selected recipe subcommand even when its flags
+    // fail validation; those diagnostics must never become apply diagnostics.
+    if command
+        .clone()
+        .ignore_errors(true)
+        .try_get_matches_from(&args)
+        .is_ok_and(|matches| {
+            matches
+                .subcommand_matches("weave")
+                .is_some_and(|weave| weave.subcommand_name().is_some())
+        })
+    {
+        return args;
     }
+    // A rejected apply flag identifies legacy syntax even when another argument
+    // is missing or invalid. Keep recipe subcommand errors on the canonical path.
+    let legacy_flag_error = canonical_error
+        .get(clap::error::ContextKind::InvalidArg)
+        .and_then(|value| match value {
+            clap::error::ContextValue::String(value) => Some(value.as_str()),
+            _ => None,
+        })
+        .is_some_and(|invalid| {
+            command
+                .find_subcommand("legacy-weave-apply")
+                .expect("legacy apply command")
+                .get_arguments()
+                .any(|arg| {
+                    !arg.is_global_set()
+                        && (arg
+                            .get_long()
+                            .into_iter()
+                            .chain(arg.get_all_aliases().into_iter().flatten())
+                            .any(|long| invalid == format!("--{long}"))
+                            || arg
+                                .get_short()
+                                .into_iter()
+                                .chain(arg.get_all_short_aliases().into_iter().flatten())
+                                .any(|short| invalid == format!("-{short}")))
+                })
+        });
     for (index, arg) in args.iter().enumerate().skip(1) {
         if arg != "weave" {
             continue;
@@ -429,7 +489,7 @@ fn normalize_legacy_weave_args(args: Vec<std::ffi::OsString>) -> Vec<std::ffi::O
             Ok(matches) if matches.subcommand_name() == Some("legacy-weave-apply") => {
                 return legacy;
             }
-            Err(error) if is_display(&error) => {
+            Err(error) if is_display(&error) || legacy_flag_error => {
                 let mut prefix = legacy[..=index].to_vec();
                 prefix.extend(["--input".into(), "compatibility-probe.bin".into()]);
                 if let Ok(matches) = cli_command().try_get_matches_from(prefix)
@@ -486,14 +546,13 @@ fn run_native_command(cli: &Cli, mode: OutputMode, command: &str) -> ExitCode {
     );
     tracing::debug!(options = ?cli, "native command options");
     // `completions` is a native-only concern: emit the script and exit before
-    // any command runs. `cli_command()` rebuilds the same clap tree the parse
-    // used, so the generated script covers every real subcommand.
+    // any command runs. The completion tree excludes internal parser shims.
     if let CliCommand::Completions { shell } = &cli.command {
         if cli.dry_run {
             return print_native_dry_run_plan("completions", Vec::new(), mode);
         }
         let shell = *shell;
-        let mut command = cli_command();
+        let mut command = completion_command();
         let mut script = Vec::new();
         clap_complete::generate(shell, &mut command, "rom-weaver", &mut script);
         return print_asset(
@@ -1126,6 +1185,120 @@ mod tests {
             assert_eq!(error.kind(), clap::error::ErrorKind::DisplayHelp);
             assert_eq!(error.exit_code(), 0);
             assert!(error.to_string().contains("Apply one or more patches"));
+            assert!(!error.to_string().contains("legacy-weave-apply"));
+        }
+    }
+
+    #[test]
+    fn legacy_weave_invalid_arguments_keep_apply_diagnostics() {
+        for (argv, expected) in [
+            (
+                vec!["rom-weaver", "weave", "--bundle", "recipe.json"],
+                "--input <PATH>",
+            ),
+            (
+                vec!["rom-weaver", "weave", "--input=a.bin", "--bogus"],
+                "'--bogus'",
+            ),
+            (
+                vec!["rom-weaver", "weave", "--patch", "x.ips"],
+                "--input <PATH>",
+            ),
+            (
+                vec!["rom-weaver", "weave", "--input", "a.bin", "--bogus"],
+                "'--bogus'",
+            ),
+            (
+                vec!["rom-weaver", "weave", "-i", "a.bin", "-p", "x.ips"],
+                "'-p'",
+            ),
+            (
+                vec!["rom-weaver", "--json", "weave", "--patch", "x.ips"],
+                "--input <PATH>",
+            ),
+        ] {
+            let normalized =
+                normalize_legacy_weave_args(argv.iter().map(std::ffi::OsString::from).collect());
+            let error = cli_command()
+                .try_get_matches_from(normalized)
+                .expect_err("invalid apply");
+            assert!(error.to_string().contains(expected), "{argv:?}: {error}");
+            assert!(!error.to_string().contains("legacy-weave-apply"), "{error}");
+        }
+        for argv in [
+            vec![
+                "rom-weaver",
+                "weave",
+                "parse",
+                "--input",
+                "r.json",
+                "--cheat",
+                "x",
+            ],
+            vec![
+                "rom-weaver",
+                "weave",
+                "create",
+                "--output",
+                "r.json",
+                "--codec",
+                "zstd",
+            ],
+            vec![
+                "rom-weaver",
+                "weave",
+                "create",
+                "--output",
+                "r.json",
+                "--emit-bundle",
+                "e.json",
+            ],
+            vec![
+                "rom-weaver",
+                "--json",
+                "weave",
+                "parse",
+                "--input",
+                "r.json",
+                "--cheat",
+                "x",
+            ],
+            vec!["rom-weaver", "weave", "create", "--bogus"],
+            vec!["rom-weaver", "weave", "--json", "parse", "--bogus"],
+            vec![
+                "rom-weaver",
+                "checksum",
+                "--input",
+                "weave",
+                "--patch",
+                "x.ips",
+            ],
+        ] {
+            let args: Vec<std::ffi::OsString> = argv.iter().map(std::ffi::OsString::from).collect();
+            assert_eq!(normalize_legacy_weave_args(args.clone()), args, "{argv:?}");
+        }
+    }
+
+    #[test]
+    fn completions_exclude_internal_legacy_command() {
+        for shell in [
+            clap_complete::Shell::Bash,
+            clap_complete::Shell::Fish,
+            clap_complete::Shell::Zsh,
+            clap_complete::Shell::Elvish,
+            clap_complete::Shell::PowerShell,
+        ] {
+            let mut bytes = Vec::new();
+            clap_complete::generate(
+                shell,
+                &mut super::completion_command(),
+                "rom-weaver",
+                &mut bytes,
+            );
+            let script = String::from_utf8(bytes).expect("completion UTF-8");
+            assert!(!script.contains("legacy-weave-apply"), "{shell}");
+            assert!(script.contains("weave"), "{shell}");
+            assert!(script.contains("checksum"), "{shell}");
         }
     }
 
