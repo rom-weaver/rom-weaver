@@ -12,7 +12,7 @@ import { inheritSourceIdentificationPolicy } from "../input/input-identification
 import type { InputParentCompression } from "../input/input-assets.ts";
 import { fetchRemoteFiles } from "../remote/remote-file-fetch.ts";
 import type { WeaveApplySession, WeaveApplySessionEntry } from "./weave-session-model.ts";
-import { weaveChainEndpointChecks, weaveRomExpectation, weaveSessionDisplayName } from "./weave-session-model.ts";
+import { weaveSessionDefaults, weavePatchMetadata, weaveRomExpectation } from "./weave-session-model.ts";
 import { resolveWeaveChecks } from "./weave-targets.ts";
 
 // The archive-nesting chain a fanned-out leaf patch carries on its File so a re-stage still renders
@@ -151,12 +151,9 @@ function buildWeaveApplySession(
   patchFiles: File[],
   romFile: File | undefined,
 ): WeaveApplySession {
-  const output = result.weave.output;
-  const name = weaveSessionDisplayName(result.weave);
   const romExpectation = romFile ? undefined : weaveRomExpectation(result.weave);
   return {
-    chainEndpointChecks: weaveChainEndpointChecks(result.weave),
-    ...(result.weave.rom?.member ? { romMember: result.weave.rom.member } : {}),
+    ...weaveSessionDefaults(result.weave),
     entries: result.weave.patches.map((patch, index) =>
       toWeaveSessionEntry(
         {
@@ -169,12 +166,6 @@ function buildWeaveApplySession(
       ),
     ),
     key: `local:${weaveFile.name}:${weaveFile.size}:${weaveFile.lastModified}`,
-    patchBasis: result.weave.version >= 2 ? result.weave.patchBasis || "auto" : "auto",
-    ...(name ? { name } : {}),
-    outputDefaults: {
-      ...(output?.name ? { name: output.name } : {}),
-      ...(output?.header ? { header: output.header } : {}),
-    },
     ...(romFile ? { romFileName: romFile.name } : {}),
     ...(romExpectation ? { romExpectation } : {}),
     warnings: result.warnings,
@@ -215,18 +206,7 @@ function toWeaveSessionEntry(
   return {
     acquisition: { extractedPath: file.name, kind: "extracted" },
     fileName: file.name,
-    optional: patch.optional === true,
-    ...(patch.name ? { name: patch.name } : {}),
-    ...(patch.description ? { description: patch.description } : {}),
-    ...(patch.version ? { version: patch.version } : {}),
-    ...(patch.author ? { author: patch.author } : {}),
-    ...(patch.label ? { label: patch.label } : {}),
-    ...(patch.header ? { header: patch.header } : {}),
-    ...(patch.basis ? { basis: patch.basis } : {}),
-    ...(patch.input ? { input: patch.input } : {}),
-    ...(patch.target ? { target: patch.target } : {}),
-    ...(patch.inputChecks ? { inputChecks: patch.inputChecks } : {}),
-    ...(patch.outputChecks ? { outputChecks: patch.outputChecks } : {}),
+    ...weavePatchMetadata(patch),
   };
 }
 

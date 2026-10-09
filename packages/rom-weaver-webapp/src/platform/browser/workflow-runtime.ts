@@ -396,25 +396,7 @@ const createBrowserWeaveRuntime = (
   workerIo: RuntimeWorkerIo,
   jsonFileName = "rom-weaver-weave.json",
 ): NonNullable<WorkflowRuntime["weave"]> => ({
-  create: async ({
-    rom,
-    weaveRom,
-    patches,
-    outputName,
-    outputHeader,
-    patchBasis,
-    romName,
-    romMember,
-    romChecksums,
-    romSize,
-    outputCheck,
-    weaveFileName,
-    noWeaveRom,
-    logLevel,
-    onLog,
-    onProgress,
-    signal,
-  }) => {
+  create: async ({ rom, weaveRom, patches, weaveFileName, logLevel, onLog, onProgress, signal, ...options }) => {
     const staged: Array<{ cleanup: () => Promise<void> }> = [];
     const createdOutputs: Array<{ dispose: () => Promise<void> }> = [];
     const outputScope = createRomWeaverOutputScope();
@@ -445,19 +427,11 @@ const createBrowserWeaveRuntime = (
         : undefined;
       const result = await invokeRomWeaverWeaveCreateWorker(
         {
-          ...(weavePath ? { weavePath } : {}),
-          ...(weaveRomPath ? { weaveRomPath } : {}),
+          ...options,
+          weavePath,
+          weaveRomPath,
           knownInputPaths: inputPaths,
           logLevel,
-          ...(noWeaveRom ? { noWeaveRom: true } : {}),
-          ...(outputCheck ? { outputCheck } : {}),
-          ...(romChecksums ? { romChecksums } : {}),
-          ...(typeof romSize === "number" ? { romSize } : {}),
-          ...(outputHeader ? { outputHeader } : {}),
-          ...(patchBasis ? { patchBasis } : {}),
-          ...(outputName ? { outputName } : {}),
-          ...(romName === undefined ? {} : { romName }),
-          ...(romMember ? { romMember } : {}),
           outputPath,
           patchBases: patches.map((patch) => patch.basis || "auto"),
           patchAuthors: patches.map((patch) => patch.author || ""),
@@ -473,7 +447,7 @@ const createBrowserWeaveRuntime = (
           patchOutputChecks: patches.map((patch) => patch.outputChecks || ""),
           patchVersions: patches.map((patch) => patch.version || ""),
           patchPaths,
-          ...(romPath ? { romPath } : {}),
+          romPath,
           signal,
         },
         onProgress,

@@ -137,23 +137,23 @@ const toAcquisition = (source: ParsedWeaveSourceRef, weaveUrl: string, label: st
   return { kind: "url", url: resolveWeaveRelativeUrl(source.path, weaveUrl, label) };
 };
 
-const toOutputDefaults = (parsed: ParsedWeaveParseResult): WeaveOutputDefaults => {
-  const output = parsed.weave.output;
-  if (!output) return {};
-  const defaults: WeaveOutputDefaults = {};
-  if (output.name) defaults.name = output.name;
-  if (output.header) defaults.header = output.header;
-  return defaults;
+const weaveSessionDefaults = (
+  weave: ParsedWeave,
+): Pick<WeaveApplySessionPlan, "chainEndpointChecks" | "romMember" | "name" | "patchBasis" | "outputDefaults"> => {
+  const name = weaveSessionDisplayName(weave);
+  return {
+    chainEndpointChecks: weaveChainEndpointChecks(weave),
+    ...(weave.rom?.member ? { romMember: weave.rom.member } : {}),
+    patchBasis: weave.version >= 2 ? weave.patchBasis || "auto" : "auto",
+    ...(name ? { name } : {}),
+    outputDefaults: {
+      ...(weave.output?.name ? { name: weave.output.name } : {}),
+      ...(weave.output?.header ? { header: weave.output.header } : {}),
+    },
+  };
 };
 
-const toWeavePlanEntry = (
-  patch: ParsedWeaveParseResult["weave"]["patches"][number],
-  source: ParsedWeaveSourceRef,
-  weaveUrl: string,
-  index: number,
-): WeavePlanEntry => ({
-  acquisition: toAcquisition(source, weaveUrl, `patch ${index + 1}`),
-  ...(patch.id ? { id: patch.id } : {}),
+const weavePatchMetadata = (patch: ParsedWeave["patches"][number]): Omit<WeavePlanEntry, "acquisition" | "id"> => ({
   ...(patch.input ? { input: patch.input } : {}),
   ...(patch.target ? { target: patch.target } : {}),
   ...(patch.version ? { version: patch.version } : {}),
@@ -166,6 +166,17 @@ const toWeavePlanEntry = (
   ...(patch.outputChecks ? { outputChecks: patch.outputChecks } : {}),
   ...(patch.header ? { header: patch.header } : {}),
   ...(patch.basis ? { basis: patch.basis } : {}),
+});
+
+const toWeavePlanEntry = (
+  patch: ParsedWeave["patches"][number],
+  source: ParsedWeaveSourceRef,
+  weaveUrl: string,
+  index: number,
+): WeavePlanEntry => ({
+  acquisition: toAcquisition(source, weaveUrl, `patch ${index + 1}`),
+  ...(patch.id ? { id: patch.id } : {}),
+  ...weavePatchMetadata(patch),
 });
 
 /**
@@ -190,16 +201,11 @@ const buildWeaveApplySessionPlan = (parsed: ParsedWeaveParseResult, weaveUrl: st
       ),
     );
   });
-  const name = weaveSessionDisplayName(parsed.weave);
   const romExpectation = parsed.romSource ? undefined : weaveRomExpectation(parsed.weave);
   return {
-    chainEndpointChecks: weaveChainEndpointChecks(parsed.weave),
-    ...(parsed.weave.rom?.member ? { romMember: parsed.weave.rom.member } : {}),
+    ...weaveSessionDefaults(parsed.weave),
     entries,
     key: weaveUrl,
-    patchBasis: parsed.weave.version >= 2 ? parsed.weave.patchBasis || "auto" : "auto",
-    ...(name ? { name } : {}),
-    outputDefaults: toOutputDefaults(parsed),
     ...(parsed.romSource ? { romAcquisition: toAcquisition(parsed.romSource, weaveUrl, "rom") } : {}),
     ...(romExpectation ? { romExpectation } : {}),
     warnings: parsed.warnings.slice(),
@@ -207,4 +213,11 @@ const buildWeaveApplySessionPlan = (parsed: ParsedWeaveParseResult, weaveUrl: st
 };
 
 export type { WeaveApplySession, WeaveApplySessionEntry, WeaveRomExpectation };
-export { buildWeaveApplySessionPlan, weaveChainEndpointChecks, weaveRomExpectation, weaveSessionDisplayName };
+export {
+  buildWeaveApplySessionPlan,
+  weaveChainEndpointChecks,
+  weaveRomExpectation,
+  weaveSessionDisplayName,
+  weaveSessionDefaults,
+  weavePatchMetadata,
+};
