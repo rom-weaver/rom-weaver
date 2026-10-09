@@ -320,10 +320,17 @@ async function checkWebapp() {
   const configPath = join(scratch, "nginx.conf");
   await writeFile(configPath, config);
   const proxy = await start("proxy", "nginx:alpine", [
+    "--health-cmd",
+    "wget -q -O /dev/null http://127.0.0.1:8080/rom-weaver/health",
+    "--health-interval=1s",
+    "--health-timeout=5s",
+    "--health-start-period=10s",
+    "--health-retries=10",
     "--mount",
     `type=bind,source=${configPath},target=/etc/nginx/conf.d/default.conf,readonly`,
   ]);
   docker("exec", proxy.container, "nginx", "-t");
+  await healthy(proxy.container);
   await redirects(web.origin, "");
   await redirects(proxy.origin, "/rom-weaver");
   for (const query of queries) {
