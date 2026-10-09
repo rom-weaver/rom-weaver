@@ -248,6 +248,14 @@ async function checkBrowser(origins) {
       await page
         .locator('#rom-weaver-list-patch-stack [data-file-name="patch.ips"]')
         .waitFor({ state: "visible", timeout: 60_000 });
+      await page
+        .locator("#rom-weaver-list-input-stack")
+        .getByText(/^758d6336$/i)
+        .waitFor({ state: "visible", timeout: 60_000 });
+      await page
+        .locator("#rom-weaver-list-patch-stack")
+        .getByText("Verified", { exact: true })
+        .waitFor({ state: "visible", timeout: 60_000 });
       let download;
       try {
         [download] = await Promise.all([
