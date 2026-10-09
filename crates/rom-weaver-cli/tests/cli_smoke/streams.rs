@@ -806,8 +806,8 @@ fn binary_patch_output_rejects_ambiguous_formats_and_side_effects() {
             "-o",
             "-",
             "--no-compress",
-            "--emit-bundle",
-            "bundle.json",
+            "--emit-weave",
+            "weave.json",
         ],
         vec![
             "weave",

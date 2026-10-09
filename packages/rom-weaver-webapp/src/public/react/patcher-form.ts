@@ -1,5 +1,5 @@
-import type { BundleApplySession } from "../../lib/bundle/bundle-session-model.ts";
-import type { ParsedBundleCreateResult, ParsedBundlePatchInput } from "../../types/bundle.ts";
+import type { WeaveApplySession } from "../../lib/weave/weave-session-model.ts";
+import type { ParsedWeaveCreateResult, ParsedWeavePatchInput } from "../../types/weave.ts";
 import type { ApplySettings } from "../../types/settings.ts";
 import type { RomLookupResultRequest } from "./use-rom-lookup.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime-types.ts";
@@ -7,7 +7,7 @@ import type { PatcherOutputState, PatchStackItemState, PatchStackState } from ".
 import type { NoticeState, PatcherSectionNoticeKey, PatcherUiState, StoreController } from "./patcher-ui-state.ts";
 
 type ApplyPatchFormSettings = ApplySettings;
-type ApplyPatchFormMode = "apply" | "bundle";
+type ApplyPatchFormMode = "apply" | "weave";
 type BinarySource = File | FileSystemFileHandle;
 type PageFileDrop = {
   files: File[];
@@ -43,8 +43,8 @@ type PatcherStackController = StoreController<PatchStackState> & {
     index: number,
     option: {
       id?: string;
-      input?: ParsedBundlePatchInput;
-      target?: ParsedBundlePatchInput;
+      input?: ParsedWeavePatchInput;
+      target?: ParsedWeavePatchInput;
       inputChecks?: string;
       outputChecks?: string;
       basis?: "base" | "previous";
@@ -90,20 +90,20 @@ type ApplyPatchFormProps = {
   containerInputsEnabled?: boolean;
   compressionOptions?: string[];
   startup?: StartupState;
-  /** A `?bundle=` boot session: seeds enablement/output defaults once its files land. */
-  bundleSession?: BundleApplySession | null;
+  /** A `?weave=` boot session: seeds enablement/output defaults once its files land. */
+  weaveSession?: WeaveApplySession | null;
   onInputsChange?: (inputs: BinarySource[]) => void;
   onPatchesChange?: (patches: BinarySource[]) => void;
   onSelectView?: (view: "test") => void;
   /** The nav's own tab-switch handler, threaded down for the result's related-links strip. */
   onSelectTab?: (id: string) => void;
   onSettingsChange?: (settings: ApplyPatchFormSettings) => void;
-  /** Fires when the output-card bundle dropdown changes, to persist the "Bundle" setting ("" hides it). */
-  onBundlePackageChange?: (value: string) => void;
+  /** Fires when the output-card weave dropdown changes, to persist the "Weave" setting ("" hides it). */
+  onWeavePackageChange?: (value: string) => void;
   onProgress?: (event: ProgressEvent) => void;
   onApplyComplete?: (result: ApplyWorkflowResult) => void;
-  /** Fires after an "Export bundle…" run with the parsed create result (before the download). */
-  onBundleExportComplete?: (result: ParsedBundleCreateResult) => void;
+  /** Fires after an "Export weave…" run with the parsed create result (before the download). */
+  onWeaveExportComplete?: (result: ParsedWeaveCreateResult) => void;
   onError?: (error: Error) => void;
 };
 

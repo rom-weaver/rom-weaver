@@ -23,7 +23,7 @@ describe("rom-weaver command boundary helpers", () => {
       "compress",
       "trim",
       "patch",
-      "bundle",
+      "weave",
       "save",
       "tools",
       "plan-extract-batch",

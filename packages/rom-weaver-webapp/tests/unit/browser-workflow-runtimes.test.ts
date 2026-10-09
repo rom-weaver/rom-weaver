@@ -263,11 +263,11 @@ describe("browser archive runtime", () => {
     const runtime = createBrowserArchiveRuntime(io as never);
     state.staged.push({
       cleanup: vi.fn(async () => undefined),
-      fileName: "bundle.epub",
-      filePath: "/work/bundle.epub",
+      fileName: "weave.epub",
+      filePath: "/work/weave.epub",
     });
     const result = await runtime.extract?.({
-      source: { name: "bundle.epub" },
+      source: { name: "weave.epub" },
       entries: ["game.bin"],
       options: { directExtract: true },
     } as never);
@@ -278,9 +278,9 @@ describe("browser archive runtime", () => {
       undefined,
     );
 
-    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "bundle.zip", filePath: "/work/bundle.zip" });
+    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "weave.zip", filePath: "/work/weave.zip" });
     await expect(
-      runtime.extract?.({ source: "bundle.zip", entries: ["a", "b"], options: { directExtract: true } } as never),
+      runtime.extract?.({ source: "weave.zip", entries: ["a", "b"], options: { directExtract: true } } as never),
     ).rejects.toThrow("exactly one selected entry");
 
     state.staged.push({
@@ -296,14 +296,14 @@ describe("browser archive runtime", () => {
 
   it("extracts every nested leaf once and preserves its relative path", async () => {
     const runtime = createBrowserArchiveRuntime(io as never);
-    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "bundle.zip", filePath: "/work/bundle.zip" });
+    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "weave.zip", filePath: "/work/weave.zip" });
     state.extractAll.mockResolvedValueOnce([
       { fileName: "one.bin", filePath: "/work/output-scope/folder/one.bin", size: 4 },
       { fileName: "two.txt", filePath: "/work/output-scope/deeper/two.txt", size: 5 },
     ]);
 
     const result = await runtime.extract?.({
-      source: "bundle.zip",
+      source: "weave.zip",
       entries: [],
       extractAll: true,
       options: { chdSplitBin: true },
@@ -415,13 +415,13 @@ describe("browser archive runtime", () => {
 
   it("normalizes zip-like aliases and uses a VFS fallback output", async () => {
     const runtime = createBrowserArchiveRuntime(io as never);
-    const epub = new File(["archive"], "bundle.epub");
-    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "bundle.zip", filePath: "/work/bundle.zip" });
+    const epub = new File(["archive"], "weave.epub");
+    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "weave.zip", filePath: "/work/weave.zip" });
     state.probe.mockResolvedValueOnce({ entries: [] });
     await expect(runtime.probe?.({ source: epub } as never)).resolves.toEqual({ entries: [] });
     expect(io.stageSource).toHaveBeenCalledWith(expect.objectContaining({ source: expect.any(File) }));
     const stagedAlias = io.stageSource.mock.calls[0]?.[0]?.source as File;
-    expect(stagedAlias.name).toBe("bundle.zip");
+    expect(stagedAlias.name).toBe("weave.zip");
 
     const wrapped = { source: new File(["wrapped"], "wrapped.epub") };
     state.staged.push({
@@ -437,7 +437,7 @@ describe("browser archive runtime", () => {
       source: wrapped.source,
     });
 
-    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "bundle.zip", filePath: "/work/bundle.zip" });
+    state.staged.push({ cleanup: vi.fn(async () => undefined), fileName: "weave.zip", filePath: "/work/weave.zip" });
     state.ingest.mockResolvedValueOnce({ assets: [], patches: [] });
     await expect(
       runtime.extract?.({ source: epub, entries: ["fallback.bin"], options: {} } as never),

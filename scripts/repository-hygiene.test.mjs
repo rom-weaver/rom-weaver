@@ -56,11 +56,14 @@ test("build outputs stay out of the tracked tree", () => {
   );
 });
 
-test("the Docker context includes the published bundle schema", () => {
+test("the Docker context includes the published weave schema", () => {
   const dockerIgnore = readFileSync(new URL("../.dockerignore", import.meta.url), "utf8");
-  assert.match(
-    dockerIgnore,
-    /^!docs\/rom-weaver-bundle-v2\.schema\.json$/mu,
-    "Vite publishes the bundle schema, so Docker builds MUST include its source file",
-  );
+  for (const name of ["weave", "bundle"]) {
+    for (const version of [1, 2]) {
+      assert.ok(
+        dockerIgnore.split("\n").includes(`!docs/rom-weaver-${name}-v${version}.schema.json`),
+        `Docker builds MUST include the published ${name} v${version} schema`,
+      );
+    }
+  }
 });

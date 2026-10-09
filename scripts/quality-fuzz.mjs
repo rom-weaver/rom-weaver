@@ -8,7 +8,7 @@ export const FUZZ_TARGETS = [
   "ips_apply",
   "save_parse",
   "disc_sheet",
-  "bundle_parse",
+  "weave_parse",
   "dcp_zip",
   "iso9660",
 ];

@@ -33,8 +33,8 @@ const DOCS_SCREENSHOT_CASES = [
     dismissGuide: true,
     docsRoute: "docs/create-bundles",
     name: "bundle-output",
-    route: "/bundle-patches?guide=bundle",
-    target: "#rom-weaver-bundle-job",
+    route: "/weave-patches?guide=weave",
+    target: "#rom-weaver-weave-job",
   },
   {
     docsRoute: "docs/identify-roms-browser",

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
-import type { BundleRomExpectation } from "../../lib/bundle/bundle-session-model.ts";
-import { validatePatchDependencies } from "../../lib/bundle/bundle-targets.ts";
+import type { WeaveRomExpectation } from "../../lib/weave/weave-session-model.ts";
+import { validatePatchDependencies } from "../../lib/weave/weave-targets.ts";
 import type { BrowserApplyResult } from "../../platform/browser/browser-api.ts";
-import type { ParsedBundleChecks } from "../../types/bundle.ts";
+import type { ParsedWeaveChecks } from "../../types/weave.ts";
 import { RelatedStrip } from "../../webapp/components/related-strip.tsx";
 import { getCheatHeaderStripConflict } from "../../lib/cheats/header-guard.ts";
 import { ApplyPatchListStep } from "./apply-patch-list-step.tsx";
@@ -45,7 +45,7 @@ import type {
 import type { PatcherSectionNoticeKey, RomInputRowState } from "./patcher-ui-state.ts";
 import { resolveAssetUrl } from "./asset-url.ts";
 import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
-import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
+import type { WeavePatchMeta } from "./use-weave-apply-session.ts";
 import type { PatchInputBasis } from "./patch-input-basis.ts";
 import { useExpectedRomIdentification } from "./use-expected-rom-identification.ts";
 import { useRomLookup, type RomLookupResultRequest } from "./use-rom-lookup.ts";
@@ -57,18 +57,18 @@ import {
   type RomIdentificationState,
   buildRomIdentificationStates,
 } from "./apply-rom-expectations.ts";
-import { getBundleVerificationError } from "./apply-declared-checksums.ts";
+import { getWeaveVerificationError } from "./apply-declared-checksums.ts";
 import {
-  type BundleToolsState,
-  type BundleExportState,
+  type WeaveToolsState,
+  type WeaveExportState,
   OutputHeaderField,
   PostApplyBehaviorFields,
   ApplyOutputAction,
   ApplySecondaryJob,
   buildRomActualsById,
-  getBundleActionLabel,
-  BundleOutputStep,
-  BundleSecondaryJob,
+  getWeaveActionLabel,
+  WeaveOutputStep,
+  WeaveSecondaryJob,
 } from "./apply-output-fields.tsx";
 import { type RomRowDeps, groupRomInputs, renderRomInputRow, renderDiscGroup } from "./apply-rom-input-rows.tsx";
 import { SectionNotice } from "./apply-section-notice.tsx";
@@ -201,46 +201,46 @@ const APPLY_CHEATS_TUTORIAL_STEPS: readonly SampleTutorialStep[] = [
   },
 ];
 
-const getBundleSampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer>): readonly SampleTutorialStep[] => [
+const getWeaveSampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer>): readonly SampleTutorialStep[] => [
   getViewTutorialStep(localizer, "#rom-weaver-row-file-rom", {
     actions: [
       ["checks", localizer.message("ui.apply.tutorial.checks")],
       ["remove", localizer.message("ui.apply.tutorial.remove")],
     ],
-    body: localizer.message("ui.apply.bundleTutorial.rom.body"),
+    body: localizer.message("ui.apply.weaveTutorial.rom.body"),
     openDrawers: true,
     target: "#rom-weaver-row-file-rom",
-    title: localizer.message("ui.apply.bundleTutorial.rom.title"),
+    title: localizer.message("ui.apply.weaveTutorial.rom.title"),
   }),
   getIdentifyTutorialStep(localizer),
   {
     actions: [
       ["reorder", localizer.message("ui.apply.tutorial.moveUp")],
       ["reorder", localizer.message("ui.apply.tutorial.moveDown")],
-      ["toggle", localizer.message("ui.apply.bundleTutorial.optional")],
+      ["toggle", localizer.message("ui.apply.weaveTutorial.optional")],
       ["menu", localizer.message("ui.apply.tutorial.patchDetails")],
     ],
-    body: localizer.message("ui.apply.bundleTutorial.patches.body"),
+    body: localizer.message("ui.apply.weaveTutorial.patches.body"),
     openMenu: true,
     target: "#rom-weaver-row-patch-stack",
-    title: localizer.message("ui.apply.bundleTutorial.patches.title"),
+    title: localizer.message("ui.apply.weaveTutorial.patches.title"),
   },
   {
-    actions: [["package", localizer.message("ui.apply.bundleTutorial.bundlePatches")]],
-    body: localizer.message("ui.apply.bundleTutorial.safeBundle.body"),
+    actions: [["weave", localizer.message("ui.apply.weaveTutorial.weavePatches")]],
+    body: localizer.message("ui.apply.weaveTutorial.safeWeave.body"),
     openDrawers: true,
     placement: "top",
-    target: "#rom-weaver-bundle-job",
-    title: localizer.message("ui.apply.bundleTutorial.safeBundle.title"),
+    target: "#rom-weaver-weave-job",
+    title: localizer.message("ui.apply.weaveTutorial.safeWeave.title"),
   },
   {
-    actions: [["package", localizer.message("ui.bundleExport.share")]],
-    body: localizer.message("ui.apply.bundleTutorial.download.body"),
-    cta: "#rom-weaver-button-export-bundle",
+    actions: [["weave", localizer.message("ui.weaveExport.share")]],
+    body: localizer.message("ui.apply.weaveTutorial.download.body"),
+    cta: "#rom-weaver-button-export-weave",
     openDrawers: true,
     placement: "top",
-    target: "#rom-weaver-bundle-job",
-    title: localizer.message("ui.apply.bundleTutorial.download.title"),
+    target: "#rom-weaver-weave-job",
+    title: localizer.message("ui.apply.weaveTutorial.download.title"),
   },
 ];
 
@@ -327,15 +327,15 @@ const resolveOutputHeaderOptions = (romInputs: RomInputRowState[]) => {
 /** Fetches the bundled sample and hands it to the drop path, for both guided tutorials. */
 const useGuidedSampleLoader = (input: {
   assetBaseUrl: string | undefined;
-  mode: "apply" | "bundle";
+  mode: "apply" | "weave";
   onDrop: (files: File[]) => void;
-  onStartBundle: () => void;
+  onStartWeave: () => void;
   onPracticeCheatSampleChange?: (active: boolean) => void;
 }) => {
   const localizer = useUiLocalizer();
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleError, setSampleError] = useState("");
-  const [sampleTutorial, setSampleTutorial] = useState<"apply" | "apply-cheats" | "bundle" | null>(null);
+  const [sampleTutorial, setSampleTutorial] = useState<"apply" | "apply-cheats" | "weave" | null>(null);
   const loadGenerationRef = useRef(0);
   const closeSampleTutorial = () => {
     loadGenerationRef.current += 1;
@@ -348,7 +348,7 @@ const useGuidedSampleLoader = (input: {
     },
     [],
   );
-  const loadFirstWeave = async (guide: "apply" | "apply-cheats" | "bundle") => {
+  const loadFirstWeave = async (guide: "apply" | "apply-cheats" | "weave") => {
     const generation = ++loadGenerationRef.current;
     setSampleLoading(true);
     setSampleError("");
@@ -392,14 +392,14 @@ const useGuidedSampleLoader = (input: {
     setSampleTutorial("apply-cheats");
     void loadFirstWeave("apply-cheats");
   };
-  const startBundleSample = () => {
-    input.onStartBundle();
-    setSampleTutorial("bundle");
-    void loadFirstWeave("bundle");
+  const startWeaveSample = () => {
+    input.onStartWeave();
+    setSampleTutorial("weave");
+    void loadFirstWeave("weave");
   };
   useGuidedSampleStart("apply", startApplySample, closeSampleTutorial, input.mode === "apply");
   useGuidedSampleStart("apply-cheats", startApplyCheatsSample, closeSampleTutorial, input.mode === "apply");
-  useGuidedSampleStart("bundle", startBundleSample, closeSampleTutorial, input.mode === "bundle");
+  useGuidedSampleStart("weave", startWeaveSample, closeSampleTutorial, input.mode === "weave");
   return {
     closeSampleTutorial,
     loadApplyPractice,
@@ -408,7 +408,7 @@ const useGuidedSampleLoader = (input: {
     sampleTutorial,
     startApplyCheatsSample,
     startApplySample,
-    startBundleSample,
+    startWeaveSample,
   };
 };
 
@@ -434,8 +434,8 @@ const resolveApplyActivity = (input: {
  * an unambiguous single-ROM bench.
  */
 const buildRomRowDeps = (input: {
-  bundleRomExpectation: BundleRomExpectation | undefined;
-  expectedRomChecks: ParsedBundleChecks | undefined;
+  weaveRomExpectation: WeaveRomExpectation | undefined;
+  expectedRomChecks: ParsedWeaveChecks | undefined;
   expectedDatabaseChecksums: Record<string, string> | undefined;
   identificationStates: ReadonlyMap<string, RomIdentificationState>;
   localizer: ReturnType<typeof useUiLocalizer>;
@@ -452,7 +452,7 @@ const buildRomRowDeps = (input: {
     ui: input.uiController,
     verificationStates: input.romVerificationStates,
     ...(singleRom && expectedRomChecks ? { expectedChecks: expectedRomChecks } : {}),
-    ...(singleRom && input.bundleRomExpectation?.name ? { expectedName: input.bundleRomExpectation.name } : {}),
+    ...(singleRom && input.weaveRomExpectation?.name ? { expectedName: input.weaveRomExpectation.name } : {}),
     ...(singleRom && input.expectedDatabaseChecksums
       ? { expectedDatabaseChecksums: input.expectedDatabaseChecksums }
       : {}),
@@ -464,14 +464,14 @@ function ApplyWorkflowFormView({
   cheatsOn,
   controllers,
   emulatorOutput,
-  bundleExpectedRomChecks,
-  bundleExport,
-  bundleMetaById,
-  bundleSessionMatches,
-  bundleRomExpectation,
-  bundleTools,
-  onBundleMetaChange,
-  onBundleMetaBulkChange,
+  weaveExpectedRomChecks,
+  weaveExport,
+  weaveMetaById,
+  weaveSessionMatches,
+  weaveRomExpectation,
+  weaveTools,
+  onWeaveMetaChange,
+  onWeaveMetaBulkChange,
   onSelectTab,
   onSelectView,
   onPracticeCheatSampleChange,
@@ -501,27 +501,27 @@ function ApplyWorkflowFormView({
     notice?: NoticeController;
   };
   emulatorOutput?: BrowserApplyResult["output"] | null;
-  /** Bundle export controls live in the separate sharing job after Apply. */
-  bundleExport?: BundleExportState;
-  /** Bundle notices + the export reveal state. */
-  bundleTools?: BundleToolsState;
-  /** The bundle's expected base-ROM checks, folded into the staged ROM card. */
-  bundleExpectedRomChecks?: ParsedBundleChecks;
-  /** Per-patch bundle metadata (label/description chips), keyed by stable source id. */
-  bundleMetaById?: ReadonlyMap<string, BundlePatchMeta>;
-  /** A loaded bundle's delivered patch names match the current patch list. */
-  bundleSessionMatches?: boolean;
-  /** Shown while the bundle session waits for the user to supply the expected ROM. */
-  bundleRomExpectation?: BundleRomExpectation;
-  onBundleMetaChange?: (id: string, updates: Partial<BundlePatchMeta>) => void;
-  onBundleMetaBulkChange?: (ids: readonly string[], updates: Partial<BundlePatchMeta>) => void;
+  /** Weave export controls live in the separate sharing job after Apply. */
+  weaveExport?: WeaveExportState;
+  /** Weave notices + the export reveal state. */
+  weaveTools?: WeaveToolsState;
+  /** The weave's expected base-ROM checks, folded into the staged ROM card. */
+  weaveExpectedRomChecks?: ParsedWeaveChecks;
+  /** Per-patch weave metadata (label/description chips), keyed by stable source id. */
+  weaveMetaById?: ReadonlyMap<string, WeavePatchMeta>;
+  /** A loaded weave's delivered patch names match the current patch list. */
+  weaveSessionMatches?: boolean;
+  /** Shown while the weave session waits for the user to supply the expected ROM. */
+  weaveRomExpectation?: WeaveRomExpectation;
+  onWeaveMetaChange?: (id: string, updates: Partial<WeavePatchMeta>) => void;
+  onWeaveMetaBulkChange?: (ids: readonly string[], updates: Partial<WeavePatchMeta>) => void;
   /** The nav's own tab-switch handler, threaded down for the result's related-links strip. */
   onSelectTab?: (id: string) => void;
   onSelectView?: (view: "test") => void;
   onTrace?: (message: string, details?: Record<string, unknown>) => void;
   onUnifiedDrop?: (files: File[], onSettled?: () => void) => void;
   onPracticeCheatSampleChange?: (active: boolean) => void;
-  mode?: "apply" | "bundle";
+  mode?: "apply" | "weave";
   patchEnablement?: PatchEnablement;
   patchInputBasis?: PatchInputBasis;
   onPatchInputBasisChange?: (index: number, basis: PatchInputBasis) => void;
@@ -551,8 +551,8 @@ function ApplyWorkflowFormView({
   const fileInputAccept = getFileInputAcceptAttributes();
   const dismissSectionNotice = (key: PatcherSectionNoticeKey) => () => uiController.dismissNotice?.(key);
   const localizer = useUiLocalizer();
-  const bundlePage = mode === "bundle";
-  const unifiedInputId = mode === "bundle" ? "rom-weaver-input-file-unified-bundle" : "rom-weaver-input-file-unified";
+  const weavePage = mode === "weave";
+  const unifiedInputId = mode === "weave" ? "rom-weaver-input-file-unified-weave" : "rom-weaver-input-file-unified";
 
   const romInputs: RomInputRowState[] = uiState.romInputs;
   const patches = patchState.items;
@@ -563,15 +563,15 @@ function ApplyWorkflowFormView({
     return !!patchEnablement && id !== undefined && patchEnablement.disabledIds.has(id);
   });
   // Card metadata is resolved by stable id so reorders keep the right annotations.
-  const bundleMeta = patches.map((_, index) => {
+  const weaveMeta = patches.map((_, index) => {
     const id = patchIds[index];
-    const metadata = bundleMetaById && id !== undefined ? bundleMetaById.get(id) : undefined;
+    const metadata = weaveMetaById && id !== undefined ? weaveMetaById.get(id) : undefined;
     return id ? { id, ...metadata } : metadata;
   });
-  const bundleVerificationError =
-    getBundleVerificationError(bundleMeta, patches, localizer) ||
+  const weaveVerificationError =
+    getWeaveVerificationError(weaveMeta, patches, localizer) ||
     validatePatchDependencies(
-      bundleMeta.map((meta, index) => ({
+      weaveMeta.map((meta, index) => ({
         enabled: !disabledPatchFlags[index],
         id: meta?.id || `patch-${index + 1}`,
         input: meta?.input,
@@ -629,16 +629,16 @@ function ApplyWorkflowFormView({
   const romActualsById = buildRomActualsById(romInputs);
   // The expected-ROM group describes THE base ROM, so it only renders for an
   // unambiguous single-ROM bench. Plan base-basis verdicts feed it; without plan
-  // evidence the bundle expectation, then the chain-input patch's checks, stand in.
+  // evidence the weave expectation, then the chain-input patch's checks, stand in.
   const singleRom = romInputs.length === 1;
   const planBaseExpectation = singleRom
-    ? buildPlanBaseExpectation(patches, disabledPatchFlags, bundleMeta, bundleExpectedRomChecks, romInputs[0]?.info)
+    ? buildPlanBaseExpectation(patches, disabledPatchFlags, weaveMeta, weaveExpectedRomChecks, romInputs[0]?.info)
     : null;
   const expectedRomChecks =
-    planBaseExpectation?.expected ?? bundleExpectedRomChecks ?? parseChainInputExpectation(patches, disabledPatchFlags);
+    planBaseExpectation?.expected ?? weaveExpectedRomChecks ?? parseChainInputExpectation(patches, disabledPatchFlags);
   const baseConflict = !!planBaseExpectation?.conflict;
   // Any rom check with no ROM behind it yet raises the expectation card - the
-  // bundle's own entry, the plan's base verdict, or the chain-input patch's
+  // weave's own entry, the plan's base verdict, or the chain-input patch's
   // declared source. The identify lookup is what turns the check into a title.
   const hasExpectedChecks = !!(
     Object.keys(expectedRomChecks?.checksums || {}).length || typeof expectedRomChecks?.size === "number"
@@ -648,7 +648,7 @@ function ApplyWorkflowFormView({
     romInputs.length === 0,
   );
   // The search-by-checksum-or-name path only exists to fill the gap the
-  // derived checks leave: nothing here says which ROM the run needs. A bundle
+  // derived checks leave: nothing here says which ROM the run needs. A weave
   // or patch that already declares one answers the question, so the search
   // stays out of the way and its own result is dropped.
   const romLookup = useRomLookup(ROM_LOOKUP_MESSAGES(localizer));
@@ -670,14 +670,14 @@ function ApplyWorkflowFormView({
     romInputs.length === 0 && hasExpectedChecks
       ? {
           ...(expectedRomChecks ? { checks: expectedRomChecks } : {}),
-          ...(bundleRomExpectation?.name ? { name: bundleRomExpectation.name } : {}),
-          source: bundleRomExpectation ? "bundle" : "patch",
+          ...(weaveRomExpectation?.name ? { name: weaveRomExpectation.name } : {}),
+          source: weaveRomExpectation ? "weave" : "patch",
         }
       : manualRomLookup
         ? { checks: manualRomLookup.checks, source: romLookupSource(manualRomLookup.foundBy) }
         : undefined;
   const romRowDeps = buildRomRowDeps({
-    bundleRomExpectation,
+    weaveRomExpectation,
     expectedDatabaseChecksums: databaseOnlyChecks(expectedRomChecks, expectedRomIdentification)?.checksums,
     expectedRomChecks,
     identificationStates: romIdentificationStates,
@@ -687,7 +687,7 @@ function ApplyWorkflowFormView({
     singleRom,
     uiController,
   });
-  const outputDisabled = outputState.disabled || bundleExport?.busy === true;
+  const outputDisabled = outputState.disabled || weaveExport?.busy === true;
   const header = resolveOutputHeaderOptions(romInputs);
   const renderOutputHeaderField = (id?: string) => (
     <OutputHeaderField
@@ -706,11 +706,11 @@ function ApplyWorkflowFormView({
   const emulatorFileName =
     emulatorInput?.info.fileName || emulatorInput?.info.archiveName || outputState.pendingDownloadFileName || undefined;
   const emulatorCore = getEmulatorJsCore(emulatorPlatform, emulatorFileName);
-  // "Share bundle" until an export exists, then "Download ...".
-  const bundleCreateLabel = getBundleActionLabel(bundleExport, localizer, false);
-  const bundleActionLabel = bundleExport?.downloadable
-    ? getBundleActionLabel(bundleExport, localizer, true)
-    : bundleCreateLabel;
+  // "Share weave" until an export exists, then "Download ...".
+  const weaveCreateLabel = getWeaveActionLabel(weaveExport, localizer, false);
+  const weaveActionLabel = weaveExport?.downloadable
+    ? getWeaveActionLabel(weaveExport, localizer, true)
+    : weaveCreateLabel;
   const outputExtraFields = (
     <>
       {renderOutputHeaderField()}
@@ -744,13 +744,13 @@ function ApplyWorkflowFormView({
     sampleTutorial,
     startApplyCheatsSample,
     startApplySample,
-    startBundleSample,
+    startWeaveSample,
   } = useGuidedSampleLoader({
     assetBaseUrl,
     mode,
     onDrop: handleUnifiedDrop,
     onPracticeCheatSampleChange,
-    onStartBundle: () => bundleTools?.setBundlePackage("patches"),
+    onStartWeave: () => weaveTools?.setWeavePackage("patches"),
   });
   // Start the hero morph at the gesture, not after a large input finishes enough
   // staging to publish its first row. This is presentation-only; Rust ingestion
@@ -771,7 +771,7 @@ function ApplyWorkflowFormView({
   // The empty bench fills (or clears) inside a flat crossfade - the 0x01 hero
   // shrinking into the add-row otherwise snaps. A drop-start signal makes that
   // crossfade begin before input staging publishes its first row.
-  // A checksum match fills the bench the way a patches-only bundle does: 0x02
+  // A checksum match fills the bench the way a patches-only weave does: 0x02
   // already knows which ROM it wants, so the whole run is laid out around it.
   const workflowActuallyEmpty = !(workflowHasContent || dropStarted || manualRomLookup);
   const workflowEmpty = useFlatTransitionFlag(workflowActuallyEmpty);
@@ -799,8 +799,8 @@ function ApplyWorkflowFormView({
   const renderOutputAction = (
     <ApplyOutputAction
       applyTotalTime={applyTotalTime}
-      bundleTools={bundleTools}
-      bundleVerificationError={bundleVerificationError}
+      weaveTools={weaveTools}
+      weaveVerificationError={weaveVerificationError}
       cheatHeaderStripConflict={cheatHeaderStripConflict}
       controllers={{ output: controllers.output }}
       disabledPatchCount={disabledPatchCount}
@@ -820,14 +820,14 @@ function ApplyWorkflowFormView({
     />
   );
   // Keep the optional sharing job available after Apply once the bench has content.
-  const showBundleJob = bundleExport && bundleTools && (romInputs.length > 0 || patches.length > 0 || applyDone);
-  const bundleSecondaryJob =
-    showBundleJob && !bundlePage ? (
-      <BundleSecondaryJob
-        bundleActionLabel={bundleActionLabel}
-        bundleExport={bundleExport}
-        bundleTools={bundleTools}
-        disabled={outputState.disabled || !bundleExport.ready || !romInputs.length || !patches.length}
+  const showWeaveJob = weaveExport && weaveTools && (romInputs.length > 0 || patches.length > 0 || applyDone);
+  const weaveSecondaryJob =
+    showWeaveJob && !weavePage ? (
+      <WeaveSecondaryJob
+        weaveActionLabel={weaveActionLabel}
+        weaveExport={weaveExport}
+        weaveTools={weaveTools}
+        disabled={outputState.disabled || !weaveExport.ready || !romInputs.length || !patches.length}
       />
     ) : null;
 
@@ -867,7 +867,7 @@ function ApplyWorkflowFormView({
       state={uiState.outputNotice}
     />
   );
-  const applySecondaryJob = bundlePage ? (
+  const applySecondaryJob = weavePage ? (
     <ApplySecondaryJob>
       <OutputCard {...applyOutputProps} className="apply-output" />
       {outputNotice}
@@ -900,7 +900,7 @@ function ApplyWorkflowFormView({
           </>
         }
         big={workflowEmpty}
-        guide={bundlePage ? WORKFLOW_GUIDES.bundle : WORKFLOW_GUIDES.apply}
+        guide={weavePage ? WORKFLOW_GUIDES.weave : WORKFLOW_GUIDES.apply}
         heroLabel={localizer.message("ui.apply.drop.hero")}
         heroLabelCoarse={localizer.message("ui.apply.drop.heroCoarse")}
         id="rom-weaver-row-unified-drop"
@@ -908,17 +908,17 @@ function ApplyWorkflowFormView({
           <ul className="info-list">
             <li>{localizer.message("ui.apply.drop.info.nested")}</li>
             <li>{localizer.message("ui.apply.drop.info.compressed")}</li>
-            <li>{localizer.message("ui.apply.drop.info.bundle")}</li>
+            <li>{localizer.message("ui.apply.drop.info.weave")}</li>
             <li>{localizer.message("ui.apply.drop.info.retroArch")}</li>
           </ul>
         }
         inputId={unifiedInputId}
         lead={
-          bundlePage
+          weavePage
             ? {
-                line1: "ui.hero.bundleThesis",
-                line2: "ui.hero.bundleThesis2",
-                description: "ui.hero.bundleDescription",
+                line1: "ui.hero.weaveThesis",
+                line2: "ui.hero.weaveThesis2",
+                description: "ui.hero.weaveDescription",
               }
             : {
                 line1: "ui.hero.thesis",
@@ -931,11 +931,11 @@ function ApplyWorkflowFormView({
         onboarding={
           pendingDrops.length ? null : (
             <ApplySampleStart
-              bundlePage={bundlePage}
+              weavePage={weavePage}
               downloadHref={resolveAssetUrl(assetBaseUrl, FIRST_WEAVE_ASSET)}
               onLoadApplySample={startApplySample}
               onLoadApplyCheatsSample={startApplyCheatsSample}
-              onLoadBundleSample={startBundleSample}
+              onLoadWeaveSample={startWeaveSample}
               sampleError={sampleError}
               sampleLoading={sampleLoading}
             />
@@ -949,10 +949,10 @@ function ApplyWorkflowFormView({
             { num: "0x02", title: localizer.message("ui.step.rom") },
             {
               num: "0x03",
-              title: localizer.message(bundlePage ? "ui.step.patches" : "ui.step.patchesCheats"),
+              title: localizer.message(weavePage ? "ui.step.patches" : "ui.step.patchesCheats"),
             },
-            ...(bundlePage
-              ? [{ num: "0x04", title: localizer.message("ui.step.bundle") }]
+            ...(weavePage
+              ? [{ num: "0x04", title: localizer.message("ui.step.weave") }]
               : [{ num: "0x04", title: localizer.message("ui.step.apply") }]),
           ]}
         />
@@ -971,7 +971,7 @@ function ApplyWorkflowFormView({
                   />
                   {/* A searched-for ROM is the user's guess, so the search stays
                       one line away until a real ROM makes the expectation
-                      concrete. A bundle's or patch's check is not up for
+                      concrete. A weave's or patch's check is not up for
                       revision, so those get no refine row. */}
                   {manualRomLookup ? (
                     <RomSearch localizer={localizer} lookup={romLookup} sampleChecksum="46df91ad" variant="compact" />
@@ -989,9 +989,9 @@ function ApplyWorkflowFormView({
                   <li>{localizer.message("ui.apply.inputHandling.archives")}</li>
                   <li>{localizer.message("ui.apply.inputHandling.compressed")}</li>
                   <li>{localizer.message("ui.apply.inputHandling.nested")}</li>
-                  <li>{localizer.message("ui.apply.inputHandling.bundleIndex")}</li>
+                  <li>{localizer.message("ui.apply.inputHandling.weaveIndex")}</li>
                   <li>{localizer.message("ui.apply.inputHandling.patchEntries")}</li>
-                  <li>{localizer.message("ui.apply.inputHandling.bundleContents")}</li>
+                  <li>{localizer.message("ui.apply.inputHandling.weaveContents")}</li>
                   <li>
                     <a href="https://docs.libretro.com/guides/softpatching/" rel="noreferrer" target="_blank">
                       RetroArch softpatch format
@@ -1030,24 +1030,24 @@ function ApplyWorkflowFormView({
             const renderPatchStep = (stack?: CheatStackRenderState) => (
               <ApplyPatchListStep
                 cheats={stack}
-                bundleMeta={bundleMeta}
-                bundleOutputCheckHint={!!bundleTools?.hasOptionalEntries}
-                bundleSessionMatches={bundleSessionMatches}
+                weaveMeta={weaveMeta}
+                weaveOutputCheckHint={!!weaveTools?.hasOptionalEntries}
+                weaveSessionMatches={weaveSessionMatches}
                 disabledFlags={disabledPatchFlags}
                 emptyState={patchesNeedsInput}
                 fault={applyFailed}
-                onBundleMetaChange={(index, updates) => {
+                onWeaveMetaChange={(index, updates) => {
                   const id = patchIds[index];
-                  if (id) onBundleMetaChange?.(id, updates);
+                  if (id) onWeaveMetaChange?.(id, updates);
                 }}
-                onBundleMetaBulkChange={(updates) => onBundleMetaBulkChange?.(patchIds, updates)}
+                onWeaveMetaBulkChange={(updates) => onWeaveMetaBulkChange?.(patchIds, updates)}
                 onTogglePatch={patchEnablement?.onToggle}
                 overrideAvailable={uiState.checksumOverride.visible}
                 patches={patches}
                 patchKeys={patchIds}
                 patchStack={controllers.patchStack}
                 patchInputBasis={patchInputBasis}
-                patchInputBasisDisabled={bundleExport?.busy}
+                patchInputBasisDisabled={weaveExport?.busy}
                 onPatchInputBasisChange={onPatchInputBasisChange}
                 romActualsById={romActualsById}
                 sharedRomChecks={singleRom ? expectedRomChecks : undefined}
@@ -1062,31 +1062,31 @@ function ApplyWorkflowFormView({
                 woven={wovenSteps}
               />
             );
-            return !bundlePage && romInputs.length === 1 && cheats
+            return !weavePage && romInputs.length === 1 && cheats
               ? cheats({ headerStripConflict: cheatHeaderStripConflict, renderStack: renderPatchStep })
               : renderPatchStep();
           })()}
 
-          {bundleExport && bundleTools && showBundleJob && bundlePage ? (
-            <BundleOutputStep
-              bundleActionLabel={bundleActionLabel}
-              bundleExport={bundleExport}
-              bundleTools={bundleTools}
-              disabled={outputDisabled || !bundleExport.ready || !romInputs.length || !patches.length}
+          {weaveExport && weaveTools && showWeaveJob && weavePage ? (
+            <WeaveOutputStep
+              weaveActionLabel={weaveActionLabel}
+              weaveExport={weaveExport}
+              weaveTools={weaveTools}
+              disabled={outputDisabled || !weaveExport.ready || !romInputs.length || !patches.length}
               fileName={outputState.displayFileName}
               headerField={
-                header.visible ? renderOutputHeaderField("rom-weaver-select-bundle-output-header") : undefined
+                header.visible ? renderOutputHeaderField("rom-weaver-select-weave-output-header") : undefined
               }
               onFileNameChange={(value) => controllers.output.setDisplayFileName(value)}
               onFormatChange={(value) => {
-                bundleExport.setFormat(value);
+                weaveExport.setFormat(value);
                 controllers.output.setOutputCompression(value);
               }}
               secondary={applySecondaryJob}
             />
           ) : null}
 
-          {bundlePage ? null : (
+          {weavePage ? null : (
             <WorkflowOutputStep
               {...applyOutputProps}
               className="apply-output"
@@ -1105,7 +1105,7 @@ function ApplyWorkflowFormView({
               meta={renderApplyTimingMeta(applyDone, localizer, outputState.applyTiming, outputState.compressTiming)}
               notice={outputNotice}
               num="0x04"
-              secondary={bundleSecondaryJob}
+              secondary={weaveSecondaryJob}
               title={localizer.message("ui.step.apply")}
               woven={applyDone || running}
             />
@@ -1128,8 +1128,8 @@ function ApplyWorkflowFormView({
           onClose={closeSampleTutorial}
           ready={sampleTutorial === "apply" || sampleTutorialReady}
           steps={
-            sampleTutorial === "bundle"
-              ? getBundleSampleTutorialSteps(localizer)
+            sampleTutorial === "weave"
+              ? getWeaveSampleTutorialSteps(localizer)
               : sampleTutorial === "apply-cheats"
                 ? APPLY_CHEATS_TUTORIAL_STEPS
                 : getApplySampleTutorialSteps(localizer, {

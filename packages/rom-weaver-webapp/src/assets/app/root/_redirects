@@ -34,10 +34,10 @@
 /apply-patch/ /apply-patches 301
 /apply-patch.html /apply-patches 301
 /apply-patch/index.html /apply-patches 301
-/bundle /bundle-patches 301
-/bundle/ /bundle-patches 301
-/bundle.html /bundle-patches 301
-/bundle/index.html /bundle-patches 301
+/weave /weave-patches 301
+/weave/ /weave-patches 301
+/weave.html /weave-patches 301
+/weave/index.html /weave-patches 301
 /create /create-patch 301
 /create/ /create-patch 301
 /create.html /create-patch 301
@@ -54,10 +54,10 @@
 /trim/ /trim-rom 301
 /trim.html /trim-rom 301
 /trim/index.html /trim-rom 301
-/weave /apply-patches 301
-/weave/ /apply-patches 301
-/weave.html /apply-patches 301
-/weave/index.html /apply-patches 301
+/bundle /weave-patches 301
+/bundle/ /weave-patches 301
+/bundle.html /weave-patches 301
+/bundle/index.html /weave-patches 301
 
 # `how-to/work-with-archives.md` was published at /docs/formats, one letter away
 # from the reference page at /docs/supported-formats. The guide now matches its
@@ -65,3 +65,8 @@
 /docs/formats /docs/work-with-archives 301
 /docs/formats/ /docs/work-with-archives 301
 /docs/formats.html /docs/work-with-archives 301
+
+/bundle-patches /weave-patches 301
+/bundle-patches/ /weave-patches 301
+/bundle-patches.html /weave-patches 301
+/bundle-patches/index.html /weave-patches 301

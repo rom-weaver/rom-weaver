@@ -23,7 +23,7 @@ Your original stays untouched. No uploads or account are needed.
 - [Put several patches in order](#put-several-patches-in-order)
 - [Add cheats to the patch order](#add-cheats-to-the-patch-order)
 - [Choose the output and apply](#choose-the-output-and-apply)
-- [Open a bundle](#open-a-bundle)
+- [Open a weave](#open-a-weave)
 - [If the ROM does not match](#if-the-rom-does-not-match)
 - [Use the result safely](#use-the-result-safely)
 
@@ -56,7 +56,7 @@ Compare the checksum, not just the filename. [How patching works](../explanation
 
 If you know the ROM but do not have the file, type its checksum or its game name into **Identify by checksum or game name**. It sits under the drop zone on the empty page, and in **0x02 ROM** once a patch is loaded. A checksum shows the expected ROM directly. A name lists the matching games on every system; choose one, then choose its region or revision. Either way the card shows the expected ROM: its title, its region and revision, and every checksum and the size the local identification data holds. Nothing is uploaded.
 
-The search appears only while nothing else names the ROM. A bundle entry, or a patch that records its own source, already answers the question.
+The search appears only while nothing else names the ROM. A weave entry, or a patch that records its own source, already answers the question.
 
 Keep one clean original somewhere safe. rom-weaver writes a separate result, but a known-good copy makes updates and troubleshooting much easier.
 
@@ -193,7 +193,7 @@ In **Apply**:
 
 1. Enter an output filename without an extension.
 2. Pick a plain file or a compressed output format. The format selector adds the extension.
-3. Open **Options** only if you need compression, output header, or bundle controls. The defaults are right for most patches.
+3. Open **Options** only if you need compression, output header, or weave controls. The defaults are right for most patches.
 4. Choose **APPLY & DOWNLOAD**.
 5. Wait for the button to finish, then save the browser download.
 
@@ -215,13 +215,15 @@ In **Apply**:
 
 Everything happens locally in the browser. The ROM, patches, and result are not sent to rom-weaver - see [why your files stay on your device](../explanation/local-first.md).
 
-## Open a bundle
+<a id="open-a-bundle"></a>
 
-A [bundle](../explanation/bundles.md) is a saved patching recipe. Add the bundle archive to **0x01 Inputs**. If it is patch-only, rom-weaver shows which ROM it expects. Add your matching ROM. Review optional patch switches, then use **APPLY & DOWNLOAD** just as you would for loose files.
+## Open a weave
 
-A release author can also give you a link that opens the bundle directly in Apply. The same local checks still happen before anything is written.
+A [weave](../explanation/bundles.md) is a saved patching recipe. Add the weave archive to **0x01 Inputs**. If it is patch-only, rom-weaver shows which ROM it expects. Add your matching ROM. Review optional patch switches, then use **APPLY & DOWNLOAD** just as you would for loose files.
 
-Want to publish one? [Create and share a patch bundle](create-bundles.md) has a separate browser-only guide and its own guided sample.
+A release author can also give you a link that opens the weave directly in Apply. The same local checks still happen before anything is written.
+
+Want to publish one? [Create and share a patch weave](create-bundles.md) has a separate browser-only guide and its own guided sample.
 
 ## If the ROM does not match
 

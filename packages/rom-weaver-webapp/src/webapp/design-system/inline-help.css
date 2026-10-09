@@ -1,5 +1,5 @@
 /* The inline-help popover system (the "i" trigger and its popover). The triggers sit in
-   step headers visible at first paint, so this must stay in the render-critical bundle -
+   step headers visible at first paint, so this must stay in the render-critical weave -
    it was extracted from drawers.css, which is deferred (the trigger rendered oversized
    until the deferred sheet arrived). Layered directly before `drawers` to keep its old
    cascade position. */

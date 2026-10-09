@@ -57,7 +57,7 @@
     scale: 0.985;
   }
 }
-/* The instant "identifying…" source bundle: shown the moment an archive lands, then its footprint
+/* The instant "identifying…" source weave: shown the moment an archive lands, then its footprint
    fans into the resolved card(s). The motion never blocks staging. The list gets breathing room so
    the chip doesn't crowd the drop zone above it. */
 .rw-app #rom-weaver-pending-drops {

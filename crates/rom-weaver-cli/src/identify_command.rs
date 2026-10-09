@@ -1108,7 +1108,7 @@ impl CliApp {
         }
     }
 
-    /// Identify from checks alone - the checksums and optional size a bundle
+    /// Identify from checks alone - the checksums and optional size a weave
     /// rom entry or a patch's source requirement carries, with no file to hash.
     fn run_identify_hash(
         &self,

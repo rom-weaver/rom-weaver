@@ -125,13 +125,13 @@ describe("ApplyPatchListStep", () => {
     });
     const { container } = renderList({
       patches: [first, second],
-      bundleOutputCheckHint: true,
-      bundleSessionMatches: true,
+      weaveOutputCheckHint: true,
+      weaveSessionMatches: true,
       disabledFlags: [false, true],
       fault: true,
       notice: <p id="list-notice">Patch source loaded</p>,
       overrideAvailable: true,
-      bundleMeta: [
+      weaveMeta: [
         {
           id: "patch-0",
           name: "First update",
@@ -155,7 +155,7 @@ describe("ApplyPatchListStep", () => {
     expect(container.textContent).toContain("CRC32");
     expect(container.textContent).toContain("SHA-1");
     expect(container.textContent).toContain(
-      "The expected output is verified only when every patch in the bundle is applied.",
+      "The expected output is verified only when every patch in the weave is applied.",
     );
     expect(container.textContent).toContain("Patch source loaded");
   });
@@ -188,14 +188,14 @@ describe("ApplyPatchListStep", () => {
 
   it("updates patch options, metadata, replacement, removal, and toggles", async () => {
     const patchStack = stack();
-    const onBundleMetaChange = vi.fn();
+    const onWeaveMetaChange = vi.fn();
     const onTogglePatch = vi.fn();
-    const { container } = renderList({ patchStack, onBundleMetaChange, onTogglePatch });
+    const { container } = renderList({ patchStack, onWeaveMetaChange, onTogglePatch });
 
     fireEvent.change(container.querySelector("#rom-weaver-select-patch-target-0") as HTMLSelectElement, {
       target: { value: "rom" },
     });
-    expect(onBundleMetaChange).toHaveBeenCalledWith(0, { input: { rom: true } });
+    expect(onWeaveMetaChange).toHaveBeenCalledWith(0, { input: { rom: true } });
     expect(patchStack.setPatchOption).toHaveBeenCalledWith(0, { basis: "base", revalidate: true });
     fireEvent.change(container.querySelector("#rom-weaver-patch-track-0") as HTMLSelectElement, {
       target: { value: "rom-b" },
@@ -226,7 +226,7 @@ describe("ApplyPatchListStep", () => {
     const name = container.querySelector("#rom-weaver-patch-name-0") as HTMLInputElement;
     fireEvent.change(name, { target: { value: " Renamed " } });
     fireEvent.blur(name);
-    expect(onBundleMetaChange).toHaveBeenCalledWith(0, { name: "Renamed" });
+    expect(onWeaveMetaChange).toHaveBeenCalledWith(0, { name: "Renamed" });
     fireEvent.click(container.querySelector("#rom-weaver-patch-meta-edit-0") as HTMLButtonElement);
 
     const checkAdd = container.querySelector("#rom-weaver-patch-input-add-check-0") as HTMLSelectElement;
@@ -237,7 +237,7 @@ describe("ApplyPatchListStep", () => {
     expect(container.querySelector("#rom-weaver-patch-input-md5-0-err")?.textContent).toContain("hex characters");
     fireEvent.change(check, { target: { value: "0123456789abcdef0123456789abcdef" } });
     fireEvent.blur(check);
-    expect(onBundleMetaChange).toHaveBeenCalledWith(
+    expect(onWeaveMetaChange).toHaveBeenCalledWith(
       0,
       expect.objectContaining({ inputChecks: expect.objectContaining({ checksums: expect.any(Object) }) }),
     );
@@ -283,11 +283,11 @@ describe("ApplyPatchListStep", () => {
 
   it("supports bulk metadata, order editing, and an order repair action", () => {
     const patchStack = stack();
-    const onBundleMetaBulkChange = vi.fn();
+    const onWeaveMetaBulkChange = vi.fn();
     const onTogglePatch = vi.fn();
     const { container } = renderList({
       patchStack,
-      onBundleMetaBulkChange,
+      onWeaveMetaBulkChange,
       onTogglePatch,
       disabledFlags: [false, false],
       patches: [
@@ -301,7 +301,7 @@ describe("ApplyPatchListStep", () => {
           },
         }),
       ],
-      bundleMeta: [{ version: "1" }, { version: "2" }],
+      weaveMeta: [{ version: "1" }, { version: "2" }],
     });
 
     fireEvent.click(container.querySelector(".patch-bulk-edit-button") as HTMLButtonElement);
@@ -313,7 +313,7 @@ describe("ApplyPatchListStep", () => {
       target: { value: "none" },
     });
     fireEvent.submit(container.querySelector("#rom-weaver-bulk-patch-meta") as HTMLFormElement);
-    expect(onBundleMetaBulkChange).toHaveBeenCalledWith({ author: "Team", version: "3.0" });
+    expect(onWeaveMetaBulkChange).toHaveBeenCalledWith({ author: "Team", version: "3.0" });
     expect(onTogglePatch).toHaveBeenCalledWith(0);
     expect(onTogglePatch).toHaveBeenCalledWith(1);
 
@@ -331,7 +331,7 @@ describe("ApplyPatchListStep", () => {
 
   it("edits N64 order and both sides of user verification checks", async () => {
     const patchStack = stack();
-    const onBundleMetaChange = vi.fn();
+    const onWeaveMetaChange = vi.fn();
     const n64 = item(0, {
       fileName: "game.bps",
       format: "BPS",
@@ -348,8 +348,8 @@ describe("ApplyPatchListStep", () => {
       ],
     });
     const { container } = renderList({
-      bundleMeta: [{}, undefined],
-      onBundleMetaChange,
+      weaveMeta: [{}, undefined],
+      onWeaveMetaChange,
       patches: [n64, item(1)],
       patchStack,
       romActuals: { bytes: 2048, crc32: "1234abcd", md5: "0".repeat(32) },
@@ -370,7 +370,7 @@ describe("ApplyPatchListStep", () => {
     fireEvent.keyDown(inputCheck, { key: "Enter" });
     await waitFor(() => expect(container.querySelector("#rom-weaver-patch-input-md5-0")).toBeNull());
     expect(container.querySelector("#rom-weaver-patch-input-md5-0-open")).toBeTruthy();
-    expect(onBundleMetaChange).toHaveBeenCalledWith(
+    expect(onWeaveMetaChange).toHaveBeenCalledWith(
       0,
       expect.objectContaining({ inputChecks: expect.objectContaining({ checksums: { md5: "0".repeat(32) } }) }),
     );
@@ -383,7 +383,7 @@ describe("ApplyPatchListStep", () => {
     expect(container.querySelector("#rom-weaver-patch-output-bytes-1-err")?.textContent).toContain("whole number");
     fireEvent.change(outputSize, { target: { value: "2048" } });
     fireEvent.blur(outputSize);
-    expect(onBundleMetaChange).toHaveBeenCalledWith(
+    expect(onWeaveMetaChange).toHaveBeenCalledWith(
       1,
       expect.objectContaining({ outputChecks: expect.objectContaining({ size: 2048 }) }),
     );

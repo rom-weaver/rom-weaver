@@ -9,10 +9,10 @@ import {
   ListChecks,
   ListOrdered,
   MousePointer2,
-  Package,
   RefreshCw,
   Scissors,
   SlidersHorizontal,
+  Spool,
   Stamp,
   ToggleRight,
   Upload,
@@ -49,13 +49,13 @@ type SampleTutorialAction =
   | "header"
   | "menu"
   | "options"
-  | "package"
   | "play"
   | "remove"
   | "reorder"
   | "replace"
   | "swap"
-  | "toggle";
+  | "toggle"
+  | "weave";
 
 const useGuidedSampleStart = (guide: GuidedSample, onStart: () => void, onDismiss: () => void, enabled = true) => {
   const onDismissRef = useRef(onDismiss);
@@ -154,7 +154,7 @@ const getViewTutorialStep = (
 
 /**
  * The match for a step's selector that is actually on screen. Every visited
- * workflow panel stays mounted (hidden), and Apply and Bundle render the same
+ * workflow panel stays mounted (hidden), and Apply and Weave render the same
  * form, so a document-wide lookup can land on a hidden panel's copy of the row:
  * the ring would then frame an empty box and the row the reader sees would stay
  * under the scrim.
@@ -193,13 +193,13 @@ const ACTION_ICONS: Record<SampleTutorialAction, ComponentType<{ className?: str
   header: Scissors,
   menu: EllipsisVertical,
   options: SlidersHorizontal,
-  package: Package,
   play: Gamepad,
   remove: X,
   reorder: ListOrdered,
   replace: RefreshCw,
   swap: SwapIcon,
   toggle: ToggleRight,
+  weave: Spool,
 };
 
 const GUIDE_GAP = 14;
@@ -503,7 +503,7 @@ const SampleTutorialStart = ({
   onSecondaryStart,
   secondaryHref,
   startAction = "apply",
-  secondaryAction = "package",
+  secondaryAction = "weave",
 }: {
   /** The page's own call to action on the closed chip ("Patch a sample"). */
   chipLabel: string;

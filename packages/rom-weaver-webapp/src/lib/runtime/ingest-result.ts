@@ -258,7 +258,7 @@ const parseRomAsset = (value: unknown): ParsedIngestRomAsset | undefined => {
   return asset;
 };
 
-/** Parse one wire `PatchDescriptor` record (shared with the bundle-parse result reader). */
+/** Parse one wire `PatchDescriptor` record (shared with the weave-parse result reader). */
 export const parsePatchDescriptor = (value: unknown): ParsedPatchDescriptor | undefined => {
   const record = asRecord(value) as WireRecord<PatchDescriptor> | undefined;
   if (!record) return undefined;

@@ -10,7 +10,7 @@ type WorkflowView =
   | "save-editor"
   | "test";
 /** "home" is the apex landing route: a WebappView the shell renders, but not a workflow. */
-type WebappView = WorkflowView | "bundle" | "docs" | "home" | "whats-new";
+type WebappView = WorkflowView | "weave" | "docs" | "home" | "whats-new";
 
 type ValidationState = {
   messages: string[];

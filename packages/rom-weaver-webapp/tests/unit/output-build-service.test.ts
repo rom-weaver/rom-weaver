@@ -271,7 +271,7 @@ describe("buildSessionOutputFiles", () => {
     (first as PatchFileInstance & { _cleanup?: () => void })._cleanup = cleanup;
     (second as PatchFileInstance & { _cleanup?: () => void })._cleanup = cleanup;
     const assets = [makeAsset("a", "rom", first), makeAsset("b", "rom", second)];
-    const compressed = await makeFile("7z-bytes", "bundle.7z");
+    const compressed = await makeFile("7z-bytes", "weave.7z");
     mockCreateArchivePatchFileOutput.mockResolvedValue(compressed);
 
     const result = await buildSessionOutputFiles(assets, new Map(), { output: { compression: "7z" } } as never);

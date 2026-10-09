@@ -19,28 +19,28 @@ type ApplyWorkflowParentCompression = {
   decompressionTimeMs?: number;
 };
 
-type ApplyWorkflowBundleSource = {
+type ApplyWorkflowWeaveSource = {
   /** The already-prepared leaf used by apply (usually an OPFS/VFS path). */
   source: SourceRef;
-  /** The original dropped source, retained for optional ROM bundling. */
+  /** The original dropped source, retained for optional ROM inclusion. */
   originalSource: SourceRef;
   fileName: string;
   size?: number;
   /** Exact logical ROM member/track locator when this source is a disc/archive leaf. */
   member?: string;
-  /** Concrete execution target used by bundle export. */
+  /** Concrete execution target used by weave export. */
   target?: PatchInputRef;
 };
 
-type ApplyWorkflowBundleRomSource = ApplyWorkflowBundleSource & {
+type ApplyWorkflowWeaveRomSource = ApplyWorkflowWeaveSource & {
   checksums?: ApplyWorkflowChecksums;
   recommendedFormat?: string;
 };
 
-type ApplyWorkflowBundleSources = {
+type ApplyWorkflowWeaveSources = {
   error?: string;
-  rom: ApplyWorkflowBundleRomSource | null;
-  patches: ApplyWorkflowBundleSource[];
+  rom: ApplyWorkflowWeaveRomSource | null;
+  patches: ApplyWorkflowWeaveSource[];
 };
 
 type ApplyWorkflowResolvedInput = {
@@ -96,11 +96,11 @@ type ApplyWorkflowInputState = {
 
 type ApplyWorkflowPatchState = {
   id: string;
-  /** Stable bundle/session identity; distinct from the transient source id. */
+  /** Stable weave/session identity; distinct from the transient source id. */
   patchId?: string;
-  /** Concrete execution input recorded by a bundle or session. */
+  /** Concrete execution input recorded by a weave or session. */
   patchInput?: PatchInputRef;
-  /** Cumulative output lane recorded by a bundle or session. */
+  /** Cumulative output lane recorded by a weave or session. */
   patchTarget?: PatchInputRef;
   inputChecks?: string;
   outputChecks?: string;
@@ -191,7 +191,7 @@ type ApplyWorkflowPatchState = {
 };
 
 export type {
-  ApplyWorkflowBundleSources,
+  ApplyWorkflowWeaveSources,
   ApplyWorkflowChecksums,
   ApplyN64ByteOrderMode,
   ApplyWorkflowInputState,

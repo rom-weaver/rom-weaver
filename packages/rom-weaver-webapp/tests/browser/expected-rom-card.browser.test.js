@@ -5,7 +5,7 @@ import { installPatcherTestHooks, loadFixtureFile, mount, RAW_PATCH, VALID_BPS }
 
 installPatcherTestHooks();
 
-const EXPECTED_CARD = "#rom-weaver-bundle-rom-expectation";
+const EXPECTED_CARD = "#rom-weaver-weave-rom-expectation";
 
 const getExpectationCard = () => document.querySelector(EXPECTED_CARD);
 const getHashForm = () => document.getElementById("rom-weaver-rom-search-form");
@@ -26,29 +26,29 @@ const submitHash = (value) => {
   getHashForm().dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
 };
 
-test("a checks-only bundle shows the expected ROM before one is staged", async () => {
+test("a checks-only weave shows the expected ROM before one is staged", async () => {
   const patchFile = await loadFixtureFile(RAW_PATCH);
-  const bundleJson = {
+  const weaveJson = {
     output: { name: "bundled-output" },
     patches: [{ name: "Core", path: "change.ips" }],
     rom: { checks: { checksums: { crc32: "d7ae93df" }, size: 1024 }, name: "game.bin" },
     version: 1,
   };
-  const bundleFile = new File([JSON.stringify(bundleJson)], "rom-weaver-bundle.json", { type: "application/json" });
+  const weaveFile = new File([JSON.stringify(weaveJson)], "rom-weaver-weave.json", { type: "application/json" });
 
-  mount(createElement(ApplyPatchForm, { pageDrop: { files: [bundleFile, patchFile], id: 1 } }));
+  mount(createElement(ApplyPatchForm, { pageDrop: { files: [weaveFile, patchFile], id: 1 } }));
 
   await expect.poll(() => getExpectationCard()?.textContent || "", { timeout: 30000 }).toContain("game.bin");
   expect(getExpectationCard().textContent).toContain("provide it yourself");
   const checks = getExpectationChecks();
   expect(checks.some((row) => row.includes("d7ae93df"))).toBe(true);
   expect(checks.some((row) => row.includes("1024"))).toBe(true);
-  // The bundle already answers "which ROM do I need", so the checksum search
+  // The weave already answers "which ROM do I need", so the checksum search
   // stays away rather than offering a second, possibly conflicting answer.
   expect(getHashForm()).toBeNull();
 });
 
-// The check does not have to come from a bundle: a patch that declares its
+// The check does not have to come from a weave: a patch that declares its
 // source ROM is a rom check too, and raises the same card.
 test("a patch's declared source ROM shows the expected ROM card", async () => {
   const patchFile = await loadFixtureFile(VALID_BPS);

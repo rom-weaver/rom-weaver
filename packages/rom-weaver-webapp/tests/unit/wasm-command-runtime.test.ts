@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  invokeRomWeaverBundleCreateWorker,
-  invokeRomWeaverBundleParseWorker,
+  invokeRomWeaverWeaveCreateWorker,
+  invokeRomWeaverWeaveParseWorker,
   invokeRomWeaverCompressionCreateWorker,
   invokeRomWeaverExtractAllWorker,
   invokeRomWeaverCreatePatchCandidatesWorker,
@@ -341,37 +341,37 @@ describe("invokeRomWeaverIngestWorker", () => {
   });
 });
 
-describe("bundle runtime workers", () => {
-  it("parses a bundle and forwards an optional extraction directory", async () => {
+describe("weave runtime workers", () => {
+  it("parses a weave and forwards an optional extraction directory", async () => {
     mocks.runRomWeaverJson.mockResolvedValue(
-      succeededResult({ bundle: { bundle: { patches: [], version: 1 }, patch_sources: [], source_kind: "json" } }),
+      succeededResult({ weave: { weave: { patches: [], version: 1 }, patch_sources: [], source_kind: "json" } }),
     );
 
     await expect(
-      invokeRomWeaverBundleParseWorker({ extractDirPath: " /out ", sourcePath: " bundle.json " }),
-    ).resolves.toMatchObject({ bundle: { version: 1 }, patchSources: [], sourceKind: "json" });
+      invokeRomWeaverWeaveParseWorker({ extractDirPath: " /out ", sourcePath: " weave.json " }),
+    ).resolves.toMatchObject({ weave: { version: 1 }, patchSources: [], sourceKind: "json" });
     expect(lastCall()[0]).toEqual({
-      args: { args: { input: "bundle.json", output: "/out" }, type: "parse" },
-      type: "bundle",
+      args: { args: { input: "weave.json", output: "/out" }, type: "parse" },
+      type: "weave",
     });
   });
 
-  it("creates a bundle with aligned metadata and expected checks", async () => {
+  it("creates a weave with aligned metadata and expected checks", async () => {
     mocks.runRomWeaverJson.mockResolvedValue(
       succeededResult({
-        bundle_create: { bundle: { patches: [], version: 1 }, bundle_path: "/out/bundle.json", warnings: [] },
+        weave_create: { weave: { patches: [], version: 1 }, weave_path: "/out/weave.json", warnings: [] },
       }),
     );
 
     await expect(
-      invokeRomWeaverBundleCreateWorker({
-        bundlePath: " /bundle.zip ",
-        bundleRomPath: " /rom.sfc ",
-        noBundleRom: true,
+      invokeRomWeaverWeaveCreateWorker({
+        weavePath: " /weave.zip ",
+        weaveRomPath: " /rom.sfc ",
+        noWeaveRom: true,
         outputCheck: " sha1=abc ",
         outputHeader: "strip",
         outputName: "patched.sfc",
-        outputPath: " /out/bundle.json ",
+        outputPath: " /out/weave.json ",
         patchAuthors: [" Author "],
         patchBases: ["auto", "previous"],
         patchHeaders: ["auto", "keep"],
@@ -384,15 +384,15 @@ describe("bundle runtime workers", () => {
         romPath: " /input.sfc ",
         romSize: 100,
       }),
-    ).resolves.toMatchObject({ bundlePath: "/out/bundle.json" });
+    ).resolves.toMatchObject({ weavePath: "/out/weave.json" });
     expect(lastCall()[0]).toEqual({
       args: {
         args: {
           assume_in: ["crc32=1234", "sha1=abcd", "size=100"],
-          bundle: "/bundle.zip",
-          bundle_rom: "/rom.sfc",
-          no_bundle_rom: true,
-          output: "/out/bundle.json",
+          weave: "/weave.zip",
+          weave_rom: "/rom.sfc",
+          no_weave_rom: true,
+          output: "/out/weave.json",
           output_check: ["sha1=abc"],
           output_header: "strip",
           output_name: "patched.sfc",
@@ -408,7 +408,7 @@ describe("bundle runtime workers", () => {
         },
         type: "create",
       },
-      type: "bundle",
+      type: "weave",
     });
   });
 });

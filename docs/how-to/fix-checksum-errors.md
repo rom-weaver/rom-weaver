@@ -33,7 +33,7 @@ Compare the same algorithm. CRC32, SHA-1, and SHA-256 fingerprints for one file 
 
 The Apply cards separate clues from proof.
 
-An expected filename mismatch is advisory. Authors often write a useful name into a bundle, but users may legally dump or rename the same bytes under another name. If size and checksum match, a different name alone does not make the ROM wrong.
+An expected filename mismatch is advisory. Authors often write a useful name into a weave, but users may legally dump or rename the same bytes under another name. If size and checksum match, a different name alone does not make the ROM wrong.
 
 An expected checksum mismatch describes different bytes. An expected size mismatch also describes different content. These checks are stronger than the filename.
 
@@ -90,13 +90,13 @@ An extension is still only a clue. Use the checksum in the ROM card to identify 
 
 ## Wrong patch order
 
-By default, several patches modify one accumulated result. Each patch can be authored for the clean ROM or for an earlier patch's output. A bundle can also select a particular track or an earlier result.
+By default, several patches modify one accumulated result. Each patch can be authored for the clean ROM or for an earlier patch's output. A weave can also select a particular track or an earlier result.
 
 In **0x03 Patches**, put the patches in the author's order. Check each patch's input selector and **Checks**. A dependent patch must follow the result it expects. A patch set to **Original ROM** runs on the original ROM, not on the result above it.
 
 Do not turn off a required base patch to get past a warning. Optional switches are safe only for combinations the release author tested.
 
-If you started from a bundle, its saved order should already be correct. A manual reorder is a sign to reread the bundle's release notes.
+If you started from a weave, its saved order should already be correct. A manual reorder is a sign to reread the weave's release notes.
 
 ## Already modified files
 

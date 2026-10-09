@@ -88,7 +88,7 @@ const ALWAYS_VALIDATE_CHOICE_FIELDS = [
   "language",
   "byteUnits",
   "logLevel",
-  "bundlePackage",
+  "weavePackage",
   "postApplyDownloadBehavior",
   "postApplyTestBehavior",
   "compressionProfile",
@@ -105,7 +105,7 @@ const isSingleCodecField = (fieldKey: SettingsFieldKey): boolean =>
 const readStoredField = <T>(schema: StoredSchema<T>, value: unknown): T | undefined =>
   schema(value) ? value : undefined;
 
-const normalizeStoredBundlePackage = (value: string, fallback: string): string => {
+const normalizeStoredWeavePackage = (value: string, fallback: string): string => {
   const normalized = value.trim().toLowerCase();
   if (normalized === "patches" || normalized === "rom") return normalized;
   const contents = normalized.split(":")[1];
@@ -414,7 +414,9 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     offlineCopyEnabled: commonSettings.offlineCopyEnabled,
     accent: commonSettings.accent,
     byteUnits: commonSettings.byteUnits,
-    bundlePackage: isRecord(applySettings.output) ? applySettings.output.bundlePackage : undefined,
+    weavePackage: isRecord(applySettings.output)
+      ? (applySettings.output.weavePackage ?? applySettings.output.bundlePackage)
+      : undefined,
     legacyPostApplyRomBehavior: isRecord(applySettings.output) ? applySettings.output.postApplyRomBehavior : undefined,
     postApplyDownloadBehavior: isRecord(applySettings.output)
       ? applySettings.output.postApplyDownloadBehavior
@@ -488,12 +490,15 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
     const logLevel = readStoredField(storedStringSchema, loadedSettings.logLevel);
     if (logLevel !== undefined) settings.logLevel = normalizeChoiceField("logLevel", logLevel, settings.logLevel);
 
-    const bundlePackage = readStoredField(storedStringSchema, loadedSettings.bundlePackage);
-    if (bundlePackage !== undefined) {
-      settings.bundlePackage = normalizeChoiceField(
-        "bundlePackage",
-        normalizeStoredBundlePackage(bundlePackage, settings.bundlePackage),
-        settings.bundlePackage,
+    const weavePackage = readStoredField(
+      storedStringSchema,
+      loadedSettings.weavePackage ?? loadedSettings.bundlePackage,
+    );
+    if (weavePackage !== undefined) {
+      settings.weavePackage = normalizeChoiceField(
+        "weavePackage",
+        normalizeStoredWeavePackage(weavePackage, settings.weavePackage),
+        settings.weavePackage,
       );
     }
 
@@ -683,7 +688,7 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
       return;
     }
     if (
-      fieldKey === "bundlePackage" ||
+      fieldKey === "weavePackage" ||
       fieldKey === "postApplyDownloadBehavior" ||
       fieldKey === "postApplyTestBehavior"
     ) {

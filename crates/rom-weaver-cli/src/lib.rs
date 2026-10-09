@@ -175,7 +175,7 @@ detected platform pick the pack. Nothing is uploaded."
             about = "Install the offline identify and cheat databases",
             long_about = "\
 Install the identify database this build's `identify` command searches, plus
-the cheat shards that `cheat` and bundle cheat steps read.
+the cheat shards that `cheat` and weave cheat steps read.
 
 Run it once after installing rom-weaver by a method that ships only the
 executable, such as `cargo binstall` or `cargo install`. The Homebrew, scoop,
@@ -276,10 +276,12 @@ footer recording what was cut."
         not(target_arch = "wasm32"),
         command(
             subcommand,
-            about = "Build and read rom-weaver-bundle.json patch recipes"
+            visible_alias = "bundle",
+            about = "Build and read rom-weaver-weave.json patch recipes"
         )
     )]
-    Bundle(BundleCommands),
+    #[serde(alias = "bundle")]
+    Weave(WeaveCommands),
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(subcommand, about = "Inspect and edit supported persistent game saves")
@@ -367,35 +369,35 @@ GameShark/Pro Action Replay codes."
     feature = "typescript-types",
     ts(rename_all = "kebab-case", tag = "type", content = "args")
 )]
-pub enum BundleCommands {
+pub enum WeaveCommands {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
-            about = "Write a rom-weaver-bundle.json recipe from local ROM and patch files",
+            about = "Write a rom-weaver-weave.json recipe from local ROM and patch files",
             long_about = "\
-Write a rom-weaver-bundle.json recipe from local ROM and patch files.
+Write a rom-weaver-weave.json recipe from local ROM and patch files.
 
-A bundle records which ROM the patches are for, what order they run in, and
+A weave records which ROM the patches are for, what order they run in, and
 what the result should hash to. Hand it to someone else and
-`rom-weaver patch apply --bundle` reproduces your exact result.
+`rom-weaver patch apply --weave` reproduces your exact result.
 
 Checksums come from the real files, so nothing here is taken on faith. Every
 --patch-* flag describes the --patch before it.
 
---output names the recipe itself; add .gz or .zst to compress it. --bundle
+--output names the recipe itself; add .gz or .zst to compress it. --weave
 additionally packs the recipe and its files into one shareable archive."
         )
     )]
-    Create(Box<BundleCreateCommand>),
+    Create(Box<WeaveCreateCommand>),
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
-            about = "Read a rom-weaver-bundle.json recipe and report what it points at",
+            about = "Read a rom-weaver-weave.json recipe and report what it points at",
             long_about = "\
-Read a rom-weaver-bundle.json recipe, check that it is valid, and report the
+Read a rom-weaver-weave.json recipe, check that it is valid, and report the
 ROM and patches it points at.
 
-The input can be a plain rom-weaver-bundle.json, a compressed one (.gz, .bz2,
+The input can be a plain rom-weaver-weave.json, a compressed one (.gz, .bz2,
 .xz, or .zst), or an archive with the recipe at its root alongside the files it
 names.
 
@@ -403,28 +405,28 @@ Entries that name a file are looked for in the archive, or next to the recipe.
 Pass --output to write those files out and get real paths back. Entries that
 name a url are reported as they are; nothing is downloaded.
 
-To actually run a bundle, use `rom-weaver patch apply --bundle` instead."
+To actually run a weave, use `rom-weaver patch apply --weave` instead."
         )
     )]
-    Parse(BundleParseCommand),
-    // CLI-only: the webapp never dispatches `bundle schema` (the CLI prints the
+    Parse(WeaveParseCommand),
+    // CLI-only: the webapp never dispatches `weave schema` (the CLI prints the
     // schema before dispatch), so keep it out of the generated TS command union
     // where a variant without `args` would break the command-branch types.
     #[cfg_attr(feature = "typescript-types", ts(skip))]
     #[cfg_attr(
         not(target_arch = "wasm32"),
         command(
-            about = "Print the rom-weaver-bundle.json JSON Schema, for editors and hand-authoring",
+            about = "Print the rom-weaver-weave.json JSON Schema, for editors and hand-authoring",
             long_about = "\
-Print the rom-weaver-bundle.json JSON Schema to stdout.
+Print the rom-weaver-weave.json JSON Schema to stdout.
 
 Save it and point your editor at it, and the editor will check and autocomplete
-a bundle as you write it:
+a weave as you write it:
 
-  rom-weaver bundle schema > rom-weaver-bundle-v2.schema.json
+  rom-weaver weave schema > rom-weaver-weave-v2.schema.json
 
-Then `bundle create --from <your file>` turns what you wrote into a finished
-bundle with the checksums filled in."
+Then `weave create --from <your file>` turns what you wrote into a finished
+weave with the checksums filled in."
         )
     )]
     Schema,
@@ -886,7 +888,7 @@ pub fn run_command(
 
 /// Like [`run_command`] but returns the full [`AppRunOutcome`] so callers that
 /// chain commands (for example `apply --tui`, which applies then writes a
-/// bundle) can gate on success. Logging init is idempotent across calls.
+/// weave) can gate on success. Logging init is idempotent across calls.
 pub fn run_command_outcome(
     command: Commands,
     options: RunCommandOptions,
@@ -935,7 +937,7 @@ fn log_command_options(command: &Commands) {
         args = nested.take();
     }
     for option in [
-        "input", "inputs", "original", "modified", "patches", "bundle", "output", "format", "algo",
+        "input", "inputs", "original", "modified", "patches", "weave", "output", "format", "algo",
         "threads",
     ] {
         let Some(value) = args.get(option).filter(|value| !value.is_null()) else {
@@ -1666,11 +1668,11 @@ mod patch_filename_checksum;
 use patch_filename_checksum::{embed_checksum_in_filename, parse_filename_requirements};
 
 #[cfg(not(target_arch = "wasm32"))]
-mod bundle_cheats;
-mod bundle_schema;
-pub use bundle_schema::{
-    BUNDLE_JSON_SCHEMA, BUNDLE_JSON_SCHEMA_URL, BUNDLE_VERSION, BundleCheatEntry, BundleCheckState,
-    BundleChecks, BundleOutput, BundlePatchEntry, BundlePatchInput, BundleRom, RomWeaverBundle,
+mod weave_cheats;
+mod weave_schema;
+pub use weave_schema::{
+    RomWeaverWeave, WEAVE_JSON_SCHEMA, WEAVE_JSON_SCHEMA_URL, WEAVE_VERSION, WeaveCheatEntry,
+    WeaveCheckState, WeaveChecks, WeaveOutput, WeavePatchEntry, WeavePatchInput, WeaveRom,
 };
 
 mod patch_plan;
@@ -1679,38 +1681,38 @@ pub use patch_plan::{
     PatchInputVerdict, PatchPlanVerdict, PatchValidationPlan,
 };
 
-mod bundle_parse;
+mod weave_parse;
 
-/// Production bundle parsing seam for the owned fuzz harness only.
+/// Production weave parsing seam for the owned fuzz harness only.
 #[cfg(feature = "fuzzing")]
-pub fn parse_bundle_for_fuzzing(bytes: &[u8]) -> Result<RomWeaverBundle> {
-    bundle_parse::parse_bundle_bytes(bytes)
+pub fn parse_weave_for_fuzzing(bytes: &[u8]) -> Result<RomWeaverWeave> {
+    weave_parse::parse_weave_bytes(bytes)
 }
 
-mod bundle_load;
+mod weave_load;
 
-mod bundle_apply;
+mod weave_apply;
 
 #[cfg(not(target_arch = "wasm32"))]
-mod bundle_download;
+mod weave_download;
 
-mod bundle_command;
-pub use bundle_command::{BundleParseResult, BundlePatchSource, BundleSourceKind, BundleSourceRef};
+mod weave_command;
+pub use weave_command::{WeaveParseResult, WeavePatchSource, WeaveSourceKind, WeaveSourceRef};
 
-mod bundle_create;
-pub use bundle_create::BundleCreateResult;
+mod weave_create;
+pub use weave_create::WeaveCreateResult;
 
 mod command_args;
 pub use command_args::{
-    BundleCreateCommand, BundleCreatePatchSpec, BundleParseCommand, CheatAction, CheatCommand,
-    CheatSelectionArgs, ChecksumCommand, CompressCommand, ExtractCommand, IdentifyCommand,
-    IdentifyDatabaseCommands, IdentifyDatabaseDirCommand, IdentifyDatabaseGroupCommand,
-    IdentifyDatabaseImportCommand, IdentifyDatabaseInstallCommand, IdentifyDatabaseSystemCommand,
-    IdentifyDatabaseUpdateCommand, IdentifySubcommands, IngestCommand, PATCH_APPLY_ABOUT,
-    PATCH_APPLY_AFTER_HELP, PATCH_APPLY_LONG_ABOUT, PatchApplyCommand, PatchCreateCommand,
-    PatchValidateCommand, PlanExtractBatchCommand, PpfUndoCommand, ProbeCommand, SaveCreateCommand,
-    SaveExportSchemaCommand, SaveGetCommand, SaveIdentifyCommand, SaveInspectCommand,
-    SaveListGamesCommand, SaveSetCommand, SetupCommand, TrimCommand,
+    CheatAction, CheatCommand, CheatSelectionArgs, ChecksumCommand, CompressCommand,
+    ExtractCommand, IdentifyCommand, IdentifyDatabaseCommands, IdentifyDatabaseDirCommand,
+    IdentifyDatabaseGroupCommand, IdentifyDatabaseImportCommand, IdentifyDatabaseInstallCommand,
+    IdentifyDatabaseSystemCommand, IdentifyDatabaseUpdateCommand, IdentifySubcommands,
+    IngestCommand, PATCH_APPLY_ABOUT, PATCH_APPLY_AFTER_HELP, PATCH_APPLY_LONG_ABOUT,
+    PatchApplyCommand, PatchCreateCommand, PatchValidateCommand, PlanExtractBatchCommand,
+    PpfUndoCommand, ProbeCommand, SaveCreateCommand, SaveExportSchemaCommand, SaveGetCommand,
+    SaveIdentifyCommand, SaveInspectCommand, SaveListGamesCommand, SaveSetCommand, SetupCommand,
+    TrimCommand, WeaveCreateCommand, WeaveCreatePatchSpec, WeaveParseCommand,
 };
 
 mod expect_tokens;

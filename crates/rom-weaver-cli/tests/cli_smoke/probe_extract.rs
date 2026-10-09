@@ -319,7 +319,7 @@ fn probe_auto_extract_ignores_sidecars_unless_no_ignore() {
     fs::write(temp.child("maxcso-report.bin").path(), b"skip me").expect("maxcso sidecar");
     fs::write(temp.child("__MACOSX/ghost.bin").path(), b"ghost").expect("macosx sidecar");
 
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",
@@ -403,7 +403,7 @@ fn probe_auto_extract_patch_filter_selects_patch_payload() {
         0,
     );
 
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",
@@ -470,7 +470,7 @@ fn probe_auto_extract_rom_filter_prefers_rom_payload_over_archive() {
         0,
     );
 
-    let outer = temp.child("bundle.zip");
+    let outer = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",
@@ -540,7 +540,7 @@ fn probe_rom_filter_prefers_payload_entries_over_archive_fallback() {
         0,
     );
 
-    let outer = temp.child("bundle.zip");
+    let outer = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",
@@ -630,7 +630,7 @@ fn probe_rom_filter_lists_archive_fallback_when_no_payload_matches() {
         0,
     );
 
-    let outer = temp.child("bundle.zip");
+    let outer = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",
@@ -686,7 +686,7 @@ fn extract_rom_filter_extracts_rom_entries_only() {
         0,
     );
 
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",
@@ -908,7 +908,7 @@ fn extract_ignores_common_sidecars_unless_no_ignore() {
     fs::write(temp.child("._game.bin").path(), b"resource fork").expect("resource fork");
     fs::write(temp.child("__MACOSX/ghost.bin").path(), b"ghost").expect("mac metadata");
 
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",
@@ -992,7 +992,7 @@ fn extract_checksum_rom_only_hashes_rom_outputs_only() {
     .expect("rom fixture");
     fs::write(temp.child("readme.txt").path(), b"not a rom").expect("sidecar fixture");
 
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",
@@ -1045,7 +1045,7 @@ fn extract_emits_early_probe_manifest_for_rom_archive() {
     .expect("rom fixture");
     fs::write(temp.child("readme.txt").path(), b"not a rom").expect("sidecar fixture");
 
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",
@@ -1225,7 +1225,7 @@ fn extract_probe_manifest_marks_patch_only_archive_as_not_rom() {
         .find(|event| event["stage"] == "probe-manifest")
         .map(|event| &event["details"]["probe_manifest"])
         .expect("expected an early probe-manifest event");
-    // A bundle that carries a patch and no ROM payload routes to the patch bucket.
+    // A weave that carries a patch and no ROM payload routes to the patch bucket.
     assert_eq!(manifest["is_rom"], false);
     let entries = manifest["entries"]
         .as_array()

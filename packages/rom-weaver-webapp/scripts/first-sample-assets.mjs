@@ -328,7 +328,7 @@ const createFirstSampleAssets = () => {
       ["modified-world.nes", modified.rom],
     ]),
     firstWeaveZip: createZip([
-      ["rom-weaver-bundle.json", manifest],
+      ["rom-weaver-weave.json", manifest],
       ["hello-world.nes", original.rom],
       ["hello-to-rom.ips", helloToRomPatch],
       ["world-to-weaver.ips", worldToWeaverPatch],

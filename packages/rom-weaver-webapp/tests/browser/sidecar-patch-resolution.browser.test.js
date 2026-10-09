@@ -100,20 +100,20 @@ const createZipFile = (entries, outputName) => {
 // also covered natively in `crates/rom-weaver-cli/src/tests.rs` with the same golden cases.
 test("sidecar resolver matches RetroArch patch basename and numeric order (via ingest preflight)", async () => {
   const entries = [
-    { filename: "bundle/other.ips" },
-    { filename: "bundle/game [Hack].ips2" },
-    { filename: "bundle/game.bspatch3" },
-    { filename: "bundle/game.ips" },
-    { filename: "bundle/game.bin.ips1" },
+    { filename: "weave/other.ips" },
+    { filename: "weave/game [Hack].ips2" },
+    { filename: "weave/game.bspatch3" },
+    { filename: "weave/game.ips" },
+    { filename: "weave/game.bin.ips1" },
     { filename: "elsewhere/game.ips" },
   ];
 
-  const resolved = await resolveSidecarPatchEntries("bundle/game.bin", entries);
+  const resolved = await resolveSidecarPatchEntries("weave/game.bin", entries);
   expect(resolved.map((entry) => entry.fileName)).toEqual([
-    "bundle/game.ips",
-    "bundle/game.bin.ips1",
-    "bundle/game [Hack].ips2",
-    "bundle/game.bspatch3",
+    "weave/game.ips",
+    "weave/game.bin.ips1",
+    "weave/game [Hack].ips2",
+    "weave/game.bspatch3",
   ]);
 });
 
@@ -124,18 +124,18 @@ test("apply workflow discovers matching sidecar patches inside input archives", 
     [
       {
         data: romBytes,
-        fileName: "bundle/game.bin",
-        filename: "bundle/game.bin",
+        fileName: "weave/game.bin",
+        filename: "weave/game.bin",
       },
       {
         data: patchBytes,
-        fileName: "bundle/game [Hack].ips",
-        filename: "bundle/game [Hack].ips",
+        fileName: "weave/game [Hack].ips",
+        filename: "weave/game [Hack].ips",
       },
       {
         data: patchBytes,
-        fileName: "bundle/other.ips",
-        filename: "bundle/other.ips",
+        fileName: "weave/other.ips",
+        filename: "weave/other.ips",
       },
     ],
     "softpatch.zip",

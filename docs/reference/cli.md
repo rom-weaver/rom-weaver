@@ -21,15 +21,15 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 - [Patching](#patching)
   - [Inputs](#inputs)
   - [Output and compression](#output-and-compression)
-  - [Bundle detection](#bundle-detection)
-  - [Bundle execution targets](#bundle-execution-targets)
+  - [Weave detection](#weave-detection)
+  - [Weave execution targets](#weave-execution-targets)
   - [Checksum flags](#checksum-flags)
   - [Header and byte-order flags](#header-and-byte-order-flags)
   - [Extras](#extras)
   - [Validation](#validation)
 - [Patch creation metadata](#patch-creation-metadata)
-- [Bundles](#bundles)
-  - [Bundle cheats](#bundle-cheats)
+- [Weaves](#weaves)
+  - [Weave cheats](#weave-cheats)
 - [Tools](#tools)
 - [Supported formats](#supported-formats)
 - [JSON output](#json-output)
@@ -55,9 +55,9 @@ Every rom-weaver command and global flag, the archive-selection options, the pat
 | `patch apply` | Apply one or more patches to a ROM, in order. |
 | `patch create` | Build a patch from an original ROM and a changed one. |
 | `patch validate` | Check patch application without keeping an output ROM. |
-| `bundle create` | Write a `rom-weaver-bundle.json` recipe from local files. |
-| `bundle parse` | Read a bundle recipe and report what it points at. |
-| `bundle schema` | Print the `rom-weaver-bundle.json` JSON Schema to stdout. |
+| `weave create` | Write a `rom-weaver-weave.json` recipe from local files. |
+| `weave parse` | Read a weave recipe and report what it points at. |
+| `weave schema` | Print the `rom-weaver-weave.json` JSON Schema to stdout. |
 | `save identify` | Report save recognition, format, integrity, and active slot. |
 | `save inspect` | Report the sections and generic field schema for a supported save. |
 | `save get` | Read one field by its stable field ID. |
@@ -89,9 +89,14 @@ These alternate names invoke the same command or option:
 | Canonical | Also accepted |
 | --- | --- |
 | `rom-weaver probe` | `rom-weaver inspect` |
-| `rom-weaver patch apply` | `rom-weaver weave`, `rom-weaver patch weave` |
+| `rom-weaver weave create/parse/schema` | `rom-weaver bundle create/parse/schema` |
+| `--weave`, `--emit-weave` | `--bundle`, `--emit-bundle` |
+| `--weave-rom`, `--no-weave-rom` | `--bundle-rom`, `--no-bundle-rom` |
+| `rom-weaver patch apply --input ...` | `rom-weaver weave --input ...`, `rom-weaver patch weave --input ...` |
 | `trim --revert` | `trim --untrim`, `trim --restore` |
 | `trim --revert-marker` | `trim --reversible` |
+
+The legacy top-level `weave` apply spelling requires flags, such as `weave --input game.sfc --patch fix.ips`. `weave --help` lists recipe subcommands; `weave create`, `weave parse`, and `weave schema` manage recipes.
 
 Format names have alternates too, accepted anywhere `--format` is: `7zip` for `7z`, `3ds` for `z3ds`, `xdelta3` for `xdelta`, `bsdiff` for `bdf`, and more. The [format tables](formats.md) list every one.
 
@@ -99,7 +104,7 @@ Codecs are stricter. Each format accepts only the codec names in its own row of 
 
 Every command accepts these global flags, listed under `Global options` in its help:
 
-- `--json` prints one complete JSON result document to stdout. It contains `schema_version: 1`, `exit_code`, `error`, `warnings`, and the usual report fields and `details`. Asset generators put their result in `details`; `formats --json` keeps its compatible top-level catalog object; `formats --jsonl` emits one succeeded event with the catalog in `details`. `bundle schema`, `completions`, and `man` without `--install` use that asset result. `man --install --json` reports the installed page count and output directory.
+- `--json` prints one complete JSON result document to stdout. It contains `schema_version: 1`, `exit_code`, `error`, `warnings`, and the usual report fields and `details`. Asset generators put their result in `details`; `formats --json` keeps its compatible top-level catalog object; `formats --jsonl` emits one succeeded event with the catalog in `details`. `weave schema`, `completions`, and `man` without `--install` use that asset result. `man --install --json` reports the installed page count and output directory.
 - `--jsonl` keeps the JSON event stream: it writes one event per line to stdout and includes progress by default. Use `--no-progress` or `--quiet` to suppress running events.
 - `--progress` writes progress to stderr. Human output enables progress automatically when stderr is a capable terminal; redirected stderr and `--json` output keep it off by default. With `--json`, progress events and diagnostics are JSON lines on stderr. `--no-progress` hides progress.
 - `--log-level off|error|warn|info|debug|trace` sets how much rom-weaver logs to stderr. The default level is `warn`. Logging is separate from the normal output.
@@ -119,7 +124,7 @@ List-valued flags (`--algo`, `--checksum`, `--filter`, `--codec`, `--expect-in`,
 
 `-n`/`--dry-run` is available on every command, before or after the command name. It reports planned changes without writing destination files, changing installed databases, or downloading inputs. Read-only commands report a read-only plan instead of running the operation. Dry runs do not ask interactive questions.
 
-Compression, trimming, and explicit patch application retain their detailed plans. Explicit patch application needs `--output` for its dry-run plan. For a plain ROM, the matching output extension selects raw bytes during planning as it does during application; an explicit compression option overrides that selection. For archive members and disc payloads whose raw extension is not yet known, the plan reports an unresolved format instead of rejecting the requested extension. Other commands report the requested destinations and any unresolved work. Archive member selection, remote bundle contents, checksums, and destination write access can remain unvalidated; the plan names these limits. A successful dry run means the plan completed, not that the later operation is guaranteed to succeed. Trimming an archive can use temporary extraction files, which are removed after planning.
+Compression, trimming, and explicit patch application retain their detailed plans. Explicit patch application needs `--output` for its dry-run plan. For a plain ROM, the matching output extension selects raw bytes during planning as it does during application; an explicit compression option overrides that selection. For archive members and disc payloads whose raw extension is not yet known, the plan reports an unresolved format instead of rejecting the requested extension. Other commands report the requested destinations and any unresolved work. Archive member selection, remote weave contents, checksums, and destination write access can remain unvalidated; the plan names these limits. A successful dry run means the plan completed, not that the later operation is guaranteed to succeed. Trimming an archive can use temporary extraction files, which are removed after planning.
 
 In human output, a dry run shows the plan and a no-write notice. JSON plans carry `details.dry_run`, `writes`, `downloads`, and `read_only`; `writes` and `downloads` describe planned actions, not completed actions. Existing detailed plan fields remain available.
 
@@ -131,7 +136,7 @@ rom-weaver only asks interactive questions when stdin and stderr are both termin
 
 ## Binary pipelines
 
-Native `extract` and `compress` accept `-` as an input path or as `--output`. Native `patch create`, `patch apply` (including both `weave` spellings), `trim`, `save set`, and `tools ppf-undo` also accept `--output -`. `./-` names a literal file called `-`. These conventions do not change the JSON/WASM command schema. Other commands keep their existing output behavior.
+Native `extract` and `compress` accept `-` as an input path or as `--output`. Native `patch create`, `patch apply` (including the legacy `weave --input` and `patch weave` spellings), `trim`, `save set`, and `tools ppf-undo` also accept `--output -`. `./-` names a literal file called `-`. These conventions do not change the JSON/WASM command schema. Other commands keep their existing output behavior.
 
 | Option or condition | Behavior |
 | --- | --- |
@@ -140,7 +145,7 @@ Native `extract` and `compress` accept `-` as an input path or as `--output`. Na
 | `compress --output -` | Requires an explicit `--format`. Writes the completed compressed file to stdout. Existing format and codec restrictions apply. |
 | `extract --output -` | Writes exactly one final regular file. Nested extraction retains its normal behavior. Zero or multiple final files are an error; `--select` can narrow the selection. CUE/GDI sheets require companion files and cannot be streamed. |
 | `patch create --output -` | Requires `--format`. Conflicts with `--plan` and `--checksum-name`. Writes the completed patch. |
-| `patch apply --output -` | Requires `--no-compress` for raw bytes or `--compress-format` for compressed output. Conflicts with `--tui` and `--emit-bundle`. Requires one final regular file; disc sheets with companion files cannot be streamed. |
+| `patch apply --output -` | Requires `--no-compress` for raw bytes or `--compress-format` for compressed output. Conflicts with `--tui` and `--emit-weave`. Requires one final regular file; disc sheets with companion files cannot be streamed. |
 | `trim --output -` | Requires exactly one trim-eligible source. Conflicts with `--in-place` and `--extension`. Writes the trimmed or restored file. |
 | `save set --output -` | Writes the edited save, or the original bytes when the validated edits make no change. |
 | `tools ppf-undo --output -` | Requires `--no-compress` for raw bytes or `--compress-format` for compressed output. Requires one final regular file; a raw disc sheet with companion tracks cannot be streamed. |
@@ -156,7 +161,7 @@ Examples are in [Use an archive pipeline](../how-to/work-with-archives.md#use-an
 ## Reaching inside archives
 
 
-`probe`, `extract`, `identify`, `checksum`, `trim`, `bundle parse`, and the patching commands open archives automatically. Five flags control archive selection:
+`probe`, `extract`, `identify`, `checksum`, `trim`, `weave parse`, and the patching commands open archives automatically. Five flags control archive selection:
 
 - `-s`/`--select` picks which file to use, by exact name, prefix, or glob. On `patch apply` and `patch validate` it applies to the input and to every `--patch` archive alike.
 - `--patch-select` picks the file inside the `--patch` archive it follows, overriding `--select` for that patch. Repeat it once per `--patch`, in the same order. Only `patch apply` and `patch validate` take it, and it is the only way to select different files from an archive input and an archive patch in one command.
@@ -319,19 +324,19 @@ The directory layout is in [Cheat database reference](cheat-database.md). The re
 
 ## Patching
 
-The flags shared by `patch apply` (also spelled `weave`) and `patch validate`. The task-shaped recipes live in [Apply patches from the CLI](../how-to/cli-apply.md).
+The flags shared by `patch apply` (also spelled `patch weave` or legacy `weave --input`) and `patch validate`. The task-shaped recipes live in [Apply patches from the CLI](../how-to/cli-apply.md).
 
-Under `Basic`, `patch apply --help` puts the common `--input`, `--patch`, and `--output` task first. The complete list uses the `Basic`, `Archive/bundle`, `Compatibility`, `Diagnostics/authoring`, and `Performance` headings.
+Under `Basic`, `patch apply --help` puts the common `--input`, `--patch`, and `--output` task first. The complete list uses the `Basic`, `Archive/weave`, `Compatibility`, `Diagnostics/authoring`, and `Performance` headings.
 
 ### Inputs
 
 Repeat `--patch` to run several patches in order on one accumulated result. The shared input basis defaults to `auto`, which infers the authored input from checksums. `--default-patch-basis base` declares original-ROM patches. `previous` declares a dependent chain. Repeat `--patch-basis` for mixed per-patch overrides.
 
-Leave `--patch` out entirely and rom-weaver looks for RetroArch-style patches sitting next to the ROM inside the input archive. A `rom-weaver-bundle.json` can supply the ROM, patch order, input rule, checks, and output name.
+Leave `--patch` out entirely and rom-weaver looks for RetroArch-style patches sitting next to the ROM inside the input archive. A `rom-weaver-weave.json` can supply the ROM, patch order, input rule, checks, and output name.
 
 ### Output and compression
 
-For an ordinary file apply, `--output` is optional. Without it, the command writes a sibling named `<input-stem>-patched.<rom-extension>` and adds a numeric suffix when that path already exists. Bundle applies keep their bundle-provided output behavior.
+For an ordinary file apply, `--output` is optional. Without it, the command writes a sibling named `<input-stem>-patched.<rom-extension>` and adds a numeric suffix when that path already exists. Weave applies keep their weave-provided output behavior.
 
 Without an explicit compression flag, an output extension matching the selected ROM leaf writes raw ROM bytes. A registered creatable container extension selects that container. Unknown or ambiguous extensions fail rather than selecting a format silently.
 
@@ -339,13 +344,19 @@ Without an explicit compression flag, an output extension matching the selected 
 
 DCP patches need a Dreamcast `.cue` or `.gdi` input. They rebuild the GD-ROM data track and reassemble the whole disc, so they cannot be chained with another patch or combined with the header and checksum options.
 
-### Bundle detection
+<a id="bundle-detection"></a>
 
-When `patch apply` detects a bundle from its positional input, the canonical `rom-weaver-bundle.json` name is the fast path. It also content-probes valid plain `.json` files and root-level `.json` members inside archives. A stream-compressed positional bundle needs a canonical name such as `rom-weaver-bundle.json.gz`; pass a differently named one explicitly with `--bundle`.
+### Weave detection
 
-Bundle version 2 requires `patchBasis`. Bundle version 1 remains readable and uses automatic inference. Per-entry `basis` values override the shared bundle rule.
+When `patch apply` detects a weave from its positional input, the canonical `rom-weaver-weave.json` name is the fast path. It also content-probes valid plain `.json` files and root-level `.json` members inside archives. A stream-compressed positional weave needs a canonical name such as `rom-weaver-weave.json.gz`; pass a differently named one explicitly with `--weave`.
 
-### Bundle execution targets
+The legacy `rom-weaver-bundle.json` name and its compressed forms remain readable. Both recipe names use the same version 1 and version 2 fields.
+
+Weave version 2 requires `patchBasis`. Weave version 1 remains readable and uses automatic inference. Per-entry `basis` values override the shared weave rule.
+
+<a id="bundle-execution-targets"></a>
+
+### Weave execution targets
 
 A version 2 patch entry accepts `target` and `input`. Both use either a ROM reference (`rom: true`) or a generated-output reference (`patch: "producer-id"`), with an optional exact `member` selector.
 
@@ -377,8 +388,8 @@ A named producer must be selected and precede its consumer. Member selection app
 ### Extras
 
 - `--code` bakes a supported device code into the ROM, as if it were a patch. Repeat it for each code. `--code-system nes|snes|genesis|32x|sms|gamegear|sg1000|gameboy|gba|psx` names the console when the ROM header does not. `--code-kind` accepts `auto`, `game-genie`, `gameshark`/`par`, `xploder`, `pro-action-rocky`, `gold-finger`, `game-shark-v1`, `game-shark-v1-raw`, `action-replay-v3`, and `action-replay-v3-raw`. `auto` detects 14-character SNES Gold Finger codes. Select eight-digit NES Pro Action Rocky codes explicitly because their shape is ambiguous. GBA defaults to Xploder. Versioned GBA kinds preserve and decode the complete block. Raw kinds accept the corresponding decrypted form. Only cartridge-ROM writes can bake. Runtime-memory writes, SRAM Gold Finger codes, conditionals, and unsupported device operations are rejected. One value may hold several codes joined with `+`, commas, or newlines. Codes are applied after the last `--patch`, and cannot be combined with `--patch-header strip` or `--n64-byte-order`. `patch create` takes the same three flags in place of `--modified` and writes a patch holding only the codes' byte writes. The recipe is [Bake cheat codes into a ROM](../how-to/bake-cheat-codes.md).
-- `--emit-bundle PATH` also writes a `rom-weaver-bundle.json` recording the run: the ROM's checksums, the patches in order, and the result. It runs the same code as `bundle create`, so the file is byte-identical to the equivalent `bundle create` call. It carries no per-patch names or authors; for those use `bundle create`, `bundle create --from`, or `--tui`.
-- `--tui` asks for each patch's name, version, author, and optional state plus an output name, then applies and writes the bundle. It needs a terminal, and for now it needs explicit `--patch` files; re-opening a bundle is not supported yet.
+- `--emit-weave PATH` also writes a `rom-weaver-weave.json` recording the run: the ROM's checksums, the patches in order, and the result. It runs the same code as `weave create`, so the file is byte-identical to the equivalent `weave create` call. It carries no per-patch names or authors; for those use `weave create`, `weave create --from`, or `--tui`.
+- `--tui` asks for each patch's name, version, author, and optional state plus an output name, then applies and writes the weave. It needs a terminal, and for now it needs explicit `--patch` files; re-opening a weave is not supported yet.
 
 ### Validation
 
@@ -398,14 +409,16 @@ SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for it
 
 [Create patches from the CLI](../how-to/cli-create.md) provides a metadata example and reconstruction check.
 
-## Bundles
+<a id="bundles"></a>
 
-`bundle schema` prints the JSON Schema. The current schema is [rom-weaver-bundle-v2.schema.json](../rom-weaver-bundle-v2.schema.json). Version 1 bundles remain readable.
+## Weaves
+
+`weave schema` prints the JSON Schema. The current schema is [rom-weaver-weave-v2.schema.json](../rom-weaver-weave-v2.schema.json). Version 1 weaves remain readable. Legacy [version 1](../rom-weaver-bundle-v1.schema.json) and [version 2](../rom-weaver-bundle-v2.schema.json) schema URLs remain available.
 
 | Option | Meaning |
 | --- | --- |
 | `--rom-name`, `--rom-url` | Expected logical ROM name and remote source. A filename mismatch warns; checksum and size mismatches remain strict. |
-| `--rom-member PATH` | Exact archive member or disc track recorded as the bundle's ROM target. Its checksums describe that member. |
+| `--rom-member PATH` | Exact archive member or disc track recorded as the weave's ROM target. Its checksums describe that member. |
 | `--default-patch-basis base\|previous\|auto` | Shared input basis recorded as `patchBasis`. The default is `auto`. |
 | `--patch-id`, `--patch-version` | Stable patch identity and author-controlled version. |
 | `--patch-author`, `--patch-name`, `--patch-description`, `--patch-label` | Patch metadata. |
@@ -414,16 +427,18 @@ SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for it
 | `--expect-out` | Expected final result checks. |
 | `--patch-expect-in`, `--patch-expect-out` | Expected checks around the preceding patch. |
 | `--assume-in` | Supplied ROM checksums used without reading the file to verify them. |
-| `--bundle ARCHIVE`, `--no-bundle-rom` | Archive packaging and exclusion of ROM bytes. |
+| `--weave ARCHIVE`, `--no-weave-rom` | Archive packaging and exclusion of ROM bytes. |
 | `--schema-ref URL` | Adds a `$schema` URL; omitted by default. |
 | `--from FILE`, `--from -` | Reads a specification from a file or stdin. File paths resolve against the spec directory, or the current directory for stdin. Explicit CLI values override the spec: `--patch` replaces the spec's patch chain and `--cheat` replaces its `cheats` array, in both cases wholesale. |
-| `--cheat ID_OR_DESCRIPTION` | Records a cheat selection in the bundle's `cheats` array. Needs `--input`. Takes the same selection flags as `patch apply`. |
+| `--cheat ID_OR_DESCRIPTION` | Records a cheat selection in the weave's `cheats` array. Needs `--input`. Takes the same selection flags as `patch apply`. |
 
-Patch metadata options bind to the preceding `--patch`; options before the first patch bind to that first patch. Metadata can be omitted independently for each patch. `--from` preserves an existing `$schema`. For `bundle create --from`, a ROM entry needs a local `path` or a `url`; a URL-only ROM supplies `--rom-url`. Patch entries need local paths unless explicit CLI patches replace the spec chain. Checks-only ROM entries are rejected by `--from`, but remain valid in bundles read by `bundle parse` and `patch apply`.
+Patch metadata options bind to the preceding `--patch`; options before the first patch bind to that first patch. Metadata can be omitted independently for each patch. `--from` preserves an existing `$schema`. For `weave create --from`, a ROM entry needs a local `path` or a `url`; a URL-only ROM supplies `--rom-url`. Patch entries need local paths unless explicit CLI patches replace the spec chain. Checks-only ROM entries are rejected by `--from`, but remain valid in weaves read by `weave parse` and `patch apply`.
 
-### Bundle cheats
+<a id="bundle-cheats"></a>
 
-The optional top-level `cheats` array records the cheat selection that produced a build, in selection order. `bundle create --cheat` and `patch apply --emit-bundle` write it. A bundle needs at least one `patches` entry or one `cheats` entry.
+### Weave cheats
+
+The optional top-level `cheats` array records the cheat selection that produced a build, in selection order. `weave create --cheat` and `patch apply --emit-weave` write it. A weave needs at least one `patches` entry or one `cheats` entry.
 
 | Field | Meaning |
 | --- | --- |
@@ -434,15 +449,15 @@ The optional top-level `cheats` array records the cheat selection that produced 
 | `codeKind` | Optional decoder for the snapshot. Explicit formats retain their type when the database is absent. |
 | `optional` | When true an unresolvable entry is skipped and named in the report; omitted or false makes it fail the apply. |
 
-Applying a bundle resolves each entry by `id` through the cheat database at `--cheat-database`, then falls back to `code`. An entry that resolves to nothing, or that the ROM's bytes cannot bake, fails the apply unless it is `optional`. Entries bake after the patch chain, so the result equals the same `patch apply --cheat`. Write conflicts fail with `cheat_write_conflict` unless `--allow-cheat-conflicts` is given.
+Applying a weave resolves each entry by `id` through the cheat database at `--cheat-database`, then falls back to `code`. An entry that resolves to nothing, or that the ROM's bytes cannot bake, fails the apply unless it is `optional`. Entries bake after the patch chain, so the result equals the same `patch apply --cheat`. Write conflicts fail with `cheat_write_conflict` unless `--allow-cheat-conflicts` is given.
 
-`patch apply --without-cheats` ignores the whole `cheats` array and runs only the patch chain. It is all-or-nothing; there is no per-cheat filter. A bundle with no patches and `--without-cheats` fails, because nothing is left to run.
+`patch apply --without-cheats` ignores the whole `cheats` array and runs only the patch chain. It is all-or-nothing; there is no per-cheat filter. A weave with no patches and `--without-cheats` fails, because nothing is left to run.
 
-When every recorded cheat is `optional` and none resolves, a bundle with no patches fails and names each skipped entry.
+When every recorded cheat is `optional` and none resolves, a weave with no patches fails and names each skipped entry.
 
-`bundle parse` names each cheat and whether it is optional.
+`weave parse` names each cheat and whether it is optional. JSON reports use `details.weave`; exported types use weave names. Legacy bundle spellings remain accepted as inputs.
 
-`bundle parse` accepts archive selection options for packaged bundles. A plain JSON recipe references paths and has no archive members to unpack. [Bundles from the CLI](../how-to/cli-bundles.md) gives creation, parsing, and apply examples.
+`weave parse` accepts archive selection options for packaged weaves. A plain JSON recipe references paths and has no archive members to unpack. [Weaves from the CLI](../how-to/cli-bundles.md) gives creation, parsing, and apply examples.
 
 ## Tools
 
@@ -468,7 +483,7 @@ Pass `--json` to make an operation command write one complete JSON result docume
 
 Use `--jsonl` when a consumer needs the event stream. It writes progress and terminal events as JSON lines to stdout. Failed, unsupported, and cancelled terminal events include `details.error` with `code`, `message`, and `exit_code`. A final failure or cancellation event records a nonzero exit when earlier events do not reflect it. `--no-progress` and `--quiet` suppress running events. `--json --progress` instead keeps the single stdout document and writes JSON progress events to stderr. JSON diagnostics also use stderr as JSON lines.
 
-Both JSON modes disable interactive selection, making them stable interfaces for scripts. Commands that generate an asset, such as `bundle schema`, `completions`, and `man` without `--install`, return their result in `details`. `bundle schema` uses `details.schema`; help, man pages, and completions use `details.content` and `details.content_format`. Version output uses `details.name` and `details.version`. `formats --json` intentionally keeps the top-level catalog object.
+Both JSON modes disable interactive selection, making them stable interfaces for scripts. Commands that generate an asset, such as `weave schema`, `completions`, and `man` without `--install`, return their result in `details`. `weave schema` uses `details.schema`; help, man pages, and completions use `details.content` and `details.content_format`. Version output uses `details.name` and `details.version`. `formats --json` intentionally keeps the top-level catalog object.
 
 A closed stdout pipe does not cause a panic or interrupt file creation. The command finishes its work and retains its operation exit status. Other stdout write errors produce a diagnostic on stderr and a nonzero exit status.
 

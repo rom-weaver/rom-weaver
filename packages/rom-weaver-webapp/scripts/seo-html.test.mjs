@@ -60,7 +60,7 @@ test("the sitemap contains each indexable workflow once and excludes beta tools"
   assert.equal(locations.length, new Set(locations).size);
   for (const slug of [
     "apply-patches",
-    "bundle-patches",
+    "weave-patches",
     "checksum",
     "create-patch",
     "extract",

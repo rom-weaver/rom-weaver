@@ -18,7 +18,9 @@ include = [
   "Cargo.toml",
   "README.md",
   "rom-weaver-bundle-v1.schema.json",
+  "rom-weaver-weave-v1.schema.json",
   "rom-weaver-bundle-v2.schema.json",
+  "rom-weaver-weave-v2.schema.json",
 ]
 
 [lib]
@@ -30,7 +32,7 @@ default = ["bundled-identify-data"]
 bundled-identify-data = []
 typescript-types = ["dep:ts-rs", "rom-weaver-core/typescript-types"]
 wasm-app = []
-# Exposes the production bundle validator to the separately locked fuzz harness.
+# Exposes the production weave validator to the separately locked fuzz harness.
 fuzzing = []
 
 [dependencies]

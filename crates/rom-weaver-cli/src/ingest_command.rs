@@ -450,7 +450,7 @@ impl CliApp {
         );
 
         if !is_rom {
-            // Patch-only bundle: describe every patch leaf, no ROM checksumming. An explicit `--select`
+            // Patch-only weave: describe every patch leaf, no ROM checksumming. An explicit `--select`
             // still pins specific leaves; interactive resolution stays driven by the global flag.
             let patches = self.ingest_patch_leaves(
                 handler,
@@ -559,7 +559,7 @@ impl CliApp {
                 trace!(
                     source = %source.display(),
                     patch_count = patches.len(),
-                    "ingest ROM branch found no ROM; re-routed nested bundle as patch source"
+                    "ingest ROM branch found no ROM; re-routed nested weave as patch source"
                 );
                 return Ok(IngestOutcome {
                     kind: IngestKind::Patch,

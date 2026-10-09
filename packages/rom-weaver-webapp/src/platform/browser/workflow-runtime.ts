@@ -5,8 +5,8 @@ import { createRomWeaverOutputScope } from "../../lib/runtime/run-output-paths.t
 import { romTypeFromEmittedFile } from "../../lib/runtime/run-result-parsing.ts";
 import { assertBrowserBinarySource } from "../../lib/runtime/source-normalization.ts";
 import {
-  invokeRomWeaverBundleCreateWorker,
-  invokeRomWeaverBundleParseWorker,
+  invokeRomWeaverWeaveCreateWorker,
+  invokeRomWeaverWeaveParseWorker,
   invokeRomWeaverCheatWorker,
   invokeRomWeaverCreatePatchCandidatesWorker,
   invokeRomWeaverCreatePatchWorker,
@@ -52,22 +52,22 @@ import { createBrowserChdRuntime, stripPrimaryChdTrackSuffix } from "./workflow-
 import { createBrowserDiscFormatsRuntime } from "./workflow-runtime-disc-formats.ts";
 import { browserVfs } from "./workflow-runtime-vfs-cleanup.ts";
 
-type BrowserBundleCreateInput = Parameters<NonNullable<NonNullable<WorkflowRuntime["bundle"]>["create"]>>[0];
+type BrowserWeaveCreateInput = Parameters<NonNullable<NonNullable<WorkflowRuntime["weave"]>["create"]>>[0];
 
-const stageBundleCreateInputs = async ({
-  bundleRom,
+const stageWeaveCreateInputs = async ({
+  weaveRom,
   logLevel,
   onLog,
   patches,
   rom,
   workerIo,
-}: Pick<BrowserBundleCreateInput, "bundleRom" | "patches" | "rom"> & {
-  logLevel: BrowserBundleCreateInput["logLevel"];
-  onLog: BrowserBundleCreateInput["onLog"];
+}: Pick<BrowserWeaveCreateInput, "weaveRom" | "patches" | "rom"> & {
+  logLevel: BrowserWeaveCreateInput["logLevel"];
+  onLog: BrowserWeaveCreateInput["onLog"];
   workerIo: RuntimeWorkerIo;
 }) => {
   const staged: Array<Awaited<ReturnType<RuntimeWorkerIo["stageSource"]>>> = [];
-  const pathPrefixRoot = `bundle-create-${createVfsPathId()}`;
+  const pathPrefixRoot = `weave-create-${createVfsPathId()}`;
   const stage = async (
     source: { source: unknown; fileName?: string },
     pathPrefix: string,
@@ -84,17 +84,15 @@ const stageBundleCreateInputs = async ({
     staged.push(stagedSource);
     return stagedSource.filePath;
   };
-  const romPath = rom ? await stage(rom, "bundle-rom", rom.fileName || "rom.bin") : undefined;
-  const bundleRomPath = bundleRom
-    ? await stage(bundleRom, "bundle-bundle-rom", bundleRom.fileName || "rom.bin")
-    : undefined;
+  const romPath = rom ? await stage(rom, "weave-rom", rom.fileName || "rom.bin") : undefined;
+  const weaveRomPath = weaveRom ? await stage(weaveRom, "weave-weave-rom", weaveRom.fileName || "rom.bin") : undefined;
   const patchPaths: string[] = [];
   for (const [index, patch] of patches.entries()) {
-    patchPaths.push(await stage(patch, `bundle-patch-${index + 1}`, patch.fileName || `patch-${index + 1}.bin`));
+    patchPaths.push(await stage(patch, `weave-patch-${index + 1}`, patch.fileName || `patch-${index + 1}.bin`));
   }
   return {
-    bundleRomPath,
-    inputPaths: [...(romPath ? [romPath] : []), ...(bundleRomPath ? [bundleRomPath] : []), ...patchPaths],
+    weaveRomPath,
+    inputPaths: [...(romPath ? [romPath] : []), ...(weaveRomPath ? [weaveRomPath] : []), ...patchPaths],
     patchPaths,
     romPath,
     staged,
@@ -390,13 +388,13 @@ const createBrowserIngestRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
   },
 });
 
-// Parse a rom-weaver-bundle.json source (plain/compressed/archive). Bundled ROM/patch leaves land under
+// Parse a rom-weaver-weave.json source (plain/compressed/archive). Weaved ROM/patch leaves land under
 // a unique per-parse OPFS scope. Disk-backed File views carry their path into the normal drop pipeline;
 // final workflow ownership releases each member and removes the scope after the last member is gone.
-const createBrowserBundleRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["bundle"] => ({
+const createBrowserWeaveRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["weave"] => ({
   create: async ({
     rom,
-    bundleRom,
+    weaveRom,
     patches,
     outputName,
     outputHeader,
@@ -406,8 +404,8 @@ const createBrowserBundleRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
     romChecksums,
     romSize,
     outputCheck,
-    bundleFileName,
-    noBundleRom,
+    weaveFileName,
+    noWeaveRom,
     logLevel,
     onLog,
     onProgress,
@@ -418,13 +416,13 @@ const createBrowserBundleRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
     const outputScope = createRomWeaverOutputScope();
     try {
       const {
-        bundleRomPath,
+        weaveRomPath,
         inputPaths,
         patchPaths,
         romPath,
         staged: stagedInputs,
-      } = await stageBundleCreateInputs({
-        bundleRom,
+      } = await stageWeaveCreateInputs({
+        weaveRom,
         logLevel,
         onLog,
         patches,
@@ -432,20 +430,20 @@ const createBrowserBundleRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
         workerIo,
       });
       staged.push(...stagedInputs);
-      const outputPath = outputScope.selectOutputPath("", "rom-weaver-bundle.json", inputPaths);
-      // The bundle name comes from the caller (its extension picks the archive
+      const outputPath = outputScope.selectOutputPath("", "rom-weaver-weave.json", inputPaths);
+      // The weave name comes from the caller (its extension picks the archive
       // format); only its base name is honored so it stays inside the mount.
-      const bundleBaseName = bundleFileName ? getPathBaseName(bundleFileName, "rom-weaver-bundle.zip") : undefined;
-      const bundlePath = bundleBaseName
-        ? outputScope.selectOutputPath("", bundleBaseName, [...inputPaths, outputPath])
+      const weaveBaseName = weaveFileName ? getPathBaseName(weaveFileName, "rom-weaver-weave.zip") : undefined;
+      const weavePath = weaveBaseName
+        ? outputScope.selectOutputPath("", weaveBaseName, [...inputPaths, outputPath])
         : undefined;
-      const result = await invokeRomWeaverBundleCreateWorker(
+      const result = await invokeRomWeaverWeaveCreateWorker(
         {
-          ...(bundlePath ? { bundlePath } : {}),
-          ...(bundleRomPath ? { bundleRomPath } : {}),
+          ...(weavePath ? { weavePath } : {}),
+          ...(weaveRomPath ? { weaveRomPath } : {}),
           knownInputPaths: inputPaths,
           logLevel,
-          ...(noBundleRom ? { noBundleRom: true } : {}),
+          ...(noWeaveRom ? { noWeaveRom: true } : {}),
           ...(outputCheck ? { outputCheck } : {}),
           ...(romChecksums ? { romChecksums } : {}),
           ...(typeof romSize === "number" ? { romSize } : {}),
@@ -476,26 +474,26 @@ const createBrowserBundleRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
         onLog,
       );
       const outputCleanups = await outputScope.createOutputCleanups(
-        [result.bundlePath, ...(result.archivePath ? [result.archivePath] : [])],
+        [result.weavePath, ...(result.archivePath ? [result.archivePath] : [])],
         (filePath) => browserVfs.remove(filePath),
       );
-      const bundleOutput = await createRuntimeOutputFromVfs(
+      const weaveOutput = await createRuntimeOutputFromVfs(
         browserVfs,
-        result.bundlePath,
-        getPathBaseName(result.bundlePath, "rom-weaver-bundle.json"),
+        result.weavePath,
+        getPathBaseName(result.weavePath, "rom-weaver-weave.json"),
         { cleanup: outputCleanups[0] },
       );
-      createdOutputs.push(bundleOutput);
+      createdOutputs.push(weaveOutput);
       const archiveOutput = result.archivePath
         ? await createRuntimeOutputFromVfs(
             browserVfs,
             result.archivePath,
-            getPathBaseName(result.archivePath, "rom-weaver-bundle.zip"),
+            getPathBaseName(result.archivePath, "rom-weaver-weave.zip"),
             { cleanup: outputCleanups[1] },
           )
         : undefined;
       if (archiveOutput) createdOutputs.push(archiveOutput);
-      return { ...(archiveOutput ? { archiveOutput } : {}), bundleOutput, result };
+      return { ...(archiveOutput ? { archiveOutput } : {}), weaveOutput, result };
     } catch (error) {
       await Promise.all(createdOutputs.map((output) => output.dispose().catch(() => undefined)));
       await outputScope.cleanup().catch(() => undefined);
@@ -505,16 +503,16 @@ const createBrowserBundleRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
     }
   },
   parse: async ({ source, fileName, logLevel, onLog, onProgress, signal }) => {
-    const extractDirPath = joinVfsPath(WORKER_OPFS_MOUNTPOINT, "bundle-parse", createVfsPathId());
+    const extractDirPath = joinVfsPath(WORKER_OPFS_MOUNTPOINT, "weave-parse", createVfsPathId());
     const staged = await workerIo.stageSource({
-      fallbackFileName: fileName || "rom-weaver-bundle.json",
-      pathPrefix: "bundle-input",
+      fallbackFileName: fileName || "rom-weaver-weave.json",
+      pathPrefix: "weave-input",
       scope: "archive",
       source,
       trace: { logLevel, onLog },
     });
     try {
-      const result = await invokeRomWeaverBundleParseWorker(
+      const result = await invokeRomWeaverWeaveParseWorker(
         {
           extractDirPath,
           knownInputPaths: [staged.filePath],
@@ -540,8 +538,8 @@ const createBrowserBundleRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime[
       const extractedCleanups: Array<() => Promise<void>> = [];
       for (const extractedPath of extractedPaths) {
         const storedFile = await browserVfs.getFile?.(extractedPath);
-        if (!storedFile) throw new Error(`Bundle file is not available: ${extractedPath}`);
-        const file = new File([storedFile], getPathBaseName(extractedPath, "bundle-entry.bin"), {
+        if (!storedFile) throw new Error(`Weave file is not available: ${extractedPath}`);
+        const file = new File([storedFile], getPathBaseName(extractedPath, "weave-entry.bin"), {
           lastModified: storedFile.lastModified,
           type: storedFile.type || "application/octet-stream",
         });
@@ -644,7 +642,7 @@ const createBrowserRuntime = (): WorkflowRuntime => {
     binary: {
       assertSource: assertBrowserBinarySource,
     },
-    bundle: createBrowserBundleRuntime(workerIo),
+    weave: createBrowserWeaveRuntime(workerIo),
     cheat: createBrowserCheatRuntime(workerIo),
     checksum: createBrowserChecksumRuntime(workerIo),
     compression: createBrowserCompressionRuntime(workerIo),

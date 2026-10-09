@@ -24,7 +24,7 @@ const TABS = [
   { dock: true, group: "patches", href: "create", icon: <svg aria-hidden="true" />, id: "creator", label: "Create" },
   { dock: true, group: "roms", href: "test", icon: <svg aria-hidden="true" />, id: "test", label: "Test" },
   { group: "project", href: "/docs", icon: <svg aria-hidden="true" />, id: "docs", label: "Docs" },
-  { group: "patches", href: "bundle", icon: <svg aria-hidden="true" />, id: "bundle", label: "Bundles" },
+  { group: "patches", href: "weave", icon: <svg aria-hidden="true" />, id: "weave", label: "Weaves" },
   { beta: true, group: "roms", href: "trim", icon: <svg aria-hidden="true" />, id: "trim", label: "Trim" },
 ] satisfies WorkflowTab[];
 
@@ -129,8 +129,8 @@ describe("the navigation both layouts share", () => {
       expect(onSelectTab).toHaveBeenCalledWith("trim");
       fireEvent.click(rowNamed(scope, "Docs"));
       expect(onSelectTab).toHaveBeenCalledWith("docs");
-      fireEvent.click(rowNamed(scope, "Bundles"));
-      expect(onSelectTab).toHaveBeenCalledWith("bundle");
+      fireEvent.click(rowNamed(scope, "Weaves"));
+      expect(onSelectTab).toHaveBeenCalledWith("weave");
     }
     expect(onOpenStatus).toHaveBeenCalledTimes(2);
     expect(onOpenLog).toHaveBeenCalledTimes(1);

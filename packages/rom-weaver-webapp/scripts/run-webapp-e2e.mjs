@@ -37,6 +37,7 @@ const LINK_AUDIT_WORKFLOW_ROUTES = [
   "compress",
   "identify-rom",
   "test-rom",
+  "weave-patches",
   "bundle-patches",
   "extract",
   "trim-rom",
@@ -47,6 +48,7 @@ const LINK_AUDIT_WORKFLOW_ROUTES = [
   "create",
   "identify",
   "test",
+  "weave",
   "bundle",
   "trim",
   "tools",
@@ -255,7 +257,7 @@ const runHydrationAudit = async (createContext, baseUrl) => {
       { finalView: "patcher", initialView: "patcher", path: "apply/", replayClick: true },
       { finalView: "creator", initialView: "creator", path: "create/" },
       { finalView: "trim", initialView: "trim", path: "trim/" },
-      { finalView: "bundle", initialView: "bundle", path: "bundle-patches?guide=bundle" },
+      { finalView: "weave", initialView: "weave", path: "weave-patches?guide=weave" },
     ]) {
       const page = await context.newPage();
       const failures = [];
@@ -591,7 +593,7 @@ export const checkCssCoverage = (entries) => {
 const runAccessibilityAudit = async (createContext, baseUrl) => {
   // Reduced motion keeps the guided tour's re-reveal scrolls instant. Its
   // smooth `scrollBy` otherwise glides the page while Playwright is hovering
-  // the bundle download button, and the hover retries "element is not stable"
+  // the weave download button, and the hover retries "element is not stable"
   // until it times out. Chromium only: under the emulation WebKit intermittently
   // serves stale theme colours to axe after a theme flip (`.mode-label` read
   // dark-theme text on a light background), so WebKit keeps its default media.
@@ -945,30 +947,30 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
     await page.locator("#rom-weaver-button-apply").waitFor({ state: "visible", timeout: 60_000 });
     await page.locator("#rom-weaver-button-test-emulator").waitFor({ state: "visible", timeout: 60_000 });
 
-    await scanGuidedLoading(page, ["first-weave.zip"], "guided Bundle loading (desktop, light)", async () => {
-      await page.goto(new URL("bundle?guide=bundle", baseUrl).href, { waitUntil: "domcontentloaded" });
-      await page.locator("#rom-weaver-input-file-unified-bundle").waitFor({ state: "attached" });
+    await scanGuidedLoading(page, ["first-weave.zip"], "guided Weave loading (desktop, light)", async () => {
+      await page.goto(new URL("weave-patches?guide=weave", baseUrl).href, { waitUntil: "domcontentloaded" });
+      await page.locator("#rom-weaver-input-file-unified-weave").waitFor({ state: "attached" });
       await installAuditTools();
     });
     for (let step = 1; step <= 5; step += 1) {
       await page
         .locator(`.sample-tutorial-dialog[data-step="${step}"][data-step-count="5"]:not([data-moving])`)
         .waitFor({ state: "visible", timeout: 60_000 });
-      await scanVariants(`guided Bundle ${step}/5`);
+      await scanVariants(`guided Weave ${step}/5`);
       if (step === 5) {
-        const createBundleButton = page.locator("#rom-weaver-button-export-bundle:not([data-downloadable])");
-        await createBundleButton.waitFor({ state: "visible", timeout: 60_000 });
+        const createWeaveButton = page.locator("#rom-weaver-button-export-weave:not([data-downloadable])");
+        await createWeaveButton.waitFor({ state: "visible", timeout: 60_000 });
         await page.waitForFunction(
           () => {
-            const button = document.getElementById("rom-weaver-button-export-bundle");
+            const button = document.getElementById("rom-weaver-button-export-weave");
             return button instanceof HTMLButtonElement && !button.disabled;
           },
           undefined,
           { timeout: 60_000 },
         );
-        await createBundleButton.click();
-        // The same control turns into the download once the bundle is built.
-        const downloadButton = page.locator("#rom-weaver-button-export-bundle[data-downloadable]");
+        await createWeaveButton.click();
+        // The same control turns into the download once the weave is built.
+        const downloadButton = page.locator("#rom-weaver-button-export-weave[data-downloadable]");
         await downloadButton.waitFor({ state: "visible", timeout: 60_000 });
         // Stability first: the guide re-anchors (and may scroll) while the
         // control settles from Create into Download, and hovering during that
@@ -982,7 +984,7 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
           downloadButton.click(),
         ]);
         if (!download.suggestedFilename().endsWith(".zip")) {
-          throw new Error(`guided Bundle downloaded ${download.suggestedFilename()}; expected a ZIP`);
+          throw new Error(`guided Weave downloaded ${download.suggestedFilename()}; expected a ZIP`);
         }
       } else {
         await tutorial.locator(".sample-tutorial-next").click();

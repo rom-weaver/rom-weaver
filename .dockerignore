@@ -38,7 +38,10 @@ third_party
 docs/*
 !docs/README.md
 !docs/faq.md
+!docs/rom-weaver-bundle-v1.schema.json
 !docs/rom-weaver-bundle-v2.schema.json
+!docs/rom-weaver-weave-v1.schema.json
+!docs/rom-weaver-weave-v2.schema.json
 !docs/tutorials
 !docs/tutorials/**
 !docs/how-to

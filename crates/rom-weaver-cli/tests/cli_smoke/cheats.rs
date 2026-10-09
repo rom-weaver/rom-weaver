@@ -896,18 +896,18 @@ fn an_unknown_cheat_system_names_the_flag_that_set_it() {
     assert!(label.contains("gameboy-color"), "{label}");
 }
 
-/// `bundle create --cheat` for [`nes_rom`], recording one bakeable cheat and
-/// one the ROM's bytes cannot bake. Returns `(bundle path, database path)`.
-fn write_cheat_bundle(temp: &TempDir, rom: &[u8]) -> (String, String) {
+/// `weave create --cheat` for [`nes_rom`], recording one bakeable cheat and
+/// one the ROM's bytes cannot bake. Returns `(weave path, database path)`.
+fn write_cheat_weave(temp: &TempDir, rom: &[u8]) -> (String, String) {
     let database = write_cheat_database(temp, rom);
     let input = temp.child("game.nes");
     fs::write(input.path(), rom).expect("fixture");
-    let bundle = temp.child("rom-weaver-bundle.json");
-    let bundle_s = bundle.path().to_str().expect("path").to_owned();
+    let weave = temp.child("rom-weaver-weave.json");
+    let weave_s = weave.path().to_str().expect("path").to_owned();
 
     let report = parse_single_json_line(&command_stdout(
         &[
-            "bundle",
+            "weave",
             "create",
             "--input",
             input.path().to_str().expect("path"),
@@ -916,13 +916,13 @@ fn write_cheat_bundle(temp: &TempDir, rom: &[u8]) -> (String, String) {
             "--cheat",
             CHEAT_ROM,
             "--output",
-            &bundle_s,
+            &weave_s,
             "--jsonl",
         ],
         0,
     ));
     assert_eq!(report["status"], "succeeded");
-    let cheats = &report["details"]["bundle_create"]["bundle"]["cheats"];
+    let cheats = &report["details"]["weave_create"]["weave"]["cheats"];
     assert_eq!(cheats[0]["id"], CHEAT_ROM);
     assert_eq!(cheats[0]["code"], "AKE-LVS");
     assert_eq!(cheats[0]["revision"], "testrevision");
@@ -930,7 +930,7 @@ fn write_cheat_bundle(temp: &TempDir, rom: &[u8]) -> (String, String) {
     // A cheat the ROM cannot bake is refused, not recorded.
     let refused = parse_single_json_line(&command_stdout(
         &[
-            "bundle",
+            "weave",
             "create",
             "--input",
             input.path().to_str().expect("path"),
@@ -946,18 +946,18 @@ fn write_cheat_bundle(temp: &TempDir, rom: &[u8]) -> (String, String) {
     ));
     let label = refused["label"].as_str().expect("label");
     assert!(label.contains("High score"), "{label}");
-    (bundle_s, database)
+    (weave_s, database)
 }
 
 #[test]
-fn bundle_apply_reproduces_a_cheat_apply_byte_for_byte() {
+fn weave_apply_reproduces_a_cheat_apply_byte_for_byte() {
     let temp = setup_temp_dir();
     let rom = nes_rom();
-    let (bundle, database) = write_cheat_bundle(&temp, &rom);
+    let (weave, database) = write_cheat_weave(&temp, &rom);
     let input = temp.child("game.nes");
     let input_s = input.path().to_str().expect("path").to_owned();
-    let via_bundle = temp.child("via-bundle.nes");
-    let via_bundle_s = via_bundle.path().to_str().expect("path").to_owned();
+    let via_weave = temp.child("via-weave.nes");
+    let via_weave_s = via_weave.path().to_str().expect("path").to_owned();
     let direct = temp.child("direct.nes");
     let direct_s = direct.path().to_str().expect("path").to_owned();
 
@@ -967,12 +967,12 @@ fn bundle_apply_reproduces_a_cheat_apply_byte_for_byte() {
             "apply",
             "--input",
             &input_s,
-            "--bundle",
-            &bundle,
+            "--weave",
+            &weave,
             "--cheat-database",
             &database,
             "--output",
-            &via_bundle_s,
+            &via_weave_s,
             "--no-compress",
             "--jsonl",
         ],
@@ -980,7 +980,7 @@ fn bundle_apply_reproduces_a_cheat_apply_byte_for_byte() {
     ));
     assert_eq!(report["status"], "succeeded");
     // AKE-LVS -> $BD86:48; header (16) + (0xBD86 - 0x8000) = 0x3D96.
-    assert_eq!(fs::read(via_bundle.path()).expect("output")[0x3D96], 0x48);
+    assert_eq!(fs::read(via_weave.path()).expect("output")[0x3D96], 0x48);
 
     command_stdout(
         &[
@@ -1000,17 +1000,17 @@ fn bundle_apply_reproduces_a_cheat_apply_byte_for_byte() {
         0,
     );
     assert_eq!(
-        fs::read(via_bundle.path()).expect("bundle output"),
+        fs::read(via_weave.path()).expect("weave output"),
         fs::read(direct.path()).expect("direct output"),
-        "a bundle apply must reproduce the direct cheat apply byte-for-byte"
+        "a weave apply must reproduce the direct cheat apply byte-for-byte"
     );
 }
 
 #[test]
-fn bundle_apply_without_the_database_bakes_from_the_snapshot() {
+fn weave_apply_without_the_database_bakes_from_the_snapshot() {
     let temp = setup_temp_dir();
     let rom = nes_rom();
-    let (bundle, _) = write_cheat_bundle(&temp, &rom);
+    let (weave, _) = write_cheat_weave(&temp, &rom);
     let empty = temp.child("no-database");
     fs::create_dir_all(empty.path()).expect("directory");
     let empty_s = empty.path().to_str().expect("path").to_owned();
@@ -1022,14 +1022,14 @@ fn bundle_apply_without_the_database_bakes_from_the_snapshot() {
         .to_owned();
     let output = temp.child("patched.nes");
     let output_s = output.path().to_str().expect("path").to_owned();
-    let args = |bundle: &str| {
+    let args = |weave: &str| {
         vec![
             "patch".to_owned(),
             "apply".to_owned(),
             "--input".to_owned(),
             input_s.clone(),
-            "--bundle".to_owned(),
-            bundle.to_owned(),
+            "--weave".to_owned(),
+            weave.to_owned(),
             "--cheat-database".to_owned(),
             empty_s.clone(),
             "--output".to_owned(),
@@ -1044,21 +1044,21 @@ fn bundle_apply_without_the_database_bakes_from_the_snapshot() {
     }
 
     // The recorded entry bakes from its own code snapshot with no database.
-    let report = parse_single_json_line(&command_stdout(&borrowed(&args(&bundle)), 0));
+    let report = parse_single_json_line(&command_stdout(&borrowed(&args(&weave)), 0));
     assert_eq!(report["status"], "succeeded");
     assert_eq!(fs::read(output.path()).expect("output")[0x3D96], 0x48);
 
     // An entry with no snapshot and no database fails, unless it is optional.
-    let stripped = temp.child("stripped-bundle.json");
+    let stripped = temp.child("stripped-weave.json");
     let mut parsed: Value =
-        serde_json::from_str(&fs::read_to_string(&bundle).expect("bundle")).expect("bundle json");
+        serde_json::from_str(&fs::read_to_string(&weave).expect("weave")).expect("weave json");
     parsed["cheats"][0]["code"] = Value::Null;
     parsed["cheats"][0]["id"] = Value::String("cheat_missing".to_owned());
     fs::write(
         stripped.path(),
-        serde_json::to_vec(&parsed).expect("bundle json"),
+        serde_json::to_vec(&parsed).expect("weave json"),
     )
-    .expect("bundle");
+    .expect("weave");
     let failed = parse_single_json_line(&command_stdout(
         &borrowed(&args(stripped.path().to_str().expect("path"))),
         1,
@@ -1069,20 +1069,20 @@ fn bundle_apply_without_the_database_bakes_from_the_snapshot() {
 }
 
 #[test]
-fn bundle_parse_lists_the_cheats_a_bundle_carries() {
+fn weave_parse_lists_the_cheats_a_weave_carries() {
     let temp = setup_temp_dir();
     let rom = nes_rom();
-    let (bundle, _) = write_cheat_bundle(&temp, &rom);
+    let (weave, _) = write_cheat_weave(&temp, &rom);
 
     let report = parse_single_json_line(&command_stdout(
-        &["bundle", "parse", "--input", &bundle, "--jsonl"],
+        &["weave", "parse", "--input", &weave, "--jsonl"],
         0,
     ));
     assert_eq!(report["status"], "succeeded");
     let label = report["label"].as_str().expect("label");
     assert!(label.contains("1 cheat entry"), "{label}");
     assert!(label.contains("Team runs faster"), "{label}");
-    let cheats = report["details"]["bundle"]["bundle"]["cheats"]
+    let cheats = report["details"]["weave"]["weave"]["cheats"]
         .as_array()
         .expect("cheats");
     assert_eq!(cheats.len(), 1);
@@ -1090,16 +1090,16 @@ fn bundle_parse_lists_the_cheats_a_bundle_carries() {
 }
 
 #[test]
-fn patch_apply_emit_bundle_records_the_cheat_selection() {
+fn patch_apply_emit_weave_records_the_cheat_selection() {
     let temp = setup_temp_dir();
     let rom = nes_rom();
     let database = write_cheat_database(&temp, &rom);
     let input = temp.child("game.nes");
     fs::write(input.path(), &rom).expect("fixture");
     let output = temp.child("patched.nes");
-    let emitted = temp.child("emitted-bundle.json");
+    let emitted = temp.child("emitted-weave.json");
 
-    // The bundle is written after the terminal apply event, so the last JSON
+    // The weave is written after the terminal apply event, so the last JSON
     // line is not the one that reports the apply.
     let events = parse_json_lines(&command_stdout(
         &[
@@ -1113,7 +1113,7 @@ fn patch_apply_emit_bundle_records_the_cheat_selection() {
             CHEAT_ROM,
             "--output",
             output.path().to_str().expect("path"),
-            "--emit-bundle",
+            "--emit-weave",
             emitted.path().to_str().expect("path"),
             "--no-compress",
             "--jsonl",
@@ -1127,17 +1127,17 @@ fn patch_apply_emit_bundle_records_the_cheat_selection() {
         "{events:?}"
     );
     let parsed: Value =
-        serde_json::from_str(&fs::read_to_string(emitted.path()).expect("emitted bundle"))
-            .expect("bundle json");
+        serde_json::from_str(&fs::read_to_string(emitted.path()).expect("emitted weave"))
+            .expect("weave json");
     assert_eq!(parsed["cheats"][0]["id"], CHEAT_ROM);
     assert_eq!(parsed["cheats"][0]["code"], "AKE-LVS");
     assert!(parsed["patches"].as_array().expect("patches").is_empty());
 }
 
-/// Write a hand-authored cheats-only bundle beside [`nes_rom`], so the shapes
-/// `bundle create` never emits can be applied too.
-fn write_cheats_only_bundle(temp: &TempDir, name: &str, cheats: Value) -> String {
-    let bundle = temp.child(name);
+/// Write a hand-authored cheats-only weave beside [`nes_rom`], so the shapes
+/// `weave create` never emits can be applied too.
+fn write_cheats_only_weave(temp: &TempDir, name: &str, cheats: Value) -> String {
+    let weave = temp.child(name);
     let document = serde_json::json!({
         "version": 1,
         "rom": { "path": "game.nes" },
@@ -1145,24 +1145,24 @@ fn write_cheats_only_bundle(temp: &TempDir, name: &str, cheats: Value) -> String
         "cheats": cheats,
     });
     fs::write(
-        bundle.path(),
-        serde_json::to_vec(&document).expect("bundle json"),
+        weave.path(),
+        serde_json::to_vec(&document).expect("weave json"),
     )
-    .expect("bundle");
-    bundle.path().to_str().expect("path").to_owned()
+    .expect("weave");
+    weave.path().to_str().expect("path").to_owned()
 }
 
 #[test]
-fn an_all_skipped_optional_bundle_names_what_it_dropped() {
+fn an_all_skipped_optional_weave_names_what_it_dropped() {
     let temp = setup_temp_dir();
     let rom = nes_rom();
     let input = temp.child("game.nes");
     fs::write(input.path(), &rom).expect("fixture");
     let empty = temp.child("no-database");
     fs::create_dir_all(empty.path()).expect("directory");
-    let bundle = write_cheats_only_bundle(
+    let weave = write_cheats_only_weave(
         &temp,
-        "optional-only-bundle.json",
+        "optional-only-weave.json",
         serde_json::json!([{ "id": CHEAT_RAM, "optional": true }]),
     );
     let output = temp.child("patched.nes");
@@ -1173,8 +1173,8 @@ fn an_all_skipped_optional_bundle_names_what_it_dropped() {
             "apply",
             "--input",
             input.path().to_str().expect("path"),
-            "--bundle",
-            &bundle,
+            "--weave",
+            &weave,
             "--cheat-database",
             empty.path().to_str().expect("path"),
             "--output",
@@ -1186,7 +1186,7 @@ fn an_all_skipped_optional_bundle_names_what_it_dropped() {
     ));
     let label = report["label"].as_str().expect("label");
     assert!(
-        label.contains("every cheat this bundle records was skipped"),
+        label.contains("every cheat this weave records was skipped"),
         "{label}"
     );
     assert!(label.contains(CHEAT_RAM), "{label}");
@@ -1195,7 +1195,7 @@ fn an_all_skipped_optional_bundle_names_what_it_dropped() {
 }
 
 #[test]
-fn emit_bundle_keeps_an_applied_cheat_that_shares_an_id_with_a_skipped_one() {
+fn emit_weave_keeps_an_applied_cheat_that_shares_an_id_with_a_skipped_one() {
     let temp = setup_temp_dir();
     let rom = nes_rom();
     let input = temp.child("game.nes");
@@ -1206,16 +1206,16 @@ fn emit_bundle_keeps_an_applied_cheat_that_shares_an_id_with_a_skipped_one() {
     // Both entries name `cheat_rom`. With no database the second has no code
     // to fall back on, so it is skipped while the first applies from its
     // snapshot - the skip is tracked by index, not by id.
-    let bundle = write_cheats_only_bundle(
+    let weave = write_cheats_only_weave(
         &temp,
-        "twin-bundle.json",
+        "twin-weave.json",
         serde_json::json!([
             { "id": CHEAT_ROM, "code": "AKE-LVS" },
             { "id": CHEAT_ROM, "optional": true },
         ]),
     );
     let output = temp.child("patched.nes");
-    let emitted = temp.child("emitted-bundle.json");
+    let emitted = temp.child("emitted-weave.json");
 
     let events = parse_json_lines(&command_stdout(
         &[
@@ -1223,13 +1223,13 @@ fn emit_bundle_keeps_an_applied_cheat_that_shares_an_id_with_a_skipped_one() {
             "apply",
             "--input",
             input.path().to_str().expect("path"),
-            "--bundle",
-            &bundle,
+            "--weave",
+            &weave,
             "--cheat-database",
             &database,
             "--output",
             output.path().to_str().expect("path"),
-            "--emit-bundle",
+            "--emit-weave",
             emitted.path().to_str().expect("path"),
             "--no-compress",
             "--jsonl",
@@ -1243,15 +1243,15 @@ fn emit_bundle_keeps_an_applied_cheat_that_shares_an_id_with_a_skipped_one() {
         "{events:?}"
     );
     let parsed: Value =
-        serde_json::from_str(&fs::read_to_string(emitted.path()).expect("emitted bundle"))
-            .expect("bundle json");
+        serde_json::from_str(&fs::read_to_string(emitted.path()).expect("emitted weave"))
+            .expect("weave json");
     let cheats = parsed["cheats"].as_array().expect("cheats");
     assert_eq!(cheats.len(), 1, "{cheats:?}");
     assert_eq!(cheats[0]["id"], CHEAT_ROM);
 }
 
 #[test]
-fn bundle_create_from_a_spec_lets_an_explicit_cheat_replace_its_cheats() {
+fn weave_create_from_a_spec_lets_an_explicit_cheat_replace_its_cheats() {
     let temp = setup_temp_dir();
     let rom = nes_rom();
     let database = write_cheat_database(&temp, &rom);
@@ -1269,18 +1269,18 @@ fn bundle_create_from_a_spec_lets_an_explicit_cheat_replace_its_cheats() {
         .expect("spec json"),
     )
     .expect("spec");
-    let output = temp.child("rom-weaver-bundle.json");
+    let output = temp.child("rom-weaver-weave.json");
     let spec_s = spec.path().to_str().expect("path").to_owned();
     let output_s = output.path().to_str().expect("path").to_owned();
 
     // Without --cheat the spec's own entries carry through.
     let kept = parse_single_json_line(&command_stdout(
         &[
-            "bundle", "create", "--from", &spec_s, "--output", &output_s, "--jsonl",
+            "weave", "create", "--from", &spec_s, "--output", &output_s, "--jsonl",
         ],
         0,
     ));
-    let cheats = kept["details"]["bundle_create"]["bundle"]["cheats"]
+    let cheats = kept["details"]["weave_create"]["weave"]["cheats"]
         .as_array()
         .expect("cheats");
     assert_eq!(cheats.len(), 1);
@@ -1289,7 +1289,7 @@ fn bundle_create_from_a_spec_lets_an_explicit_cheat_replace_its_cheats() {
     // With --cheat the selection replaces them rather than appending.
     let replaced = parse_single_json_line(&command_stdout(
         &[
-            "bundle",
+            "weave",
             "create",
             "--from",
             &spec_s,
@@ -1304,7 +1304,7 @@ fn bundle_create_from_a_spec_lets_an_explicit_cheat_replace_its_cheats() {
         ],
         0,
     ));
-    let cheats = replaced["details"]["bundle_create"]["bundle"]["cheats"]
+    let cheats = replaced["details"]["weave_create"]["weave"]["cheats"]
         .as_array()
         .expect("cheats");
     assert_eq!(cheats.len(), 1, "{cheats:?}");
@@ -1313,22 +1313,22 @@ fn bundle_create_from_a_spec_lets_an_explicit_cheat_replace_its_cheats() {
 }
 
 #[test]
-fn without_cheats_runs_the_bundle_patch_chain_alone() {
+fn without_cheats_runs_the_weave_patch_chain_alone() {
     let temp = setup_temp_dir();
     let rom = nes_rom();
-    let (bundle, database) = write_cheat_bundle(&temp, &rom);
+    let (weave, database) = write_cheat_weave(&temp, &rom);
     let input = temp.child("game.nes");
     let output = temp.child("patched.nes");
 
-    // A cheats-only bundle has nothing left once the cheats are dropped.
+    // A cheats-only weave has nothing left once the cheats are dropped.
     let refused = parse_single_json_line(&command_stdout(
         &[
             "patch",
             "apply",
             "--input",
             input.path().to_str().expect("path"),
-            "--bundle",
-            &bundle,
+            "--weave",
+            &weave,
             "--cheat-database",
             &database,
             "--without-cheats",
@@ -1547,7 +1547,7 @@ fn new_cheat_formats_bake_exact_bytes_and_export_patches() {
 }
 
 #[test]
-fn explicit_code_kind_survives_bundle_snapshot_replay() {
+fn explicit_code_kind_survives_weave_snapshot_replay() {
     let temp = setup_temp_dir();
     let mut rom = nes_rom();
     rom[16 + 0x1123] = 0xDE;
@@ -1555,7 +1555,7 @@ fn explicit_code_kind_survives_bundle_snapshot_replay() {
     fs::write(input.path(), &rom).unwrap();
     let database = temp.child("no-database");
     fs::create_dir_all(database.path()).unwrap();
-    let bundle = write_cheats_only_bundle(
+    let weave = write_cheats_only_weave(
         &temp,
         "rocky.json",
         serde_json::json!([
@@ -1570,11 +1570,11 @@ fn explicit_code_kind_survives_bundle_snapshot_replay() {
             "apply",
             "--input",
             input.path().to_str().unwrap(),
-            "--bundle",
-            &bundle,
+            "--weave",
+            &weave,
             "--cheat-database",
             database.path().to_str().unwrap(),
-            "--emit-bundle",
+            "--emit-weave",
             emitted.path().to_str().unwrap(),
             "--output",
             first.path().to_str().unwrap(),
@@ -1593,7 +1593,7 @@ fn explicit_code_kind_survives_bundle_snapshot_replay() {
             "apply",
             "--input",
             input.path().to_str().unwrap(),
-            "--bundle",
+            "--weave",
             emitted.path().to_str().unwrap(),
             "--cheat-database",
             database.path().to_str().unwrap(),

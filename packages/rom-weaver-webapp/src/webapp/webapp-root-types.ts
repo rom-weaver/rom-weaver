@@ -69,7 +69,7 @@ type WebappRootProps = {
     onCancel: () => void;
     onConfirm: () => void;
   };
-  /** Boot-time `?bundle=` / `?rom=&patch=` session request, when present. */
+  /** Boot-time `?weave=` / `?rom=&patch=` session request, when present. */
   urlSession?: UrlSessionParseResult | null;
   actions: {
     onStartGuide: (guide: GuidedSample) => void;
@@ -95,7 +95,7 @@ type WebappRootProps = {
     onCreatorOriginalChange: (file: unknown) => void;
     onCreatorPatchTypeChange: (patchType: string) => void;
     onCreatorSettingsChange: (settings: unknown) => void;
-    onPatcherBundlePackageChange: (value: string) => void;
+    onPatcherWeavePackageChange: (value: string) => void;
     onPatcherInputsChange: (inputs: readonly unknown[]) => void;
     onPatcherPatchesChange: (patches: readonly unknown[]) => void;
     onPatcherSettingsChange: (settings: unknown) => void;

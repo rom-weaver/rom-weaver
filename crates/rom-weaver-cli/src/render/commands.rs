@@ -15,13 +15,13 @@ pub(super) struct OutputSelection {
 
 impl OutputSelection {
     pub(super) fn for_command(command: &crate::Commands) -> Self {
-        use crate::{BundleCommands, Commands, PatchCommands, SaveCommands, ToolsCommands};
+        use crate::{Commands, PatchCommands, SaveCommands, ToolsCommands, WeaveCommands};
         let mut selection = Self::default();
         selection.explicit_output = match command {
             Commands::Compress(args) => Some(args.output.clone()),
             Commands::Patch(PatchCommands::Apply(args)) => args.output.clone(),
             Commands::Patch(PatchCommands::Create(args)) => args.output.clone(),
-            Commands::Bundle(BundleCommands::Create(args)) => Some(args.output.clone()),
+            Commands::Weave(WeaveCommands::Create(args)) => Some(args.output.clone()),
             Commands::Save(SaveCommands::Create(args)) => args.output.clone(),
             Commands::Save(SaveCommands::Set(args)) => args.output.clone(),
             Commands::Tools(ToolsCommands::PpfUndo(args)) => Some(args.output.clone()),
@@ -72,7 +72,7 @@ pub(super) fn render_success(
     match event.command.as_str() {
         "probe" => render_container_or_patch(surface, event),
         "trim" if !has_emitted_files(event) => render_no_write(surface, event),
-        "extract" | "compress" | "patch-apply" | "trim" | "bundle-create" | "tools-ppf-undo" => {
+        "extract" | "compress" | "patch-apply" | "trim" | "weave-create" | "tools-ppf-undo" => {
             render_emitted_files(surface, event, selection);
         }
         "patch-create" => {

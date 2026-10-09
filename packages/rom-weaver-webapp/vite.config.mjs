@@ -179,7 +179,7 @@ export default defineConfig(({ command, mode }) => {
             "**/index.html",
             "404.html",
             "manifest.json",
-            "rom-weaver-bundle-v2.schema.json",
+            "rom-weaver-*.schema.json",
             "docs.md",
             "docs/*.md",
             "NOTICE",

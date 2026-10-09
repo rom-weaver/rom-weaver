@@ -26,11 +26,11 @@ Find rom-weaver guides for ROM patching, checksum errors, supported files, priva
   - [What are Original and Modified?](#what-are-original-and-modified)
   - [How do I know the patch really works?](#how-do-i-know-the-patch-really-works)
   - [What belongs in release notes?](#what-belongs-in-release-notes)
-- [Bundles](#bundles)
-  - [What is a bundle?](#what-is-a-bundle)
-  - [Does a bundle contain the ROM?](#does-a-bundle-contain-the-rom)
+- [Weaves](#weaves)
+  - [What is a weave?](#what-is-a-weave)
+  - [Does a weave contain the ROM?](#does-a-weave-contain-the-rom)
   - [How do I make one?](#how-do-i-make-one)
-  - [Can a link open my hosted bundle?](#can-a-link-open-my-hosted-bundle)
+  - [Can a link open my hosted weave?](#can-a-link-open-my-hosted-weave)
 - [Identify, prepare, and save](#identify-prepare-and-save)
   - [Why is my ROM unknown?](#why-is-my-rom-unknown)
   - [Can I find a ROM from its checksum without a file?](#can-i-find-a-rom-from-its-checksum-without-a-file)
@@ -83,7 +83,7 @@ Find rom-weaver guides for ROM patching, checksum errors, supported files, priva
 
 ### Can I share the result?
 
-[Bundles and redistribution](explanation/bundles.md#what-it-is-not).
+[Weaves and redistribution](explanation/bundles.md#what-it-is-not).
 
 ## Applying a patch
 
@@ -129,23 +129,31 @@ Work through [Fix a checksum error](how-to/fix-checksum-errors.md).
 
 [Write useful release notes](how-to/create-rom-patches.md#write-useful-release-notes).
 
-## Bundles
+<a id="bundles"></a>
 
-### What is a bundle?
+## Weaves
 
-[What a bundle is](explanation/bundles.md).
+<a id="what-is-a-bundle"></a>
 
-### Does a bundle contain the ROM?
+### What is a weave?
 
-[What a bundle contains](explanation/bundles.md#what-it-is-not).
+[What a weave is](explanation/bundles.md).
+
+<a id="does-a-bundle-contain-the-rom"></a>
+
+### Does a weave contain the ROM?
+
+[What a weave contains](explanation/bundles.md#what-it-is-not).
 
 ### How do I make one?
 
-[Create and share a patch bundle](how-to/create-bundles.md), or [from the CLI](how-to/cli-bundles.md).
+[Create and share a patch weave](how-to/create-bundles.md), or [from the CLI](how-to/cli-bundles.md).
 
-### Can a link open my hosted bundle?
+<a id="can-a-link-open-my-hosted-bundle"></a>
 
-[Open a hosted bundle in Apply](how-to/create-bundles.md#open-a-hosted-bundle-in-apply).
+### Can a link open my hosted weave?
+
+[Open a hosted weave in Apply](how-to/create-bundles.md#open-a-hosted-bundle-in-apply).
 
 ## Identify, prepare, and save
 

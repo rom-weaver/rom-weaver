@@ -1,19 +1,19 @@
 use super::shared::*;
 
 #[test]
-fn patch_bundle_dry_run_lists_the_remote_source_without_downloading_it() {
+fn patch_weave_dry_run_lists_the_remote_source_without_downloading_it() {
     let temp = setup_temp_dir();
     let input = temp.child("source.bin");
     input.write_str("source").expect("fixture");
     let destination = temp.child("output.zip");
-    let url = "https://example.invalid/rom-weaver-bundle.json";
+    let url = "https://example.invalid/rom-weaver-weave.json";
     let output = command_stdout(
         &[
             "patch",
             "apply",
             "--input",
             input.path().to_str().expect("path"),
-            "--bundle",
+            "--weave",
             url,
             "--output",
             destination.path().to_str().expect("path"),
@@ -29,7 +29,7 @@ fn patch_bundle_dry_run_lists_the_remote_source_without_downloading_it() {
 }
 
 #[test]
-fn dry_run_keeps_patch_bundle_and_ingest_destinations_untouched() {
+fn dry_run_keeps_patch_weave_and_ingest_destinations_untouched() {
     let temp = setup_temp_dir();
     let input = temp.child("source.bin");
     let modified = temp.child("modified.bin");
@@ -54,13 +54,13 @@ fn dry_run_keeps_patch_bundle_and_ingest_destinations_untouched() {
         ),
         (
             vec![
-                "bundle", "create", "--input", input_path, "--patch", patch_path,
+                "weave", "create", "--input", input_path, "--patch", patch_path,
             ],
-            "rom-weaver-bundle.json",
+            "rom-weaver-weave.json",
         ),
         (
-            vec!["bundle", "parse", "--input", input_path],
-            "bundle-members",
+            vec!["weave", "parse", "--input", input_path],
+            "weave-members",
         ),
         (vec!["ingest", "--input", input_path], "ingested"),
     ];
@@ -236,7 +236,7 @@ fn native_read_only_commands_emit_the_standard_dry_run_plan() {
     for args in [
         ["formats", "--dry-run", "--json"].as_slice(),
         ["completions", "bash", "--dry-run", "--json"].as_slice(),
-        ["bundle", "schema", "--dry-run", "--json"].as_slice(),
+        ["weave", "schema", "--dry-run", "--json"].as_slice(),
     ] {
         let report = run_single_json_event(args, 0);
         assert_eq!(report["status"], "succeeded", "args={args:?}");

@@ -23,7 +23,7 @@ import {
   decodeUtf8,
   getPatchFileBytes,
 } from "./binary-service.ts";
-import { getBundleRomProvenance } from "./bundle-rom-provenance.ts";
+import { getWeaveRomProvenance } from "./weave-rom-provenance.ts";
 import {
   attachInputPreparationMetrics,
   getInputPreparationMetrics,
@@ -445,15 +445,15 @@ const prepareInputAssets = async (
     assetCount: assets.length,
     fileName: file.fileName,
   });
-  return withBundleRomProvenance(source, assets);
+  return withWeaveRomProvenance(source, assets);
 };
 
-// A bundle-supplied ROM is extracted from the bundle archive out-of-band, so `resolveCompressedInputAssets`
-// sees a bare file and records no extract chain. When the bundle registered a breadcrumb for this source,
+// A weave-supplied ROM is extracted from the weave archive out-of-band, so `resolveCompressedInputAssets`
+// sees a bare file and records no extract chain. When the weave registered a breadcrumb for this source,
 // attach it as the input's `parentCompressions` so the ROM card renders the same "Extract" section a
 // plainly-dropped archive would - but never clobber a real chain the extract pass already recorded.
-const withBundleRomProvenance = (source: SourceRef, assets: InputAsset[]): InputAsset[] => {
-  const provenance = getBundleRomProvenance(source);
+const withWeaveRomProvenance = (source: SourceRef, assets: InputAsset[]): InputAsset[] => {
+  const provenance = getWeaveRomProvenance(source);
   if (!provenance?.length) return assets;
   const existing = getInputPreparationMetrics(assets);
   if (existing?.parentCompressions?.length) return assets;

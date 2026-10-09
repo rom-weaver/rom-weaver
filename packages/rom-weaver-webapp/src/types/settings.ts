@@ -18,7 +18,7 @@ type SevenZipCodec = (typeof ROM_WEAVER_COMPRESSION_METADATA)["codecFields"]["se
 
 type StringNumber = number | string;
 
-type BundlePackage = "" | "patches" | "rom" | "7z:patches" | "7z:rom" | "zip:patches" | "zip:rom";
+type WeavePackage = "" | "patches" | "rom" | "7z:patches" | "7z:rom" | "zip:patches" | "zip:rom";
 
 type PostApplyActionBehavior = "auto-show" | "show" | "hide";
 
@@ -45,7 +45,7 @@ type CommonSettings = {
   emulatorSaveStorageEnabled?: boolean;
   input?: InputSettings;
   logging?: LoggingSettings;
-  bundlePackage?: BundlePackage;
+  weavePackage?: WeavePackage;
   storage?: StorageSettings;
   workers?: WorkerSettings;
 };
@@ -89,7 +89,7 @@ type OutputSettings = {
   /** ROM copier-header handling on the patched output: auto (re-add emulator-required
    * headers, drop junk copier headers), keep, or strip (headerless output). */
   header?: "auto" | "keep" | "strip";
-  bundlePackage?: BundlePackage;
+  weavePackage?: WeavePackage;
   /**
    * Name the output after the ROM's identified title instead of its file name.
    * Absent means on - a confident title is a better name than `rom_final_v2`.

@@ -62,7 +62,7 @@ const createFakeApplyWorkflow = () => {
     dispose: vi.fn(async () => {
       disposed = true;
     }),
-    getBundleExportSources: vi.fn(() => ({ patches: [], rom: null })),
+    getWeaveExportSources: vi.fn(() => ({ patches: [], rom: null })),
     getInput: vi.fn(() => input),
     getPatches: vi.fn(() => patches.slice()),
     getPatchSources: vi.fn(() => [] as unknown[]),
@@ -181,7 +181,8 @@ vi.mock("../../src/platform/browser/browser-api.ts", () => ({
 }));
 
 const { ApplyPatchForm } = await import("../../src/public/react/apply-patch-form.tsx");
-const { RomWeaverSettingsProvider } = await import("../../src/public/react/settings-context.tsx");
+const { RomWeaverSettingsProvider, toApplyWorkflowSettings, useApplySettings } =
+  await import("../../src/public/react/settings-context.tsx");
 
 const renderForm = (props: Parameters<typeof ApplyPatchForm>[0] = {}) =>
   render(
@@ -189,6 +190,39 @@ const renderForm = (props: Parameters<typeof ApplyPatchForm>[0] = {}) =>
       <ApplyPatchForm {...props} />
     </RomWeaverSettingsProvider>,
   );
+
+describe("legacy package settings normalization", () => {
+  const normalize = (settings: unknown) =>
+    toApplyWorkflowSettings(settings as Parameters<typeof toApplyWorkflowSettings>[0]);
+  it.each([{ bundlePackage: "rom" }, { output: { bundlePackage: "rom" } }])(
+    "normalizes legacy settings %j",
+    (settings) => {
+      const normalized = normalize(settings);
+      expect(normalized.output?.weavePackage).toBe("rom");
+      expect(normalized).not.toHaveProperty("bundlePackage");
+      expect(normalized.output).not.toHaveProperty("bundlePackage");
+      expect(JSON.stringify(settings)).toContain("bundlePackage");
+    },
+  );
+  it.each([
+    { weavePackage: "patches", bundlePackage: "rom" },
+    { output: { weavePackage: "patches", bundlePackage: "rom" } },
+    { weavePackage: "patches", output: { bundlePackage: "rom" } },
+  ])("prefers canonical settings %j", (settings) => {
+    expect(normalize(settings).output?.weavePackage).toBe("patches");
+  });
+  it("normalizes legacy provider settings", () => {
+    const Choice = () => <output>{useApplySettings().output?.weavePackage}</output>;
+    const { container } = render(
+      <RomWeaverSettingsProvider
+        settings={{ bundlePackage: "rom" } as unknown as Parameters<typeof RomWeaverSettingsProvider>[0]["settings"]}
+      >
+        <Choice />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(container.querySelector("output")?.textContent).toBe("rom");
+  });
+});
 
 describe("ApplyPatchForm - empty mount", () => {
   beforeEach(() => window.history.replaceState(null, "", "/apply-patch"));
@@ -221,6 +255,25 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     latestFakeWorkflow = null;
+  });
+
+  it("uses legacy defaults for the rendered weave ROM choice", async () => {
+    const { container } = renderForm({
+      mode: "weave",
+      defaultSettings: { output: { bundlePackage: "rom" } } as unknown as Parameters<
+        typeof ApplyPatchForm
+      >[0]["defaultSettings"],
+    });
+    const fileInput = container.querySelector("#rom-weaver-input-file-unified-weave") as HTMLInputElement;
+    await act(async () => {
+      Object.defineProperty(fileInput, "files", { configurable: true, value: [new File(["rom-bytes"], "game.bin")] });
+      fireEvent.change(fileInput);
+    });
+    await vi.waitFor(() => {
+      const choice = container.querySelector<HTMLInputElement>("#rom-weaver-weave-export-weave-rom");
+      expect(choice).not.toBeNull();
+      expect(choice?.checked).toBe(true);
+    });
   });
 
   it("stages a dropped ROM through the fake workflow and discloses the rest of the bench", async () => {

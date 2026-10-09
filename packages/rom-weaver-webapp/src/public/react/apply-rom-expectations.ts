@@ -1,8 +1,8 @@
-import type { ParsedBundleChecks } from "../../types/bundle.ts";
+import type { ParsedWeaveChecks } from "../../types/weave.ts";
 import { formatIdentifyTitle } from "../../presentation/identify-title.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import type { RomInputRowState } from "./patcher-ui-state.ts";
-import type { BundlePatchMeta } from "./use-bundle-apply-session.ts";
+import type { WeavePatchMeta } from "./use-weave-apply-session.ts";
 
 const ROM_CHECKSUM_HEX_LENGTHS: Record<number, "crc32" | "md5" | "sha1"> = { 8: "crc32", 32: "md5", 40: "sha1" };
 
@@ -34,7 +34,7 @@ const parseInputExpectationEntry = (entry: string): { key: string; value: string
   return value ? { key, value } : null;
 };
 
-const parsePatchInputExpectation = (patch: PatchStackItemState): ParsedBundleChecks | undefined => {
+const parsePatchInputExpectation = (patch: PatchStackItemState): ParsedWeaveChecks | undefined => {
   const checksums: Record<string, string> = {};
   let size: number | undefined;
   for (const entry of patch.validationValues || []) {
@@ -56,7 +56,7 @@ const parsePatchInputExpectation = (patch: PatchStackItemState): ParsedBundleChe
 export const parseChainInputExpectation = (
   patches: PatchStackItemState[],
   disabledFlags?: readonly boolean[],
-): ParsedBundleChecks | undefined => {
+): ParsedWeaveChecks | undefined => {
   const chainInput = patches.find((_, index) => !disabledFlags?.[index]);
   return chainInput ? parsePatchInputExpectation(chainInput) : undefined;
 };
@@ -64,15 +64,15 @@ export const parseChainInputExpectation = (
 const collectPlanBaseContributions = (
   patches: PatchStackItemState[],
   disabledFlags: readonly boolean[],
-  bundleMeta: ReadonlyArray<BundlePatchMeta | undefined>,
-  bundleRomChecks: ParsedBundleChecks | undefined,
+  weaveMeta: ReadonlyArray<WeavePatchMeta | undefined>,
+  weaveRomChecks: ParsedWeaveChecks | undefined,
 ) => {
-  const contributions: ParsedBundleChecks[] = bundleRomChecks ? [bundleRomChecks] : [];
+  const contributions: ParsedWeaveChecks[] = weaveRomChecks ? [weaveRomChecks] : [];
   let sawBaseVerdict = false;
   for (const [index, patch] of patches.entries()) {
     if (disabledFlags[index] || patch.chainVerdict?.basis !== "base") continue;
     sawBaseVerdict = true;
-    const expectation = bundleMeta[index]?.inputChecks ?? parsePatchInputExpectation(patch);
+    const expectation = weaveMeta[index]?.inputChecks ?? parsePatchInputExpectation(patch);
     if (expectation) contributions.push(expectation);
   }
   return { contributions, sawBaseVerdict };
@@ -85,7 +85,7 @@ const collectPlanBaseContributions = (
  */
 const mergeChecksumContribution = (
   checksums: Record<string, string>,
-  contribution: ParsedBundleChecks,
+  contribution: ParsedWeaveChecks,
   romInfo: RomInputRowState["info"] | undefined,
 ): boolean => {
   let conflict = false;
@@ -107,7 +107,7 @@ const mergeChecksumContribution = (
 };
 
 const mergePlanBaseContributions = (
-  contributions: ParsedBundleChecks[],
+  contributions: ParsedWeaveChecks[],
   romInfo: RomInputRowState["info"] | undefined,
 ) => {
   const checksums: Record<string, string> = {};
@@ -124,7 +124,7 @@ const mergePlanBaseContributions = (
 
 /**
  * Plan-fed base expectation for a single-ROM bench: union the checks of every
- * base-basis patch with the bundle's rom.checks. On disagreement the value
+ * base-basis patch with the weave's rom.checks. On disagreement the value
  * matching the staged ROM wins and a base conflict is flagged (the losing
  * patch's own card shows the mismatch). Null when the plan offered no
  * base-basis verdicts - callers fall back to the chain-input parse.
@@ -132,15 +132,15 @@ const mergePlanBaseContributions = (
 export const buildPlanBaseExpectation = (
   patches: PatchStackItemState[],
   disabledFlags: readonly boolean[],
-  bundleMeta: ReadonlyArray<BundlePatchMeta | undefined>,
-  bundleRomChecks: ParsedBundleChecks | undefined,
+  weaveMeta: ReadonlyArray<WeavePatchMeta | undefined>,
+  weaveRomChecks: ParsedWeaveChecks | undefined,
   romInfo: RomInputRowState["info"] | undefined,
-): { conflict: boolean; expected: ParsedBundleChecks } | null => {
+): { conflict: boolean; expected: ParsedWeaveChecks } | null => {
   const { contributions, sawBaseVerdict } = collectPlanBaseContributions(
     patches,
     disabledFlags,
-    bundleMeta,
-    bundleRomChecks,
+    weaveMeta,
+    weaveRomChecks,
   );
   if (!(sawBaseVerdict && contributions.length)) return null;
   const { checksums, conflict, size } = mergePlanBaseContributions(contributions, romInfo);

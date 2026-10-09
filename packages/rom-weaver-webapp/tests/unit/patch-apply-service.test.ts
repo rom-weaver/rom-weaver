@@ -156,8 +156,8 @@ describe("resolvePatchTargets checksum auto-targeting", () => {
   });
 });
 
-describe("bundle patch requirements", () => {
-  it("reuses requirements after a bundle file is wrapped", async () => {
+describe("weave patch requirements", () => {
+  it("reuses requirements after a weave file is wrapped", async () => {
     const source = {};
     const wrapped = createLazyExternalPatchFile("patch.ips", { filePath: "/work/patch.ips", size: 18 });
     attachIngestPatchRequirements(

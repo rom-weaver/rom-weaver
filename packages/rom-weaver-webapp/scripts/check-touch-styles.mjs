@@ -19,7 +19,7 @@ const SRC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "s
 const EXEMPT = new Map([
   [".rw-app .btn.primary:hover", "variant of .btn; .btn:active supplies the press transform"],
   [".rw-app .btn.danger:hover", "variant of .btn; .btn:active supplies the press transform"],
-  [".rw-app .btn.bundle-dl:hover", "variant of .btn; .btn:active supplies the press transform"],
+  [".rw-app .btn.weave-dl:hover", "variant of .btn; .btn:active supplies the press transform"],
   [".rw-app .handle:hover:not(:disabled)", "paired with .handle:active:not(:disabled)"],
   [".rw-app .pick-row.off:hover", "variant of .pick-row; .pick-row:active covers the press"],
   [

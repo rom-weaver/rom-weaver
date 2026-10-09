@@ -124,9 +124,9 @@ const TOOL_FIND_DETAILS: Record<string, { hint: MessageId; keywords: string }> =
   identify: { hint: "ui.hero.identifyDescription", keywords: "identify ROM checksum hash" },
   patcher: {
     hint: "ui.hero.applyDescription",
-    keywords: "apply patch apply weave xdelta xdelta3 vcdiff bdf bsdiff bsdiff40",
+    keywords: "apply patch apply xdelta xdelta3 vcdiff bdf bsdiff bsdiff40",
   },
-  bundle: { hint: "ui.find.bundleHint", keywords: "bundle bundle apply saved patch sequence" },
+  weave: { hint: "ui.find.weaveHint", keywords: "weave bundle apply saved patch sequence" },
   test: { hint: "ui.hero.testDescription", keywords: "test ROM play emulator" },
   trim: { hint: "ui.hero.trimDescription", keywords: "trim ROM padding" },
 };
@@ -166,10 +166,10 @@ const CLI_GUIDES: readonly CliGuide[] = [
     keywords: "CLI patch validate check",
   },
   {
-    command: "bundle parse",
+    command: "weave parse",
     hint: "ui.find.cliPatchHint",
     href: "/docs/cli-bundles",
-    keywords: "CLI bundle parse",
+    keywords: "CLI weave parse",
   },
   {
     command: "trim --untrim / --restore",
@@ -198,7 +198,7 @@ const createStaticEntries = ({ baseHref, donateHref, githubHref, localizer, tabs
       id: `tool:${tab.id}`,
       keywords: `${tab.label} ${tab.id} ${tab.href} ${details?.keywords ?? ""}`,
       kind: "tool",
-      label: tab.id === "bundle" ? message("ui.find.bundlesApplyPatch") : tab.label,
+      label: tab.id === "weave" ? message("ui.find.weavesApplyPatch") : tab.label,
     };
   });
   const cliGuides: FindEntry[] = CLI_GUIDES.map(({ command, hint, href, keywords }) => {

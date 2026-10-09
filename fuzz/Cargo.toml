@@ -41,8 +41,8 @@ doc = false
 bench = false
 
 [[bin]]
-name = "bundle_parse"
-path = "fuzz_targets/bundle_parse.rs"
+name = "weave_parse"
+path = "fuzz_targets/weave_parse.rs"
 test = false
 doc = false
 bench = false

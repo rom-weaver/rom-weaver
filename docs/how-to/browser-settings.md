@@ -36,12 +36,12 @@ This exposes Trim and Save Editor. PPF Undo and cheat tools in Apply, Create, an
 1. While online, open **Settings**, select **Keep an offline copy**, then **Save**.
 2. Wait for the app's offline download to finish.
 3. Reopen **Settings** and select the **Optional ROM databases** you need. These choices download immediately.
-4. Open the sample, bundle, or cheat list you plan to use while online.
+4. Open the sample, weave, or cheat list you plan to use while online.
 5. Load a game for each emulator system you need, so its core is cached.
 
 Check the result before relying on it: disconnect your device, reopen rom-weaver, and run a small local job.
 
-Remote bundle links still need network access unless their required files are available locally. Browser storage eviction can remove cached assets.
+Remote weave links still need network access unless their required files are available locally. Browser storage eviction can remove cached assets.
 
 [Offline behavior](../explanation/local-first.md#offline) explains these limits. [Test a ROM](test-roms-in-browser.md) covers emulator controls.
 

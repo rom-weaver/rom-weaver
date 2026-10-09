@@ -168,7 +168,7 @@ const latest = () => {
   return props;
 };
 
-const otherOptionValue = (field: "accent" | "bundlePackage" | "language" | "logLevel") => {
+const otherOptionValue = (field: "accent" | "weavePackage" | "language" | "logLevel") => {
   const current = String(getDefaultSettings()[field]);
   const metadata = SETTINGS_FIELD_METADATA[field];
   const values = metadata.options
@@ -311,10 +311,10 @@ describe("boot", () => {
   });
 
   it("logs the url session warnings it parsed at boot", async () => {
-    await loadWebapp({ url: "/apply-patch?bundle=notaurl&rom=/rom.sfc" });
+    await loadWebapp({ url: "/apply-patch?weave=notaurl&rom=/rom.sfc" });
 
-    expect(consoleText()).toContain("url session: bundle= takes precedence; rom=/patch= params are ignored");
-    expect(latest().urlSession?.warnings).toContain("bundle= takes precedence; rom=/patch= params are ignored");
+    expect(consoleText()).toContain("url session: weave= takes precedence; rom=/patch= params are ignored");
+    expect(latest().urlSession?.warnings).toContain("weave= takes precedence; rom=/patch= params are ignored");
   });
 
   it("hands a parsed url session request to the root", async () => {
@@ -325,28 +325,28 @@ describe("boot", () => {
     expect(window.location.pathname).toBe("/apply-patches");
   });
 
-  it("replaces the retired Bundle route", async () => {
-    await loadWebapp({ url: "/bundle?guide=bundle" });
+  it("replaces the retired Weave route", async () => {
+    await loadWebapp({ url: "/weave?guide=weave" });
 
-    expect(window.location.pathname).toBe("/bundle-patches");
-    expect(window.location.search).toBe("?guide=bundle");
-    expect(latest().state.currentView).toBe("bundle");
+    expect(window.location.pathname).toBe("/weave-patches");
+    expect(window.location.search).toBe("?guide=weave");
+    expect(latest().state.currentView).toBe("weave");
   });
 
-  it("moves bundle sessions to the Bundle route", async () => {
-    await loadWebapp({ url: "/apply-patch?bundle=/bundles/first-weave.zip" });
+  it("moves weave sessions to the Weave route", async () => {
+    await loadWebapp({ url: "/apply-patch?weave=/weaves/first-weave.zip" });
 
-    expect(window.location.pathname).toBe("/bundle-patches");
-    expect(window.location.search).toBe("?bundle=/bundles/first-weave.zip");
-    expect(latest().state.currentView).toBe("bundle");
+    expect(window.location.pathname).toBe("/weave-patches");
+    expect(window.location.search).toBe("?weave=/weaves/first-weave.zip");
+    expect(latest().state.currentView).toBe("weave");
   });
 
-  it("moves the legacy bundle guide to Bundle and keeps its guide query", async () => {
-    await loadWebapp({ url: "/apply-patch?guide=bundle" });
+  it("moves the legacy weave guide to Weave and keeps its guide query", async () => {
+    await loadWebapp({ url: "/apply-patch?guide=weave" });
 
-    expect(window.location.pathname).toBe("/bundle-patches");
-    expect(window.location.search).toBe("?guide=bundle");
-    expect(latest().state.currentView).toBe("bundle");
+    expect(window.location.pathname).toBe("/weave-patches");
+    expect(window.location.search).toBe("?guide=weave");
+    expect(latest().state.currentView).toBe("weave");
   });
 
   it("reports the browser storage estimate it could not read", async () => {
@@ -531,20 +531,20 @@ describe("settings actions", () => {
     expect(latest().state.draftSettings.accent).toBe(accent);
   });
 
-  it("commits accent, language, log level, and bundle package changes", async () => {
+  it("commits accent, language, log level, and weave package changes", async () => {
     await loadWebapp();
     const accent = otherOptionValue("accent");
     const language = otherOptionValue("language");
     const logLevel = otherOptionValue("logLevel");
-    const bundlePackage = otherOptionValue("bundlePackage");
+    const weavePackage = otherOptionValue("weavePackage");
 
     latest().actions.onAccentChange(accent);
     latest().actions.onLanguageChange(language);
     latest().actions.onLogLevelChange(logLevel);
-    latest().actions.onPatcherBundlePackageChange(bundlePackage);
+    latest().actions.onPatcherWeavePackageChange(weavePackage);
     await flush();
 
-    expect(latest().state.settings).toMatchObject({ accent, bundlePackage, language, logLevel });
+    expect(latest().state.settings).toMatchObject({ accent, weavePackage, language, logLevel });
   });
 
   it("focuses the first invalid field when the draft cannot be saved", async () => {
@@ -791,11 +791,11 @@ describe("routing", () => {
       started.push(String((event as CustomEvent<string>).detail));
     });
 
-    window.history.pushState({}, "", "/apply-patch?guide=bundle");
+    window.history.pushState({}, "", "/apply-patch?guide=weave");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await flush();
 
-    expect(started).toEqual(["bundle"]);
+    expect(started).toEqual(["weave"]);
   });
 
   it("does not soft-navigate from the not-found document", async () => {

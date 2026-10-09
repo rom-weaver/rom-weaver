@@ -42,7 +42,7 @@ type InputAsset = {
   preparation?: InputPreparationMetrics;
   file: PatchFileInstance;
   groupId?: string;
-  /** Stable source member/track locator for persisted bundle targets. */
+  /** Stable source member/track locator for persisted weave targets. */
   member?: string;
   trackNumber?: number;
   discGroupId?: string;

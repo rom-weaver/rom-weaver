@@ -14,20 +14,22 @@ For public MCP connections and browser agent workflows, see [Use MCP and browser
 
 ## URL sessions
 
-Use `?bundle=<url>` to load a bundle, or combine `?rom=<url>` with one or more `patch=<url>` parameters (repeat them with `&patch=`):
+Use `?weave=<url>` to load a weave, or combine `?rom=<url>` with one or more `patch=<url>` parameters (repeat them with `&patch=`):
 
 ```text
-https://rom-weaver.com/bundle-patches?bundle=https://example.com/release.zip
+https://rom-weaver.com/weave-patches?weave=https://example.com/release.zip
 https://rom-weaver.com/apply-patches?rom=https://example.com/game.bin&patch=https://example.com/change.ips
 ```
 
-The webapp reads these parameters once at startup and fetches each source in the browser, so every remote host must allow the webapp origin through CORS. Downloaded files go through the same classification, extraction, checksum, and bundle-resolution pipeline as locally dropped files.
+The webapp reads these parameters once at startup and fetches each source in the browser, so every remote host must allow the webapp origin through CORS. Downloaded files go through the same classification, extraction, checksum, and weave-resolution pipeline as locally dropped files.
 
-Bundle metadata controls the initial patch selection and output defaults. Patches marked `optional: true` start disabled; all patches remain toggleable. Relative bundle URLs resolve against the bundle URL. A locally dropped bundle may instead reference companion files dropped alongside it.
+Weave metadata controls the initial patch selection and output defaults. Patches marked `optional: true` start disabled; all patches remain toggleable. Relative weave URLs resolve against the weave URL. A locally dropped weave may instead reference companion files dropped alongside it.
+
+The legacy `/bundle-patches` route and `?bundle=<url>` parameter remain accepted.
 
 ## Ingest existing OPFS files
 
-A host on the same origin can place inputs under the OPFS `rom-weaver-imports/` directory and send their mounted paths through the same pipeline. Include a bundle in the list when using one; it does not need a separate option.
+A host on the same origin can place inputs under the OPFS `rom-weaver-imports/` directory and send their mounted paths through the same pipeline. Include a weave in the list when using one; it does not need a separate option.
 
 Code running inside this workspace can import the private webapp package and call `ingest`:
 
@@ -35,7 +37,7 @@ Code running inside this workspace can import the private webapp package and cal
 import { ingest } from "@rom-weaver/webapp";
 
 ingest([
-  "/work/rom-weaver-imports/rom-weaver-bundle.json",
+  "/work/rom-weaver-imports/rom-weaver-weave.json",
   "/work/rom-weaver-imports/game.bin",
   "/work/rom-weaver-imports/change.ips",
 ]);
@@ -47,7 +49,7 @@ Hosts serving the prebuilt webapp can dispatch the equivalent event after its mo
 document.dispatchEvent(
   new CustomEvent("rom-weaver:ingest", {
     detail: [
-      "/work/rom-weaver-imports/rom-weaver-bundle.json",
+      "/work/rom-weaver-imports/rom-weaver-weave.json",
       "/work/rom-weaver-imports/game.bin",
       "/work/rom-weaver-imports/change.ips",
     ],

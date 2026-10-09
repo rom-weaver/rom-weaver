@@ -194,7 +194,7 @@ describe("discoverImplicitPatches", () => {
 describe("surfaceArchivePatchSelection", () => {
   it("stages the archive as a patch slot and evaluates it", async () => {
     const controller = createController();
-    const source = { name: "bundle.zip" };
+    const source = { name: "weave.zip" };
 
     await (controller.surfaceArchivePatchSelection as (patchSource: Source) => Promise<void>)(source);
 
@@ -202,7 +202,7 @@ describe("surfaceArchivePatchSelection", () => {
     expect(controller.patches).toHaveLength(1);
     expect(controller.patches[0]?.source).toBe(source);
     expect(controller.patches[0]?.state.role).toBe("patch");
-    expect(controller.patches[0]?.state.fileName).toBe("bundle.zip");
+    expect(controller.patches[0]?.state.fileName).toBe("weave.zip");
     expect(controller.maybeResolveBlockingPatchSelection).toHaveBeenCalledTimes(1);
     expect(controller.evaluatePatchReadiness).toHaveBeenCalledTimes(1);
   });
@@ -212,7 +212,7 @@ describe("surfaceArchivePatchSelection", () => {
     controller.stageSource = vi.fn(async () => {
       throw new Error("staging failed");
     });
-    const source = { name: "bundle.zip" };
+    const source = { name: "weave.zip" };
 
     await (controller.surfaceArchivePatchSelection as (patchSource: Source) => Promise<void>)(source);
 
@@ -375,7 +375,7 @@ describe("replacePatchAt rollback", () => {
 describe("handleSourceSelectionRequests", () => {
   it("resets the stage to await a selection and forgets every derived verdict", () => {
     const controller = createController();
-    const stage = controller.createInitialSource("patch", { name: "bundle.zip" }, 0) as StageProbe & {
+    const stage = controller.createInitialSource("patch", { name: "weave.zip" }, 0) as StageProbe & {
       parentCompressions: string[];
       state: Record<string, unknown>;
     };

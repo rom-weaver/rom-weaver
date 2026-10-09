@@ -100,7 +100,7 @@ fn no_filter() -> ArchiveEntryKindFilter {
 }
 
 /// Pack `inputs` into `output` with the registry's zip handler, the same route
-/// `bundle create --bundle` uses.
+/// `weave create --weave` uses.
 fn make_zip(app: &CliApp, output: &Path, inputs: &[PathBuf], context: &OperationContext) {
     let handler = app
         .containers

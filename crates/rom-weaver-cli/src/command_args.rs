@@ -25,7 +25,7 @@ filter_accessors!(ExtractCommand);
 filter_accessors!(ChecksumCommand);
 filter_accessors!(PatchApplyCommand);
 filter_accessors!(PatchValidateCommand);
-filter_accessors!(BundleParseCommand);
+filter_accessors!(WeaveParseCommand);
 
 impl TrimCommand {
     /// `--filter rom` (the default) and the older no-value `--no-filter` both
@@ -54,7 +54,7 @@ spelling `rom-weaver weave` runs the same command.
 Repeat --patch once per patch. They run left to right, each one on the result
 of the last. --input takes a plain ROM, an archive, or a single-payload
 compressed format (the ROM inside is found for you), or a
-rom-weaver-bundle.json that already names the ROM, the patches, and the
+rom-weaver-weave.json that already names the ROM, the patches, and the
 output.
 
 When --output names the selected ROM leaf's extension, rom-weaver writes a
@@ -249,7 +249,7 @@ fn checksum_algorithm_parser() -> clap::builder::PossibleValuesParser {
 #[cfg(not(target_arch = "wasm32"))]
 pub const CHECKSUM_ALGO_HELP: &str = "Which checksum to compute (repeatable, comma-separable)";
 
-/// The `--patch-*` metadata flags on `bundle create` all bind positionally to
+/// The `--patch-*` metadata flags on `weave create` all bind positionally to
 /// the `--patch` before them, so every one of them repeats the same rule. This
 /// appends it to the flag's own long help.
 #[cfg(not(target_arch = "wasm32"))]
@@ -1172,7 +1172,7 @@ pub struct PatchApplyCommand {
             long,
             value_name = "PATH",
             help_heading = "Basic",
-            help = "ROM to patch. May be an archive, a disc sheet (.cue/.gdi), or a bundle"
+            help = "ROM to patch. May be an archive, a disc sheet (.cue/.gdi), or a weave"
         )
     )]
     pub input: PathBuf,
@@ -1181,7 +1181,7 @@ pub struct PatchApplyCommand {
         arg(
             short = 's',
             long = "select",
-            help_heading = "Archive/bundle",
+            help_heading = "Archive/weave",
             help = "Pick which file to use when the ROM or a patch is inside an archive, by exact name, prefix, or glob (repeatable). --patch-select overrides it for the patch it follows"
         )
     )]
@@ -1192,7 +1192,7 @@ pub struct PatchApplyCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "target",
-            help_heading = "Archive/bundle",
+            help_heading = "Archive/weave",
             help = "For a .cue or .gdi input, which track gets the patch. Matched like --select and must hit exactly one track"
         )
     )]
@@ -1205,7 +1205,7 @@ pub struct PatchApplyCommand {
             long = "filter",
             value_enum,
             value_delimiter = ',',
-            help_heading = "Archive/bundle",
+            help_heading = "Archive/weave",
             help = FILTER_HELP
         )
     )]
@@ -1216,7 +1216,7 @@ pub struct PatchApplyCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help_heading = "Archive/bundle",
+            help_heading = "Archive/weave",
             help = "Do not look inside archives; treat the input and every patch as raw files"
         )
     )]
@@ -1225,7 +1225,7 @@ pub struct PatchApplyCommand {
     pub no_extract: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
-        arg(long, help_heading = "Archive/bundle", help = NO_IGNORE_HELP)
+        arg(long, help_heading = "Archive/weave", help = NO_IGNORE_HELP)
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
@@ -1253,7 +1253,7 @@ the ROM inside the input archive."
             long = "patch-select",
             value_name = "GLOB",
             action = clap::ArgAction::Append,
-            help_heading = "Archive/bundle",
+            help_heading = "Archive/weave",
             help = "Pick which file to use inside the --patch archive before it. Repeatable, one per --patch; falls back to --select"
         )
     )]
@@ -1266,7 +1266,7 @@ the ROM inside the input archive."
             short = 'o',
             long,
             help_heading = "Basic",
-            help = "Where to write the patched ROM. Optional when a bundle already names the output"
+            help = "Where to write the patched ROM. Optional when a weave already names the output"
         )
     )]
     #[serde(default)]
@@ -1275,28 +1275,29 @@ the ROM inside the input archive."
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
-            long = "bundle",
-            help_heading = "Archive/bundle",
-            help = "Follow a rom-weaver-bundle.json recipe: a file path, or an http(s) URL",
+            long = "weave",
+            visible_alias = "bundle",
+            help_heading = "Archive/weave",
+            help = "Follow a rom-weaver-weave.json recipe: a file path, or an http(s) URL",
             long_help = "\
-Follow a rom-weaver-bundle.json recipe, which lists the patches, their order,
+Follow a rom-weaver-weave.json recipe, which lists the patches, their order,
 and the expected checksums. Takes a file path or an http(s) URL.
 
-You can usually skip this flag. A bundle is picked up automatically when
---input is a rom-weaver-bundle.json (optionally .gz, .bz2, .xz, or .zst), or an
+You can usually skip this flag. A weave is picked up automatically when
+--input is a rom-weaver-weave.json (optionally .gz, .bz2, .xz, or .zst), or an
 archive with one at its root, and you passed no --patch of your own."
         )
     )]
-    #[serde(default)]
+    #[serde(default, alias = "bundle")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub bundle: Option<PathBuf>,
+    pub weave: Option<PathBuf>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
             long = "with",
             value_name = "GLOB",
-            help_heading = "Archive/bundle",
-            help = "Turn on a bundle patch the bundle leaves off by default, matched by name or file name (repeatable)"
+            help_heading = "Archive/weave",
+            help = "Turn on a weave patch the weave leaves off by default, matched by name or file name (repeatable)"
         )
     )]
     #[serde(default)]
@@ -1307,8 +1308,8 @@ archive with one at its root, and you passed no --patch of your own."
         arg(
             long = "without",
             value_name = "GLOB",
-            help_heading = "Archive/bundle",
-            help = "Turn off a bundle patch, matched by name or file name (repeatable)"
+            help_heading = "Archive/weave",
+            help = "Turn off a weave patch, matched by name or file name (repeatable)"
         )
     )]
     #[serde(default)]
@@ -1318,8 +1319,8 @@ archive with one at its root, and you passed no --patch of your own."
         not(target_arch = "wasm32"),
         arg(
             long = "without-cheats",
-            help_heading = "Archive/bundle",
-            help = "Ignore every cheat the bundle records and run only its patch chain"
+            help_heading = "Archive/weave",
+            help = "Ignore every cheat the weave records and run only its patch chain"
         )
     )]
     #[serde(default)]
@@ -1506,12 +1507,12 @@ Use --default-patch-basis to set one rule for every patch."
     #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub patch_input: Vec<Option<BundlePatchInput>>,
+    pub patch_input: Vec<Option<WeavePatchInput>>,
     /// Cumulative execution targets for direct JSON/WASM apply runs.
     #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub patch_target: Vec<Option<BundlePatchInput>>,
+    pub patch_target: Vec<Option<WeavePatchInput>>,
     /// Index-aligned authored pre-apply checks for the patch apply JSON wire.
     /// They verify the selected execution input without changing it.
     #[cfg_attr(
@@ -1705,25 +1706,26 @@ output is written back in the order the input arrived in."
     #[cfg_attr(feature = "typescript-types", ts(skip))]
     pub cheat_selection: CheatSelectionArgs,
     // Native-only authoring conveniences (serde/ts skip keeps them off the
-    // wasm wire + generated TS; the webapp has its own bundle export).
+    // wasm wire + generated TS; the webapp has its own weave export).
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
-            long = "emit-bundle",
+            long = "emit-weave",
+            visible_alias = "emit-bundle",
             value_name = "PATH",
             help_heading = "Diagnostics/authoring",
-            help = "Also write a rom-weaver-bundle.json recording this run, so someone else can repeat it"
+            help = "Also write a rom-weaver-weave.json recording this run, so someone else can repeat it"
         )
     )]
     #[serde(skip)]
     #[cfg_attr(feature = "typescript-types", ts(skip))]
-    pub emit_bundle: Option<PathBuf>,
+    pub emit_weave: Option<PathBuf>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
             long = "tui",
             help_heading = "Diagnostics/authoring",
-            help = "Ask for each patch's name, version, and author, then apply and write a bundle. Needs a terminal"
+            help = "Ask for each patch's name, version, and author, then apply and write a weave. Needs a terminal"
         )
     )]
     #[serde(skip)]
@@ -1930,7 +1932,7 @@ pub struct PatchValidateCommand {
             long = "patch-select",
             value_name = "GLOB",
             action = clap::ArgAction::Append,
-            help_heading = "Archive/bundle",
+            help_heading = "Archive/weave",
             help = "Pick which file to use inside the --patch archive before it. Repeatable, one per --patch; falls back to --select"
         )
     )]
@@ -2504,14 +2506,14 @@ pub struct PlanExtractBatchCommand {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
-pub struct BundleParseCommand {
+pub struct WeaveParseCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
             short = 'i',
             long = "input",
             value_name = "INPUT",
-            help = "Bundle file, or an archive with a bundle at its root"
+            help = "Weave file, or an archive with a weave at its root"
         )
     )]
     pub input: PathBuf,
@@ -2520,7 +2522,7 @@ pub struct BundleParseCommand {
         arg(
             short = 's',
             long = "select",
-            help = "Handle only the bundle entries whose file name matches this exact name, prefix, or glob (repeatable)"
+            help = "Handle only the weave entries whose file name matches this exact name, prefix, or glob (repeatable)"
         )
     )]
     #[serde(default)]
@@ -2532,7 +2534,7 @@ pub struct BundleParseCommand {
             long = "filter",
             value_enum,
             value_delimiter = ',',
-            help = "Handle only the bundle's rom entry or only its patch entries (repeatable, comma-separable)"
+            help = "Handle only the weave's rom entry or only its patch entries (repeatable, comma-separable)"
         )
     )]
     #[serde(default)]
@@ -2542,7 +2544,7 @@ pub struct BundleParseCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Report what the bundle contains without unpacking any of it"
+            help = "Report what the weave contains without unpacking any of it"
         )
     )]
     #[serde(default)]
@@ -2554,7 +2556,7 @@ pub struct BundleParseCommand {
             short = 'o',
             long = "output",
             value_name = "DIR",
-            help = "Directory to unpack the bundle's files into. Without it, files packed in an archive are listed but not written out"
+            help = "Directory to unpack the weave's files into. Without it, files packed in an archive are listed but not written out"
         )
     )]
     #[serde(default)]
@@ -2575,11 +2577,11 @@ pub struct BundleParseCommand {
     pub threads: ThreadBudget,
 }
 
-/// One normalized `bundle create` patch entry, bound from the per-patch
+/// One normalized `weave create` patch entry, bound from the per-patch
 /// metadata flags (native argv alignment) or from index-aligned vectors on
 /// the wasm JSON path.
 #[derive(Clone, Debug, Default)]
-pub struct BundleCreatePatchSpec {
+pub struct WeaveCreatePatchSpec {
     pub path: PathBuf,
     pub id: Option<String>,
     pub version: Option<String>,
@@ -2595,9 +2597,9 @@ pub struct BundleCreatePatchSpec {
     pub basis: Option<PatchInputBasis>,
     /// Concrete execution target for this patch. This stays separate from the
     /// authored `basis` declaration.
-    pub input: Option<BundlePatchInput>,
+    pub input: Option<WeavePatchInput>,
     /// Cumulative execution lane for this patch.
-    pub target: Option<BundlePatchInput>,
+    pub target: Option<WeavePatchInput>,
     /// Expected pre-apply ROM checksums for this entry (`algo=hex` tokens).
     pub input_checks: Vec<String>,
     /// Original named state from `--from`; it proves intentional sharing.
@@ -2611,8 +2613,8 @@ pub struct BundleCreatePatchSpec {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
-pub struct BundleCreateCommand {
-    // Field/wire name stays `rom` (the bundle's rom entry); only the CLI flag
+pub struct WeaveCreateCommand {
+    // Field/wire name stays `rom` (the weave's rom entry); only the CLI flag
     // mirrors apply's `-i/--input` so the webapp wasm wire is untouched.
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -2620,13 +2622,13 @@ pub struct BundleCreateCommand {
             short = 'i',
             long = "input",
             value_name = "INPUT",
-            help = "ROM the patches apply to. Its checksums and size are read from the file and recorded in the bundle"
+            help = "ROM the patches apply to. Its checksums and size are read from the file and recorded in the weave"
         )
     )]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub rom: Option<PathBuf>,
-    /// Trusted ROM checksum/size values from a prior staging pass, so bundle
+    /// Trusted ROM checksum/size values from a prior staging pass, so weave
     /// export skips re-hashing the same prepared leaf. `algo=hex` tokens supply
     /// the emitted rom checks; a `size=N` token supplies the prepared size.
     #[cfg_attr(
@@ -2646,7 +2648,7 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "rom-url",
-            help = "Where the ROM can be downloaded from. With --input, the local file still supplies the checksums; on its own, the bundle records only this url"
+            help = "Where the ROM can be downloaded from. With --input, the local file still supplies the checksums; on its own, the weave records only this url"
         )
     )]
     #[serde(default)]
@@ -2668,7 +2670,7 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "rom-member",
-            help = "Use this exact archive member or disc track as the bundle ROM target"
+            help = "Use this exact archive member or disc track as the weave ROM target"
         )
     )]
     #[serde(default)]
@@ -2678,9 +2680,9 @@ pub struct BundleCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "patch",
-            help = "Patch to list in the bundle. Repeat once per patch, in the order they should be applied",
+            help = "Patch to list in the weave. Repeat once per patch, in the order they should be applied",
             long_help = "\
-Patch to list in the bundle. Repeat once per patch, in the order they should be
+Patch to list in the weave. Repeat once per patch, in the order they should be
 applied.
 
 Every --patch-* flag describes the --patch before it, so metadata for several
@@ -2774,8 +2776,8 @@ patches reads left to right:
         not(target_arch = "wasm32"),
         arg(
             long = "patch-source-url",
-            help = "Where the preceding --patch can be downloaded from. The local file is still read to build the bundle",
-            long_help = patch_adjacency_long_help!("Where the preceding --patch can be downloaded from. The local file is still read to build the bundle")
+            help = "Where the preceding --patch can be downloaded from. The local file is still read to build the weave",
+            long_help = patch_adjacency_long_help!("Where the preceding --patch can be downloaded from. The local file is still read to build the weave")
         )
     )]
     #[serde(default)]
@@ -2798,8 +2800,8 @@ patches reads left to right:
         arg(
             long = "patch-basis",
             value_enum,
-            help = "Override the preceding --patch input rule: base or previous. Use auto to inherit the bundle rule",
-            long_help = patch_adjacency_long_help!("Override the preceding --patch input rule: base (the bundle's ROM) or previous (the patch before it). Use auto to inherit the bundle rule")
+            help = "Override the preceding --patch input rule: base or previous. Use auto to inherit the weave rule",
+            long_help = patch_adjacency_long_help!("Override the preceding --patch input rule: base (the weave's ROM) or previous (the patch before it). Use auto to inherit the weave rule")
         )
     )]
     #[serde(default)]
@@ -2810,18 +2812,18 @@ patches reads left to right:
     #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub patch_input: Vec<Option<BundlePatchInput>>,
+    pub patch_input: Vec<Option<WeavePatchInput>>,
     /// Index-aligned cumulative execution targets from the JSON/WASM surface.
     #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub patch_target: Vec<Option<BundlePatchInput>>,
+    pub patch_target: Vec<Option<WeavePatchInput>>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
             long = "default-patch-basis",
             value_enum,
-            help = "Shared input ROM rule recorded in the v2 bundle: auto, base, or previous [default: auto]",
+            help = "Shared input ROM rule recorded in the v2 weave: auto, base, or previous [default: auto]",
             long_help = "\
 Record one input ROM rule for every patch. An individual --patch-basis overrides it.
 
@@ -2838,8 +2840,8 @@ Record one input ROM rule for every patch. An individual --patch-basis overrides
         arg(
             long = "patch-expect-in",
             value_name = "ALGO=HEX",
-            help = "Checksum the ROM should have before the preceding --patch runs. Recorded only when it differs from the bundle's ROM checksums (repeatable, comma-separable)",
-            long_help = patch_adjacency_long_help!("Checksum the ROM should have before the preceding --patch runs. Recorded only when it differs from the bundle's ROM checksums (repeatable, comma-separable)")
+            help = "Checksum the ROM should have before the preceding --patch runs. Recorded only when it differs from the weave's ROM checksums (repeatable, comma-separable)",
+            long_help = patch_adjacency_long_help!("Checksum the ROM should have before the preceding --patch runs. Recorded only when it differs from the weave's ROM checksums (repeatable, comma-separable)")
         )
     )]
     #[serde(default)]
@@ -2871,7 +2873,7 @@ Record one input ROM rule for every patch. An individual --patch-basis overrides
         not(target_arch = "wasm32"),
         arg(
             long = "output-name",
-            help = "File name the bundle suggests for the patched ROM"
+            help = "File name the weave suggests for the patched ROM"
         )
     )]
     #[serde(default)]
@@ -2888,12 +2890,12 @@ Record one input ROM rule for every patch. An individual --patch-basis overrides
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub output_header: Option<PatchApplyOutputHeaderMode>,
-    /// Cheat selections to record in the bundle. The wasm/JSON boundary sets
+    /// Cheat selections to record in the weave. The wasm/JSON boundary sets
     /// this directly; the native CLI fills it from `--cheat`/`--cht`.
     #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub cheats: Vec<crate::BundleCheatEntry>,
+    pub cheats: Vec<crate::WeaveCheatEntry>,
     /// Native cheat-database selection; see `PatchApplyCommand::cheat_selection`.
     #[cfg_attr(not(target_arch = "wasm32"), command(flatten))]
     #[serde(skip)]
@@ -2904,7 +2906,7 @@ Record one input ROM rule for every patch. An individual --patch-basis overrides
         arg(
             short = 'o',
             long,
-            help = "Where to write the bundle. Name it rom-weaver-bundle.json, or add .gz or .zst to compress it"
+            help = "Where to write the weave. Name it rom-weaver-weave.json, or add .gz or .zst to compress it"
         )
     )]
     pub output: PathBuf,
@@ -2912,33 +2914,36 @@ Record one input ROM rule for every patch. An individual --patch-basis overrides
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Also pack the bundle and its ROM and patches into one shareable archive, such as release.zip"
+            visible_alias = "bundle",
+            help = "Also pack the weave and its ROM and patches into one shareable archive, such as release.zip"
         )
     )]
-    #[serde(default)]
+    #[serde(default, alias = "bundle")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub bundle: Option<PathBuf>,
+    pub weave: Option<PathBuf>,
     /// Optional packaged ROM payload. Checks are still calculated from `rom`.
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
-            long = "bundle-rom",
-            help = "Pack this file into --bundle as the ROM, while --input supplies the checksums and metadata"
+            long = "weave-rom",
+            visible_alias = "bundle-rom",
+            help = "Pack this file into --weave as the ROM, while --input supplies the checksums and metadata"
         )
     )]
-    #[serde(default)]
+    #[serde(default, alias = "bundle_rom")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
-    pub bundle_rom: Option<PathBuf>,
+    pub weave_rom: Option<PathBuf>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
-            long = "no-bundle-rom",
-            help = "Keep the ROM out of --bundle and record only its checksums, so whoever applies the bundle brings their own copy"
+            long = "no-weave-rom",
+            visible_alias = "no-bundle-rom",
+            help = "Keep the ROM out of --weave and record only its checksums, so whoever applies the weave brings their own copy"
         )
     )]
-    #[serde(default)]
+    #[serde(default, alias = "no_bundle_rom")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
-    pub no_bundle_rom: bool,
+    pub no_weave_rom: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -2954,9 +2959,9 @@ Record one input ROM rule for every patch. An individual --patch-basis overrides
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub checksum: Vec<String>,
-    // Native-only authoring front door: read a hand-authored bundle spec (a
-    // RomWeaverBundle with local `path`s and optional/omitted checks) and bake
-    // it into the canonical checksummed bundle. `serde(skip)`/`ts(skip)` keep
+    // Native-only authoring front door: read a hand-authored weave spec (a
+    // RomWeaverWeave with local `path`s and optional/omitted checks) and bake
+    // it into the canonical checksummed weave. `serde(skip)`/`ts(skip)` keep
     // it off the wasm wire and out of the generated TS types (the webapp builds
     // the command directly). `-` reads the spec from stdin.
     #[cfg_attr(
@@ -2964,13 +2969,13 @@ Record one input ROM rule for every patch. An individual --patch-basis overrides
         arg(
             long = "from",
             value_name = "FILE",
-            help = "Build the bundle from a hand-written rom-weaver-bundle.json instead of flags. Use - to read it from stdin",
+            help = "Build the weave from a hand-written rom-weaver-weave.json instead of flags. Use - to read it from stdin",
             long_help = "\
-Build the bundle from a hand-written rom-weaver-bundle.json instead of flags.
+Build the weave from a hand-written rom-weaver-weave.json instead of flags.
 Use - to read it from stdin.
 
 Write the file with local paths and leave the checksums out; they are filled in
-from the real files. Get the schema with `rom-weaver bundle schema` so your
+from the real files. Get the schema with `rom-weaver weave schema` so your
 editor can check the file as you write it.
 
 Any flag you also pass overrides what the file says."
@@ -2979,14 +2984,14 @@ Any flag you also pass overrides what the file says."
     #[serde(skip)]
     #[cfg_attr(feature = "typescript-types", ts(skip))]
     pub from: Option<PathBuf>,
-    // Native-only: stamp a `$schema` reference into the emitted bundle so
+    // Native-only: stamp a `$schema` reference into the emitted weave so
     // editors bind validation. Never auto-set (would change output bytes).
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
             long = "schema-ref",
             value_name = "URL",
-            help = "Record this $schema URL in the bundle so editors can validate it. Left out unless asked for"
+            help = "Record this $schema URL in the weave so editors can validate it. Left out unless asked for"
         )
     )]
     #[serde(skip)]
@@ -3010,7 +3015,7 @@ Any flag you also pass overrides what the file says."
     #[cfg_attr(not(target_arch = "wasm32"), arg(skip))]
     #[serde(skip)]
     #[cfg_attr(feature = "typescript-types", ts(skip))]
-    pub patch_specs: Vec<BundleCreatePatchSpec>,
+    pub patch_specs: Vec<WeaveCreatePatchSpec>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -3024,12 +3029,12 @@ Any flag you also pass overrides what the file says."
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-impl BundleCreateCommand {
+impl WeaveCreateCommand {
     /// Bind each per-patch metadata occurrence to the most recent preceding
     /// `--patch` (clap's parsed `Vec`s lose the interleave order, so this
     /// re-derives it from the raw argv indices). The last occurrence bound to
     /// a patch wins; an occurrence before any `--patch` binds to the first.
-    pub fn align_bundle_patch_metadata(&mut self, matches: &clap::ArgMatches) {
+    pub fn align_weave_patch_metadata(&mut self, matches: &clap::ArgMatches) {
         let patch_indices: Vec<usize> = matches
             .indices_of("patch")
             .map(Iterator::collect)
@@ -3037,12 +3042,12 @@ impl BundleCreateCommand {
         if patch_indices.is_empty() {
             return;
         }
-        let mut specs: Vec<BundleCreatePatchSpec> = self
+        let mut specs: Vec<WeaveCreatePatchSpec> = self
             .patch
             .iter()
-            .map(|path| BundleCreatePatchSpec {
+            .map(|path| WeaveCreatePatchSpec {
                 path: path.clone(),
-                ..BundleCreatePatchSpec::default()
+                ..WeaveCreatePatchSpec::default()
             })
             .collect();
         let patch_position = |value_index: usize| -> usize {
@@ -3050,10 +3055,10 @@ impl BundleCreateCommand {
                 .partition_point(|patch_index| *patch_index < value_index)
                 .saturating_sub(1)
         };
-        let bind = |specs: &mut Vec<BundleCreatePatchSpec>,
+        let bind = |specs: &mut Vec<WeaveCreatePatchSpec>,
                     id: &str,
                     count: usize,
-                    assign: &mut dyn FnMut(&mut BundleCreatePatchSpec, usize)| {
+                    assign: &mut dyn FnMut(&mut WeaveCreatePatchSpec, usize)| {
             let indices: Vec<usize> = matches
                 .indices_of(id)
                 .map(Iterator::collect)

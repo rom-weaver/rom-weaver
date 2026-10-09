@@ -1,4 +1,4 @@
-import type { ParsedBundlePatchInput } from "../../types/bundle.ts";
+import type { ParsedWeavePatchInput } from "../../types/weave.ts";
 import { resolveAutomaticCompressionFormat } from "../../lib/compression/container-format-registry.ts";
 import { getBaseFileName } from "../../lib/input/path-utils.ts";
 import { buildPatchedOutputBaseName } from "../../lib/output/output-name-composition.ts";
@@ -24,8 +24,8 @@ import { formatChecksumTiming } from "./workflow-form-utils.ts";
  * stages from scratch, so the run replays these onto the fresh stages. */
 type ApplyPatchRunOptions = {
   id?: string;
-  input?: ParsedBundlePatchInput;
-  target?: ParsedBundlePatchInput;
+  input?: ParsedWeavePatchInput;
+  target?: ParsedWeavePatchInput;
   inputChecks?: string;
   outputChecks?: string;
   basis?: "base" | "previous";

@@ -837,7 +837,7 @@ fn ingest_rom_archive_extracts_and_checksums() {
     let temp = setup_temp_dir();
     let rom = temp.child("game.nes");
     fs::write(rom.path(), with_nes_header(b"archived rom payload")).expect("rom fixture");
-    let archive = temp.child("bundle.zip");
+    let archive = temp.child("weave.zip");
     command_stdout(
         &[
             "compress",
@@ -942,7 +942,7 @@ fn ingest_nested_patch_archive_routes_as_patch_source() {
     // A patch bundled inside a nested archive: the OUTER archive's only entry is the inner container,
     // so the top-level classify sees no patch name and defaults to `is_rom = true`. The rom-filtered
     // descent then finds no ROM in the inner archive - ingest must fall back to patch ingestion and
-    // route the whole bundle as a patch source instead of erroring with "no entries matched --filter rom".
+    // route the whole weave as a patch source instead of erroring with "no entries matched --filter rom".
     let temp = setup_temp_dir();
     let patch = temp.child("hack.ips");
     fs::write(
@@ -990,7 +990,7 @@ fn ingest_nested_patch_archive_routes_as_patch_source() {
             .as_array()
             .expect("assets array")
             .is_empty(),
-        "a nested patch bundle surfaces no ROM assets"
+        "a nested patch weave surfaces no ROM assets"
     );
     let patches = ingest["patches"].as_array().expect("patches array");
     assert_eq!(patches.len(), 1, "the nested patch leaf is surfaced");
@@ -1002,10 +1002,10 @@ fn ingest_nested_patch_archive_routes_as_patch_source() {
 
 #[test]
 fn ingest_nested_patch_archive_routes_as_patch_source_with_rom_select() {
-    // Same nested-patch-only bundle as above, but ingested WITH a ROM keep-one `--select` glob.
+    // Same nested-patch-only weave as above, but ingested WITH a ROM keep-one `--select` glob.
     // The fallback patch enumeration must ignore that glob (it enumerates with `&[]`): a ROM select
-    // that filters the descent must NOT also filter the bundle's patch leaves, or a select-present
-    // drop of a nested patch bundle regresses to "no ROM". Reverting the fallback to `raw_selections`
+    // that filters the descent must NOT also filter the weave's patch leaves, or a select-present
+    // drop of a nested patch weave regresses to "no ROM". Reverting the fallback to `raw_selections`
     // makes the `*.nes` glob drop the `.ips` leaf, leaving no patches and surfacing the ROM error.
     let temp = setup_temp_dir();
     let patch = temp.child("hack.ips");
@@ -1056,7 +1056,7 @@ fn ingest_nested_patch_archive_routes_as_patch_source_with_rom_select() {
             .as_array()
             .expect("assets array")
             .is_empty(),
-        "a nested patch bundle surfaces no ROM assets"
+        "a nested patch weave surfaces no ROM assets"
     );
     let patches = ingest["patches"].as_array().expect("patches array");
     assert_eq!(
@@ -1436,7 +1436,7 @@ fn ingest_mixed_archive_surfaces_rom_and_sidecar_patch() {
         "--json",
     ]);
     let ingest = &terminal["details"]["ingest"];
-    // A bundle carrying a ROM routes to the ROM bucket, but still surfaces the bundled patch.
+    // A weave carrying a ROM routes to the ROM bucket, but still surfaces the bundled patch.
     assert_eq!(ingest["kind"], "rom");
     let assets = ingest["assets"].as_array().expect("assets array");
     assert!(
@@ -1456,7 +1456,7 @@ fn ingest_mixed_archive_surfaces_rom_and_sidecar_patch() {
 
 #[test]
 fn ingest_mixed_archive_surfaces_sidecar_patch_independent_of_rom_selection() {
-    // A keep-one ROM `--select` pins which ROM is extracted, but it must NOT suppress the bundle's
+    // A keep-one ROM `--select` pins which ROM is extracted, but it must NOT suppress the weave's
     // sidecar patches: they are enumerated independently so the host can still offer to apply them.
     let temp = setup_temp_dir();
     let rom = temp.child("game.nes");

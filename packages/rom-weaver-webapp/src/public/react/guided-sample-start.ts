@@ -1,7 +1,7 @@
 const GUIDED_SAMPLE_VIEWS = {
   apply: "patcher",
   "apply-cheats": "patcher",
-  bundle: "bundle",
+  weave: "weave",
   create: "creator",
   "create-cheats": "creator",
   test: "test",
@@ -12,7 +12,7 @@ type GuidedSample = keyof typeof GUIDED_SAMPLE_VIEWS;
 const GUIDED_SAMPLE_HREFS = {
   apply: "/apply-patches?guide=apply",
   "apply-cheats": "/apply-patches?guide=apply-cheats",
-  bundle: "/bundle-patches?guide=bundle",
+  weave: "/weave-patches?guide=weave",
   create: "/create-patch?guide=create",
   "create-cheats": "/create-patch?guide=create-cheats",
   test: "/test-rom?guide=test",
@@ -20,6 +20,7 @@ const GUIDED_SAMPLE_HREFS = {
 
 const readGuidedSampleFromSearch = (search: string): GuidedSample | null => {
   const value = new URLSearchParams(search).get("guide");
+  if (value === "bundle") return "weave";
   return value && Object.prototype.hasOwnProperty.call(GUIDED_SAMPLE_VIEWS, value) ? (value as GuidedSample) : null;
 };
 

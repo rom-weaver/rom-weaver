@@ -90,7 +90,7 @@ const useApplyCheats = ({
     [cheatChecksums, cheatFileName, cheatPlatform, cheatRomRow],
   );
   const peekCheatSource = useCallback(
-    () => (preparedWorkflowRef.current || workflowHandle.peek())?.getBundleExportSources().rom?.source,
+    () => (preparedWorkflowRef.current || workflowHandle.peek())?.getWeaveExportSources().rom?.source,
     [preparedWorkflowRef, workflowHandle],
   );
   const getCheatSource = useCallback(() => {

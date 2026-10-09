@@ -16,7 +16,7 @@ use super::expect_tokens::checksum_hex_len;
 use super::selection_resolution::{SelectionExtract, SelectionResolutionOptions};
 use super::{
     CliApp, Commands, CompressCommand, CompressionLevelProfile, ExtractCommand, LogLevel,
-    N64ByteOrder, N64ByteOrderTransform, RomWeaverBundle, log_filter_spec,
+    N64ByteOrder, N64ByteOrderTransform, RomWeaverWeave, log_filter_spec,
 };
 
 #[test]
@@ -358,7 +358,7 @@ fn extract_payload_selection_keeps_one_rom_from_several() {
     let selected = app
         .resolve_extract_payload_selections(
             &handler,
-            Path::new("bundle.test"),
+            Path::new("weave.test"),
             SelectionResolutionOptions {
                 kind_filter: ArchiveEntryKindFilter::new(false, false),
                 split_bin: false,
@@ -1135,15 +1135,15 @@ fn header_repair_finalize_restores_original_n64_order() {
 // Ingest sidecar preflight can never drift on the RetroArch `<rom-stem>.<patch-ext>` convention.
 #[test]
 fn libretro_sidecar_matches_basename_stem_and_order() {
-    let rom = "bundle/game.bin";
+    let rom = "weave/game.bin";
     let cases: [(&str, Option<u32>); 7] = [
-        ("bundle/game.ips", Some(0)),         // stem match, no order suffix
-        ("bundle/game.bin.ips1", Some(1)),    // full-name match + order 1
-        ("bundle/game [Hack].ips2", Some(2)), // bracket label stripped, order 2
-        ("bundle/game.bspatch3", Some(3)),    // different patch ext, order 3
-        ("elsewhere/game.ips", None),         // wrong directory
-        ("bundle/other.ips", None),           // wrong basename
-        ("bundle/game.txt", None),            // not a patch extension
+        ("weave/game.ips", Some(0)),         // stem match, no order suffix
+        ("weave/game.bin.ips1", Some(1)),    // full-name match + order 1
+        ("weave/game [Hack].ips2", Some(2)), // bracket label stripped, order 2
+        ("weave/game.bspatch3", Some(3)),    // different patch ext, order 3
+        ("elsewhere/game.ips", None),        // wrong directory
+        ("weave/other.ips", None),           // wrong basename
+        ("weave/game.txt", None),            // not a patch extension
     ];
     for (patch, expected) in cases {
         assert_eq!(
@@ -1157,7 +1157,7 @@ fn libretro_sidecar_matches_basename_stem_and_order() {
 // --------------------------------------------------------------------------------------------
 // patch-validate helper coverage. `parse_patch_apply_checksum_values`,
 // `validate_patch_input_size`, `validate_patch_apply_expected_checksums`, and `checksum_hex_len`
-// back the bundle check-token parser (`bundle_entry_checks` -> `--output-check` and the per-patch
+// back the weave check-token parser (`weave_entry_checks` -> `--output-check` and the per-patch
 // check flags) and have no other in-source tests. Each error case asserts the matched
 // `RomWeaverError` variant plus the guard message so the intended branch is the one hit.
 // --------------------------------------------------------------------------------------------
@@ -1313,8 +1313,8 @@ fn validate_patch_apply_expected_checksums_uses_hints_for_match_and_mismatch() {
     let _ = std::fs::remove_file(path);
 }
 
-fn bundle_for_selection() -> RomWeaverBundle {
-    crate::bundle_parse::parse_bundle_bytes(
+fn weave_for_selection() -> RomWeaverWeave {
+    crate::weave_parse::parse_weave_bytes(
         br#"{ "version": 1, "patches": [
             { "path": "main.ips",     "name": "Main hack" },
             { "path": "balance.ips",  "name": "Rebalance" },
@@ -1322,7 +1322,7 @@ fn bundle_for_selection() -> RomWeaverBundle {
             { "path": "debug.ips",    "name": "Debug menu", "optional": true }
         ] }"#,
     )
-    .expect("selection bundle parses")
+    .expect("selection weave parses")
 }
 
 fn noninteractive_app() -> CliApp {
@@ -1336,20 +1336,20 @@ fn noninteractive_app() -> CliApp {
 }
 
 #[test]
-fn bundle_selection_defaults_to_required_and_default() {
+fn weave_selection_defaults_to_required_and_default() {
     let app = noninteractive_app();
     let selected = app
-        .select_bundle_patches(&bundle_for_selection(), &[], &[])
+        .select_weave_patches(&weave_for_selection(), &[], &[])
         .expect("selection succeeds");
     assert_eq!(selected, vec![0, 1]);
 }
 
 #[test]
-fn bundle_selection_with_includes_optional_and_disabled() {
+fn weave_selection_with_includes_optional_and_disabled() {
     let app = noninteractive_app();
     let selected = app
-        .select_bundle_patches(
-            &bundle_for_selection(),
+        .select_weave_patches(
+            &weave_for_selection(),
             &["extra*".to_string(), "debug.ips".to_string()],
             &[],
         )
@@ -1358,29 +1358,29 @@ fn bundle_selection_with_includes_optional_and_disabled() {
 }
 
 #[test]
-fn bundle_selection_without_excludes_default() {
+fn weave_selection_without_excludes_default() {
     let app = noninteractive_app();
     let selected = app
-        .select_bundle_patches(&bundle_for_selection(), &[], &["Rebalance".to_string()])
+        .select_weave_patches(&weave_for_selection(), &[], &["Rebalance".to_string()])
         .expect("selection succeeds");
     assert_eq!(selected, vec![0]);
 }
 
 #[test]
-fn bundle_selection_without_can_disable_any_patch() {
+fn weave_selection_without_can_disable_any_patch() {
     let app = noninteractive_app();
     let selected = app
-        .select_bundle_patches(&bundle_for_selection(), &[], &["main*".to_string()])
+        .select_weave_patches(&weave_for_selection(), &[], &["main*".to_string()])
         .expect("every patch is toggleable");
     assert_eq!(selected, vec![1]);
 }
 
 #[test]
-fn bundle_selection_interactive_prompt_picks_subset() {
+fn weave_selection_interactive_prompt_picks_subset() {
     // Every entry is offered. Picking position 1 selects only `balance`.
     let app = test_app_with_prompt(vec![1]);
     let selected = app
-        .select_bundle_patches(&bundle_for_selection(), &[], &[])
+        .select_weave_patches(&weave_for_selection(), &[], &[])
         .expect("selection succeeds");
     assert_eq!(
         selected,
@@ -1390,23 +1390,48 @@ fn bundle_selection_interactive_prompt_picks_subset() {
 }
 
 #[test]
-fn bundle_selection_interactive_cancel_keeps_defaults() {
+fn weave_selection_interactive_cancel_keeps_defaults() {
     // Cancel (or an empty pick - the protocol folds both into Cancelled) must
     // fall back to the boolean defaults rather than aborting the run.
     let app = test_app_with_prompt(vec![]);
     let selected = app
-        .select_bundle_patches(&bundle_for_selection(), &[], &[])
+        .select_weave_patches(&weave_for_selection(), &[], &[])
         .expect("cancel does not abort");
     assert_eq!(selected, vec![0, 1]);
 }
 
 #[test]
-fn bundle_selection_flags_suppress_prompt() {
+fn weave_selection_flags_suppress_prompt() {
     // An interactive session with --with flags must not prompt; the scripted
     // prompter would pick position 0 (balance) if consulted.
     let app = test_app_with_prompt(vec![0]);
     let selected = app
-        .select_bundle_patches(&bundle_for_selection(), &["extra*".to_string()], &[])
+        .select_weave_patches(&weave_for_selection(), &["extra*".to_string()], &[])
         .expect("selection succeeds");
     assert_eq!(selected, vec![0, 1, 2]);
+}
+
+#[test]
+fn legacy_weave_command_tag_and_fields_serialize_canonically() {
+    let command: Commands = serde_json::from_value(serde_json::json!({
+        "type": "bundle", "args": {"type": "create", "args": {
+            "output": "rom-weaver-weave.json", "bundle": "release.zip",
+            "bundle_rom": "game.bin", "no_bundle_rom": true
+        }}
+    }))
+    .expect("legacy command");
+    let value = serde_json::to_value(command).expect("canonical command");
+    assert_eq!(value["type"], "weave");
+    let args = &value["args"]["args"];
+    assert_eq!(args["weave"], "release.zip");
+    assert_eq!(args["weave_rom"], "game.bin");
+    assert_eq!(args["no_weave_rom"], true);
+    assert!(args.get("bundle").is_none());
+    let apply: super::PatchApplyCommand = serde_json::from_value(serde_json::json!({
+        "input": "game.bin", "bundle": "rom-weaver-bundle.json"
+    }))
+    .expect("legacy apply field");
+    let value = serde_json::to_value(apply).expect("canonical apply");
+    assert_eq!(value["weave"], "rom-weaver-bundle.json");
+    assert!(value.get("bundle").is_none());
 }

@@ -33,14 +33,14 @@ Start in the browser. No account, installation, or commercial game is needed for
 
 Prefer the terminal? Start with [Install the CLI](how-to/install-cli.md), then [your first CLI apply](tutorials/cli-first-weave.md).
 
-Guided runs in the app: [Apply](https://rom-weaver.com/apply-patches?guide=apply), [Create](https://rom-weaver.com/create-patch?guide=create), [Bundle](https://rom-weaver.com/bundle-patches?guide=bundle), and [Test](https://rom-weaver.com/test-rom?guide=test), plus cheat runs for [Apply](https://rom-weaver.com/apply-patches?guide=apply-cheats) and [Create](https://rom-weaver.com/create-patch?guide=create-cheats). Guided Apply waits for you to add files, and its **Continue** uses the practice files when you have none. [Guided practice runs](reference/guided-runs.md) lists what each run covers and where it starts.
+Guided runs in the app: [Apply](https://rom-weaver.com/apply-patches?guide=apply), [Create](https://rom-weaver.com/create-patch?guide=create), [Weave](https://rom-weaver.com/weave-patches?guide=weave), and [Test](https://rom-weaver.com/test-rom?guide=test), plus cheat runs for [Apply](https://rom-weaver.com/apply-patches?guide=apply-cheats) and [Create](https://rom-weaver.com/create-patch?guide=create-cheats). Guided Apply waits for you to add files, and its **Continue** uses the practice files when you have none. [Guided practice runs](reference/guided-runs.md) lists what each run covers and where it starts.
 
 ## Choose a task
 
 | I want to… | Browser guide |
 | --- | --- |
 | Add a translation or other game change | [Apply a patch](how-to/apply-rom-patches.md) |
-| Share changes I made | [Create a patch](how-to/create-rom-patches.md) or [bundle a recipe](how-to/create-bundles.md) |
+| Share changes I made | [Create a patch](how-to/create-rom-patches.md) or [weave a recipe](how-to/create-bundles.md) |
 | Find which game or revision a file contains | [Identify a ROM by checksum](how-to/identify-roms-browser.md) |
 | Find a ROM from an existing CRC32, MD5, or SHA-1 hash | [Search ROM checksums](how-to/search-rom-checksums-browser.md) |
 | Check a file against an expected checksum | [Checksum a file](how-to/checksum-roms-browser.md) |
@@ -67,7 +67,7 @@ Guided practice runs. Follow them start to finish; everything you need is suppli
 
 - [Your first patch in the browser](tutorials/first-patch.md): patch a homebrew ROM and verify the result byte for byte.
 - [Patch a compressed CHD disc](tutorials/patch-compressed-disc.md): apply two supplied patches and verify the decompressed result.
-- [Your first apply in the terminal](tutorials/cli-first-weave.md): the same job, plus creating and bundling a patch, from a command line.
+- [Your first apply in the terminal](tutorials/cli-first-weave.md): the same job, plus creating a patch and a weave, from a command line.
 
 ## How-to guides
 
@@ -78,7 +78,7 @@ Procedures for specific tasks.
 - [Apply a ROM patch](how-to/apply-rom-patches.md)
 - [Use cheats in the browser](how-to/use-browser-cheats.md)
 - [Create a ROM patch](how-to/create-rom-patches.md)
-- [Create and share a patch bundle](how-to/create-bundles.md)
+- [Create and share a patch weave](how-to/create-bundles.md)
 - [Identify a ROM by checksum](how-to/identify-roms-browser.md)
 - [Search ROM checksums](how-to/search-rom-checksums-browser.md)
 - [Checksum a file](how-to/checksum-roms-browser.md)
@@ -105,7 +105,7 @@ Procedures for specific tasks.
 - [Verify a download](how-to/verify-downloads.md)
 - [Apply patches from the CLI](how-to/cli-apply.md)
 - [Create patches from the CLI](how-to/cli-create.md)
-- [Bundles from the CLI](how-to/cli-bundles.md)
+- [Weaves from the CLI](how-to/cli-bundles.md)
 - [Identify and hash files](how-to/identify-and-hash-files.md)
 - [Bake cheat codes into a ROM](how-to/bake-cheat-codes.md)
 - [Edit a game save from the CLI](how-to/cli-save.md)
@@ -117,7 +117,7 @@ Procedures for specific tasks.
 ### Deploying and integrating
 
 - [Self-hosting](hosting/self-hosting.md): Docker, static deployment, reverse proxies, subpaths, HTTPS, and COOP/COEP.
-- [Webapp integration](hosting/webapp-integration.md): preload `?bundle=...` and `?rom=...&patch=...` URLs, or feed same-origin OPFS files into the pipeline.
+- [Webapp integration](hosting/webapp-integration.md): preload `?weave=...` and `?rom=...&patch=...` URLs, or feed same-origin OPFS files into the pipeline.
 - [Hosted deployment channels](development/ci.md#deploy-channels): production, beta, nightly, and pull-request previews.
 
 ## Reference
@@ -131,7 +131,7 @@ Facts to look up. No advice, no steps.
 - [CLI reference](reference/cli.md): every command, global flag, patching flag, JSON output, exit code, and permission check.
 - [Save Editor support](reference/save-editor.md): supported games, editable fields, recognition rules, and integrity checks.
 - [Man pages](reference/cli.md#man-pages): generate `rom-weaver(1)` and one page per visible command from Clap.
-- [`rom-weaver-bundle.json` schema](rom-weaver-bundle-v2.schema.json): the machine-readable bundle format.
+- [`rom-weaver-weave.json` schema](rom-weaver-weave-v2.schema.json): the machine-readable weave format.
 - [Runtime configuration](hosting/env-vars.md): environment variables and browser diagnostic handles.
 - [Webapp masthead metadata](hosting/webapp-runtime-status.md): version, SHA, thread, PWA, and service-worker labels.
 
@@ -144,7 +144,7 @@ Background on the engine, formats, and design decisions.
 - [Why your files stay on your device](explanation/local-first.md): the benefits and limits of local processing.
 - [ROM patch formats compared](explanation/patch-formats.md): checksum protection, size limits, and suitable uses for BPS, IPS, UPS, xdelta, and PPF.
 - [Choosing a compression format](explanation/compression-formats.md): CHD, RVZ, Z3DS, ZIP, 7z, and when trimming beats compressing.
-- [What a bundle is](explanation/bundles.md): the portable patch recipe.
+- [What a weave is](explanation/bundles.md): the portable patch recipe.
 - [Browser and CLI](explanation/browser-and-cli.md): one engine, two front ends, and how to pick.
 - [Where identify data comes from](explanation/identify-sources.md): Libretro metadata, OpenGood fallback records, and local lookup.
 - [Release provenance](explanation/release-provenance.md): what download verification proves and why the checks are shaped the way they are.

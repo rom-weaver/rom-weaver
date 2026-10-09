@@ -51,7 +51,7 @@ type PatchChainDeclaration = {
 };
 
 type PatchTargetValidationEntry<TSource> = {
-  /** This patch's declared chain metadata (bundle/user), when any. */
+  /** This patch's declared chain metadata (weave/user), when any. */
   chain?: PatchChainDeclaration;
   /** Fingerprint of the enabled chain this entry belongs to (ordered ids + declarations +
    * target). Order/enablement/check changes change it, invalidating every member's cached

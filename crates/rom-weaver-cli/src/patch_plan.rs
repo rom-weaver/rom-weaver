@@ -1,6 +1,6 @@
 // The verification planner: pure and I/O-free. Callers supply the base ROM's
 // variant checksums and everything known about each enabled patch (embedded
-// endpoints, filename/bundle/user expectations, declared basis); the planner
+// endpoints, filename/weave/user expectations, declared basis); the planner
 // resolves each patch's input basis, diagnoses chain order, and decides which
 // output expectations are enforceable. `patch validate --plan` and the apply
 // pipeline share it.
@@ -113,7 +113,7 @@ pub struct PatchPlanVerdict {
 pub struct OutputEnforceableEntry {
     pub patch_index: u32,
     pub source: String,
-    pub checks: BundleChecks,
+    pub checks: WeaveChecks,
     pub enforceable: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
@@ -146,7 +146,7 @@ pub(crate) struct PlanState {
 }
 
 impl PlanState {
-    pub(crate) fn from_bundle_checks(checks: &BundleChecks) -> Self {
+    pub(crate) fn from_weave_checks(checks: &WeaveChecks) -> Self {
         Self {
             checksums: checks.checksums.clone(),
             size: checks.size,
@@ -161,8 +161,8 @@ impl PlanState {
         self.checksums.is_empty() && self.size.is_none()
     }
 
-    pub(crate) fn to_bundle_checks(&self) -> BundleChecks {
-        BundleChecks {
+    pub(crate) fn to_weave_checks(&self) -> WeaveChecks {
+        WeaveChecks {
             checksums: self.checksums.clone(),
             size: self.size,
         }
@@ -175,10 +175,10 @@ pub(crate) struct PlanPatchInput {
     pub name: String,
     pub format: Option<String>,
     pub declared_basis: Option<PatchInputBasis>,
-    /// Merged filename/bundle/user expectations for the input state.
+    /// Merged filename/weave/user expectations for the input state.
     pub declared_input: PlanState,
     /// Whether a matching declaration may independently infer base basis.
-    /// Bundle `inputChecks` without an explicit basis are mid-chain gates: they
+    /// Weave `inputChecks` without an explicit basis are mid-chain gates: they
     /// constrain base inference but do not opt a checksumless patch into it.
     pub declared_input_infers_base: bool,
     /// Declared expectations for the state after this patch.
@@ -306,7 +306,7 @@ pub(crate) struct PatchStepVerification {
     pub base_variant: Option<String>,
     /// Typed execution state for the selected base representation.
     pub base_representation: Option<BaseRepresentation>,
-    /// Declared (bundle/CLI) checks for the state this step consumes,
+    /// Declared (weave/CLI) checks for the state this step consumes,
     /// verified against the real intermediate before the step runs (strict
     /// mode, previous basis, mid-chain).
     pub declared_input: Option<PlanState>,
@@ -315,7 +315,7 @@ pub(crate) struct PatchStepVerification {
     /// mode, not the final step - the final output keeps its own gate).
     pub declared_output: Option<PlanState>,
     /// Whether the selection up to and including this step is exactly the
-    /// bundle's chain prefix ending here.
+    /// weave's chain prefix ending here.
     pub is_chain_prefix: bool,
     /// `declared_input` describes the lane's own source bytes (filled from the
     /// identify database), so it verifies at the lane start even when earlier
@@ -332,7 +332,7 @@ pub(crate) struct ResolvedPlan {
 }
 
 /// Copy the planner's basis decisions onto apply's declaration-carrying step
-/// records without disturbing bundle checks or chain-prefix metadata.
+/// records without disturbing weave checks or chain-prefix metadata.
 pub(crate) fn apply_resolved_bases(
     resolved: &ResolvedPlan,
     base_variants: &[BaseVariant],
@@ -409,7 +409,7 @@ pub(crate) enum EvidenceMatch {
     /// A shared algorithm (or both-pinned size) disagrees.
     Conflict,
     /// No shared checksum algorithm. Size-only agreement is still disjoint:
-    /// size alone is never evidence. (`bundle_checks_agree`, by contrast,
+    /// size alone is never evidence. (`weave_checks_agree`, by contrast,
     /// lets disjoint declarations "agree" - unusable for inference.)
     Disjoint,
 }
@@ -932,7 +932,7 @@ pub(crate) fn resolve_output_verification(
         entries.push(OutputEnforceableEntry {
             patch_index: index as u32,
             source: "declared output checks".to_string(),
-            checks: patch.declared_output.to_bundle_checks(),
+            checks: patch.declared_output.to_weave_checks(),
             enforceable: intact,
             standdown_reason: (!intact).then(|| {
                 "an upstream patch is out of order or failed its input checks".to_string()
@@ -1001,7 +1001,7 @@ pub(crate) fn resolve_output_verification(
             entries.push(OutputEnforceableEntry {
                 patch_index: last_index as u32,
                 source: "embedded target checks".to_string(),
-                checks: output.to_bundle_checks(),
+                checks: output.to_weave_checks(),
                 enforceable,
                 standdown_reason,
             });

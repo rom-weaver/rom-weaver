@@ -184,7 +184,7 @@ test("focus reopens choices after selecting a release", async () => {
   await waitFor(() => getResults().length === 1);
   expect(searchExpectedRomTitles).toHaveBeenCalledTimes(2);
   expect(getInput().value).toBe("metroid");
-  expect(document.querySelector("#rom-weaver-bundle-rom-expectation")).not.toBeNull();
+  expect(document.querySelector("#rom-weaver-weave-rom-expectation")).not.toBeNull();
 });
 
 test("a name search lists titles across every platform", async () => {
@@ -225,8 +225,8 @@ test("the first result is selected and arrows choose a release", async () => {
   expect(document.querySelectorAll(".identify-search-result-btn")[0].getAttribute("aria-current")).toBeNull();
   expect(document.querySelectorAll(".identify-search-result-btn")[1].getAttribute("aria-current")).toBe("true");
   await userEvent.keyboard("{Enter}");
-  await waitFor(() => document.querySelector("#rom-weaver-bundle-rom-expectation") !== null);
-  expect(document.querySelector("#rom-weaver-bundle-rom-expectation").textContent).toContain("Metroid Fusion (Europe)");
+  await waitFor(() => document.querySelector("#rom-weaver-weave-rom-expectation") !== null);
+  expect(document.querySelector("#rom-weaver-weave-rom-expectation").textContent).toContain("Metroid Fusion (Europe)");
 });
 
 test("returning to title results resets the keyboard selection", async () => {
@@ -324,8 +324,8 @@ test("choosing a title lists its releases, and choosing one fills the expected-R
   await waitFor(() => getResults()[0]?.includes("(USA)"));
   document.querySelectorAll(".identify-search-result-btn")[0].click();
 
-  await waitFor(() => document.querySelector("#rom-weaver-bundle-rom-expectation") !== null);
-  const card = document.querySelector("#rom-weaver-bundle-rom-expectation");
+  await waitFor(() => document.querySelector("#rom-weaver-weave-rom-expectation") !== null);
+  const card = document.querySelector("#rom-weaver-weave-rom-expectation");
   expect(card.textContent).toContain("Metroid Fusion (USA)");
   const checks = Array.from(card.querySelectorAll(".ck")).map((row) => row.textContent || "");
   expect(checks.some((row) => row.includes("d7ae93df"))).toBe(true);
@@ -345,11 +345,11 @@ test("a title with one release stays selectable", async () => {
   expect(getResults()[0]).not.toContain("d7ae93df");
   await page.getByRole("checkbox", { name: "Show checksums" }).click();
   expect(document.querySelector(".identify-search-result-checksum-details").textContent).toContain("d7ae93df");
-  expect(document.querySelector("#rom-weaver-bundle-rom-expectation")).toBeNull();
+  expect(document.querySelector("#rom-weaver-weave-rom-expectation")).toBeNull();
   document.querySelector(".identify-search-result-btn").click();
 
-  await waitFor(() => document.querySelector("#rom-weaver-bundle-rom-expectation") !== null);
-  expect(document.querySelector("#rom-weaver-bundle-rom-expectation").textContent).toContain("Metroid Fusion (USA)");
+  await waitFor(() => document.querySelector("#rom-weaver-weave-rom-expectation") !== null);
+  expect(document.querySelector("#rom-weaver-weave-rom-expectation").textContent).toContain("Metroid Fusion (USA)");
 });
 
 test("a NES release names its header variants without showing the DAT extension", async () => {
@@ -396,8 +396,8 @@ test("a NES release names its header variants without showing the DAT extension"
     }
     await page.screenshot({ path: "../../../../dist/ui-verify/rom-header-variants-dark-chromium-390.png" });
     await page.getByRole("button", { name: /Unheadered ROM/u }).click();
-    await waitFor(() => document.querySelector("#rom-weaver-bundle-rom-expectation") !== null);
-    expect(document.querySelector("#rom-weaver-bundle-rom-expectation").textContent).toContain("Super Mario Bros.");
+    await waitFor(() => document.querySelector("#rom-weaver-weave-rom-expectation") !== null);
+    expect(document.querySelector("#rom-weaver-weave-rom-expectation").textContent).toContain("Super Mario Bros.");
   } finally {
     if (previousTheme === null) document.documentElement.removeAttribute("data-theme");
     else document.documentElement.setAttribute("data-theme", previousTheme);
@@ -414,10 +414,10 @@ test("a checksum lists releases before the user selects one", async () => {
   expect(lookupExpectedRom).toHaveBeenCalledTimes(1);
   expect(lookupExpectedRom.mock.calls[0][0]).toEqual({ checksums: { crc32: "d7ae93df" } });
   expect(searchExpectedRomTitles).not.toHaveBeenCalled();
-  expect(document.querySelector("#rom-weaver-bundle-rom-expectation")).toBeNull();
+  expect(document.querySelector("#rom-weaver-weave-rom-expectation")).toBeNull();
 
   document.querySelector(".identify-search-result-btn").click();
-  await waitFor(() => document.querySelector("#rom-weaver-bundle-rom-expectation") !== null);
+  await waitFor(() => document.querySelector("#rom-weaver-weave-rom-expectation") !== null);
 });
 
 test("a phone lists the answer above the box, where the keyboard cannot cover it", async () => {

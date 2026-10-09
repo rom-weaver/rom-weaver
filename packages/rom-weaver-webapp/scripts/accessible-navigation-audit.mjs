@@ -112,7 +112,7 @@ export const runAccessibleNavigationAudit = async (createContext, baseUrl) => {
       await expect(reset).toBeFocused();
 
       const input = page.locator("#rom-weaver-input-file-unified");
-      await expect(input).toHaveAccessibleName("Drop or click to add ROMs, patches, bundles, or archives");
+      await expect(input).toHaveAccessibleName("Drop or click to add ROMs, patches, weaves, or archives");
       await chooseFilesByKeyboard(page, input, []);
       process.stdout.write(
         `PASS accessible navigation (${viewport.width}px: skip link, dialog names/focus, keyboard file picker)\n`,

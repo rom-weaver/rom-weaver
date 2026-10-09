@@ -1349,17 +1349,17 @@ impl CliApp {
         patch_count: usize,
     ) -> Result<PlanAlignedMetadata> {
         Ok(PlanAlignedMetadata {
-            basis_modes: crate::bundle_create::aligned_metadata(
+            basis_modes: crate::weave_create::aligned_metadata(
                 &flags.basis,
                 patch_count,
                 "--patch-basis",
             )?,
-            input_check_flags: crate::bundle_create::aligned_metadata(
+            input_check_flags: crate::weave_create::aligned_metadata(
                 &flags.input_checks,
                 patch_count,
                 "--patch-input-check",
             )?,
-            output_check_flags: crate::bundle_create::aligned_metadata(
+            output_check_flags: crate::weave_create::aligned_metadata(
                 &flags.output_checks,
                 patch_count,
                 "--patch-output-check",

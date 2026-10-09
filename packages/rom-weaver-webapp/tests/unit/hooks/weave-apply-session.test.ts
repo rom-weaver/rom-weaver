@@ -1,0 +1,280 @@
+// @vitest-environment happy-dom
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { lookupExpectedRom } from "../../../src/lib/apply/expected-rom-lookup.ts";
+import type { WeaveApplySession } from "../../../src/lib/weave/weave-session-model.ts";
+import { mergeWeaveMetaForIds, useWeaveApplySession } from "../../../src/public/react/use-weave-apply-session.ts";
+
+vi.mock("../../../src/lib/apply/expected-rom-lookup.ts", () => ({ lookupExpectedRom: vi.fn() }));
+
+const patch = (fileName: string) => ({ fileName, name: fileName });
+
+const session = (overrides: Partial<WeaveApplySession> = {}): WeaveApplySession =>
+  ({
+    key: "https://example.test/weave.json",
+    warnings: [],
+    entries: [
+      {
+        fileName: "first.ips",
+        id: "weave-first",
+        name: "First patch",
+        version: "1.0",
+        author: "Author",
+        description: "The first change",
+        label: "main",
+        optional: false,
+        basis: "base",
+        header: "strip",
+      },
+      {
+        fileName: "second.ips",
+        id: "weave-second",
+        optional: true,
+      },
+    ],
+    chainEndpointChecks: {
+      input: { checksums: { crc32: "1234abcd" } },
+      output: { checksums: { sha1: "0123456789abcdef0123456789abcdef01234567" } },
+    },
+    outputDefaults: { name: "Weave result.zip", header: "keep" },
+    ...overrides,
+  }) as WeaveApplySession;
+
+describe("mergeWeaveMetaForIds", () => {
+  it("merges updates without changing unrelated ids", () => {
+    const merged = mergeWeaveMetaForIds(
+      new Map([
+        ["first", { author: "A", version: "1" }],
+        ["other", { name: "Other" }],
+      ]),
+      ["first", "new"],
+      { description: "shared" },
+    );
+    expect(merged.get("first")).toEqual({ author: "A", version: "1", description: "shared" });
+    expect(merged.get("new")).toEqual({ description: "shared" });
+    expect(merged.get("other")).toEqual({ name: "Other" });
+  });
+});
+
+describe("useWeaveApplySession", () => {
+  it("waits for subscribed patch readiness before seeding defaults", async () => {
+    let items = [{ progress: {} }, { optionsDisabled: true }];
+    const listeners = new Set<() => void>();
+    const unsubscribe = vi.fn((listener: () => void) => listeners.delete(listener));
+    const setPatchOption = vi.fn().mockResolvedValue(undefined);
+    const controllersRef = {
+      current: {
+        output: { setDisplayFileName: vi.fn(), setOutputHeader: vi.fn() },
+        patchStack: {
+          getState: () => ({ items }),
+          setPatchOption,
+          subscribe: (listener: () => void) => {
+            listeners.add(listener);
+            return () => unsubscribe(listener);
+          },
+        },
+      },
+    } as never;
+    const { result, unmount } = renderHook(() =>
+      useWeaveApplySession({
+        weaveSession: session(),
+        controllersRef,
+        getPatchIds: () => ["slot-1", "slot-2"],
+        seedPatchEnablement: vi.fn(),
+      }),
+    );
+
+    act(() => result.current.handleWeavePatchesChange([patch("first.ips"), patch("second.ips")]));
+    await waitFor(() => expect(listeners.size).toBe(1));
+    expect(setPatchOption).not.toHaveBeenCalled();
+
+    act(() => {
+      items = [{ progress: null }, { optionsDisabled: false }];
+      for (const listener of listeners) listener();
+    });
+    await waitFor(() => expect(result.current.weaveDefaultsPending).toBe(false));
+    expect(setPatchOption).toHaveBeenCalledTimes(2);
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    unmount();
+  });
+
+  it("aborts the readiness subscription on unmount", async () => {
+    const listeners = new Set<() => void>();
+    const unsubscribe = vi.fn((listener: () => void) => listeners.delete(listener));
+    const controllersRef = {
+      current: {
+        output: null,
+        patchStack: {
+          getState: () => ({ items: [] }),
+          subscribe: (listener: () => void) => {
+            listeners.add(listener);
+            return () => unsubscribe(listener);
+          },
+        },
+      },
+    } as never;
+    const { result, unmount } = renderHook(() =>
+      useWeaveApplySession({
+        weaveSession: session(),
+        controllersRef,
+        getPatchIds: () => ["slot-1", "slot-2"],
+        seedPatchEnablement: vi.fn(),
+      }),
+    );
+
+    act(() => result.current.handleWeavePatchesChange([patch("first.ips"), patch("second.ips")]));
+    await waitFor(() => expect(listeners.size).toBe(1));
+    unmount();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    expect(listeners.size).toBe(0);
+  });
+
+  it("seeds matching patches, options, output defaults, and metadata", async () => {
+    const setPatchOption = vi.fn().mockResolvedValue(undefined);
+    const setDisplayFileName = vi.fn();
+    const setOutputHeader = vi.fn();
+    const seedPatchEnablement = vi.fn();
+    const controllersRef = {
+      current: {
+        output: { setDisplayFileName, setOutputHeader },
+        patchStack: {
+          getState: () => ({ items: [{ progress: null }, { optionsDisabled: false }] }),
+          setPatchOption,
+        },
+      },
+    } as never;
+    const { result } = renderHook(() =>
+      useWeaveApplySession({
+        weaveSession: session(),
+        controllersRef,
+        getPatchIds: () => ["slot-1", "slot-2"],
+        seedPatchEnablement,
+      }),
+    );
+    const patches = [patch("first.ips"), patch("second.ips")];
+
+    act(() => result.current.handleWeavePatchesChange(patches));
+    await waitFor(() => expect(result.current.weaveDefaultsPending).toBe(false));
+
+    expect(seedPatchEnablement).toHaveBeenCalledWith([
+      { enabled: true, id: "slot-1" },
+      { enabled: false, id: "slot-2" },
+    ]);
+    expect(result.current.weaveMetaById.get("slot-1")).toMatchObject({
+      author: "Author",
+      basis: "base",
+      id: "weave-first",
+      name: "First patch",
+    });
+    expect(setPatchOption).toHaveBeenNthCalledWith(1, 0, {
+      basis: "base",
+      header: "strip",
+      id: "weave-first",
+      revalidate: false,
+      validateInputChecksum: "1234abcd",
+    });
+    expect(setPatchOption).toHaveBeenNthCalledWith(2, 1, { id: "weave-second", revalidate: true });
+    expect(setDisplayFileName).toHaveBeenCalledWith("Weave result");
+    expect(setOutputHeader).toHaveBeenCalledWith("keep");
+    expect((patches[0] as { _generatedPatchName?: string })._generatedPatchName).toBeTruthy();
+
+    act(() => result.current.updateWeaveMeta("slot-1", { author: "New author" }));
+    await waitFor(() => expect(result.current.weaveMetaById.get("slot-1")?.author).toBe("New author"));
+    act(() => result.current.updateWeaveMetaForIds(["slot-1", "slot-2"], { label: "all" }));
+    await waitFor(() => expect(result.current.weaveMetaById.get("slot-2")?.label).toBe("all"));
+
+    const foreign = patch("foreign.ips");
+    act(() => result.current.handleWeavePatchesChange([foreign]));
+    expect((foreign as { _generatedPatchName?: string })._generatedPatchName).toBeUndefined();
+    expect(result.current.weaveDefaultsPending).toBe(false);
+  });
+
+  it("seeds a rom-member lane with the track checks its identify record holds", async () => {
+    vi.mocked(lookupExpectedRom).mockResolvedValue({
+      matches: [
+        {
+          algorithm: "components",
+          database: "redump",
+          expectedComponents: [
+            { crc32: "aaaaaaaa", ordinal: 0, role: "data_track", size: 10, track: 1 },
+            { crc32: "bbbbbbbb", ordinal: 1, role: "audio_track", size: 20, track: 2 },
+          ],
+          name: "Two Track Quest (USA)",
+          platform: "Test Disc System",
+          variant: "raw",
+        },
+      ],
+      status: "matched",
+    });
+    const setPatchOption = vi.fn().mockResolvedValue(undefined);
+    const controllersRef = {
+      current: {
+        output: { setDisplayFileName: vi.fn(), setOutputHeader: vi.fn() },
+        patchStack: {
+          getState: () => ({ items: [{ progress: null }, { optionsDisabled: false }] }),
+          setPatchOption,
+        },
+      },
+    } as never;
+    const { result } = renderHook(() =>
+      useWeaveApplySession({
+        weaveSession: session({
+          entries: [
+            { fileName: "first.ips", id: "first", optional: false, target: { member: "track01.bin", rom: true } },
+            { fileName: "second.ips", id: "second", optional: false, target: { member: "track02.bin", rom: true } },
+          ],
+        }),
+        controllersRef,
+        getPatchIds: () => ["slot-1", "slot-2"],
+        seedPatchEnablement: vi.fn(),
+      }),
+    );
+
+    act(() => result.current.handleWeavePatchesChange([patch("first.ips"), patch("second.ips")]));
+    await waitFor(() => expect(result.current.weaveDefaultsPending).toBe(false));
+
+    expect(lookupExpectedRom).toHaveBeenCalledWith({ checksums: { crc32: "1234abcd" } });
+    expect(setPatchOption).toHaveBeenNthCalledWith(2, 1, {
+      id: "second",
+      inputChecks: "crc32=bbbbbbbb,size=20",
+      revalidate: true,
+      target: { member: "track02.bin", rom: true },
+    });
+    // The weave's own member lane is filled the same way; its component is
+    // the track rom.checks already describe, so the gate stays consistent.
+    expect(setPatchOption).toHaveBeenNthCalledWith(1, 0, {
+      id: "first",
+      inputChecks: "crc32=aaaaaaaa,size=10",
+      revalidate: false,
+      target: { member: "track01.bin", rom: true },
+      validateInputChecksum: "1234abcd",
+    });
+    expect([...result.current.memberLaneChecksRef.current]).toEqual([
+      ["slot-1", "crc32=aaaaaaaa,size=10"],
+      ["slot-2", "crc32=bbbbbbbb,size=20"],
+    ]);
+    // Only the weave's own metadata reaches an export.
+    expect(result.current.weaveMetaById.get("slot-2")?.inputChecks).toBeUndefined();
+  });
+
+  it("replays when the session arrives after the patch list", async () => {
+    const seedPatchEnablement = vi.fn();
+    const controllersRef = { current: { output: null, patchStack: null } } as never;
+    const patches = [patch("first.ips"), patch("second.ips")];
+    const { result, rerender } = renderHook(
+      ({ weaveSession }: { weaveSession: WeaveApplySession | null }) =>
+        useWeaveApplySession({
+          weaveSession,
+          controllersRef,
+          getPatchIds: () => ["slot-1", "slot-2"],
+          seedPatchEnablement,
+        }),
+      { initialProps: { weaveSession: null } },
+    );
+
+    act(() => result.current.handleWeavePatchesChange(patches));
+    rerender({ weaveSession: session({ key: "https://example.test/late.json" }) });
+    await waitFor(() => expect(seedPatchEnablement).toHaveBeenCalledOnce());
+    expect(result.current.weaveMetaById.get("slot-1")?.id).toBe("weave-first");
+  });
+});

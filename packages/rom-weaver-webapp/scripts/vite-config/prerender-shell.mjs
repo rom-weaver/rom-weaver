@@ -170,7 +170,7 @@ export const prerenderWebappShell = (prerenderedShells) => ({
         prerenderedShells.set("home", await render("home"));
         assertShellLoomCanvas(prerenderedShells.get("home"));
         prerenderedShells.set("patcher", await render("patcher"));
-        prerenderedShells.set("bundle", await render("bundle"));
+        prerenderedShells.set("weave", await render("weave"));
         prerenderedShells.set("creator", await render("creator"));
         prerenderedShells.set("checksum", await render("checksum"));
         prerenderedShells.set("compress", await render("compress"));

@@ -95,11 +95,11 @@ type PatchInputRef = { rom: true; member?: string } | { patch: string; member?: 
 
 /** Per-patch options the user can set in the patch "Options" panel, aligned by patch index. */
 type PatchApplyUserOptions = {
-  /** Stable bundle/session identity for this patch slot. */
+  /** Stable weave/session identity for this patch slot. */
   id?: string;
-  /** Concrete execution input recorded by a bundle or session. */
+  /** Concrete execution input recorded by a weave or session. */
   input?: PatchInputRef;
-  /** Cumulative output lane recorded by a bundle or session. */
+  /** Cumulative output lane recorded by a weave or session. */
   target?: PatchInputRef;
   /** Expected checks for the concrete input state, forwarded to patch-apply. */
   inputChecks?: string;

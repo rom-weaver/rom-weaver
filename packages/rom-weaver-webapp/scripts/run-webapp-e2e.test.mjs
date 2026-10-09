@@ -200,6 +200,10 @@ describe("computeLinkAuditRoutes", () => {
     assert.equal(routes.filter((route) => route === "docs/a").length, 1);
     assert.ok(routes.includes(""));
     assert.ok(routes.includes("apply-patches"));
+    assert.ok(routes.includes("weave-patches"));
+    assert.ok(routes.includes("weave"));
+    assert.ok(routes.includes("bundle-patches"));
+    assert.ok(routes.includes("bundle"));
     assert.ok(routes.includes("docs/b"));
   });
 });

@@ -174,7 +174,7 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   mountWebappRoot({ settings: { ...getDefaultSettings(), betaToolsEnabled: true } });
 
   // The unified drop surface is the only input now; its label flips once the workflow has files.
-  const romInput = page.getByLabelText(/ROMs, patches, bundles, or archives/i);
+  const romInput = page.getByLabelText(/ROMs, patches, weaves, or archives/i);
 
   await expect.element(romInput).toBeInTheDocument();
 
@@ -198,7 +198,7 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
     .not.toContain("game.bin");
 
   await page
-    .getByLabelText(/ROMs, patches, bundles, or archives/i)
+    .getByLabelText(/ROMs, patches, weaves, or archives/i)
     .upload(await loadFixtureFile(MULTI_ROM_ZIP, "application/zip"));
 
   await selectCandidateIfPrompted("game.bin");
@@ -583,7 +583,7 @@ test("the mobile scroll reserve returns once the bench holds a card", async () =
 
 test.each([
   ["patcher", "/apply-patches?guide=apply", "/docs/apply-rom-patches"],
-  ["bundle", "/bundle-patches?guide=bundle", "/docs/create-bundles"],
+  ["weave", "/weave-patches?guide=weave", "/docs/create-bundles"],
 ])("the %s sample link carries its own guide and the download", async (initialView, guideHref, docsPath) => {
   await page.viewport(1024, 900);
   mountWebappRoot({ initialView });

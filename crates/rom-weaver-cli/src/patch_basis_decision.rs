@@ -3,7 +3,7 @@
 //! `--patch-header auto` decides on checksum proof wherever the patch offers
 //! any: [`CliApp::checksum_basis_proof`] compares every whole-file check the
 //! patch embeds - under whatever algorithm it uses (BPS/UPS/PMSR crc32, RUP and
-//! Solid md5) - plus anything the user, bundle or filename declared, against
+//! Solid md5) - plus anything the user, weave or filename declared, against
 //! the raw and the headerless bytes. Formats such as IPS provide no embedded
 //! checksums, so they can need structural evidence.
 //!
@@ -51,7 +51,7 @@ impl CliApp {
     /// the raw and the headerless bytes.
     ///
     /// Requirements come from two places, declared first: what the user, a
-    /// bundle or the patch filename asked for, then what the patch itself
+    /// weave or the patch filename asked for, then what the patch itself
     /// embeds (`details.patch.endpoints`, normalized by every handler that has
     /// whole-file checks to report). Any algorithm counts - RUP and Solid pin
     /// an md5, PMSR a crc32 - so hashing follows the patch rather than a

@@ -60,7 +60,7 @@ pub(crate) fn attribution(directory: Option<&Path>) -> String {
 }
 
 /// The database the shards were imported from, as its manifest names it.
-/// Recorded in a bundle's cheat entries so a reader knows which IDs they are.
+/// Recorded in a weave's cheat entries so a reader knows which IDs they are.
 pub(crate) fn source_name(directory: &Path) -> String {
     load_manifest(directory)
         .and_then(|manifest| manifest.source)
@@ -152,7 +152,7 @@ fn serde_name<T: Serialize>(value: &T) -> String {
 /// The record ID the data build assigns: `cheat_` plus the first 24 hex
 /// digits of SHA-256 over `system NUL gameId NUL codeKind NUL fields`, where
 /// `fields` is the raw field map without `enable`, as JSON with keys sorted by
-/// UTF-16 code unit. Mirrors `cheatIdSource` in `shard-format.mjs`; bundles
+/// UTF-16 code unit. Mirrors `cheatIdSource` in `shard-format.mjs`; weaves
 /// store these IDs, so the two MUST agree byte for byte.
 pub(crate) fn stable_cheat_id(
     system: &str,

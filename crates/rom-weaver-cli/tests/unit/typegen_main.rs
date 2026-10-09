@@ -23,7 +23,7 @@ fn read_committed(relative_path: &str) -> Option<String> {
     let path = repo_root().join(relative_path);
     // The packaged crate (crates.io / vendored source) does not ship the
     // webapp tree, so only assert when the checkout has it - matches the
-    // pattern used by `bundle_schema.rs`'s canonical-docs-copy test.
+    // pattern used by `weave_schema.rs`'s canonical-docs-copy test.
     std::fs::read_to_string(&path).ok()
 }
 
@@ -68,7 +68,7 @@ fn render_types_declares_every_expected_top_level_export() {
     let rendered = render_types();
     for expected in [
         "export type ProgressEvent",
-        "export type RomWeaverBundle",
+        "export type RomWeaverWeave",
         "export type RomWeaverRunRequest",
         "export type RomWeaverCommand = Commands;",
     ] {

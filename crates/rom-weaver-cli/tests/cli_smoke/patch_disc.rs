@@ -737,7 +737,7 @@ fn patch_apply_dcp_rebuilds_gdrom_through_cli() {
         ],
         0,
     );
-    temp.child("rom-weaver-bundle.json")
+    temp.child("rom-weaver-weave.json")
         .write_str(
             r#"{
   "version": 1,
@@ -745,7 +745,7 @@ fn patch_apply_dcp_rebuilds_gdrom_through_cli() {
   "patches": [{ "path": "update.dcp" }]
 }"#,
         )
-        .expect("bundle");
+        .expect("weave");
 
     let out_dir = temp.child("out");
     fs::create_dir_all(out_dir.path()).expect("output dir");
@@ -758,8 +758,8 @@ fn patch_apply_dcp_rebuilds_gdrom_through_cli() {
             "apply",
             "--input",
             temp.child("disc.gdi").path().to_str().expect("path"),
-            "--bundle",
-            temp.child("rom-weaver-bundle.json")
+            "--weave",
+            temp.child("rom-weaver-weave.json")
                 .path()
                 .to_str()
                 .expect("path"),
@@ -777,7 +777,7 @@ fn patch_apply_dcp_rebuilds_gdrom_through_cli() {
     assert_patch_envelope(terminal, "patch-apply", "dcp", "succeeded");
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
     assert!(
-        stderr.contains("bundle ROM name mismatch")
+        stderr.contains("weave ROM name mismatch")
             && stderr.contains("expected-track.bin")
             && stderr.contains("track03.bin"),
         "expected advisory name warning, got: {stderr}"

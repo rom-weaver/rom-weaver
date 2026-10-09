@@ -74,8 +74,8 @@ const PendingDropCard = ({ drop }: { drop: PendingDrop }) => {
         <StageStatus
           id={`rom-weaver-progress-identify-${drop.id}`}
           label={
-            drop.bundle
-              ? localizer.message("ui.apply.drop.readingBundle")
+            drop.weave
+              ? localizer.message("ui.apply.drop.readingWeave")
               : drop.entryCount === undefined
                 ? localizer.message("ui.apply.drop.identifying")
                 : localizer.message("ui.apply.drop.identified")
@@ -135,38 +135,38 @@ export const ApplyDropAfter = ({ pendingDrops }: { pendingDrops: PendingDrop[] }
 };
 
 export const ApplySampleStart = ({
-  bundlePage,
+  weavePage,
   downloadHref,
   onLoadApplySample,
   onLoadApplyCheatsSample,
-  onLoadBundleSample,
+  onLoadWeaveSample,
   sampleError,
   sampleLoading,
 }: {
-  bundlePage: boolean;
+  weavePage: boolean;
   onLoadApplySample: () => void;
   onLoadApplyCheatsSample: () => void;
-  onLoadBundleSample: () => void;
+  onLoadWeaveSample: () => void;
   downloadHref: string;
   sampleError: string;
   sampleLoading: boolean;
 }) => {
   const localizer = useUiLocalizer();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
-  const guide = bundlePage ? WORKFLOW_GUIDES.bundle : WORKFLOW_GUIDES.apply;
+  const guide = weavePage ? WORKFLOW_GUIDES.weave : WORKFLOW_GUIDES.apply;
   return (
     <SampleTutorialStart
-      chipLabel={localizer.message(bundlePage ? "ui.tutorial.tryBundle" : "ui.tutorial.tryApply")}
+      chipLabel={localizer.message(weavePage ? "ui.tutorial.tryWeave" : "ui.tutorial.tryApply")}
       documentation={{ href: resolveAssetUrl(assetBaseUrl, guide.path), label: localizer.message(guide.label) }}
       downloadHref={downloadHref}
-      downloadLabel={localizer.message("ui.apply.tutorial.downloadTestBundle")}
+      downloadLabel={localizer.message("ui.apply.tutorial.downloadTestWeave")}
       downloadName={FIRST_WEAVE_ASSET}
       error={sampleError}
-      guideHref={resolveGuidedSampleHref(assetBaseUrl, bundlePage ? "bundle" : "apply")}
-      label={localizer.message(bundlePage ? "ui.apply.tutorial.createBundle" : "ui.apply.tutorial.startApply")}
+      guideHref={resolveGuidedSampleHref(assetBaseUrl, weavePage ? "weave" : "apply")}
+      label={localizer.message(weavePage ? "ui.apply.tutorial.createWeave" : "ui.apply.tutorial.startApply")}
       loading={sampleLoading}
-      onStart={bundlePage ? onLoadBundleSample : onLoadApplySample}
-      {...(bundlePage
+      onStart={weavePage ? onLoadWeaveSample : onLoadApplySample}
+      {...(weavePage
         ? {}
         : {
             onSecondaryStart: onLoadApplyCheatsSample,
@@ -174,7 +174,7 @@ export const ApplySampleStart = ({
             secondaryHref: resolveGuidedSampleHref(assetBaseUrl, "apply-cheats"),
             secondaryLabel: "Apply cheats to a ROM",
           })}
-      startAction={bundlePage ? "package" : "apply"}
+      startAction={weavePage ? "weave" : "apply"}
     />
   );
 };

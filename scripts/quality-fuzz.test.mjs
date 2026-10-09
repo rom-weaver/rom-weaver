@@ -57,8 +57,8 @@ test("deep fuzzing is bounded and targeted runs never silently skip unknown targ
   assert.throws(() => fuzzPlan("smoke", "not_a_target"), /Unknown/);
 });
 
-test("smoke includes production bundle graph validation and owned binary metadata", () => {
-  for (const target of ["bundle_parse", "dcp_zip", "iso9660"]) {
+test("smoke includes production weave graph validation and owned binary metadata", () => {
+  for (const target of ["weave_parse", "dcp_zip", "iso9660"]) {
     assert.ok(FUZZ_TARGETS.includes(target));
     assert.equal(fuzzPlan("smoke", target)[0].name, target);
   }

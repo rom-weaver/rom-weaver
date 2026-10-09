@@ -60,18 +60,18 @@ const OPENAPI_SOURCE = {
         summary: "Open the Apply workflow with preloaded inputs",
       },
     },
-    "/bundle-patches": {
+    "/weave-patches": {
       get: {
-        operationId: "openBundleWorkflow",
+        operationId: "openWeaveWorkflow",
         description:
-          "Loads the Bundle workflow with a preloaded bundle. The client fetches the bundle " +
+          "Loads the Weave workflow with a preloaded weave. The client fetches the weave " +
           "URL in the browser, so the remote host MUST allow the webapp origin through CORS.",
         parameters: [
           {
             description:
-              "HTTP(S) URL reference for a rom-weaver bundle to preload. Relative references resolve against the webapp base URL.",
+              "HTTP(S) URL reference for a rom-weaver weave to preload. Relative references resolve against the webapp base URL.",
             in: "query",
-            name: "bundle",
+            name: "weave",
             required: false,
             schema: { format: "uri-reference", type: "string" },
           },
@@ -79,10 +79,10 @@ const OPENAPI_SOURCE = {
         responses: {
           200: {
             content: { "text/html": { schema: { type: "string" } } },
-            description: "The webapp shell. The bundle resolves in the browser.",
+            description: "The webapp shell. The weave resolves in the browser.",
           },
         },
-        summary: "Open the Bundle workflow with a preloaded bundle",
+        summary: "Open the Weave workflow with a preloaded weave",
       },
     },
   },

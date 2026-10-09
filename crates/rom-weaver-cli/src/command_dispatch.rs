@@ -72,10 +72,10 @@ impl CliApp {
                 PatchCommands::Validate(args) => self.run_patch_validate(*args),
                 PatchCommands::Create(args) => self.run_patch_create(*args),
             },
-            Commands::Bundle(command) => match command {
-                BundleCommands::Create(args) => self.run_bundle_create(*args),
-                BundleCommands::Parse(args) => self.run_bundle_parse(args),
-                BundleCommands::Schema => self.run_bundle_schema(),
+            Commands::Weave(command) => match command {
+                WeaveCommands::Create(args) => self.run_weave_create(*args),
+                WeaveCommands::Parse(args) => self.run_weave_parse(args),
+                WeaveCommands::Schema => self.run_weave_schema(),
             },
             Commands::Save(SaveCommands::Set(mut args)) => {
                 args.dry_run |= self.dry_run;
@@ -105,9 +105,9 @@ impl CliApp {
             Commands::Patch(PatchCommands::Apply(_)) => "patch-apply",
             Commands::Patch(PatchCommands::Validate(_)) => "patch-validate",
             Commands::Patch(PatchCommands::Create(_)) => "patch-create",
-            Commands::Bundle(BundleCommands::Create(_)) => "bundle-create",
-            Commands::Bundle(BundleCommands::Parse(_)) => "bundle-parse",
-            Commands::Bundle(BundleCommands::Schema) => "bundle-schema",
+            Commands::Weave(WeaveCommands::Create(_)) => "weave-create",
+            Commands::Weave(WeaveCommands::Parse(_)) => "weave-parse",
+            Commands::Weave(WeaveCommands::Schema) => "weave-schema",
             Commands::Save(SaveCommands::Identify(_)) => "save-identify",
             Commands::Save(SaveCommands::ListGames(_)) => "save-list-games",
             Commands::Save(SaveCommands::Create(_)) => "save-create",

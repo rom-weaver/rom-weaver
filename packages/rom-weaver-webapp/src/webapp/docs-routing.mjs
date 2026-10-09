@@ -55,7 +55,7 @@ const DOC_SOURCES = Object.freeze([
   Object.freeze({
     audience: "browser",
     file: "how-to/create-bundles.md",
-    label: "Create bundles (browser)",
+    label: "Create weaves (browser)",
     slug: "docs/create-bundles",
   }),
   Object.freeze({
@@ -192,7 +192,7 @@ const DOC_SOURCES = Object.freeze([
     label: "Create patches (CLI)",
     slug: "docs/cli-create",
   }),
-  Object.freeze({ audience: "cli", file: "how-to/cli-bundles.md", label: "Bundles (CLI)", slug: "docs/cli-bundles" }),
+  Object.freeze({ audience: "cli", file: "how-to/cli-bundles.md", label: "Weaves (CLI)", slug: "docs/cli-bundles" }),
   Object.freeze({ audience: "cli", file: "how-to/cli-trim.md", label: "Trim a ROM (CLI)", slug: "docs/cli-trim" }),
   Object.freeze({
     audience: "cli",
@@ -259,7 +259,7 @@ const DOC_SOURCES = Object.freeze([
     label: "Compression formats",
     slug: "docs/compression-formats",
   }),
-  Object.freeze({ file: "explanation/bundles.md", label: "What a bundle is", slug: "docs/bundles" }),
+  Object.freeze({ file: "explanation/bundles.md", label: "What a weave is", slug: "docs/bundles" }),
   Object.freeze({ file: "explanation/browser-and-cli.md", label: "Browser and CLI", slug: "docs/browser-and-cli" }),
   Object.freeze({
     file: "explanation/identify-sources.md",
@@ -349,14 +349,14 @@ const groupDocRoutes = (routes) => {
 
 /** @type {Readonly<Record<string, string>>} */
 const HOW_TO_NAVIGATION_GROUPS = Object.freeze({
-  "docs/apply-rom-patches": "Patching & bundles",
+  "docs/apply-rom-patches": "Patching & weaves",
   "docs/bake-cheat-codes": "Cheats",
   "docs/browser-settings": "Setup & offline",
   "docs/use-mcp": "Setup & offline",
   "docs/checksum-roms-browser": "ROM checks",
-  "docs/cli-apply": "Patching & bundles",
-  "docs/cli-bundles": "Patching & bundles",
-  "docs/cli-create": "Patching & bundles",
+  "docs/cli-apply": "Patching & weaves",
+  "docs/cli-bundles": "Patching & weaves",
+  "docs/cli-create": "Patching & weaves",
   "docs/cli-save": "Saves",
   "docs/cli-trim": "ROM checks",
   "docs/convert-roms-browser": "Conversion & files",
@@ -364,10 +364,10 @@ const HOW_TO_NAVIGATION_GROUPS = Object.freeze({
   "docs/convert-to-chd": "Conversion & files",
   "docs/convert-to-rvz": "Conversion & files",
   "docs/convert-to-z3ds": "Conversion & files",
-  "docs/create-bundles": "Patching & bundles",
+  "docs/create-bundles": "Patching & weaves",
   "docs/create-game-saves-browser": "Saves",
   "docs/create-game-saves-cli": "Saves",
-  "docs/create-rom-patches": "Patching & bundles",
+  "docs/create-rom-patches": "Patching & weaves",
   "docs/edit-gen3-saves": "Saves",
   "docs/extract-chd": "Conversion & files",
   "docs/extract-files-browser": "Conversion & files",
@@ -380,7 +380,7 @@ const HOW_TO_NAVIGATION_GROUPS = Object.freeze({
   "docs/search-rom-checksums": "ROM checks",
   "docs/test-roms": "ROM checks",
   "docs/trim-roms-browser": "ROM checks",
-  "docs/undo-ppf-browser": "Patching & bundles",
+  "docs/undo-ppf-browser": "Patching & weaves",
   "docs/use-cheats": "Cheats",
   "docs/verify-downloads": "Setup & offline",
   "docs/work-with-archives": "Conversion & files",
@@ -389,7 +389,7 @@ const HOW_TO_NAVIGATION_GROUPS = Object.freeze({
 const DOC_NAVIGATION_GROUP_ORDER = Object.freeze([
   "Start here",
   "Walkthroughs",
-  "Patching & bundles",
+  "Patching & weaves",
   "ROM checks",
   "Conversion & files",
   "Saves",

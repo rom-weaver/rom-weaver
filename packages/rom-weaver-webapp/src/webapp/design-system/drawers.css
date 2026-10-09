@@ -369,7 +369,7 @@
   overflow-wrap: anywhere;
   white-space: normal;
 }
-/* Secondary chips (a format-implied note, a hidden bundle) recede beside the
+/* Secondary chips (a format-implied note, a hidden weave) recede beside the
    values the user picked. Previously only `.step-meta` styled `.muted`, so the
    drawer headers rendered it at full emphasis. */
 .rw-app .cks > .cks-head .rb.muted {

@@ -1,6 +1,6 @@
 export { normalizeChdCodecArgs, normalizeCodecEntries } from "./compression-codec-args.ts";
 export { resolvePatchApplyThreadArg } from "./patch-run-resolution.ts";
-export { invokeRomWeaverBundleCreateWorker, invokeRomWeaverBundleParseWorker } from "./wasm-bundle-commands.ts";
+export { invokeRomWeaverWeaveCreateWorker, invokeRomWeaverWeaveParseWorker } from "./wasm-weave-commands.ts";
 export { invokeRomWeaverCheatWorker } from "./wasm-cheat-commands.ts";
 export {
   invokeRomWeaverCompressionCreateWorker,

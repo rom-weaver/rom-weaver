@@ -184,7 +184,7 @@ const listCompressionEntries = async (
 
 /**
  * List archive names without extraction so drop routing can separate ROMs from
- * patch bundles before staging. The cached result is reused by descent. Failure
+ * patch weaves before staging. The cached result is reused by descent. Failure
  * returns [] and lets Rust correct the default ROM route later.
  */
 const listDroppedArchiveEntryNames = async (source: SourceRef): Promise<string[]> => {
@@ -473,7 +473,7 @@ const resolveArchiveInputAssetsByDescent = async (
     traceArchivePreparation(options, "input.archive.chd-mode", { chdMode, sourceIndex });
   }
   if (!outputs.length) {
-    // A nested patch-only bundle can default to the ROM bucket before descent
+    // A nested patch-only weave can default to the ROM bucket before descent
     // reveals its leaves. Reclassify and abort ROM staging so it releases OPFS
     // handles before the patch bucket stages the same file.
     if (patchOutputs.length) {
@@ -485,7 +485,7 @@ const resolveArchiveInputAssetsByDescent = async (
       });
       throw new RomWeaverError(
         "INVALID_INPUT",
-        `${archiveFile.fileName || "Archive"} is a patch-only bundle; re-homing it to the patch list`,
+        `${archiveFile.fileName || "Archive"} is a patch-only weave; re-homing it to the patch list`,
         { details: { reclassifiedToPatch: true } },
       );
     }

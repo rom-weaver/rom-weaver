@@ -12,7 +12,7 @@ Documentation images show real app controls with homebrew samples or a generated
 - [Create a patch](#create-a-patch)
   - [Original and Modified](#original-and-modified)
   - [Patch output](#patch-output)
-- [Create a bundle](#create-a-bundle)
+- [Create a weave](#create-a-weave)
 - [Sample ROMs](#sample-roms)
 - [Regenerate the captures](#regenerate-the-captures)
 - [Refresh the README video](#refresh-the-readme-video)
@@ -28,7 +28,7 @@ Documentation images show real app controls with homebrew samples or a generated
 | `apply-output` | [Apply output](../how-to/apply-rom-patches.md#choose-the-output-and-apply) | File name, container, and download action |
 | `create-inputs` | [Create a patch](../how-to/create-rom-patches.md) | Original and Modified inputs |
 | `create-output` | [Create output](../how-to/create-rom-patches.md) | Patch format and output controls |
-| `bundle-output` | [Share a bundle](../how-to/create-bundles.md#turn-on-bundle-output-and-download-it) | ROM inclusion and the separate sharing action |
+| `bundle-output` | [Share a weave](../how-to/create-bundles.md#turn-on-bundle-output-and-download-it) | ROM inclusion and the separate sharing action |
 | `identify-checks` | [Identify a ROM](../how-to/identify-roms-browser.md) | An unknown homebrew ROM with usable checksums |
 | `cheat-step` | [Use cheats](../how-to/use-browser-cheats.md) | A manual ROM-write step in the patch order |
 | `save-editor` | [Edit a save](../how-to/edit-gen3-saves.md) | Filtered fields and a checked edit preview |
@@ -58,9 +58,11 @@ The [Create guide](../how-to/create-rom-patches.md) owns both input and output c
 
 The output capture shows format selection. It does not show a second workflow.
 
-## Create a bundle
+<a id="create-a-bundle"></a>
 
-The [bundle guide](../how-to/create-bundles.md#turn-on-bundle-output-and-download-it) owns the sharing-control images.
+## Create a weave
+
+The [weave guide](../how-to/create-bundles.md#turn-on-bundle-output-and-download-it) owns the sharing-control images.
 
 ## Sample ROMs
 

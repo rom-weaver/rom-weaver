@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { loadLocalBundleSession } from "../../src/lib/bundle/local-bundle-session.ts";
+import { loadLocalWeaveSession } from "../../src/lib/weave/local-weave-session.ts";
 import { ApplyWorkflow } from "../../src/platform/browser/browser-api.ts";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 import { readStoredZipEntries } from "./patcher-test-shared.js";
@@ -43,7 +43,7 @@ const createDisc = (runId) => {
   };
 };
 
-const applyImportedBundle = async ({ disc, entries, patchFiles, runId, withOptional }) => {
+const applyImportedWeave = async ({ disc, entries, patchFiles, runId, withOptional }) => {
   const workflow = new ApplyWorkflow({
     settings: {
       output: { compression: "none", outputName: `target-chain-result-${runId}` },
@@ -78,7 +78,7 @@ const applyImportedBundle = async ({ disc, entries, patchFiles, runId, withOptio
   }
 };
 
-test("bundle targets preserve a selected track chain when an optional patch is enabled after import", async () => {
+test("weave targets preserve a selected track chain when an optional patch is enabled after import", async () => {
   const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const disc = createDisc(runId);
   const patches = [
@@ -90,9 +90,9 @@ test("bundle targets preserve a selected track chain when an optional patch is e
   const patchFiles = new Map(patches.map((patch) => [patch.name, patch]));
   const targetOne = { member: disc.trackOne.name, rom: true };
   const targetTwo = { member: disc.trackTwo.name, rom: true };
-  const created = await browserRuntime.bundle.create?.({
-    bundleFileName: `target-chain-${runId}.zip`,
-    noBundleRom: true,
+  const created = await browserRuntime.weave.create?.({
+    weaveFileName: `target-chain-${runId}.zip`,
+    noWeaveRom: true,
     patches: [
       { fileName: "a.ips", id: "a", source: patches[0], target: targetOne },
       { fileName: "b.ips", id: "b", optional: true, source: patches[1], target: targetOne },
@@ -101,17 +101,17 @@ test("bundle targets preserve a selected track chain when an optional patch is e
     ],
     rom: { fileName: disc.cue.name, source: disc.cue },
   });
-  if (!created) throw new Error("Bundle create is unavailable");
+  if (!created) throw new Error("Weave create is unavailable");
   try {
-    expect(created.result.bundle.patches.map((patch) => patch.target)).toEqual([
+    expect(created.result.weave.patches.map((patch) => patch.target)).toEqual([
       targetOne,
       targetOne,
       targetTwo,
       targetOne,
     ]);
-    const bundleBytes = await (await browserRuntime.publicOutput.getBlob(created.bundleOutput)).arrayBuffer();
-    const bundleFile = new File([bundleBytes], "rom-weaver-bundle.json", { type: "application/json" });
-    const imported = await loadLocalBundleSession(bundleFile, [disc.cue, disc.trackOne, disc.trackTwo, ...patches]);
+    const weaveBytes = await (await browserRuntime.publicOutput.getBlob(created.weaveOutput)).arrayBuffer();
+    const weaveFile = new File([weaveBytes], "rom-weaver-weave.json", { type: "application/json" });
+    const imported = await loadLocalWeaveSession(weaveFile, [disc.cue, disc.trackOne, disc.trackTwo, ...patches]);
     try {
       expect(imported.session.entries.map((entry) => entry.target)).toEqual([
         targetOne,
@@ -119,14 +119,14 @@ test("bundle targets preserve a selected track chain when an optional patch is e
         targetTwo,
         targetOne,
       ]);
-      const withoutOptional = await applyImportedBundle({
+      const withoutOptional = await applyImportedWeave({
         disc,
         entries: imported.session.entries,
         patchFiles,
         runId: `${runId}-without-b`,
         withOptional: false,
       });
-      const withOptional = await applyImportedBundle({
+      const withOptional = await applyImportedWeave({
         disc,
         entries: imported.session.entries,
         patchFiles,
@@ -150,7 +150,7 @@ test("bundle targets preserve a selected track chain when an optional patch is e
       await imported.cleanup();
     }
   } finally {
-    await created.bundleOutput.dispose();
+    await created.weaveOutput.dispose();
     await created.archiveOutput?.dispose();
   }
 }, 180000);

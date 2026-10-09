@@ -15,12 +15,12 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-#~ msgid "ui.bundleExport.action"
-#~ msgstr "Bundle herunterladen"
+#~ msgid "ui.weaveExport.action"
+#~ msgstr "Weave herunterladen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-#~ msgid "ui.output.bundlePartial"
+#~ msgid "ui.output.weavePartial"
 #~ msgstr "Die Ausgabe wird nicht überprüft - das erwartete Ergebnis des Pakets gilt nur für die vollständige Patch-Kette."
 
 #. js-lingui-explicit-id
@@ -295,7 +295,7 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-#~ msgid "ui.home.flowBundle"
+#~ msgid "ui.home.flowWeave"
 #~ msgstr "Patches bündeln"
 
 #. js-lingui-explicit-id
@@ -311,7 +311,7 @@ msgstr ""
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 #~ msgid "ui.home.workflowsDescription"
-#~ msgstr "Erstelle Patches, teile wiederverwendbare Bundles und teste ROMs in deinem Browser."
+#~ msgstr "Erstelle Patches, teile wiederverwendbare Weaves und teste ROMs in deinem Browser."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -435,18 +435,18 @@ msgstr "A"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.inputHandling.bundleContents"
-msgstr "Ein Bundle kann eine JSON-Datei oder ein Archiv mit dieser Datei und seinen Patches sein. Es kann das ROM enthalten; ansonsten gib das passende ROM separat an."
+msgid "ui.apply.inputHandling.weaveContents"
+msgstr "Ein Weave kann eine JSON-Datei oder ein Archiv mit dieser Datei und seinen Patches sein. Es kann das ROM enthalten; ansonsten gib das passende ROM separat an."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.bundleTutorial.rom.body"
-msgstr "Ein Bundle ist eine Anleitung und beginnt daher mit dem ROM, das die Patches erwarten. Das Beispiel nutzt ein kleines legales Übungs-ROM."
+msgid "ui.apply.weaveTutorial.rom.body"
+msgstr "Ein Weave ist eine Anleitung und beginnt daher mit dem ROM, das die Patches erwarten. Das Beispiel nutzt ein kleines legales Übungs-ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.bundleProofDescription"
-msgstr "Ein Bundle speichert die Eingabe-Prüfsumme, jeden Patch in Reihenfolge und die erwartete Ausgabe. Monate später kannst du zeigen, woher eine Datei kam, oder das Bundle weitergeben, damit jemand dieselben Bytes erhält."
+msgid "ui.home.weaveProofDescription"
+msgstr "Ein Weave speichert die Eingabe-Prüfsumme, jeden Patch in Reihenfolge und die erwartete Ausgabe. Monate später kannst du zeigen, woher eine Datei kam, oder das Weave weitergeben, damit jemand dieselben Bytes erhält."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -480,7 +480,7 @@ msgstr "Eine neue Version wurde im Hintergrund geladen. Zum Wechseln neu laden."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.flowBundleBringBefore"
+msgid "ui.home.flowWeaveBringBefore"
 msgstr "Eine Patch-Kette, die du in Apply eingerichtet hast, oder eine"
 
 #. js-lingui-explicit-id
@@ -520,18 +520,18 @@ msgstr "Ein ROM, das du ausprobieren willst"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.drop.info.bundle"
-msgstr "Ein rom-weaver-Bundle ist eine portable Patch-Anleitung: ein Index rom-weaver-bundle.json, archiviert mit seinen Patches und optional einem ROM."
+msgid "ui.apply.drop.info.weave"
+msgstr "Ein rom-weaver-Weave ist eine portable Patch-Anleitung: ein Index rom-weaver-weave.json, archiviert mit seinen Patches und optional einem ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.archive.info.recipe"
-msgstr "Ein rom-weaver-Bundle ist eine portable Anleitung zum Anwenden einer Patch-Kette auf ein ROM; es ist kein vorgepatchtes ROM."
+msgstr "Ein rom-weaver-Weave ist eine portable Anleitung zum Anwenden einer Patch-Kette auf ein ROM; es ist kein vorgepatchtes ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.inputHandling.bundleIndex"
-msgstr "Ein rom-weaver-Bundle ist eine Anleitung zum Anwenden einer Patch-Kette auf ein ROM. Seine Datei rom-weaver-bundle.json ist der erforderliche Index."
+msgid "ui.apply.inputHandling.weaveIndex"
+msgstr "Ein rom-weaver-Weave ist eine Anleitung zum Anwenden einer Patch-Kette auf ein ROM. Seine Datei rom-weaver-weave.json ist der erforderliche Index."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -925,13 +925,13 @@ msgstr "Browser-Tab"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.bundleTutorial.download.title"
+msgid "ui.apply.weaveTutorial.download.title"
 msgstr "Erstellen und herunterladen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.find.bundleHint"
-msgstr "Patch-Bundles erstellen und optional anwenden."
+msgid "ui.find.weaveHint"
+msgstr "Patch-Weaves erstellen und optional anwenden."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -940,48 +940,48 @@ msgstr "Mehrere bearbeiten"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.goBundle"
+msgid "ui.home.goWeave"
 msgstr "Bündeln"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "settings.bundlePackage"
-msgstr "Bundle"
+msgid "settings.weavePackage"
+msgstr "Weave"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.step.bundle"
-msgstr "Bundle"
+msgid "ui.step.weave"
+msgstr "Weave"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.bundleTutorial.bundlePatches"
-msgstr "Bundle + Patches (.zip)"
+msgid "ui.apply.weaveTutorial.weavePatches"
+msgstr "Weave + Patches (.zip)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.tutorial.tryBundle"
+msgid "ui.tutorial.tryWeave"
 msgstr "Bündeln"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.bundleExport.outputFilename"
-msgstr "Bundle-Ausgabename (ohne Erweiterung)"
+msgid "ui.weaveExport.outputFilename"
+msgstr "Weave-Ausgabename (ohne Erweiterung)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.find.bundlesApplyPatch"
+msgid "ui.find.weavesApplyPatch"
 msgstr "Patches bündeln"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.bundleThesis"
+msgid "ui.hero.weaveThesis"
 msgstr "Patches bündeln."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.sourceInfo.expectationAuthorityBundle"
-msgstr "vom Bundle"
+msgid "ui.sourceInfo.expectationAuthorityWeave"
+msgstr "vom Weave"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1030,8 +1030,8 @@ msgstr "Patchen abbrechen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.cancelBundleExport"
-msgstr "Bundle-Export abbrechen"
+msgid "ui.apply.cancelWeaveExport"
+msgstr "Weave-Export abbrechen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1115,7 +1115,7 @@ msgstr "Prüfe es"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.bundleTutorial.rom.title"
+msgid "ui.apply.weaveTutorial.rom.title"
 msgstr "Start-ROM prüfen"
 
 #. js-lingui-explicit-id
@@ -1190,8 +1190,8 @@ msgstr "Wähle eine Patch-Datei oder ein Archiv, um diesen Patch zu ersetzen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.bundleTutorial.safeBundle.title"
-msgstr "Sicheres Bundle wählen"
+msgid "ui.apply.weaveTutorial.safeWeave.title"
+msgstr "Sicheres Weave wählen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1435,13 +1435,13 @@ msgstr "Erstellen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.bundleExport.create"
-msgstr "{format}-Bundle erstellen"
+msgid "ui.weaveExport.create"
+msgstr "{format}-Weave erstellen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.bundleExport.createRom"
-msgstr "{format}-ROM-Bundle erstellen"
+msgid "ui.weaveExport.createRom"
+msgstr "{format}-ROM-Weave erstellen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1510,7 +1510,7 @@ msgstr "Standardwerte"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.bundleTutorial.patches.title"
+msgid "ui.apply.weaveTutorial.patches.title"
 msgstr "Patch-Anleitung beschreiben"
 
 #. js-lingui-explicit-id
@@ -1620,13 +1620,13 @@ msgstr "{file} herunterladen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.bundleExport.download"
-msgstr "{format}-Bundle herunterladen"
+msgid "ui.weaveExport.download"
+msgstr "{format}-Weave herunterladen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.bundleExport.downloadRom"
-msgstr "{format}-ROM-Bundle herunterladen"
+msgid "ui.weaveExport.downloadRom"
+msgstr "{format}-ROM-Weave herunterladen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1635,8 +1635,8 @@ msgstr "{name} herunterladen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.downloadTestBundle"
-msgstr "Test-Bundle herunterladen"
+msgid "ui.apply.tutorial.downloadTestWeave"
+msgstr "Test-Weave herunterladen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1671,7 +1671,7 @@ msgstr "Zum Sortieren ziehen · zum Bearbeiten der Position klicken · Pfeiltast
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.addFiles.body"
-msgstr "Lege hier ein ROM und seine Patches ab: einzelne Dateien, einen ganzen Ordner, ein ZIP- oder 7z-Archiv oder ein Bundle. Oder wähle Dateien hinzufügen, um sie auszuwählen. rom-weaver erkennt jede Datei und legt sie auf die passende Karte. Nichts verlässt deinen Browser."
+msgstr "Lege hier ein ROM und seine Patches ab: einzelne Dateien, einen ganzen Ordner, ein ZIP- oder 7z-Archiv oder ein Weave. Oder wähle Dateien hinzufügen, um sie auszuwählen. rom-weaver erkennt jede Datei und legt sie auf die passende Karte. Nichts verlässt deinen Browser."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1696,7 +1696,7 @@ msgstr "Dateien zum Komprimieren hier ablegen"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.drop.hero"
-msgstr "ROMs, Patches, Bundles oder Archive ablegen oder anklicken"
+msgstr "ROMs, Patches, Weaves oder Archive ablegen oder anklicken"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1845,13 +1845,13 @@ msgstr "erwartet zuerst Patch {n}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.bundleTutorial.download.body"
-msgstr "Das Exportieren einer Anleitung wendet keine Patches an. Drücke Bundle teilen, um die Einrichtung zu prüfen und herunterzuladen; dann wird daraus ZIP-Bundle herunterladen."
+msgid "ui.apply.weaveTutorial.download.body"
+msgstr "Das Exportieren einer Anleitung wendet keine Patches an. Drücke Weave teilen, um die Einrichtung zu prüfen und herunterzuladen; dann wird daraus ZIP-Weave herunterladen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.archive.summary"
-msgstr "Exportiert diese Sitzung als portables rom-weaver-Bundle, das durch rom-weaver-bundle.json definiert ist."
+msgstr "Exportiert diese Sitzung als portables rom-weaver-Weave, das durch rom-weaver-weave.json definiert ist."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2130,8 +2130,8 @@ msgstr "{name} einschließen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.bundleExport.includeRom"
-msgstr "ROM in Bundle einschließen"
+msgid "ui.weaveExport.includeRom"
+msgstr "ROM in Weave einschließen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2785,7 +2785,7 @@ msgstr "Eine Engine, zwei Oberflächen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.flowBundleGet"
+msgid "ui.home.flowWeaveGet"
 msgstr "Eine Datei, die Patch-Reihenfolge, erwartete Prüfsummen und Ausgabenamen festlegt. Öffne sie, und der Workflow ist bereit."
 
 #. js-lingui-explicit-id
@@ -2796,7 +2796,7 @@ msgstr "Ein Durchlauf, kein Entpacken von Hand"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.loomCaption"
-msgstr "Ein Durchlauf, kein manuelles Entpacken, keine Zwischendateien. Speichere es als Bundle, dann bleibt die Reihenfolge für die nächste Person erhalten."
+msgstr "Ein Durchlauf, kein manuelles Entpacken, keine Zwischendateien. Speichere es als Weave, dann bleibt die Reihenfolge für die nächste Person erhalten."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2805,7 +2805,7 @@ msgstr "Ein Werkzeugkasten."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.bundleExport.romDistributionWarning"
+msgid "ui.weaveExport.romDistributionWarning"
 msgstr "Schließe eine ROM nur ein, wenn du sie vertreiben darfst. Das Teilen urheberrechtlich geschützter ROMs kann illegal sein."
 
 #. js-lingui-explicit-id
@@ -2821,7 +2821,7 @@ msgstr "{flow} öffnen"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.webappItem4"
-msgstr "Öffne einen Bundle-Link, und die Patch-Kette wird für dich vorbereitet."
+msgstr "Öffne einen Weave-Link, und die Patch-Kette wird für dich vorbereitet."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2865,7 +2865,7 @@ msgstr "Öffnet die Anleitung"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.bundleExport.optional"
+msgid "ui.weaveExport.optional"
 msgstr "optional"
 
 #. js-lingui-explicit-id
@@ -2965,7 +2965,7 @@ msgstr "Ausgabe-Header"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.bundleExport.headerNotSaved"
+msgid "ui.weaveExport.headerNotSaved"
 msgstr "Änderungen am Ausgabe-Header gelten nur für diese Sitzung."
 
 #. js-lingui-explicit-id
@@ -2995,7 +2995,7 @@ msgstr "Die Ausgabe wird nicht überprüft - die erwartete Ausgabe beschreibt ei
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.output.bundleDiverged"
+msgid "ui.output.weaveDiverged"
 msgstr "Die Ausgabe wird nicht überprüft - die Patch-Kette weicht vom Paket ab."
 
 #. js-lingui-explicit-id
@@ -3160,7 +3160,7 @@ msgstr "Patches können aus unterstützten, auch verschachtelten Archiven gewäh
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.routeBundle"
+msgid "ui.home.routeWeave"
 msgstr "Patches zum Weitergeben"
 
 #. js-lingui-explicit-id
@@ -3190,8 +3190,8 @@ msgstr "Wähle, was zur Aufgabe passt. Die Ausgabedaten sind in beiden Fällen i
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.routeBundleBody"
-msgstr "Lege Patch-Reihenfolge und Prüfsummen in einem Bundle fest, das jemand nachspielen kann."
+msgid "ui.home.routeWeaveBody"
+msgstr "Lege Patch-Reihenfolge und Prüfsummen in einem Weave fest, das jemand nachspielen kann."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3355,8 +3355,8 @@ msgstr "Lies die Apply-Anleitung"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.bundleGuide"
-msgstr "Lies die Bundle-Anleitung"
+msgid "ui.hero.weaveGuide"
+msgstr "Lies die Weave-Anleitung"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3415,8 +3415,8 @@ msgstr "Lesen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.drop.readingBundle"
-msgstr "Bundle wird gelesen"
+msgid "ui.apply.drop.readingWeave"
+msgstr "Weave wird gelesen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3565,7 +3565,7 @@ msgstr "Eingabe-Übereinstimmung erzwingen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.bundleTutorial.optional"
+msgid "ui.apply.weaveTutorial.optional"
 msgstr "Erforderlich oder optional"
 
 #. js-lingui-explicit-id
@@ -3635,7 +3635,7 @@ msgstr "ROM-Header-Behandlung vor dem Patchen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.sourceInfo.expectationMetaBundle"
+msgid "ui.sourceInfo.expectationMetaWeave"
 msgstr "ROM nicht enthalten – füge sie selbst hinzu"
 
 #. js-lingui-explicit-id
@@ -3790,17 +3790,17 @@ msgstr "Einstellungen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.bundleThesis2"
+msgid "ui.hero.weaveThesis2"
 msgstr "Ein wiederverwendbares Rezept teilen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.bundleExport.share"
-msgstr "Bundle teilen"
+msgid "ui.weaveExport.share"
+msgstr "Weave teilen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.bundleExport.shareTitle"
+msgid "ui.weaveExport.shareTitle"
 msgstr "Dieses Patch-Rezept teilen (für Patch-Ersteller)"
 
 #. js-lingui-explicit-id
@@ -3860,7 +3860,7 @@ msgstr "Zum Hauptinhalt springen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.flowBundleBringAfter"
+msgid "ui.home.flowWeaveBringAfter"
 msgstr ", die dir jemand geschickt hat."
 
 #. js-lingui-explicit-id
@@ -3880,8 +3880,8 @@ msgstr "Quelle"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.bundleDescription"
-msgstr "ROM und Patches zusammenstellen, das Rezept beschreiben und ein wiederverwendbares Bundle teilen."
+msgid "ui.hero.weaveDescription"
+msgstr "ROM und Patches zusammenstellen, das Rezept beschreiben und ein wiederverwendbares Weave teilen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3910,8 +3910,8 @@ msgstr "Geführtes Anwenden starten"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.createBundle"
-msgstr "Geführtes Bundle starten"
+msgid "ui.apply.tutorial.createWeave"
+msgstr "Geführtes Weave starten"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4041,7 +4041,7 @@ msgstr "Tippen, um Dateien zum Komprimieren hinzuzufügen"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.drop.heroCoarse"
-msgstr "Tippen, um ROMs, Patches, Bundles oder Archive hinzuzufügen"
+msgstr "Tippen, um ROMs, Patches, Weaves oder Archive hinzuzufügen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4066,22 +4066,22 @@ msgstr "Test-Tool"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.archive.info.contents"
-msgstr "Das Archiv enthält diesen Index und die Patch-Dateien. Das Original-ROM ist optional; ein reines Patch-Bundle fordert eine passende Datei an."
+msgstr "Das Archiv enthält diesen Index und die Patch-Dateien. Das Original-ROM ist optional; ein reines Patch-Weave fordert eine passende Datei an."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.bundleTutorial.safeBundle.body"
-msgstr "Der Bundle-Download ist von Anwenden getrennt. Bundle + Patches (.zip) teilt Anleitung und Patches ohne ein urheberrechtlich geschütztes ROM im Download."
+msgid "ui.apply.weaveTutorial.safeWeave.body"
+msgstr "Der Weave-Download ist von Anwenden getrennt. Weave + Patches (.zip) teilt Anleitung und Patches ohne ein urheberrechtlich geschütztes ROM im Download."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.home.bundleProof"
-msgstr "Das Bundle ist der Nachweis"
+msgid "ui.home.weaveProof"
+msgstr "Das Weave ist der Nachweis"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.archive.info.apply"
-msgstr "Das Bundle enthält Anweisungen und Prüfdaten; rom-weaver wendet die Patches weiterhin an."
+msgstr "Das Weave enthält Anweisungen und Prüfdaten; rom-weaver wendet die Patches weiterhin an."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4121,7 +4121,7 @@ msgstr "Die CLI-Referenz listet diesen Befehl auf."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.outputCheckHint"
-msgstr "Die erwartete Ausgabe wird nur geprüft, wenn jeder Patch im Bundle angewendet wird."
+msgstr "Die erwartete Ausgabe wird nur geprüft, wenn jeder Patch im Weave angewendet wird."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4196,7 +4196,7 @@ msgstr "Das gepatchte Ergebnis ist als senkrechte Fäden dargestellt. Drei Patch
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.flowApplyGet"
-msgstr "Die gepatchte ROM mit geprüften Prüfsummen. Speichere die Kette als Bundle, um sie zu wiederholen oder zu teilen."
+msgstr "Die gepatchte ROM mit geprüften Prüfsummen. Speichere die Kette als Weave, um sie zu wiederholen oder zu teilen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4206,7 +4206,7 @@ msgstr "Die Daten dieser Plattform führen keine Version dieses Spiels."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.archive.info.index"
-msgstr "Der erforderliche Index rom-weaver-bundle.json enthält die Schemaversion, ROM-Details und Prüfungen, geordnete Patches sowie Ausgabevorgaben und Prüfungen."
+msgstr "Der erforderliche Index rom-weaver-weave.json enthält die Schemaversion, ROM-Details und Prüfungen, geordnete Patches sowie Ausgabevorgaben und Prüfungen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4315,7 +4315,7 @@ msgstr "Diese Patches erwarten unterschiedliche ROMs - jede Patch-Karte zeigt di
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.bundleTutorial.patches.body"
+msgid "ui.apply.weaveTutorial.patches.body"
 msgstr "Diese Patches zielen auf das Original-ROM. Spieler können ihre Reihenfolge ändern oder einen überspringen. Verwende Patch-Details, um Bezeichnung, Version, Autor und Beschreibung zu bearbeiten."
 
 #. js-lingui-explicit-id
@@ -4760,4 +4760,4 @@ msgstr "ZIP-Codec"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
-msgstr "ZIP, 7z und Bundles"
+msgstr "ZIP, 7z und Weaves"

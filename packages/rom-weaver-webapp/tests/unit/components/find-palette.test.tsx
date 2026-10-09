@@ -33,7 +33,7 @@ const TABS = [
     id: "patcher",
     label: "Apply Patch",
   },
-  { group: "patches", href: "bundle", icon: <svg aria-hidden="true" />, id: "bundle", label: "Bundles" },
+  { group: "patches", href: "weave", icon: <svg aria-hidden="true" />, id: "weave", label: "Weaves" },
   {
     dock: true,
     group: "patches",
@@ -208,17 +208,17 @@ describe("Find", () => {
     expect(options.slice(0, -1).every((option) => !option.classList.contains("is-identify"))).toBe(true);
   });
 
-  it("opens the bundle page", () => {
+  it("opens the weave page", () => {
     const onSelectTab = vi.fn();
     const { container, getByRole } = render(withSettings(<Masthead {...props} onSelectTab={onSelectTab} />));
     fireEvent.click(container.querySelector(".topbar-find") as HTMLButtonElement);
-    fireEvent.change(findInput(container), { target: { value: "bundle" } });
+    fireEvent.change(findInput(container), { target: { value: "weave" } });
 
     const first = getByRole("listbox", { name: "Find" }).querySelector('[role="option"]');
-    expect(first?.textContent).toContain("Bundle Patches");
+    expect(first?.textContent).toContain("Weave Patches");
     fireEvent.keyDown(findInput(container), { key: "Enter" });
 
-    expect(onSelectTab).toHaveBeenCalledWith("bundle");
+    expect(onSelectTab).toHaveBeenCalledWith("weave");
   });
 
   it("uses the guide link for a CLI-only command", () => {

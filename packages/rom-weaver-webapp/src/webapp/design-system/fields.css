@@ -277,37 +277,37 @@
 .rw-app .patch-description-field {
   grid-column: 1 / -1;
 }
-.rw-app .bundle-job {
+.rw-app .weave-job {
   margin-block-start: var(--sp-l);
 }
-.rw-app .bundle-job-content {
+.rw-app .weave-job-content {
   display: grid;
   gap: var(--sp-m);
 }
-.rw-app .bundle-job-fields {
+.rw-app .weave-job-fields {
   display: grid;
   gap: var(--sp-l);
 }
-.rw-app .opts-extra-fields > .bundle-job-fields {
+.rw-app .opts-extra-fields > .weave-job-fields {
   grid-column: 1 / -1;
 }
-.rw-app .bundle-rom-option {
+.rw-app .weave-rom-option {
   align-self: end;
 }
-.rw-app .bundle-rom-option .checkrow {
+.rw-app .weave-rom-option .checkrow {
   margin-block: 0;
 }
-.rw-app .bundle-rom-option input[type="checkbox"] {
+.rw-app .weave-rom-option input[type="checkbox"] {
   --sw-h: 24px;
 }
-.rw-app .bundle-rom-warning {
+.rw-app .weave-rom-warning {
   grid-column: 1 / -1;
 }
-.rw-app .bundle-share,
-.rw-app .bundle-job-content > .runprog {
+.rw-app .weave-share,
+.rw-app .weave-job-content > .runprog {
   width: 100%;
 }
-.rw-app .bundle-share {
+.rw-app .weave-share {
   min-height: 40px;
 }
 .rw-app .patch-description-field textarea.input {
@@ -350,7 +350,7 @@
   text-transform: none;
   letter-spacing: 0.02em;
 }
-/* Distinguish expected bundle values from computed readouts. */
+/* Distinguish expected weave values from computed readouts. */
 .rw-app .ckrows #rom-weaver-rom-expected-checks {
   padding: 6px 0 2px;
   margin-block: 3px;
@@ -875,24 +875,24 @@
   margin-inline: 9px;
 }
 
-.rw-app .bundle-rom-expectation {
+.rw-app .weave-rom-expectation {
   margin-block: 13px 10px;
 }
-.rw-app .bundle-rom-expectation:has(+ .identify-search--compact) {
+.rw-app .weave-rom-expectation:has(+ .identify-search--compact) {
   margin-block-end: 0;
 }
-.rw-app .bundle-rom-expectation:has(+ .identify-search--compact) .card {
+.rw-app .weave-rom-expectation:has(+ .identify-search--compact) .card {
   --card-end-radius: 0;
 }
-.rw-app .bundle-rom-expectation .card {
+.rw-app .weave-rom-expectation .card {
   background: color-mix(in oklab, var(--plate-2) 55%, var(--chassis));
   border-color: var(--seam-strong);
   border-style: dashed;
 }
-.rw-app .bundle-rom-expectation .card .card-name {
+.rw-app .weave-rom-expectation .card .card-name {
   color: var(--ink-2);
 }
-.rw-app .bundle-rom-expectation .card .card-meta {
+.rw-app .weave-rom-expectation .card .card-meta {
   color: var(--thread-text);
 }
 .rw-app .verification-row {

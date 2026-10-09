@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { identifyDumpTagLabel, identifyMatchCountLabel } from "../../../../presentation/identify-status.ts";
 import { uniqueIdentifyDisplayNames } from "../../../../presentation/identify-title.ts";
-import type { ParsedBundleChecks } from "../../../../types/bundle.ts";
+import type { ParsedWeaveChecks } from "../../../../types/weave.ts";
 import type { ExpectedRomTitle } from "../../../../lib/apply/expected-rom-lookup.ts";
 import { identifyRecordChecks } from "../../../../lib/identify/identify-record-checks.ts";
 import { displayTitle } from "../../../../lib/identify/title-index.mjs";
@@ -133,7 +133,7 @@ const ExpectedComponentCheckGroups = ({
    with the Checks drawer; this only subtracts what the check already asserts,
    so the card never repeats a value it is about to show as its own. */
 const databaseOnlyChecks = (
-  checks: ParsedBundleChecks | undefined,
+  checks: ParsedWeaveChecks | undefined,
   identification: ParsedIdentifyResolution | undefined,
 ): { checksums: Record<string, string>; size?: number } | undefined => {
   const record = identifyRecordChecks(identification);
@@ -153,31 +153,31 @@ const databaseOnlyChecks = (
  * Where an expected-ROM check came from; it decides the card's meta line.
  * `manual` is a pasted checksum, `name` a title chosen from a name search.
  */
-type RomExpectationSource = "bundle" | "manual" | "name" | "patch";
+type RomExpectationSource = "weave" | "manual" | "name" | "patch";
 
 const ROM_EXPECTATION_META: Record<
   RomExpectationSource,
-  | "ui.sourceInfo.expectationMetaBundle"
+  | "ui.sourceInfo.expectationMetaWeave"
   | "ui.sourceInfo.expectationMetaManual"
   | "ui.sourceInfo.expectationMetaName"
   | "ui.sourceInfo.expectationMetaPatch"
 > = {
-  bundle: "ui.sourceInfo.expectationMetaBundle",
+  weave: "ui.sourceInfo.expectationMetaWeave",
   manual: "ui.sourceInfo.expectationMetaManual",
   name: "ui.sourceInfo.expectationMetaName",
   patch: "ui.sourceInfo.expectationMetaPatch",
 };
 
 /* Who asserted the checks, for the merged group's head note. The database name
-   follows it, so the note reads "by the bundle · No-Intro". */
+   follows it, so the note reads "by the weave · No-Intro". */
 const ROM_EXPECTATION_AUTHORITY: Record<
   RomExpectationSource,
-  | "ui.sourceInfo.expectationAuthorityBundle"
+  | "ui.sourceInfo.expectationAuthorityWeave"
   | "ui.sourceInfo.expectationAuthorityManual"
   | "ui.sourceInfo.expectationAuthorityName"
   | "ui.sourceInfo.expectationAuthorityPatch"
 > = {
-  bundle: "ui.sourceInfo.expectationAuthorityBundle",
+  weave: "ui.sourceInfo.expectationAuthorityWeave",
   manual: "ui.sourceInfo.expectationAuthorityManual",
   name: "ui.sourceInfo.expectationAuthorityName",
   patch: "ui.sourceInfo.expectationAuthorityPatch",
@@ -189,8 +189,8 @@ const romLookupSource = (foundBy: "checksum" | "name"): RomExpectationSource =>
 
 /** What the workflow expects the ROM to be, and where that expectation came from. */
 type RomExpectation = {
-  checks?: ParsedBundleChecks;
-  /** Advisory file name; only a bundle rom entry carries one. */
+  checks?: ParsedWeaveChecks;
+  /** Advisory file name; only a weave rom entry carries one. */
   name?: string;
   source: RomExpectationSource;
 };
@@ -222,7 +222,7 @@ const compareRomExpectation = (
 
 /**
  * "Provide this ROM" card for a rom check with no ROM behind it yet - a
- * patches-only bundle, a patch that declares its source ROM, or a checksum the
+ * patches-only weave, a patch that declares its source ROM, or a checksum the
  * user pasted. Styled like the ROM card it becomes once the input lands; only
  * the meta note marks it expected. When the check identifies against the local
  * data the card is titled with that ROM and its Expected group merges the
@@ -231,7 +231,7 @@ const compareRomExpectation = (
  */
 const RomExpectationCard = ({
   expectation,
-  id = "rom-weaver-bundle-rom-expectation",
+  id = "rom-weaver-weave-rom-expectation",
   identification,
   onRemove,
   removeLabel,
@@ -270,7 +270,7 @@ const RomExpectationCard = ({
     ? { displayName: title, fileName: localizer.message("ui.sourceInfo.expectedRom") }
     : { fileName: title };
   return (
-    <div className="cards bundle-rom-expectation" id={id}>
+    <div className="cards weave-rom-expectation" id={id}>
       <FileCard
         meta={<span>{localizer.message(ROM_EXPECTATION_META[expectation.source])}</span>}
         name={<ExtractName {...extractName} />}

@@ -26,7 +26,7 @@ Every way to install the rom-weaver command-line tool: package managers, verifie
 
 Every method here installs a binary built for the release: macOS arm64 and x86-64; Linux x86-64 GNU plus x86-64, arm64, and i686 musl; and Windows arm64, x86-64, and x86.
 
-Some install methods deliver only the executable, so two extra steps finish them: `rom-weaver man --install` for the manpages, and `rom-weaver setup` for the identify and cheat databases. `identify`, `probe --identify`, and cheat baking read that data; other operations can also use it for title lookup and bundle checks. Raw cheat codes supplied with `--code` do not need the database.
+Some install methods deliver only the executable, so two extra steps finish them: `rom-weaver man --install` for the manpages, and `rom-weaver setup` for the identify and cheat databases. `identify`, `probe --identify`, and cheat baking read that data; other operations can also use it for title lookup and weave checks. Raw cheat codes supplied with `--code` do not need the database.
 
 | Method | Manpages | Identify and cheat data |
 | --- | --- | --- |

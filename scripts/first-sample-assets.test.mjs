@@ -58,7 +58,7 @@ test("generated first-create and first-weave archives contain a runnable NES pat
   assert.deepEqual([...createEntries.keys()], ["hello-world.nes", "modified-world.nes"]);
   assert.deepEqual(
     [...weaveEntries.keys()],
-    ["rom-weaver-bundle.json", "hello-world.nes", "hello-to-rom.ips", "world-to-weaver.ips"],
+    ["rom-weaver-weave.json", "hello-world.nes", "hello-to-rom.ips", "world-to-weaver.ips"],
   );
   assert.equal(createEntries.get("hello-world.nes")?.subarray(0, 4).toString("hex"), "4e45531a");
   assert.deepEqual(createEntries.get("hello-world.nes"), assets.originalRom);
@@ -100,7 +100,7 @@ test("generated first-create and first-weave archives contain a runnable NES pat
     assets.wovenRom,
   );
 
-  const manifest = JSON.parse(weaveEntries.get("rom-weaver-bundle.json"));
+  const manifest = JSON.parse(weaveEntries.get("rom-weaver-weave.json"));
   assert.equal(manifest.rom.path, "hello-world.nes");
   assert.deepEqual(
     manifest.patches.map((patch) => patch.path),

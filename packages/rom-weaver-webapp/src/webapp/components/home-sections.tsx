@@ -90,12 +90,12 @@ const HOME_ROUTES: readonly HomeRoute[] = [
     title: "ui.home.routeChecksum",
   },
   {
-    body: "ui.home.routeBundleBody",
+    body: "ui.home.routeWeaveBody",
     file: "patch-chain.zip",
-    go: "ui.home.goBundle",
-    slug: "bundle-patches",
+    go: "ui.home.goWeave",
+    slug: "weave-patches",
     swatch: "wefts",
-    title: "ui.home.routeBundle",
+    title: "ui.home.routeWeave",
   },
 ];
 

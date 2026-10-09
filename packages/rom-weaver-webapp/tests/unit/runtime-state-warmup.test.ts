@@ -51,7 +51,7 @@ describe("runtime state with offline warm-up gating", () => {
     expect(offlineWarmupPercent({ cachedBytes: 50, ready: false, totalBytes: 100 })).toBe(50);
     expect(offlineWarmupPercent({ cachedBytes: 100, ready: false, totalBytes: 100 })).toBe(99);
 
-    // No size map (dev, or an older bundle): entry counts carry the percent.
+    // No size map (dev, or an older weave): entry counts carry the percent.
     expect(offlineWarmupPercent({ ...precache, cachedBytes: 0, totalBytes: 0, totalFiles: 20 })).toBe(15);
 
     expect(offlineWarmupPercent({ cachedBytes: 100, ready: true, totalBytes: 100 })).toBeNull();
