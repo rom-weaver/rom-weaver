@@ -226,7 +226,7 @@ const getWeaveSampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer
     title: localizer.message("ui.apply.weaveTutorial.patches.title"),
   },
   {
-    actions: [["package", localizer.message("ui.apply.weaveTutorial.weavePatches")]],
+    actions: [["weave", localizer.message("ui.apply.weaveTutorial.weavePatches")]],
     body: localizer.message("ui.apply.weaveTutorial.safeWeave.body"),
     openDrawers: true,
     placement: "top",
@@ -234,7 +234,7 @@ const getWeaveSampleTutorialSteps = (localizer: ReturnType<typeof useUiLocalizer
     title: localizer.message("ui.apply.weaveTutorial.safeWeave.title"),
   },
   {
-    actions: [["package", localizer.message("ui.weaveExport.share")]],
+    actions: [["weave", localizer.message("ui.weaveExport.share")]],
     body: localizer.message("ui.apply.weaveTutorial.download.body"),
     cta: "#rom-weaver-button-export-weave",
     openDrawers: true,

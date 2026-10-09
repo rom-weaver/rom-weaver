@@ -5,12 +5,12 @@ import {
   Gamepad,
   Hash,
   House,
-  Package,
   PackageOpen,
   RotateCcw,
   Save as SaveIcon,
   ScanSearch,
   Scissors,
+  Spool,
   Stamp,
   Undo2,
 } from "lucide-react";
@@ -105,7 +105,7 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   {
     group: "patches",
     href: "weave-patches",
-    icon: <Package aria-hidden="true" />,
+    icon: <Spool aria-hidden="true" />,
     id: "weave",
     label: "Weave Patches",
     railLabel: "Weave",

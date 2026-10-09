@@ -1,4 +1,4 @@
-import { Download, Share2, TriangleAlert } from "lucide-react";
+import { Spool, TriangleAlert } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   postApplyDownloadBehaviorOption,
@@ -215,7 +215,7 @@ const WeaveExportAction = ({
       onClick={() => void weaveExport.runExport()}
       type="button"
     >
-      {weaveExport.downloadable ? <Download aria-hidden="true" /> : <Share2 aria-hidden="true" />}
+      <Spool aria-hidden="true" />
       {weaveActionLabel}
     </button>
   );

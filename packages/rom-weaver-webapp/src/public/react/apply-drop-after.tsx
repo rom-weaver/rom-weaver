@@ -174,7 +174,7 @@ export const ApplySampleStart = ({
             secondaryHref: resolveGuidedSampleHref(assetBaseUrl, "apply-cheats"),
             secondaryLabel: "Apply cheats to a ROM",
           })}
-      startAction={weavePage ? "package" : "apply"}
+      startAction={weavePage ? "weave" : "apply"}
     />
   );
 };
