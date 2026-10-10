@@ -35,30 +35,11 @@ For a compressed-disc practice run, [patch a supplied CHD](../tutorials/patch-co
 
 ## What do you need?
 
-You need the patch and your own copy of the exact game release it was made for. The files have different roles:
+Keep a clean copy of the exact ROM release the patch requires, the patch file, and the author's notes. Check region, revision, checksum algorithm and digest, header state, and patch order. A ZIP/7z/RAR is a container, not a patch format; the downloaded output is a new ROM, not your Original.
 
-- **Original ROM:** the starting game file named by the patch author. Add it to Apply alongside the patch. Keep a clean copy.
-- **Patch:** a file such as `.bps`, `.ips`, or `.xdelta` that describes changes to the original ROM.
-- **Archive:** a ZIP, 7z, or RAR that can contain a ROM, a patch, or both. Its extension identifies the archive, not the patch format.
-- **Output ROM:** the new game file created by applying the patch. This is the result you download and use in a compatible emulator or on supported hardware.
+Use the supplied patch format. Renaming or converting it does not fix a source mismatch. See [patch formats](../explanation/patch-formats.md), [checksum evidence](../explanation/how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not), or the [tool comparison](../explanation/comparisons.md#applying-a-patch).
 
-Use the patch format supplied by its author. Changing formats does not fix a ROM mismatch. [Patch format differences](../explanation/patch-formats.md) explains which formats carry checksums. For other tools, see the [ROM patcher comparison](../explanation/comparisons.md#applying-a-patch).
-
-Keep the patch author's notes open. Look for:
-
-- region, such as USA, Japan, or Europe;
-- revision, such as Rev 0 or Rev 1;
-- a checksum and its algorithm;
-- whether the ROM has a header;
-- the required order when there is more than one patch.
-
-Compare the checksum, not just the filename. [How patching works](../explanation/how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not) explains the difference.
-
-If you know the ROM but do not have the file, type its checksum or its game name into **Identify by checksum or game name**. It sits under the drop zone on the empty page, and in **0x02 ROM** once a patch is loaded. A checksum shows the expected ROM directly. A name lists the matching games on every system; choose one, then choose its region or revision. Either way the card shows the expected ROM: its title, its region and revision, and every checksum and the size the local identification data holds. Nothing is uploaded.
-
-The search appears only while nothing else names the ROM. A weave entry, or a patch that records its own source, already answers the question.
-
-Keep one clean original somewhere safe. rom-weaver writes a separate result, but a known-good copy makes updates and troubleshooting much easier.
+To look up an expected ROM without its file, use **Identify by checksum or game name** below the empty drop zone or in **0x02 ROM**. Search a checksum directly, or choose a game, system, region, and revision. The card shows locally indexed checksums and size; nothing is uploaded. This search appears only when a weave or patch has not already identified the expected source.
 
 ## Add the files
 
@@ -73,19 +54,15 @@ The page changes after the files are understood. **ROM** holds the game, **Patch
 
 Use [cheats](use-browser-cheats.md) to add supported codes to that order. To change only the container, follow [Convert a ROM](convert-roms-browser.md).
 
-For a practice run, open [guided Apply](https://rom-weaver.com/apply-patches?guide=apply). It starts on this drop zone and waits for you to add files; choose **Continue** on its card to use the practice files if you have none. The [guided Apply cheats tour](https://rom-weaver.com/apply-patches?guide=apply-cheats) loads a supplied homebrew ROM and a working sample code. [Ways files get into Apply](../reference/guided-runs.md#ways-files-get-into-apply) lists every route in one table.
+[Guided Apply](https://rom-weaver.com/apply-patches?guide=apply) waits for your files; choose **Continue** with none to load practice files. The [cheats tour](https://rom-weaver.com/apply-patches?guide=apply-cheats) supplies homebrew and a sample code. [Input routes](../reference/guided-runs.md#ways-files-get-into-apply) lists other ways to add files.
 
 ## Apply a BPS patch
 
-Apply a BPS patch online using the clean source ROM specified by its author:
+1. [Add the `.bps` patch and clean ROM](#add-the-files), together or in a supported archive.
+2. Open **Checks**. BPS records the expected source checksum; resolve any [source mismatch](fix-checksum-errors.md).
+3. [Choose the output and apply](#choose-the-output-and-apply). Keep a plain file unless the author or emulator requires compression.
 
-1. Open [Apply](https://rom-weaver.com/apply-patches).
-2. Add the `.bps` patch and the clean ROM named by its author to **0x01 Inputs**. You can add them together, including inside a supported archive.
-3. Wait for the files to be read. Check the ROM's region and revision against the author's notes, then open **Checks** to inspect the patch's source check. BPS records the expected source checksum; if it fails, follow [Fix a source ROM checksum mismatch](fix-checksum-errors.md).
-4. Set the output name. Choose a plain output file unless your emulator or the patch author requires a compressed format.
-5. Choose **APPLY & DOWNLOAD** after the checks match. Use the downloaded output ROM and keep your clean original for future patches.
-
-For several patches, follow [Put several patches in order](#put-several-patches-in-order). The [CLI Apply guide](cli-apply.md) has the terminal command for the same BPS workflow.
+For multiple patches, check the [order and inputs](#put-several-patches-in-order). See [CLI Apply](cli-apply.md) for terminal use.
 
 ## Apply an IPS or IPS32 patch
 
@@ -165,15 +142,7 @@ The On or Off switch temporarily skips a patch. This is useful for optional add-
 
 After changing an input, the order, or a switch, read each patch's **Checks** summary again. **Input checks** describe the state the patch was authored for. An embedded **Output** check describes that patch's standalone result. It does not verify a combined result when earlier patches changed the same source.
 
-For example, suppose a project supplies `translation.bps` and `translation-fix.bps`. Its notes say the fix requires the translated ROM.
-
-1. Add the clean ROM and both patches to **0x01 Inputs**.
-2. Put `translation.bps` first and set its input to **Original ROM**.
-3. Put `translation-fix.bps` second and set its input to **Previous patch output**.
-4. Open **Checks** on both cards and resolve any input mismatches.
-5. Choose the output format, select **APPLY & DOWNLOAD**, and save the result.
-
-This example is hypothetical. Use the order and input states from your patch author's notes.
+For a reproducible example, [patch the supplied synthetic CHD](../tutorials/patch-compressed-disc.md): `01-first.bps` reads the Original and `02-second.bps` requires its output. The tutorial provides intermediate and final checksums. For your files, use the author's tested order and input states.
 
 ## Add cheats to the patch order
 
