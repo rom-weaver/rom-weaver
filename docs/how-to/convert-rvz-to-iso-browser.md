@@ -2,6 +2,8 @@
 
 Extract a GameCube or Wii RVZ disc image to ISO locally in your browser. Use this RVZ to ISO converter without uploading your disc.
 
+[Open the RVZ to ISO tool](https://rom-weaver.com/extract).
+
 <!-- START doctoc -->
 ## Table of contents
 
@@ -25,7 +27,11 @@ Extract accepts one archive or disc image at a time. Add another file only after
 
 RVZ stores GameCube and Wii disc data efficiently. ISO has wider tool compatibility but usually needs more storage.
 
-Make sure the browser and destination have enough free space for the extracted ISO. Keep the RVZ until you test the ISO.
+Use the uncompressed ISO size to plan space, not the smaller RVZ download size. The browser needs working storage, and saving the result needs destination space too. There is no single maximum disc size guaranteed across devices: browser storage quota, available memory, and free disk space all matter. Keep the tab open and the device awake until the download finishes.
+
+For example, `my-disc.rvz` is listed as `my-disc.iso` after extraction. Check the listed size before downloading. If you retained the ISO used to create that RVZ, compare the two ISO checksums using [Checksum file](https://rom-weaver.com/checksum); do not compare the RVZ checksum with the ISO checksum. Keep the RVZ until you test the ISO in the intended tool or emulator.
+
+If extraction stops with a storage or memory error, free space and retry one disc in a fresh session. A smaller practice file succeeding does not establish that the full disc fits. If it still fails, use the [native extraction workflow](work-with-archives.md) on a computer with sufficient space.
 
 For other inputs, use [Extract files](extract-files-browser.md). [Choosing a compression format](../explanation/compression-formats.md) compares RVZ with other containers.
 

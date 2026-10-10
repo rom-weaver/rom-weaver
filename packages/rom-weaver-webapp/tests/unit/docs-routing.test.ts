@@ -124,6 +124,14 @@ describe("groupDocNavigationRoutes", () => {
     expect(new Set(topicSlugs)).toEqual(new Set(howToSlugs));
   });
 
+  it("makes the author integration kit discoverable with patching guides", () => {
+    const authorGuide = DOC_SOURCES.find((source) => source.slug === "docs/add-apply-button");
+    expect(authorGuide?.file).toBe("how-to/add-apply-button.md");
+    expect(readDocsSlugFromPathname("/docs/add-apply-button")).toBe("docs/add-apply-button");
+    const patching = shelves.find((shelf) => shelf.title === "Patching & weaves");
+    expect(patching?.routes.map((route) => route.slug)).toContain("docs/add-apply-button");
+  });
+
   it("keeps tutorials separate from the source-folder grouping", () => {
     const practice = shelves.find((shelf) => shelf.title === "Walkthroughs");
     expect(practice?.routes.map((route) => route.slug)).toEqual([

@@ -2,6 +2,8 @@
 
 Decompress CHD locally in your browser without uploading it. DVDs produce ISO, CDs BIN/CUE, and Dreamcast GD-ROMs GDI with tracks.
 
+[Open the CHD extraction tool](https://rom-weaver.com/extract).
+
 <!-- START doctoc -->
 ## Table of contents
 
@@ -31,6 +33,12 @@ Keep the CUE or GDI sheet and tracks together with their original filenames. Use
 
 ## Check the result and storage
 
-Allow space for the uncompressed disc and download. Test it in your emulator before removing the CHD. Keep this page open until downloading finishes.
+Plan for the uncompressed disc, browser working storage, and the downloaded files. A small CHD can expand substantially. Browser quotas, free disk space, and memory vary by device; no fixed maximum CHD size is guaranteed. Keep this page open and the device awake until downloading finishes.
+
+For a safe example with a known result, the [synthetic compressed-disc tutorial](../tutorials/patch-compressed-disc.md) supplies a CHD and two patches. After its patching steps, **One BIN file** produces a 32,768-byte BIN with SHA-1 `ebce631d802abe7c450e3f6cb658f9679701fdd6`. That checksum applies to the patched, extracted BIN, not the original CHD or its CUE sheet. Compare it with [Checksum file](https://rom-weaver.com/checksum).
+
+For your own disc, confirm that all expected tracks are present and test it in your intended emulator before removing the CHD. A CD yielding BIN/CUE instead of ISO is an expected result. If an emulator asks for a missing track, keep the sheet and every referenced track together and undo any filename changes.
+
+If extraction reports insufficient storage or memory, free space and retry one disc. If it still fails, use the [native extraction workflow](work-with-archives.md). Do not treat a successful tiny example as a capacity test for a multi-gigabyte disc.
 
 To compress the disc again, follow [Convert ISO or BIN/CUE to CHD](convert-to-chd-browser.md). For other inputs, follow [Extract files](extract-files-browser.md).

@@ -4,7 +4,12 @@ Fix a source ROM checksum mismatch by checking the starting ROM, its region and 
 
 Use these steps when Apply shows **Not the expected ROM** or **The patch checks did not match this ROM.** Bypassing verification does not repair the input.
 
-Use [Identify](identify-roms-browser.md) to check an unknown file. Return to [Apply](apply-rom-patches.md) after the expected and actual checks match.
+Start with [Identify](https://rom-weaver.com/identify-rom) for an unknown file, or [Checksum file](https://rom-weaver.com/checksum) when the author supplied a digest. Return to [Apply](https://rom-weaver.com/apply-patches) only after the expected and actual checks match.
+
+- No expected checksum in the release notes? Ask the author for the source's region, revision, header state, and checksum. A filename alone cannot settle the mismatch.
+- Comparing a ZIP, RVZ, or CHD with a raw-ROM checksum? Check the selected extracted ROM or track instead; container and content hashes are different.
+- The first patch passes, but the next fails? Check [patch order and inputs](#wrong-patch-order) before changing the clean ROM.
+- Only the expected filename differs, while size and checksums match? The filename is advisory; review [which messages are strict](#which-messages-are-strict).
 
 <!-- START doctoc -->
 ## Table of contents
