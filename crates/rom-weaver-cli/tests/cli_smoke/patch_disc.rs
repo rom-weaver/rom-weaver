@@ -1280,3 +1280,273 @@ fn patch_apply_disc_preserves_distinct_unicode_sheet_extensions() {
         apply_ips_literal(track02, DISC_PATCH_OFFSET, &disc_patch_payload())
     );
 }
+
+#[test]
+fn patch_apply_disc_rebases_absolute_cue_references() {
+    assert_rebased_disc_reference("cue", true, "original.bin");
+}
+
+#[test]
+fn patch_apply_disc_rebases_parent_cue_references_inside_output_directory() {
+    assert_rebased_disc_reference("cue", false, "original.bin");
+}
+
+#[test]
+fn patch_apply_disc_rebases_absolute_gdi_references() {
+    assert_rebased_disc_reference("gdi", true, "original.bin");
+}
+
+#[test]
+fn patch_apply_disc_rebases_parent_gdi_references_inside_output_directory() {
+    assert_rebased_disc_reference("gdi", false, "original.bin");
+}
+
+#[test]
+fn patch_apply_disc_rebases_unicode_source_names_portably() {
+    for name in ["Ä.bin", "ä.bin", "é.bin", "e\u{301}.bin", "日本語.bin"] {
+        assert_rebased_disc_reference("cue", false, name);
+    }
+}
+
+fn assert_rebased_disc_reference(extension: &str, absolute: bool, name: &str) {
+    let temp = setup_temp_dir();
+    let source = temp.child(format!("input/{name}"));
+    fs::create_dir_all(temp.child("input/sheets").path()).expect("input directory");
+    let original = vec![0x41; 2352 * 2];
+    fs::write(source.path(), &original).expect("source track");
+    let sheet = temp.child(format!("input/sheets/disc.{extension}"));
+    let reference = if absolute {
+        source.path().to_string_lossy().into_owned()
+    } else {
+        format!("../{name}")
+    };
+    let text = if extension == "cue" {
+        format!(
+            "REM preserve this comment\r\nFILE \"{reference}\" BINARY\r\n  TRACK 01 MODE1/2352\r\n    INDEX 01 00:00:00\r\n"
+        )
+    } else {
+        format!("1\r\n1 0 4 2352 \"{reference}\" 0\r\n")
+    };
+    sheet.write_str(&text).expect("sheet");
+    let patch = temp.child("change.ips");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 100,
+                data: b"patched".to_vec(),
+            }],
+            None,
+        ),
+    )
+    .expect("patch");
+    let output = temp.child(format!("output/sheets/disc.{extension}"));
+    let scratch = temp.child("scratch");
+    fs::create_dir(scratch.path()).expect("scratch");
+    let result = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .env("TMPDIR", scratch.path())
+        .env("TMP", scratch.path())
+        .env("TEMP", scratch.path())
+        .args([
+            "patch",
+            "apply",
+            "--input",
+            sheet.path().to_str().unwrap(),
+            "--patch",
+            patch.path().to_str().unwrap(),
+            "--no-compress",
+            "--output",
+            output.path().to_str().unwrap(),
+            "--json",
+        ])
+        .output()
+        .expect("run patch apply");
+    assert_eq!(
+        fs::read(source.path()).expect("source"),
+        original,
+        "source bytes must remain unchanged"
+    );
+    assert_eq!(
+        fs::read_to_string(sheet.path()).expect("source sheet"),
+        text
+    );
+    assert!(
+        result.status.success(),
+        "valid source references must remain supported: {}",
+        String::from_utf8_lossy(&result.stdout)
+    );
+    assert!(
+        !temp.child(format!("output/{name}")).path().exists(),
+        "track output must not escape the requested sheet directory"
+    );
+    let refs = rom_weaver_core::enumerate_disc_sheet_refs(output.path())
+        .expect("output refs")
+        .referenced_files;
+    assert_eq!(refs.len(), 1);
+    let output_name = &refs[0];
+    assert!(output_name.is_ascii());
+    assert_eq!(Path::new(output_name).components().count(), 1);
+    if name.is_ascii() {
+        assert_eq!(output_name, name);
+    }
+    assert_eq!(
+        fs::read(temp.child("output/sheets").path().join(output_name)).expect("patched track"),
+        apply_ips_literal(original, 100, b"patched")
+    );
+    assert_eq!(
+        fs::read_to_string(output.path()).expect("sheet"),
+        text.replace(&reference, output_name)
+    );
+}
+
+#[test]
+fn patch_apply_disc_rebases_colliding_names_across_cue_and_gdi() {
+    let temp = setup_temp_dir();
+    for folder in ["left", "right", "input"] {
+        fs::create_dir_all(temp.child(folder).path()).expect("track directory");
+        fs::write(
+            temp.child(format!("{folder}/track.bin")).path(),
+            vec![folder.as_bytes()[0]; 2352 * 2],
+        )
+        .expect("track");
+    }
+    let cue = temp.child("input/disc.cue");
+    cue.write_str("REM ../left/track.bin must remain in this comment\nFILE \"../left/track.bin\" BINARY\n TRACK 01 MODE1/2352\n INDEX 01 00:00:00\nFILE track.bin BINARY\n TRACK 02 AUDIO\n INDEX 01 00:00:00\n").expect("cue");
+    temp.child("input/disc.gdi").write_str("3\n1 0 4 2352 \"../left/track.bin\" 0\n2 2 0 2352 track.bin 0\n3 45000 4 2352 \"../right/track.bin\" 0\n").expect("gdi");
+    let patch = temp.child("change.ips");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 100,
+                data: b"patched".to_vec(),
+            }],
+            None,
+        ),
+    )
+    .expect("patch");
+    let output = temp.child("out/disc.cue");
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            cue.path().to_str().unwrap(),
+            "--patch",
+            patch.path().to_str().unwrap(),
+            "--target",
+            "../left/track.bin",
+            "--no-compress",
+            "--output",
+            output.path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    let cue_refs = rom_weaver_core::enumerate_disc_sheet_refs(output.path())
+        .expect("cue refs")
+        .referenced_files;
+    let gdi_refs = rom_weaver_core::enumerate_disc_sheet_refs(temp.child("out/disc.gdi").path())
+        .expect("gdi refs")
+        .referenced_files;
+    assert_eq!(cue_refs, gdi_refs[..2]);
+    assert_eq!(gdi_refs.len(), 3);
+    assert_eq!(
+        gdi_refs[1], "track.bin",
+        "existing simple names retain priority"
+    );
+    let unique: std::collections::BTreeSet<_> = gdi_refs.iter().collect();
+    assert_eq!(unique.len(), 3, "rebased names must not collide");
+    for (index, folder) in ["left", "input", "right"].iter().enumerate() {
+        let original = vec![folder.as_bytes()[0]; 2352 * 2];
+        assert_eq!(
+            fs::read(temp.child(format!("{folder}/track.bin")).path()).expect("source"),
+            original
+        );
+        let expected = if index == 0 {
+            apply_ips_literal(original, 100, b"patched")
+        } else {
+            original
+        };
+        assert_eq!(
+            fs::read(temp.child("out").path().join(&gdi_refs[index])).expect("output track"),
+            expected
+        );
+        assert_eq!(Path::new(&gdi_refs[index]).components().count(), 1);
+    }
+    assert!(
+        fs::read_to_string(output.path())
+            .expect("cue")
+            .starts_with("REM ../left/track.bin must remain in this comment\n")
+    );
+}
+
+#[test]
+fn patch_apply_disc_rejects_references_that_differ_only_by_case_unless_same_file() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("a.bin").path(), vec![1u8; 2352 * 4]).expect("a.bin");
+    let case_insensitive = temp.child("A.BIN").path().exists();
+    if !case_insensitive {
+        fs::write(temp.child("A.BIN").path(), vec![2u8; 2352 * 4]).expect("A.BIN");
+    }
+    temp.child("disc.cue")
+        .write_str(
+            "FILE a.bin BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\nFILE A.BIN BINARY\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\n",
+        )
+        .expect("cue");
+    let patch = temp.child("patch.ips");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: DISC_PATCH_OFFSET as u32,
+                data: disc_patch_payload(),
+            }],
+            None,
+        ),
+    )
+    .expect("patch");
+    let output = temp.child("out/disc.cue");
+    let json = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--no-compress",
+            "--target",
+            "a.bin",
+            "-i",
+            temp.child("disc.cue").path().to_str().expect("cue path"),
+            "--patch",
+            patch.path().to_str().expect("patch path"),
+            "-o",
+            output.path().to_str().expect("output path"),
+            "--jsonl",
+        ],
+        if case_insensitive { 0 } else { 1 },
+    );
+    assert_eq!(
+        fs::read(temp.child("a.bin").path()).expect("original track"),
+        vec![1u8; 2352 * 4]
+    );
+    if case_insensitive {
+        assert_eq!(json["status"], "succeeded");
+        assert_eq!(
+            fs::read(temp.child("out/a.bin").path()).expect("patched track"),
+            apply_ips_literal(
+                vec![1u8; 2352 * 4],
+                DISC_PATCH_OFFSET,
+                &disc_patch_payload()
+            )
+        );
+    } else {
+        assert_eq!(json["status"], "failed");
+        assert!(
+            json["label"]
+                .as_str()
+                .expect("label")
+                .contains("differ only by case")
+        );
+        assert!(!output.path().exists());
+    }
+}

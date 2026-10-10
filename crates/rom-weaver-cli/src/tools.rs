@@ -182,7 +182,7 @@ impl CliApp {
         ];
         let mut outputs = vec![output.clone()];
         if let Some(disc) = &disc {
-            sources.extend(Self::disc_output_paths(disc, self.primary_disc_sheet(disc)));
+            sources.extend(Self::disc_source_paths(disc));
             if !compression_options.enabled {
                 outputs = Self::disc_output_paths(disc, &output);
             }
