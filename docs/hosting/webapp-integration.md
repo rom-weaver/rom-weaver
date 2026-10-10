@@ -73,7 +73,11 @@ For the prebuilt app, dispatch after its module loads:
 ```js
 document.dispatchEvent(
   new CustomEvent("rom-weaver:ingest", {
-    detail: ["/work/rom-weaver-imports/rom-weaver-weave.json"],
+    detail: [
+      "/work/rom-weaver-imports/rom-weaver-weave.json",
+      "/work/rom-weaver-imports/game.bin",
+      "/work/rom-weaver-imports/change.ips",
+    ],
   }),
 );
 ```
