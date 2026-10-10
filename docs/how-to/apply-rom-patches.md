@@ -1,8 +1,10 @@
-# ROM patcher online: apply BPS, IPS, UPS, and xdelta patches
+# How to apply BPS, IPS, UPS, and xdelta patches
 
-Patch your own ROM locally, then download a new file. Your Original stays untouched; no upload or account is needed.
+Apply BPS, IPS, UPS, or xdelta patches to your own ROM in the browser. Check the source, choose an output, and download the patched file. No uploads or account.
 
 <a id="apply-bps-ips-ups-and-xdelta-rom-patches-online"></a>
+
+<a id="rom-patcher-online-apply-bps-ips-ups-and-xdelta-patches"></a>
 
 <!-- START doctoc -->
 ## Table of contents
@@ -45,7 +47,12 @@ New here? [Your first patch](../tutorials/first-patch.md) supplies homebrew file
 
 ## Apply a BPS patch
 
-Add the `.bps` and clean source. Open **Checks**: BPS carries the expected source checksum. Resolve any [mismatch](fix-checksum-errors.md), then [choose the output and apply](#choose-the-output-and-apply). For multiple patches, check [order and inputs](#put-several-patches-in-order).
+1. Open [Apply](https://rom-weaver.com/apply-patches) and add your clean ROM and `.bps` file to **0x01 Inputs**.
+2. Wait for checksumming, then open **Checks**. BPS stores the expected source CRC32; resolve any [mismatch](fix-checksum-errors.md) before continuing.
+3. In **Apply**, choose the output name and format, then select **APPLY & DOWNLOAD**.
+4. Save the new ROM and [test it](test-roms-in-browser.md#test-an-apply-result). Your Original stays untouched.
+
+A `.bps` file is a patch, not a playable ROM. For multiple patches, check [order and inputs](#put-several-patches-in-order); for output options, see [choose the output and apply](#choose-the-output-and-apply).
 
 ## Apply an IPS or IPS32 patch
 
