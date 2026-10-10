@@ -664,17 +664,21 @@ let appPumpChain: Promise<unknown> = Promise.resolve();
 let appPumpGeneration = 0;
 let offlineCopyRequestedEnabled = true;
 let coreRefillNeeded = true;
-const pumpOfflineFiles = (onInterim: (progress: unknown) => void) => {
+const pumpOfflineFiles = (onInterim: (progress: unknown) => void, identifyGroupIds?: string[]) => {
   // A pause MUST stop refilling both active pumps and pumps waiting for cache reads.
   const generation = appPumpGeneration;
   const process = async () => {
-    if (generation !== appPumpGeneration || !offlineCopyRequestedEnabled || !(await offlineCopyPolicy.isEnabled())) {
+    const enabled = await offlineCopyPolicy.isEnabled();
+    if (generation !== appPumpGeneration || !offlineCopyRequestedEnabled || !enabled) {
       return {
         ...(await offlineWarmup.getReadyState()),
         enabled: await offlineCopyPolicy.isEnabled(),
         ready: false,
       };
     }
+    // Automatic identify requests on data saver must not refill the app or
+    // emulator caches before reaching the requested group.
+    if (identifyGroupIds) return offlineWarmup.runNextUnit(onInterim, identifyGroupIds);
     const baseline = await offlineWarmup.getReadyState();
     if (coreRefillNeeded) corePrecache.setSizes(await loadPrecacheSizes());
     let coreCachedBytes = coreRefillNeeded ? (await corePrecache.state()).cachedBytes : 0;
@@ -957,8 +961,12 @@ self.addEventListener("message", (event) => {
   if (event.data.action === "offline-warmup-pump") {
     // Interim byte-level events stream over the same reply port while the
     // unit downloads; the final "offline-warmup-progress" message ends the pump.
-    const pump = pumpOfflineFiles((interim) =>
-      replyTo({ action: "offline-warmup-interim", ...(interim as Record<string, unknown>) }),
+    const identifyGroupIds = Array.isArray(event.data.identifyGroupIds)
+      ? event.data.identifyGroupIds.filter((id: unknown): id is string => typeof id === "string")
+      : undefined;
+    const pump = pumpOfflineFiles(
+      (interim) => replyTo({ action: "offline-warmup-interim", ...(interim as Record<string, unknown>) }),
+      identifyGroupIds,
     )
       .then((progress) => ({ action: "offline-warmup-progress", ...progress }))
       .catch((error) => ({ action: "offline-warmup-failed", error: formatError(error) }));

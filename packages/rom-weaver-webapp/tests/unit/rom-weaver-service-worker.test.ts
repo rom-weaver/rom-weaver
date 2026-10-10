@@ -1227,6 +1227,42 @@ describe("offline warm-up messages", () => {
     return replies;
   };
 
+  it("routes a group-only pump without downloading the app precache", async () => {
+    const harness = await loadWorker();
+    const replies = await collect(harness, {
+      action: "offline-warmup-pump",
+      identifyGroupIds: ["optional-computers", 7, null],
+    });
+    expect(harness.warmup.runNextUnit).toHaveBeenCalledWith(expect.any(Function), ["optional-computers"]);
+    expect(harness.fetchStub.calls).toEqual([]);
+    expect(replies.at(-1)).toMatchObject({ action: "offline-warmup-progress" });
+  });
+
+  it("discards a queued group-only pump after a pause", async () => {
+    const harness = await loadWorker();
+    let release: () => void = () => undefined;
+    vi.mocked(harness.warmup.runNextUnit).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ bytes: 12, files: 1 });
+        }),
+    );
+    const request = { action: "offline-warmup-pump", identifyGroupIds: ["optional-computers"] };
+    const first = collect(harness, request);
+    await vi.waitFor(() => expect(harness.warmup.runNextUnit).toHaveBeenCalledOnce());
+    const queued = collect(harness, request);
+    try {
+      await dispatch(harness.scope, "message", { data: { action: "offline-warmup-pause" } });
+      release();
+      await Promise.all([first, queued]);
+      expect(harness.warmup.runNextUnit).toHaveBeenCalledOnce();
+      expect(harness.fetchStub.calls).toEqual([]);
+    } finally {
+      release();
+      await Promise.all([first, queued]);
+    }
+  });
+
   it("streams interim progress and the final unit result for a pump", async () => {
     const harness = await loadWorker({ manifest: [] });
     vi.mocked(harness.warmup.runNextUnit).mockImplementation(async (onInterim) => {
