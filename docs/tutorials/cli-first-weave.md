@@ -30,7 +30,9 @@ rom-weaver patch apply --input first-weave.zip --output rom-weaver.nes
 rom-weaver checksum --input rom-weaver.nes --algo sha256
 ```
 
-The original ROM displays `HELLO WORLD`. One IPS patch changes `HELLO` to `ROM`, and the other changes `WORLD` to `WEAVER`. Both patches target the original ROM, so either order works. The final ROM displays `ROM WEAVER`. The final SHA-256 should be `7ac8001dcbcbff45cd5cebb5b0655192021fbbdf27533aa961347194ab3e836e`. Open the result in an NES emulator to run it.
+The original ROM displays `HELLO WORLD`. One IPS patch changes `HELLO` to `ROM`, and the other changes `WORLD` to `WEAVER`. Both patches target the original ROM, so either order works. The final ROM displays `ROM WEAVER`. Open the result in an NES emulator to run it.
+
+The final SHA-256 should be `7ac8001dcbcbff45cd5cebb5b0655192021fbbdf27533aa961347194ab3e836e`. `checksum` prints two SHA256 lines; compare the first. The `Header removed` line hashes the ROM without its 16-byte NES header.
 
 | Original ROM | After the first patch | After both patches |
 | :---: | :---: | :---: |
@@ -90,10 +92,11 @@ rom-weaver patch apply \
 rom-weaver checksum --input weave-rebuilt.nes --algo sha256
 ```
 
-The result should have the same SHA-256 as `rebuilt.nes`:
+The first line should match `rebuilt.nes`:
 
 ```text
-00639b0b8586e10c67d6d15217478786cebed6e2cd6495ed94b6a338c0de0afd
+SHA256  00639b0b8586e10c67d6d15217478786cebed6e2cd6495ed94b6a338c0de0afd
+Header removed / SHA256  e88e1682d0c56578bb33910764fceb780ced4be5438fb2e2a94932af1d80710b
 ```
 
 This sequence uses the same generated assets as the browser tours, so both interfaces start from identical bytes.

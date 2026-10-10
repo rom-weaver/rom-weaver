@@ -50,8 +50,7 @@ No vendored dependency has its own `rom-weaver-*` package.
 
 ## `libarchive`, inlined into `rom-weaver-containers`
 
-The libarchive C sources live at `crates/rom-weaver-containers/libarchive/vendor/libarchive/`, and `libarchive/build.rs` builds them with CMake. They are the only libarchive source rom-weaver builds - a local `cargo build` and a `cargo install
-rom-weaver-cli` compile the same tree.
+The libarchive C sources live at `crates/rom-weaver-containers/libarchive/vendor/libarchive/`, and `libarchive/build.rs` builds them with CMake. They are the only libarchive source rom-weaver builds - a local `cargo build` and a `cargo install rom-weaver-cli` compile the same tree.
 
 Local patches are developed in the fork [brandonocasey/libarchive](https://github.com/brandonocasey/libarchive), which keeps the reviewable history against upstream and is where a contribution back to upstream starts. The inlined copy is a snapshot of one fork commit, recorded in `crates/rom-weaver-containers/libarchive/vendor/LIBARCHIVE_VERSION`.
 

@@ -55,7 +55,7 @@ rom-weaver man --install
 rom-weaver setup
 ```
 
-Cargo installs the executable and nothing else. `rom-weaver man --install` writes the generated manpages, and `rom-weaver setup` downloads this version's identify and cheat databases into the per-user data directory. `identify`, `probe --identify`, and cheat baking need that data; the other commands do not.
+Cargo installs the executable and nothing else. `rom-weaver man --install` writes the generated manpages, and `rom-weaver setup` downloads this version's identify and cheat databases into the per-user data directory. `identify` and cheat baking need that data; the other commands do not.
 
 A source build links native C libraries and needs **Rust 1.95+**, **CMake**, **Clang**, and a native compiler toolchain. The crate's Cargo features (`typescript-types`, `wasm-app`) drive this project's own type generation and WASM entrypoint builds; they are not meant for external use.
 
@@ -121,4 +121,4 @@ Before v1.0, breaking changes increase the minor version. CLI flags and JSON out
 
 ## License
 
-Copyright © Brandon Casey. Licensed under [AGPL-3.0-or-later](https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE). Weaved third-party components retain their own licenses; release builds ship a generated `CLI_NOTICE` attribution and license inventory.
+Copyright © Brandon Casey. Licensed under [AGPL-3.0-or-later](https://github.com/rom-weaver/rom-weaver/blob/main/LICENSE). Bundled third-party components retain their own licenses; release builds ship a generated `CLI_NOTICE` attribution and license inventory.

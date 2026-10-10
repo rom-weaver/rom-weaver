@@ -155,6 +155,7 @@ Background on the engine, formats, and design decisions.
 ## Quick answers
 
 - [FAQ](faq.md): common questions, each pointing at the page that owns the answer.
+- [About](legal/about.md): who makes rom-weaver, its licence, and what it is built on.
 - [Privacy](legal/privacy.md): browser storage, logs, analytics, and network requests.
 - [Notices](https://rom-weaver.com/docs/notices): licensing and third-party components.
 

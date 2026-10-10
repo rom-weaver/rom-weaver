@@ -26,7 +26,7 @@ Every way to install the rom-weaver command-line tool: package managers, verifie
 
 Every method here installs a binary built for the release: macOS arm64 and x86-64; Linux x86-64 GNU plus x86-64, arm64, and i686 musl; and Windows arm64, x86-64, and x86.
 
-Some install methods deliver only the executable, so two extra steps finish them: `rom-weaver man --install` for the manpages, and `rom-weaver setup` for the identify and cheat databases. `identify`, `probe --identify`, and cheat baking read that data; other operations can also use it for title lookup and weave checks. Raw cheat codes supplied with `--code` do not need the database.
+Some install methods deliver only the executable, so two extra steps finish them: `rom-weaver man --install` for the manpages, and `rom-weaver setup` for the identify and cheat databases. `identify` and cheat baking read that data; other operations can also use it for title lookup and weave checks. Raw cheat codes supplied with `--code` do not need the database.
 
 | Method | Manpages | Identify and cheat data |
 | --- | --- | --- |
@@ -40,7 +40,7 @@ Some install methods deliver only the executable, so two extra steps finish them
 | mise | `rom-weaver man --install` | `rom-weaver setup` |
 | `cargo install` (source) | `rom-weaver man --install` | `rom-weaver setup` |
 
-Homebrew, the macOS/Linux install script, and global npm installs put the generated CLI manpages in a Unix manpath. The Windows installers store them under the installed package's `docs/man` directory. Cargo, cargo-binstall, and mise install the executable only; run `rom-weaver man --install` after any of them. The Docker image stores the pages under `/usr/local/share/man/man1`, but it has no `man(1)` program. See [Install shell completions](#install-shell-completions) for completion files, and [man pages](../reference/cli.md#man-pages) for the page commands.
+Cargo, cargo-binstall, and mise install the executable only; run `rom-weaver man --install` after any of them. [Man pages](../reference/cli.md#man-pages) lists where each install method puts the pages. See [Install shell completions](#install-shell-completions) for completion files.
 
 ## Homebrew (macOS arm64/Intel, Linux arm64/x86-64)
 
