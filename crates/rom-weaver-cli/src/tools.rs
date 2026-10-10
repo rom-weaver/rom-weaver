@@ -1,6 +1,23 @@
 use super::*;
 
 impl CliApp {
+    fn require_new_ppf_undo_outputs(outputs: &[PathBuf]) -> Result<()> {
+        for output in outputs {
+            trace!(output = %output.display(), "checking PPF undo output availability");
+            match fs::symlink_metadata(output) {
+                Ok(_) => {
+                    return Err(RomWeaverError::Validation(format!(
+                        "refusing to overwrite existing output `{}`; choose a different --output path",
+                        output.display()
+                    )));
+                }
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn run_tools(&self, command: ToolsCommands) -> AppRunOutcome {
         match command {
             ToolsCommands::PpfUndo(args) => self.run_ppf_undo(args),
@@ -268,6 +285,9 @@ impl CliApp {
             report.label.push_str(&format!("; {note}"));
         }
         context.cancel().check()?;
+        // Preserve undo/compression diagnostics, then validate every destination
+        // before publishing any part of a disc. Dangling links are occupied too.
+        Self::require_new_ppf_undo_outputs(&outputs)?;
         if let Some(parent) = output
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
@@ -277,10 +297,28 @@ impl CliApp {
         if let Some(disc) = &disc
             && !compression_options.enabled
         {
-            let note = self.write_disc_output(disc, &ready_output, &output)?;
-            report.label.push_str(&format!("; {note}"));
+            let staged_outputs = Self::disc_output_paths(disc, &ready_output);
+            // Install companions first and the primary sheet last. Publication
+            // itself is no-clobber, so a destination created after the preflight
+            // check is still preserved.
+            for (source, destination) in staged_outputs
+                .iter()
+                .zip(&outputs)
+                .skip(1)
+                .chain(staged_outputs.iter().zip(&outputs).take(1))
+            {
+                if let Some(parent) = destination.parent()
+                    && !parent.as_os_str().is_empty()
+                {
+                    fs::create_dir_all(parent)?;
+                }
+                Self::copy_to_new_output_file(source, destination)?;
+            }
+            report
+                .label
+                .push_str(&format!("; wrote full disc beside `{}`", output.display()));
         } else {
-            fs::copy(&ready_output, &output)?;
+            Self::copy_to_new_output_file(&ready_output, &output)?;
         }
         Ok(Self::attach_emitted_files_details(
             report,

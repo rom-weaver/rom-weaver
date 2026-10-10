@@ -1421,7 +1421,7 @@ impl CliApp {
         Self::copy_file_create_new(staged_path, destination_path)
     }
 
-    fn copy_to_new_output_file(source: &Path, destination: &Path) -> Result<()> {
+    pub(super) fn copy_to_new_output_file(source: &Path, destination: &Path) -> Result<()> {
         let mut source_file = File::open(source)?;
         let (staged_path, mut staged_file) = loop {
             let counter =

@@ -548,10 +548,13 @@ fn tools_ppf_undo_rejects_ambiguous_archives_and_accepts_payload_selectors() {
         );
         assert_eq!(fs::read(output.path()).expect("output"), b"keep output");
     }
+    // The selector success case uses a fresh destination; the earlier failure
+    // fixture remains user-owned and must never be overwritten.
+    let selected_output = temp.child("selected.gba");
     let report = undo_report(
         rom_archive.path(),
         patch_archive.path(),
-        output.path(),
+        selected_output.path(),
         &[
             "--select",
             "nested/patched.gba",
@@ -561,7 +564,11 @@ fn tools_ppf_undo_rejects_ambiguous_archives_and_accepts_payload_selectors() {
         0,
     );
     assert_eq!(report["status"], "succeeded");
-    assert_eq!(fs::read(output.path()).expect("output"), original);
+    assert_eq!(fs::read(selected_output.path()).expect("output"), original);
+    assert_eq!(
+        fs::read(output.path()).expect("preserved output"),
+        b"keep output"
+    );
 }
 
 #[test]
@@ -707,8 +714,13 @@ fn tools_ppf_undo_matching_bin_extension_requires_explicit_raw_output() {
             .contains("ambiguous between a raw ROM and a disc image")
     );
     assert_eq!(fs::read(output.path()).expect("output"), b"keep output");
-    undo_report(bin.path(), &patch, output.path(), &["--no-compress"], 0);
-    assert_eq!(fs::read(output.path()).expect("output"), original);
+    let raw_output = temp.child("restored-raw.bin");
+    undo_report(bin.path(), &patch, raw_output.path(), &["--no-compress"], 0);
+    assert_eq!(fs::read(raw_output.path()).expect("output"), original);
+    assert_eq!(
+        fs::read(output.path()).expect("preserved output"),
+        b"keep output"
+    );
 }
 
 #[test]
@@ -1004,4 +1016,146 @@ fn tools_ppf_undo_extracts_rvz_iso_payload_and_compresses_restored_output() {
         original
     );
     assert_eq!(fs::read(iso.path()).expect("source ISO"), modified);
+}
+
+#[test]
+fn tools_ppf_undo_preserves_existing_outputs_for_valid_patches() {
+    let temp = setup_temp_dir();
+    let (rom, patch, _, modified) = undo_fixture(&temp);
+    let patch_bytes = fs::read(&patch).expect("patch fixture");
+    for (name, options, final_name) in [
+        ("restored.gba", vec!["--no-compress"], "restored.gba"),
+        ("restored.zip", vec![], "restored.zip"),
+        ("appended", vec!["--compress-format", "zip"], "appended.zip"),
+    ] {
+        let output = temp.child(name);
+        let destination = temp.child(final_name);
+        fs::write(destination.path(), b"existing user output").expect("existing output");
+        let report = undo_report(&rom, &patch, output.path(), &options, 1);
+        assert!(
+            report["label"]
+                .as_str()
+                .expect("label")
+                .contains("refusing to overwrite")
+        );
+        assert_eq!(
+            fs::read(destination.path()).expect("preserved output"),
+            b"existing user output"
+        );
+        assert_eq!(fs::read(&rom).expect("source ROM"), modified);
+        assert_eq!(fs::read(&patch).expect("source patch"), patch_bytes);
+    }
+}
+
+#[test]
+fn tools_ppf_undo_disc_collision_preserves_all_existing_outputs() {
+    let temp = setup_temp_dir();
+    let (track01, track02) = super::patch_disc::write_two_track_cd(&temp);
+    let patch = temp.child("undo.ppf");
+    fs::write(
+        patch.path(),
+        build_ppf3_undo_patch(&[(100, track02[100..103].to_vec(), b"AAA".to_vec())]),
+    )
+    .expect("valid patch");
+    let sheet = temp.child("disc.cue");
+    let sheet_bytes = fs::read(sheet.path()).expect("source sheet");
+    let patch_bytes = fs::read(patch.path()).expect("source patch");
+    for (index, name) in ["disc.cue", "track01.bin", "track02.bin"]
+        .iter()
+        .enumerate()
+    {
+        let directory = temp.child(format!("restored-{index}"));
+        fs::create_dir(directory.path()).expect("output directory");
+        let existing = directory.path().join(name);
+        fs::write(&existing, b"existing disc output").expect("existing output");
+        let report = undo_report(
+            sheet.path(),
+            patch.path(),
+            &directory.path().join("disc.cue"),
+            &["--no-compress", "--target", "track02.bin"],
+            1,
+        );
+        assert!(
+            report["label"]
+                .as_str()
+                .expect("label")
+                .contains("refusing to overwrite")
+        );
+        assert_eq!(
+            fs::read(&existing).expect("preserved output"),
+            b"existing disc output"
+        );
+        assert_eq!(
+            fs::read_dir(directory.path())
+                .expect("output directory")
+                .count(),
+            1,
+            "collision must be detected before publishing any disc files"
+        );
+    }
+    assert_eq!(fs::read(sheet.path()).expect("source sheet"), sheet_bytes);
+    assert_eq!(fs::read(patch.path()).expect("source patch"), patch_bytes);
+    assert_eq!(
+        fs::read(temp.child("track01.bin").path()).expect("source track"),
+        track01
+    );
+    assert_eq!(
+        fs::read(temp.child("track02.bin").path()).expect("source track"),
+        track02
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn tools_ppf_undo_preserves_existing_and_dangling_output_symlinks() {
+    let temp = setup_temp_dir();
+    let (rom, patch, _, _) = undo_fixture(&temp);
+    for present in [true, false] {
+        let target = temp.child(format!("target-{present}.gba"));
+        if present {
+            fs::write(target.path(), b"keep symlink target").expect("target fixture");
+        }
+        let output = temp.child(format!("output-{present}.gba"));
+        std::os::unix::fs::symlink(target.path(), output.path()).expect("output symlink");
+        let report = undo_report(&rom, &patch, output.path(), &["--no-compress"], 1);
+        assert!(
+            report["label"]
+                .as_str()
+                .expect("label")
+                .contains("refusing to overwrite")
+        );
+        assert_eq!(
+            fs::read_link(output.path()).expect("preserved symlink"),
+            target.path()
+        );
+        if present {
+            assert_eq!(
+                fs::read(target.path()).expect("target"),
+                b"keep symlink target"
+            );
+        } else {
+            assert!(!target.path().exists());
+        }
+    }
+}
+
+#[test]
+fn tools_ppf_undo_preserves_existing_output_directory() {
+    let temp = setup_temp_dir();
+    let (rom, patch, _, _) = undo_fixture(&temp);
+    let output = temp.child("restored.gba");
+    fs::create_dir(output.path()).expect("output directory");
+    fs::write(output.path().join("keep.txt"), b"keep directory contents")
+        .expect("directory contents");
+    let report = undo_report(&rom, &patch, output.path(), &["--no-compress"], 1);
+    assert!(
+        report["label"]
+            .as_str()
+            .expect("label")
+            .contains("refusing to overwrite")
+    );
+    assert_eq!(
+        fs::read(output.path().join("keep.txt")).expect("preserved contents"),
+        b"keep directory contents"
+    );
 }
