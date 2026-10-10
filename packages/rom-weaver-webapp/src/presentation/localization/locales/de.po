@@ -4776,3 +4776,28 @@ msgstr "Für die Offline-Nutzung vorbereiten"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.validation.fixChecksum"
 msgstr "Vergleiche das erwartete ROM, bevor du Prüfungen umgehst (öffnet einen neuen Tab)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.memory"
+msgstr "Schließe andere speicherintensive Tabs, bevor du es erneut versuchst. Wenn das Problem weiterhin auftritt, verwende die native CLI für diese Datei."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.archiveGuide"
+msgstr "Anleitung zum Entpacken (öffnet in einem neuen Tab)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.archiveDepth"
+msgstr "Entpacke das äußere Archiv auf deinem Gerät und füge dann die benötigte Datei oder ein weniger tief verschachteltes Archiv hinzu."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.cliGuide"
+msgstr "Erste Schritte mit der CLI (öffnet in einem neuen Tab)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.selection"
+msgstr "Entferne die betroffene Eingabe und füge die benötigte Datei erneut hinzu. Prüfe bei Archiven zuerst den Inhalt; behalte Disc-Beschreibungen und zugehörige Tracks zusammen."

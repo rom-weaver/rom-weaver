@@ -1,3 +1,4 @@
+import { WorkflowErrorMessage } from "./workflow-error-message.tsx";
 import { Download, GitCompare } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CheatManualSystem, ManualCheatKindOverride } from "../../lib/cheats/index.ts";
@@ -1578,7 +1579,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
             level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}
             onDismiss={messageDismissible ? clearWorkflowMessage : undefined}
           >
-            {message}
+            <WorkflowErrorMessage message={message} />
           </Notice>
         ) : null,
       num: "0x04",

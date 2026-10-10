@@ -1098,6 +1098,28 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.tutorial.view.current": msg({ id: "ui.tutorial.view.current", message: "Now" }),
   "candidate.warningCount": msg({ id: "candidate.warningCount", message: "{count} warning(s)" }),
+  "ui.errorRecovery.selection": msg({
+    id: "ui.errorRecovery.selection",
+    message:
+      "Remove the affected input and add the required file again. For an archive, check its contents first; keep disc sheets and companion tracks together.",
+  }),
+  "ui.errorRecovery.archiveDepth": msg({
+    id: "ui.errorRecovery.archiveDepth",
+    message: "Extract the outer archive on your device, then add the required file or a less deeply nested archive.",
+  }),
+  "ui.errorRecovery.memory": msg({
+    id: "ui.errorRecovery.memory",
+    message:
+      "Close other memory-heavy tabs before trying again. If this keeps happening, use the native CLI for this file.",
+  }),
+  "ui.errorRecovery.cliGuide": msg({
+    id: "ui.errorRecovery.cliGuide",
+    message: "Get started with the CLI (opens in a new tab)",
+  }),
+  "ui.errorRecovery.archiveGuide": msg({
+    id: "ui.errorRecovery.archiveGuide",
+    message: "Extract files guide (opens in a new tab)",
+  }),
   "error.AMBIGUOUS_SELECTION": msg({ id: "error.AMBIGUOUS_SELECTION", message: "Multiple matching files were found." }),
   "error.CANCELLED": msg({ id: "error.CANCELLED", message: "Workflow was cancelled." }),
   "error.CHECKSUM_MISMATCH": msg({ id: "error.CHECKSUM_MISMATCH", message: "Checksum validation failed." }),

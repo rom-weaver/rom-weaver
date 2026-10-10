@@ -4776,3 +4776,28 @@ msgstr "Prepare for offline use"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.validation.fixChecksum"
 msgstr "Compare the expected ROM before bypassing checks (opens in a new tab)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.memory"
+msgstr "Close other memory-heavy tabs before trying again. If this keeps happening, use the native CLI for this file."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.archiveGuide"
+msgstr "Extract files guide (opens in a new tab)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.archiveDepth"
+msgstr "Extract the outer archive on your device, then add the required file or a less deeply nested archive."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.cliGuide"
+msgstr "Get started with the CLI (opens in a new tab)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.selection"
+msgstr "Remove the affected input and add the required file again. For an archive, check its contents first; keep disc sheets and companion tracks together."

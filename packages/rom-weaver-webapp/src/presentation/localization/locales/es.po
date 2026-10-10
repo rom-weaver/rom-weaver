@@ -4776,3 +4776,28 @@ msgstr "Preparar el uso sin conexión"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.validation.fixChecksum"
 msgstr "Compara la ROM esperada antes de omitir las comprobaciones (se abre en otra pestaña)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.memory"
+msgstr "Cierra otras pestañas que consuman mucha memoria antes de volver a intentarlo. Si el problema persiste, usa la CLI nativa para este archivo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.archiveGuide"
+msgstr "Guía para extraer archivos (se abre en una pestaña nueva)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.archiveDepth"
+msgstr "Extrae el archivo comprimido exterior en tu dispositivo y añade el archivo necesario o uno con menos niveles de compresión anidados."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.cliGuide"
+msgstr "Primeros pasos con la CLI (se abre en una pestaña nueva)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.errorRecovery.selection"
+msgstr "Quita la entrada afectada y vuelve a añadir el archivo necesario. Si es un archivo comprimido, comprueba su contenido primero; mantén juntos los descriptores de disco y sus pistas."
