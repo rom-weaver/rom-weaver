@@ -1,5 +1,5 @@
 import { Check, TriangleAlert, X } from "lucide-react";
-import { type ReactNode, useEffect, useId, useRef } from "react";
+import { type ReactNode, useId, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { join } from "./cx.ts";
 
@@ -50,7 +50,7 @@ const ModalShell = ({
   children: ReactNode;
 }) => {
   const dialogRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!(open && onBackdrop)) return undefined;
     const handle = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || dialogRef.current?.inert) return;
@@ -61,12 +61,12 @@ const ModalShell = ({
     document.addEventListener("keydown", handle);
     return () => document.removeEventListener("keydown", handle);
   }, [open, onBackdrop]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return undefined;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const dialog = dialogRef.current;
     if (!dialog) return undefined;
-    const nativeDialog = dialog.closest("dialog:modal") as HTMLDialogElement | null;
+    const nativeDialog = dialog.closest("dialog:modal");
     const previousInert = new Map<HTMLElement, boolean>();
     for (const sibling of Array.from(dialog.parentElement?.children ?? [])) {
       if (sibling === dialog || !(sibling instanceof HTMLElement)) continue;
@@ -104,17 +104,20 @@ const ModalShell = ({
     };
     document.addEventListener("focusin", keepFocusInside);
     document.addEventListener("keydown", wrapTabFocus);
-    const frame = requestAnimationFrame(() => dialogRef.current?.focus());
+    dialog.focus();
     return () => {
-      cancelAnimationFrame(frame);
       document.removeEventListener("focusin", keepFocusInside);
       document.removeEventListener("keydown", wrapTabFocus);
       for (const [sibling, inert] of previousInert) sibling.inert = inert;
       previousFocus?.focus();
-      // History traversal and Safari pointer activation can leave the previous
-      // focus outside the native modal. Never return keyboard users to the page
-      // while Settings is still open.
-      if (nativeDialog?.open && !nativeDialog.contains(document.activeElement)) nativeDialog.focus();
+      // History traversal can leave focus outside the still-open Settings dialog.
+      if (
+        nativeDialog instanceof HTMLElement &&
+        nativeDialog.matches(":modal") &&
+        !nativeDialog.contains(document.activeElement)
+      ) {
+        nativeDialog.focus();
+      }
     };
   }, [open]);
   if (!open || typeof document === "undefined") return null;

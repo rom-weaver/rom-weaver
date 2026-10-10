@@ -1663,7 +1663,10 @@ const LogDialog = ({
             <button
               aria-label={localizer.message("ui.common.close")}
               className="dlg-x"
-              onClick={close}
+              onClick={(event) => {
+                event.currentTarget.focus();
+                close();
+              }}
               title={localizer.message("ui.common.close")}
               type="button"
             >
