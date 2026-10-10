@@ -1353,7 +1353,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.console.reportIssue": msg({ id: "ui.console.reportIssue", message: "Report an issue" }),
   "ui.console.settingsDescription": msg({
     id: "ui.console.settingsDescription",
-    message: "Changes apply when you save.",
+    message: "Theme applies immediately. Other settings apply when you save.",
   }),
   "ui.console.showAdvanced": msg({ id: "ui.console.showAdvanced", message: "Show advanced" }),
   "ui.console.storage": msg({ id: "ui.console.storage", message: "Saves & storage" }),

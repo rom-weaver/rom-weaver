@@ -24,28 +24,15 @@ const getFocusableElements = (root: HTMLElement): HTMLElement[] =>
   });
 
 /**
- * Design-system modal primitives. A generic overlay (header + scrollable body)
- * and a confirmation dialog. Both portal into the `.rw-app` root (falling back to
- * <body>) so the design system's `.rw-app`-scoped control styles (.input/.select/
- * .btn/…) reach the modal content; `.rw-modal` is `position: fixed`, so stacking
- * and overflow are unaffected by where it sits in the tree. Shared by settings,
- * candidate selection, and every confirm flow.
+ * Keep overlays inside the active native dialog's top layer. Portaling beside
+ * a showModal() dialog makes the overlay inert, regardless of its z-index.
+ * Otherwise use the styled app root so design-system controls inherit it.
  */
-
-/** The styled app root the design system scopes its rules under; modals portal here so controls inherit it. */
 const getModalPortalTarget = (): Element =>
-  (typeof document === "undefined" ? null : document.querySelector(".rw-app")) ?? document.body;
-
-const useEscapeKey = (active: boolean, onEscape: () => void) => {
-  useEffect(() => {
-    if (!active) return undefined;
-    const handle = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onEscape();
-    };
-    document.addEventListener("keydown", handle);
-    return () => document.removeEventListener("keydown", handle);
-  }, [active, onEscape]);
-};
+  document.activeElement?.closest("dialog:modal") ??
+  document.querySelector("dialog:modal") ??
+  document.querySelector(".rw-app") ??
+  document.body;
 
 const ModalShell = ({
   open,
@@ -63,9 +50,17 @@ const ModalShell = ({
   children: ReactNode;
 }) => {
   const dialogRef = useRef<HTMLDivElement | null>(null);
-  useEscapeKey(open && !!onBackdrop, () => {
-    if (!dialogRef.current?.inert) onBackdrop?.();
-  });
+  useEffect(() => {
+    if (!(open && onBackdrop)) return undefined;
+    const handle = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || dialogRef.current?.inert) return;
+      // Consume Escape here so it cannot also cancel the containing native dialog.
+      event.preventDefault();
+      onBackdrop();
+    };
+    document.addEventListener("keydown", handle);
+    return () => document.removeEventListener("keydown", handle);
+  }, [open, onBackdrop]);
   useEffect(() => {
     if (!open) return undefined;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;

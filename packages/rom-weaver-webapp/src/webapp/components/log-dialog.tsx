@@ -1633,7 +1633,10 @@ const LogDialog = ({
         if (event.target === dialogRef.current) close();
       }}
       onKeyDown={(event) => {
-        if (event.key === "Escape") close();
+        if (event.key !== "Escape" || event.defaultPrevented) return;
+        if (event.target instanceof Element && event.target.closest(".rw-modal")) return;
+        event.preventDefault();
+        close();
       }}
       ref={dialogRef}
     >

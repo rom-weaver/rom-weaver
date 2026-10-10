@@ -1071,7 +1071,7 @@ msgstr "CD-Codecs"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.console.settingsDescription"
-msgstr "Änderungen gelten nach dem Speichern."
+msgstr "Das Design wird sofort angewendet. Andere Einstellungen werden beim Speichern übernommen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

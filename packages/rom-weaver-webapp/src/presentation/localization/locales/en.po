@@ -1071,7 +1071,7 @@ msgstr "CD Codecs"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.console.settingsDescription"
-msgstr "Changes apply when you save."
+msgstr "Theme applies immediately. Other settings apply when you save."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
