@@ -584,8 +584,16 @@ impl CliApp {
                     root
                 }
             };
-            let target =
-                Self::extract_weave_archive_member(archive_source, format_name, entry, &root)?;
+            // The same archive member can occur more than once in a patch chain.
+            // Give every read its own private directory rather than overwriting.
+            let member_path = context.temp_paths().next_path("weave-member", None);
+            let member_root = root.join(member_path.file_name().expect("allocated file name"));
+            let target = Self::extract_weave_archive_member(
+                archive_source,
+                format_name,
+                entry,
+                &member_root,
+            )?;
             return Ok(Some(target));
         }
         let resolved = weave_dir.join(path);

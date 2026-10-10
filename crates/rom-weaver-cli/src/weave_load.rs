@@ -233,22 +233,27 @@ impl CliApp {
         entry: &RegularArchiveFileEntry,
         extract_dir: &Path,
     ) -> Result<PathBuf> {
-        let normalized = normalize_entry_name(&entry.name);
-        let target = extract_dir.join(&normalized);
+        let target = weave_archive_target(entry, extract_dir)?;
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent)?;
         }
+        // Recheck after creating parents; create_new also protects existing and
+        // dangling-symlink leaf destinations atomically.
+        weave_archive_target(entry, extract_dir)?;
+        let mut outputs = WeaveOutputGuard::default();
         with_regular_archive_file_entry_reader(
             archive,
             format_name,
             entry.index,
             &entry.name,
             |reader| {
-                let mut file = File::create(&target)?;
+                let mut file = outputs.create(&target)?;
                 io::copy(reader, &mut file)?;
+                file.flush()?;
                 Ok(())
             },
         )?;
+        outputs.commit();
         trace!(
             archive = %archive.display(),
             member = %entry.name,
@@ -256,6 +261,83 @@ impl CliApp {
             "extracted weave-referenced archive member"
         );
         Ok(target)
+    }
+}
+
+/// Validate the actual archive name, not only the manifest reference. Never
+/// follow a symlink at the output root, within it, or at the destination leaf.
+/// Ancestors of the user-supplied root may be platform aliases (e.g. macOS /tmp).
+pub(super) fn weave_archive_target(
+    entry: &RegularArchiveFileEntry,
+    extract_dir: &Path,
+) -> Result<PathBuf> {
+    let normalized = normalize_entry_name(&entry.name);
+    let relative = Path::new(&normalized);
+    if normalized.is_empty()
+        || normalized.contains(':')
+        || relative
+            .components()
+            .any(|part| !matches!(part, std::path::Component::Normal(_)))
+    {
+        return Err(weave_validation(
+            "bundle.path.invalid",
+            "weave archive member must have a safe relative path",
+        ));
+    }
+    let target = extract_dir.join(relative);
+    let mut current = extract_dir.to_path_buf();
+    check_weave_destination(&current, false)?;
+    for component in relative.components() {
+        current.push(component);
+        check_weave_destination(&current, current == target)?;
+    }
+    Ok(target)
+}
+
+fn check_weave_destination(path: &Path, leaf: bool) -> Result<()> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(RomWeaverError::Validation(
+            format!("refusing symlink weave output `{}`", path.display()),
+        )),
+        Ok(_) if leaf => Err(RomWeaverError::Validation(format!(
+            "refusing to overwrite existing weave output `{}`",
+            path.display()
+        ))),
+        Ok(metadata) if !metadata.is_dir() => Err(RomWeaverError::Validation(format!(
+            "weave output parent is not a directory: `{}`",
+            path.display()
+        ))),
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// Roll back only files this operation created, never pre-existing outputs.
+/// Empty directories can remain after failure; extraction is not a filesystem
+/// transaction against other processes concurrently changing directory entries.
+#[derive(Default)]
+pub(super) struct WeaveOutputGuard {
+    paths: Vec<PathBuf>,
+}
+
+impl WeaveOutputGuard {
+    pub(super) fn create(&mut self, target: &Path) -> Result<File> {
+        let file = rom_weaver_core::create_extract_output_file(target, false)?;
+        self.paths.push(target.to_path_buf());
+        Ok(file)
+    }
+
+    pub(super) fn commit(mut self) {
+        self.paths.clear();
+    }
+}
+
+impl Drop for WeaveOutputGuard {
+    fn drop(&mut self) {
+        for path in self.paths.iter().rev() {
+            let _ = fs::remove_file(path);
+        }
     }
 }
 
@@ -307,5 +389,45 @@ mod tests {
             3
         );
         assert!(CliApp::find_weave_archive_entry(&entries, "roms/missing.bin").is_none());
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn weave_output_guard_removes_only_new_files_on_failure() {
+        let temp = assert_fs::TempDir::new().expect("temp directory");
+        let existing = temp.path().join("existing");
+        let created = temp.path().join("created");
+        fs::write(&existing, b"keep").expect("existing file");
+        {
+            let mut guard = WeaveOutputGuard::default();
+            guard
+                .create(&created)
+                .expect("new file")
+                .write_all(b"partial")
+                .expect("partial write");
+            assert!(guard.create(&existing).is_err());
+        }
+        assert!(!created.exists());
+        assert_eq!(fs::read(existing).expect("existing file"), b"keep");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn weave_output_rejects_unsafe_archive_names() {
+        let temp = assert_fs::TempDir::new().expect("temp directory");
+        for name in ["../escape", "/absolute", "C:/drive", "a/../../escape", ""] {
+            assert!(
+                weave_archive_target(&entry(0, name), temp.path()).is_err(),
+                "{name}"
+            );
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn weave_output_accepts_dot_prefix_and_normalized_separators() {
+        let temp = assert_fs::TempDir::new().expect("temp directory");
+        assert_eq!(
+            weave_archive_target(&entry(0, "./patches\\main.ips"), temp.path()).expect("safe path"),
+            temp.path().join("patches/main.ips"),
+        );
     }
 }

@@ -1,4 +1,6 @@
-use super::weave_load::LoadedWeaveSource;
+use rom_weaver_containers::libarchive::RegularArchiveFileEntry;
+
+use super::weave_load::{LoadedWeaveSource, WeaveOutputGuard, weave_archive_target};
 use super::weave_parse::parse_weave_bytes;
 use super::*;
 
@@ -201,6 +203,7 @@ impl CliApp {
         let rom_extractable = args.filter.is_empty() || args.rom_filter();
         let patch_extractable = args.filter.is_empty() || args.patch_filter();
         let mut selector = SelectionMatcher::new(&args.select);
+        let mut planned = BTreeMap::new();
         // A sourceless (checks-only) rom entry resolves to no source at all:
         // the applying user supplies the ROM.
         let rom_source = match &weave.rom {
@@ -212,7 +215,7 @@ impl CliApp {
                 Some(self.resolve_weave_entry_source(
                     rom.url.as_deref(),
                     rom.path.as_deref(),
-                    source,
+                    &mut planned,
                     &loaded,
                     entry_extract_dir,
                     "rom",
@@ -230,22 +233,61 @@ impl CliApp {
             let source_ref = self.resolve_weave_entry_source(
                 patch.url.as_deref(),
                 patch.path.as_deref(),
-                source,
+                &mut planned,
                 &loaded,
                 entry_extract_dir,
                 &entry_label,
             )?;
-            let descriptor = match &source_ref {
-                WeaveSourceRef::ExtractedPath { extracted_path } => {
-                    Some(self.build_patch_descriptor(Path::new(extracted_path), None, context)?)
-                }
-                _ => None,
-            };
             patch_sources.push(WeavePatchSource {
                 source: source_ref,
-                descriptor,
+                descriptor: None,
             });
         }
+        // Resolve and validate every destination before extracting anything.
+        // Stage all archive reads before publishing, so a corrupt later member
+        // cannot leave earlier output files behind.
+        let mut outputs = WeaveOutputGuard::default();
+        if let Some(extract_dir) = extract_dir.filter(|_| loaded.kind == WeaveSourceKind::Archive) {
+            for target in planned.keys() {
+                if target
+                    .ancestors()
+                    .skip(1)
+                    .any(|parent| planned.contains_key(parent))
+                {
+                    return Err(RomWeaverError::Validation(
+                        "weave output paths conflict as file and directory".to_owned(),
+                    ));
+                }
+            }
+            let staging = context.temp_paths().next_path("weave-parse", None);
+            let format_name = loaded.archive_format.expect("archive format");
+            let mut staged = Vec::new();
+            for (target, entry) in &planned {
+                let path =
+                    Self::extract_weave_archive_member(source, format_name, entry, &staging)?;
+                staged.push((target, entry, path));
+            }
+            for (target, entry, staged_path) in staged {
+                weave_archive_target(entry, extract_dir)?;
+                if let Some(parent) = target.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                weave_archive_target(entry, extract_dir)?;
+                let mut file = outputs.create(target)?;
+                io::copy(&mut File::open(staged_path)?, &mut file)?;
+                file.flush()?;
+            }
+            for patch in &mut patch_sources {
+                if let WeaveSourceRef::ExtractedPath { extracted_path } = &patch.source {
+                    patch.descriptor = Some(self.build_patch_descriptor(
+                        Path::new(extracted_path),
+                        None,
+                        context,
+                    )?);
+                }
+            }
+        }
+        outputs.commit();
         Ok(WeaveParseResult {
             bundle: weave,
             source_kind: loaded.kind,
@@ -257,15 +299,15 @@ impl CliApp {
     }
 
     /// Resolve one weave entry source. URL entries pass through verbatim.
-    /// `path` entries resolve against the weave's packaging: extracted from
-    /// the archive when the source is one and `extract_dir` was supplied,
-    /// passed through as a relative path otherwise (the caller resolves it
-    /// against the weave's own location).
+    /// `path` entries resolve against the weave's packaging: planned for
+    /// extraction when the source is an archive and `extract_dir` was supplied,
+    /// passed through as a relative path otherwise. Planning is read-only;
+    /// publication starts only after every reference has been resolved.
     fn resolve_weave_entry_source(
         &self,
         url: Option<&str>,
         path: Option<&str>,
-        source: &Path,
+        planned: &mut BTreeMap<PathBuf, RegularArchiveFileEntry>,
         loaded: &LoadedWeaveSource,
         extract_dir: Option<&Path>,
         entry_label: &str,
@@ -295,10 +337,8 @@ impl CliApp {
                 path: path.to_owned(),
             });
         };
-        let format_name = loaded
-            .archive_format
-            .expect("archive kind always carries a format name");
-        let target = Self::extract_weave_archive_member(source, format_name, entry, extract_dir)?;
+        let target = weave_archive_target(entry, extract_dir)?;
+        planned.insert(target.clone(), entry.clone());
         Ok(WeaveSourceRef::ExtractedPath {
             extracted_path: Self::normalize_emitted_path_string(&target.to_string_lossy()),
         })
