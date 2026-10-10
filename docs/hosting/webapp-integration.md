@@ -1,37 +1,62 @@
 # Webapp integration
 
-Hosts can preload the rom-weaver webapp with remote URLs or files already stored in same-origin Origin Private File System (OPFS) storage. Both routes feed the normal input pipeline; they do not create a separate apply mode.
-
-For public MCP connections and browser agent workflows, see [Use MCP and browser agents](../how-to/use-mcp.md).
+Preload rom-weaver with remote files or same-origin Origin Private File System (OPFS) inputs. Both use the normal classification, extraction, checksum, and weave pipeline. For agent connections, see [Use MCP](../how-to/use-mcp.md).
 
 <!-- START doctoc -->
 ## Table of contents
 
+- [Add an Apply button](#add-an-apply-button)
 - [URL sessions](#url-sessions)
+- [Host remote inputs](#host-remote-inputs)
 - [Ingest existing OPFS files](#ingest-existing-opfs-files)
 
 <!-- END doctoc -->
 
+## Add an Apply button
+
+[Create and test a patch-only weave](../how-to/create-bundles.md) with source checks, ordered patches, and optional add-ons. Leave **Include ROM in weave** clear; readers supply their own ROM. Test every optional combination you advertise and keep checksum validation enabled.
+
+Host the archive at a versioned public HTTPS URL with CORS enabled. Replace the encoded example URL in this release-page link:
+
+```html
+<a href="https://rom-weaver.com/weave-patches?weave=https%3A%2F%2Fexample.com%2Frelease.zip">Apply this recipe</a>
+```
+
+Use the same address for a Markdown link. Beside it, give the source's region, revision, header state and checksum; supported optional choices; expected output checksums; and a direct archive download. Archive and ROM checksums describe different bytes. Keep private tokens out of shared links.
+
+Open the published link in a fresh browser without signing into the host. Check the recipe, supply the source locally, and verify the output and emulator. Check that a wrong sample source shows a mismatch. Reuse the [existing two-patch demo](https://github.com/user-attachments/assets/558b4f4d-640c-410e-a866-cd9ff97ac84c) or [homebrew practice run](../tutorials/first-patch.md) to introduce readers to the workflow.
+
 ## URL sessions
 
-Use `?weave=<url>` to load a weave, or combine `?rom=<url>` with one or more `patch=<url>` parameters (repeat them with `&patch=`):
+Use `weave` for a recipe or archive. For individual patches, repeat `patch` and omit `rom` when readers supply their own ROM:
 
 ```text
 https://rom-weaver.com/weave-patches?weave=https://example.com/release.zip
-https://rom-weaver.com/apply-patches?rom=https://example.com/game.bin&patch=https://example.com/change.ips
+https://rom-weaver.com/apply-patches?patch=https://example.com/first.bps&patch=https://example.com/second.bps
 ```
 
-The webapp reads these parameters once at startup and fetches each source in the browser, so every remote host must allow the webapp origin through CORS. Downloaded files go through the same classification, extraction, checksum, and weave-resolution pipeline as locally dropped files.
+Encode complete remote URLs, including their query strings:
 
-Weave metadata controls the initial patch selection and output defaults. Patches marked `optional: true` start disabled; all patches remain toggleable. Relative weave URLs resolve against the weave URL. A locally dropped weave may instead reference companion files dropped alongside it.
+```js
+const link = new URL("https://rom-weaver.com/weave-patches");
+link.searchParams.set("weave", "https://example.com/release.zip");
+```
 
-The legacy `/bundle-patches` route and `?bundle=<url>` parameter remain accepted.
+Parameters are read once at startup. Only HTTP(S) URLs are accepted. `weave` overrides `rom` and `patch`; legacy `bundle` is used when `weave` is absent. `/bundle-patches` remains accepted. Neither link applies patches automatically.
+
+Weaves preserve checks, order, optional defaults, and output metadata; direct patch links only preload files. `optional: true` starts disabled; all patches remain toggleable. Remote relative URLs resolve against the weave URL. Local weaves can use companion files dropped alongside them.
+
+## Host remote inputs
+
+Serve actual files, not HTML previews or login pages. Every remote host, including redirected destinations and referenced patches, must allow the app origin with `Access-Control-Allow-Origin: https://rom-weaver.com` (or `*` for public, credential-free files). Self-hosted apps need their own origin allowed.
+
+If loading fails, check response status, redirects, CORS headers, and file contents. A working address-bar download does not prove cross-origin access. Offer direct download and local file selection as the fallback; never ask readers to disable browser security.
 
 ## Ingest existing OPFS files
 
-A host on the same origin can place inputs under the OPFS `rom-weaver-imports/` directory and send their mounted paths through the same pipeline. Include a weave in the list when using one; it does not need a separate option.
+A same-origin host can store files below OPFS `rom-weaver-imports/` and ingest their mounted paths. Include the recipe when using one.
 
-Code running inside this workspace can import the private webapp package and call `ingest`:
+Inside this workspace, use the private webapp package:
 
 ```js
 import { ingest } from "@rom-weaver/webapp";
@@ -43,7 +68,7 @@ ingest([
 ]);
 ```
 
-Hosts serving the prebuilt webapp can dispatch the equivalent event after its module script has loaded:
+For the prebuilt app, dispatch after its module loads:
 
 ```js
 document.dispatchEvent(
@@ -57,6 +82,4 @@ document.dispatchEvent(
 );
 ```
 
-The mounted `/work/rom-weaver-imports/example.bin` path refers to `rom-weaver-imports/example.bin` below the origin's OPFS root. rom-weaver preserves that directory during startup cleanup and does not delete supplied files. OPFS is origin-private, so another origin cannot populate or ingest these paths.
-
-For lower-level browser worker and OPFS runner APIs, see the [browser WASM runtime](../../packages/rom-weaver-webapp/src/wasm/README.md).
+`/work/rom-weaver-imports/example.bin` maps to OPFS `rom-weaver-imports/example.bin`. Startup cleanup preserves this directory and supplied files. Other origins cannot populate it. See the [browser WASM runtime](../../packages/rom-weaver-webapp/src/wasm/README.md) for worker APIs.
