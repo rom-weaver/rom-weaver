@@ -46,6 +46,9 @@ mod patch;
 #[path = "cli_smoke/patch_disc.rs"]
 mod patch_disc;
 
+#[path = "cli_smoke/patch_compression_safety.rs"]
+mod patch_compression_safety;
+
 #[path = "cli_smoke/cheats.rs"]
 mod cheats;
 

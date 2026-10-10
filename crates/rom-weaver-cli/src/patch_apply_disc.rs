@@ -537,6 +537,14 @@ impl CliApp {
             .ok_or_else(|| RomWeaverError::Validation("disc has no sheet to stage".to_string()))
     }
 
+    pub(super) fn disc_source_paths(disc: &DiscContext) -> Vec<PathBuf> {
+        disc.sheet_paths
+            .iter()
+            .chain(disc.files.iter().map(|file| &file.path))
+            .cloned()
+            .collect()
+    }
+
     pub(super) fn disc_output_paths(disc: &DiscContext, output: &Path) -> Vec<PathBuf> {
         let out_dir = output.parent().unwrap_or_else(|| Path::new("."));
         let mut paths = vec![output.to_path_buf()];

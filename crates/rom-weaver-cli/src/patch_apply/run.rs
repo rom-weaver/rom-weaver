@@ -66,6 +66,24 @@ impl PatchApplyRun {
         self.disc_context.is_some()
     }
 
+    fn source_paths(&self) -> Vec<PathBuf> {
+        let mut sources = vec![
+            self.original_input.clone(),
+            self.args.input.clone(),
+            self.resolved_input.clone(),
+        ];
+        sources.extend(self.local_weave.iter().cloned());
+        sources.extend(self.args.patches.iter().cloned());
+        sources.extend(self.rom_member_inputs.values().cloned());
+        for patch in &self.resolved_patches {
+            sources.extend([patch.source.clone(), patch.resolved.clone()]);
+        }
+        if let Some(disc) = &self.disc_context {
+            sources.extend(CliApp::disc_source_paths(disc));
+        }
+        sources
+    }
+
     fn cheat_patch_count(&self) -> usize {
         usize::from(!self.args.codes.is_empty())
     }
@@ -167,14 +185,13 @@ impl CliApp {
         else {
             return Ok(());
         };
-        let mut sources = vec![run.original_input.clone(), run.args.input.clone()];
-        sources.extend(run.local_weave.iter().cloned());
-        sources.extend(run.args.patches.iter().cloned());
-        for patch in &run.resolved_patches {
-            sources.extend([patch.source.clone(), patch.resolved.clone()]);
-        }
-        Self::validate_disc_output_destinations(disc, &run.output, &sources, run.args.force)
-            .map_err(|error| run.fail_error("validate", error))
+        Self::validate_disc_output_destinations(
+            disc,
+            &run.output,
+            &run.source_paths(),
+            run.args.force,
+        )
+        .map_err(|error| run.fail_error("validate", error))
     }
 
     /// Split the command into the run state and settle every flag that does not
@@ -1170,18 +1187,33 @@ impl CliApp {
             return *error_report;
         }
 
-        if report.status == OperationStatus::Succeeded
-            && run.compression_options.enabled
-            && let Err(error_report) = self.resolve_guarded_patch_apply_compression_plan(
+        if report.status == OperationStatus::Succeeded && run.compression_options.enabled {
+            let plan = match self.resolve_guarded_patch_apply_compression_plan(
                 &run.output,
                 &run.resolved_input,
                 &run.compression_options,
                 run.args.force,
                 report.format.clone(),
                 &run.context,
-            )
-        {
-            return *error_report;
+            ) {
+                Ok(plan) => plan,
+                Err(error_report) => return *error_report,
+            };
+            // Explicit compression writes directly to its extension-adjusted
+            // destination. Inferred outputs instead use private staging and
+            // no-clobber publication with suffix retry.
+            if !run.output_was_inferred {
+                let mut sources = run.source_paths();
+                // Chain planning has already consumed run.resolved_patches.
+                for step in &chain.patch_steps {
+                    sources.extend([step.patch.source.clone(), step.patch.resolved.clone()]);
+                }
+                if let Err(error) =
+                    Self::ensure_patch_output_preserves_sources(&plan.output_path, &sources)
+                {
+                    return *run.fail_error("compress", error);
+                }
+            }
         }
         if let Some(error_report) = self.compress_patch_apply_output(PatchApplyCompressionInputs {
             report: &mut report,
