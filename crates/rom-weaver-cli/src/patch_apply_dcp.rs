@@ -135,19 +135,31 @@ impl CliApp {
             }
             Err(error) => return fail_error("prepare", error),
         };
-        if !compression_options.enabled {
-            let mut sources = additional_sources.to_vec();
-            sources.extend([args.input.clone(), dcp_path.clone()]);
-            if let Err(error) = Self::validate_disc_output_destinations(
-                &disc,
-                args.output
-                    .as_deref()
-                    .expect("output validated by run_patch_apply"),
-                &sources,
-                args.force,
+        let mut sources = additional_sources.to_vec();
+        sources.extend([args.input.clone(), dcp_path.clone()]);
+        let output = args
+            .output
+            .as_deref()
+            .expect("output validated by run_patch_apply");
+        if compression_options.enabled {
+            let plan = match self.resolve_patch_apply_compression_plan(
+                output,
+                &args.input,
+                &compression_options,
             ) {
+                Ok(plan) => plan,
+                Err(error) => return fail_error("validate", error),
+            };
+            sources.extend(Self::disc_source_paths(&disc));
+            if let Err(error) =
+                Self::ensure_patch_output_preserves_sources(&plan.output_path, &sources)
+            {
                 return fail_error("validate", error);
             }
+        } else if let Err(error) =
+            Self::validate_disc_output_destinations(&disc, output, &sources, args.force)
+        {
+            return fail_error("validate", error);
         }
         let name_warning = warn_on_rom_name_mismatch(expected_rom_name, &disc.target_file);
 

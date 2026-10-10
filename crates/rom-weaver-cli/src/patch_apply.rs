@@ -1126,6 +1126,23 @@ impl CliApp {
             .map(|_| ())
     }
 
+    pub(super) fn ensure_patch_output_preserves_sources(
+        output: &Path,
+        sources: &[PathBuf],
+    ) -> Result<()> {
+        if let Some(source) = sources
+            .iter()
+            .find(|source| paths_refer_to_same_file(source, output))
+        {
+            return Err(RomWeaverError::Validation(format!(
+                "patch apply output `{}` and source `{}` resolve to the same file; choose a different --output path",
+                output.display(),
+                source.display()
+            )));
+        }
+        Ok(())
+    }
+
     fn patch_apply_output_alias_message(
         input: &Path,
         patches: &[PathBuf],
