@@ -440,8 +440,9 @@ Fixture description.
   it.each([
     ["docs/apply-rom-patches", 4],
     ["docs/create-rom-patches", 4],
-    ["docs/create-bundles", 2],
-  ])("reserves responsive screenshot space and keeps WebP fallbacks on %s", (slug, expectedPictures) => {
+    // quality-reason: Obsolete Bundle-labeled screenshots are intentionally omitted until refreshed.
+    ["docs/create-bundles", 0],
+  ])("renders the intended screenshot set with responsive WebP fallbacks on %s", (slug, expectedPictures) => {
     render(<DocsPage active slug={slug} />);
 
     const pictures = [...document.querySelectorAll<HTMLPictureElement>("picture[data-docs-screenshot-theme]")];

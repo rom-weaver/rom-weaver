@@ -1086,7 +1086,7 @@ msgstr "chd, rvz, and z3ds are decompressed to raw formats before patching."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.routeDiscBody"
-msgstr "CHD, RVZ, CSO, and more. Convert it, or take files out."
+msgstr "Convert between compressed formats, or extract a CHD to ISO or BIN/CUE."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1331,7 +1331,7 @@ msgstr "Compress"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.goCompress"
-msgstr "Compress"
+msgstr "Convert / compress"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2161,7 +2161,7 @@ msgstr "Inputs"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.webappItem2"
-msgstr "Install it from the browser menu and it keeps working offline."
+msgstr "Cache the app in Settings before going offline. Databases, samples, and emulator cores may need separate downloads."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3056,7 +3056,7 @@ msgstr "Patch {position} of {total}. Reordering unavailable."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.tryApply"
-msgstr "Patch a sample"
+msgstr "Patch a sample ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4416,7 +4416,7 @@ msgstr "Trim tool"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.trySample"
-msgstr "Try a sample"
+msgstr "Try a checksum lookup"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4761,3 +4761,18 @@ msgstr "ZIP codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z and weaves"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.goExtract"
+msgstr "Extract files"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.prepareOffline"
+msgstr "Prepare for offline use"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.validation.fixChecksum"
+msgstr "Compare the expected ROM before bypassing checks (opens in a new tab)"

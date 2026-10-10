@@ -20,7 +20,8 @@ import { ProgressActionButton } from "./components/progress-action-button.tsx";
 import type { NoticeController, PatcherOutputController, PatcherUiController } from "./patcher-form.ts";
 import type { PatcherOutputState, PatchStackItemState } from "./patcher-presentation.ts";
 import type { NoticeState, RomInputRowState } from "./patcher-ui-state.ts";
-import { useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
+import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
+import { resolveAssetUrl } from "./asset-url.ts";
 import {
   setPostApplyDownloadBehaviorOverride,
   setPostApplyTestBehaviorOverride,
@@ -248,18 +249,26 @@ const ChecksumOverrideRow = ({
   uiController: PatcherUiController;
 }) => {
   const localizer = useUiLocalizer();
+  const assetBaseUrl = useRomWeaverAssetBaseUrl();
   if (!state.visible) return null;
   return (
-    <label className="checkrow warn">
-      <input
-        checked={state.checked}
-        disabled={state.disabled}
-        id="rom-weaver-checkbox-checksum-override"
-        onChange={(event) => uiController.setChecksumOverride?.(event.currentTarget.checked)}
-        type="checkbox"
-      />
-      <span>{localizer.message("ui.apply.validation.overrideChecksum")}</span>
-    </label>
+    <>
+      <p>
+        <a href={resolveAssetUrl(assetBaseUrl, "docs/fix-checksum-errors")} target="_blank" rel="noreferrer">
+          {localizer.message("ui.apply.validation.fixChecksum")}
+        </a>
+      </p>
+      <label className="checkrow warn">
+        <input
+          checked={state.checked}
+          disabled={state.disabled}
+          id="rom-weaver-checkbox-checksum-override"
+          onChange={(event) => uiController.setChecksumOverride?.(event.currentTarget.checked)}
+          type="checkbox"
+        />
+        <span>{localizer.message("ui.apply.validation.overrideChecksum")}</span>
+      </label>
+    </>
   );
 };
 

@@ -39,7 +39,7 @@ You can also paste a hash into the top-bar **Find games (by name/checksum), tool
 2. Select the game, then its release.
 3. Read the expected checksums, region, and revision where available.
 
-Select **Try a sample** in the empty search box, then choose the matching Tetris release.
+Select **Try a checksum lookup** in the empty search box, then choose the matching Tetris release.
 
 ## Check your file against a result
 

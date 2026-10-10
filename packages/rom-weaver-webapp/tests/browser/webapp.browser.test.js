@@ -168,6 +168,22 @@ const openMenuSheet = async () => {
   return document.querySelector(".menu-sheet");
 };
 
+test("disc conversion and extraction have independent hit targets on mobile", async () => {
+  await page.viewport(390, 844);
+  mountWebappRoot({ initialView: "home" });
+  await expect.poll(() => document.querySelector(".home-route-actions")).toBeTruthy();
+  const actions = document.querySelector(".home-route-actions");
+  const links = Array.from(actions.querySelectorAll("a"));
+  expect(links.map((link) => link.textContent)).toEqual(["Convert / compress", "Extract files"]);
+  expect(links.map((link) => new URL(link.href).pathname)).toEqual(["/compress", "/extract"]);
+  for (const link of links) {
+    link.scrollIntoView({ block: "center" });
+    const rect = link.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    expect(hit?.closest("a")).toBe(link);
+  }
+});
+
 test("WebappRoot mounts the full workflow shell and stages archive inputs", async () => {
   // Trim is beta-gated (see `betaToolsEnabled`), so the full-shell assertions
   // below require the flag on - matching the pattern the sibling controller unit tests use.

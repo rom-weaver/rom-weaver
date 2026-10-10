@@ -1086,7 +1086,7 @@ msgstr "chd, rvz und z3ds werden vor dem Patchen in Rohformate dekomprimiert."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.routeDiscBody"
-msgstr "CHD, RVZ, CSO und mehr. Konvertiere es oder hole Dateien heraus."
+msgstr "Konvertiere zwischen komprimierten Formaten oder extrahiere eine CHD als ISO oder BIN/CUE."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1331,7 +1331,7 @@ msgstr "Komprimieren"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.goCompress"
-msgstr "Komprimieren"
+msgstr "Konvertieren / komprimieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2161,7 +2161,7 @@ msgstr "Eingaben"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.webappItem2"
-msgstr "Installiere sie über das Browsermenü, dann funktioniert sie weiter offline."
+msgstr "Speichere die App in den Einstellungen, bevor du offline gehst. Datenbanken, Beispiele und Emulator-Kerne benötigen möglicherweise separate Downloads."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3056,7 +3056,7 @@ msgstr "Patch {position} von {total}. Sortieren nicht verfügbar."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.tryApply"
-msgstr "Patch testen"
+msgstr "Beispiel-ROM patchen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4416,7 +4416,7 @@ msgstr "Trimmen-Tool"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.trySample"
-msgstr "Beispiel testen"
+msgstr "Prüfsummensuche ausprobieren"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4761,3 +4761,18 @@ msgstr "ZIP-Codec"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z und Weaves"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.goExtract"
+msgstr "Dateien extrahieren"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.prepareOffline"
+msgstr "Für die Offline-Nutzung vorbereiten"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.validation.fixChecksum"
+msgstr "Vergleiche das erwartete ROM, bevor du Prüfungen umgehst (öffnet einen neuen Tab)"
