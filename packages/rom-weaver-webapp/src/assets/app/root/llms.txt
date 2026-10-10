@@ -73,7 +73,7 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 - [Create game saves with the CLI](https://rom-weaver.com/docs/create-game-saves-cli): Generate fresh saves or validated copies from existing save templates.
 - [Save Editor development](https://rom-weaver.com/docs/game-save-development): Shared save handler architecture, integrity boundary, and contributor flow.
 
-- [Add an Apply button](https://rom-weaver.com/docs/add-apply-button): Patch-only release links, expected source checks, ordered patches, optional add-ons, and CORS hosting checks.
+- [Add an Apply button](https://rom-weaver.com/docs/webapp-integration#add-an-apply-button): Patch-only release links, expected source checks, ordered patches, optional add-ons, and CORS hosting checks.
 
 ## Documentation
 

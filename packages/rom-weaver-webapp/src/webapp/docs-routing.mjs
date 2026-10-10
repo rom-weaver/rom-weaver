@@ -42,12 +42,6 @@ const DOC_SOURCES = Object.freeze([
   }),
   Object.freeze({
     audience: "browser",
-    file: "how-to/add-apply-button.md",
-    label: "Add an Apply button",
-    slug: "docs/add-apply-button",
-  }),
-  Object.freeze({
-    audience: "browser",
     file: "how-to/use-browser-cheats.md",
     label: "Use cheats (browser)",
     slug: "docs/use-cheats",
@@ -355,7 +349,6 @@ const groupDocRoutes = (routes) => {
 
 /** @type {Readonly<Record<string, string>>} */
 const HOW_TO_NAVIGATION_GROUPS = Object.freeze({
-  "docs/add-apply-button": "Patching & weaves",
   "docs/apply-rom-patches": "Patching & weaves",
   "docs/bake-cheat-codes": "Cheats",
   "docs/browser-settings": "Setup & offline",
