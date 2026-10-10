@@ -10,7 +10,7 @@ import {
 import {
   clearPendingTestSave,
   configureEmulatorSaveStorage,
-  ensureEmulatorSaveBridge,
+  registerEmulatorSaveBridge,
   readPendingTestSave,
   setEmulatorSavePreview,
   type PendingTestSave,
@@ -149,12 +149,24 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
         : null,
     [currentGame],
   );
+  const saveId = currentIdentity?.saveId;
+  const registerPlayerFrame = useCallback(
+    (frame: HTMLIFrameElement | null) => {
+      iframeRef.current = frame;
+      if (!(frame && saveId)) return undefined;
+      const unregister = registerEmulatorSaveBridge(frame, saveId);
+      return () => {
+        unregister();
+        iframeRef.current = null;
+      };
+    },
+    [saveId],
+  );
   const currentGameName = currentIdentity?.gameName;
   const dataUrl =
     typeof document === "undefined" ? "/emulatorjs/data/" : new URL("emulatorjs/data/", document.baseURI).href;
 
   useEffect(() => {
-    ensureEmulatorSaveBridge();
     // The test view is about to pull EmulatorJS assets; move them to the front
     // of the offline warm-up so its low-priority queue works for, not against,
     // this session.
@@ -795,7 +807,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
                       allow="autoplay; fullscreen; gamepad"
                       allowFullScreen
                       key={`${currentGame.id}:${gameUrl}:${currentGame.savePreviewRevision ?? 0}`}
-                      ref={iframeRef}
+                      ref={registerPlayerFrame}
                       referrerPolicy="no-referrer"
                       srcDoc={createEmulatorDocument(dataUrl, gameUrl, currentIdentity.gameName, currentCore, {
                         gameId: currentIdentity.gameId,
