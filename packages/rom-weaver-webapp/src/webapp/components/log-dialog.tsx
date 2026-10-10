@@ -1627,14 +1627,15 @@ const LogDialog = ({
       tabIndex={-1}
       onCancel={(event) => {
         event.preventDefault();
-        close();
+        if (!event.currentTarget.querySelector(".rw-modal")) close();
       }}
       onClick={(event) => {
         if (event.target === dialogRef.current) close();
       }}
       onKeyDown={(event) => {
         if (event.key !== "Escape" || event.defaultPrevented) return;
-        if (event.target instanceof Element && event.target.closest(".rw-modal")) return;
+        // A newly opened confirmation owns Escape even before its focus frame runs.
+        if (event.currentTarget.querySelector(".rw-modal")) return;
         event.preventDefault();
         close();
       }}

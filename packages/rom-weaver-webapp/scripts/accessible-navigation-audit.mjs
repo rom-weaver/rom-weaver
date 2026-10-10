@@ -59,6 +59,10 @@ const auditDialogKeyboard = async (page, trigger, dialog) => {
 };
 
 const auditDirtySettings = async (page, trigger, dialog) => {
+  const openSettings = async () => {
+    await tabTo(page, trigger);
+    await page.keyboard.press("Enter");
+  };
   const confirmation = page.getByRole("dialog", { name: "Discard settings changes?", exact: true });
   const detailed = page.locator("#settings-detailed-view-enabled");
   const stagedFile = page.locator("#rom-weaver-list-input-stack");
@@ -69,7 +73,7 @@ const auditDirtySettings = async (page, trigger, dialog) => {
   });
   await expect(stagedFile).toContainText("settings-retained.bin");
   for (const method of ["Close", "Escape", "Back"]) {
-    await trigger.click();
+    await openSettings();
     const saved = await detailed.isChecked();
     await detailed.setChecked(!saved);
     const close = dialog.getByRole("button", { name: "Close", exact: true });
@@ -87,7 +91,10 @@ const auditDirtySettings = async (page, trigger, dialog) => {
     await expect(page).toHaveURL(/#console-settings$/);
     await expectFocusInside(dialog);
 
-    await close.click();
+    // Safari does not focus buttons on pointer clicks. Establish the keyboard
+    // opener explicitly before asserting that cancellation returns focus to it.
+    await tabTo(page, close);
+    await page.keyboard.press("Enter");
     await expect(confirmation).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(confirmation).toBeHidden();
@@ -102,14 +109,14 @@ const auditDirtySettings = async (page, trigger, dialog) => {
     await expect(page).not.toHaveURL(/#console-/);
     await expect(trigger).toBeFocused();
     await expect(stagedFile).toContainText("settings-retained.bin");
-    await trigger.click();
+    await openSettings();
     await expect(detailed).toBeChecked({ checked: saved });
     await close.click();
     await expect(dialog).toBeHidden();
     await expect(page).not.toHaveURL(/#console-/);
   }
 
-  await trigger.click();
+  await openSettings();
   await expect(dialog).toContainText("Theme applies immediately. Other settings apply when you save.");
   await dialog.getByRole("button", { name: "Dark", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -117,7 +124,7 @@ const auditDirtySettings = async (page, trigger, dialog) => {
   await expect(dialog).toBeHidden();
   await expect(confirmation).toBeHidden();
   await expect(page).not.toHaveURL(/#console-/);
-  await trigger.click();
+  await openSettings();
   await expect(dialog.getByRole("button", { name: "Dark", exact: true })).toHaveAttribute("aria-pressed", "true");
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await expect(dialog).toBeHidden();
