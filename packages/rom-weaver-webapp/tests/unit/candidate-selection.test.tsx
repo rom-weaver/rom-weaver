@@ -1,7 +1,10 @@
 // @vitest-environment happy-dom
 import { act, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { CandidateSelectionDialog, useCandidateSelection } from "../../src/public/react/candidate-selection.tsx";
+import { useInputSelectionHandler } from "../../src/public/react/input-selection-handler.ts";
+import { resolveInputSelection } from "../../src/workers/rom-weaver/runner-control.ts";
 import type { CandidateSelectionPrompt } from "../../src/public/react/public-types.ts";
 
 const singleRequest = (overrides: Partial<CandidateSelectionPrompt> = {}): CandidateSelectionPrompt => ({
@@ -209,6 +212,68 @@ describe("CandidateSelectionDialog", () => {
 });
 
 describe("useCandidateSelection", () => {
+  it("rejects active and queued requests when their form unmounts", async () => {
+    const onCancelSelection = vi.fn();
+    const { result, unmount } = renderHook(() => useCandidateSelection({ onCancelSelection }));
+    const settled = vi.fn();
+    act(() => {
+      void result.current.selectFile(singleRequest()).catch(settled);
+      void result.current.selectFile(singleRequest({ sourceName: "queued.zip" })).catch(settled);
+    });
+
+    unmount();
+    await Promise.resolve();
+    expect(settled).toHaveBeenCalledTimes(2);
+    for (const [error] of settled.mock.calls) {
+      expect(error).toMatchObject({ code: "WORKFLOW_SELECTION_SKIPPED" });
+    }
+    // Unmount is lifecycle cleanup, not another user cancellation event.
+    expect(onCancelSelection).not.toHaveBeenCalled();
+  });
+
+  it("rejects a delayed request sent to an unmounted form", async () => {
+    const { result, unmount } = renderHook(() => useCandidateSelection());
+    const selectFile = result.current.selectFile;
+    unmount();
+    const settled = vi.fn();
+    void selectFile(singleRequest()).catch(settled);
+    await Promise.resolve();
+    expect(settled).toHaveBeenCalledWith(expect.objectContaining({ code: "WORKFLOW_SELECTION_SKIPPED" }));
+  });
+
+  it("accepts requests after StrictMode replays the mount effect", async () => {
+    const { result } = renderHook(() => useCandidateSelection(), { wrapper: StrictMode });
+    let choice: Promise<unknown> | undefined;
+    act(() => {
+      choice = result.current.selectFile(singleRequest());
+    });
+    const view = render(result.current.candidateSelectionDialog);
+    fireEvent.click(view.getByRole("button", { name: /folder\/update\.ips/ }));
+    await expect(choice).resolves.toEqual({ id: "patch-a" });
+  });
+
+  it("releases the global host-prompt chain so a replacement form can select", async () => {
+    const useFormSelection = () => {
+      const selection = useCandidateSelection();
+      useInputSelectionHandler("embedded", selection.selectFile);
+      return selection;
+    };
+    const request = JSON.stringify({ candidates: [{ label: "game-a.bin" }, { label: "game-b.bin" }] });
+    const old = renderHook(useFormSelection);
+    const cancelled = vi.fn();
+    void Promise.resolve(resolveInputSelection(request)).then(cancelled);
+    await waitFor(() => expect(old.result.current.candidateSelectionDialog.props.state).not.toBeNull());
+    old.unmount();
+    await waitFor(() => expect(cancelled).toHaveBeenCalledWith([]));
+
+    const replacement = renderHook(useFormSelection);
+    const choice = Promise.resolve(resolveInputSelection(request));
+    await waitFor(() => expect(replacement.result.current.candidateSelectionDialog.props.state).not.toBeNull());
+    const view = render(replacement.result.current.candidateSelectionDialog);
+    fireEvent.click(view.getByRole("button", { name: /game-b\.bin/ }));
+    await expect(choice).resolves.toEqual([1]);
+  });
+
   it("resolves one request, queues the next, and reports cancellation", async () => {
     const onCancelSelection = vi.fn();
     const { result } = renderHook(() => useCandidateSelection({ onCancelSelection }));

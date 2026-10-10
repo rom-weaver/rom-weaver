@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createLogger } from "../../lib/logging.ts";
 import { stripOperationScopeChain } from "../../lib/runtime/run-output-paths.ts";
 import { getCandidateDisplayItems } from "../../presentation/formatting/candidates.ts";
@@ -133,6 +133,21 @@ const useCandidateSelection = ({ fileInput, onCancelSelection }: UseCandidateSel
   // mutation awaiting it.
   const pendingQueueRef = useRef<CandidateSelectionState[]>([]);
   const selectionSeqRef = useRef(0);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    const pendingQueue = pendingQueueRef.current;
+    return () => {
+      mountedRef.current = false;
+      // Releasing the form must also release callers awaiting its picker, including
+      // the global host-prompt chain. No dialog remains to answer these requests.
+      const active = selectionStateRef.current;
+      selectionStateRef.current = null;
+      const pending = pendingQueue.splice(0);
+      active?.reject(createSelectionSkippedError());
+      for (const request of pending) request.reject(createSelectionSkippedError());
+    };
+  }, []);
   const showSelection = useCallback((next: CandidateSelectionState | null) => {
     selectionStateRef.current = next;
     setSelectionState(next);
@@ -144,6 +159,11 @@ const useCandidateSelection = ({ fileInput, onCancelSelection }: UseCandidateSel
   const selectFile = useCallback(
     (request: CandidateSelectionPrompt) =>
       new Promise<CandidateSelectionChoice>((resolve, reject) => {
+        // In-flight staging can retain this callback past the form's lifetime.
+        if (!mountedRef.current) {
+          reject(createSelectionSkippedError());
+          return;
+        }
         selectionSeqRef.current += 1;
         const nextState: CandidateSelectionState = { reject, request, resolve, seq: selectionSeqRef.current };
         if (selectionStateRef.current) {
