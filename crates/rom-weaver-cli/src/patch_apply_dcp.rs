@@ -31,6 +31,7 @@ impl CliApp {
         &self,
         args: PatchApplyCommand,
         expected_rom_name: Option<&str>,
+        additional_sources: &[PathBuf],
     ) -> OperationReport {
         let context = self.context(args.threads);
         let single = context.single_thread_execution();
@@ -134,6 +135,32 @@ impl CliApp {
             }
             Err(error) => return fail_error("prepare", error),
         };
+        let mut sources = additional_sources.to_vec();
+        sources.extend([args.input.clone(), dcp_path.clone()]);
+        let output = args
+            .output
+            .as_deref()
+            .expect("output validated by run_patch_apply");
+        if compression_options.enabled {
+            let plan = match self.resolve_patch_apply_compression_plan(
+                output,
+                &args.input,
+                &compression_options,
+            ) {
+                Ok(plan) => plan,
+                Err(error) => return fail_error("validate", error),
+            };
+            sources.extend(Self::disc_source_paths(&disc));
+            if let Err(error) =
+                Self::ensure_patch_output_preserves_sources(&plan.output_path, &sources)
+            {
+                return fail_error("validate", error);
+            }
+        } else if let Err(error) =
+            Self::validate_disc_output_destinations(&disc, output, &sources, args.force)
+        {
+            return fail_error("validate", error);
+        }
         let name_warning = warn_on_rom_name_mismatch(expected_rom_name, &disc.target_file);
 
         let mut report = self.rebuild_and_emit_dcp(
@@ -294,7 +321,7 @@ impl CliApp {
                         return fail_error("prepare", error);
                     }
                 };
-            match self.write_disc_output(disc, &staged_sheet, output) {
+            match self.write_disc_output(disc, &staged_sheet, output, args.force) {
                 Ok(note) => {
                     label = format!("{label}; {note}");
                     let report = OperationReport::succeeded(
