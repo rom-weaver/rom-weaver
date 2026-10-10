@@ -3,21 +3,24 @@
 //! Resolves tracks from a `.cue`/`.gdi` and reassembles patched tracks with the
 //! untouched tracks and sheets. Reports unreferenced data files beside the sheet.
 
+mod staging;
+
 use super::patch_filename_checksum::parse_filename_requirements;
 use super::*;
 
 /// One data file referenced by a disc sheet.
 struct DiscFile {
-    /// The name exactly as written in the sheet (used as the staged filename so
-    /// the sheet stays valid).
+    /// The name exactly as written in the source sheet (also used by --target).
     name: String,
+    /// A collision-free, single-component name for staged/output files.
+    output_name: String,
     /// Absolute path to the file next to the sheet.
     path: PathBuf,
 }
 
 /// A disc resolved from a sheet input for patching.
 pub(super) struct DiscContext {
-    /// Sheets to copy into the staged disc verbatim: the `.cue` and, for a
+    /// Sheets to copy into the staged disc with rebased references: the `.cue` and, for a
     /// GD-ROM `.cue` with a sibling `.gdi`, that `.gdi` too.
     sheet_paths: Vec<PathBuf>,
     /// Every referenced data file (union across sheets), in declaration order.
@@ -76,9 +79,11 @@ fn discover_disc_files(input: &Path, kind: DiscSheetKind) -> Result<(Vec<PathBuf
     }
 
     let sheet_dir = sheet_directory(input);
+    let output_names = staging::output_names(&sheet_paths, &referenced_names);
     let files = referenced_names
         .into_iter()
-        .map(|name| {
+        .zip(output_names)
+        .map(|(name, output_name)| {
             let path = sheet_dir.join(&name);
             if !path.is_file() {
                 return Err(RomWeaverError::Validation(format!(
@@ -86,7 +91,11 @@ fn discover_disc_files(input: &Path, kind: DiscSheetKind) -> Result<(Vec<PathBuf
                     input.display()
                 )));
             }
-            Ok(DiscFile { name, path })
+            Ok(DiscFile {
+                name,
+                output_name,
+                path,
+            })
         })
         .collect::<Result<Vec<_>>>()?;
     Ok((sheet_paths, files))
@@ -471,7 +480,7 @@ impl CliApp {
     }
 
     /// Stage the reassembled disc in a temp directory: every sheet copied
-    /// verbatim, every untouched track copied under its sheet-referenced name,
+    /// with safe references, every untouched track copied under its output name,
     /// and the patched track written under the target's name. Registers the
     /// stage directory in `temp_paths` for cleanup. Returns the path to the
     /// primary sheet inside the stage directory (the input to the compressor).
@@ -503,7 +512,11 @@ impl CliApp {
         let stage_dir = context
             .temp_paths()
             .next_path("patch-apply-disc-stage", None);
-        fs::create_dir_all(&stage_dir)?;
+        if let Some(parent) = stage_dir.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        // Never reuse an existing directory (or symlink) as our private stage.
+        fs::create_dir(&stage_dir)?;
         temp_paths.push(stage_dir.clone());
         trace!(stage_dir = %stage_dir.display(), tracks = replacements.len(), "staging patched disc");
 
@@ -516,21 +529,27 @@ impl CliApp {
                 ))
             })?;
             let dest = stage_dir.join(name);
-            fs::copy(sheet, &dest)?;
+            staging::write_sheet(sheet, &dest, &disc.files)?;
             if index == 0 {
                 primary_sheet = Some(dest);
             }
         }
 
         for file in &disc.files {
-            let dest = stage_dir.join(&file.name);
+            let dest = stage_dir.join(&file.output_name);
             if let Some(parent) = dest.parent()
                 && !parent.exists()
             {
                 fs::create_dir_all(parent)?;
             }
             let source = replacements.get(&file.path).unwrap_or(&file.path);
-            fs::copy(source, &dest)?;
+            // Exclusive creation also catches filesystem-specific name aliases.
+            let mut source = File::open(source)?;
+            let mut target = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&dest)?;
+            std::io::copy(&mut source, &mut target)?;
         }
 
         primary_sheet
@@ -555,7 +574,11 @@ impl CliApp {
                 .filter_map(|sheet| sheet.file_name())
                 .map(|name| out_dir.join(name)),
         );
-        paths.extend(disc.files.iter().map(|file| out_dir.join(&file.name)));
+        paths.extend(
+            disc.files
+                .iter()
+                .map(|file| out_dir.join(&file.output_name)),
+        );
         paths
     }
 
