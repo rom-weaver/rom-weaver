@@ -1231,10 +1231,11 @@ describe("webapp responsive navigation", () => {
       if (width <= 999) {
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, "e");
         input.dispatchEvent(new Event("input", { bubbles: true }));
-        // Guides load asynchronously after the first query. Wait for their rows
-        // before capturing the ordered options used by the keyboard assertions.
+        // Docs-search results load asynchronously after the first query. Static
+        // CLI shortcuts also have kind "Guide", so wait for a highlighted docs
+        // link before capturing the ordered keyboard options.
         await vi.waitFor(() => {
-          expect([...host.querySelectorAll(".find-kind")].some((kind) => kind.textContent === "Guide")).toBe(true);
+          expect(host.querySelector('.find-option[href*="?highlight=e"]')).not.toBeNull();
           expect(host.querySelectorAll(".find-option").length).toBeGreaterThan(3);
         });
       }
