@@ -660,6 +660,11 @@ impl CliApp {
                 fs::create_dir_all(parent)?;
             }
             if overwrite {
+                // Some filesystems create additional aliases (such as NTFS
+                // short names) only after an earlier member exists. Recheck
+                // identities before each destructive copy, not only before
+                // the first publication.
+                Self::validate_disc_output_destinations(disc, output, &[], true)?;
                 fs::copy(source, destination)?;
             } else {
                 Self::copy_to_new_output_file(source, destination)?;
