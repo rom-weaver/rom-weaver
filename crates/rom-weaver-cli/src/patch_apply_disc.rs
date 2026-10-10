@@ -583,7 +583,12 @@ impl CliApp {
                     super::patch_apply::paths_refer_to_same_file(other, destination)
                         // Disc reference enumeration is ASCII-case-insensitive;
                         // keep emitted names unambiguous on every host too.
-                        || other.to_string_lossy().eq_ignore_ascii_case(&destination.to_string_lossy())
+                        // Components normalize Windows' interchangeable path
+                        // separators before the case-insensitive comparison.
+                        || other.components()
+                            .map(|part| part.as_os_str().to_string_lossy().to_ascii_lowercase())
+                            .eq(destination.components()
+                                .map(|part| part.as_os_str().to_string_lossy().to_ascii_lowercase()))
                         // Unicode normalization/case folding differs between
                         // filesystems. Conservatively refuse same-extension
                         // names when either is outside the portable ASCII

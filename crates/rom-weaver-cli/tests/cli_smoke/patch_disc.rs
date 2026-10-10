@@ -1218,7 +1218,10 @@ fn patch_apply_disc_force_rejects_primary_companion_name_collision() {
                 .unwrap()
                 .contains("conflicts with another disc output")
         );
-        assert!(!temp.child(output_name).path().exists());
+        assert!(
+            !temp.child(output_name).path().exists(),
+            "collision preflight must not publish {output_name}"
+        );
         assert!(!temp.child("out/track01.bin").path().exists());
         assert!(!temp.child("out/track02.bin").path().exists());
     }
