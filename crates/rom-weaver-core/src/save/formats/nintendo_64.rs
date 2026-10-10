@@ -17,7 +17,7 @@ const fn n64(
 
 /// Mupen64Plus-Next (libretro) stores every backup device in one `.srm`:
 /// EEPROM, four Controller Paks, SRAM, then FlashRAM, in that order.
-/// https://github.com/libretro/mupen64plus-libretro-nx/blob/develop/libretro/libretro.c
+/// <https://github.com/libretro/mupen64plus-libretro-nx/blob/develop/libretro/libretro.c>
 pub const MUPEN64PLUS_COMBINED_SIZE: usize = 0x800 + 4 * 0x8000 + 0x8000 + 0x20000;
 
 pub const FORMATS: &[SaveFormatDefinition] = &[

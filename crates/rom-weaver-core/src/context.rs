@@ -220,7 +220,7 @@ impl OperationContext {
         }
     }
 
-    /// The seeded checksum for `path`/`algorithm`, if one was recorded via [`seed_checksums`].
+    /// The seeded checksum for `path`/`algorithm`, if one was recorded via [`Self::seed_checksums`].
     pub fn seeded_checksum(&self, path: &Path, algorithm: &str) -> Option<String> {
         let cache = self
             .seeded_checksums

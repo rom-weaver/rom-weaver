@@ -4,7 +4,7 @@ pub const MEMORY_CARD_SIZE: usize = 128 * 1024;
 const MEMORY_CARD_MAGIC: &[u8] = b"MC";
 
 /// Frame 0 of a formatted memory card starts with the `MC` header id.
-/// https://psx-spx.consoledev.net/controllersandmemorycards/#memory-card-data-format
+/// <https://psx-spx.consoledev.net/controllersandmemorycards/#memory-card-data-format>
 fn is_memory_card(bytes: &[u8]) -> bool {
     bytes.starts_with(MEMORY_CARD_MAGIC)
 }

@@ -411,7 +411,7 @@ fn progress_override(progress: bool, no_progress: bool) -> Option<bool> {
 }
 
 /// Resolve the `--color`/`--no-color` pair into an explicit override, or `None`
-/// to fall back to the `NO_COLOR`-env / tty default in [`Surface`]. Flag beats
+/// to fall back to the `NO_COLOR`-env / tty default in [`Surface`](crate::render::Surface). Flag beats
 /// env: `--color` forces color even with `NO_COLOR` set.
 #[cfg(not(target_arch = "wasm32"))]
 fn color_override(color: bool, no_color: bool) -> Option<bool> {
