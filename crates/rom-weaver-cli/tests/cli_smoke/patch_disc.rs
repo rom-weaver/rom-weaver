@@ -1550,3 +1550,280 @@ fn patch_apply_disc_rejects_references_that_differ_only_by_case_unless_same_file
         assert!(!output.path().exists());
     }
 }
+
+fn case_alias_patch(temp: &assert_fs::TempDir) -> assert_fs::fixture::ChildPath {
+    let patch = temp.child("patch.ips");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: DISC_PATCH_OFFSET as u32,
+                data: disc_patch_payload(),
+            }],
+            None,
+        ),
+    )
+    .expect("patch");
+    patch
+}
+
+const CASE_ALIAS_TRACK_LEN: usize = 2352 * 4;
+const CASE_ALIAS_CUE: &str = "FILE a.bin BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\nFILE A.BIN BINARY\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\n";
+
+fn case_alias_track(modulus: usize) -> Vec<u8> {
+    (0..CASE_ALIAS_TRACK_LEN)
+        .map(|i| (i % modulus) as u8)
+        .collect()
+}
+
+/// Patch `a.bin` of the `CASE_ALIAS_CUE` disc in `temp` into `out.chd`.
+fn apply_case_alias_patch_to_chd(temp: &assert_fs::TempDir) -> assert_fs::fixture::ChildPath {
+    temp.child("disc.cue")
+        .write_str(CASE_ALIAS_CUE)
+        .expect("cue");
+    let patch = case_alias_patch(temp);
+    let output = temp.child("out.chd");
+    let json = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--target",
+            "a.bin",
+            "-i",
+            temp.child("disc.cue").path().to_str().expect("cue path"),
+            "--patch",
+            patch.path().to_str().expect("patch path"),
+            "-o",
+            output.path().to_str().expect("output path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_eq!(json["status"], "succeeded", "{json}");
+    output
+}
+
+/// Extract a two-track `CASE_ALIAS_CUE` CHD and split it into its tracks.
+fn extract_case_alias_tracks(
+    temp: &assert_fs::TempDir,
+    chd: &assert_fs::fixture::ChildPath,
+) -> (Vec<u8>, Vec<u8>) {
+    let out_dir = temp.child("extract");
+    command_stdout(
+        &[
+            "extract",
+            "--input",
+            chd.path().to_str().expect("chd path"),
+            "--output",
+            out_dir.path().to_str().expect("extract path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    let mut track01 = fs::read(out_dir.child("out.bin").path()).expect("extracted bin");
+    assert_eq!(track01.len(), CASE_ALIAS_TRACK_LEN * 2);
+    let track02 = track01.split_off(CASE_ALIAS_TRACK_LEN);
+    (track01, track02)
+}
+
+#[test]
+fn patch_apply_disc_compressed_output_keeps_distinct_case_variant_track() {
+    let temp = setup_temp_dir();
+    let original = case_alias_track(211);
+    fs::write(temp.child("a.bin").path(), &original).expect("a.bin");
+    let case_insensitive = temp.child("A.BIN").path().exists();
+    let other = case_alias_track(173);
+    if !case_insensitive {
+        fs::write(temp.child("A.BIN").path(), &other).expect("A.BIN");
+    }
+    let output = apply_case_alias_patch_to_chd(&temp);
+    let (track01, track02) = extract_case_alias_tracks(&temp, &output);
+    let patched = apply_ips_literal(original, DISC_PATCH_OFFSET, &disc_patch_payload());
+    assert_eq!(track01, patched);
+    // A distinct `A.BIN` keeps its own bytes; on a case-insensitive
+    // filesystem it is `a.bin`, so it is patched too.
+    assert_eq!(track02, if case_insensitive { patched } else { other });
+}
+
+#[cfg(unix)]
+#[test]
+fn patch_apply_disc_compressed_output_patches_symlinked_alias_track() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("a.bin").path(), case_alias_track(211)).expect("a.bin");
+    if temp.child("A.BIN").path().exists() {
+        // Case-insensitive filesystem: the distinct-variant test covers it.
+        return;
+    }
+    std::os::unix::fs::symlink("a.bin", temp.child("A.BIN").path()).expect("symlink");
+    let output = apply_case_alias_patch_to_chd(&temp);
+    let (track01, track02) = extract_case_alias_tracks(&temp, &output);
+
+    let staged = temp.child("staged/disc.cue");
+    let json = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--no-compress",
+            "--target",
+            "a.bin",
+            "-i",
+            temp.child("disc.cue").path().to_str().expect("cue path"),
+            "--patch",
+            temp.child("patch.ips").path().to_str().expect("patch path"),
+            "-o",
+            staged.path().to_str().expect("staged path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_eq!(json["status"], "succeeded", "{json}");
+    let staged_track = fs::read(temp.child("staged/a.bin").path()).expect("staged track");
+    assert_eq!(
+        staged_track,
+        apply_ips_literal(
+            case_alias_track(211),
+            DISC_PATCH_OFFSET,
+            &disc_patch_payload()
+        )
+    );
+    assert_eq!(track01, staged_track);
+    assert_eq!(track02, staged_track);
+}
+
+#[cfg(unix)]
+#[test]
+fn patch_apply_disc_compressed_output_keeps_differently_named_hard_link_track() {
+    let temp = setup_temp_dir();
+    let original = case_alias_track(211);
+    fs::write(temp.child("a.bin").path(), &original).expect("a.bin");
+    fs::hard_link(temp.child("a.bin").path(), temp.child("b.bin").path()).expect("hard link");
+    temp.child("disc.cue")
+        .write_str(&CASE_ALIAS_CUE.replace("A.BIN", "b.bin"))
+        .expect("cue");
+    let patch = case_alias_patch(&temp);
+    let output = temp.child("out.chd");
+    let json = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--target",
+            "a.bin",
+            "-i",
+            temp.child("disc.cue").path().to_str().expect("cue path"),
+            "--patch",
+            patch.path().to_str().expect("patch path"),
+            "-o",
+            output.path().to_str().expect("output path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_eq!(json["status"], "succeeded", "{json}");
+    let (track01, track02) = extract_case_alias_tracks(&temp, &output);
+    // `b.bin` is its own sheet entry, so only the targeted `a.bin` track is
+    // patched, matching the `--no-compress` copy of `b.bin`.
+    assert_eq!(
+        track01,
+        apply_ips_literal(original.clone(), DISC_PATCH_OFFSET, &disc_patch_payload())
+    );
+    assert_eq!(track02, original);
+}
+
+#[test]
+fn patch_apply_disc_bare_relative_sheet_matches_absolute_chd() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("a.bin").path(), case_alias_track(211)).expect("a.bin");
+    temp.child("disc.cue")
+        .write_str("FILE a.bin BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n")
+        .expect("cue");
+    let patch = case_alias_patch(&temp);
+    let patch_path = patch.path().to_str().expect("patch path");
+    let absolute = temp.child("absolute.chd");
+    let absolute_json = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "-i",
+            temp.child("disc.cue").path().to_str().expect("cue path"),
+            "--patch",
+            patch_path,
+            "--threads",
+            "1",
+            "-o",
+            absolute.path().to_str().expect("output path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_eq!(absolute_json["status"], "succeeded", "{absolute_json}");
+
+    let relative = temp.child("relative.chd");
+    let stdout = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .current_dir(temp.path())
+        .args([
+            "patch",
+            "apply",
+            "-i",
+            "disc.cue",
+            "--patch",
+            patch_path,
+            "--threads",
+            "1",
+            "-o",
+            relative.path().to_str().expect("output path"),
+            "--jsonl",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let relative_json = parse_single_json_line(&stdout);
+    assert_eq!(relative_json["status"], "succeeded", "{relative_json}");
+    assert_eq!(
+        fs::read(relative.path()).expect("relative chd"),
+        fs::read(absolute.path()).expect("absolute chd")
+    );
+}
+
+#[test]
+fn patch_apply_disc_reports_missing_case_alias_as_not_found() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("a.bin").path(), vec![1u8; 2352 * 4]).expect("a.bin");
+    // On a case-insensitive filesystem `A.BIN` resolves to `a.bin`, so there is
+    // no missing alias to report.
+    if temp.child("A.BIN").path().exists() {
+        return;
+    }
+    temp.child("disc.cue")
+        .write_str(CASE_ALIAS_CUE)
+        .expect("cue");
+    let patch = case_alias_patch(&temp);
+    let output = temp.child("out/disc.cue");
+    let json = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--no-compress",
+            "--target",
+            "a.bin",
+            "-i",
+            temp.child("disc.cue").path().to_str().expect("cue path"),
+            "--patch",
+            patch.path().to_str().expect("patch path"),
+            "-o",
+            output.path().to_str().expect("output path"),
+            "--jsonl",
+        ],
+        1,
+    );
+    assert_eq!(json["status"], "failed");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("`A.BIN`, which was not found"), "{label}");
+    assert!(
+        label.contains("differs only by case from `a.bin`"),
+        "{label}"
+    );
+    assert!(!output.path().exists());
+}

@@ -107,6 +107,60 @@ fn token(text: &str, start: usize) -> Option<(std::ops::Range<usize>, usize)> {
     }
 }
 
+/// Byte range of the file reference on one sheet line, if it has one.
+/// `saw_gdi_header` tracks the GDI track-count line across calls.
+fn reference_range(
+    kind: DiscSheetKind,
+    line: &str,
+    saw_gdi_header: &mut bool,
+) -> Option<std::ops::Range<usize>> {
+    let range = match kind {
+        DiscSheetKind::Cue => token(line, 0).and_then(|(keyword, end)| {
+            (!line.trim_start().starts_with('"') && line[keyword].eq_ignore_ascii_case("FILE"))
+                .then(|| token(line, end))
+                .flatten()
+        }),
+        DiscSheetKind::Gdi if line.trim().is_empty() => None,
+        DiscSheetKind::Gdi if !*saw_gdi_header => {
+            *saw_gdi_header = true;
+            None
+        }
+        DiscSheetKind::Gdi => {
+            let mut end = 0;
+            for _ in 0..4 {
+                end = token(line, end).map(|(_, end)| end).unwrap_or(line.len());
+            }
+            token(line, end)
+        }
+    };
+    range.map(|(range, _)| range)
+}
+
+/// References are matched ignoring case, so a differently-cased reference must
+/// be the same file as `file` (case-insensitive filesystem or symlink);
+/// otherwise its data would silently be replaced by `file`'s.
+fn check_case_alias(source: &Path, name: &str, file: &DiscFile) -> Result<()> {
+    if file.name == name {
+        return Ok(());
+    }
+    let alias = super::sheet_directory(source).join(name);
+    if !alias.is_file() {
+        return Err(RomWeaverError::Validation(format!(
+            "disc sheet `{}` references `{name}`, which was not found (differs only by case from `{}`)",
+            source.display(),
+            file.name
+        )));
+    }
+    if !super::super::patch_apply::paths_refer_to_same_file(&alias, &file.path) {
+        return Err(RomWeaverError::Validation(format!(
+            "disc sheet `{}` references `{}` and `{name}`, which differ only by case but are different files",
+            source.display(),
+            file.name
+        )));
+    }
+    Ok(())
+}
+
 pub(super) fn write_sheet(source: &Path, dest: &Path, files: &[DiscFile]) -> Result<()> {
     let text = fs::read_to_string(source)?;
     let kind = super::detect_disc_sheet(source).ok_or_else(|| {
@@ -115,26 +169,8 @@ pub(super) fn write_sheet(source: &Path, dest: &Path, files: &[DiscFile]) -> Res
     let mut output = String::with_capacity(text.len());
     let mut saw_gdi_header = false;
     for line in text.split_inclusive('\n') {
-        let range = match kind {
-            DiscSheetKind::Cue => token(line, 0).and_then(|(keyword, end)| {
-                (!line.trim_start().starts_with('"') && line[keyword].eq_ignore_ascii_case("FILE"))
-                    .then(|| token(line, end))
-                    .flatten()
-            }),
-            DiscSheetKind::Gdi if line.trim().is_empty() => None,
-            DiscSheetKind::Gdi if !saw_gdi_header => {
-                saw_gdi_header = true;
-                None
-            }
-            DiscSheetKind::Gdi => {
-                let mut end = 0;
-                for _ in 0..4 {
-                    end = token(line, end).map(|(_, end)| end).unwrap_or(line.len());
-                }
-                token(line, end)
-            }
-        };
-        if let Some((range, _)) = range {
+        let range = reference_range(kind, line, &mut saw_gdi_header);
+        if let Some(range) = range {
             let name = &line[range.clone()];
             let file = files
                 .iter()
@@ -145,19 +181,7 @@ pub(super) fn write_sheet(source: &Path, dest: &Path, files: &[DiscFile]) -> Res
                         source.display()
                     ))
                 })?;
-            // References are matched ignoring case, so a differently-cased
-            // reference must be the same file (case-insensitive filesystem);
-            // otherwise its data would silently be replaced by `file`'s.
-            if file.name != name {
-                let alias = super::sheet_directory(source).join(name);
-                if !super::super::patch_apply::paths_refer_to_same_file(&alias, &file.path) {
-                    return Err(RomWeaverError::Validation(format!(
-                        "disc sheet `{}` references `{}` and `{name}`, which differ only by case but are different files",
-                        source.display(),
-                        file.name
-                    )));
-                }
-            }
+            check_case_alias(source, name, file)?;
             output.push_str(&line[..range.start]);
             output.push_str(&file.output_name);
             output.push_str(&line[range.end..]);
