@@ -637,7 +637,7 @@ pub struct IdentifyCommand {
         arg(
             long = "hash",
             value_name = "HEX",
-            help = "Identify by a checksum instead of a file; accepts crc32/md5/sha1 hex (repeatable, one per algorithm)"
+            help = "Identify by a checksum instead of a file; accepts crc32/md5/sha1/sha256 hex (repeatable, one per algorithm)"
         )
     )]
     #[serde(default)]
@@ -3264,7 +3264,7 @@ pub struct CheatSelectionArgs {
             long = "cheat-system",
             value_name = "SYS",
             help_heading = "Cheats",
-            help = "Console the cheat shard is for (nes, snes, genesis, gameboy, gameboy-color, gba), when the ROM header does not say"
+            help = "Console the cheat shard is for (nes, snes, genesis, 32x, sms, gamegear, gameboy, gameboy-color, gba), when the ROM header does not say"
         )
     )]
     pub cheat_system: Option<String>,
