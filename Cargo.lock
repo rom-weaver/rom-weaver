@@ -1740,7 +1740,7 @@ checksum = "323c417e1d9665a65b263ec744ba09030cfb277e9daa0b018a4ab62e57bc8189"
 
 [[package]]
 name = "rom-weaver-checksum"
-version = "0.20.1"
+version = "0.21.0"
 dependencies = [
  "adler2",
  "blake3",
@@ -1760,7 +1760,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-cli"
-version = "0.20.1"
+version = "0.21.0"
 dependencies = [
  "assert_cmd",
  "assert_fs",
@@ -1795,7 +1795,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-containers"
-version = "0.20.1"
+version = "0.21.0"
 dependencies = [
  "adler2",
  "aes",
@@ -1857,7 +1857,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-core"
-version = "0.20.1"
+version = "0.21.0"
 dependencies = [
  "assert_fs",
  "bzip2",
@@ -1876,7 +1876,7 @@ dependencies = [
 
 [[package]]
 name = "rom-weaver-patches"
-version = "0.20.1"
+version = "0.21.0"
 dependencies = [
  "bzip2",
  "crc32fast",
