@@ -551,6 +551,84 @@ impl CliApp {
         paths
     }
 
+    /// Check the entire output set before publishing any file. `--force`
+    /// permits replacing unrelated outputs, never a source or another member.
+    pub(super) fn validate_disc_output_destinations(
+        disc: &DiscContext,
+        output: &Path,
+        additional_sources: &[PathBuf],
+        overwrite: bool,
+    ) -> Result<()> {
+        let outputs = Self::disc_output_paths(disc, output);
+        let sources = disc
+            .sheet_paths
+            .iter()
+            .chain(disc.files.iter().map(|file| &file.path))
+            .chain(additional_sources);
+        for source in sources {
+            for destination in &outputs {
+                if super::patch_apply::paths_refer_to_same_file(source, destination) {
+                    return Err(RomWeaverError::Validation(format!(
+                        "disc output `{}` and source `{}` resolve to the same file; choose a different --output directory",
+                        destination.display(),
+                        source.display()
+                    )));
+                }
+            }
+        }
+        for (index, destination) in outputs.iter().enumerate() {
+            if outputs[..index]
+                .iter()
+                .any(|other| {
+                    super::patch_apply::paths_refer_to_same_file(other, destination)
+                        // Disc reference enumeration is ASCII-case-insensitive;
+                        // keep emitted names unambiguous on every host too.
+                        // Components normalize Windows' interchangeable path
+                        // separators before the case-insensitive comparison.
+                        || other.components()
+                            .map(|part| part.as_os_str().to_string_lossy().to_ascii_lowercase())
+                            .eq(destination.components()
+                                .map(|part| part.as_os_str().to_string_lossy().to_ascii_lowercase()))
+                        // Unicode normalization/case folding differs between
+                        // filesystems. Conservatively refuse same-extension
+                        // names when either is outside the portable ASCII
+                        // namespace, before --force can overwrite a member.
+                        || (other.extension().zip(destination.extension()).is_some_and(|(left, right)| {
+                            left.to_string_lossy().eq_ignore_ascii_case(&right.to_string_lossy())
+                        }) && [other, destination].iter().any(|path| {
+                            path.file_name().is_some_and(|name| !name.to_string_lossy().is_ascii())
+                        }))
+                })
+            {
+                return Err(RomWeaverError::Validation(format!(
+                    "disc output `{}` conflicts with another disc output; choose distinct ASCII output names (non-ASCII names with the same extension may alias on some filesystems)",
+                    destination.display()
+                )));
+            }
+            // `exists` follows links and misses dangling links. Those are
+            // occupied destinations too, even before the no-clobber install.
+            match fs::symlink_metadata(destination) {
+                Ok(_) if !overwrite => {
+                    return Err(RomWeaverError::Validation(format!(
+                        "refusing to overwrite existing output `{}` (pass --force to overwrite it)",
+                        destination.display()
+                    )));
+                }
+                Ok(metadata) if metadata.is_dir() => {
+                    return Err(RomWeaverError::Validation(format!(
+                        "disc output `{}` is a directory; choose a different --output path",
+                        destination.display()
+                    )));
+                }
+                Ok(_) => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+            ensure_output_available(destination, overwrite)?;
+        }
+        Ok(())
+    }
+
     /// Write the reassembled disc to disk for `--no-compress` output: the
     /// primary sheet is written to `output` (which must be a `.cue`/`.gdi`
     /// path) and every track (and any secondary sheet) is written beside it
@@ -561,6 +639,7 @@ impl CliApp {
         disc: &DiscContext,
         staged_sheet: &Path,
         output: &Path,
+        overwrite: bool,
     ) -> Result<String> {
         if detect_disc_sheet(output).is_none() {
             return Err(RomWeaverError::Validation(format!(
@@ -568,30 +647,33 @@ impl CliApp {
                 output.display()
             )));
         }
-        let stage_dir = staged_sheet.parent().ok_or_else(|| {
-            RomWeaverError::Validation("staged disc sheet has no parent directory".to_string())
-        })?;
-        let out_dir = output.parent().unwrap_or_else(|| Path::new("."));
-        if !out_dir.as_os_str().is_empty() {
-            fs::create_dir_all(out_dir)?;
-        }
-        // The primary sheet's content is unchanged; it references tracks by name
-        // and those names are written beside it.
-        fs::copy(staged_sheet, output)?;
-        for sheet in disc.sheet_paths.iter().skip(1) {
-            if let Some(name) = sheet.file_name() {
-                fs::copy(stage_dir.join(name), out_dir.join(name))?;
-            }
-        }
-        for file in &disc.files {
-            let dest = out_dir.join(&file.name);
-            if let Some(parent) = dest.parent()
+        Self::validate_disc_output_destinations(disc, output, &[], overwrite)?;
+        let staged_outputs = Self::disc_output_paths(disc, staged_sheet);
+        let outputs = Self::disc_output_paths(disc, output);
+        trace!(output = %output.display(), overwrite, files = outputs.len(), "publishing full patched disc");
+        // Install companions before the primary sheet so an interrupted copy
+        // cannot publish a new sheet that references unfinished tracks.
+        for (source, destination) in staged_outputs
+            .iter()
+            .zip(&outputs)
+            .skip(1)
+            .chain(staged_outputs.iter().zip(&outputs).take(1))
+        {
+            if let Some(parent) = destination.parent()
                 && !parent.as_os_str().is_empty()
-                && !parent.exists()
             {
                 fs::create_dir_all(parent)?;
             }
-            fs::copy(stage_dir.join(&file.name), dest)?;
+            if overwrite {
+                // Some filesystems create additional aliases (such as NTFS
+                // short names) only after an earlier member exists. Recheck
+                // identities before each destructive copy, not only before
+                // the first publication.
+                Self::validate_disc_output_destinations(disc, output, &[], true)?;
+                fs::copy(source, destination)?;
+            } else {
+                Self::copy_to_new_output_file(source, destination)?;
+            }
         }
         Ok(format!(
             "wrote full disc ({} track(s)) beside `{}`",
