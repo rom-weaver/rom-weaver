@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.21.0](https://github.com/rom-weaver/rom-weaver/compare/v0.20.1...v0.21.0) (2026-10-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* rename bundles to weaves ([#1051](https://github.com/rom-weaver/rom-weaver/issues/1051))
+
+### User Experience
+
+* rename bundles to weaves ([#1051](https://github.com/rom-weaver/rom-weaver/issues/1051)) ([5fc15f3](https://github.com/rom-weaver/rom-weaver/commit/5fc15f3f0f89b54e08a82ba6a526a40ed5998c7e))
+
+
+### Bug Fixes
+
+* preserve bundle compatibility alongside weave ([#1061](https://github.com/rom-weaver/rom-weaver/issues/1061)) ([9898627](https://github.com/rom-weaver/rom-weaver/commit/98986273143eb32968cb9e7bef945652c1c65ef5))
+* verify Docker builds and runtime compatibility ([#1062](https://github.com/rom-weaver/rom-weaver/issues/1062)) ([fd341ac](https://github.com/rom-weaver/rom-weaver/commit/fd341ac0028c9059b4cc9744994c1e5323aac1ad))
+* **webapp:** send Docker weave redirects to weave-patches ([#1060](https://github.com/rom-weaver/rom-weaver/issues/1060)) ([07bb85a](https://github.com/rom-weaver/rom-weaver/commit/07bb85a6564af74e51c2a87c7050132aeb746cfd))
+
+
+### Documentation
+
+* add apply workflow video ([#1052](https://github.com/rom-weaver/rom-weaver/issues/1052)) ([9e3f5ae](https://github.com/rom-weaver/rom-weaver/commit/9e3f5ae9f7804c8fc818225d1cc3f2745239f5f2))
+* expand README feature pitch ([#1050](https://github.com/rom-weaver/rom-weaver/issues/1050)) ([5e862f2](https://github.com/rom-weaver/rom-weaver/commit/5e862f2beef3ed3e3e02ed07075ce7e9bc9a3013))
+
+
+### Dependencies
+
+* bump oxlint from 1.86.0 to 1.87.0 in the root-npm group ([#1054](https://github.com/rom-weaver/rom-weaver/issues/1054)) ([3ff9228](https://github.com/rom-weaver/rom-weaver/commit/3ff922833e1460c3a931ad3b3aa477198f2ff724))
+* bump taiki-e/install-action from 2.87.25 to 2.87.26 in the actions group ([#1059](https://github.com/rom-weaver/rom-weaver/issues/1059)) ([434e97e](https://github.com/rom-weaver/rom-weaver/commit/434e97e5092084c322270d51f8643bdbceaf624c))
+* bump the build-toolchain group in /packages/rom-weaver-webapp with 2 updates ([#1055](https://github.com/rom-weaver/rom-weaver/issues/1055)) ([ad3c386](https://github.com/rom-weaver/rom-weaver/commit/ad3c386ccac7055354e9615ac2969bec95701ac9))
+* bump the linting group in /packages/rom-weaver-webapp with 2 updates ([#1056](https://github.com/rom-weaver/rom-weaver/issues/1056)) ([c016ff4](https://github.com/rom-weaver/rom-weaver/commit/c016ff4d2885f9f42a232546e53896699a009be6))
+* bump zerocopy from 0.8.59 to 0.8.60 in the rust-dependencies group ([#1057](https://github.com/rom-weaver/rom-weaver/issues/1057)) ([846ff68](https://github.com/rom-weaver/rom-weaver/commit/846ff688df9699a4245df4e521fdc48dd96a2bcc))
+
+
+### Internal
+
+* refresh README video during releases ([#1053](https://github.com/rom-weaver/rom-weaver/issues/1053)) ([d945dee](https://github.com/rom-weaver/rom-weaver/commit/d945dee7e6a4daac35c461dd363de7ff7f8edfc8))
+
 ## [0.20.1](https://github.com/rom-weaver/rom-weaver/releases/tag/v0.20.1) (2026-10-09)
 
 ### Highlights

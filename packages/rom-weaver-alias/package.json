@@ -1,6 +1,6 @@
 {
   "name": "rom-weaver",
-  "version": "0.20.1",
+  "version": "0.21.0",
   "description": "Convenience alias for @rom-weaver/cli, the canonical package. Installs the CLI under the unscoped name so `npx rom-weaver` works.",
   "author": "Brandon Casey",
   "license": "AGPL-3.0-or-later",
@@ -75,7 +75,7 @@
     "docs/man/rom-weaver-weave-schema.1"
   ],
   "dependencies": {
-    "@rom-weaver/cli": "0.20.1"
+    "@rom-weaver/cli": "0.21.0"
   },
   "files": [
     "bin/rom-weaver.mjs",
