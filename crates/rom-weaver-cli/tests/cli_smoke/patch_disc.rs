@@ -1521,12 +1521,24 @@ fn patch_apply_disc_rejects_references_that_differ_only_by_case_unless_same_file
             patch.path().to_str().expect("patch path"),
             "-o",
             output.path().to_str().expect("output path"),
-            "--json",
+            "--jsonl",
         ],
         if case_insensitive { 0 } else { 1 },
     );
+    assert_eq!(
+        fs::read(temp.child("a.bin").path()).expect("original track"),
+        vec![1u8; 2352 * 4]
+    );
     if case_insensitive {
         assert_eq!(json["status"], "succeeded");
+        assert_eq!(
+            fs::read(temp.child("out/a.bin").path()).expect("patched track"),
+            apply_ips_literal(
+                vec![1u8; 2352 * 4],
+                DISC_PATCH_OFFSET,
+                &disc_patch_payload()
+            )
+        );
     } else {
         assert_eq!(json["status"], "failed");
         assert!(
