@@ -144,9 +144,11 @@ impl DiscLayout {
 }
 
 /// Whether two paths name the same disc track file. A sheet and its caller can
-/// spell one file differently: `./a.bin` versus `a.bin`, a symlink, or a case
-/// variant on a case-insensitive filesystem. Paths are first compared with `.`
-/// components dropped, then by file identity where the platform exposes it.
+/// spell one file differently: `./a.bin` versus `a.bin`, or a case variant
+/// that is the same file (a case-insensitive filesystem or a symlink). Paths
+/// are first compared with `.` components dropped. A case-only variant then
+/// matches only when it is the same file. Differently named hard links or
+/// symlinks stay separate tracks, as they do for `--no-compress` output.
 /// WASI has no file identity API, so wasm builds compare lexically only.
 fn is_same_track_file(track_path: &Path, original_path: &Path) -> bool {
     let without_cur_dir = |path: &Path| {
@@ -154,12 +156,19 @@ fn is_same_track_file(track_path: &Path, original_path: &Path) -> bool {
             .filter(|component| *component != std::path::Component::CurDir)
             .collect::<PathBuf>()
     };
-    if without_cur_dir(track_path) == without_cur_dir(original_path) {
+    let (track_path, original_path) = (without_cur_dir(track_path), without_cur_dir(original_path));
+    if track_path == original_path {
         return true;
+    }
+    if !track_path
+        .to_string_lossy()
+        .eq_ignore_ascii_case(&original_path.to_string_lossy())
+    {
+        return false;
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        same_file::is_same_file(track_path, original_path).unwrap_or(false)
+        same_file::is_same_file(&track_path, &original_path).unwrap_or(false)
     }
     #[cfg(target_arch = "wasm32")]
     {

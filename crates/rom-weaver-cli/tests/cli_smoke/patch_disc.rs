@@ -1690,6 +1690,45 @@ fn patch_apply_disc_compressed_output_patches_symlinked_alias_track() {
     assert_eq!(track02, staged_track);
 }
 
+#[cfg(unix)]
+#[test]
+fn patch_apply_disc_compressed_output_keeps_differently_named_hard_link_track() {
+    let temp = setup_temp_dir();
+    let original = case_alias_track(211);
+    fs::write(temp.child("a.bin").path(), &original).expect("a.bin");
+    fs::hard_link(temp.child("a.bin").path(), temp.child("b.bin").path()).expect("hard link");
+    temp.child("disc.cue")
+        .write_str(&CASE_ALIAS_CUE.replace("A.BIN", "b.bin"))
+        .expect("cue");
+    let patch = case_alias_patch(&temp);
+    let output = temp.child("out.chd");
+    let json = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--target",
+            "a.bin",
+            "-i",
+            temp.child("disc.cue").path().to_str().expect("cue path"),
+            "--patch",
+            patch.path().to_str().expect("patch path"),
+            "-o",
+            output.path().to_str().expect("output path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_eq!(json["status"], "succeeded", "{json}");
+    let (track01, track02) = extract_case_alias_tracks(&temp, &output);
+    // `b.bin` is its own sheet entry, so only the targeted `a.bin` track is
+    // patched, matching the `--no-compress` copy of `b.bin`.
+    assert_eq!(
+        track01,
+        apply_ips_literal(original.clone(), DISC_PATCH_OFFSET, &disc_patch_payload())
+    );
+    assert_eq!(track02, original);
+}
+
 #[test]
 fn patch_apply_disc_bare_relative_sheet_matches_absolute_chd() {
     let temp = setup_temp_dir();
