@@ -8,6 +8,25 @@ const isRawHtmlContainer = (content) => {
   return lines.at(-1)?.trim().toLowerCase() === `</${openingTag[1].toLowerCase()}>`;
 };
 
+// CommonMark gives autolinks and raw inline HTML the same precedence as code
+// spans: whichever starts first wins, so a backtick inside one never opens a span.
+const ATTRIBUTE = String.raw`\s+[A-Za-z_:][\w.:-]*(?:\s*=\s*(?:[^"'=<>\x60\x00-\x20]+|'[^']*'|"[^"]*"))?`;
+const AUTOLINK_OR_INLINE_HTML = new RegExp(
+  [
+    String.raw`<[A-Za-z][A-Za-z0-9.+-]{1,31}:[^<>\x00-\x20]*>`,
+    String.raw`<[\w.!#$%&'*+/=?^\x60{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*>`,
+    String.raw`<[A-Za-z][A-Za-z0-9-]*(?:${ATTRIBUTE})*\s*\/?>`,
+    String.raw`<\/[A-Za-z][A-Za-z0-9-]*\s*>`,
+    String.raw`<!--[\s\S]*?-->`,
+  ].join("|"),
+  "y",
+);
+
+const skippedMarkupEnd = (content, index) => {
+  AUTOLINK_OR_INLINE_HTML.lastIndex = index;
+  return AUTOLINK_OR_INLINE_HTML.test(content) ? AUTOLINK_OR_INLINE_HTML.lastIndex : -1;
+};
+
 const closingRunStart = (content, from, width) => {
   for (let search = from; search < content.length; ) {
     const start = content.indexOf("`", search);
@@ -35,6 +54,11 @@ const codeSpanBreakOffsets = (content) => {
   while (index < content.length) {
     if (content[index] === "\\") {
       index += 2;
+      continue;
+    }
+    if (content[index] === "<") {
+      const markupEnd = skippedMarkupEnd(content, index);
+      index = markupEnd < 0 ? index + 1 : markupEnd;
       continue;
     }
     if (content[index] !== "`") {

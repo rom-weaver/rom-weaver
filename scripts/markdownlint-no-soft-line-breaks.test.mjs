@@ -88,6 +88,24 @@ test("reports line breaks inside code spans", () => {
   ]);
 });
 
+test("ignores backticks inside autolinks and inline HTML", () => {
+  const errors = lintTokens([
+    {
+      lineNumber: 3,
+      content: 'See <a title="`x\ny`">z</a> and <https://e.com/`a> then `b\nc` end.',
+      children: [],
+    },
+  ]);
+
+  assert.deepEqual(errors, [
+    {
+      lineNumber: 4,
+      detail: "Join the code span onto one line.",
+      context: 'y`">z</a> and <https://e.com/`a> then `b',
+    },
+  ]);
+});
+
 test("allows one-line code spans, escaped backticks, and unmatched backticks", () => {
   const errors = lintTokens([
     {
