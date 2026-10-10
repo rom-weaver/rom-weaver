@@ -64,3 +64,39 @@ test("allows structural line breaks inside raw HTML containers", () => {
 
   assert.deepEqual(errors, []);
 });
+
+test("reports line breaks inside code spans", () => {
+  const errors = lintTokens([
+    {
+      lineNumber: 5,
+      content: "Prose first.\nRun `rom-weaver <command>\n--help` or ``a\nb``.",
+      children: [],
+    },
+  ]);
+
+  assert.deepEqual(errors, [
+    {
+      lineNumber: 6,
+      detail: "Join the code span onto one line.",
+      context: "Run `rom-weaver <command>",
+    },
+    {
+      lineNumber: 7,
+      detail: "Join the code span onto one line.",
+      context: "--help` or ``a",
+    },
+  ]);
+});
+
+test("allows one-line code spans, escaped backticks, and unmatched backticks", () => {
+  const errors = lintTokens([
+    {
+      lineNumber: 1,
+      content: "Use `code` and ``a ` b``.\nAn escaped \\` stays prose,\nand a lone ` never opens a span.",
+      children: [],
+    },
+    { type: "fence", lineNumber: 4, content: "`one\ntwo`\n" },
+  ]);
+
+  assert.deepEqual(errors, []);
+});
