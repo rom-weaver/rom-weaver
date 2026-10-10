@@ -40,6 +40,7 @@ Guided runs in the app: [Apply](https://rom-weaver.com/apply-patches?guide=apply
 | I want to… | Browser guide |
 | --- | --- |
 | Add a translation or other game change | [Apply a patch](how-to/apply-rom-patches.md) |
+| Add a patch recipe to my release page | [Add an Apply button](hosting/webapp-integration.md#add-an-apply-button) |
 | Share changes I made | [Create a patch](how-to/create-rom-patches.md) or [weave a recipe](how-to/create-bundles.md) |
 | Find which game or revision a file contains | [Identify a ROM by checksum](how-to/identify-roms-browser.md) |
 | Find a ROM from an existing CRC32, MD5, or SHA-1 hash | [Search ROM checksums](how-to/search-rom-checksums-browser.md) |
@@ -75,6 +76,7 @@ Procedures for specific tasks.
 
 ### In the browser
 
+- [Add an Apply button to a release](hosting/webapp-integration.md#add-an-apply-button)
 - [Apply a ROM patch](how-to/apply-rom-patches.md)
 - [Use cheats in the browser](how-to/use-browser-cheats.md)
 - [Create a ROM patch](how-to/create-rom-patches.md)

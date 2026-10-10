@@ -1,8 +1,6 @@
 # ROM patcher online: apply BPS, IPS, UPS, and xdelta patches
 
-Use rom-weaver as an online ROM patcher. Supported formats include BPS, IPS, UPS, xdelta, and PPF. Apply a ROM patch locally in your browser, then download the patched game.
-
-Your original stays untouched. No uploads or account are needed.
+Patch your own ROM locally, then download a new file. Your Original stays untouched; no upload or account is needed.
 
 <a id="apply-bps-ips-ups-and-xdelta-rom-patches-online"></a>
 
@@ -29,113 +27,59 @@ Your original stays untouched. No uploads or account are needed.
 
 <!-- END doctoc -->
 
-Never done this before? [Your first patch in the browser](../tutorials/first-patch.md) walks the same workflow with homebrew practice files first, using [guided Apply](https://rom-weaver.com/apply-patches?guide=apply).
-
-For a compressed-disc practice run, [patch a supplied CHD](../tutorials/patch-compressed-disc.md) with two ordered patches and verify the result.
-
 ## What do you need?
 
-You need the patch and your own copy of the exact game release it was made for. The files have different roles:
+Keep a clean ROM, the patch, and the author's notes. Match region, revision, checksum algorithm and digest, header state, and patch order. ZIP/7z/RAR files are containers; changing a patch's extension cannot fix a ROM mismatch. See [patch formats](../explanation/patch-formats.md) or the [tool comparison](../explanation/comparisons.md#applying-a-patch).
 
-- **Original ROM:** the starting game file named by the patch author. Add it to Apply alongside the patch. Keep a clean copy.
-- **Patch:** a file such as `.bps`, `.ips`, or `.xdelta` that describes changes to the original ROM.
-- **Archive:** a ZIP, 7z, or RAR that can contain a ROM, a patch, or both. Its extension identifies the archive, not the patch format.
-- **Output ROM:** the new game file created by applying the patch. This is the result you download and use in a compatible emulator or on supported hardware.
-
-Use the patch format supplied by its author. Changing formats does not fix a ROM mismatch. [Patch format differences](../explanation/patch-formats.md) explains which formats carry checksums. For other tools, see the [ROM patcher comparison](../explanation/comparisons.md#applying-a-patch).
-
-Keep the patch author's notes open. Look for:
-
-- region, such as USA, Japan, or Europe;
-- revision, such as Rev 0 or Rev 1;
-- a checksum and its algorithm;
-- whether the ROM has a header;
-- the required order when there is more than one patch.
-
-Compare the checksum, not just the filename. [How patching works](../explanation/how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not) explains the difference.
-
-If you know the ROM but do not have the file, type its checksum or its game name into **Identify by checksum or game name**. It sits under the drop zone on the empty page, and in **0x02 ROM** once a patch is loaded. A checksum shows the expected ROM directly. A name lists the matching games on every system; choose one, then choose its region or revision. Either way the card shows the expected ROM: its title, its region and revision, and every checksum and the size the local identification data holds. Nothing is uploaded.
-
-The search appears only while nothing else names the ROM. A weave entry, or a patch that records its own source, already answers the question.
-
-Keep one clean original somewhere safe. rom-weaver writes a separate result, but a known-good copy makes updates and troubleshooting much easier.
+Without the source file, use **Identify by checksum or game name** below the empty drop zone or in **0x02 ROM**. Search a checksum, or choose a game, system, region, and revision. The card shows locally indexed checksums and size. This search appears only when a weave or patch has not already named the expected source.
 
 ## Add the files
 
 1. Open [Apply](https://rom-weaver.com/apply-patches).
-2. Drag the ROM and patch onto **0x01 Inputs**, or choose **Add files**. You may add both at once, or drop the folder that holds them.
-3. Wait while the temporary cards say **Reading** or **Checksumming**.
-4. If an archive contains several possible files, choose the entry the patch author named.
+2. Drop the ROM and patch into **0x01 Inputs**, or choose **Add files**. A folder or [supported archive](../reference/formats.md#container-and-compression-formats) also works; nested archives, CHD, and RVZ are unpacked.
+3. Wait for **Reading** and **Checksumming**. If asked, choose the entry the author named.
 
-You can add [supported archives](../reference/formats.md#container-and-compression-formats), including ZIP, 7z, RAR, and tar, without extracting them first. rom-weaver looks inside, including inside nested archives. Disc containers such as CHD and RVZ are unpacked to the form the patch expects.
+The resulting cards separate **ROM**, **Patches & Cheats**, and **Apply** controls. To change only the container, use [Convert](convert-roms-browser.md).
 
-The page changes after the files are understood. **ROM** holds the game, **Patches & Cheats** holds the ordered steps, and **Apply** controls the new file.
-
-Use [cheats](use-browser-cheats.md) to add supported codes to that order. To change only the container, follow [Convert a ROM](convert-roms-browser.md).
-
-For a practice run, open [guided Apply](https://rom-weaver.com/apply-patches?guide=apply). It starts on this drop zone and waits for you to add files; choose **Continue** on its card to use the practice files if you have none. The [guided Apply cheats tour](https://rom-weaver.com/apply-patches?guide=apply-cheats) loads a supplied homebrew ROM and a working sample code. [Ways files get into Apply](../reference/guided-runs.md#ways-files-get-into-apply) lists every route in one table.
+New here? [Your first patch](../tutorials/first-patch.md) supplies homebrew files. [Guided Apply](https://rom-weaver.com/apply-patches?guide=apply) waits for your files; **Continue** with none loads samples. The [cheats tour](https://rom-weaver.com/apply-patches?guide=apply-cheats) supplies a sample code. [Input routes](../reference/guided-runs.md#ways-files-get-into-apply) lists other ways to add files.
 
 ## Apply a BPS patch
 
-Apply a BPS patch online using the clean source ROM specified by its author:
-
-1. Open [Apply](https://rom-weaver.com/apply-patches).
-2. Add the `.bps` patch and the clean ROM named by its author to **0x01 Inputs**. You can add them together, including inside a supported archive.
-3. Wait for the files to be read. Check the ROM's region and revision against the author's notes, then open **Checks** to inspect the patch's source check. BPS records the expected source checksum; if it fails, follow [Fix a source ROM checksum mismatch](fix-checksum-errors.md).
-4. Set the output name. Choose a plain output file unless your emulator or the patch author requires a compressed format.
-5. Choose **APPLY & DOWNLOAD** after the checks match. Use the downloaded output ROM and keep your clean original for future patches.
-
-For several patches, follow [Put several patches in order](#put-several-patches-in-order). The [CLI Apply guide](cli-apply.md) has the terminal command for the same BPS workflow.
+Add the `.bps` and clean source. Open **Checks**: BPS carries the expected source checksum. Resolve any [mismatch](fix-checksum-errors.md), then [choose the output and apply](#choose-the-output-and-apply). For multiple patches, check [order and inputs](#put-several-patches-in-order).
 
 ## Apply an IPS or IPS32 patch
 
-Add the `.ips` or `.ips32` patch with the ROM named by its author. Check the author's source checksum through [Checksum](checksum-roms-browser.md) before applying it.
-
-IPS and IPS32 contain no source checksum. A successful patch operation alone does not prove that you used the correct ROM. Check the required header state, then use **APPLY & DOWNLOAD**.
+Add the `.ips`/`.ips32` and source. These formats contain no source checksum: compare the author's digest using [Checksum](checksum-roms-browser.md) and check the header state. Successful application alone does not prove the ROM is correct.
 
 ## Apply a UPS patch
 
-Add the `.ups` patch and the clean ROM together. Read the patch card's input checks before selecting **APPLY & DOWNLOAD**.
-
-If the check fails, compare the required region, revision, and header state with the author's notes. Follow [Fix a checksum error](fix-checksum-errors.md) before applying the patch.
+Add the `.ups` and clean source. Check the card's input checks; resolve [region, revision, or header mismatches](fix-checksum-errors.md) before applying.
 
 ## Apply an xdelta or VCDIFF patch
 
-To use the xdelta patcher online, add the patch as supplied. Accepted extensions include `.xdelta`, `.delta`, `.dat`, and `.vcdiff`. For disc patches, use the exact image or track named by the author.
-
-Compare any published source checksum before applying. Source checks depend on how the patch was made. Select a plain output file unless the author or emulator requires compression, then use **APPLY & DOWNLOAD**.
+Add the supplied `.xdelta`, `.delta`, `.dat`, or `.vcdiff` and the exact image or track named by the author. Source checks depend on how the patch was made; compare any published source digest before applying.
 
 ## Apply a PPF patch
 
-Add the `.ppf` file and the exact ROM or disc track the author named. Check the image layout as well as its checksum. For a BIN/CUE disc, add the cue sheet and all referenced tracks.
-
-Use **APPLY & DOWNLOAD** after the input checks pass. To restore a result from a PPF3 patch with undo data, follow [Undo PPF](undo-ppf-browser.md).
+Add the `.ppf` and exact ROM or track. Check the image layout and checksum; include the CUE and every BIN track for a BIN/CUE disc. For PPF3 undo data, see [Undo PPF](undo-ppf-browser.md).
 
 ## Apply APS, APSGBA, RUP, and other patch formats
 
-Use the same [input steps](#add-the-files) for APS, APSGBA, RUP, SOLID, GDIFF, PAT/FireFlower, EBP, BDF/BSDIFF40, BSP, MOD/PMSR, DLDI, and DPS. Check the detected format on the patch card.
-
-Use the author's source file and checksum. Wait for the input checks, choose the output, then select **APPLY & DOWNLOAD**. The [format reference](../reference/formats.md#patch-formats) lists extensions and creation support.
+The same input steps cover APS, APSGBA, RUP, SOLID, GDIFF, PAT/FireFlower, EBP, BDF/BSDIFF40, BSP, MOD/PMSR, DLDI, and DPS. Check the detected format and the author's source digest. The [reference](../reference/formats.md#patch-formats) lists extensions and creation support.
 
 ## Apply an HDiffPatch or HPatchZ patch
 
-Add a single-file `.hdiff` or `.hpatchz` patch and the source file it expects. Compare the author's source checksum, then use **APPLY & DOWNLOAD**.
-
-Directory patches marked `HDIFF19` are unsupported. Use the author's directory-patching tool for those inputs.
+Add a single-file `.hdiff`/`.hpatchz` and its matching source. Check the author's digest. Directory patches marked `HDIFF19` are unsupported; use the author's directory-patching tool.
 
 ## Dreamcast DCP patches need the CLI
 
-Use the [CLI Dreamcast DCP procedure](cli-apply.md#apply-a-dreamcast-dcp-patch) for `.dcp` files. Browser Apply does not support the required disc-sheet workflow.
-
-NINJA1 and PDS patches cannot be applied. Check the [support limits](../reference/formats.md#patch-formats) before choosing a patcher.
+Use the [CLI DCP procedure](cli-apply.md#apply-a-dreamcast-dcp-patch); browser Apply lacks that disc-sheet workflow. NINJA1 and PDS cannot be applied. See [support limits](../reference/formats.md#patch-formats).
 
 ## Read the ROM and patch cards
 
-Start with the labels and warning colors, then open **Checks** if you need the numbers.
+The ROM card shows filename, size, system, and checksums. A filename mismatch is advisory; checksum or size mismatches are strict. Open **Checks** for details.
 
-The ROM card shows the selected filename, size, detected system, and checksums. A message about the expected filename is advice. The name can differ while the bytes are still correct. A checksum or expected-size failure is strict and means the bytes do not match.
-
-Each patch card shows its format and position. Open **Checks** to see the state that the patch's input checks describe and the result that its output checks describe. Open the three-dot **Patch actions** menu to edit details, replace the file, or remove it. Header controls appear only for formats and systems where they make sense.
+Patch cards show format, position, and input/output checks. The three-dot **Patch actions** menu edits details, replaces the file, or removes it. Header controls appear where applicable.
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
@@ -155,47 +99,26 @@ Each patch card shows its format and position. Open **Checks** to see the state 
 
 ## Put several patches in order
 
-Patches run from top to bottom and modify one result. Each patch card has an input selector. This selector chooses the state that the patch runs on. The patch's **Input** checks must match that state.
+Patches run top to bottom. Each input selector chooses the state it modifies: keep **auto** for checksum inference, **Original ROM** for the clean source, or **Previous patch output** for the preceding result.
 
-Keep **auto** to let the checks select the state. Choose **Original ROM** when the patch was made from the clean ROM. Choose **Previous patch output** when the patch depends on the result above it.
+Drag a numbered handle to reorder; keyboard users can focus it and follow its announced controls. Switch optional patches **On** or **Off** only in tested combinations. Skipping a required base can break dependent patches.
 
-Drag a numbered handle to move a patch. With a keyboard, focus the handle and use its announced controls. The number changes when the card moves.
+Recheck **Checks** after changing order, inputs, or switches. Input checks describe the authored state. Embedded output checks describe a standalone patch's result, not necessarily the combined stack.
 
-The On or Off switch temporarily skips a patch. This is useful for optional add-ons, but only use combinations the author says are compatible. Turning off a required base patch can make everything below it fail.
-
-After changing an input, the order, or a switch, read each patch's **Checks** summary again. **Input checks** describe the state the patch was authored for. An embedded **Output** check describes that patch's standalone result. It does not verify a combined result when earlier patches changed the same source.
-
-For example, suppose a project supplies `translation.bps` and `translation-fix.bps`. Its notes say the fix requires the translated ROM.
-
-1. Add the clean ROM and both patches to **0x01 Inputs**.
-2. Put `translation.bps` first and set its input to **Original ROM**.
-3. Put `translation-fix.bps` second and set its input to **Previous patch output**.
-4. Open **Checks** on both cards and resolve any input mismatches.
-5. Choose the output format, select **APPLY & DOWNLOAD**, and save the result.
-
-This example is hypothetical. Use the order and input states from your patch author's notes.
+[Patch the supplied synthetic CHD](../tutorials/patch-compressed-disc.md) for a verified example: `01-first.bps` reads the Original; `02-second.bps` requires its output. The tutorial supplies intermediate and final checksums. Use your author's tested states for your own files.
 
 ## Add cheats to the patch order
 
-1. Add the original ROM and any patches it needs.
-2. In **Patches & Cheats**, select **Add cheats to the patch order**.
-3. Add compatible entries from the database, or select **Add code manually**.
-4. Put each cheat where it must run in the ordered patch stack.
-5. Resolve any unsupported-code or write-conflict message before you apply.
-
-A cheat changes the bytes produced by the steps above it. Check the game and revision when the database match is based on a title instead of exact checksums. [Use cheats in the browser](use-browser-cheats.md) covers manual-code checks, patch export, and offline use.
+In **Patches & Cheats**, select **Add cheats to the patch order**, then choose database entries or **Add code manually**. Place each code where it must run; it changes the preceding result. Check game/revision when matching by title, and resolve unsupported-code or write-conflict errors. [Use cheats](use-browser-cheats.md) covers validation, export, and offline use.
 
 ## Choose the output and apply
 
-If **APPLY & DOWNLOAD** is disabled, wait for reading and checksumming to finish. Read the nearby notice and resolve any failed checks.
+If **APPLY & DOWNLOAD** is disabled, wait for checksumming and resolve the nearby warning. In **Apply**:
 
-In **Apply**:
-
-1. Enter an output filename without an extension.
-2. Pick a plain file or a compressed output format. The format selector adds the extension.
-3. Open **Options** only if you need compression, output header, or weave controls. The defaults are right for most patches.
-4. Choose **APPLY & DOWNLOAD**.
-5. Wait for the button to finish, then save the browser download.
+1. Enter a filename without an extension.
+2. Pick a plain file unless the author or emulator requires compression; the selector adds the extension.
+3. Open **Options** for compression, output header, or weave controls when needed.
+4. Choose **APPLY & DOWNLOAD**, wait, and save the new file.
 
 <figure class="docs-screenshot">
   <picture data-docs-screenshot-theme="light">
@@ -213,28 +136,18 @@ In **Apply**:
   <figcaption>Choose the output name and format before applying.</figcaption>
 </figure>
 
-Everything happens locally in the browser. The ROM, patches, and result are not sent to rom-weaver - see [why your files stay on your device](../explanation/local-first.md).
-
 <a id="open-a-bundle"></a>
 
 ## Open a weave
 
-A [weave](../explanation/bundles.md) is a saved patching recipe. Add the weave archive to **0x01 Inputs**. If it is patch-only, rom-weaver shows which ROM it expects. Add your matching ROM. Review optional patch switches, then use **APPLY & DOWNLOAD** just as you would for loose files.
-
-A release author can also give you a link that opens the weave directly in Apply. The same local checks still happen before anything is written.
-
-Want to publish one? [Create and share a patch weave](create-bundles.md) has a separate browser-only guide and its own guided sample.
+Add the [weave recipe](../explanation/bundles.md) to **0x01 Inputs**, or open the author's preload link. Supply the matching ROM for a patch-only weave, review optional switches, and use **APPLY & DOWNLOAD**. To publish one, follow [Create a weave](create-bundles.md).
 
 ## If the ROM does not match
 
-Follow [Fix a checksum error](fix-checksum-errors.md) before applying. That guide checks region, revision, archive selection, headers, Nintendo 64 byte order, patch order, and earlier modifications. A different filename alone is advisory; a checksum or size mismatch blocks the run.
+[Fix checksum errors](fix-checksum-errors.md) checks region, revision, archive selection, headers, byte order, patch order, and earlier edits. Do not bypass a mismatch to repair it.
 
 ## Use the result safely
 
-For supported systems, [test the patched ROM in your browser](test-roms-in-browser.md#test-an-apply-result). Otherwise, open the downloaded result in the emulator or hardware you trust.
+[Test supported ROMs in the browser](test-roms-in-browser.md#test-an-apply-result), or use your emulator/hardware. Exercise the modified parts; reaching the title screen does not prove every combination works. Keep the clean Original and name the output by project/version.
 
-Reaching the title screen is a useful first check, but play far enough to exercise the change when you can. Some bad combinations fail later.
-
-Do not delete the clean original. Give the patched result a name that includes the project and version so you can tell it apart later.
-
-If you need automation or terminal commands, switch to the [CLI apply guide](cli-apply.md). If you want to make your own change, continue with [Create a ROM patch](create-rom-patches.md).
+For automation, see [CLI Apply](cli-apply.md); to author changes, see [Create a patch](create-rom-patches.md). [Files stay local](../explanation/local-first.md).
