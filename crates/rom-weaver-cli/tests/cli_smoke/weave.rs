@@ -3916,6 +3916,62 @@ fn weave_parse_rejects_symlinked_directories_and_output_root() {
     );
 }
 
+#[cfg(unix)]
+fn assert_weave_parse_rejects_suffixed_symlink_root(suffix: &str) {
+    use std::os::unix::fs::symlink;
+    let temp = setup_temp_dir();
+    let archive = weave_output_fixture(&temp, &["main.ips"]);
+    let outside = temp.child("outside");
+    fs::create_dir(outside.path()).expect("outside directory");
+    let root_link = temp.child("root-link");
+    symlink(outside.path(), root_link.path()).expect("root symlink");
+    let mut output = root_link.path().as_os_str().to_owned();
+    output.push(suffix);
+    parse_weave_output(&archive, Path::new(&output), 1);
+    assert_eq!(
+        fs::read_dir(outside.path())
+            .expect("outside directory")
+            .count(),
+        0
+    );
+    assert!(
+        fs::symlink_metadata(root_link.path())
+            .expect("root link preserved")
+            .file_type()
+            .is_symlink()
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn weave_parse_rejects_symlink_root_with_trailing_separator() {
+    assert_weave_parse_rejects_suffixed_symlink_root("/");
+}
+
+#[cfg(unix)]
+#[test]
+fn weave_parse_rejects_symlink_root_with_trailing_dot() {
+    assert_weave_parse_rejects_suffixed_symlink_root("/.");
+}
+
+#[cfg(unix)]
+#[test]
+fn weave_parse_preserves_parent_traversal_through_symlink_ancestor() {
+    use std::os::unix::fs::symlink;
+    let temp = setup_temp_dir();
+    let archive = weave_output_fixture(&temp, &["main.ips"]);
+    let outside = temp.child("outside");
+    fs::create_dir_all(outside.path().join("nested")).expect("outside directory");
+    let ancestor = temp.child("ancestor-link");
+    symlink(outside.path().join("nested"), ancestor.path()).expect("ancestor symlink");
+    parse_weave_output(&archive, &ancestor.path().join("../output/."), 0);
+    assert_eq!(
+        fs::read(outside.path().join("output/main.ips")).expect("resolved output"),
+        fs::read(temp.child("fixture.ips").path()).expect("patch fixture"),
+    );
+    assert!(!temp.child("output").path().exists());
+}
+
 #[test]
 fn weave_parse_preserves_hard_link_to_source_archive() {
     let temp = setup_temp_dir();

@@ -284,8 +284,11 @@ pub(super) fn weave_archive_target(
             "weave archive member must have a safe relative path",
         ));
     }
+    // Trailing separators and dots make symlink_metadata follow a root symlink.
+    // Components remove those aliases while preserving parent traversal.
+    let extract_dir: PathBuf = extract_dir.components().collect();
     let target = extract_dir.join(relative);
-    let mut current = extract_dir.to_path_buf();
+    let mut current = extract_dir;
     check_weave_destination(&current, false)?;
     for component in relative.components() {
         current.push(component);
