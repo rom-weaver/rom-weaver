@@ -153,7 +153,7 @@ Work through [Fix a checksum error](how-to/fix-checksum-errors.md).
 
 ### Can a link open my hosted weave?
 
-[Open a hosted weave in Apply](how-to/create-bundles.md#open-a-hosted-bundle-in-apply).
+[Open a hosted weave](how-to/create-bundles.md#open-a-hosted-bundle-in-apply).
 
 ## Identify, prepare, and save
 

@@ -78,7 +78,7 @@ Weaves help releases with several patches, optional pieces, or automatic ROM che
 
 A link can preload a remotely hosted recipe. The browser downloads the recipe and referenced patches, then applies them locally. Cross-origin downloads depend on the host's CORS policy.
 
-[Open a hosted weave in Apply](../how-to/create-bundles.md#open-a-hosted-bundle-in-apply) gives the link format. [Webapp integration](../hosting/webapp-integration.md) documents the host requirements.
+[Open a hosted weave](../how-to/create-bundles.md#open-a-hosted-bundle-in-apply) gives the link format. [Webapp integration](../hosting/webapp-integration.md) documents the host requirements.
 
 ## Related
 

@@ -70,5 +70,6 @@ test("the weave guide teaches current controls without the obsolete Bundle scree
   assert.equal(capture.docsRoute, undefined);
   assert.ok(!guide.includes("../screenshots/bundle-output-"), "do not publish the obsolete instructional image");
   assert.ok(guide.includes("In the main **Weave** output step"));
-  assert.ok(guide.includes("https://rom-weaver.com/apply-patches?weave="));
+  assert.ok(guide.includes("https://rom-weaver.com/weave-patches?weave=https%3A%2F%2Fexample.com%2Frelease.zip"));
+  assert.ok(guide.includes("expand **Apply**, and choose **APPLY & DOWNLOAD**"));
 });
