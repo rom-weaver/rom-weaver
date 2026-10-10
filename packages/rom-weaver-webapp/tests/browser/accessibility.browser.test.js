@@ -21,6 +21,7 @@ import { createEmptyPatcherUiState } from "../../src/public/react/patcher-ui-sta
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { TrimPatchFormView } from "../../src/public/react/trim-form-view.tsx";
 import { ACCENTS, applyAccent } from "../../src/webapp/accent.ts";
+import { loadGuideRoutes } from "../../src/webapp/find-index.ts";
 import { LogDialog } from "../../src/webapp/components/log-dialog.tsx";
 import { WhatsNewPage } from "../../src/webapp/whats-new-page.tsx";
 import { Masthead, UpdateBanner } from "../../src/webapp/components/shell.tsx";
@@ -1225,23 +1226,45 @@ describe("webapp responsive navigation", () => {
       await renderMastheadOnly(ALL_TABS);
       if (width > 999) host.querySelector(".topbar-find").click();
       else host.querySelector(".dock-menu").click();
-      await settle();
+      await vi.waitFor(() => expect(host.querySelector(".find-input")).not.toBeNull());
       const input = host.querySelector(".find-input");
       // The phone's box lists the sheet's nav until it holds a query.
       if (width <= 999) {
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, "e");
         input.dispatchEvent(new Event("input", { bubbles: true }));
-        await settle();
-        expect(host.querySelectorAll(".find-option").length).toBeGreaterThan(3);
+        // Docs-search results load asynchronously after the first query. Static
+        // CLI shortcuts also have kind "Guide", so wait for a highlighted docs
+        // link before capturing the ordered keyboard options. Await the actual
+        // chunk load first rather than timing a cold import with the DOM poll.
+        await loadGuideRoutes();
+        await vi.waitFor(() => {
+          expect(host.querySelector('.find-option[href*="?highlight=e"]')).not.toBeNull();
+          expect(host.querySelectorAll(".find-option").length).toBeGreaterThan(3);
+        });
       }
       const options = host.querySelectorAll(".find-option");
-      for (let index = 1; index < options.length; index += 1) {
+      const expectVisibleSelection = async (index) => {
+        // Two animation frames do not guarantee React's passive scroll effect
+        // has run. Wait for the requested selection AND its unchanged bounds.
+        await vi.waitFor(() => {
+          const option = host.querySelector(".find-option.is-active");
+          expect(option).toBe(options[index]);
+          expect(option.getAttribute("aria-selected")).toBe("true");
+          expect(input.getAttribute("aria-activedescendant")).toBe(option.id);
+          const selected = option.getBoundingClientRect();
+          const list = host.querySelector(".find-results").getBoundingClientRect();
+          expect(selected.top).toBeGreaterThanOrEqual(list.top - 1);
+          expect(selected.bottom).toBeLessThanOrEqual(list.bottom + 1);
+        });
+      };
+      await expectVisibleSelection(0);
+      for (let index = 1; index <= options.length; index += 1) {
         input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowDown" }));
-        await settle();
-        const selected = host.querySelector(".find-option.is-active").getBoundingClientRect();
-        const list = host.querySelector(".find-results").getBoundingClientRect();
-        expect(selected.top).toBeGreaterThanOrEqual(list.top - 1);
-        expect(selected.bottom).toBeLessThanOrEqual(list.bottom + 1);
+        await expectVisibleSelection(index % options.length);
+      }
+      for (let index = options.length - 1; index >= 0; index -= 1) {
+        input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "ArrowUp" }));
+        await expectVisibleSelection(index);
       }
     }
   });
