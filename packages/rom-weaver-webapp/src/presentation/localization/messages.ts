@@ -873,7 +873,8 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.home.webappItem2": msg({
     id: "ui.home.webappItem2",
-    message: "Install it from the browser menu and it keeps working offline.",
+    message:
+      "Cache the app in Settings before going offline. Databases, samples, and emulator cores may need separate downloads.",
   }),
   "ui.home.webappItem3": msg({
     id: "ui.home.webappItem3",
@@ -937,7 +938,13 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.home.goWeave": msg({ id: "ui.home.goWeave", message: "Weave" }),
   "ui.home.goCheats": msg({ id: "ui.home.goCheats", message: "Add cheats" }),
   "ui.home.goChecksum": msg({ id: "ui.home.goChecksum", message: "Checksum" }),
-  "ui.home.goCompress": msg({ id: "ui.home.goCompress", message: "Compress" }),
+  "ui.home.goExtract": msg({ id: "ui.home.goExtract", message: "Extract files" }),
+  "ui.home.prepareOffline": msg({ id: "ui.home.prepareOffline", message: "Prepare for offline use" }),
+  "ui.apply.validation.fixChecksum": msg({
+    id: "ui.apply.validation.fixChecksum",
+    message: "Compare the expected ROM before bypassing checks (opens in a new tab)",
+  }),
+  "ui.home.goCompress": msg({ id: "ui.home.goCompress", message: "Convert / compress" }),
   "ui.home.goCreate": msg({ id: "ui.home.goCreate", message: "Create" }),
   "ui.home.goIdentify": msg({ id: "ui.home.goIdentify", message: "Identify" }),
   "ui.home.goTest": msg({ id: "ui.home.goTest", message: "Test" }),
@@ -961,7 +968,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.home.routeDisc": msg({ id: "ui.home.routeDisc", message: "A compressed disc image" }),
   "ui.home.routeDiscBody": msg({
     id: "ui.home.routeDiscBody",
-    message: "CHD, RVZ, CSO, and more. Convert it, or take files out.",
+    message: "Convert between compressed formats, or extract a CHD to ISO or BIN/CUE.",
   }),
   "ui.home.routeEdited": msg({ id: "ui.home.routeEdited", message: "Your own edited ROM" }),
   "ui.home.routeEditedBody": msg({
@@ -1058,7 +1065,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.tutorial.preparingProgress": msg({ id: "ui.tutorial.preparingProgress", message: "Getting the sample ready" }),
   "ui.tutorial.start": msg({ id: "ui.tutorial.start", message: "Practice with sample files" }),
   "ui.tutorial.step": msg({ id: "ui.tutorial.step", message: "Practice run · Step {step} of {total}" }),
-  "ui.tutorial.tryApply": msg({ id: "ui.tutorial.tryApply", message: "Patch a sample" }),
+  "ui.tutorial.tryApply": msg({ id: "ui.tutorial.tryApply", message: "Patch a sample ROM" }),
   "ui.tutorial.tryWeave": msg({ id: "ui.tutorial.tryWeave", message: "Weave a sample" }),
   "ui.tutorial.tryCreate": msg({ id: "ui.tutorial.tryCreate", message: "Create a sample" }),
   "ui.tutorial.tryIt": msg({ id: "ui.tutorial.tryIt", message: "Try it" }),
@@ -1480,7 +1487,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.identify.tap": msg({ id: "ui.identify.tap", message: "Tap to add a ROM" }),
   "ui.identify.trySample": msg({
     id: "ui.identify.trySample",
-    message: "Try a sample",
+    message: "Try a checksum lookup",
   }),
   "ui.identify.searchRefine": msg({ id: "ui.identify.searchRefine", message: "Not the ROM you meant?" }),
   "ui.identify.searchPlaceholder": msg({

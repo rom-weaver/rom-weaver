@@ -319,14 +319,14 @@ test("an empty form shows the ghost steps next to the ROM search", async () => {
 test("the sample checksum searches and opens a match without a ROM", async () => {
   lookupExpectedRom.mockResolvedValue({ matches: [gbaMatch("Tetris (World) (Rev 1)")], status: "matched" });
   await mountIdentifyForm();
-  await page.getByRole("button", { name: "Try a sample" }).click();
+  await page.getByRole("button", { name: "Try a checksum lookup" }).click();
   await waitFor(() => lookupExpectedRom.mock.calls.length > 0);
   expect(host.querySelector(".identify-search-input").value).toBe("46df91ad");
   expect(lookupExpectedRom).toHaveBeenCalledWith({ checksums: { crc32: "46df91ad" } }, expect.anything());
   expect(identifyRom).not.toHaveBeenCalled();
   await chooseRelease("Tetris (World) (Rev 1)");
   await waitFor(() => host.querySelector("#identify-container-expected-rom"));
-  expect(buttonMatching(/Try a sample/)).toBeUndefined();
+  expect(buttonMatching(/Try a checksum lookup/)).toBeUndefined();
 });
 
 test("a pasted checksum raises the expected-ROM card without a file", async () => {

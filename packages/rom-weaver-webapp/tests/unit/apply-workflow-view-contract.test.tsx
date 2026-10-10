@@ -224,6 +224,26 @@ const renderView = ({
   );
 };
 
+describe("checksum mismatch recovery", () => {
+  it("offers recovery before the override while leaving it unchecked", () => {
+    const ui = createEmptyPatcherUiState();
+    ui.romInputs = [romRow("game.bin")];
+    ui.checksumOverride = { ...ui.checksumOverride, visible: true };
+    const { container } = renderView({ ui, patches: [patchItem("fix.ips")] });
+    const recovery = container.querySelector("a[href='/docs/fix-checksum-errors']");
+    const override = container.querySelector("#rom-weaver-checkbox-checksum-override");
+    expect(recovery?.textContent).toContain("Compare the expected ROM");
+    expect(recovery?.getAttribute("target")).toBe("_blank");
+    expect((recovery?.compareDocumentPosition(override as Node) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect((override as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("does not offer a mismatch override or recovery when checks pass", () => {
+    const { container } = renderView({ ui: createEmptyPatcherUiState() });
+    expect(container.querySelector("a[href='/docs/fix-checksum-errors']")).toBeNull();
+  });
+});
+
 describe("apply workflow view - empty bench", () => {
   beforeEach(() => window.history.replaceState(null, "", "/apply-patch"));
   afterEach(() => vi.unstubAllGlobals());
@@ -236,7 +256,7 @@ describe("apply workflow view - empty bench", () => {
     expect(container.querySelector(".drop.hero .formats")).toBeNull();
     expect(container.querySelector(".hero-formats-help .info-support")).toBeTruthy();
     const chip = container.querySelector(".sample-tutorial-start .sample-tutorial-start-chip") as HTMLButtonElement;
-    expect(chip.textContent).toContain("Patch a sample");
+    expect(chip.textContent).toContain("Patch a sample ROM");
     fireEvent.click(chip);
     expect(container.querySelector(".first-weave-demo")?.textContent).toContain("Start guided Apply");
     expect(container.querySelector(".first-weave-demo")?.textContent).not.toContain("Start guided weave");
@@ -253,7 +273,7 @@ describe("apply workflow view - empty bench", () => {
   ] as const)("offers the %s guide and the test weave download", (mode, href, label, docsHref, docsLabel) => {
     const { container } = renderView({ mode, ui: createEmptyPatcherUiState() });
     const chip = container.querySelector(".sample-tutorial-start .sample-tutorial-start-chip") as HTMLButtonElement;
-    expect(chip.textContent).toBe(mode === "apply" ? "Patch a sample" : "Weave a sample");
+    expect(chip.textContent).toBe(mode === "apply" ? "Patch a sample ROM" : "Weave a sample");
     fireEvent.click(chip);
     const actions = container.querySelectorAll(".sample-tutorial-start-action");
     expect(actions).toHaveLength(mode === "apply" ? 5 : 4);

@@ -24,6 +24,7 @@ const CHECKSUM_ALGORITHMS = ["crc32", "md5", "sha1", "sha256", "blake3", "crc32c
 
 type HomeRoute = {
   body: MessageId;
+  secondary?: { go: MessageId; slug: string };
   file: string;
   go: MessageId;
   slug: string;
@@ -46,6 +47,7 @@ const HOME_ROUTES: readonly HomeRoute[] = [
     file: "game.chd",
     go: "ui.home.goCompress",
     slug: "compress",
+    secondary: { go: "ui.home.goExtract", slug: "extract" },
     swatch: "source",
     title: "ui.home.routeDisc",
   },
@@ -124,9 +126,16 @@ const HomeRoutes = ({ featuresHref, route }: HomeRoutesProps): React.ReactElemen
               <h3>{localizer.message(item.title)}</h3>
               <p>{localizer.message(item.body)}</p>
             </div>
-            <a className="btn ghost slim home-route-go" href={route(item.slug)}>
-              {localizer.message(item.go)}
-            </a>
+            <div className={item.secondary ? "home-route-actions" : undefined}>
+              <a className="btn ghost slim home-route-go" href={route(item.slug)}>
+                {localizer.message(item.go)}
+              </a>
+              {item.secondary ? (
+                <a className="btn ghost slim home-route-go" href={route(item.secondary.slug)}>
+                  {localizer.message(item.secondary.go)}
+                </a>
+              ) : null}
+            </div>
           </li>
         ))}
       </ul>
@@ -202,9 +211,10 @@ const HomeFormats = ({ docsHref }: HomeFormatsProps): React.ReactElement => {
 
 type HomeTrustProps = {
   selfHostingHref: string;
+  offlineHref: string;
 };
 
-const HomeTrust = ({ selfHostingHref }: HomeTrustProps): React.ReactElement => {
+const HomeTrust = ({ selfHostingHref, offlineHref }: HomeTrustProps): React.ReactElement => {
   const localizer = useUiLocalizer();
   return (
     <section aria-labelledby="home-trust-title" className="home-wrap home-section home-trust">
@@ -217,7 +227,10 @@ const HomeTrust = ({ selfHostingHref }: HomeTrustProps): React.ReactElement => {
         </li>
         <li>
           <h3>{localizer.message("ui.home.factOffline")}</h3>
-          <p>{localizer.message("ui.home.webappItem2")}</p>
+          <p>
+            {localizer.message("ui.home.webappItem2")}{" "}
+            <a href={offlineHref}>{localizer.message("ui.home.prepareOffline")}</a>
+          </p>
         </li>
         <li>
           <h3>{localizer.message("ui.home.trustOriginals")}</h3>

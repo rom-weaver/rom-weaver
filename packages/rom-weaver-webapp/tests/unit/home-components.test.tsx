@@ -149,6 +149,23 @@ describe("HomeLoom", () => {
 });
 
 describe("HomePage", () => {
+  it("offers separate disc conversion and extraction with offline preparation", () => {
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{ language: "en" }}>
+        <HomePage baseUrl="https://example.com/tools/" />
+      </RomWeaverSettingsProvider>,
+    );
+    const disc = Array.from(container.querySelectorAll(".home-route")).find((row) =>
+      row.textContent?.includes("game.chd"),
+    );
+    expect(disc?.querySelector("a[href='/tools/compress']")?.textContent).toBe("Convert / compress");
+    expect(disc?.querySelector("a[href='/tools/extract']")?.textContent).toBe("Extract files");
+    expect(disc?.textContent).toContain("ISO or BIN/CUE");
+    const offline = container.querySelector("a[href='/tools/docs/browser-settings#prepare-for-offline-use']");
+    expect(offline?.textContent).toBe("Prepare for offline use");
+    expect(offline?.parentElement?.textContent).toContain("separate downloads");
+  });
+
   it("builds sub-path-safe workflow links and includes the public workflow copy", async () => {
     const { container } = render(
       <RomWeaverSettingsProvider settings={{ language: "en" }}>
@@ -163,6 +180,7 @@ describe("HomePage", () => {
     expect(Array.from(container.querySelectorAll(".home-route-go"), (link) => link.getAttribute("href"))).toEqual([
       "/tools/apply-patches",
       "/tools/compress",
+      "/tools/extract",
       "/tools/identify-rom",
       "/tools/create-patch",
       "/tools/apply-patches",

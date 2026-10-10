@@ -28,7 +28,7 @@ That is all you need to know to start. [How patching works](../explanation/how-p
 
 ## Step 1: open the guide and add the practice files
 
-Open [guided Apply Patches](https://rom-weaver.com/apply-patches?guide=apply). On the plain [Apply Patches](https://rom-weaver.com/apply-patches) page, the same guide is **Patch a sample** › **Start guided Apply** under the empty drop zone.
+Open [guided Apply Patches](https://rom-weaver.com/apply-patches?guide=apply). On the plain [Apply Patches](https://rom-weaver.com/apply-patches) page, the same guide is **Patch a sample ROM** › **Start guided Apply** under the empty drop zone.
 
 The guide opens on **Add your files**, the drop area every file goes through. It lists the ways in: drop files or a whole folder, drop a ZIP, 7z, or weave, or choose **Add files** to pick them.
 
@@ -81,7 +81,7 @@ For a tool that reports SHA-256, the same file has this value:
 
 A match checks that you downloaded the expected result. [Checksums](../explanation/how-patching-works.md#what-a-checksum-proves-and-what-a-filename-does-not) explains what this comparison establishes.
 
-To see the sample files for yourself, choose **Download a test weave** from **Patch a sample** on the empty Apply page, or [download `first-weave.zip`](https://rom-weaver.com/first-weave.zip).
+To see the sample files for yourself, choose **Download a test weave** from **Patch a sample ROM** on the empty Apply page, or [download `first-weave.zip`](https://rom-weaver.com/first-weave.zip).
 
 ## Step 5: try the other two samples
 

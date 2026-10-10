@@ -264,7 +264,10 @@ const HomePage = ({ baseUrl }: HomePageProps): React.ReactElement => {
       <HomeRoutes featuresHref={`${route("docs")}/features`} route={route} />
       <HomeChain />
       <HomeFormats docsHref={`${route("docs")}/supported-formats`} />
-      <HomeTrust selfHostingHref={`${route("docs")}/self-hosting`} />
+      <HomeTrust
+        offlineHref={`${route("docs")}/browser-settings#prepare-for-offline-use`}
+        selfHostingHref={`${route("docs")}/self-hosting`}
+      />
       <HomeCli route={route} />
       <HomeFaq faqHref={`${route("docs")}/faq`} />
     </section>

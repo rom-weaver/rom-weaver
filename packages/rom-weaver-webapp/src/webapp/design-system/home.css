@@ -509,6 +509,16 @@
   content: "";
 }
 
+/* A choice row has separate hit targets rather than overlapping row links. */
+.rw-app .home-route-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rw-app .home-route-actions .home-route-go {
+  position: relative;
+}
+
 /* One-pass steps */
 .rw-app .home-chain-steps {
   display: grid;

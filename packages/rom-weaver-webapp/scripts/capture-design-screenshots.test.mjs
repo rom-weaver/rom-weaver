@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { DOCS_SCREENSHOT_CASES, waitForDocsScreenshotReady } from "./docs-screenshot-manifest.mjs";
 
@@ -58,4 +59,16 @@ test("a ready tutorial still requires its loaded capture target", async () => {
     },
   };
   await assert.rejects(waitForDocsScreenshotReady(page, captureCase), (error) => error === missingTarget);
+});
+
+test("the weave guide teaches current controls without the obsolete Bundle screenshot", () => {
+  const guide = readFileSync(new URL("../../../docs/how-to/create-bundles.md", import.meta.url), "utf8");
+  const capture = DOCS_SCREENSHOT_CASES.find(({ name }) => name === "bundle-output");
+  assert.ok(capture, "keep the capture recipe for the next screenshot refresh");
+  assert.equal(capture.route, "/weave-patches?guide=weave");
+  assert.equal(capture.target, "#rom-weaver-weave-job");
+  assert.equal(capture.docsRoute, undefined);
+  assert.ok(!guide.includes("../screenshots/bundle-output-"), "do not publish the obsolete instructional image");
+  assert.ok(guide.includes("In the main **Weave** output step"));
+  assert.ok(guide.includes("https://rom-weaver.com/apply-patches?weave="));
 });

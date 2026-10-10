@@ -31,7 +31,7 @@ const DOCS_SCREENSHOT_CASES = [
   },
   {
     dismissGuide: true,
-    docsRoute: "docs/create-bundles",
+    // quality-reason: The guide omits obsolete Bundle-labeled images; retain this capture case for a refreshed Weave screenshot.
     name: "bundle-output",
     route: "/weave-patches?guide=weave",
     target: "#rom-weaver-weave-job",

@@ -1086,7 +1086,7 @@ msgstr "chd, rvz y z3ds se descomprimen a formatos sin procesar antes de aplicar
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.routeDiscBody"
-msgstr "CHD, RVZ, CSO y más. Conviértela o saca sus archivos."
+msgstr "Convierte entre formatos comprimidos o extrae un CHD a ISO o BIN/CUE."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1331,7 +1331,7 @@ msgstr "Comprimir"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.goCompress"
-msgstr "Comprimir"
+msgstr "Convertir / comprimir"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2161,7 +2161,7 @@ msgstr "Entradas"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.webappItem2"
-msgstr "Instálala desde el menú del navegador y seguirá funcionando sin conexión."
+msgstr "Guarda la app en Ajustes antes de desconectarte. Las bases de datos, los ejemplos y los núcleos del emulador pueden necesitar descargas separadas."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3056,7 +3056,7 @@ msgstr "Parche {position} de {total}. No se puede reordenar."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.tryApply"
-msgstr "Probar parche"
+msgstr "Aplicar un parche a una ROM de ejemplo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4416,7 +4416,7 @@ msgstr "Herramienta Recortar"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.trySample"
-msgstr "Probar un ejemplo"
+msgstr "Probar una búsqueda por checksum"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4761,3 +4761,18 @@ msgstr "Códec ZIP"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.archives"
 msgstr "ZIP, 7z y paquetes"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.goExtract"
+msgstr "Extraer archivos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.home.prepareOffline"
+msgstr "Preparar el uso sin conexión"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.apply.validation.fixChecksum"
+msgstr "Compara la ROM esperada antes de omitir las comprobaciones (se abre en otra pestaña)"

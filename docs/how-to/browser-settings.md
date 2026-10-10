@@ -16,7 +16,7 @@ Use Settings to change app preferences, enable beta tools, and prepare local ass
 
 Open **Settings** from the app navigation. On a phone, select **Menu** at the right end of the bottom bar, then **Settings**. Change the required values, then select **Save**.
 
-The settings cover language, byte units, guided help, output defaults, and compression. Guided help is the sample link under each empty drop zone, such as **Patch a sample**, that starts the [guided practice runs](../reference/guided-runs.md). Turn on **Advanced** to show worker threads, codecs, and the RVZ block size. Leave automatic thread selection enabled unless you need to limit resource use.
+The settings cover language, byte units, guided help, output defaults, and compression. Guided help is the sample link under each empty drop zone, such as **Patch a sample ROM**, that starts the [guided practice runs](../reference/guided-runs.md). Turn on **Advanced** to show worker threads, codecs, and the RVZ block size. Leave automatic thread selection enabled unless you need to limit resource use.
 
 To leave Settings on a phone, select **Close** at the right end of the bottom bar, swipe right from the left edge of the screen, or use your browser's back gesture.
 
@@ -38,6 +38,8 @@ This exposes Trim and Save Editor. PPF Undo and cheat tools in Apply, Create, an
 3. Reopen **Settings** and select the **Optional ROM databases** you need. These choices download immediately.
 4. Open the sample, weave, or cheat list you plan to use while online.
 5. Load a game for each emulator system you need, so its core is cached.
+
+The app’s **Offline active** status confirms the app cache, not every optional resource. Check that the selected databases have finished downloading, keep the ROM and patches locally, and open each needed emulator system while online. Installing the app from the browser menu alone does not verify these downloads.
 
 Check the result before relying on it: disconnect your device, reopen rom-weaver, and run a small local job.
 

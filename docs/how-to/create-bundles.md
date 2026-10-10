@@ -24,7 +24,7 @@ Leave **Include ROM in weave** clear for a patch-only release. The archive conta
 
 Select **Include ROM in weave** only for a ROM you can redistribute, such as your own homebrew. Packaging does not grant redistribution rights.
 
-Keep ZIP for a broadly readable download. Weave archives use 7z when the Apply output uses 7z compression; other output formats produce ZIP weaves.
+Keep ZIP for a broadly readable download, or select 7z in the Weave format selector. This format controls the recipe archive, not the recipient’s patched ROM container.
 
 ## Build the patch recipe
 
@@ -57,29 +57,17 @@ Order is part of the recipe. Move a card only when you know the patch was author
 
 ## Turn on weave output and download it
 
-1. Expand **Apply** and set the output filename and format users should receive after patching.
-2. Open **Share this patch recipe (for patch creators)**.
-3. Leave **Include ROM in weave** clear for a patch-only release.
+1. In the main **Weave** output step, enter the expected output name. It is also used to name the downloaded archive.
+2. Choose **.zip** or **.7z** in its format selector.
+3. Open **Options** and leave **Include ROM in weave** clear for a patch-only release.
 4. Select **Share weave** and wait for the checks and download.
 5. Save the archive. The control becomes **Download ZIP Weave** or **Download 7z Weave** for another copy.
 
-The expected filename helps users find the ROM. Checksums establish whether its contents match; a different filename alone does not block applying.
+To test the patched ROM from the same session, expand the secondary **Apply** step. Its name and compression settings are shared with Weave: choosing 7z selects a 7z weave, while other Apply output formats select ZIP. Recheck the Weave format after changing Apply settings. The recipe archive format does not force the recipient’s final ROM container.
 
-<figure class="docs-screenshot">
-  <picture data-docs-screenshot-theme="light">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/bundle-output-mobile-light.avif" width="1170" height="771">
-    <source type="image/avif" srcset="../screenshots/bundle-output-desktop-light.avif" width="1770" height="660">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/bundle-output-mobile-light.webp" width="1170" height="771">
-    <img src="../screenshots/bundle-output-desktop-light.webp" alt="Weave sharing controls with Include ROM in weave left clear in the light theme" width="1770" height="660">
-  </picture>
-  <picture data-docs-screenshot-theme="dark">
-    <source media="(max-width: 520px)" type="image/avif" srcset="../screenshots/bundle-output-mobile-dark.avif" width="1170" height="771">
-    <source type="image/avif" srcset="../screenshots/bundle-output-desktop-dark.avif" width="1770" height="660">
-    <source media="(max-width: 520px)" type="image/webp" srcset="../screenshots/bundle-output-mobile-dark.webp" width="1170" height="771">
-    <img src="../screenshots/bundle-output-desktop-dark.webp" alt="Weave sharing controls with Include ROM in weave left clear in the dark theme" width="1770" height="660">
-  </picture>
-  <figcaption>Weave creation packages the staged recipe without applying the patches.</figcaption>
-</figure>
+If you already have a recipe staged on **Apply**, open **Share this patch recipe (for patch creators)** there to export it.
+
+The expected filename helps users find the ROM. Checksums establish whether its contents match; a different filename alone does not block applying.
 
 Weave creation does not apply the patches. It packages the recipe you have staged. **APPLY & DOWNLOAD** remains available separately when you also want to build the patched output.
 
@@ -117,8 +105,10 @@ For an update, rebuild the recipe from the same clean Original and the new patch
 You can give users a link that preloads a public weave:
 
 ```text
-https://rom-weaver.com/weave-patches?weave=https://example.com/release.zip
+https://rom-weaver.com/apply-patches?weave=https://example.com/release.zip
 ```
+
+Use **Apply** for recipient links so patching is the primary action. **Weave** is for authors preparing or editing the recipe.
 
 The weave host must permit cross-origin browser downloads with CORS. The user's ROM still stays local. Relative patch URLs inside a remote recipe are resolved against the recipe URL.
 
