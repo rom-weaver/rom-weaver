@@ -30,7 +30,14 @@ export const chooseFilesByKeyboard = async (page, input, files) => {
 };
 
 const expectFocusInside = async (dialog) => {
-  await expect.poll(() => dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+  await expect
+    .poll(() =>
+      dialog.evaluate((element) => ({
+        inside: element.contains(document.activeElement),
+        active: document.activeElement?.outerHTML.slice(0, 200),
+      })),
+    )
+    .toMatchObject({ inside: true });
 };
 
 const auditDialogKeyboard = async (page, trigger, dialog) => {
@@ -73,6 +80,7 @@ const auditDirtySettings = async (page, trigger, dialog) => {
   });
   await expect(stagedFile).toContainText("settings-retained.bin");
   for (const method of ["Close", "Escape", "Back"]) {
+    process.stdout.write(`CHECK dirty Settings recovery: ${method}\n`);
     await openSettings();
     const saved = await detailed.isChecked();
     await detailed.setChecked(!saved);

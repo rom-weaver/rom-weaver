@@ -66,6 +66,7 @@ const ModalShell = ({
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const dialog = dialogRef.current;
     if (!dialog) return undefined;
+    const nativeDialog = dialog.closest("dialog:modal") as HTMLDialogElement | null;
     const previousInert = new Map<HTMLElement, boolean>();
     for (const sibling of Array.from(dialog.parentElement?.children ?? [])) {
       if (sibling === dialog || !(sibling instanceof HTMLElement)) continue;
@@ -110,6 +111,10 @@ const ModalShell = ({
       document.removeEventListener("keydown", wrapTabFocus);
       for (const [sibling, inert] of previousInert) sibling.inert = inert;
       previousFocus?.focus();
+      // History traversal and Safari pointer activation can leave the previous
+      // focus outside the native modal. Never return keyboard users to the page
+      // while Settings is still open.
+      if (nativeDialog?.open && !nativeDialog.contains(document.activeElement)) nativeDialog.focus();
     };
   }, [open]);
   if (!open || typeof document === "undefined") return null;
