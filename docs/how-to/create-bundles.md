@@ -63,9 +63,9 @@ Order is part of the recipe. Move a card only when you know the patch was author
 4. Select **Share weave** and wait for the checks and download.
 5. Save the archive. The control becomes **Download ZIP Weave** or **Download 7z Weave** for another copy.
 
-To test the patched ROM from the same session, expand the secondary **Apply** step. Its name and compression settings are shared with Weave: choosing 7z selects a 7z weave, while other Apply output formats select ZIP. Recheck the Weave format after changing Apply settings. The recipe archive format does not force the recipient’s final ROM container.
+Expand the secondary **Apply** step to test the recipe. Its name and compression settings are shared with Weave: 7z selects a 7z weave; other Apply formats select ZIP. Recheck the Weave format before sharing.
 
-If you already have a recipe staged on **Apply**, open **Share this patch recipe (for patch creators)** there to export it.
+From an existing **Apply** session, export through **Share this patch recipe (for patch creators)**.
 
 The expected filename helps users find the ROM. Checksums establish whether its contents match; a different filename alone does not block applying.
 
@@ -108,7 +108,7 @@ You can give users a link that preloads a public weave:
 https://rom-weaver.com/apply-patches?weave=https://example.com/release.zip
 ```
 
-Use **Apply** for recipient links so patching is the primary action. **Weave** is for authors preparing or editing the recipe.
+Recipient links use **Apply**; authors prepare and edit recipes in **Weave**.
 
 The weave host must permit cross-origin browser downloads with CORS. The user's ROM still stays local. Relative patch URLs inside a remote recipe are resolved against the recipe URL.
 

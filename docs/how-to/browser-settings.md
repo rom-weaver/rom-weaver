@@ -39,7 +39,7 @@ This exposes Trim and Save Editor. PPF Undo and cheat tools in Apply, Create, an
 4. Open the sample, weave, or cheat list you plan to use while online.
 5. Load a game for each emulator system you need, so its core is cached.
 
-The app’s **Offline active** status confirms the app cache, not every optional resource. Check that the selected databases have finished downloading, keep the ROM and patches locally, and open each needed emulator system while online. Installing the app from the browser menu alone does not verify these downloads.
+**Offline active** confirms the app cache. Also finish the selected database downloads, keep ROMs and patches locally, and open each needed emulator system while online. Installing from the browser menu does not verify these resources.
 
 Check the result before relying on it: disconnect your device, reopen rom-weaver, and run a small local job.
 
