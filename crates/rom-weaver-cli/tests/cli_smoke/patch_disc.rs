@@ -1481,3 +1481,60 @@ fn patch_apply_disc_rebases_colliding_names_across_cue_and_gdi() {
             .starts_with("REM ../left/track.bin must remain in this comment\n")
     );
 }
+
+#[test]
+fn patch_apply_disc_rejects_references_that_differ_only_by_case_unless_same_file() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("a.bin").path(), vec![1u8; 2352 * 4]).expect("a.bin");
+    let case_insensitive = temp.child("A.BIN").path().exists();
+    if !case_insensitive {
+        fs::write(temp.child("A.BIN").path(), vec![2u8; 2352 * 4]).expect("A.BIN");
+    }
+    temp.child("disc.cue")
+        .write_str(
+            "FILE a.bin BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\nFILE A.BIN BINARY\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\n",
+        )
+        .expect("cue");
+    let patch = temp.child("patch.ips");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: DISC_PATCH_OFFSET as u32,
+                data: disc_patch_payload(),
+            }],
+            None,
+        ),
+    )
+    .expect("patch");
+    let output = temp.child("out/disc.cue");
+    let json = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--no-compress",
+            "--target",
+            "a.bin",
+            "-i",
+            temp.child("disc.cue").path().to_str().expect("cue path"),
+            "--patch",
+            patch.path().to_str().expect("patch path"),
+            "-o",
+            output.path().to_str().expect("output path"),
+            "--json",
+        ],
+        if case_insensitive { 0 } else { 1 },
+    );
+    if case_insensitive {
+        assert_eq!(json["status"], "succeeded");
+    } else {
+        assert_eq!(json["status"], "failed");
+        assert!(
+            json["label"]
+                .as_str()
+                .expect("label")
+                .contains("differ only by case")
+        );
+        assert!(!output.path().exists());
+    }
+}

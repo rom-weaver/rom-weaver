@@ -1159,3 +1159,66 @@ fn tools_ppf_undo_preserves_existing_output_directory() {
         b"keep directory contents"
     );
 }
+
+#[test]
+fn tools_ppf_undo_disc_with_parent_reference_checks_real_source_paths() {
+    let temp = setup_temp_dir();
+    let original = vec![b'A'; 4096];
+    let mut modified = original.clone();
+    modified[100..103].copy_from_slice(b"XYZ");
+    fs::create_dir_all(temp.child("disc").path()).expect("disc dir");
+    fs::create_dir_all(temp.child("shared").path()).expect("shared dir");
+    fs::write(temp.child("shared/track.bin").path(), &modified).expect("track");
+    temp.child("disc/game.cue")
+        .write_str(
+            "FILE \"../shared/track.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n",
+        )
+        .expect("cue");
+    let patch = temp.child("undo.ppf");
+    fs::write(
+        patch.path(),
+        build_ppf3_undo_patch(&[(100, b"XYZ".to_vec(), b"AAA".to_vec())]),
+    )
+    .expect("patch");
+    let sheet = temp.child("disc/game.cue");
+
+    // Rebased output `disc/track.bin` is not the real source: must succeed.
+    let output = temp.child("disc/restored.cue");
+    let report = undo_report(
+        sheet.path(),
+        patch.path(),
+        output.path(),
+        &["--no-compress"],
+        0,
+    );
+    assert_eq!(report["status"], "succeeded");
+    assert_eq!(
+        fs::read(temp.child("disc/track.bin").path()).expect("restored track"),
+        original
+    );
+    assert_eq!(
+        fs::read(temp.child("shared/track.bin").path()).expect("source track"),
+        modified
+    );
+
+    // Output beside the real source would overwrite it: must be rejected.
+    let output = temp.child("shared/restored.cue");
+    let report = undo_report(
+        sheet.path(),
+        patch.path(),
+        output.path(),
+        &["--no-compress"],
+        1,
+    );
+    assert!(
+        report["label"]
+            .as_str()
+            .expect("label")
+            .contains("resolve to the same file")
+    );
+    assert!(!output.path().exists());
+    assert_eq!(
+        fs::read(temp.child("shared/track.bin").path()).expect("source track"),
+        modified
+    );
+}

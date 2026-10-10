@@ -663,7 +663,8 @@ impl CliApp {
     /// Write the reassembled disc to disk for `--no-compress` output: the
     /// primary sheet is written to `output` (which must be a `.cue`/`.gdi`
     /// path) and every track (and any secondary sheet) is written beside it
-    /// under its sheet-referenced name. `staged_sheet` points into the stage
+    /// under its staged output name (the sheet-referenced name or a rebased or
+    /// generated portable name). `staged_sheet` points into the stage
     /// directory produced by [`Self::stage_disc_directory`].
     pub(super) fn write_disc_output(
         &self,

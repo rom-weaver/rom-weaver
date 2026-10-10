@@ -145,6 +145,19 @@ pub(super) fn write_sheet(source: &Path, dest: &Path, files: &[DiscFile]) -> Res
                         source.display()
                     ))
                 })?;
+            // References are matched ignoring case, so a differently-cased
+            // reference must be the same file (case-insensitive filesystem);
+            // otherwise its data would silently be replaced by `file`'s.
+            if file.name != name {
+                let alias = super::sheet_directory(source).join(name);
+                if !super::super::patch_apply::paths_refer_to_same_file(&alias, &file.path) {
+                    return Err(RomWeaverError::Validation(format!(
+                        "disc sheet `{}` references `{}` and `{name}`, which differ only by case but are different files",
+                        source.display(),
+                        file.name
+                    )));
+                }
+            }
             output.push_str(&line[..range.start]);
             output.push_str(&file.output_name);
             output.push_str(&line[range.end..]);
