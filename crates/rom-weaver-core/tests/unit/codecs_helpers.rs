@@ -462,3 +462,88 @@ fn xz_rejects_expected_len_larger_than_actual() {
     let compressed = encode_xz_preset(&payload, 6).expect("xz encode must succeed");
     assert!(decode_xz_exact(&compressed, payload.len() as u64 + 5).is_err());
 }
+
+#[test]
+fn exact_decode_rejects_impossible_declared_size_without_panicking() {
+    // Larger than Vec's isize::MAX capacity limit: the old eager allocation
+    // panics before requesting any memory. The compressed stream is empty.
+    let compressed = encode_deflate(&[]);
+    let error = decode_deflate_exact(&compressed, usize::MAX as u64)
+        .expect_err("an empty stream cannot supply the declared output");
+    assert!(matches!(error, RomWeaverError::Validation(_)));
+}
+
+#[test]
+fn exact_decode_handles_multiple_output_chunks() {
+    let payload = pattern_bytes(3 * 64 * 1024 + 17);
+    let compressed = encode_deflate(&payload);
+    assert_eq!(
+        decode_deflate_exact(&compressed, payload.len() as u64).expect("decode all chunks"),
+        payload
+    );
+    assert!(decode_deflate_exact(&compressed, payload.len() as u64 + 1).is_err());
+    assert!(decode_deflate_exact(&compressed, payload.len() as u64 - 1).is_err());
+}
+
+#[test]
+fn exact_decode_retries_interrupted_reads() {
+    struct InterruptedReader {
+        interrupted: bool,
+        data: Cursor<Vec<u8>>,
+    }
+    impl Read for InterruptedReader {
+        fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+            if !self.interrupted {
+                self.interrupted = true;
+                return Err(std::io::ErrorKind::Interrupted.into());
+            }
+            self.data.read(output)
+        }
+    }
+    let payload = pattern_bytes(64 * 1024 + 1);
+    let reader = InterruptedReader {
+        interrupted: false,
+        data: Cursor::new(payload.clone()),
+    };
+    assert_eq!(
+        decode_exact(reader, payload.len() as u64, "test").expect("retry interrupted read"),
+        payload
+    );
+}
+
+#[test]
+fn exact_decode_preserves_reader_errors() {
+    struct FailedReader;
+    impl Read for FailedReader {
+        fn read(&mut self, _output: &mut [u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::other("fixture decoder failure"))
+        }
+    }
+    let error = decode_exact(FailedReader, 64 * 1024 + 1, "test")
+        .expect_err("decoder errors must not become output");
+    assert!(error.to_string().contains("fixture decoder failure"));
+}
+
+#[test]
+fn exact_decode_reads_in_bounded_chunks() {
+    struct BoundedReader(Cursor<Vec<u8>>);
+    impl Read for BoundedReader {
+        fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+            assert!(
+                output.len() <= 64 * 1024,
+                "decode request must stay bounded"
+            );
+            self.0.read(output)
+        }
+    }
+    let payload = pattern_bytes(2 * 64 * 1024 + 1);
+    assert_eq!(
+        decode_exact(
+            BoundedReader(Cursor::new(payload.clone())),
+            payload.len() as u64,
+            "test",
+        )
+        .expect("decode bounded chunks"),
+        payload
+    );
+}
