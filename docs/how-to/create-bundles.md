@@ -102,14 +102,14 @@ For updates, rebuild from the same clean Original and new patches, update their 
 
 ## Open a hosted weave in Apply
 
-You can give users a link that preloads a public weave:
+Share a link that preloads the public weave:
 
 ```text
 https://rom-weaver.com/apply-patches?weave=https://example.com/release.zip
 ```
 
-Recipient links use **Apply**; authors prepare and edit recipes in **Weave**.
+Use **Apply** for recipients and **Weave** for authors.
 
-The weave host must permit cross-origin browser downloads with CORS. The user's ROM still stays local. Relative patch URLs inside a remote recipe are resolved against the recipe URL.
+The host must allow CORS. ROMs stay local. Relative patch URLs resolve against the recipe URL.
 
 See [webapp integration](../hosting/webapp-integration.md) for URL parameters, hosting headers, and errors, or the [CLI weave guide](cli-bundles.md) for scripted creation.
