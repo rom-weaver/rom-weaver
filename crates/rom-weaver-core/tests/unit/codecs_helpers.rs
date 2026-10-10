@@ -547,3 +547,12 @@ fn exact_decode_reads_in_bounded_chunks() {
         payload
     );
 }
+
+#[test]
+fn exact_decode_capacity_never_exceeds_declared_size() {
+    let payload = pattern_bytes(5 * 64 * 1024 + 17);
+    let output = decode_exact(Cursor::new(payload.clone()), payload.len() as u64, "test")
+        .expect("decode multi-chunk payload");
+    assert_eq!(output, payload);
+    assert!(output.capacity() <= payload.len());
+}

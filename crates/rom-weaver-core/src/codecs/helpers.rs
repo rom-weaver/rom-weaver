@@ -15,9 +15,16 @@ pub(super) fn decode_exact(
     while output.len() < expected {
         let start = output.len();
         let chunk_len = (expected - start).min(DECODE_CHUNK_BYTES);
-        output.try_reserve(chunk_len).map_err(|error| {
-            RomWeaverError::Validation(format!("{codec} decoded output allocation failed: {error}"))
-        })?;
+        if output.capacity() - start < chunk_len {
+            // Double like `try_reserve`, but never past the declared size: amortized
+            // growth would overshoot it by up to 2x and overflow 32-bit wasm at 1 GiB.
+            let grow = (expected - start).min(start.max(DECODE_CHUNK_BYTES));
+            output.try_reserve_exact(grow).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "{codec} decoded output allocation failed: {error}"
+                ))
+            })?;
+        }
         output.resize(start + chunk_len, 0);
         decoder.read_exact(&mut output[start..]).map_err(|error| {
             RomWeaverError::Validation(format!("{codec} decode failed: {error}"))
