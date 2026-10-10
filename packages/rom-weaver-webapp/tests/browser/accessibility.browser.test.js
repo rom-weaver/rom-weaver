@@ -21,6 +21,7 @@ import { createEmptyPatcherUiState } from "../../src/public/react/patcher-ui-sta
 import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { TrimPatchFormView } from "../../src/public/react/trim-form-view.tsx";
 import { ACCENTS, applyAccent } from "../../src/webapp/accent.ts";
+import { loadGuideRoutes } from "../../src/webapp/find-index.ts";
 import { LogDialog } from "../../src/webapp/components/log-dialog.tsx";
 import { WhatsNewPage } from "../../src/webapp/whats-new-page.tsx";
 import { Masthead, UpdateBanner } from "../../src/webapp/components/shell.tsx";
@@ -1233,7 +1234,9 @@ describe("webapp responsive navigation", () => {
         input.dispatchEvent(new Event("input", { bubbles: true }));
         // Docs-search results load asynchronously after the first query. Static
         // CLI shortcuts also have kind "Guide", so wait for a highlighted docs
-        // link before capturing the ordered keyboard options.
+        // link before capturing the ordered keyboard options. Await the actual
+        // chunk load first rather than timing a cold import with the DOM poll.
+        await loadGuideRoutes();
         await vi.waitFor(() => {
           expect(host.querySelector('.find-option[href*="?highlight=e"]')).not.toBeNull();
           expect(host.querySelectorAll(".find-option").length).toBeGreaterThan(3);
