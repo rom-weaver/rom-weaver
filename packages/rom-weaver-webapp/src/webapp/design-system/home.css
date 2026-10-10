@@ -517,6 +517,7 @@
 }
 .rw-app .home-route-actions .home-route-go {
   position: relative;
+  min-height: 44px;
 }
 
 /* One-pass steps */
