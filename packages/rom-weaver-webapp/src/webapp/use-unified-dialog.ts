@@ -149,13 +149,20 @@ const useUnifiedDialog = (actions: WebappRootProps["actions"], state: WebappRoot
   closeDialogRef.current = closeDialog;
   const showTabRef = useRef(showTab);
   showTabRef.current = showTab;
+  const logTabRef = useRef(logTab);
+  logTabRef.current = logTab;
   const logOpenRef = useRef(logOpen);
   logOpenRef.current = logOpen;
   useEffect(() => {
     const sync = () => {
       const tab = readConsoleHashTab();
       if (tab) showTabRef.current(tab, true);
-      else if (logOpenRef.current) closeDialogRef.current();
+      else if (logOpenRef.current) {
+        // Keep the console's entry while a dirty-draft decision is pending.
+        // Discard closes it and removes this entry; Keep editing leaves Back usable.
+        pushConsoleEntry(logTabRef.current);
+        closeDialogRef.current();
+      }
     };
     if (readConsoleHashTab()) sync();
     window.addEventListener("popstate", sync);

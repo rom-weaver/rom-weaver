@@ -1627,13 +1627,17 @@ const LogDialog = ({
       tabIndex={-1}
       onCancel={(event) => {
         event.preventDefault();
-        close();
+        if (!event.currentTarget.querySelector(".rw-modal")) close();
       }}
       onClick={(event) => {
         if (event.target === dialogRef.current) close();
       }}
       onKeyDown={(event) => {
-        if (event.key === "Escape") close();
+        if (event.key !== "Escape" || event.defaultPrevented) return;
+        // A newly opened confirmation owns Escape even before its focus frame runs.
+        if (event.currentTarget.querySelector(".rw-modal")) return;
+        event.preventDefault();
+        close();
       }}
       ref={dialogRef}
     >
@@ -1659,7 +1663,10 @@ const LogDialog = ({
             <button
               aria-label={localizer.message("ui.common.close")}
               className="dlg-x"
-              onClick={close}
+              onClick={(event) => {
+                event.currentTarget.focus();
+                close();
+              }}
               title={localizer.message("ui.common.close")}
               type="button"
             >

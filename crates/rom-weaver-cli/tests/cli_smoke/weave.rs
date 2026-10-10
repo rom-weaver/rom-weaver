@@ -1,4 +1,5 @@
 use super::shared::*;
+use serde_json::json;
 
 fn write_min_ips(temp: &TempDir, name: &str) -> PathBuf {
     let patch = temp.child(name);
@@ -3770,4 +3771,300 @@ fn oversized_legacy_member_does_not_reject_valid_canonical_recipe() {
     assert_eq!(result["bundle"]["version"], 1);
     assert_eq!(result["archive_member"], "rom-weaver-weave.json");
     assert_eq!(result["warnings"].as_array().expect("warnings").len(), 1);
+}
+
+fn weave_output_fixture(temp: &TempDir, members: &[&str]) -> PathBuf {
+    let patch = write_min_ips(temp, "fixture.ips");
+    let manifest = temp.child("manifest.json");
+    let patches: Vec<_> = members.iter().map(|path| json!({ "path": path })).collect();
+    fs::write(
+        manifest.path(),
+        json!({ "version": 1, "patches": patches }).to_string(),
+    )
+    .expect("write manifest");
+    let archive = temp.child("input.tar.gz");
+    let mut entries = vec![(manifest.path(), "rom-weaver-weave.json")];
+    entries.extend(members.iter().map(|name| (patch.as_path(), *name)));
+    write_tar_gz_fixture(&entries, archive.path());
+    archive.path().to_owned()
+}
+
+fn parse_weave_output(archive: &Path, output: &Path, code: i32) {
+    run_json_events(
+        &[
+            "weave",
+            "parse",
+            "--input",
+            archive.to_str().expect("archive path"),
+            "--output",
+            output.to_str().expect("output path"),
+            "--jsonl",
+        ],
+        code,
+    );
+}
+
+#[test]
+fn weave_parse_preserves_existing_output_and_preflights_later_conflicts() {
+    let temp = setup_temp_dir();
+    let archive = weave_output_fixture(&temp, &["first.ips", "second.ips"]);
+    let output = temp.child("output");
+    fs::create_dir(output.path()).expect("output directory");
+    fs::write(output.path().join("second.ips"), b"keep me").expect("existing output");
+    parse_weave_output(&archive, output.path(), 1);
+    assert_eq!(
+        fs::read(output.path().join("second.ips")).expect("sentinel"),
+        b"keep me"
+    );
+    assert!(!output.path().join("first.ips").exists());
+}
+
+#[test]
+fn weave_parse_preserves_source_archive_when_member_aliases_input() {
+    let temp = setup_temp_dir();
+    let archive = weave_output_fixture(&temp, &["input.tar.gz"]);
+    let original = fs::read(&archive).expect("original archive");
+    parse_weave_output(&archive, temp.path(), 1);
+    assert_eq!(fs::read(&archive).expect("preserved archive"), original);
+}
+
+#[test]
+fn weave_parse_rejects_file_directory_output_conflicts_without_writing() {
+    let temp = setup_temp_dir();
+    let archive = weave_output_fixture(&temp, &["patch", "patch/next.ips"]);
+    let output = temp.child("output");
+    parse_weave_output(&archive, output.path(), 1);
+    assert!(!output.path().exists());
+}
+
+#[test]
+fn weave_parse_repeated_member_reuses_one_output() {
+    let temp = setup_temp_dir();
+    let patch = write_min_ips(&temp, "fixture.ips");
+    let manifest = temp.child("manifest.json");
+    fs::write(
+        manifest.path(),
+        r#"{"version":1,"patches":[{"path":"main.ips"},{"path":"main.ips"}]}"#,
+    )
+    .expect("manifest");
+    let archive = temp.child("repeat.tar.gz");
+    write_tar_gz_fixture(
+        &[
+            (manifest.path(), "rom-weaver-weave.json"),
+            (&patch, "main.ips"),
+        ],
+        archive.path(),
+    );
+    let output = temp.child("output");
+    parse_weave_output(archive.path(), output.path(), 0);
+    assert_eq!(
+        fs::read(output.path().join("main.ips")).expect("output"),
+        fs::read(patch).expect("patch")
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn weave_parse_rejects_file_and_dangling_symlinks() {
+    use std::os::unix::fs::symlink;
+    let temp = setup_temp_dir();
+    let archive = weave_output_fixture(&temp, &["main.ips"]);
+    let outside = temp.child("outside.ips");
+    fs::write(outside.path(), b"outside sentinel").expect("outside file");
+    for (name, destination) in [
+        ("existing", outside.path().to_owned()),
+        ("dangling", temp.path().join("missing.ips")),
+    ] {
+        let output = temp.child(name);
+        fs::create_dir(output.path()).expect("output directory");
+        symlink(&destination, output.path().join("main.ips")).expect("symlink");
+        parse_weave_output(&archive, output.path(), 1);
+        assert!(
+            fs::symlink_metadata(output.path().join("main.ips"))
+                .expect("symlink preserved")
+                .file_type()
+                .is_symlink()
+        );
+    }
+    assert_eq!(
+        fs::read(outside.path()).expect("outside sentinel"),
+        b"outside sentinel"
+    );
+    assert!(!temp.path().join("missing.ips").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn weave_parse_rejects_symlinked_directories_and_output_root() {
+    use std::os::unix::fs::symlink;
+    let temp = setup_temp_dir();
+    let archive = weave_output_fixture(&temp, &["patches/main.ips"]);
+    let outside = temp.child("outside");
+    fs::create_dir(outside.path()).expect("outside directory");
+    let output = temp.child("output");
+    fs::create_dir(output.path()).expect("output directory");
+    symlink(outside.path(), output.path().join("patches")).expect("directory symlink");
+    parse_weave_output(&archive, output.path(), 1);
+    let root_link = temp.child("root-link");
+    symlink(outside.path(), root_link.path()).expect("root symlink");
+    parse_weave_output(&archive, root_link.path(), 1);
+    assert_eq!(
+        fs::read_dir(outside.path())
+            .expect("outside directory")
+            .count(),
+        0
+    );
+}
+
+#[cfg(unix)]
+fn assert_weave_parse_rejects_suffixed_symlink_root(suffix: &str) {
+    use std::os::unix::fs::symlink;
+    let temp = setup_temp_dir();
+    let archive = weave_output_fixture(&temp, &["main.ips"]);
+    let outside = temp.child("outside");
+    fs::create_dir(outside.path()).expect("outside directory");
+    let root_link = temp.child("root-link");
+    symlink(outside.path(), root_link.path()).expect("root symlink");
+    let mut output = root_link.path().as_os_str().to_owned();
+    output.push(suffix);
+    parse_weave_output(&archive, Path::new(&output), 1);
+    assert_eq!(
+        fs::read_dir(outside.path())
+            .expect("outside directory")
+            .count(),
+        0
+    );
+    assert!(
+        fs::symlink_metadata(root_link.path())
+            .expect("root link preserved")
+            .file_type()
+            .is_symlink()
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn weave_parse_rejects_symlink_root_with_trailing_separator() {
+    assert_weave_parse_rejects_suffixed_symlink_root("/");
+}
+
+#[cfg(unix)]
+#[test]
+fn weave_parse_rejects_symlink_root_with_trailing_dot() {
+    assert_weave_parse_rejects_suffixed_symlink_root("/.");
+}
+
+#[cfg(unix)]
+#[test]
+fn weave_parse_preserves_parent_traversal_through_symlink_ancestor() {
+    use std::os::unix::fs::symlink;
+    let temp = setup_temp_dir();
+    let archive = weave_output_fixture(&temp, &["main.ips"]);
+    let outside = temp.child("outside");
+    fs::create_dir_all(outside.path().join("nested")).expect("outside directory");
+    let ancestor = temp.child("ancestor-link");
+    symlink(outside.path().join("nested"), ancestor.path()).expect("ancestor symlink");
+    parse_weave_output(&archive, &ancestor.path().join("../output/."), 0);
+    assert_eq!(
+        fs::read(outside.path().join("output/main.ips")).expect("resolved output"),
+        fs::read(temp.child("fixture.ips").path()).expect("patch fixture"),
+    );
+    assert!(!temp.child("output").path().exists());
+}
+
+#[test]
+fn weave_parse_preserves_hard_link_to_source_archive() {
+    let temp = setup_temp_dir();
+    let archive = weave_output_fixture(&temp, &["main.ips"]);
+    let original = fs::read(&archive).expect("archive");
+    let output = temp.child("output");
+    fs::create_dir(output.path()).expect("output directory");
+    fs::hard_link(&archive, output.path().join("main.ips")).expect("hard link");
+    parse_weave_output(&archive, output.path(), 1);
+    assert_eq!(fs::read(&archive).expect("archive preserved"), original);
+}
+
+#[test]
+fn weave_apply_repeated_archive_member_uses_private_outputs() {
+    let temp = setup_temp_dir();
+    let archive = weave_output_fixture(&temp, &["main.ips", "main.ips"]);
+    let rom = write_weave_rom(&temp, "game.bin");
+    let output = temp.child("patched.bin");
+    run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            rom.to_str().expect("rom"),
+            "--weave",
+            archive.to_str().expect("archive"),
+            "--output",
+            output.path().to_str().expect("output"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        0,
+    );
+    let mut expected = fs::read(rom).expect("original ROM");
+    expected[0] = 0xAA;
+    assert_eq!(fs::read(output.path()).expect("patched ROM"), expected);
+}
+
+#[test]
+fn weave_parse_corrupt_later_member_leaves_no_extracted_files() {
+    let temp = setup_temp_dir();
+    let first = write_min_ips(&temp, "first.ips");
+    let second = write_min_ips(&temp, "second.ips");
+    let manifest = temp.child("rom-weaver-weave.json");
+    fs::write(
+        manifest.path(),
+        r#"{"version":1,"patches":[{"path":"first.ips"},{"path":"second.ips"}]}"#,
+    )
+    .expect("manifest");
+    let archive = temp.child("corrupt.zip");
+    run_json_events(
+        &[
+            "compress",
+            "--input",
+            manifest.path().to_str().expect("manifest path"),
+            "--input",
+            first.to_str().expect("first patch"),
+            "--input",
+            second.to_str().expect("second patch"),
+            "--output",
+            archive.path().to_str().expect("archive path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    let mut bytes = fs::read(archive.path()).expect("archive");
+    let header = bytes
+        .windows(30 + "second.ips".len())
+        .position(|window| window.starts_with(b"PK\x03\x04") && &window[30..] == b"second.ips")
+        .expect("second local ZIP header");
+    let extra_len = u16::from_le_bytes([bytes[header + 28], bytes[header + 29]]) as usize;
+    bytes[header + 30 + "second.ips".len() + extra_len] ^= 0xff;
+    fs::write(archive.path(), &bytes).expect("corrupt member payload");
+    // The manifest and entry listing remain readable; only member extraction fails.
+    run_json_events(
+        &[
+            "weave",
+            "parse",
+            "--input",
+            archive.path().to_str().expect("archive path"),
+            "--no-extract",
+            "--jsonl",
+        ],
+        0,
+    );
+    let output = temp.child("output");
+    parse_weave_output(archive.path(), output.path(), 1);
+    assert!(
+        !output.path().join("first.ips").exists(),
+        "earlier member must not survive a later read failure"
+    );
+    assert!(
+        !output.path().join("second.ips").exists(),
+        "failed member must not leave partial bytes"
+    );
+    assert_eq!(fs::read(archive.path()).expect("source preserved"), bytes);
 }

@@ -30,7 +30,14 @@ export const chooseFilesByKeyboard = async (page, input, files) => {
 };
 
 const expectFocusInside = async (dialog) => {
-  await expect.poll(() => dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+  await expect
+    .poll(() =>
+      dialog.evaluate((element) => ({
+        inside: element.contains(document.activeElement),
+        active: document.activeElement?.outerHTML.slice(0, 200),
+      })),
+    )
+    .toMatchObject({ inside: true });
 };
 
 const auditDialogKeyboard = async (page, trigger, dialog) => {
@@ -56,6 +63,81 @@ const auditDialogKeyboard = async (page, trigger, dialog) => {
   await expect(dialog).toBeHidden();
   await expect(page).not.toHaveURL(/#console-/);
   await expect(trigger).toBeFocused();
+};
+
+const auditDirtySettings = async (page, trigger, dialog) => {
+  const openSettings = async () => {
+    await tabTo(page, trigger);
+    await page.keyboard.press("Enter");
+  };
+  const confirmation = page.getByRole("dialog", { name: "Discard settings changes?", exact: true });
+  const detailed = page.locator("#settings-detailed-view-enabled");
+  const stagedFile = page.locator("#rom-weaver-list-input-stack");
+  await page.locator("#rom-weaver-input-file-unified").setInputFiles({
+    name: "settings-retained.bin",
+    mimeType: "application/octet-stream",
+    buffer: Buffer.from([0, 1, 2, 3]),
+  });
+  await expect(stagedFile).toContainText("settings-retained.bin");
+  for (const method of ["Close", "Escape", "Back"]) {
+    process.stdout.write(`CHECK dirty Settings recovery: ${method}\n`);
+    await openSettings();
+    const saved = await detailed.isChecked();
+    await detailed.setChecked(!saved);
+    const close = dialog.getByRole("button", { name: "Close", exact: true });
+    if (method === "Close") await close.click();
+    else if (method === "Escape") await page.keyboard.press("Escape");
+    else await page.goBack();
+    await expect(confirmation).toBeVisible();
+    await expectFocusInside(confirmation);
+    await expect(confirmation.getByRole("button", { name: "Keep editing" })).toBeVisible();
+    await tabTo(page, confirmation.getByRole("button", { name: "Keep editing" }));
+    await page.keyboard.press("Enter");
+    await expect(confirmation).toBeHidden();
+    await expect(dialog).toBeVisible();
+    await expect(detailed).toBeChecked({ checked: !saved });
+    await expect(page).toHaveURL(/#console-settings$/);
+    await expectFocusInside(dialog);
+
+    // Safari does not focus buttons on pointer clicks. Establish the keyboard
+    // opener explicitly before asserting that cancellation returns focus to it.
+    await tabTo(page, close);
+    await page.keyboard.press("Enter");
+    await expect(confirmation).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(confirmation).toBeHidden();
+    await expect(dialog).toBeVisible();
+    await expect(close).toBeFocused();
+
+    // Back must still ask after cancelling the first request.
+    await page.goBack();
+    await expect(confirmation).toBeVisible();
+    await confirmation.getByRole("button", { name: "Discard changes" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page).not.toHaveURL(/#console-/);
+    await expect(trigger).toBeFocused();
+    await expect(stagedFile).toContainText("settings-retained.bin");
+    await openSettings();
+    await expect(detailed).toBeChecked({ checked: saved });
+    await close.click();
+    await expect(dialog).toBeHidden();
+    await expect(page).not.toHaveURL(/#console-/);
+  }
+
+  await openSettings();
+  await expect(dialog).toContainText("Theme applies immediately. Other settings apply when you save.");
+  await dialog.getByRole("button", { name: "Dark", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(confirmation).toBeHidden();
+  await expect(page).not.toHaveURL(/#console-/);
+  await openSettings();
+  await expect(dialog.getByRole("button", { name: "Dark", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page).not.toHaveURL(/#console-/);
+  await expect(stagedFile).toContainText("settings-retained.bin");
 };
 
 export const runAccessibleNavigationAudit = async (createContext, baseUrl) => {
@@ -114,8 +196,9 @@ export const runAccessibleNavigationAudit = async (createContext, baseUrl) => {
       const input = page.locator("#rom-weaver-input-file-unified");
       await expect(input).toHaveAccessibleName("Drop or click to add ROMs, patches, weaves, or archives");
       await chooseFilesByKeyboard(page, input, []);
+      await auditDirtySettings(page, settings, settingsDialog);
       process.stdout.write(
-        `PASS accessible navigation (${viewport.width}px: skip link, dialog names/focus, keyboard file picker)\n`,
+        `PASS accessible navigation (${viewport.width}px: skip link, dialog names/focus, keyboard file picker, dirty Settings recovery)\n`,
       );
     } finally {
       await context.close();

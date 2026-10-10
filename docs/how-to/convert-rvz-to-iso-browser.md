@@ -25,7 +25,9 @@ Extract accepts one archive or disc image at a time. Add another file only after
 
 RVZ stores GameCube and Wii disc data efficiently. ISO has wider tool compatibility but usually needs more storage.
 
-Make sure the browser and destination have enough free space for the extracted ISO. Keep the RVZ until you test the ISO.
+Budget for the uncompressed ISO, browser working storage, and the saved download, not just the RVZ size. Device memory, browser quota, and free disk space vary; no universal maximum file size is guaranteed. Keep the tab open until the download finishes.
+
+For example, `my-disc.rvz` yields `my-disc.iso`. If you retained the original ISO, compare its checksum with the extracted ISO using [Checksum file](https://rom-weaver.com/checksum), not with the RVZ hash. Keep the RVZ until you test the ISO. For repeated memory/storage failures, use [native extraction](work-with-archives.md#extract-an-iso-from-rvz).
 
 For other inputs, use [Extract files](extract-files-browser.md). [Choosing a compression format](../explanation/compression-formats.md) compares RVZ with other containers.
 

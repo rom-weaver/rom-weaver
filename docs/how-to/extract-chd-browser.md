@@ -31,6 +31,10 @@ Keep the CUE or GDI sheet and tracks together with their original filenames. Use
 
 ## Check the result and storage
 
-Allow space for the uncompressed disc and download. Test it in your emulator before removing the CHD. Keep this page open until downloading finishes.
+Allow space for the uncompressed disc, browser working storage, and download. Quotas and memory vary by device. Keep this page open until downloading finishes; for repeated storage/memory failures, use [native extraction](work-with-archives.md).
+
+The [synthetic disc tutorial](../tutorials/patch-compressed-disc.md) supplies a safe example: after its two patches, **One BIN file** yields 32,768 bytes with SHA-1 `ebce631d802abe7c450e3f6cb658f9679701fdd6`. Check the extracted BIN using [Checksum file](https://rom-weaver.com/checksum), not the CHD or CUE. This tiny example does not test multi-gigabyte capacity.
+
+For your disc, confirm all tracks are present and test the emulator before removing the CHD. A CD yielding BIN/CUE rather than ISO is expected.
 
 To compress the disc again, follow [Convert ISO or BIN/CUE to CHD](convert-to-chd-browser.md). For other inputs, follow [Extract files](extract-files-browser.md).
