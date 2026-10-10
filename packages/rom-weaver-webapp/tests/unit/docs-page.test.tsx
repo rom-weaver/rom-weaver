@@ -45,7 +45,7 @@ const WEAVE_GUIDE_ANCHORS = [
   "turn-on-weave-output-and-download-it",
   "test-the-finished-download",
   "publish-a-useful-release",
-  "open-a-hosted-weave-in-apply",
+  "open-a-hosted-weave",
 ];
 
 const routeFor = (slug: string) => {
@@ -420,6 +420,7 @@ Fixture description.
       "create-and-share-a-patch-bundle-in-the-browser",
       "turn-on-bundle-output-and-download-it",
       "open-a-hosted-bundle-in-apply",
+      "open-a-hosted-weave-in-apply",
     ]) {
       expect(document.getElementById(legacy)).not.toBeNull();
     }
