@@ -22,7 +22,15 @@ Host the archive at a versioned public HTTPS URL with CORS enabled. Replace the 
 <a href="https://rom-weaver.com/weave-patches?weave=https%3A%2F%2Fexample.com%2Frelease.zip">Apply this recipe</a>
 ```
 
-Use the same address for a Markdown link. Beside it, give the source's region, revision, header state and checksum; supported optional choices; expected output checksums; and a direct archive download. Archive and ROM checksums describe different bytes. Keep private tokens out of shared links.
+For a Markdown release page or README, use:
+
+```md
+[Apply this recipe](https://rom-weaver.com/weave-patches?weave=https%3A%2F%2Fexample.com%2Frelease.zip)
+```
+
+The link opens **Weave** with the recipe preloaded. Tell readers to add their matching ROM, review the patches, expand **Apply**, and choose **APPLY & DOWNLOAD**. Opening the link does not apply patches automatically.
+
+Beside it, give the source's region, revision, header state and checksum; supported optional choices; expected output checksums; and a direct archive download. Archive and ROM checksums describe different bytes. Keep private tokens out of shared links.
 
 Open the published link in a fresh browser without signing into the host. Check the recipe, supply the source locally, and verify the output and emulator. Check that a wrong sample source shows a mismatch. Reuse the [existing two-patch demo](https://github.com/user-attachments/assets/558b4f4d-640c-410e-a866-cd9ff97ac84c) or [homebrew practice run](../tutorials/first-patch.md) to introduce readers to the workflow.
 
