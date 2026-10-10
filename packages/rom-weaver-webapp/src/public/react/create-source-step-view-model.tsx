@@ -1,3 +1,4 @@
+import { WorkflowErrorMessage } from "./workflow-error-message.tsx";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { Notice } from "./components/ds/feedback.tsx";
 import { StageStatus, stageBarValue, stagePercent, stageStatusLabel } from "./components/ds/staging-meta.tsx";
@@ -84,7 +85,7 @@ const buildCreateSourceStep = ({
       level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}
       onDismiss={messageDismissible ? clearWorkflowMessage : undefined}
     >
-      {message}
+      <WorkflowErrorMessage message={message} />
     </Notice>
   ) : sourceNoticeMessage ? (
     <Notice id={`patch-builder-${role}-error-message`} level={getSourceNoticeLevel(sourceState)}>

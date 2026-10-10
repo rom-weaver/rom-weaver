@@ -1,3 +1,4 @@
+import { WorkflowErrorMessage } from "./workflow-error-message.tsx";
 import { Spool, TriangleAlert } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
@@ -236,7 +237,7 @@ const ApplyErrorNotice = ({
       level={notice.level === "warning" ? "warn" : "error"}
       onDismiss={notice.dismissible ? () => noticeController?.dismiss?.() : undefined}
     >
-      {notice.message}
+      <WorkflowErrorMessage message={notice.message} />
     </Notice>
   );
 };
