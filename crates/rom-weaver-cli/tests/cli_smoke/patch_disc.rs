@@ -1550,3 +1550,106 @@ fn patch_apply_disc_rejects_references_that_differ_only_by_case_unless_same_file
         assert!(!output.path().exists());
     }
 }
+
+fn case_alias_patch(temp: &assert_fs::TempDir) -> assert_fs::fixture::ChildPath {
+    let patch = temp.child("patch.ips");
+    fs::write(
+        patch.path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: DISC_PATCH_OFFSET as u32,
+                data: disc_patch_payload(),
+            }],
+            None,
+        ),
+    )
+    .expect("patch");
+    patch
+}
+
+#[test]
+fn patch_apply_disc_compressed_output_rejects_references_that_differ_only_by_case() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("a.bin").path(), vec![1u8; 2352 * 4]).expect("a.bin");
+    let case_insensitive = temp.child("A.BIN").path().exists();
+    if !case_insensitive {
+        fs::write(temp.child("A.BIN").path(), vec![2u8; 2352 * 4]).expect("A.BIN");
+    }
+    temp.child("disc.cue")
+        .write_str(
+            "FILE a.bin BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\nFILE A.BIN BINARY\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\n",
+        )
+        .expect("cue");
+    let patch = case_alias_patch(&temp);
+    let output = temp.child("out.chd");
+    let json = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--target",
+            "a.bin",
+            "-i",
+            temp.child("disc.cue").path().to_str().expect("cue path"),
+            "--patch",
+            patch.path().to_str().expect("patch path"),
+            "-o",
+            output.path().to_str().expect("output path"),
+            "--jsonl",
+        ],
+        if case_insensitive { 0 } else { 1 },
+    );
+    if case_insensitive {
+        assert_eq!(json["status"], "succeeded");
+    } else {
+        assert_eq!(json["status"], "failed");
+        assert!(
+            json["label"]
+                .as_str()
+                .expect("label")
+                .contains("differ only by case")
+        );
+        assert!(!output.path().exists());
+    }
+}
+
+#[test]
+fn patch_apply_disc_reports_missing_case_alias_as_not_found() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("a.bin").path(), vec![1u8; 2352 * 4]).expect("a.bin");
+    // On a case-insensitive filesystem `A.BIN` resolves to `a.bin`, so there is
+    // no missing alias to report.
+    if temp.child("A.BIN").path().exists() {
+        return;
+    }
+    temp.child("disc.cue")
+        .write_str(
+            "FILE a.bin BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\nFILE A.BIN BINARY\n  TRACK 02 AUDIO\n    INDEX 01 00:00:00\n",
+        )
+        .expect("cue");
+    let patch = case_alias_patch(&temp);
+    let output = temp.child("out.chd");
+    let json = run_single_json_event(
+        &[
+            "patch",
+            "apply",
+            "--target",
+            "a.bin",
+            "-i",
+            temp.child("disc.cue").path().to_str().expect("cue path"),
+            "--patch",
+            patch.path().to_str().expect("patch path"),
+            "-o",
+            output.path().to_str().expect("output path"),
+            "--jsonl",
+        ],
+        1,
+    );
+    assert_eq!(json["status"], "failed");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("`A.BIN`, which was not found"), "{label}");
+    assert!(
+        label.contains("differs only by case from `a.bin`"),
+        "{label}"
+    );
+    assert!(!output.path().exists());
+}
