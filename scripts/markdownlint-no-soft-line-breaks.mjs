@@ -17,7 +17,10 @@ const AUTOLINK_OR_INLINE_HTML = new RegExp(
     String.raw`<[\w.!#$%&'*+/=?^\x60{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*>`,
     String.raw`<[A-Za-z][A-Za-z0-9-]*(?:${ATTRIBUTE})*\s*\/?>`,
     String.raw`<\/[A-Za-z][A-Za-z0-9-]*\s*>`,
-    String.raw`<!--[\s\S]*?-->`,
+    String.raw`<!---?>|<!--(?:[^-]|-[^-]|--[^>])*-->`,
+    String.raw`<[?][\s\S]*?[?]>`,
+    String.raw`<![A-Za-z][^>]*>`,
+    String.raw`<!\[CDATA\[[\s\S]*?\]\]>`,
   ].join("|"),
   "y",
 );

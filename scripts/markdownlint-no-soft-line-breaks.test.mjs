@@ -106,6 +106,26 @@ test("ignores backticks inside autolinks and inline HTML", () => {
   ]);
 });
 
+test("matches markdown-it for comments, processing instructions, declarations, and CDATA", () => {
+  const errors = lintTokens([
+    {
+      lineNumber: 1,
+      content: "A <?php `x\ny` ?> <!DOCTYPE `x\ny`> <![CDATA[ `x\ny` ]]> <!-- `x\ny` --> end.",
+      children: [],
+    },
+    { lineNumber: 7, content: "B <!--> `p\nq` -->", children: [] },
+    { lineNumber: 9, content: "C <![CDATA[ ` ]]> `r\ns` end.", children: [] },
+  ]);
+
+  assert.deepEqual(
+    errors.map(({ lineNumber, context }) => ({ lineNumber, context })),
+    [
+      { lineNumber: 7, context: "B <!--> `p" },
+      { lineNumber: 9, context: "C <![CDATA[ ` ]]> `r" },
+    ],
+  );
+});
+
 test("allows one-line code spans, escaped backticks, and unmatched backticks", () => {
   const errors = lintTokens([
     {
