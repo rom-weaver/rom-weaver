@@ -89,7 +89,7 @@ const buildCreateSourceStep = ({
     </Notice>
   ) : sourceNoticeMessage ? (
     <Notice id={`patch-builder-${role}-error-message`} level={getSourceNoticeLevel(sourceState)}>
-      {sourceNoticeMessage}
+      <WorkflowErrorMessage message={sourceNoticeMessage} />
     </Notice>
   ) : null;
   return {

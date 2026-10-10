@@ -50,12 +50,34 @@ describe("workflow error recovery", () => {
   );
 
   it.each([
+    ["en", "Extract files guide (opens in a new tab)"],
+    ["de", "Anleitung zum Entpacken (öffnet in einem neuen Tab)"],
+    ["es", "Guía para extraer archivos (se abre en una pestaña nueva)"],
+  ])("recognizes the native nested-extraction diagnostic in %s", async (locale, linkName) => {
+    await loadCatalog(locale);
+    const diagnostic = "validation failed: nested extract exceeded max depth of 8 at `/work/OOM.zip`";
+    const message = formatCodedErrorForDisplay(
+      Object.assign(new Error(diagnostic), { code: "COMPRESSION_FAILED" }),
+      createLocalizer(locale),
+    );
+    const view = showNotice(message, locale);
+    expect(view.getByRole("alert").textContent).toContain(diagnostic);
+    expect(view.getByRole("link", { name: linkName }).getAttribute("href")).toBe(
+      "https://example.test/tools/docs/extract-files-browser",
+    );
+  });
+
+  it.each([
     "WORKER_FAILED: Failed to fetch dynamically imported module",
     "COMPRESSION_FAILED: Archive is invalid",
     "CANCELLED: Workflow was cancelled",
     "CHECKSUM_MISMATCH: Checksum validation failed",
     "A file named OOM.zip failed",
+    "A file named validation failed: nested extract exceeded max depth of 8",
+    "validation failed: archive max depth of 8",
     "INVALID_INPUT: SELECTION_NOT_FOUND: nested detail",
+    "INVALID_INPUT: nested extract exceeded max depth of 8",
+    "COMPRESSION_FAILED: archive max depth of 8",
   ])("does not guess recovery for unrelated failure %s", (message) => {
     const view = showNotice(message);
     expect(view.queryByRole("link")).toBeNull();
@@ -88,6 +110,50 @@ describe("workflow error recovery", () => {
     expect(view.getByRole("alert").textContent).toContain(message);
     expect(view.getByRole("alert").textContent).toContain("rom-7");
     expect(view.getByRole("link", { name: linkName })).toBeTruthy();
+  });
+
+  it.each([
+    ["en", "Extract files guide (opens in a new tab)"],
+    ["de", "Anleitung zum Entpacken (öffnet in einem neuen Tab)"],
+    ["es", "Guía para extraer archivos (se abre en una pestaña nueva)"],
+  ])("renders native Create source warnings in %s", async (locale, linkName) => {
+    await loadCatalog(locale);
+    const diagnostic = "validation failed: nested extract exceeded max depth of 8 at `/work/OOM.zip`";
+    for (const role of ["original", "modified"] as const) {
+      const step = buildCreateSourceStep({
+        num: "1",
+        role,
+        title: role,
+        file: null,
+        fileName: "OOM.zip",
+        sourceState: {
+          id: role,
+          status: "ready",
+          candidates: [],
+          parentCompressions: [],
+          warnings: [{ message: diagnostic }],
+        },
+        removeLabel: "Remove",
+        onClear: vi.fn(),
+        runtimeNotice: {
+          message: "",
+          messagePlacement: null,
+          errorCode: "",
+          messageDismissible: false,
+          clearWorkflowMessage: vi.fn(),
+        },
+      });
+      const view = render(
+        <RomWeaverSettingsProvider assetBaseUrl="https://example.test/tools/" settings={{ language: locale }}>
+          {step.notice}
+        </RomWeaverSettingsProvider>,
+      );
+      expect(view.container.textContent).toContain(diagnostic);
+      expect(view.getByRole("link", { name: linkName }).getAttribute("href")).toBe(
+        "https://example.test/tools/docs/extract-files-browser",
+      );
+      view.unmount();
+    }
   });
 
   it.each(["original", "modified"] as const)("renders recovery beside Create's %s input", (role) => {
