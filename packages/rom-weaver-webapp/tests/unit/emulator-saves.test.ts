@@ -7,7 +7,7 @@ import {
   deleteEmulatorSave,
   importEmulatorSave,
   importEmulatorSavePart,
-  ensureEmulatorSaveBridge,
+  registerEmulatorSaveBridge,
   listEmulatorSaves,
   parseSerializedEmulatorSave,
   readPendingTestSave,
@@ -524,13 +524,22 @@ describe("emulator saves", () => {
   it("answers emulator save requests with the persisted SRAM", async () => {
     const source = { postMessage: vi.fn() };
     const listeners: Array<(event: MessageEvent<unknown>) => void> = [];
-    vi.stubGlobal("window", {
+    const host = {
+      origin: "https://app.test",
+      location: { origin: "https://app.test" },
+      removeEventListener: vi.fn(),
       addEventListener: (_type: string, listener: (event: MessageEvent<unknown>) => void) => {
         listeners.push(listener);
       },
-    });
+    };
+    const frame = {
+      ownerDocument: { defaultView: host },
+      contentWindow: source,
+      isConnected: true,
+      hasAttribute: () => false,
+    } as unknown as HTMLIFrameElement;
     await writeEmulatorSave(record);
-    ensureEmulatorSaveBridge();
+    const unregister = registerEmulatorSaveBridge(frame, record.gameId);
 
     listeners[0]?.({
       data: {
@@ -539,6 +548,7 @@ describe("emulator saves", () => {
         source: "rom-weaver-emulator",
       },
       source,
+      origin: host.location.origin,
     } as unknown as MessageEvent<unknown>);
 
     await vi.waitFor(() => expect(source.postMessage).toHaveBeenCalled());
@@ -549,7 +559,7 @@ describe("emulator saves", () => {
         kind: "load-sram",
         source: "rom-weaver-emulator",
       }),
-      "*",
+      host.location.origin,
     );
 
     const preview = new Uint8Array([4, 5]);
@@ -559,11 +569,12 @@ describe("emulator saves", () => {
     listeners[0]?.({
       data: { gameId: record.gameId, kind: "request-load-sram", source: "rom-weaver-emulator" },
       source,
+      origin: host.location.origin,
     } as unknown as MessageEvent<unknown>);
     await vi.waitFor(() =>
       expect(source.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ data: new Uint8Array([4, 5]), kind: "load-sram" }),
-        "*",
+        host.location.origin,
       ),
     );
     listeners[0]?.({
@@ -574,6 +585,7 @@ describe("emulator saves", () => {
         source: "rom-weaver-emulator",
       },
       source,
+      origin: host.location.origin,
     } as unknown as MessageEvent<unknown>);
     expect((await listEmulatorSaves())[0]?.sram).toEqual(record.sram);
     clearEmulatorSavePreview(record.gameId);
@@ -588,6 +600,7 @@ describe("emulator saves", () => {
         source: "rom-weaver-emulator",
       },
       source,
+      origin: host.location.origin,
     } as unknown as MessageEvent<unknown>);
     await vi.waitFor(async () => expect((await listEmulatorSaves())[0]?.state).toEqual(new Uint8Array([9, 8])));
     listeners[0]?.({
@@ -599,6 +612,7 @@ describe("emulator saves", () => {
         source: "rom-weaver-emulator",
       },
       source,
+      origin: host.location.origin,
     } as unknown as MessageEvent<unknown>);
     await vi.waitFor(async () => expect((await listEmulatorSaves())[0]?.sram).toEqual(new Uint8Array([6, 7])));
     source.postMessage.mockClear();
@@ -609,9 +623,13 @@ describe("emulator saves", () => {
         source: "rom-weaver-emulator",
       },
       source,
+      origin: host.location.origin,
     } as unknown as MessageEvent<unknown>);
     await vi.waitFor(() =>
-      expect(source.postMessage).toHaveBeenCalledWith(expect.objectContaining({ kind: "load-state" }), "*"),
+      expect(source.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "load-state" }),
+        host.location.origin,
+      ),
     );
     listeners[0]?.({ data: { source: "other", kind: "save-state", gameId: record.gameId } });
     listeners[0]?.({ data: { source: "rom-weaver-emulator", kind: "save-state", gameId: record.gameId, data: null } });
@@ -626,8 +644,148 @@ describe("emulator saves", () => {
         source: "rom-weaver-emulator",
       },
       source,
+      origin: host.location.origin,
     } as unknown as MessageEvent<unknown>);
-    expect(source.postMessage).toHaveBeenCalledWith(expect.objectContaining({ data: null, kind: "load-sram" }), "*");
+    expect(source.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ data: null, kind: "load-sram" }),
+      host.location.origin,
+    );
     configureEmulatorSaveStorage(true);
+    unregister();
+  });
+});
+
+describe("emulator save bridge session isolation", () => {
+  const gameId = "a".repeat(40);
+  const otherGameId = "b".repeat(40);
+  const origin = "https://app.test";
+  const setup = (opaque = false) => {
+    const listeners = new Set<(event: MessageEvent<unknown>) => void>();
+    const host = {
+      origin,
+      location: { origin },
+      addEventListener: (_type: string, listener: (event: MessageEvent<unknown>) => void) => listeners.add(listener),
+      removeEventListener: (_type: string, listener: (event: MessageEvent<unknown>) => void) =>
+        listeners.delete(listener),
+    };
+    const source = { postMessage: vi.fn() };
+    const frame = {
+      ownerDocument: { defaultView: host },
+      contentWindow: source,
+      isConnected: true,
+      hasAttribute: () => opaque,
+      sandbox: { contains: () => false },
+    };
+    const register = (id = gameId) => registerEmulatorSaveBridge(frame as unknown as HTMLIFrameElement, id);
+    const send = (overrides: Record<string, unknown> = {}, data: Record<string, unknown> = {}) => {
+      const event = {
+        source,
+        origin: opaque ? "null" : origin,
+        data: { source: "rom-weaver-emulator", gameId, kind: "request-load-sram", ...data },
+        ...overrides,
+      } as unknown as MessageEvent<unknown>;
+      for (const listener of listeners) listener(event);
+    };
+    return { frame, source, listeners, register, send };
+  };
+
+  it("rejects foreign sources, origins, mismatched games, and disconnected frames before storage access", () => {
+    const session = setup();
+    const unregister = session.register();
+    setEmulatorSavePreview(gameId, new Uint8Array([17, 42, 99]));
+    const open = vi.spyOn(indexedDB, "open");
+    const foreign = { postMessage: vi.fn() };
+    for (const kind of ["request-load-sram", "request-load-state", "save-sram", "save-state"]) {
+      const data = { kind, data: new Uint8Array([9]) };
+      session.send({ source: foreign }, data);
+      session.send({ source: null }, data);
+      session.send({ origin: "https://untrusted.invalid" }, data);
+      session.send({ origin: "null" }, data);
+      session.send({}, { ...data, gameId: otherGameId });
+    }
+    expect(open).not.toHaveBeenCalled();
+    expect(foreign.postMessage).not.toHaveBeenCalled();
+    expect(session.source.postMessage).not.toHaveBeenCalled();
+    session.frame.isConnected = false;
+    session.send();
+    expect(session.source.postMessage).not.toHaveBeenCalled();
+    session.frame.isConnected = true;
+    session.send();
+    expect(session.source.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ data: new Uint8Array([17, 42, 99]) }),
+      origin,
+    );
+    unregister();
+    clearEmulatorSavePreview(gameId);
+  });
+
+  it("revokes disposed sessions even if an already queued listener runs after remount", () => {
+    const old = setup();
+    const unregister = old.register();
+    const queued = [...old.listeners][0];
+    setEmulatorSavePreview(gameId, new Uint8Array([1]));
+    unregister();
+    const current = setup();
+    const disposeCurrent = current.register();
+    queued?.({
+      source: old.source,
+      origin,
+      data: { source: "rom-weaver-emulator", gameId, kind: "request-load-sram" },
+    } as unknown as MessageEvent<unknown>);
+    current.send({ source: old.source });
+    expect(old.source.postMessage).not.toHaveBeenCalled();
+    expect(current.source.postMessage).not.toHaveBeenCalled();
+    current.send();
+    expect(current.source.postMessage).toHaveBeenCalledOnce();
+    disposeCurrent();
+    clearEmulatorSavePreview(gameId);
+  });
+
+  it("does not deliver an in-flight stored save read to a disposed session", async () => {
+    await writeEmulatorSave({ gameId, gameName: gameId, label: "Synthetic", updatedAt: 1, sram: new Uint8Array([3]) });
+    const session = setup();
+    const unregister = session.register();
+    const read = vi.spyOn(indexedDB, "open");
+    session.send();
+    expect(read).toHaveBeenCalled();
+    unregister();
+    // Drain the same asynchronous database work before checking the old reply.
+    await listEmulatorSaves();
+    expect(session.source.postMessage).not.toHaveBeenCalled();
+  });
+
+  it("supports exact opaque-origin iframe sources without accepting other null-origin windows", () => {
+    const session = setup(true);
+    const unregister = session.register();
+    setEmulatorSavePreview(gameId, new Uint8Array([2]));
+    session.send({ source: { postMessage: vi.fn() } });
+    session.send({ origin });
+    expect(session.source.postMessage).not.toHaveBeenCalled();
+    session.send();
+    expect(session.source.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ data: new Uint8Array([2]) }),
+      "*",
+    );
+    unregister();
+    clearEmulatorSavePreview(gameId);
+  });
+
+  it("keeps simultaneous session registrations and cleanup independent", () => {
+    const one = setup();
+    const two = setup();
+    const disposeOne = one.register();
+    const disposeTwo = two.register(otherGameId);
+    setEmulatorSavePreview(gameId, new Uint8Array([1]));
+    setEmulatorSavePreview(otherGameId, new Uint8Array([2]));
+    one.send({}, { gameId: otherGameId });
+    two.send();
+    expect(one.source.postMessage).not.toHaveBeenCalled();
+    expect(two.source.postMessage).not.toHaveBeenCalled();
+    disposeOne();
+    two.send({}, { gameId: otherGameId });
+    expect(two.source.postMessage).toHaveBeenCalledWith(expect.objectContaining({ data: new Uint8Array([2]) }), origin);
+    disposeTwo();
+    clearEmulatorSavePreview(gameId);
+    clearEmulatorSavePreview(otherGameId);
   });
 });

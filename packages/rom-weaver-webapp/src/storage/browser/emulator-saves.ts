@@ -83,7 +83,6 @@ type EmulatorSaveMessage = {
   data?: ArrayBuffer | ArrayBufferView | null;
 };
 
-let bridgeInstalled = false;
 let saveStorageEnabled = true;
 
 const storageUnavailable = () => new Error("Emulator save storage is unavailable in this browser.");
@@ -734,17 +733,37 @@ const isSaveMessage = (value: unknown): value is EmulatorSaveMessage => {
   return message.source === MESSAGE_SOURCE && typeof message.kind === "string" && typeof message.gameId === "string";
 };
 
-const postToSource = (source: MessageEventSource | null, message: unknown) => {
-  if (!source || typeof source.postMessage !== "function") return;
-  (source as unknown as { postMessage: (value: unknown, targetOrigin: string) => void }).postMessage(message, "*");
+type EmulatorSaveSession = {
+  frame: HTMLIFrameElement;
+  source: Window;
+  gameId: string;
+  origin: string;
+  active: boolean;
 };
 
-const handleSaveMessage = async (event: MessageEvent<unknown>) => {
-  if (!isSaveMessage(event.data)) return;
+const isCurrentSession = (session: EmulatorSaveSession) =>
+  session.active && session.frame.isConnected && session.frame.contentWindow === session.source;
+
+const postToSession = (session: EmulatorSaveSession, message: unknown) => {
+  if (!isCurrentSession(session)) return;
+  // Opaque sandbox origins cannot be named as a postMessage target. The exact
+  // registered iframe window remains the authority in that case.
+  session.source.postMessage(message, session.origin === "null" ? "*" : session.origin);
+};
+
+const handleSaveMessage = async (event: MessageEvent<unknown>, session: EmulatorSaveSession) => {
+  if (
+    !isCurrentSession(session) ||
+    event.source !== session.source ||
+    event.origin !== session.origin ||
+    !isSaveMessage(event.data) ||
+    event.data.gameId !== session.gameId
+  )
+    return;
   const message = event.data;
   const preview = savePreviews.get(message.gameId);
   if (preview && message.kind === "request-load-sram") {
-    postToSource(event.source, {
+    postToSession(session, {
       data: new Uint8Array(preview),
       gameId: message.gameId,
       kind: "load-sram",
@@ -755,7 +774,7 @@ const handleSaveMessage = async (event: MessageEvent<unknown>) => {
   if (preview && message.kind === "save-sram") return;
   if (!saveStorageEnabled) {
     if (message.kind === "request-load-state" || message.kind === "request-load-sram") {
-      postToSource(event.source, {
+      postToSession(session, {
         data: null,
         gameId: message.gameId,
         kind: message.kind === "request-load-state" ? "load-state" : "load-sram",
@@ -780,7 +799,7 @@ const handleSaveMessage = async (event: MessageEvent<unknown>) => {
   if (message.kind !== "request-load-state" && message.kind !== "request-load-sram") return;
   const record = await readEmulatorSave(message.gameId);
   const data = message.kind === "request-load-state" ? record?.state : record?.sram;
-  postToSource(event.source, {
+  postToSession(session, {
     data: data ? copyBytes(data) : null,
     gameId: message.gameId,
     kind: message.kind === "request-load-state" ? "load-state" : "load-sram",
@@ -788,16 +807,30 @@ const handleSaveMessage = async (event: MessageEvent<unknown>) => {
   });
 };
 
-const ensureEmulatorSaveBridge = () => {
-  if (bridgeInstalled || typeof window === "undefined") return;
-  bridgeInstalled = true;
-  window.addEventListener("message", (event) => {
-    void handleSaveMessage(event).catch((error) => {
+/** Register only the mounted srcdoc player; disposing it revokes pending replies. */
+const registerEmulatorSaveBridge = (frame: HTMLIFrameElement, gameId: string): (() => void) => {
+  const host = frame.ownerDocument.defaultView;
+  const source = frame.contentWindow;
+  if (!(host && source)) return () => undefined;
+  const session: EmulatorSaveSession = {
+    frame,
+    source,
+    gameId,
+    origin: frame.hasAttribute("sandbox") && !frame.sandbox.contains("allow-same-origin") ? "null" : host.origin,
+    active: true,
+  };
+  const listener = (event: MessageEvent<unknown>) => {
+    void handleSaveMessage(event, session).catch((error) => {
       logger.warn("EmulatorJS save bridge message failed", {
         message: error instanceof Error ? error.message : String(error),
       });
     });
-  });
+  };
+  host.addEventListener("message", listener);
+  return () => {
+    session.active = false;
+    host.removeEventListener("message", listener);
+  };
 };
 
 const configureEmulatorSaveStorage = (enabled: boolean) => {
@@ -811,7 +844,7 @@ export {
   createEmulatorSaveExport,
   configureEmulatorSaveStorage,
   deleteEmulatorSave,
-  ensureEmulatorSaveBridge,
+  registerEmulatorSaveBridge,
   importEmulatorSave,
   importEmulatorSavePart,
   listEmulatorSaves,
