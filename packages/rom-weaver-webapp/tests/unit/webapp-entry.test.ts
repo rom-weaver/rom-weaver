@@ -1,4 +1,7 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createElement, useLayoutEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GUIDED_SAMPLE_START_EVENT } from "../../src/public/react/guided-sample-start.ts";
@@ -333,8 +336,28 @@ describe("boot", () => {
     expect(latest().state.currentView).toBe("weave");
   });
 
-  it("moves weave sessions to the Weave route", async () => {
-    await loadWebapp({ url: "/apply-patch?weave=/weaves/first-weave.zip" });
+  it.each(["hosting/webapp-integration.md", "how-to/create-bundles.md"])(
+    "boots the published recipient links in %s with the expected weave",
+    async (file) => {
+      const markdown = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../../../../docs", file), "utf8");
+      const links = markdown.match(/https:\/\/rom-weaver\.com\/[a-z-]+\?weave=[^\s"<>)]*/g) ?? [];
+      expect(links.length).toBeGreaterThan(0);
+      for (const href of links) {
+        const url = new URL(href);
+        expect(url.pathname).toBe("/weave-patches");
+        await loadWebapp({ url: `${url.pathname}${url.search}` });
+        expect(latest().urlSession?.request).toEqual({
+          kind: "weave",
+          weaveUrl: "https://example.com/release.zip",
+        });
+        expect(latest().state.currentView).toBe("weave");
+        expect(window.location.pathname).toBe("/weave-patches");
+      }
+    },
+  );
+
+  it.each(["/apply-patch", "/apply-patches"])("moves weave sessions from %s to the Weave route", async (route) => {
+    await loadWebapp({ url: `${route}?weave=/weaves/first-weave.zip` });
 
     expect(window.location.pathname).toBe("/weave-patches");
     expect(window.location.search).toBe("?weave=/weaves/first-weave.zip");

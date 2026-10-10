@@ -12,7 +12,7 @@ Package an ordered patch recipe with expected ROM checksums into one download.
 - [Turn on weave output and download it](#turn-on-weave-output-and-download-it)
 - [Test the finished download](#test-the-finished-download)
 - [Publish a useful release](#publish-a-useful-release)
-- [Open a hosted weave in Apply](#open-a-hosted-weave-in-apply)
+- [Open a hosted weave](#open-a-hosted-weave)
 
 <!-- END doctoc -->
 
@@ -100,15 +100,19 @@ For updates, rebuild from the same clean Original and new patches, update their 
 
 <a id="open-a-hosted-bundle-in-apply"></a>
 
-## Open a hosted weave in Apply
+<a id="open-a-hosted-weave-in-apply"></a>
+
+## Open a hosted weave
 
 Share a link that preloads the public weave:
 
 ```text
-https://rom-weaver.com/apply-patches?weave=https://example.com/release.zip
+https://rom-weaver.com/weave-patches?weave=https%3A%2F%2Fexample.com%2Frelease.zip
 ```
 
-Use **Apply** for recipients and **Weave** for authors.
+Weave links open **Weave**, including links that start on the Apply route. Recipients add their matching ROM, review the recipe, expand **Apply**, and choose **APPLY & DOWNLOAD**. Opening the link does not apply patches automatically.
+
+Use the [copyable Apply-button examples](../hosting/webapp-integration.md#add-an-apply-button) for HTML and Markdown release pages.
 
 The host must allow CORS. ROMs stay local. Relative patch URLs resolve against the recipe URL.
 
