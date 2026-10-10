@@ -132,6 +132,30 @@ const createWarmupWithOptionalGroup = async (
 };
 
 describe("offline warm-up (service worker side)", () => {
+  it("restricts data-saver pumps to requested groups without downloading emulator files", async () => {
+    const fetcher = createFetcher();
+    const warmup = await createWarmupWithOptionalGroup(fetcher);
+    expect(await warmup.runNextUnit(undefined, ["optional-computers"])).toMatchObject({
+      unit: "identify-group:optional-computers",
+      ready: false,
+    });
+    expect(await warmup.runNextUnit(undefined, ["optional-computers"])).toMatchObject({ unit: null, ready: false });
+    expect(fetchedUrls(fetcher).filter((url) => url.includes("emulatorjs/data/"))).toEqual([]);
+    expect(fetchedUrls(fetcher).filter((url) => url.includes("identify-computers.pack"))).toHaveLength(1);
+    // Completing a bounded request must not discard the ordinary offline queue.
+    expect(await warmup.runNextUnit()).toMatchObject({ ready: true, unit: "emulatorjs:cores/extra.data" });
+    expect(fetchedUrls(fetcher).filter((url) => url.includes("emulatorjs/data/"))).toHaveLength(3);
+  });
+
+  it("does not download unrelated units for empty, unknown, or unselected group requests", async () => {
+    const fetcher = createFetcher();
+    const warmup = await createWarmup(fetcher);
+    for (const groupIds of [[], ["missing"], ["optional-computers"]]) {
+      expect(await warmup.runNextUnit(undefined, groupIds)).toMatchObject({ unit: null, ready: false });
+    }
+    expect(fetchedUrls(fetcher).filter((url) => !url.endsWith("manifest.json"))).toEqual([]);
+  });
+
   it("serves a pack online without caching while disabled and restores the selected group on download", async () => {
     const policy = createOfflineCopyPolicy("offline-policy", SCOPE);
     const fetcher = createFetcher();
