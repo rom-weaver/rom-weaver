@@ -625,7 +625,7 @@ fn patch_apply_disc_unreferenced_bin_warns_non_interactive() {
             temp.child("update.ips").path().to_str().expect("path"),
             "--no-compress",
             "--output",
-            temp.child("out.cue").path().to_str().expect("path"),
+            temp.child("out/out.cue").path().to_str().expect("path"),
             "--json",
         ],
         0,
@@ -794,5 +794,486 @@ fn patch_apply_dcp_rebuilds_gdrom_through_cli() {
     assert_eq!(
         rebuilt.read_file(&kept_entry).expect("kept bytes"),
         b"source file"
+    );
+}
+
+#[test]
+fn patch_apply_disc_preserves_existing_companion_without_force() {
+    let temp = setup_temp_dir();
+    write_two_track_cd(&temp);
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: DISC_PATCH_OFFSET as u32,
+                data: disc_patch_payload(),
+            }],
+            None,
+        ),
+    )
+    .expect("patch");
+    let output = temp.child("out/disc.cue");
+    fs::create_dir_all(temp.child("out").path()).expect("output directory");
+    fs::write(temp.child("out/track02.bin").path(), b"existing companion").expect("sentinel");
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("disc.cue").path().to_str().unwrap(),
+            "--patch",
+            temp.child("update.ips").path().to_str().unwrap(),
+            "--target",
+            "*track02*",
+            "--no-compress",
+            "--output",
+            output.path().to_str().unwrap(),
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(
+        fs::read(temp.child("out/track02.bin").path()).unwrap(),
+        b"existing companion"
+    );
+    assert!(
+        !output.path().exists(),
+        "a conflict must not publish the primary sheet"
+    );
+    assert!(
+        !temp.child("out/track01.bin").path().exists(),
+        "preflight must check every companion"
+    );
+}
+
+#[test]
+fn patch_apply_disc_force_preserves_source_tracks() {
+    let temp = setup_temp_dir();
+    let (track01, track02) = write_two_track_cd(&temp);
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: DISC_PATCH_OFFSET as u32,
+                data: disc_patch_payload(),
+            }],
+            None,
+        ),
+    )
+    .expect("patch");
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("disc.cue").path().to_str().unwrap(),
+            "--patch",
+            temp.child("update.ips").path().to_str().unwrap(),
+            "--target",
+            "*track02*",
+            "--no-compress",
+            "--force",
+            "--output",
+            temp.child("patched.cue").path().to_str().unwrap(),
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(fs::read(temp.child("track01.bin").path()).unwrap(), track01);
+    assert_eq!(fs::read(temp.child("track02.bin").path()).unwrap(), track02);
+    assert!(!temp.child("patched.cue").path().exists());
+}
+
+#[test]
+fn patch_apply_disc_force_replaces_unrelated_companions() {
+    let temp = setup_temp_dir();
+    let (track01, track02) = write_two_track_cd(&temp);
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: DISC_PATCH_OFFSET as u32,
+                data: disc_patch_payload(),
+            }],
+            None,
+        ),
+    )
+    .expect("patch");
+    fs::create_dir_all(temp.child("out").path()).expect("output directory");
+    fs::write(
+        temp.child("out/track02.bin").path(),
+        b"replace this companion",
+    )
+    .expect("sentinel");
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("disc.cue").path().to_str().unwrap(),
+            "--patch",
+            temp.child("update.ips").path().to_str().unwrap(),
+            "--target",
+            "*track02*",
+            "--no-compress",
+            "--force",
+            "--output",
+            temp.child("out/disc.cue").path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(
+        fs::read(temp.child("out/track01.bin").path()).unwrap(),
+        track01
+    );
+    assert_eq!(
+        fs::read(temp.child("out/track02.bin").path()).unwrap(),
+        apply_ips_literal(track02.clone(), DISC_PATCH_OFFSET, &disc_patch_payload())
+    );
+    assert_eq!(fs::read(temp.child("track02.bin").path()).unwrap(), track02);
+}
+
+#[test]
+fn patch_apply_disc_force_preserves_hard_linked_source_track() {
+    let temp = setup_temp_dir();
+    let (_, track02) = write_two_track_cd(&temp);
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: DISC_PATCH_OFFSET as u32,
+                data: disc_patch_payload(),
+            }],
+            None,
+        ),
+    )
+    .expect("patch");
+    fs::create_dir_all(temp.child("out").path()).expect("output directory");
+    fs::hard_link(
+        temp.child("track02.bin").path(),
+        temp.child("out/track02.bin").path(),
+    )
+    .expect("source alias");
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("disc.cue").path().to_str().unwrap(),
+            "--patch",
+            temp.child("update.ips").path().to_str().unwrap(),
+            "--target",
+            "*track02*",
+            "--no-compress",
+            "--force",
+            "--output",
+            temp.child("out/disc.cue").path().to_str().unwrap(),
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(fs::read(temp.child("track02.bin").path()).unwrap(), track02);
+    assert!(!temp.child("out/disc.cue").path().exists());
+    assert!(!temp.child("out/track01.bin").path().exists());
+}
+
+#[test]
+#[cfg(unix)]
+fn patch_apply_disc_preserves_dangling_companion_link() {
+    let temp = setup_temp_dir();
+    write_two_track_cd(&temp);
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: DISC_PATCH_OFFSET as u32,
+                data: disc_patch_payload(),
+            }],
+            None,
+        ),
+    )
+    .expect("patch");
+    fs::create_dir_all(temp.child("out").path()).expect("output directory");
+    let missing = temp.child("missing.bin");
+    std::os::unix::fs::symlink(missing.path(), temp.child("out/track02.bin").path())
+        .expect("dangling link");
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("disc.cue").path().to_str().unwrap(),
+            "--patch",
+            temp.child("update.ips").path().to_str().unwrap(),
+            "--target",
+            "*track02*",
+            "--no-compress",
+            "--output",
+            temp.child("out/disc.cue").path().to_str().unwrap(),
+            "--json",
+        ],
+        1,
+    );
+    assert!(!missing.path().exists());
+    assert_eq!(
+        fs::read_link(temp.child("out/track02.bin").path()).unwrap(),
+        missing.path()
+    );
+    assert!(!temp.child("out/disc.cue").path().exists());
+    assert!(!temp.child("out/track01.bin").path().exists());
+}
+
+#[test]
+fn patch_apply_dcp_obeys_companion_overwrite_policy() {
+    for (force, beside_source, expected_code) in
+        [(false, false, 1), (true, false, 0), (true, true, 1)]
+    {
+        let temp = setup_temp_dir();
+        let cooked = build_iso(
+            &[IsoFile {
+                path: "KEEP.DAT".to_string(),
+                data: b"source file".to_vec(),
+            }],
+            GD_HIGH_DENSITY_START_LBA,
+            IsoTimestamp::default(),
+        )
+        .expect("source ISO");
+        let raw = cooked
+            .chunks_exact(USER_DATA_SIZE)
+            .enumerate()
+            .flat_map(|(index, sector)| {
+                encode_mode1_sector(
+                    GD_HIGH_DENSITY_START_LBA + index as u32,
+                    sector.try_into().expect("sector"),
+                )
+            })
+            .collect::<Vec<_>>();
+        fs::write(temp.child("track03.bin").path(), &raw).expect("source track");
+        temp.child("disc.gdi")
+            .write_str("1\n3 45000 4 2352 track03.bin 0\n")
+            .expect("source GDI");
+        temp.child("NEW.DAT")
+            .write_str("added file")
+            .expect("patch payload");
+        command_stdout(
+            &[
+                "compress",
+                "--input",
+                temp.child("NEW.DAT").path().to_str().unwrap(),
+                "--format",
+                "zip",
+                "--output",
+                temp.child("update.dcp").path().to_str().unwrap(),
+                "--json",
+            ],
+            0,
+        );
+        let output = temp.child(if beside_source {
+            "patched.gdi"
+        } else {
+            "out/patched.gdi"
+        });
+        if !beside_source {
+            fs::create_dir_all(temp.child("out").path()).expect("output directory");
+            fs::write(temp.child("out/track03.bin").path(), b"existing companion")
+                .expect("sentinel");
+        }
+        let input = temp.child("disc.gdi");
+        let patch = temp.child("update.dcp");
+        let mut args = vec![
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().unwrap(),
+            "--patch",
+            patch.path().to_str().unwrap(),
+            "--no-compress",
+            "--output",
+            output.path().to_str().unwrap(),
+            "--json",
+        ];
+        if force {
+            args.push("--force");
+        }
+        command_stdout(&args, expected_code);
+        assert_eq!(
+            fs::read(temp.child("track03.bin").path()).unwrap(),
+            raw,
+            "source track must never change"
+        );
+        if expected_code != 0 {
+            assert!(
+                !output.path().exists(),
+                "a conflict must not publish a primary sheet"
+            );
+            if !beside_source {
+                assert_eq!(
+                    fs::read(temp.child("out/track03.bin").path()).unwrap(),
+                    b"existing companion"
+                );
+            }
+        } else {
+            let mut rebuilt = GdRomFs::open(
+                File::open(temp.child("out/track03.bin").path()).unwrap(),
+                GD_HIGH_DENSITY_START_LBA,
+            )
+            .unwrap();
+            let entry = rebuilt.file("NEW.DAT").unwrap().clone();
+            assert_eq!(rebuilt.read_file(&entry).unwrap(), b"added file");
+        }
+    }
+}
+
+#[test]
+fn patch_apply_disc_force_preserves_companion_aliasing_patch() {
+    let temp = setup_temp_dir();
+    write_two_track_cd(&temp);
+    let patch = build_ips_patch(
+        vec![TestIpsRecord::Literal {
+            offset: DISC_PATCH_OFFSET as u32,
+            data: disc_patch_payload(),
+        }],
+        None,
+    );
+    fs::write(temp.child("update.ips").path(), &patch).expect("patch");
+    fs::create_dir_all(temp.child("out").path()).expect("output directory");
+    fs::hard_link(
+        temp.child("update.ips").path(),
+        temp.child("out/track02.bin").path(),
+    )
+    .expect("patch alias");
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("disc.cue").path().to_str().unwrap(),
+            "--patch",
+            temp.child("update.ips").path().to_str().unwrap(),
+            "--target",
+            "*track02*",
+            "--no-compress",
+            "--force",
+            "--output",
+            temp.child("out/disc.cue").path().to_str().unwrap(),
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(fs::read(temp.child("update.ips").path()).unwrap(), patch);
+    assert!(!temp.child("out/disc.cue").path().exists());
+    assert!(!temp.child("out/track01.bin").path().exists());
+}
+
+#[test]
+fn patch_apply_disc_force_rejects_primary_companion_name_collision() {
+    for (sheet_name, sibling_name, output_name) in [
+        ("disc.cue", "disc.gdi", "out/disc.gdi"),
+        ("disc.cue", "disc.gdi", "out/DISC.GDI"),
+        ("Ä.cue", "Ä.gdi", "out/ä.gdi"),
+        ("Ä.cue", "Ä.gdi", "out/A\u{0308}.gdi"),
+    ] {
+        let temp = setup_temp_dir();
+        write_two_track_cd(&temp);
+        if sheet_name != "disc.cue" {
+            fs::rename(temp.child("disc.cue").path(), temp.child(sheet_name).path())
+                .expect("sheet name");
+        }
+        temp.child(sibling_name)
+            .write_str("2\n1 0 4 2352 track01.bin 0\n2 8 0 2352 track02.bin 0\n")
+            .expect("sibling GDI");
+        fs::write(
+            temp.child("update.ips").path(),
+            build_ips_patch(
+                vec![TestIpsRecord::Literal {
+                    offset: DISC_PATCH_OFFSET as u32,
+                    data: disc_patch_payload(),
+                }],
+                None,
+            ),
+        )
+        .expect("patch");
+        let result = command_stdout(
+            &[
+                "patch",
+                "apply",
+                "--input",
+                temp.child(sheet_name).path().to_str().unwrap(),
+                "--patch",
+                temp.child("update.ips").path().to_str().unwrap(),
+                "--target",
+                "*track02*",
+                "--no-compress",
+                "--force",
+                "--output",
+                temp.child(output_name).path().to_str().unwrap(),
+                "--json",
+            ],
+            1,
+        );
+        assert!(
+            parse_single_json_line(&result)["label"]
+                .as_str()
+                .unwrap()
+                .contains("conflicts with another disc output")
+        );
+        assert!(!temp.child(output_name).path().exists());
+        assert!(!temp.child("out/track01.bin").path().exists());
+        assert!(!temp.child("out/track02.bin").path().exists());
+    }
+}
+
+#[test]
+fn patch_apply_disc_preserves_distinct_unicode_sheet_extensions() {
+    let temp = setup_temp_dir();
+    let (track01, track02) = write_two_track_cd(&temp);
+    fs::rename(temp.child("disc.cue").path(), temp.child("Ä.cue").path()).expect("Unicode primary");
+    temp.child("Ä.gdi")
+        .write_str("2\n1 0 4 2352 track01.bin 0\n2 8 0 2352 track02.bin 0\n")
+        .expect("Unicode sibling");
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: DISC_PATCH_OFFSET as u32,
+                data: disc_patch_payload(),
+            }],
+            None,
+        ),
+    )
+    .expect("patch");
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            temp.child("Ä.cue").path().to_str().unwrap(),
+            "--patch",
+            temp.child("update.ips").path().to_str().unwrap(),
+            "--target",
+            "*track02*",
+            "--no-compress",
+            "--output",
+            temp.child("out/Ä.cue").path().to_str().unwrap(),
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(
+        fs::read(temp.child("out/Ä.cue").path()).unwrap(),
+        fs::read(temp.child("Ä.cue").path()).unwrap()
+    );
+    assert_eq!(
+        fs::read(temp.child("out/Ä.gdi").path()).unwrap(),
+        fs::read(temp.child("Ä.gdi").path()).unwrap()
+    );
+    assert_eq!(
+        fs::read(temp.child("out/track01.bin").path()).unwrap(),
+        track01
+    );
+    assert_eq!(
+        fs::read(temp.child("out/track02.bin").path()).unwrap(),
+        apply_ips_literal(track02, DISC_PATCH_OFFSET, &disc_patch_payload())
     );
 }

@@ -149,11 +149,32 @@ impl CliApp {
             .and_then(|()| self.resolve_patch_apply_target(&mut run))
             .and_then(|()| self.resolve_patch_apply_rom_members(&mut run))
             .and_then(|()| self.resolve_patch_apply_patches(&mut run, applied_cheats))
+            .and_then(|()| Self::validate_patch_apply_disc_destinations(&run))
         {
             return *report;
         }
         let report = self.patch_apply_run_report(&mut run, emit_steps);
         Self::finish_patch_apply_run(report, run, final_output)
+    }
+
+    fn validate_patch_apply_disc_destinations(
+        run: &PatchApplyRun,
+    ) -> std::result::Result<(), Box<OperationReport>> {
+        let Some(disc) = run
+            .disc_context
+            .as_ref()
+            .filter(|_| !run.compression_options.enabled)
+        else {
+            return Ok(());
+        };
+        let mut sources = vec![run.original_input.clone(), run.args.input.clone()];
+        sources.extend(run.local_weave.iter().cloned());
+        sources.extend(run.args.patches.iter().cloned());
+        for patch in &run.resolved_patches {
+            sources.extend([patch.source.clone(), patch.resolved.clone()]);
+        }
+        Self::validate_disc_output_destinations(disc, &run.output, &sources, run.args.force)
+            .map_err(|error| run.fail_error("validate", error))
     }
 
     /// Split the command into the run state and settle every flag that does not
@@ -1104,7 +1125,7 @@ impl CliApp {
             &run.output
         };
         let note = self
-            .write_disc_output(disc, &staged_sheet, disc_output)
+            .write_disc_output(disc, &staged_sheet, disc_output, run.args.force)
             .map_err(|error| failed(report.format.clone(), "compat", error))?;
         report.label = format!("{}; {}", report.label, note);
         paths.raw_ready_output = staged_sheet;

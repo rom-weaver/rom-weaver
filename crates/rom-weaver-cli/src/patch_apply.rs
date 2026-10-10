@@ -784,7 +784,9 @@ impl CliApp {
             let expected_rom_name = weave_resolution
                 .as_ref()
                 .and_then(|resolution| resolution.expected_rom_name.as_deref());
-            self.run_dcp_apply(args, expected_rom_name)
+            let mut sources = vec![original_input];
+            sources.extend(local_weave);
+            self.run_dcp_apply(args, expected_rom_name, &sources)
         } else {
             self.run_patch_apply_resolved(RunPatchApplyResolvedInputs {
                 args,
