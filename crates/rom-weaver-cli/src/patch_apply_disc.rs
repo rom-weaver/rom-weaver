@@ -98,7 +98,6 @@ fn discover_disc_files(input: &Path, kind: DiscSheetKind) -> Result<(Vec<PathBuf
             })
         })
         .collect::<Result<Vec<_>>>()?;
-    staging::validate_case_aliases(&sheet_paths, &files)?;
     Ok((sheet_paths, files))
 }
 

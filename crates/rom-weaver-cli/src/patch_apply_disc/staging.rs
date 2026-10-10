@@ -161,31 +161,6 @@ fn check_case_alias(source: &Path, name: &str, file: &DiscFile) -> Result<()> {
     Ok(())
 }
 
-/// Reject sheets whose references differ only by case yet name different
-/// files. Core collapses case variants, so every disc path (compressed or
-/// staged) must run this on the raw sheet text.
-pub(super) fn validate_case_aliases(sheets: &[PathBuf], files: &[DiscFile]) -> Result<()> {
-    for sheet in sheets {
-        let text = fs::read_to_string(sheet)?;
-        let kind = super::detect_disc_sheet(sheet).ok_or_else(|| {
-            RomWeaverError::Validation(format!("unrecognized disc sheet `{}`", sheet.display()))
-        })?;
-        let mut saw_gdi_header = false;
-        for line in text.split_inclusive('\n') {
-            if let Some(range) = reference_range(kind, line, &mut saw_gdi_header) {
-                let name = &line[range];
-                if let Some(file) = files
-                    .iter()
-                    .find(|file| file.name.eq_ignore_ascii_case(name))
-                {
-                    check_case_alias(sheet, name, file)?;
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
 pub(super) fn write_sheet(source: &Path, dest: &Path, files: &[DiscFile]) -> Result<()> {
     let text = fs::read_to_string(source)?;
     let kind = super::detect_disc_sheet(source).ok_or_else(|| {
