@@ -44,8 +44,10 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 - [Create patches guide](https://rom-weaver.com/docs/create-rom-patches): Compare Original and Modified, create a patch, then test the downloaded artifact.
 - [Create weaves guide](https://rom-weaver.com/docs/create-bundles): Build, download, test, and publish a patch-only weave in the browser's Apply workflow.
 - [ROM tester guide](https://rom-weaver.com/docs/test-roms): Test a local ROM or an Apply result in the browser, check platform support, and manage local saves.
+- [Fix checksum errors](https://rom-weaver.com/docs/fix-checksum-errors): What to check when Apply reports that a file is not the expected ROM.
 - [FAQ](https://rom-weaver.com/docs/faq): Common questions, each pointing at the page that owns the answer.
 - [How patching works](https://rom-weaver.com/docs/how-patching-works): Why the exact starting file matters, what a checksum proves, and why patch order matters.
+- [ROM cheats](https://rom-weaver.com/docs/rom-cheats): Why rom-weaver bakes cheats into the ROM instead of running them at emulation time.
 - [Why files stay on your device](https://rom-weaver.com/docs/local-first): How local-first processing works in the browser and what it costs.
 - [What a weave is](https://rom-weaver.com/docs/bundles): The portable patch recipe, what it contains, and when to make one.
 - [Browser and CLI](https://rom-weaver.com/docs/browser-and-cli): One engine, two front ends, and how to choose.
@@ -56,11 +58,16 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 - [Compression formats guide](https://rom-weaver.com/docs/compression-formats): Pick format-specific compression such as CHD, RVZ, or Z3DS, plus ZIP and 7z, and learn when trimming beats compressing.
 - [Install the CLI](https://rom-weaver.com/docs/install): Install rom-weaver with package managers, verified scripts, npm, Docker, or from source.
 - [Verify a download](https://rom-weaver.com/docs/verify-downloads): Check that a release archive, npm package, or container image carries the repository's build provenance.
+- [Release provenance](https://rom-weaver.com/docs/release-provenance): What download verification proves and why the checks are shaped the way they are.
 - [Your first apply in the terminal](https://rom-weaver.com/docs/cli-get-started): Tutorial covering Apply, Create, and Weave in the terminal with the same test assets.
+- [Apply patches (CLI)](https://rom-weaver.com/docs/cli-apply): Apply one patch or an ordered chain in the terminal, handle headers and byte order, verify checksums, and validate patches.
+- [Create patches (CLI)](https://rom-weaver.com/docs/cli-create): Build a patch from an original and a modified ROM, and test it before publishing.
+- [Weaves (CLI)](https://rom-weaver.com/docs/cli-bundles): Create, inspect, and apply repeatable patch recipes from the terminal.
 - [Identify and hash ROMs (CLI)](https://rom-weaver.com/docs/identify-and-hash-files): Match an exact dump name, inspect a file, or compute checksums.
 - [Bake cheat codes (CLI)](https://rom-weaver.com/docs/bake-cheat-codes): Write Game Genie, GameShark/Pro Action Replay, or supported Xploder codes permanently into a ROM.
 - [Edit a game save (CLI)](https://rom-weaver.com/docs/cli-save): Inspect a supported save, preview changes, and write an edited copy.
 - [Trim a ROM (CLI)](https://rom-weaver.com/docs/cli-trim): Trim, preview, and revert ROM padding from the command line.
+- [Fix permission errors](https://rom-weaver.com/docs/fix-permission-errors): Get past a CLI `Permission denied` error using what the message reports.
 - [Work with archives](https://rom-weaver.com/docs/work-with-archives): Extract, convert, and create ZIP and 7z archives from the command line.
 - [CLI reference](https://rom-weaver.com/docs/cli): Every command, global flag, patching flag, JSON output, exit codes, and man pages.
 - [Supported formats](https://rom-weaver.com/docs/supported-formats): Patch, container, codec, checksum, trim, header, and browser emulator support.

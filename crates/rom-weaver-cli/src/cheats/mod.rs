@@ -159,7 +159,7 @@ pub struct CheatWrite {
     pub compare: Option<u8>,
 }
 
-/// A decoded address class. This does not weaken [`resolve_writes`], which
+/// A decoded address class. This does not weaken `resolve_writes`, which
 /// still rejects runtime addresses when a caller asks to bake them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]

@@ -4,19 +4,19 @@ How rom-weaver is put together: one Rust command core shipped two ways (native C
 
 ```text
                  ┌──────────────────────────────┐
-                 │ rom-weaver-cli Cargo package│
-                 │  rom_weaver_app shared lib  │  command orchestration
+                 │ rom-weaver-cli Cargo package │
+                 │  rom_weaver_app shared lib   │  command orchestration
                  └──────────┬──────────┬────────┘
                             │          │
                native build │          │ wasm32-wasip1-threads build
                             ▼          ▼
                  ┌──────────────┐  ┌──────────────────────┐
-                 │  rom-weaver  │  │ rom-weaver-app.wasm │ typed JSON stdio
+                 │  rom-weaver  │  │ rom-weaver-app.wasm  │ typed JSON stdio
                  │ CLI binary   │  └──────────┬───────────┘
                  └──────────────┘             │
                                   ┌───────────▼───────────┐
-                                  │ react src/wasm layer │ OPFS WASI runner,
-                                  │    (browser-only)    │ thread pool, worker client
+                                  │ webapp src/wasm layer │ OPFS WASI runner,
+                                  │    (browser-only)     │ thread pool, worker client
                                   └───────────┬───────────┘
                                   ┌───────────▼───────────┐
                                   │ rom-weaver-webapp     │ workflows, forms, PWA
@@ -48,7 +48,7 @@ How rom-weaver is put together: one Rust command core shipped two ways (native C
 | `crates/rom-weaver-core` | Foundation: registry traits, `RomWeaverError`, I/O helpers, thread planning (`ThreadCapability`/`ThreadExecution` in `src/threads.rs`), and the standalone codec backends (zstd, deflate, lzma, ... in `src/codecs`). Depends on nothing else in the workspace. |
 | `crates/rom-weaver-checksum` | Checksum engines (crc32/md5/sha*/blake3/crc32c/crc16/adler32) plus the streaming variant engine shared by `checksum` and extract flows. |
 | `crates/rom-weaver-containers` | Container registry + per-format handlers (`src/handlers/*.rs`: zip, 7z, tar*, rvz, z3ds, pbp, cso, ...), native CHD implementation (`src/chd`), and the libarchive wrapper/bindings/build integration (`src/libarchive`, `libarchive/`). |
-| `crates/rom-weaver-patches` | Patch format handlers (`src/{ips,bps,ups,ppf,rup,...}.rs`), one file per format, including VCDIFF/xdelta encode+decode (`src/xdelta`, parallel window encoding; also exposes `apply_patch_bytes` for in-memory VCDIFF apply, used by `.dcp`). |
+| `crates/rom-weaver-patches` | Patch format handlers (`src/{ips,bps,ups,ppf,rup,...}.rs`), one file per format, including VCDIFF/xdelta encode+decode (the `src/xdelta.rs` handler over the `src/vcdiff/` codec, parallel window encoding; also exposes `apply_patch_bytes` for in-memory VCDIFF apply, used by `.dcp`). |
 | `crates/rom-weaver-cli/src/gdrom` | Dreamcast GD-ROM / CD data-track filesystem: read (`sector` cooking of `MODE1/2352`, `iso9660` parse, `GdRomFs` tree view with the +45000 LBA bias) and write (`iso_writer` authors a cooked ISO9660 image, `mode1` re-encodes EDC/ECC into raw `MODE1/2352`). Pure Rust, wasm-safe. |
 | `crates/rom-weaver-cli/src/dcp` | Universal Dreamcast Patcher (`.dcp`) format: ZIP central-directory reader + entry inflate (`zip`), entry classification (`manifest`), per-file apply (`apply`), and full data-track rebuild (`rebuild`). Builds on the app's `gdrom` module + `rom-weaver-patches`'s `xdelta` module. |
 | `crates/rom-weaver-cli` | The installable package: the `rom_weaver_app` command library, native `rom-weaver` CLI, `rom-weaver-app` WASM entrypoint, type generator, argument parsing, and reporters. |
@@ -117,8 +117,7 @@ The fast-path/proxy choice is browser-gated: `useProxyHandle = isWebKitInputRunt
 
 **OPFS proxy topology** - one **dedicated** proxy worker per runner (`packages/rom-weaver-webapp/src/wasm/browser-opfs-proxy-runtime.ts` spawns `packages/rom-weaver-webapp/src/wasm/workers/browser-opfs-proxy-worker.ts`). It is the single owner of every `SyncAccessHandle` (and Blob input handle); its loop is async (`Atomics.waitAsync` doorbell) while **consumers block synchronously** (`Atomics.wait`) - that free event loop is what makes the Blob-handle reads deadlock-free. The SAB channel is forwarded into every spawned WASI thread so they share the one proxy; the mount (`packages/rom-weaver-webapp/src/wasm/browser-opfs-mount.ts`) builds proxy vs virtual inodes and caches inode trees across runs.
 
-**Bounding the fan-out** - an extract emits one output file per archive entry, so anything held per entry scales without limit (a 2048-entry zip killed the tab on iOS). Created output inodes therefore use `closeOnLastFdClose`, and the mount owns a small LRU of idle files (`packages/rom-weaver-webapp/src/wasm/browser-opfs-idle-file-pool.ts`): a file's handle and its coalescing buffers are released once it falls out of the window, so live handles are bounded by *concurrency*, never by entry count. `BrowserProxyRandomAccessFile.reopen()` re-arms an evicted adapter, so a later checksum pass or workflow chaining re-opens the path transparently. The proxy publishes a live/peak handle gauge in its SAB control region; the runner emits it at teardown as `[perf] opfs proxy handles live=… peak=… opened=…
-adapterBufferBytes=…`, which is the first thing to check for a many-small-files regression.
+**Bounding the fan-out** - an extract emits one output file per archive entry, so anything held per entry scales without limit (a 2048-entry zip killed the tab on iOS). Created output inodes therefore use `closeOnLastFdClose`, and the mount owns a small LRU of idle files (`packages/rom-weaver-webapp/src/wasm/browser-opfs-idle-file-pool.ts`): a file's handle and its coalescing buffers are released once it falls out of the window, so live handles are bounded by *concurrency*, never by entry count. `BrowserProxyRandomAccessFile.reopen()` re-arms an evicted adapter, so a later checksum pass or workflow chaining re-opens the path transparently. The proxy publishes a live/peak handle gauge in its SAB control region; the runner emits it at teardown as `[perf] opfs proxy handles live=… peak=… opened=… adapterBufferBytes=…`, which is the first thing to check for a many-small-files regression.
 
 **Mount handles inside spawned threads** - Safari cannot structured-clone a `FileSystemDirectoryHandle` into a nested worker, so the runner sends every consumer the mount's *root-relative path* (`root.resolve(handle)`) and each re-walks it from `navigator.storage.getDirectory()`. Both the OPFS proxy worker and the WASI thread runtime do this (`mountRootRelativeParts` on the thread runtime payload). A thread that assumes the mount *is* the OPFS root fails silently and confusingly: its mount builds empty, input hydration finds nothing, and the guest gets `ENOENT` for a file that plainly exists - surfacing as "archive is invalid". Only threaded work hits it, so it looks like a size/entry-count threshold rather than a mount bug.
 

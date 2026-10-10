@@ -33,7 +33,7 @@ If you need a practice file, open [guided Test](https://rom-weaver.com/test-rom?
 ## Load a ROM
 
 1. Open [Test](https://rom-weaver.com/test-rom).
-2. Drop a ROM onto **0x01 Load a game**, or choose **Choose a ROM file**.
+2. Drop a ROM onto **0x01 Load a game**, or select that area to choose a file.
 3. If the player shows **START GAME**, select it. Touch devices can require this tap before playback starts.
 4. Use the controls inside the emulator player.
 

@@ -24,7 +24,7 @@ Install these system tools before the first build:
 
 - [mise](https://mise.jdx.dev/installing-mise.html), which installs and pins everything in [`.config/mise.toml`](../../.config/mise.toml) - including Rust and Node.js, so neither is a prerequisite here
 - CMake, Clang, and a native compiler toolchain
-- [WASI SDK](https://github.com/WebAssembly/wasi-sdk/releases) for web builds
+- [WASI SDK](https://github.com/WebAssembly/wasi-sdk/releases) v33 or newer for web builds
 - Brotli for optimized production WASM builds
 - ccache (optional) to reuse the compiled C objects across target directories and worktrees
 - sccache (optional) to speed up repeated Rust builds
@@ -197,8 +197,7 @@ New crates must resolve to an already-allowed license. When one does not, prefer
 
 ### bzip2 backend
 
-`bzip2` exposes two backends and picks one with `#[cfg(feature = "bzip2-sys")]`: the C `bzip2-sys` library, or the pure-Rust `libbz2-rs-sys`. The workspace pins `bzip2` to `default-features = false,
-features = ["bzip2-sys"]`, which keeps every build on the C backend.
+`bzip2` exposes two backends and picks one with `#[cfg(feature = "bzip2-sys")]`: the C `bzip2-sys` library, or the pure-Rust `libbz2-rs-sys`. The workspace pins `bzip2` to `default-features = false, features = ["bzip2-sys"]`, which keeps every build on the C backend.
 
 The `bzip2-sys` feature selects the C backend. Cargo combines features across the dependency graph, and `qbsdiff` enables bzip2's default features. Removing the workspace's `bzip2-sys` feature therefore selects the Rust backend and can change BDF patch output.
 
@@ -225,6 +224,6 @@ node scripts/remove-worktree.mjs .worktrees/<name>
 - `crates/` contains the Rust format libraries, shared app orchestration, and native CLI.
 - `packages/rom-weaver-webapp/` contains the React app, browser workers, OPFS adapters, PWA shell, and WASM package surface.
 - `scripts/` contains build, test, release, and license automation.
-- `docs/` contains deployment, runtime, verification, and architecture guides.
+- `docs/` contains the tutorials, how-to guides, reference, and explanation, plus hosting and development guides.
 
 Read [ARCHITECTURE.md](ARCHITECTURE.md) for the full crate graph, ownership boundaries, worker model, generated-type path, and browser runtime flow.

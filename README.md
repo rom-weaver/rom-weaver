@@ -107,7 +107,7 @@ The install script covers macOS and Linux: it downloads the latest release to `~
 
 Windows, Scoop, PowerShell, cargo-binstall, mise, Docker, shell completions, and building from source are all in [Install the CLI](./docs/how-to/install-cli.md).
 
-All three methods above carry the identify and cheat databases, so they need no extra step. Methods that install only the executable - `cargo install`, `cargo binstall`, and `mise` - need `rom-weaver setup` afterwards to download that data, which `identify`, `probe --identify`, and cheat baking read.
+All three methods above carry the identify and cheat databases, so they need no extra step. Methods that install only the executable - `cargo install`, `cargo binstall`, and `mise` - need `rom-weaver setup` afterwards to download that data, which `identify` and cheat baking read.
 
 Hitting `Permission denied`? See [File permissions](./docs/reference/cli.md#file-permissions).
 
