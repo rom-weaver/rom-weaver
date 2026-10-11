@@ -1042,16 +1042,16 @@ fn matches_weave_entry(matcher: &mut Option<SelectionMatcher>, entry: &WeavePatc
     let Some(matcher) = matcher.as_mut() else {
         return false;
     };
-    if let Some(name) = entry
+    // Evaluate both so a pattern that only fits the file name is still credited
+    // when the entry also has a matching name.
+    let by_name = entry
         .name
         .as_deref()
         .map(str::trim)
         .filter(|name| !name.is_empty())
-        && matcher.matches(name)
-    {
-        return true;
-    }
-    weave_entry_file_name(entry).is_some_and(|name| matcher.matches(name))
+        .is_some_and(|name| matcher.matches(name));
+    let by_file = weave_entry_file_name(entry).is_some_and(|name| matcher.matches(name));
+    by_name || by_file
 }
 
 /// Look a declared state up in the local identify data and add what the

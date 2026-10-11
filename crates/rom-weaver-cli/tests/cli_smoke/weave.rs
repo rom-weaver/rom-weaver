@@ -539,6 +539,39 @@ fn weave_apply_rejects_with_and_without_patterns_that_match_nothing() {
 }
 
 #[test]
+fn weave_apply_credits_name_and_file_name_patterns_for_the_same_entry() {
+    let temp = setup_temp_dir();
+    let weave = write_everything_archive(&temp, EVERYTHING_WEAVE);
+    let output = temp.child("patched.bin");
+
+    let events = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            weave.to_str().expect("path"),
+            "--with",
+            "Extra",
+            "--with",
+            "extra.ips",
+            "--without",
+            "Main hack",
+            "--without",
+            "main.ips",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_eq!(events.last().expect("terminal")["status"], "succeeded");
+    assert_eq!(
+        fs::read(output.path()).expect("output exists"),
+        patched_rom_bytes(&[(1, 0xBB)])
+    );
+}
+
+#[test]
 fn patch_apply_rejects_weave_only_flags_without_a_weave() {
     let temp = setup_temp_dir();
     write_weave_rom(&temp, "game.bin");
