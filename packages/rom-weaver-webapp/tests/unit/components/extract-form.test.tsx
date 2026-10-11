@@ -39,6 +39,24 @@ describe("ExtractForm", () => {
     view.unmount();
   });
 
+  it("extracts the first of several dropped files and names the ones it did not use", async () => {
+    runtime.extract.mockResolvedValue({ outputs: [output("a.sfc")] });
+    render(
+      <ExtractForm
+        pageDrop={{ files: [new File(["1"], "a.zip"), new File(["2"], "b.zip"), new File(["3"], "c.zip")], id: 1 }}
+      />,
+    );
+
+    await waitFor(() => expect(runtime.extract).toHaveBeenCalledTimes(1));
+    expect((runtime.extract.mock.calls[0]?.[0] as { source: File } | undefined)?.source.name).toBe("a.zip");
+    expect(
+      await screen.findByText(
+        "Extract opens one archive per run, so only a.zip was extracted. Not extracted: b.zip, c.zip. Add them in another run.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText("Add one file at a time.")).toBeNull();
+  });
+
   it("extracts on add, then downloads one file as itself and several as one ZIP", async () => {
     const outputs = [output("game.sfc"), output("docs/readme.txt")];
     const archive = output("game.zip");
