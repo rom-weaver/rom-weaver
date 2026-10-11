@@ -64,8 +64,8 @@ import type { BinarySource } from "./patcher-form.ts";
 import type { CandidateSelectionPrompt, CreatePatchFormProps, CreatePatchFormSettings } from "./public-types.ts";
 import {
   getCreateSettingsOutputName,
+  getBareDefaultCompressionMode,
   getDefaultCompressionArchive,
-  getDefaultCompressionMode,
   toCreateWorkflowSettings,
   useCreateSettings,
   useRomWeaverAssetBaseUrl,
@@ -597,7 +597,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const executionOutputName = resolveCreateExecutionOutputName(resolvedOutputName, patchType);
   const createCompression = (() => {
     const normalized = String(
-      settings.output?.compression || getDefaultCompressionArchive(getDefaultCompressionMode(settings)),
+      settings.output?.compression || getDefaultCompressionArchive(getBareDefaultCompressionMode(settings)),
     )
       .trim()
       .toLowerCase();
