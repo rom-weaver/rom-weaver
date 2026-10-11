@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::fs;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -318,4 +319,38 @@ fn getters_round_trip_the_constructor_arguments() {
     assert!(!context.cancel().is_cancelled());
     cancel.cancel();
     assert!(context.cancel().is_cancelled());
+}
+
+#[test]
+fn private_temp_root_context_only_touches_its_own_root_under_the_parent() {
+    let parent = std::env::temp_dir().join(format!("rw-ctx-private-{}", std::process::id()));
+    fs::create_dir_all(&parent).expect("parent");
+    let before: Vec<_> = fs::read_dir(&parent)
+        .expect("list")
+        .flatten()
+        .map(|e| e.path())
+        .collect();
+    assert!(before.is_empty());
+    let marker = parent.join("user-file");
+    fs::write(&marker, b"keep").expect("marker");
+    let root;
+    {
+        let context = OperationContext::new_with_private_temp_root(
+            ThreadBudget::Fixed(1),
+            &parent,
+            "rom-weaver-out",
+            Arc::new(NoopProgressSink),
+            CancellationToken::new(),
+        );
+        root = context.temp_root().to_path_buf();
+        assert_eq!(root.parent(), Some(parent.as_path()));
+        let path = context.temp_paths().next_path("x", None);
+        fs::create_dir_all(path.parent().expect("parent")).expect("dir");
+        fs::write(&path, b"x").expect("file");
+        let names: Vec<_> = fs::read_dir(&parent).expect("list").flatten().collect();
+        assert_eq!(names.len(), 2, "only the marker and the private root");
+    }
+    assert!(!root.exists());
+    assert!(marker.exists());
+    let _ = fs::remove_dir_all(&parent);
 }

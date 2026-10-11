@@ -190,9 +190,23 @@ impl OperationContext {
             temp_root = %temp_root.display(),
             "creating operation context"
         );
+        Self::with_temp_paths(
+            thread_budget,
+            Arc::new(TempPathAllocator::new(temp_root)),
+            progress,
+            cancel,
+        )
+    }
+
+    fn with_temp_paths(
+        thread_budget: ThreadBudget,
+        temp_paths: Arc<TempPathAllocator>,
+        progress: Arc<dyn ProgressSink>,
+        cancel: CancellationToken,
+    ) -> Self {
         Self {
             thread_budget,
-            temp_paths: Arc::new(TempPathAllocator::new(temp_root)),
+            temp_paths,
             progress,
             cancel,
             patch_policy: PatchPolicy::default(),
@@ -210,9 +224,12 @@ impl OperationContext {
         progress: Arc<dyn ProgressSink>,
         cancel: CancellationToken,
     ) -> Self {
-        let mut context = Self::new(thread_budget, temp_parent.to_path_buf(), progress, cancel);
-        context.temp_paths = Arc::new(TempPathAllocator::new_private(temp_parent, prefix));
-        context
+        Self::with_temp_paths(
+            thread_budget,
+            Arc::new(TempPathAllocator::new_private(temp_parent, prefix)),
+            progress,
+            cancel,
+        )
     }
 
     /// Record already-known checksums for `path` (merging into any existing entry) so later

@@ -940,7 +940,8 @@ fn print_native_dry_run_plan(command: &str, writes: Vec<String>, mode: OutputMod
     ExitCode::SUCCESS
 }
 
-/// Trip the process cancellation token on Ctrl-C so running work unwinds and
+/// Trip the process cancellation token on Ctrl-C (and SIGTERM/SIGHUP on unix, via ctrlc's
+/// `termination` feature) so running work unwinds and
 /// the partial output is cleaned up. A second Ctrl-C means the operation is not
 /// unwinding, so leave immediately after removing what was written.
 #[cfg(not(target_arch = "wasm32"))]

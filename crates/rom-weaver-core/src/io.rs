@@ -714,10 +714,15 @@ impl TempPathAllocator {
     /// Nothing else uses it, so Drop removes the whole root and never has to touch a shared
     /// parent that a concurrent run might be creating subdirectories in.
     pub fn new_private(parent: &Path, prefix: &str) -> Self {
-        let mut allocator = Self::new(parent.to_path_buf());
-        allocator.root = parent.join(format!("{prefix}-{}", allocator.namespace));
-        allocator.owns_root = true;
-        allocator
+        // The root is already unique, so the inner namespace can be short.
+        let entropy = namespace_entropy();
+        let sequence = NEXT_TEMP_NAMESPACE_ID.fetch_add(1, Ordering::Relaxed);
+        Self {
+            root: parent.join(format!("{prefix}-{entropy:016x}-{sequence}")),
+            namespace: "t".to_string(),
+            counter: AtomicU64::new(0),
+            owns_root: true,
+        }
     }
 
     pub fn new(root: PathBuf) -> Self {
