@@ -348,7 +348,7 @@ describe("the What's new route", () => {
     expect(panel).not.toBeNull();
     expect(panel?.hasAttribute("hidden")).toBe(false);
     expect(panel?.querySelector(".workflow-panel-head")).toBeNull();
-    expect(document.title).toBe("rom-weaver - What's new");
+    expect(document.title).toBe("What's new | rom-weaver");
   });
 
   it("reaches the route from the version chip", async () => {
@@ -444,13 +444,13 @@ describe("page metadata per view", () => {
   it("names the page for a view that has no SEO route of its own", async () => {
     await renderRoot({ currentView: "trim" });
 
-    expect(document.title).toBe("rom-weaver - Trim ROM");
+    expect(document.title).toBe("Trim ROM | rom-weaver");
   });
 
   it("uses the marketing title for a view that has one", async () => {
     await renderRoot({ currentView: "test" });
 
-    expect(document.title).not.toBe("rom-weaver - Test");
+    expect(document.title).not.toBe("Test | rom-weaver");
     expect(document.title).toContain("rom-weaver");
   });
 });

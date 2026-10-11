@@ -199,7 +199,7 @@ const logger = createLogger("webapp-root");
 const syncWorkflowSeoMetadata = (view: WebappView) => {
   if (view === "docs") return;
   if (view === "whats-new") {
-    document.title = "rom-weaver - What's new";
+    document.title = "What's new | rom-weaver";
     return;
   }
   let route = null;
@@ -215,7 +215,7 @@ const syncWorkflowSeoMetadata = (view: WebappView) => {
   else if (view === "test") route = WORKFLOW_SEO_ROUTES.test;
   if (!route) {
     const tab = WORKFLOW_TABS.find((entry) => entry.id === view);
-    document.title = tab ? `rom-weaver - ${tab.label}` : "rom-weaver";
+    document.title = tab ? `${tab.label} | rom-weaver` : "rom-weaver";
     return;
   }
   const title = CHANNEL_BADGE ? route.title.replace(SITE_NAME, `${SITE_NAME} ${CHANNEL_BADGE}`) : route.title;
