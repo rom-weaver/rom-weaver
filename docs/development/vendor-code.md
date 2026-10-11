@@ -72,6 +72,8 @@ Every transformation - the test-subdirectory strip, the wasm patches in `libarch
 
 The all-target `gzip_validation` patch checks every member's CRC32 and uncompressed size. The snapshot initializes a CRC accumulator but never updates or verifies it. The patch validates trailers for gzip streams and gzip-filtered archives, including concatenated members. `build.rs` requires the original source fragment, so incompatible snapshot updates fail during staging.
 
+The companion `gzip_eof_validation` patch drains gzip filters when archive parsing reaches its end marker. This validates unread members and trailers beyond TAR record padding before extraction reports success.
+
 ### Going back to upstream
 
 There is no version of this that ends in a crates.io dependency - libarchive is a C library, and `libarchive-sys` style crates do not carry the local patches or the wasm build. The realistic end state is upstream accepting the fork's commits, at which point the fork resets to an upstream tag and the snapshot is refreshed from it. Track that in the fork's branches, not here.

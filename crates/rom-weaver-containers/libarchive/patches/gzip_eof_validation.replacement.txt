@@ -1,0 +1,27 @@
+	r2 = (a->format->read_header)(a, entry);
+	if (r2 == ARCHIVE_EOF) {
+		struct archive_read_filter *filter;
+
+		/* TAR can finish before the gzip trailer. The filter MUST
+		 * validate unread members before archive completion succeeds. */
+		for (filter = a->filter; filter != NULL; filter = filter->upstream) {
+			if (filter->code != ARCHIVE_FILTER_GZIP)
+				continue;
+			for (;;) {
+				ssize_t available;
+
+				if (__archive_read_filter_ahead(a->filter, 1,
+				    &available) == NULL) {
+					if (available < 0)
+						r2 = ARCHIVE_FATAL;
+					break;
+				}
+				if (__archive_read_filter_consume(a->filter,
+				    available) < 0) {
+					r2 = ARCHIVE_FATAL;
+					break;
+				}
+			}
+			break;
+		}
+	}

@@ -363,6 +363,56 @@ fn gzip_filtered_tar_rejects_corrupt_trailers_without_binary_output() {
 }
 
 #[test]
+fn padded_gzip_tar_validates_unread_members_before_emitting_output() {
+    let temp = setup_temp_dir();
+    let encode_tar = |payload: &[u8]| {
+        let mut tar = tar::Builder::new(Vec::new());
+        let mut header = tar::Header::new_gnu();
+        header.set_size(payload.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        tar.append_data(&mut header, "payload.bin", payload)
+            .unwrap();
+        let mut bytes = tar.into_inner().unwrap();
+        bytes.resize(131_072, 0);
+        let mut encoder = GzEncoder::new(Vec::new(), DeflateCompression::default());
+        encoder.write_all(&bytes).unwrap();
+        encoder.finish().unwrap()
+    };
+    let valid = encode_tar(b"abc");
+    let mut altered_payload = encode_tar(b"abd");
+    let trailer = altered_payload.len() - 8;
+    altered_payload[trailer..].copy_from_slice(&valid[valid.len() - 8..]);
+    let mut wrong_size = valid.clone();
+    let size_offset = wrong_size.len() - 4;
+    wrong_size[size_offset] ^= 1;
+    let mut corrupt_later_member = valid.clone();
+    corrupt_later_member.extend_from_slice(&altered_payload);
+    let archive = temp.child("padded.tar.gz");
+    for corrupt in [
+        altered_payload,
+        wrong_size,
+        valid[..valid.len() - 1].to_vec(),
+        corrupt_later_member,
+    ] {
+        fs::write(archive.path(), &corrupt).unwrap();
+        let output = command_output_with_env(
+            &["extract", archive.to_str().unwrap(), "--output", "-"],
+            &[],
+            1,
+        );
+        assert!(output.stdout.is_empty());
+        assert_eq!(fs::read(archive.path()).unwrap(), corrupt);
+    }
+    fs::write(archive.path(), &valid).unwrap();
+    assert_eq!(
+        command_stdout(&["extract", archive.to_str().unwrap(), "--output", "-"], 0),
+        b"abc"
+    );
+    assert_eq!(fs::read(archive.path()).unwrap(), valid);
+}
+
+#[test]
 fn extract_stdout_requires_one_leaf_and_select_can_narrow_it() {
     let temp = setup_temp_dir();
     let first = temp.child("first.bin");

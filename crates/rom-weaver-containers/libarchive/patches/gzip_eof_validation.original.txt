@@ -1,0 +1,1 @@
+	r2 = (a->format->read_header)(a, entry);
