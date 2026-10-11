@@ -67,6 +67,27 @@ fn temp_allocator_drop_removes_namespace_directory() {
 }
 
 #[test]
+fn private_temp_allocator_removes_its_whole_root_and_leaves_siblings() {
+    let parent = io_temp_path("private-parent");
+    fs::create_dir_all(&parent).expect("parent");
+    let sibling = parent.join("rom-weaver-out-other");
+    fs::create_dir_all(&sibling).expect("sibling run");
+    let root;
+    {
+        let allocator = TempPathAllocator::new_private(&parent, "rom-weaver-out");
+        root = allocator.root().to_path_buf();
+        assert_ne!(root, sibling);
+        let temp_path = allocator.next_path("scratch", Some("tmp"));
+        fs::create_dir_all(temp_path.parent().expect("namespace parent")).expect("namespace");
+        fs::write(&temp_path, b"scratch").expect("write");
+        assert!(root.exists());
+    }
+    assert!(!root.exists(), "the private root is removed on drop");
+    assert!(sibling.exists(), "another run's directory is untouched");
+    let _ = fs::remove_dir_all(&parent);
+}
+
+#[test]
 fn bounded_items_scale_with_threads() {
     assert_eq!(bounded_items_for_threads(0), 2);
     assert_eq!(bounded_items_for_threads(1), 2);

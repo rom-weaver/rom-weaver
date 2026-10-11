@@ -11273,3 +11273,74 @@ fn patch_apply_explains_that_stdin_input_is_unsupported() {
         );
     }
 }
+
+fn xdelta_create_in(cwd: &Path, index: usize) -> std::process::Output {
+    let original = cwd.join(format!("original-{index}.bin"));
+    let modified = cwd.join(format!("modified-{index}.bin"));
+    let patch = cwd.join(format!("update-{index}.xdelta"));
+    fs::write(&original, pseudo_random_bytes(64 * 1024, 1)).expect("original");
+    let mut changed = pseudo_random_bytes(64 * 1024, 1);
+    changed[1000] ^= 0xff;
+    fs::write(&modified, changed).expect("modified");
+    let mut command = Command::cargo_bin("rom-weaver").expect("binary");
+    command
+        .current_dir(cwd)
+        // The CLI resolves its temp parent from PWD, which a child does not update itself.
+        .env("PWD", cwd)
+        .args(["--json", "patch", "create", "--original"])
+        .arg(&original)
+        .arg("--modified")
+        .arg(&modified)
+        .args(["--format", "xdelta", "--output"])
+        .arg(&patch)
+        .args(["--force"]);
+    let output = command.output().expect("run rom-weaver");
+    assert!(
+        output.status.success(),
+        "run {index} failed: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert!(patch.exists(), "run {index} wrote its patch");
+    output
+}
+
+fn assert_no_temp_folder_left(cwd: &Path) {
+    let leftovers: Vec<_> = fs::read_dir(cwd)
+        .expect("read cwd")
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("rom-weaver-out")
+        })
+        .collect();
+    assert!(leftovers.is_empty(), "leftover temp folders: {leftovers:?}");
+}
+
+#[test]
+fn xdelta_create_leaves_no_temp_folder_in_the_working_directory() {
+    let temp = setup_temp_dir();
+    xdelta_create_in(temp.path(), 0);
+    assert_no_temp_folder_left(temp.path());
+}
+
+#[test]
+fn concurrent_xdelta_runs_in_one_directory_all_succeed_and_clean_up() {
+    let temp = setup_temp_dir();
+    let cwd = temp.path().to_path_buf();
+    let handles: Vec<_> = (0..8)
+        .map(|index| {
+            let cwd = cwd.clone();
+            std::thread::spawn(move || {
+                for round in 0..3 {
+                    xdelta_create_in(&cwd, index * 10 + round);
+                }
+            })
+        })
+        .collect();
+    for handle in handles {
+        handle.join().expect("worker run");
+    }
+    assert_no_temp_folder_left(&cwd);
+}
