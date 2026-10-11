@@ -39,9 +39,7 @@ describe("ExtractForm", () => {
     await waitFor(() => expect(runtime.extract).toHaveBeenCalledTimes(1));
     expect((runtime.extract.mock.calls[0]?.[0] as { source: File } | undefined)?.source.name).toBe("a.zip");
     expect(
-      await screen.findByText(
-        "Extract opens one archive per run, so only a.zip was extracted. Not extracted: b.zip, c.zip. Add them in another run.",
-      ),
+      await screen.findByText("Extract opens one archive per run: a.zip was extracted, b.zip, c.zip not."),
     ).toBeTruthy();
     expect(screen.queryByText("Add one file at a time.")).toBeNull();
   });

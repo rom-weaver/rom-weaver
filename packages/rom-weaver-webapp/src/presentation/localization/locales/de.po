@@ -1676,7 +1676,7 @@ msgstr "Lege hier ein ROM und seine Patches ab: einzelne Dateien, einen ganzen O
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.noMatchBody"
-msgstr "Diese Prüfsummen stehen nicht in den Identifikationsdaten. Unbekannt heißt nicht beschädigt: Das ROM kann Homebrew, verändert, eine nicht gelistete Revision oder von einem System sein, das die Daten nicht abdecken. Seine Prüfsummen stehen auf der Karte darunter, damit du sie anderswo nachschlagen kannst."
+msgstr "Nicht in den Identifikationsdaten. Unbekannt heißt nicht beschädigt: Es kann Homebrew, verändert oder eine nicht gelistete Revision sein. Die Prüfsummen stehen unten."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

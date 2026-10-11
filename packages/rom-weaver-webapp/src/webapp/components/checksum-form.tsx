@@ -336,30 +336,27 @@ const ChecksumSourceEntry = ({
         >
           {files.length ? (
             <ChecksumList defaultOpen label={localizer.message("ui.checks.title")}>
-              {getChecksumSets(file, "").map((set) =>
-                set.label ? (
-                  <div className="ck-group" key={set.id}>
-                    <div className="ck-group-head">{set.label}</div>
-                    <ChecksumSetRows
-                      algorithms={algorithms}
-                      compare={compare}
-                      expected={expected}
-                      pending={calculating}
-                      set={set}
-                    />
-                  </div>
-                ) : (
+              {getChecksumSets(file, "").map((set) => {
+                const rows = (
                   <ChecksumSetRows
                     algorithms={algorithms}
-                    bytes={file.size}
+                    {...(set.label ? {} : { bytes: file.size })}
                     compare={compare}
                     expected={expected}
                     key={set.id}
                     pending={calculating}
                     set={set}
                   />
-                ),
-              )}
+                );
+                return set.label ? (
+                  <div className="ck-group" key={set.id}>
+                    <div className="ck-group-head">{set.label}</div>
+                    {rows}
+                  </div>
+                ) : (
+                  rows
+                );
+              })}
             </ChecksumList>
           ) : null}
         </FileCard>
@@ -469,7 +466,6 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
   useAgentWorkflow("checksum", {
     getState: () => ({
       source: single ? describeAgentSource(single.file) : null,
-      sources: sources.map((entry) => describeAgentSource(entry.file)),
       staging,
       calculating,
       progress: entries.find((entry) => entry.progress)?.progress ?? null,
@@ -532,7 +528,6 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
           info={
             <InfoPopover title="File input">
               <ul>
-                <li>Add several files at once to checksum each one.</li>
                 <li>When Auto extract is on, choose a file if an archive contains several.</li>
                 <li>Turn Auto extract off to checksum an archive without opening it.</li>
               </ul>
@@ -545,7 +540,7 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
           <DropZone
             disabled={calculating}
             inputId="checksum-input-picker"
-            label={sources.length > 1 ? "Replace the files" : "Replace the file"}
+            label="Replace the file"
             onFiles={handleDrop}
           />
         </StepSection>
@@ -593,12 +588,7 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
         <StepSection
           className="checksum-results"
           fault={!!compare && !compare.match && !compare.uncomputed.length}
-          headerExtra={
-            <RemoveButton
-              label={sources.length > 1 || multiFile ? "Remove files" : "Remove file"}
-              onClick={clearSources}
-            />
-          }
+          headerExtra={<RemoveButton label={multiFile ? "Remove files" : "Remove file"} onClick={clearSources} />}
           id="checksum-results"
           info={
             <InfoPopover title="Checksums">
@@ -644,11 +634,7 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
             ))}
           </div>
           {notices.map((notice) => (
-            <Notice
-              id={notices.length > 1 ? `checksum-source-notice-${notice.index + 1}` : "checksum-source-notice"}
-              key={notice.index}
-              level={notice.level}
-            >
+            <Notice id={notice.index ? undefined : "checksum-source-notice"} key={notice.index} level={notice.level}>
               {notice.message}
             </Notice>
           ))}
