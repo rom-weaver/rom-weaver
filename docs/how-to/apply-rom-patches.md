@@ -123,7 +123,7 @@ In **Patches & Cheats**, select **Add cheats to the patch order**, then choose d
 If **APPLY & DOWNLOAD** is disabled, wait for checksumming and resolve the nearby warning. In **Apply**:
 
 1. Enter a filename without an extension.
-2. Pick a plain file unless the author or emulator requires compression; the selector adds the extension.
+2. The format selector starts on the ROM's own extension, such as **.gba**, so the download is the bare file. Pick **.zip** or **.7z** only if you need an archive; the selector adds the extension.
 3. Open **Options** for compression, output header, or weave controls when needed.
 4. Choose **APPLY & DOWNLOAD**, wait, and save the new file.
 

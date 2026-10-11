@@ -83,7 +83,7 @@ The format list in Create only offers formats rom-weaver can make for the files 
 
 1. Enter a patch filename without an extension.
 2. Select the patch format.
-3. Open **Options** only when the chosen format has metadata or compression settings you need.
+3. Open **Options** when you need metadata or compression settings. The download is the bare patch, such as `name.ips`; set **Type** to **.zip** or **.7z** for an archive.
 4. Choose **CREATE & DOWNLOAD PATCH**.
 5. Save the browser download somewhere separate from your working files.
 
