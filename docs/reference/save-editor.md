@@ -116,6 +116,13 @@ Fresh generation is available for Super Mario World and The Legend of Zelda: A L
 
 The repository schema catalog also limits fresh generation to the File 1 profiles for those two titles. Every other catalog profile requires a template.
 
+Each of the two titles has two generation choices that write identical bytes. The browser shows one game entry and a **Files to edit** choice:
+
+| Browser choice | Game ID                                                                         | Editable properties                                                            |
+| -------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| All files      | `super-mario-world`, `zelda-a-link-to-the-past`                                 | Every file in the save. Zelda shows named equipment, inventory, and progress choices. |
+| File 1 only    | `super-mario-world-schema`, `zelda-a-link-to-the-past-file-1-schema`            | File 1 and its backup. Zelda shows raw numeric codes in place of named choices and raw name glyphs. Other files are preserved. |
+
 Super Mario World starts with one file at Yoshi's House, the original initial movement flags, a matching backup, and two empty slots.
 
 The Zelda save follows the original file initialization. Its image contains one file named `LINK`, three hearts, no acquired equipment, a valid backup, and two empty file slots. Its bytes follow the original game's file initialization. The browser shows only editable properties for a fresh save; the full document retains its read-only metadata.

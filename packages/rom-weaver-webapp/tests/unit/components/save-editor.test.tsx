@@ -251,6 +251,52 @@ describe("SaveEditor", () => {
     );
   });
 
+  const mockMarioAndZelda = () => {
+    listSaveGames.mockResolvedValueOnce({
+      games: [
+        { identity: { id: "super-mario-world", name: "Super Mario World" }, supported_save_sizes: [2048] },
+        {
+          identity: { id: "super-mario-world-schema", name: "Super Mario World (File 1 schema)" },
+          supported_save_sizes: [2048],
+        },
+        { identity: { id: "zelda-a-link-to-the-past", name: "Zelda" }, supported_save_sizes: [8192] },
+      ],
+      generationGames: ["super-mario-world", "super-mario-world-schema", "zelda-a-link-to-the-past"],
+    });
+    inspectSave.mockResolvedValue(documentResult([textField()]));
+    render(<SaveEditor onSessionChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Choose a game" }));
+    return waitFor(() => expect(screen.getByLabelText("Game for the new save")).toBeTruthy());
+  };
+
+  it("lists one entry per game and creates the all-files save by default", async () => {
+    await mockMarioAndZelda();
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "Super Mario World",
+      "Zelda",
+      "All files",
+      "File 1 only",
+    ]);
+    expect(document.body.textContent).not.toMatch(/schema/i);
+    fireEvent.click(screen.getByRole("button", { name: "Create save" }));
+    await waitFor(() => expect(createSave).toHaveBeenCalledTimes(1));
+    expect(createSave).toHaveBeenLastCalledWith(expect.objectContaining({ game: "super-mario-world" }));
+  });
+
+  it("creates the File 1 profile when File 1 only is chosen and hides the choice for other games", async () => {
+    await mockMarioAndZelda();
+    fireEvent.change(screen.getByLabelText("Files to edit"), { target: { value: "file-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create save" }));
+    await waitFor(() => expect(createSave).toHaveBeenCalledTimes(1));
+    expect(createSave).toHaveBeenLastCalledWith(expect.objectContaining({ game: "super-mario-world-schema" }));
+  });
+
+  it("offers no file choice for a game without a File 1 profile", async () => {
+    await mockMarioAndZelda();
+    fireEvent.change(screen.getByLabelText("Game for the new save"), { target: { value: "zelda-a-link-to-the-past" } });
+    expect(screen.queryByLabelText("Files to edit")).toBeNull();
+  });
+
   it("shows only editable properties for a fresh save", async () => {
     inspectSave.mockResolvedValueOnce({
       document: {
