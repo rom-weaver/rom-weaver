@@ -510,7 +510,7 @@ impl NodHandlerCore {
     ) -> Result<&'a Path> {
         if request.inputs.len() != 1 {
             return Err(RomWeaverError::Validation(format!(
-                "{} create currently requires exactly one input file",
+                "{} create currently requires exactly one input file; pass one disc image (such as .iso, .gcm, or .rvz)",
                 self.format_name()
             )));
         }

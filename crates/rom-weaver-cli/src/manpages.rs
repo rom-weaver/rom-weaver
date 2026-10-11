@@ -32,10 +32,21 @@ fn assert_documented(command: &Command, path: &[String]) {
     }
 }
 
-fn collect_pages(command: &Command, path: &[String], pages: &mut BTreeMap<String, Vec<u8>>) {
+/// Subcommands carry no version of their own, so every page takes the root's.
+/// Without it the `.TH` header ends in an empty source string.
+fn collect_pages(
+    command: &Command,
+    version: &str,
+    path: &[String],
+    pages: &mut BTreeMap<String, Vec<u8>>,
+) {
     let page_name = path.join("-");
     let invocation = path.join(" ");
-    let mut page_command = command.clone().name(page_name.clone()).bin_name(invocation);
+    let mut page_command = command
+        .clone()
+        .name(page_name.clone())
+        .bin_name(invocation)
+        .version(version.to_string());
     for subcommand in page_command
         .get_subcommands_mut()
         .filter(|subcommand| subcommand.get_name() == "help")
@@ -63,7 +74,7 @@ fn collect_pages(command: &Command, path: &[String], pages: &mut BTreeMap<String
     {
         let mut subcommand_path = path.to_vec();
         subcommand_path.push(subcommand.get_name().to_string());
-        collect_pages(subcommand, &subcommand_path, pages);
+        collect_pages(subcommand, version, &subcommand_path, pages);
     }
 }
 
@@ -74,7 +85,11 @@ pub fn generated_man_pages() -> BTreeMap<String, Vec<u8>> {
     let root = command.get_name().to_string();
     assert_documented(&command, std::slice::from_ref(&root));
     let mut pages = BTreeMap::new();
-    collect_pages(&command, &[root], &mut pages);
+    let version = command
+        .get_version()
+        .expect("root command carries the package version")
+        .to_string();
+    collect_pages(&command, &version, &[root], &mut pages);
     for suffix in ["", "-create", "-parse", "-schema"] {
         let canonical = format!("rom-weaver-weave{suffix}.1");
         let legacy = format!("rom-weaver-bundle{suffix}.1");
@@ -150,6 +165,25 @@ mod tests {
         let pages = generated_man_pages();
         assert!(pages.contains_key("rom-weaver.1"));
         assert!(pages.contains_key("rom-weaver-man.1"));
+    }
+
+    #[test]
+    fn every_page_header_carries_the_version() {
+        let version = format!("\"rom-weaver-checksum {}\"", env!("CARGO_PKG_VERSION"));
+        let pages = generated_man_pages();
+        let checksum = String::from_utf8(pages["rom-weaver-checksum.1"].clone()).expect("utf-8");
+        assert!(checksum.contains(&version), "{checksum}");
+        for (name, page) in &pages {
+            let page = String::from_utf8(page.clone()).expect("utf-8");
+            let header = page
+                .lines()
+                .find(|line| line.starts_with(".TH"))
+                .expect("header");
+            assert!(
+                header.ends_with(&format!("{}\"", env!("CARGO_PKG_VERSION"))),
+                "{name}: {header}"
+            );
+        }
     }
 
     #[test]
