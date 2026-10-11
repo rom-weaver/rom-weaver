@@ -28,7 +28,7 @@ rom-weaver trim --input game.nds --dry-run
 rom-weaver trim --input game.nds --output game-trimmed.nds
 ```
 
-`--extension` names the copy from the input instead:
+`--extension` names the copy from the input instead. It cannot be combined with `--output` or `--in-place`:
 
 ```bash
 rom-weaver trim --input game.nds --extension trimmed.nds
@@ -46,7 +46,7 @@ For NDS-family, GBA, and 3DS ROMs, write a separate copy with `--revert-marker` 
 rom-weaver trim --input game.gba --output game-trimmed.gba --revert-marker
 ```
 
-The footer stores one repeated byte, not a copy of the removed data. Exact restoration requires uniform removed padding. Keep the source when trimming NDS files whose removed area may contain other bytes. The fill byte is recorded before trimming, including with `--in-place`.
+`--revert-marker` applies only when trimming; combining it with `--revert` is an error. The footer stores one repeated byte, not a copy of the removed data. Exact restoration requires uniform removed padding. Keep the source when trimming NDS files whose removed area may contain other bytes. The fill byte is recorded before trimming, including with `--in-place`.
 
 ## Put the padding back
 

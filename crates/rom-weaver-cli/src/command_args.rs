@@ -1041,6 +1041,7 @@ pub struct TrimCommand {
         arg(
             short = 'e',
             long,
+            conflicts_with_all = ["output", "in_place"],
             help = "Save next to each original under this extension. {ext} stands for the original one, as in trim.{ext}"
         )
     )]
@@ -1130,6 +1131,7 @@ XISO trimming and lossless RVZ conversion do not support this operation."
         arg(
             long = "revert-marker",
             visible_alias = "reversible",
+            conflicts_with = "revert",
             help = "Add a footer with the original size and a fill byte for --revert (NDS-family, GBA, and 3DS only)"
         )
     )]

@@ -1550,3 +1550,33 @@ fn trim_rejects_patch_only_archive_filter() {
     assert!(!temp.child("game.trim.gba").path().exists());
     assert_eq!(fs::read(source.path()).unwrap(), data);
 }
+
+#[test]
+fn trim_revert_conflicts_with_revert_marker() {
+    let temp = setup_temp_dir();
+    let source = temp.child("source.gba");
+    fs::write(source.path(), vec![0xFF_u8; 4096]).expect("fixture");
+    command_stdout(
+        &[
+            "trim",
+            "--input",
+            source.path().to_str().expect("source path"),
+            "--revert",
+            "--revert-marker",
+        ],
+        2,
+    );
+}
+
+#[test]
+fn trim_extension_conflicts_with_output_and_in_place() {
+    let temp = setup_temp_dir();
+    let source = temp.child("source.gba");
+    fs::write(source.path(), vec![0xFF_u8; 4096]).expect("fixture");
+    let source = source.path().to_str().expect("source path");
+    for conflicting in [["--output", "out.gba"], ["--in-place", "--force"]] {
+        let mut args = vec!["trim", "--input", source, "--extension", "small.{ext}"];
+        args.extend(conflicting);
+        command_stdout(&args, 2);
+    }
+}
