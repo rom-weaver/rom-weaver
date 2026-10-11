@@ -15,13 +15,9 @@ import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registr
 type ExtractFormProps = { pageDrop?: PageFileDrop | null };
 type ProgressState = { label: string; percent: number | null };
 
-const MAX_NAMED_SKIPPED = 3;
 // Extract opens one archive per run, so extra files are named instead of silently dropped.
-const skippedNotice = (used: File, skipped: string[]): string => {
-  const named = skipped.slice(0, MAX_NAMED_SKIPPED).join(", ");
-  const more = skipped.length > MAX_NAMED_SKIPPED ? ` and ${skipped.length - MAX_NAMED_SKIPPED} more` : "";
-  return `Extract opens one archive per run, so only ${used.name} was extracted. Not extracted: ${named}${more}. Add ${skipped.length === 1 ? "it" : "them"} in another run.`;
-};
+const skippedNotice = (used: File, skipped: string[]): string =>
+  `Extract opens one archive per run: ${used.name} was extracted, ${skipped.join(", ")} not.`;
 const outputPath = (output: PublicOutput): string => output.relativePath || output.fileName;
 const isChd = (file: File): boolean => /\.chd$/i.test(file.name);
 const binCount = (entries: { filename: string }[]): number =>
@@ -286,7 +282,6 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
       progress,
       downloadProgress: zipProgress,
       error: error || null,
-      skippedFiles: skipped,
       splitChoiceRequired: !!splitPrompt,
       outputs: outputs.map((output) => ({
         id: output.path,

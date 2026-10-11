@@ -175,18 +175,18 @@ const IdentifyForm = ({
     setEntries((previous) => previous.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)));
   }, []);
 
-  const cancelEntry = useCallback((id: number) => {
-    runsRef.current.get(id)?.abort.abort();
-    runsRef.current.delete(id);
-  }, []);
+  const cancelEntry = useCallback(
+    (id: number) => {
+      runsRef.current.get(id)?.abort.abort();
+      runsRef.current.delete(id);
+      updateEntry(id, { busy: false, percent: null, stage: "" });
+    },
+    [updateEntry],
+  );
 
   const cancelRun = useCallback(() => {
-    for (const run of runsRef.current.values()) run.abort.abort();
-    runsRef.current.clear();
-    setEntries((previous) =>
-      previous.map((entry) => (entry.busy ? { ...entry, busy: false, percent: null, stage: "" } : entry)),
-    );
-  }, []);
+    for (const id of runsRef.current.keys()) cancelEntry(id);
+  }, [cancelEntry]);
 
   const runEntry = useCallback(
     async (id: number, next: File) => {
@@ -254,31 +254,28 @@ const IdentifyForm = ({
 
   useEffect(() => {
     const settled = entries.filter((entry) => entry.result);
-    if (entries.some((entry) => entry.busy))
-      setWorkbenchActivity(IDENTIFY_ACTIVITY_KEY, {
-        stage: entries.find((entry) => entry.busy)?.stage || "Identify ROM",
-        state: "running",
-      });
-    else if (entries.some((entry) => entry.error)) setWorkbenchActivity(IDENTIFY_ACTIVITY_KEY, { state: "failed" });
-    else if (settled.length)
-      setWorkbenchActivity(IDENTIFY_ACTIVITY_KEY, {
-        stage:
-          settled.length === 1 && settled[0]?.result
-            ? IDENTIFY_STATUS_LABEL[settled[0].result.status]
-            : `${settled.length} ROMs identified`,
-        state: settled.some((entry) => entry.result?.status === "unavailable") ? "failed" : "done",
-      });
-    else if (entries.length) setWorkbenchActivity(IDENTIFY_ACTIVITY_KEY, { state: "ready" });
-    else setWorkbenchActivity(IDENTIFY_ACTIVITY_KEY, { state: "idle" });
-  }, [entries]);
+    const first = settled[0]?.result;
+    setWorkbenchActivity(
+      IDENTIFY_ACTIVITY_KEY,
+      busyEntry
+        ? { stage: busyEntry.stage || "Identify ROM", state: "running" }
+        : error
+          ? { state: "failed" }
+          : first
+            ? {
+                stage: settled.length === 1 ? IDENTIFY_STATUS_LABEL[first.status] : `${settled.length} ROMs identified`,
+                state: unavailable ? "failed" : "done",
+              }
+            : { state: entries.length ? "ready" : "idle" },
+    );
+  }, [busyEntry, entries, error, unavailable]);
 
   useEffect(
     () => () => {
-      for (const run of runsRef.current.values()) run.abort.abort();
-      runsRef.current.clear();
+      cancelRun();
       setWorkbenchActivity(IDENTIFY_ACTIVITY_KEY, { state: "idle" });
     },
-    [],
+    [cancelRun],
   );
 
   /* The unavailable notice only renders for a staged file; the checksum search
@@ -346,15 +343,15 @@ const IdentifyForm = ({
         (entry) => entry.result && entry.result.status !== "unavailable" && entry.result.status !== "unknown",
       );
 
-  const agentResult = (entry: IdentifyEntry) =>
-    entry.result
+  const agentResults = entries.map(({ result: r }) =>
+    r
       ? {
-          status: entry.result.status,
-          archiveName: entry.result.archiveName,
-          condition: entry.result.condition,
-          hint: entry.result.hint,
-          unavailableReason: entry.result.unavailableReason,
-          candidates: entry.result.candidates.map((candidate) => ({
+          status: r.status,
+          archiveName: r.archiveName,
+          condition: r.condition,
+          hint: r.hint,
+          unavailableReason: r.unavailableReason,
+          candidates: r.candidates.map((candidate) => ({
             path: candidate.path,
             size: candidate.sizeBytes,
             status: candidate.status,
@@ -364,7 +361,8 @@ const IdentifyForm = ({
             matches: candidate.matches,
           })),
         }
-      : null;
+      : null,
+  );
 
   useAgentWorkflow("identify", {
     getState: () => ({
@@ -373,18 +371,14 @@ const IdentifyForm = ({
       source: only ? describeAgentSource(only.file) : null,
       busy,
       progress: busyEntry
-        ? {
-            label: busyEntry.stage || (only ? `Identifying ${busyEntry.file.name}…` : "Identify ROM"),
-            percent: busyEntry.percent,
-          }
+        ? { label: busyEntry.stage || `Identifying ${busyEntry.file.name}…`, percent: busyEntry.percent }
         : null,
       error: error || null,
-      result: only ? agentResult(only) : null,
-      files: entries.map((entry) => ({
-        source: describeAgentSource(entry.file),
-        busy: entry.busy,
+      result: only ? agentResults[0] : null,
+      files: entries.map((entry, index) => ({
+        name: entry.file.name,
         error: entry.error || null,
-        result: agentResult(entry),
+        result: agentResults[index],
       })),
       lookup: romLookup.result ? { checks: romLookup.result.checks, foundBy: romLookup.result.foundBy } : null,
     }),
@@ -514,10 +508,7 @@ const IdentifyForm = ({
                   cancelLabel: "Cancel identification",
                   indeterminate: entry.percent == null,
                   label: entry.stage || `Identifying ${entry.file.name}…`,
-                  onCancel: () => {
-                    cancelEntry(entry.id);
-                    updateEntry(entry.id, { busy: false, percent: null, stage: "" });
-                  },
+                  onCancel: () => cancelEntry(entry.id),
                   percent: entry.percent ?? undefined,
                   value: entry.percent == null ? undefined : `${Math.round(entry.percent)}%`,
                 },
