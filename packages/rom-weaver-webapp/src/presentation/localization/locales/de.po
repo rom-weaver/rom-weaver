@@ -1071,7 +1071,7 @@ msgstr "CD-Codecs"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.console.settingsDescription"
-msgstr "Das Design wird sofort angewendet. Andere Einstellungen werden beim Speichern übernommen."
+msgstr "Design und Akzentfarbe werden sofort angewendet. Andere Einstellungen werden beim Speichern übernommen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1736,7 +1736,7 @@ msgstr "Patch-Position bearbeiten, derzeit {position} von {total}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.saveThesis"
-msgstr "Bearbeite Trainernamen, Geld, Orden, Herzen und Ausrüstung in einem Spielstand,"
+msgstr "Bearbeite Trainernamen, Geld, Orden, Herzen und Ausrüstung in einem Spielstand."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

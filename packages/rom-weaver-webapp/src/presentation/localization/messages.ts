@@ -1382,7 +1382,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.console.reportIssue": msg({ id: "ui.console.reportIssue", message: "Report an issue" }),
   "ui.console.settingsDescription": msg({
     id: "ui.console.settingsDescription",
-    message: "Theme applies immediately. Other settings apply when you save.",
+    message: "Theme and accent apply immediately. Other settings apply when you save.",
   }),
   "ui.console.showAdvanced": msg({ id: "ui.console.showAdvanced", message: "Show advanced" }),
   "ui.console.storage": msg({ id: "ui.console.storage", message: "Saves & storage" }),
@@ -1490,7 +1490,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.hero.toolsThesis2": msg({ id: "ui.hero.toolsThesis2", message: "Recover the original." }),
   "ui.hero.saveThesis": msg({
     id: "ui.hero.saveThesis",
-    message: "Edit trainer names, money, badges, hearts, and gear in a game save,",
+    message: "Edit trainer names, money, badges, hearts, and gear in a game save.",
   }),
   "ui.hero.saveThesis2": msg({
     id: "ui.hero.saveThesis2",
