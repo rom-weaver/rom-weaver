@@ -148,6 +148,7 @@ const buildStackViewState = ({
       canMoveUp: index > 0 && !(busy || disabled),
       canRemove: !(busy || disabled),
       chainVerdict: patchInfo?.chainVerdict,
+      checksumCompared: patchInfo?.checksumCompared === true,
       checksumTiming: patchInfo?.checksumTiming || "",
       decompressionTimeMs: patchInfo?.decompressionTimeMs,
       detailText: patchInfo?.targetLabel || "",

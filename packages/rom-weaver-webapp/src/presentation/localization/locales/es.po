@@ -4574,6 +4574,11 @@ msgstr "Comprobado"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.applied"
+msgstr "Aplicado"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.verifiedDuringWeave"
 msgstr "se verifica durante la aplicación"
 
