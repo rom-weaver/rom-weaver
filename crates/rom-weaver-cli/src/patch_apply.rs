@@ -1970,6 +1970,9 @@ impl CliApp {
                 decoration.context,
             )
             .map_err(|error| {
+                // The patched ROM failed the caller's --expect-out gate, so do
+                // not leave a ROM they asked us to reject sitting at the output.
+                let _ = fs::remove_file(decoration.raw_ready_output);
                 Box::new(OperationReport::failed_with_error(
                     OperationFamily::Patch,
                     report.format.clone(),
