@@ -50,6 +50,7 @@ const makeContext = (overrides: Record<string, unknown> = {}) => {
     setCompletedApplyTimeMs: vi.fn(),
     setCompletedCompressionTimeMs: vi.fn(),
     setCompletedSizeSummary: vi.fn(),
+    setCompletedWarnings: vi.fn(),
     setOutputErrorMessage: vi.fn(),
     setPatchProgress: vi.fn(),
     setPatchProgressByKey: vi.fn(),
@@ -156,6 +157,7 @@ describe("useApplyDownloadOrchestration hook", () => {
     expect(session.setCompletedSizeSummary).toHaveBeenCalledWith(
       expect.objectContaining({ inputBytes: 128, outputBytes: 80 }),
     );
+    expect(session.setCompletedWarnings).toHaveBeenCalledWith([]);
     expect(lifecycle.setPendingDownloadReadyFileName).toHaveBeenCalledWith("patched.bin");
     expect(outputResult.output.prepareDownload as ReturnType<typeof vi.fn>).toHaveBeenCalledOnce();
     expect(workflow.downloadOutput).toHaveBeenCalledWith(outputResult, "patched.bin", { interactive: false });
