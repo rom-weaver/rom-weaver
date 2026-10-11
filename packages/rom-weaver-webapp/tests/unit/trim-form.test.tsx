@@ -293,6 +293,18 @@ describe("TrimPatchForm", () => {
     });
   });
 
+  it.each([
+    { fileName: "game.3ds", expected: ["3ds", "z3ds", "zip", "7z"], extra: {} },
+    { fileName: "disc.cue", expected: ["cue", "chd", "zip", "7z"], extra: { chd: true } },
+  ])("keeps matching container formats for $fileName", async ({ fileName, expected }) => {
+    const { container } = renderForm({ pageDrop: { files: [new File(["rom"], fileName)], id: 1 } });
+    await vi.waitFor(() => expect(latest?.workflow.getInput()?.status).toBe("ready"));
+    await vi.waitFor(() => {
+      const format = container.querySelector("#trim-builder-select-output-format") as HTMLSelectElement;
+      expect(Array.from(format.options).map((option) => option.value)).toEqual(expected);
+    });
+  });
+
   it("updates the trim output name and format controls", async () => {
     const file = new File(["rom"], "game.nes", { type: "application/octet-stream" });
     const onSettingsChange = vi.fn();

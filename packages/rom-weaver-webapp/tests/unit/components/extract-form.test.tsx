@@ -30,12 +30,13 @@ describe("ExtractForm", () => {
 
   it("names a file that is not an archive instead of the internal storage path", async () => {
     runtime.extract.mockRejectedValue(new Error("no registered container matched `/work/notes.txt`"));
-    render(<ExtractForm />);
+    const view = render(<ExtractForm />);
 
     addFile(new File(["hello"], "notes.txt"));
 
     expect(await screen.findByText("notes.txt is not an archive or disc image that Extract can open.")).toBeTruthy();
     expect(screen.queryByText(/\/work\//)).toBeNull();
+    view.unmount();
   });
 
   it("extracts on add, then downloads one file as itself and several as one ZIP", async () => {
