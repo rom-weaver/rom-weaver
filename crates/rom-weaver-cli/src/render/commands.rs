@@ -88,6 +88,7 @@ pub(super) fn render_success(
             }
         }
         "patch-validate" => label_line(surface, event),
+        "bundle-parse" => render_weave_parse(surface, event),
         "checksum" => render_checksum(surface, event, selection.probe),
         "identify" if event.format.as_deref() == Some("identify-database") => {
             render_database(surface, event);
@@ -912,6 +913,24 @@ fn identify_rows(matches: &[Value]) -> Vec<Vec<String>> {
             row
         })
         .collect()
+}
+
+/// `weave parse` keeps the pre-rename `bundle` aliases in its JSON for older
+/// consumers, so every field appears up to four times. Print one copy.
+fn render_weave_parse(surface: &Surface, event: &ProgressEvent) {
+    let Some(mut weave) = event
+        .details
+        .as_ref()
+        .and_then(|details| details.get("weave"))
+        .cloned()
+    else {
+        return render_details_or_label(surface, event);
+    };
+    label_line(surface, event);
+    if let Some(object) = weave.as_object_mut() {
+        object.remove("bundle");
+    }
+    render_object(surface, &weave);
 }
 
 fn render_details_or_label(surface: &Surface, event: &ProgressEvent) {

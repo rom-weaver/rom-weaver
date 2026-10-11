@@ -90,6 +90,11 @@ impl CliApp {
         context: &OperationContext,
     ) -> Result<Option<WeaveApplyResolution>> {
         let Some(source) = self.detect_weave_apply_source(args)? else {
+            if let Some(flag) = weave_only_flag(args) {
+                return Err(RomWeaverError::Validation(format!(
+                    "{flag} only applies to a weave; pass a rom-weaver-weave.json (or an archive containing one) as --input or --weave"
+                )));
+            }
             return Ok(None);
         };
         let source = self.load_weave_apply_source(source, args, context)?;
@@ -159,6 +164,16 @@ impl CliApp {
                 context,
             )?;
         } else {
+            if !args.with_patches.is_empty() || !args.without_patches.is_empty() {
+                let flag = if args.with_patches.is_empty() {
+                    "--without"
+                } else {
+                    "--with"
+                };
+                return Err(RomWeaverError::Validation(format!(
+                    "{flag} selects patches from the weave, but explicit --patch flags replace the weave's patch list; drop one of them"
+                )));
+            }
             trace!(
                 explicit_patches = args.patches.len(),
                 "explicit --patch flags replace the weave patch list"
@@ -631,6 +646,19 @@ impl CliApp {
             }
         }
 
+        // A pattern that names no weave entry is almost always a typo; running
+        // anyway would silently apply the wrong set of patches.
+        for (flag, matcher) in [("--with", &with_matcher), ("--without", &without_matcher)] {
+            if let Some(matcher) = matcher {
+                matcher.ensure_all_matched().map_err(|error| match error {
+                    RomWeaverError::Validation(message) => RomWeaverError::Validation(format!(
+                        "{flag} matched no weave patch name or file name ({message})"
+                    )),
+                    other => other,
+                })?;
+            }
+        }
+
         // Interactive refinement only when the flags left room for it.
         if with_patterns.is_empty()
             && without_patterns.is_empty()
@@ -995,6 +1023,19 @@ fn weave_entry_prompt_label(entry: &WeavePatchEntry) -> String {
         label.push_str(&format!(" - {description}"));
     }
     label
+}
+
+/// The first weave-only flag set on a command that is not driven by a weave.
+fn weave_only_flag(args: &PatchApplyCommand) -> Option<&'static str> {
+    if !args.with_patches.is_empty() {
+        Some("--with")
+    } else if !args.without_patches.is_empty() {
+        Some("--without")
+    } else if args.without_cheats {
+        Some("--without-cheats")
+    } else {
+        None
+    }
 }
 
 fn matches_weave_entry(matcher: &mut Option<SelectionMatcher>, entry: &WeavePatchEntry) -> bool {

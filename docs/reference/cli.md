@@ -360,6 +360,8 @@ When `patch apply` detects a weave from its positional input, the canonical `rom
 
 The legacy `rom-weaver-bundle.json` name and its compressed forms remain readable. Both recipe names use the same version 1 and version 2 fields. Created archives contain identical `rom-weaver-weave.json` and `rom-weaver-bundle.json` members.
 
+`patch apply --with GLOB` and `--without GLOB` match a weave patch's `name` or file name, and both are repeatable. A pattern that matches no patch fails the apply. `--with`, `--without`, and `--without-cheats` fail when the input is not a weave, and `--with` and `--without` also fail alongside explicit `--patch` flags, which replace the weave's patch list.
+
 Weave version 2 requires `patchBasis`. Weave version 1 remains readable and uses automatic inference. Per-entry `basis` values override the shared weave rule.
 
 <a id="bundle-execution-targets"></a>
