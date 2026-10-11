@@ -2,6 +2,72 @@ use super::shared::*;
 
 const HELLO_WORLD_SHA256: &str = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9";
 
+#[test]
+fn checksum_digest_rejects_out_of_bounds_ranges_and_accepts_empty_boundaries() {
+    let temp = setup_temp_dir();
+    let source = temp.child("range-boundaries.bin");
+    source.write_str("hello world").unwrap();
+    let path = source.to_str().unwrap();
+    for (start, length) in [
+        ("12", "0"),
+        ("11", "1"),
+        ("0", "12"),
+        ("1", "18446744073709551615"),
+    ] {
+        let output = command_output_with_env(
+            &[
+                "checksum",
+                "--input",
+                path,
+                "--algo",
+                "sha256",
+                "--start",
+                start,
+                "--length",
+                length,
+                "--no-extract",
+                "--digest",
+            ],
+            &[],
+            1,
+        );
+        assert!(
+            output.stdout.is_empty(),
+            "failed digest must emit no result"
+        );
+        assert!(String::from_utf8_lossy(&output.stderr).contains("checksum range"));
+        assert_eq!(fs::read(source.path()).unwrap(), b"hello world");
+    }
+    for start in ["0", "11"] {
+        let output = digest(
+            &[
+                "checksum",
+                "--input",
+                path,
+                "--algo",
+                "sha256",
+                "--start",
+                start,
+                "--length",
+                "0",
+                "--no-extract",
+                "--digest",
+            ],
+            0,
+        );
+        assert_eq!(
+            output,
+            b"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n"
+        );
+    }
+    let output = digest(
+        &["checksum", "--input", path, "--algo", "sha256", "--digest"],
+        0,
+    );
+    assert_eq!(output, format!("{HELLO_WORLD_SHA256}\n").as_bytes());
+    assert_eq!(fs::read(source.path()).unwrap(), b"hello world");
+}
+
 fn digest(args: &[&str], expected_code: i32) -> Vec<u8> {
     command_stdout(args, expected_code)
 }
