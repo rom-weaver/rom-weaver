@@ -256,9 +256,7 @@ const CHEAT_SHARD_SYSTEMS: &str =
 #[cfg(not(target_arch = "wasm32"))]
 fn cheat_shard_system_parser(value: &str) -> std::result::Result<String, String> {
     match crate::cheats::CheatSystem::parse(value) {
-        Some(system) if crate::cheat_database::shard_slug(system).is_some() => {
-            Ok(value.to_string())
-        }
+        Some(system) if system.has_database_shard() => Ok(value.to_string()),
         Some(system) => Err(format!(
             "`{}` has no cheat database shard; expected one of: {CHEAT_SHARD_SYSTEMS}",
             system.id()

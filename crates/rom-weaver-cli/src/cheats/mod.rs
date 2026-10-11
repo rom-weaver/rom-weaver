@@ -61,6 +61,12 @@ impl CheatSystem {
         }
     }
 
+    /// Whether a cheat database shard exists for this system. libretro ships
+    /// none for PlayStation or SG-1000, though both still decode `--code` values.
+    pub const fn has_database_shard(self) -> bool {
+        !matches!(self, Self::PlayStation | Self::Sg1000)
+    }
+
     /// Parse the CLI/UI identifier (accepts a few common aliases).
     pub fn parse(value: &str) -> Option<Self> {
         match value.trim().to_ascii_lowercase().as_str() {

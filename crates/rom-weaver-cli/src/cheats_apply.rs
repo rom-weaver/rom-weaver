@@ -162,9 +162,7 @@ impl CliApp {
     ) -> Result<CheatSystem> {
         if let Some(id) = override_id.map(str::trim).filter(|id| !id.is_empty()) {
             return CheatSystem::parse(id)
-                .filter(|system| {
-                    flag != "--cheat-system" || crate::cheat_database::shard_slug(*system).is_some()
-                })
+                .filter(|system| flag != "--cheat-system" || system.has_database_shard())
                 .ok_or_else(|| {
                     // sg1000 and psx decode codes but have no cheat database shard.
                     let expected = if flag == "--cheat-system" {
