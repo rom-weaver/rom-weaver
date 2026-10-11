@@ -72,7 +72,6 @@ const TABS = [
     icon: <svg aria-hidden="true" />,
     id: "save-editor",
     label: "Save Editor",
-    railLabel: "Saves",
   },
 ] satisfies WorkflowTab[];
 
@@ -122,7 +121,7 @@ describe("Masthead", () => {
       "PPF undo",
       "Test",
       "Trim",
-      "Saves",
+      "Save Editor",
       "Settings",
       "Offline app",
       "Saves & storage",
@@ -279,7 +278,7 @@ describe("Masthead", () => {
       const labels = rowsOf(container.querySelector(nav));
       expect(labels).not.toContain("Trim");
       expect(labels).toContain("PPF undo");
-      expect(labels).not.toContain("Saves");
+      expect(labels).not.toContain("Save Editor");
       expect(labels).toContain("Apply");
       for (const row of container.querySelectorAll(`${nav} .nav-row[hidden]`)) {
         expect(row.parentElement?.hidden).toBe(true);
@@ -474,7 +473,7 @@ describe("Masthead", () => {
     for (const row of container.querySelectorAll<HTMLElement>(".side-nav .nav-row")) {
       const visible = row.querySelector(".nav-row-label")?.textContent ?? "";
       // WCAG 2.5.3: a speech user says what they can read, so the accessible
-      // name has to contain it. "Saves" is not contained in "Save Editor".
+      // name has to contain it. "Saves" is not contained in "Save Editor" (the row now shows the full name).
       expect((row.getAttribute("aria-label") ?? visible).toLowerCase()).toContain(visible.toLowerCase());
     }
     expect(container.querySelector('.nav-row[href="save-editor"]')?.getAttribute("aria-label")).toBeNull();

@@ -1756,7 +1756,7 @@ msgstr "EmulatorJS: {name}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Activar herramientas beta (Recortar y Editor de partidas)"
+msgstr "Activar herramientas beta (Recortar y Save Editor)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

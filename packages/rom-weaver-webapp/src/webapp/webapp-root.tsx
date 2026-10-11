@@ -175,7 +175,6 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     icon: <SaveIcon aria-hidden="true" />,
     id: "save-editor",
     label: "Save Editor",
-    railLabel: "Saves",
   },
   {
     group: "project",
