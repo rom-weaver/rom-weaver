@@ -422,13 +422,15 @@ const scheduleMobileIdleRunnerEviction = () => {
   }, MOBILE_IDLE_EVICTION_DEBOUNCE_MS);
 };
 
+const FATAL_OPFS_PROXY_MESSAGE_REGEX = /^OPFS proxy (?:request timed out|is poisoned|died mid-request)$/;
+
 // Classification MUST use messages because structured cloning drops custom Error names on resolved results.
 const isRunnerUnrecoverableError = (error: unknown): boolean => {
   if (!(error instanceof Error)) return false;
   return (
     OUT_OF_MEMORY_MESSAGE_REGEX.test(error.message) ||
     (error.name === "RangeError" && /memory/i.test(error.message)) ||
-    ["OPFS proxy request timed out", "OPFS proxy is poisoned", "OPFS proxy died mid-request"].includes(error.message)
+    FATAL_OPFS_PROXY_MESSAGE_REGEX.test(error.message)
   );
 };
 
