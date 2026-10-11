@@ -208,7 +208,11 @@ const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
         onWarning: (message) => setRuntimeWarnings((previous) => [...previous, message]),
         compression,
         metadata: prepared?.metadata,
-        settings: toApplyWorkflowSettings(activeSettings),
+        // PPF undo keeps the shared Type setting as saved; only Apply and Create read its default as bare.
+        settings: {
+          ...toApplyWorkflowSettings(activeSettings),
+          defaultCompression: getDefaultCompressionMode(settings),
+        },
         patch,
         rom,
         target: prepared?.target,
