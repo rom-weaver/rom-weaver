@@ -193,7 +193,8 @@ const WORKFLOW_TABS: WorkflowTab[] = [
  * subdirectory deployment.
  */
 const appPathHref = (href: string, appBaseUrl: string): string =>
-  new URL(href.replace(/^\/+/, ""), appBaseUrl).pathname;
+  // The server render has no window, so its base is the bare "/"; the throwaway origin only lets that parse.
+  new URL(href.replace(/^\/+/, ""), new URL(appBaseUrl, "https://app.invalid")).pathname;
 
 // Keep the trace inspector out of the initial weave, but share its loader so
 // the masthead and idle post-boot preload can fetch the same promise.
