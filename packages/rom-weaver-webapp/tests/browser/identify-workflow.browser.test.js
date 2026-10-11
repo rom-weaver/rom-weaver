@@ -175,6 +175,53 @@ test("an unknown ROM reports one calm no-match notice, never an error or failure
   expect(host.textContent).toContain("abcd1234");
 });
 
+test("several dropped ROMs are each identified and get their own card", async () => {
+  identifyRom.mockImplementation(async (file) => ({
+    candidates: [
+      candidate(file.name, file.name === "metroid.gba" ? "matched" : "ambiguous", [gbaMatch(`${file.name} title`)]),
+    ],
+    input: file.name,
+    status: file.name === "metroid.gba" ? "matched" : "ambiguous",
+  }));
+  await mountIdentifyForm();
+  const input = host.querySelector("#identify-input-picker");
+  expect(input.multiple).toBe(true);
+  const transfer = new DataTransfer();
+  transfer.items.add(new File([new Uint8Array([1])], "metroid.gba"));
+  transfer.items.add(new File([new Uint8Array([2])], "twin.gba"));
+  input.files = transfer.files;
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  await waitForText("metroid.gba title");
+  await waitForText("twin.gba title");
+
+  expect(identifyRom).toHaveBeenCalledTimes(2);
+  expect(host.querySelectorAll(".workflow-file-list > *")).toHaveLength(2);
+});
+
+test("several unknown ROMs each show one calm no-match notice and no error", async () => {
+  identifyRom.mockImplementation(async (file) => ({
+    candidates: [candidate(file.name, "unknown")],
+    input: file.name,
+    status: "unknown",
+  }));
+  await mountIdentifyForm();
+  const input = host.querySelector("#identify-input-picker");
+  const transfer = new DataTransfer();
+  transfer.items.add(new File([new Uint8Array([1])], "one.gba"));
+  transfer.items.add(new File([new Uint8Array([2])], "two.gba"));
+  input.files = transfer.files;
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  await waitFor(() => host.querySelectorAll(".notice.info").length === 2);
+
+  expect(host.querySelectorAll(".workflow-file-list > *")).toHaveLength(2);
+  expect(host.querySelector(".notice.error")).toBeNull();
+  expect(host.querySelector(".identify-state")).toBeNull();
+  expect(host.textContent).not.toContain("No checksum match");
+  for (const card of host.querySelectorAll(".workflow-file-list > *")) {
+    expect(card.querySelectorAll(".notice.info")).toHaveLength(1);
+  }
+});
+
 test("an ambiguous ROM names the count and lists every candidate", async () => {
   identifyRom.mockResolvedValue({
     candidates: [candidate("twin.gba", "ambiguous", [gbaMatch("Twin Game (USA)"), gbaMatch("Twin Game (Europe)")])],

@@ -85,6 +85,37 @@ describe("ChecksumForm", () => {
     expect(screen.queryByRole("button", { name: /^Calculate/ })).toBeNull();
   });
 
+  it("checksums every dropped file and shows a result per file", async () => {
+    workflow.setInput.mockImplementation(async (file: File) => ({
+      ...readyInput({ crc32: file.name === "a.sfc" ? CRC32 : "b2c3d4e5", md5: "m".repeat(32), sha1: "s".repeat(40) }),
+      fileName: file.name,
+      files: [
+        {
+          checksums: { crc32: file.name === "a.sfc" ? CRC32 : "b2c3d4e5", md5: "m".repeat(32), sha1: "s".repeat(40) },
+          fileName: file.name,
+          id: "input",
+          size: 16,
+        },
+      ],
+    }));
+    render(<ChecksumForm />);
+    const picker = screen.getByLabelText("Drop a file to checksum it") as HTMLInputElement;
+    expect(picker.multiple).toBe(true);
+
+    fireEvent.change(picker, { target: { files: [new File(["1"], "a.sfc"), new File(["2"], "b.sfc")] } });
+
+    expect((await screen.findAllByText(CRC32)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("b2c3d4e5")).length).toBeGreaterThan(0);
+    expect(workflow.setInput).toHaveBeenCalledTimes(2);
+    expect(workflow.instances).toHaveLength(2);
+    expect(screen.getByText("a.sfc")).toBeTruthy();
+    expect(screen.getByText("b.sfc")).toBeTruthy();
+
+    // A pasted checksum is compared with every file, and the match names its file.
+    fireEvent.change(screen.getByLabelText("Compare with an expected checksum"), { target: { value: "b2c3d4e5" } });
+    expect(screen.getByText(/Match: the CRC32 of this file \(b\.sfc\)/)).toBeTruthy();
+  });
+
   it("accepts text files and passes the initial options", async () => {
     render(<ChecksumForm />);
     fireEvent.click(screen.getByLabelText("Auto extract"));
