@@ -331,13 +331,43 @@ impl CliApp {
             );
         }
 
+        let patch_count = resolved_patches.len();
+        // A mid-chain patch authored against the original ROM (inferred from
+        // its checksums, or set with --patch-basis/--default-patch-basis) is
+        // checked against that ROM and then run without its embedded
+        // source/target checks, exactly as `patch apply` runs it.
+        let base_steps = if patch_count > 1 {
+            match self.resolve_validate_plan(
+                &resolved_patches,
+                &validate_input,
+                context,
+                probe_threads.clone(),
+                &plan_flags,
+            ) {
+                Ok(plan) => match Self::base_step_flags(&plan.per_patch) {
+                    Ok(flags) => flags,
+                    Err(report) => return *report,
+                },
+                Err(error) => {
+                    return OperationReport::failed_with_error(
+                        OperationFamily::Patch,
+                        None,
+                        "validate",
+                        error,
+                        probe_threads.clone(),
+                    );
+                }
+            }
+        } else {
+            vec![false; patch_count]
+        };
         let mut chain = PatchValidateChain {
             current_input: validate_input,
             n64_order,
             n64_byte_order,
             probe_threads,
+            base_steps,
         };
-        let patch_count = resolved_patches.len();
         let mut formats = Vec::with_capacity(patch_count);
         for (index, patch) in resolved_patches.iter().enumerate() {
             match self.validate_sequential_patch(
@@ -538,6 +568,40 @@ impl CliApp {
         Ok(validation_labels)
     }
 
+    /// Which chain positions run against the original ROM rather than the
+    /// previous output. Fails when such a patch's own input checks reject the
+    /// original ROM.
+    fn base_step_flags(
+        per_patch: &[PatchPlanVerdict],
+    ) -> std::result::Result<Vec<bool>, Box<OperationReport>> {
+        per_patch
+            .iter()
+            .enumerate()
+            .map(|(index, verdict)| {
+                if index == 0 || verdict.basis != PatchInputBasis::Base {
+                    return Ok(false);
+                }
+                if verdict.input_verdict == PatchInputVerdict::Failed {
+                    return Err(Box::new(
+                        OperationReport::failed(
+                            OperationFamily::Patch,
+                            verdict.format.clone(),
+                            "validate",
+                            format!(
+                                "patch {} was set to apply to the original ROM but does not match it: {}",
+                                index + 1,
+                                verdict.message
+                            ),
+                            None,
+                        )
+                        .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Validation),
+                    ));
+                }
+                Ok(true)
+            })
+            .collect()
+    }
+
     /// Validates one patch of a sequential chain and advances the chain input. Returns the
     /// patch's format name.
     fn validate_sequential_patch(
@@ -626,7 +690,7 @@ impl CliApp {
         );
 
         let progress_tracker = Arc::new(PatchApplyProgressTracker::default());
-        let patch_context =
+        let mut patch_context =
             context
                 .clone()
                 .with_progress_sink(Arc::new(PatchApplyProgressSink::new_for_command(
@@ -637,6 +701,13 @@ impl CliApp {
                     "patch-validate",
                     "validate",
                 )));
+        if chain.base_steps[index] {
+            patch_context = patch_context.with_patch_check_scopes(PatchCheckScopes {
+                patch_integrity: context.strict_patch_checksums(),
+                source: false,
+                target: false,
+            });
+        }
 
         let handler_failed = |error: RomWeaverError| {
             Box::new(match error {
@@ -1080,53 +1151,22 @@ impl CliApp {
                 probe_threads.clone(),
             )
         };
-        let base_representation = match Self::base_representation(validate_input, None, None) {
-            Ok(representation) => representation,
-            Err(error) => return fail_error(error),
-        };
-        let endpoint_base_inputs = [(validate_input, "raw", base_representation)];
-
-        let metadata = match Self::align_plan_metadata(&flags, patch_count) {
-            Ok(metadata) => metadata,
-            Err(error) => return fail_error(error),
-        };
-
-        // Probe handlers; a failed probe (or a format without preflight support)
-        // still plans, it just cannot contribute embedded checks or a preflight verdict.
-        let ProbedPlanHandlers {
+        let PlanResolution {
             handlers,
-            failures: probe_failures,
-        } = self.probe_plan_handlers(resolved_patches, patch_count, probe_threads.clone());
-
-        let plan_inputs = match Self::build_plan_patch_inputs(
+            plan_inputs,
+            base_variants,
+            resolved,
+            mut per_patch,
+        } = match self.resolve_validate_plan(
             resolved_patches,
-            &handlers,
-            &metadata,
-            flags.default_basis,
-            &endpoint_base_inputs,
+            validate_input,
             context,
+            probe_threads.clone(),
+            &flags,
         ) {
-            Ok(plan_inputs) => plan_inputs,
+            Ok(plan) => plan,
             Err(error) => return fail_error(error),
         };
-
-        let base_variants = match self.plan_base_variants(validate_input, &plan_inputs, context) {
-            Ok(variants) => variants,
-            Err(error) => return fail_error(error),
-        };
-
-        let mut resolved = patch_plan::resolve_verification_plan(&base_variants, &plan_inputs);
-        let mut per_patch = std::mem::take(&mut resolved.per_patch);
-
-        // Probe failures override whatever the planner said.
-        for (entry, message) in per_patch
-            .iter_mut()
-            .zip(probe_failures)
-            .filter_map(|(entry, failure)| failure.map(|message| (entry, message)))
-        {
-            entry.input_verdict = PatchInputVerdict::Failed;
-            entry.message = message;
-        }
 
         let ready_jobs = match Self::plan_ready_jobs(PlanReadyJobInputs {
             resolved_patches,
@@ -1160,6 +1200,62 @@ impl CliApp {
             patch_count,
             planned,
         )
+    }
+
+    /// Resolves every patch's input basis and chain order against the
+    /// prepared input with the shared verification planner. Plan mode reports
+    /// the result; the sequential check uses it to honour `--patch-basis`.
+    fn resolve_validate_plan(
+        &self,
+        resolved_patches: &[ResolvedPatch],
+        validate_input: &Path,
+        context: &OperationContext,
+        probe_threads: Option<ThreadExecution>,
+        flags: &PlanFlagInputs,
+    ) -> Result<PlanResolution> {
+        let patch_count = resolved_patches.len();
+        let base_representation = Self::base_representation(validate_input, None, None)?;
+        let endpoint_base_inputs = [(validate_input, "raw", base_representation)];
+
+        let metadata = Self::align_plan_metadata(flags, patch_count)?;
+
+        // Probe handlers; a failed probe (or a format without preflight support)
+        // still plans, it just cannot contribute embedded checks or a preflight verdict.
+        let ProbedPlanHandlers {
+            handlers,
+            failures: probe_failures,
+        } = self.probe_plan_handlers(resolved_patches, patch_count, probe_threads);
+
+        let plan_inputs = Self::build_plan_patch_inputs(
+            resolved_patches,
+            &handlers,
+            &metadata,
+            flags.default_basis,
+            &endpoint_base_inputs,
+            context,
+        )?;
+
+        let base_variants = self.plan_base_variants(validate_input, &plan_inputs, context)?;
+
+        let mut resolved = patch_plan::resolve_verification_plan(&base_variants, &plan_inputs);
+        let mut per_patch = std::mem::take(&mut resolved.per_patch);
+
+        // Probe failures override whatever the planner said.
+        for (entry, message) in per_patch
+            .iter_mut()
+            .zip(probe_failures)
+            .filter_map(|(entry, failure)| failure.map(|message| (entry, message)))
+        {
+            entry.input_verdict = PatchInputVerdict::Failed;
+            entry.message = message;
+        }
+        Ok(PlanResolution {
+            handlers,
+            plan_inputs,
+            base_variants,
+            resolved,
+            per_patch,
+        })
     }
 
     /// Assembles what is known about each patch for the verification planner.
@@ -1832,6 +1928,8 @@ struct PatchValidateChain {
     n64_order: Option<N64ByteOrderTransform>,
     n64_byte_order: PatchN64ByteOrderMode,
     probe_threads: Option<ThreadExecution>,
+    /// Chain positions that run against the original ROM; see `base_step_flags`.
+    base_steps: Vec<bool>,
 }
 
 fn patch_validate_passed_report(
@@ -1899,6 +1997,15 @@ struct PatchValidatePlanInputs<'a> {
     probe_threads: Option<ThreadExecution>,
     summary: IndependentValidationSummary,
     flags: PlanFlagInputs,
+}
+
+/// What the verification planner resolved for one validate run.
+struct PlanResolution {
+    handlers: Vec<Option<Arc<dyn rom_weaver_core::PatchHandler>>>,
+    plan_inputs: Vec<patch_plan::PlanPatchInput>,
+    base_variants: Vec<patch_plan::BaseVariant>,
+    resolved: patch_plan::ResolvedPlan,
+    per_patch: Vec<PatchPlanVerdict>,
 }
 
 struct PlanReadyJobInputs<'a> {
