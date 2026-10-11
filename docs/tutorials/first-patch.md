@@ -38,7 +38,7 @@ For this tutorial, choose **Continue** without adding anything. That loads the p
 
 The guide points at three more parts of the Apply page. Each tip has a **Try it** line with one thing to do. Use **Continue** to move on, then **Done** to close the guide.
 
-1. **Check your starting ROM** frames the **ROM** card, which lists the file's checksums, and lifts the **Detailed** switch beside it. Turn it on and the card gains **Files** and **Identify** drawers; turn it off to keep one **Checks** drawer per file. Either view works for this tutorial.
+1. **Check your original ROM** frames the **ROM** card, which lists the file's checksums, and lifts the **Detailed** switch beside it. Turn it on and the card gains **Files** and **Identify** drawers; turn it off to keep one **Checks** drawer per file. Either view works for this tutorial.
 2. **Patches and cheats** shows two independent changes. One changes `HELLO` to `ROM`. The other changes `WORLD` to `WEAVER`. Cheats join the same list from **Add cheats to the patch order**; leave every cheat off to preserve this tutorial's expected output.
 3. **Apply** controls the output.
 

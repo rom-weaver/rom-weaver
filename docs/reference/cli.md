@@ -312,7 +312,7 @@ Without an override, the first matching system shard wins:
 
 Executable-relative lookup requires `bundled-identify-data`, enabled in published packages. Explicit directory and environment overrides win even with a missing shard.
 
-Delivery is `rom` or `unsupported`. Matches are `exact` (checksum), `title` (filename), or `manual` (`--game`). Each run prints CC-BY-SA-4.0 attribution once.
+Delivery is `rom` or `unsupported`. Matches are `exact` (checksum), `title` (normalized file name), or `manual` (`--game`). Each run prints CC-BY-SA-4.0 attribution once.
 
 These flags also appear under `Cheats` in `patch apply` and `patch create` help.
 
