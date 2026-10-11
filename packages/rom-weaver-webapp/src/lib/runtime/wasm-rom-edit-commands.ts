@@ -69,6 +69,13 @@ const invokeRomWeaverTrimWorker = async (
     const emitted = getEmittedFileDetails(result);
     const terminal = getTerminalEvent(result);
     const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
+    if (
+      details?.processed === 0 &&
+      typeof details.skipped_unsupported === "number" &&
+      details.skipped_unsupported > 0
+    ) {
+      throw new Error("This input does not support trimming");
+    }
     const sizeField = (value: unknown) =>
       typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
     const actualFileName =

@@ -1557,6 +1557,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       ...propsWithSettings,
       applyPatches,
       applyReady: applyReady && !weaveDefaultsPending,
+      applyDisabled: weaveDefaultsPending,
       defaultPatchBasis: patchInputBasis,
       disabledPatchIds,
       downloadOutput,

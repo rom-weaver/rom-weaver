@@ -223,6 +223,56 @@ describe("runRomWeaverJson", () => {
     rejectRun(new Error("late result"));
   });
 
+  it.each(["OPFS proxy request timed out", "OPFS proxy is poisoned", "OPFS proxy died mid-request"])(
+    "discards a runner after a resolved poisoned failure: %s",
+    async (message) => {
+      const original = new Error(message);
+      original.name = "OpfsProxyError";
+      const error = structuredClone(original);
+      const failed = { events: [], exitCode: 1, ok: false, error };
+      state.run.mockResolvedValueOnce(failed);
+      await expect(runRomWeaverJson(command("compress"))).resolves.toBe(failed);
+      expect(state.clients[0]?.terminate).toHaveBeenCalledOnce();
+      await expect(runRomWeaverJson(command("compress"))).resolves.toEqual(success());
+      expect(state.clients).toHaveLength(2);
+    },
+  );
+
+  it("discards a runner after a resolved out-of-memory failure", async () => {
+    const failed = { events: [], exitCode: 1, ok: false, error: new Error("Out of memory") };
+    state.run.mockResolvedValueOnce(failed);
+    await expect(runRomWeaverJson(command("compress"))).resolves.toBe(failed);
+    expect(state.clients[0]?.terminate).toHaveBeenCalledOnce();
+    await runRomWeaverJson(command("compress"));
+    expect(state.clients).toHaveLength(2);
+  });
+
+  it("discards a runner after a rejected poisoned failure and preserves the error", async () => {
+    const error = new Error("OPFS proxy is poisoned");
+    error.name = "OpfsProxyError";
+    state.run.mockRejectedValueOnce(error);
+    await expect(runRomWeaverJson(command("compress"))).rejects.toBe(error);
+    expect(state.clients[0]?.terminate).toHaveBeenCalledOnce();
+    await runRomWeaverJson(command("compress"));
+    expect(state.clients).toHaveLength(2);
+  });
+
+  it.each([
+    "network failed",
+    "OPFS proxy slot acquisition timed out",
+    "OPFS proxy op 1 failed errno=44 (missing file)",
+  ])("reuses runners after recoverable failures: %s", async (message) => {
+    const error = new Error(message);
+    error.name = "OpfsProxyError";
+    const failed = { events: [], exitCode: 1, ok: false, error };
+    state.run.mockResolvedValueOnce(failed).mockRejectedValueOnce(error);
+    await expect(runRomWeaverJson(command("compress"))).resolves.toBe(failed);
+    await expect(runRomWeaverJson(command("compress"))).rejects.toBe(error);
+    await runRomWeaverJson(command("compress"));
+    expect(state.clients).toHaveLength(1);
+    expect(state.clients[0]?.terminate).not.toHaveBeenCalled();
+  });
+
   it("terminates a failed runner on an out-of-memory result and propagates other errors", async () => {
     state.run.mockRejectedValueOnce(new Error("Out of memory"));
     await expect(runRomWeaverJson(command("compress"))).rejects.toThrow("Out of memory");
