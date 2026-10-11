@@ -433,6 +433,29 @@ fn copy_cheat_cli(temp: &TempDir) {
     fs::create_dir_all(executable.path().parent().expect("binary directory"))
         .expect("binary directory");
     fs::copy(env!("CARGO_BIN_EXE_rom-weaver"), executable.path()).expect("installed binary");
+
+    // Concurrent process spawns can inherit the copy's writable descriptor until their exec completes.
+    // Probe only executable readiness; workflow commands and assertions MUST run without retries.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        match cheat_data_command(temp).arg("--version").output() {
+            Err(error)
+                if error.kind() == std::io::ErrorKind::ExecutableFileBusy
+                    && std::time::Instant::now() < deadline =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            result => {
+                let output = result.expect("installed binary is executable");
+                assert!(
+                    output.status.success(),
+                    "installed binary version failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                break;
+            }
+        }
+    }
 }
 
 fn cheat_data_command(temp: &TempDir) -> Command {
