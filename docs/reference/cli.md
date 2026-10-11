@@ -427,6 +427,9 @@ The recipe is [Bake cheat codes into a ROM](../how-to/bake-cheat-codes.md).
 - `--default-patch-basis base|previous|auto` sets the shared input relationship. The default is `auto`.
 - `--patch-basis base|previous|auto` overrides one patch. It binds to the preceding `--patch`.
 - `--independent` checks each patch separately against the original ROM. It reports every verdict instead of stopping at the first failure.
+- `--plan` reports the order, input basis, and verdict of each patch without applying the chain, so mid-chain patches that depend on earlier output are reported as deferred instead of failed.
+- `--patch-input-check ALGO=HEX` and `--patch-output-check ALGO=HEX` supply the checksums the preceding `--patch` should see going in and produce, for formats that do not carry them.
+- A mid-chain patch with an original-ROM basis (declared, or inferred from its checksums) is checked against the original ROM and runs without its embedded source and target checks, as `patch apply` runs it.
 
 ## Patch creation metadata
 
