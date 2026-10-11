@@ -629,6 +629,10 @@ fn emit_vendor_patch_rerun_if_changed(manifest_dir: &Path) {
     for name in [
         "7zip_sdk_null_advance.original.txt",
         "7zip_sdk_null_advance.replacement.txt",
+        "gzip_validation.original.txt",
+        "gzip_validation.replacement.txt",
+        "gzip_eof_validation.original.txt",
+        "gzip_eof_validation.replacement.txt",
     ] {
         println!(
             "cargo:rerun-if-changed={}",
@@ -680,6 +684,20 @@ fn prepare_source_tree(manifest_dir: &Path, libarchive_dir: &Path, out_dir: &Pat
         "7zip SDK zero-length null pointer advancement",
     )
     .expect("failed to patch 7zip SDK finalization pointer arithmetic");
+    replace_file_fragment(
+        &staged.join("libarchive/archive_read_support_filter_gzip.c"),
+        &patch_path(manifest_dir, "gzip_validation.original.txt"),
+        &patch_path(manifest_dir, "gzip_validation.replacement.txt"),
+        "gzip member CRC32 and uncompressed size validation",
+    )
+    .expect("failed to patch libarchive gzip integrity validation");
+    replace_file_fragment(
+        &staged.join("libarchive/archive_read.c"),
+        &patch_path(manifest_dir, "gzip_eof_validation.original.txt"),
+        &patch_path(manifest_dir, "gzip_eof_validation.replacement.txt"),
+        "gzip validation at archive end-of-file",
+    )
+    .expect("failed to patch libarchive gzip completion validation");
     let write_extra = write_extra_enabled();
     add_wasm_archive_write_format_shim(manifest_dir, &staged.join("libarchive"))
         .expect("failed to add libarchive format shim");

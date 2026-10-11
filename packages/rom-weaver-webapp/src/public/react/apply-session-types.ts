@@ -181,6 +181,7 @@ type LocalApplyPatchFormSessionOptions = Pick<
     options?: { interactive?: boolean },
   ) => void | Promise<void>;
   applyReady?: boolean;
+  applyDisabled?: boolean;
   resolvedOutputCompression?: CompressionFormat;
   resolvedOutputName?: string;
   resolvedOutputNameKey?: string;

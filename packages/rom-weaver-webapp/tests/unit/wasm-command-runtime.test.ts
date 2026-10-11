@@ -508,6 +508,31 @@ describe("output-producing runtime workers", () => {
     });
   });
 
+  it("rejects unsupported trim inputs before resolving an output", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({ processed: 0, trimmed: 0, already_target: 0, skipped_unsupported: 1 }),
+    );
+    await expect(
+      invokeRomWeaverTrimWorker({ outputName: "trimmed.bin", sourceFilePath: "/unsupported.bin" }),
+    ).rejects.toThrow("This input does not support trimming");
+  });
+
+  it("retains the output of an already trimmed ROM", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({
+        processed: 1,
+        trimmed: 0,
+        already_target: 1,
+        skipped_unsupported: 0,
+        emitted_files: [{ path: "/out/game.nds", size_bytes: 12288 }],
+      }),
+    );
+    await expect(invokeRomWeaverTrimWorker({ sourceFilePath: "/game.nds" })).resolves.toMatchObject({
+      filePath: "/out/game.nds",
+      size: 12288,
+    });
+  });
+
   it("names a lossless disc trim by its actual format and retains logical size metadata", async () => {
     mocks.runRomWeaverJson.mockResolvedValue(
       succeededResult({

@@ -63,26 +63,30 @@ it("registers before the srcdoc's first request and revokes the old frame on res
       .poll(async () => (await listEmulatorSaves()).find((save) => save.gameId === gameId)?.state)
       .toEqual(new Uint8Array([7, 8]));
 
+    const queuedWrite = (source) => {
+      const event = new MessageEvent("message", {
+        origin: window.location.origin,
+        data: { source: "rom-weaver-emulator", gameId, kind: "save-state", data: new Uint8Array([99]) },
+      });
+      // WebKit clears native event sources on detach; pin the stale sender for this guard test.
+      Object.defineProperty(event, "source", { value: source });
+      return event;
+    };
+    const firstStaleWrite = queuedWrite(firstWindow);
     act(() => restartCurrentGameWithSave("save-session"));
     await expect.poll(() => replies.length).toBe(2);
     const secondFrame = document.querySelector("iframe");
     expect(secondFrame).not.toBe(firstFrame);
     expect(replies[1].source).toBe(secondFrame.contentWindow);
     expect(replies[1].data).toEqual(new Uint8Array([3, 4]));
-    // A queued message retains its old WindowProxy even after its frame is gone.
-    const staleWrite = (source) =>
-      window.dispatchEvent(
-        new MessageEvent("message", {
-          origin: window.location.origin,
-          source,
-          data: { source: "rom-weaver-emulator", gameId, kind: "save-state", data: new Uint8Array([99]) },
-        }),
-      );
-    staleWrite(firstWindow);
-    const secondWindow = secondFrame.contentWindow;
+    // The fixture must still exercise the stale sender after its frame is gone.
+    expect(firstStaleWrite.source).toBe(firstWindow);
+    window.dispatchEvent(firstStaleWrite);
+    const secondStaleWrite = queuedWrite(secondFrame.contentWindow);
     fireEvent.click(screen.getByRole("button", { name: "Stop and unload game" }));
     expect(document.querySelector("iframe")).toBeNull();
-    staleWrite(secondWindow);
+    expect(secondStaleWrite.source).toBe(replies[1].source);
+    window.dispatchEvent(secondStaleWrite);
     expect((await listEmulatorSaves()).find((save) => save.gameId === gameId)?.state).toEqual(new Uint8Array([7, 8]));
   } finally {
     window.removeEventListener("message", receive);

@@ -6,6 +6,7 @@ Use the failed job name to choose a local check. Use the broad gate when you nee
 ## Table of contents
 
 - [Match a specific job](#match-a-specific-job)
+- [Run release regressions](#run-release-regressions)
 - [Prevent repeat failures](#prevent-repeat-failures)
 - [Reproduce the Docker jobs](#reproduce-the-docker-jobs)
 - [Check the complete change](#check-the-complete-change)
@@ -45,6 +46,57 @@ npm --prefix packages/rom-weaver-webapp run test:performance     # performance g
 The performance gates need the production WASM artifact and the webapp build first (`mise run build-wasm-prod`, then `run build` above). The audit picks a free port unless `PORT` is set.
 
 `actionlint` is shellcheck-aware and lints inline workflow `run:` scripts; the separate `shellcheck` task covers the tracked shell files, and `npm test` covers the Node.js tooling.
+
+## Run release regressions
+
+From the repository root, run the browser and CLI regression gate:
+
+```bash
+mise run test-e2e-fast
+```
+
+The gate builds production WASM and the webapp, then checks asset sizes. It runs CLI, Chromium, WASM, and E2E tests. E2E reuses the checked bundle.
+
+Build or size failures stop the gate. Its summary reports each stage and total time, including preparation.
+
+| Behavior | Regression coverage |
+| --- | --- |
+| Patching | CLI formats, chains, headers; browser Create → Apply byte parity. |
+| Weaves | CLI schema, selection, members; browser export → import → Apply byte parity. |
+| Archives | CLI valid/damaged streams; browser ZIP roundtrip and recovery. |
+| Checksums | CLI ranges, empty files, vectors; browser independent hashes and mismatch recovery. |
+| Trim | CLI batches/platforms; browser exact NDS extent. |
+| Saves | CLI failure atomicity/retry; browser edit, checksum repair, download, reopen. |
+| Other workflows | Native/browser/WASM Identify, cheats, disc images, PPF Undo. |
+| Browser state | Settings, navigation, mobile accessibility, worker recovery, seeded lifecycles, OPFS handle counts. |
+
+Also run Rust/frontend unit tests, documentation, and tooling checks:
+
+```bash
+mise run ci
+```
+
+Run browser component checks in WebKit, using isolated persistent profiles and sequential file processes:
+
+```bash
+npm --prefix packages/rom-weaver-webapp run test:browser:webkit
+```
+
+Run WebKit E2E against the same production bundle:
+
+```bash
+ROM_WEAVER_CHANNEL=prod ROM_WEAVER_E2E_USE_PREBUILT_DIST=1 npm --prefix packages/rom-weaver-webapp run test:e2e:webapp:webkit
+```
+
+For the larger valid codec, level, and thread matrix:
+
+```bash
+mise run test-e2e-nightly
+```
+
+Run nightly after production checks: it replaces local assets with development builds.
+
+Fixtures cannot cover every input. Keep platform CI and [real-device checks](mobile-safari-verification.md) for hardware coverage.
 
 ## Prevent repeat failures
 

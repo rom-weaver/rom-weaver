@@ -17,7 +17,7 @@ const PATH_SEPARATOR_REGEX = /[\\/]+/;
 // bucket hierarchy on every stage/write/truncate/cleanup. The OPFS root is a per-origin singleton
 // and intermediate directories are long-lived, so we memoize both. Leaf FILE handles are never
 // cached (files are created/removed under per-op nonces). Invalidation: removeManagedOpfsPath drops
-// the removed subtree, and a NotFoundError from a cached handle triggers one retry from a fresh root.
+// the removed subtree, and stale cached directory handles trigger one retry from a fresh root.
 const STORAGE_ROOT_CACHE = new WeakMap<object, Promise<FileSystemDirectoryHandle>>();
 const DIRECTORY_HANDLE_CACHE = new Map<string, Promise<FileSystemDirectoryHandle>>();
 
@@ -87,6 +87,7 @@ const resolveParentDirectory = async (
   root: FileSystemDirectoryHandle,
   parts: string[],
   create: boolean,
+  onCachedDirectory: () => void,
 ): Promise<FileSystemDirectoryHandle> => {
   let current = root;
   let prefix = "";
@@ -94,6 +95,7 @@ const resolveParentDirectory = async (
     prefix = prefix ? `${prefix}/${part}` : part;
     const cached = DIRECTORY_HANDLE_CACHE.get(prefix);
     if (cached) {
+      onCachedDirectory();
       current = await cached;
       continue;
     }
@@ -127,20 +129,27 @@ const getManagedOpfsFileHandle = async (
   const fileName = parts.pop();
   if (!fileName) return null;
 
+  let reusedCachedDirectory = false;
   const locate = async (): Promise<FileSystemFileHandle | null> => {
     const directory = await getManagedOpfsDirectory(options.navigatorObject);
     if (!directory) return null;
-    const parent = await resolveParentDirectory(directory, parts, create);
+    const parent = await resolveParentDirectory(directory, parts, create, () => {
+      reusedCachedDirectory = true;
+    });
     return parent.getFileHandle(fileName, { create });
   };
 
   try {
     return await locate();
   } catch (error) {
-    if (isNotFoundError(error)) {
-      // A cached directory handle may point at a tree that was removed and recreated. Drop the
-      // caches and retry once from a fresh root before treating this as a genuine miss.
-      emitOpfsPathTrace(options.trace, "not-found, retrying from fresh root", { create, filePath });
+    const unknownCachedHandleError =
+      reusedCachedDirectory &&
+      typeof DOMException !== "undefined" &&
+      error instanceof DOMException &&
+      error.name === "UnknownError";
+    if (isNotFoundError(error) || unknownCachedHandleError) {
+      // Removed directory handles MAY report UnknownError in WebKit. Retry cached handles once; fresh errors MUST propagate.
+      emitOpfsPathTrace(options.trace, "stale handle, retrying from fresh root", { create, filePath });
       resetOpfsHandleCaches(options.navigatorObject);
       try {
         return await locate();

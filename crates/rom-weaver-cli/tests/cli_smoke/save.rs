@@ -843,6 +843,74 @@ fn save_set_rejects_bad_values_and_source_collisions() {
 }
 
 #[test]
+fn save_set_rejects_late_invalid_assignments_atomically_and_can_retry() {
+    let temp = setup_temp_dir();
+    let source = write_fixture(&temp);
+    let output = temp.child("retry.sav");
+    let original = emerald_fixture();
+    let existing = b"existing destination must survive";
+    for (assignment, code) in [
+        ("trainer.money=2", "save_edit_conflict"),
+        ("missing.field=1", "save_field_invalid"),
+        ("trainer.gender=not-a-gender", "save_enum_invalid"),
+        ("trainer.name", "save_assignment_invalid"),
+    ] {
+        fs::write(output.path(), existing).unwrap();
+        let report = run_single_json_event(
+            &[
+                "save",
+                "set",
+                source.to_str().unwrap(),
+                "trainer.money=12345",
+                assignment,
+                "--output",
+                output.to_str().unwrap(),
+                "--force",
+                "--json",
+            ],
+            1,
+        );
+        assert_eq!(report["status"], "failed");
+        assert!(report["label"].as_str().unwrap().contains(code), "{report}");
+        assert_eq!(fs::read(&source).unwrap(), original);
+        assert_eq!(fs::read(output.path()).unwrap(), existing);
+    }
+    let report = run_single_json_event(
+        &[
+            "save",
+            "set",
+            source.to_str().unwrap(),
+            "trainer.money=12345",
+            "--output",
+            output.to_str().unwrap(),
+            "--force",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(report["status"], "succeeded");
+    let mut expected = original.clone();
+    let section = section_offset(0, 1);
+    expected[section + 0x490..section + 0x494]
+        .copy_from_slice(&(12345u32 ^ 0x1234_5678).to_le_bytes());
+    let sum = checksum(&expected[section..section + 0xF80]);
+    expected[section + 0xFF6..section + 0xFF8].copy_from_slice(&sum.to_le_bytes());
+    assert_eq!(fs::read(output.path()).unwrap(), expected);
+    assert_eq!(fs::read(&source).unwrap(), original);
+    let inspected = run_single_json_event(
+        &[
+            "save",
+            "get",
+            output.to_str().unwrap(),
+            "trainer.money",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(inspected["label"], "12345");
+}
+
+#[test]
 fn save_gen1_identify_and_set_preserve_unknown_bytes_and_checksum() {
     let temp = setup_temp_dir();
     let source = temp.child("red.sav");

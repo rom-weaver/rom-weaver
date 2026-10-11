@@ -621,8 +621,10 @@ describe("console history", () => {
       expect(container.querySelector('[data-logtab="offline"]')?.getAttribute("aria-selected")).toBe("true"),
     );
     window.history.back();
-    await waitFor(() => expect(container.querySelector("dialog.log-dlg")).toBeNull());
-    expect(window.location.hash).toBe("");
+    await waitFor(() => {
+      expect(container.querySelector("dialog.log-dlg")).toBeNull();
+      expect(window.location.hash).toBe("");
+    });
   });
 
   it("drops its entries when the console closes from inside", async () => {

@@ -68,7 +68,11 @@ Pruning is also what keeps the published crate viable: the full tree packages to
 
 Every transformation - the test-subdirectory strip, the wasm patches in `libarchive/patches/wasm/`, the all-target patches in `libarchive/patches/`, and the `CMakeLists.txt` source-list edits - is applied to a staged copy under `OUT_DIR`, never to the committed tree.
 
-`libarchive/patches/7zip_solid_block.c` is the one all-target patch today. It appends `rom_weaver_7zip_entry_solid_block()` to the staged 7zip reader so extract chunking can see which solid block an entry lives in; the accessor has to live in that translation unit because `struct _7zip` is file-local, and it is declared by hand in `src/libarchive/read.rs` rather than through bindgen because no header declares it. `build.rs` asserts every struct field the accessor reads before appending, so a refresh that renames one fails the build with the field name instead of a compiler error in a generated file.
+`libarchive/patches/7zip_solid_block.c` appends `rom_weaver_7zip_entry_solid_block()` to the staged 7zip reader so extract chunking can see which solid block an entry lives in; the accessor has to live in that translation unit because `struct _7zip` is file-local, and it is declared by hand in `src/libarchive/read.rs` rather than through bindgen because no header declares it. `build.rs` asserts every struct field the accessor reads before appending, so a refresh that renames one fails the build with the field name instead of a compiler error in a generated file.
+
+The all-target `gzip_validation` patch checks every member's CRC32 and uncompressed size. The snapshot initializes a CRC accumulator but never updates or verifies it. The patch validates trailers for gzip streams and gzip-filtered archives, including concatenated members. `build.rs` requires the original source fragment, so incompatible snapshot updates fail during staging.
+
+The companion `gzip_eof_validation` patch runs when archive parsing ends with a gzip filter present. Downstream decoders can finish before upstream gzip trailers, including nested gzip and UU-encoded TAR. It drains each decoder directly, validating every gzip member and preserving other codecs' checks.
 
 ### Going back to upstream
 

@@ -16,6 +16,13 @@ import { buildStoredZip } from "../tests/wasm/stored-zip-fixture.mjs";
 import { chooseFilesByKeyboard, runAccessibleNavigationAudit, tabTo } from "./accessible-navigation-audit.mjs";
 import { summarizeCssCoverage } from "./css-coverage.mjs";
 import { createGuidedLoadingAudit } from "./guided-loading-audit.mjs";
+import {
+  runChecksumJourney,
+  runCompressExtractRoundtrip,
+  runCreateApplyRoundtrip,
+  runSaveEditorJourney,
+  runTrimJourney,
+} from "./production-workflow-journeys.mjs";
 
 const PACKAGE_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FIXTURE_DIR = path.join(PACKAGE_DIR, "tests", "fixtures");
@@ -1640,12 +1647,27 @@ const main = async () => {
     }
     if (RUN_LINK_AUDIT) await scenario("links", (createContext) => runLinkAudit(createContext, devBaseUrl));
     if (RUN_RAW_JOURNEY) {
+      await scenario("Create/Apply/Weave byte roundtrips", (createContext) =>
+        runCreateApplyRoundtrip(createContext, previewBaseUrl, configureUncompressedOutput),
+      );
+      await scenario("checksum/comparison/recovery", (createContext) =>
+        runChecksumJourney(createContext, previewBaseUrl),
+      );
+      await scenario("Compress/Extract ZIP roundtrip/recovery", (createContext) =>
+        runCompressExtractRoundtrip(createContext, previewBaseUrl),
+      );
+      await scenario("Trim NDS exact extent", (createContext) =>
+        runTrimJourney(createContext, previewBaseUrl, configureUncompressedOutput),
+      );
       await scenario("PPF Undo/download/recovery", (createContext) => runPpfUndoJourney(createContext, previewBaseUrl));
       await scenario("raw apply/download", (createContext) =>
         runApplyJourney(createContext, previewBaseUrl, "raw apply/download", [
           "archive_sources/game.bin",
           "archive_sources/change.ips",
         ]),
+      );
+      await scenario("Save Editor exact edit/reopen", (createContext) =>
+        runSaveEditorJourney(createContext, previewBaseUrl),
       );
     }
     if (RUN_ARCHIVE_JOURNEY) {

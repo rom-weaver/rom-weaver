@@ -422,11 +422,16 @@ const scheduleMobileIdleRunnerEviction = () => {
   }, MOBILE_IDLE_EVICTION_DEBOUNCE_MS);
 };
 
-// WASM heaps only grow. Match shared WASI/Emscripten OOM messages and V8 memory RangeErrors so the affected runner is recycled.
-const isRunnerOutOfMemoryError = (error: unknown): boolean => {
+const FATAL_OPFS_PROXY_MESSAGE_REGEX = /^OPFS proxy (?:request timed out|is poisoned|died mid-request)$/;
+
+// Classification MUST use messages because structured cloning drops custom Error names on resolved results.
+const isRunnerUnrecoverableError = (error: unknown): boolean => {
   if (!(error instanceof Error)) return false;
-  if (OUT_OF_MEMORY_MESSAGE_REGEX.test(error.message)) return true;
-  return error.name === "RangeError" && /memory/i.test(error.message);
+  return (
+    OUT_OF_MEMORY_MESSAGE_REGEX.test(error.message) ||
+    (error.name === "RangeError" && /memory/i.test(error.message)) ||
+    FATAL_OPFS_PROXY_MESSAGE_REGEX.test(error.message)
+  );
 };
 
 const createRunnerAbortError = () => {
@@ -514,6 +519,12 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
       `runJson dispatch mode=${lease.runner.ready.mode} threaded=${String(lease.runner.ready.threaded)}`,
     );
     let removeAbortListener: (() => void) | undefined;
+    const recycleUnrecoverableError = (error: unknown) => {
+      if (isRunnerUnrecoverableError(error)) {
+        emitRunnerTraceLine(options, "runJson unrecoverable failure; terminating runner");
+        lease.terminate();
+      }
+    };
     try {
       return await new Promise<RomWeaverRunnerRunJsonResult>((resolve, reject) => {
         let settled = false;
@@ -547,6 +558,7 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
             settled = true;
             // Start the perceived-latency tail that ends when the result paints.
             markWasmFinished();
+            if (!result.ok) recycleUnrecoverableError(result.error);
             resolve(result);
           },
           (error) => {
@@ -557,12 +569,7 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
         );
       });
     } catch (error) {
-      // A long-lived worker can exhaust its grown heap. Only that runner is replaced on the next acquire.
-      if (isRunnerOutOfMemoryError(error)) {
-        // Release the exhausted worker's OPFS handles immediately.
-        emitRunnerTraceLine(options, "runJson out-of-memory; terminating exhausted runner");
-        lease.terminate();
-      }
+      recycleUnrecoverableError(error);
       throw error;
     } finally {
       removeAbortListener?.();

@@ -363,3 +363,18 @@ test("remote fetch rejects a pre-aborted request before starting network or OPFS
     globalThis.fetch = originalFetch;
   }
 });
+
+test("remote fetch recreates a directory removed through the browser VFS", async () => {
+  const [first] = await fetchRemoteFiles([{ url: `${location.origin}/${RAW_ROM}` }]);
+  const expectedBytes = new Uint8Array(await first.file.arrayBuffer());
+  await first.cleanup?.();
+  await browserVfs.remove(`${browserVfs.rootPath}/remote-fetch`);
+  const [second] = await fetchRemoteFiles([{ url: `${location.origin}/${RAW_ROM}` }]);
+  try {
+    expect(second.file.size).toBe(first.file.size);
+    expect(new Uint8Array(await second.file.arrayBuffer())).toEqual(expectedBytes);
+    expect(await browserVfs.stat(second.filePath)).toMatchObject({ size: first.file.size });
+  } finally {
+    await second.cleanup?.();
+  }
+});

@@ -113,6 +113,52 @@ describe("managed OPFS path resolution", () => {
     expect(freshDirectory.fileCalls).toEqual([{ create: false, name: "file.bin" }]);
   });
 
+  it("retries a cached directory that WebKit reports as an unknown error", async () => {
+    const root = new FakeDirectoryHandle();
+    const storage = new FakeStorage(root);
+    const navigatorObject = navigatorFor(storage);
+    const filePath = "/guest/webkit-stale/file.bin";
+    await getManagedOpfsFileHandle(filePath, { create: true, navigatorObject });
+    const stale = root.directories.get("webkit-stale");
+    if (!stale) throw new Error("test setup did not create the stale directory");
+    stale.fileError = new DOMException("unknown transient reason", "UnknownError");
+    root.directories.delete("webkit-stale");
+    await expect(getManagedOpfsFileHandle(filePath, { create: true, navigatorObject })).resolves.toMatchObject({
+      name: "file.bin",
+    });
+    expect(storage.getDirectoryCalls).toBe(2);
+  });
+
+  it("preserves unknown errors from fresh directories without retrying", async () => {
+    const root = new FakeDirectoryHandle();
+    const dir = new FakeDirectoryHandle();
+    const error = new DOMException("actual storage failure", "UnknownError");
+    dir.fileError = error;
+    root.directories.set("webkit-fresh", dir);
+    const storage = new FakeStorage(root);
+    await expect(
+      getManagedOpfsFileHandle("/guest/webkit-fresh/file.bin", {
+        create: true,
+        navigatorObject: navigatorFor(storage),
+      }),
+    ).rejects.toBe(error);
+    expect(storage.getDirectoryCalls).toBe(1);
+  });
+
+  it("preserves an unknown error if the fresh-root retry also fails", async () => {
+    const root = new FakeDirectoryHandle();
+    const storage = new FakeStorage(root);
+    const navigatorObject = navigatorFor(storage);
+    const filePath = "/guest/webkit-failed-retry/file.bin";
+    await getManagedOpfsFileHandle(filePath, { create: true, navigatorObject });
+    const error = new DOMException("persistent storage failure", "UnknownError");
+    const stale = root.directories.get("webkit-failed-retry");
+    if (!stale) throw new Error("test setup did not create the stale directory");
+    stale.fileError = error;
+    await expect(getManagedOpfsFileHandle(filePath, { create: true, navigatorObject })).rejects.toBe(error);
+    expect(storage.getDirectoryCalls).toBe(2);
+  });
+
   it("returns null when a stale handle still misses after the retry", async () => {
     const staleRoot = new FakeDirectoryHandle();
     const freshRoot = new FakeDirectoryHandle();

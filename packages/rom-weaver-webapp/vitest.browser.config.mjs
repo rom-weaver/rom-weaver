@@ -1,7 +1,8 @@
 import { Buffer } from "node:buffer";
 import { execSync } from "node:child_process";
 import fs from "node:fs";
-import { dirname, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { playwright } from "@vitest/browser-playwright";
 import { mergeConfig } from "vitest/config";
@@ -113,14 +114,26 @@ const createBrowserInstances = () => {
           .map((name) => name.trim().toLowerCase())
           .filter(Boolean);
 
-  if (selectedNames.length === 0) return [BROWSER_INSTANCES_BY_NAME.chromium];
+  if (selectedNames.length === 0) selectedNames.push("chromium");
 
   return selectedNames.map((name) => {
     const instance = BROWSER_INSTANCES_BY_NAME[name];
     if (!instance) {
       throw new Error(`Unsupported ROM_WEAVER_BROWSER value "${name}". Expected chromium, webkit, or all.`);
     }
-    return instance;
+    if (name === "webkit") {
+      // WebKit's ephemeral sessions reject OPFS. Each file-runner process needs
+      // its own profile, and Vitest disables persistence when files run in parallel.
+      const profile = fs.mkdtempSync(join(tmpdir(), "rom-weaver-webkit-vitest-"));
+      process.once("exit", () => fs.rmSync(profile, { recursive: true, force: true }));
+      return { ...instance, fileParallelism: false, provider: playwright({ persistentContext: profile }) };
+    }
+    return {
+      ...instance,
+      provider: playwright(
+        process.env.ROM_WEAVER_SYSTEM_CHROME === "1" ? { launchOptions: { channel: "chrome" } } : undefined,
+      ),
+    };
   });
 };
 
@@ -211,9 +224,6 @@ export default mergeConfig(baseConfig, {
       enabled: true,
       headless: true,
       instances: createBrowserInstances(),
-      provider: playwright(
-        process.env.ROM_WEAVER_SYSTEM_CHROME === "1" ? { launchOptions: { channel: "chrome" } } : undefined,
-      ),
       screenshotFailures: false,
       viewport: {
         height: 900,

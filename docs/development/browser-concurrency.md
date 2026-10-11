@@ -112,13 +112,18 @@ The proxy supports open, read, positional read, write, truncate, flush, close, u
 4. The proxy changes the state to `DONE` and wakes the client.
 5. The client reads the response and returns the slot to `IDLE`.
 
-The proxy scans for work before waiting on the doorbell, so a request cannot be lost between a scan and a wait. It wakes at least every 250 ms even if no notification arrives.
+Before scanning, the proxy snapshots the doorbell. It checks again before waiting to avoid losing requests during that gap. Requests and shutdown notify the doorbell. Linux WebKit can leave even untimed `Atomics.waitAsync` calls unresolved after notification.
+
+A JavaScript watchdog rescans slots while the native wait remains pending. Its delay starts at one millisecond and doubles after empty scans. The delay never exceeds 250 milliseconds.
+
+Servicing a request resets the delay; a native wake cancels the timer immediately. The proxy retains one native wait and one settlement handler throughout recovery. Shutdown wakes the current idle cycle directly and clears its watchdog.
 
 ### Safety rules
 
 - Keep the two private states, `CONSUMER_LOCKED` and `PROXY_SERVICING`, distinct from each other and from every shared state.
 - A client waits up to 30 seconds for a free slot and 60 seconds for an operation. On an operation timeout it poisons the whole channel instead of reusing a slot that the proxy may still own.
 - A crashed or poisoned proxy sets the global poison flag and wakes all clients. Later operations fail with an I/O error instead of hanging.
+- The command pool discards runners after fatal proxy failures, including failures returned as command results. The next request receives a fresh runner.
 - `Atomics.store` on the state word is the publication boundary. Write all request or result data before changing the state.
 - The proxy shares and reference-counts handles opened for the same path. It closes the browser handle only after the last reference is released.
 

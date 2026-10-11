@@ -2,6 +2,7 @@
 import { act, fireEvent, render } from "@testing-library/react";
 import { Profiler } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as weaveApplySession from "../../src/public/react/use-weave-apply-session.ts";
 
 /**
  * Container-level contract for `ApplyPatchForm`: the piece above
@@ -431,6 +432,58 @@ describe("ApplyPatchForm - staging a dropped ROM", () => {
     expect(latestFakeWorkflow?.setOutputName).toHaveBeenCalledWith("custom-output");
     expect(container.textContent).toContain("Download Patched");
     expect(container.textContent).toContain("custom-output.bin");
+  });
+
+  it("keeps Apply disabled until imported weave defaults settle, then uses the final output name", async () => {
+    let pending = false;
+    const useSession = weaveApplySession.useWeaveApplySession;
+    const sessionSpy = vi.spyOn(weaveApplySession, "useWeaveApplySession").mockImplementation((options) => ({
+      ...useSession(options),
+      weaveDefaultsPending: pending,
+    }));
+    const form = () => (
+      <RomWeaverSettingsProvider settings={{}}>
+        <ApplyPatchForm />
+      </RomWeaverSettingsProvider>
+    );
+    const rendered = render(form());
+    try {
+      const fileInput = rendered.container.querySelector("#rom-weaver-input-file-unified") as HTMLInputElement;
+      await act(async () => {
+        Object.defineProperty(fileInput, "files", {
+          configurable: true,
+          value: [
+            new File(["rom-bytes"], "game.bin"),
+            new File(["patch-bytes"], "change.ips"),
+            new File(["patch-two"], "second.ips"),
+          ],
+        });
+        fireEvent.change(fileInput);
+      });
+      await vi.waitFor(() => expect(latestFakeWorkflow?.addPatch).toHaveBeenCalled());
+      const apply = () => rendered.container.querySelector("#rom-weaver-button-apply") as HTMLButtonElement;
+      await vi.waitFor(() => expect(apply().disabled).toBe(false));
+      pending = true;
+      rendered.rerender(form());
+      expect(apply().disabled).toBe(true);
+      const handle = rendered.container.querySelector("#rom-weaver-list-patch-stack .handle") as HTMLButtonElement;
+      expect(handle).not.toBeNull();
+      expect(handle.disabled).toBe(false);
+      fireEvent.click(apply());
+      expect(latestFakeWorkflow?.run).not.toHaveBeenCalled();
+      const outputName = rendered.container.querySelector("#rom-weaver-input-output-file-name") as HTMLInputElement;
+      fireEvent.change(outputName, { target: { value: "weave-final-name" } });
+      fireEvent.blur(outputName);
+      pending = false;
+      rendered.rerender(form());
+      await vi.waitFor(() => expect(apply().disabled).toBe(false));
+      expect(latestFakeWorkflow?.run).not.toHaveBeenCalled();
+      await act(async () => fireEvent.click(apply()));
+      await vi.waitFor(() => expect(latestFakeWorkflow?.run).toHaveBeenCalledOnce());
+      expect(latestFakeWorkflow?.setOutputName).toHaveBeenCalledWith("weave-final-name");
+    } finally {
+      sessionSpy.mockRestore();
+    }
   });
 
   it("replaces a staged patch and clears the staged input through card actions", async () => {

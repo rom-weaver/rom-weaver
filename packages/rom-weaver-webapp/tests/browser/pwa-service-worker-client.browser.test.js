@@ -167,7 +167,8 @@ test("auto-applies an update silently without reloading when no work is in progr
   });
 
   harness.client.initialize();
-  await flushAsync();
+  // MessageChannel delivery can follow timer tasks, so observe the reported version.
+  await expect.poll(() => harness.client.getState().label).toBe("cache test");
   harness.triggerNeedRefresh();
   await flushAsync();
 
@@ -188,7 +189,7 @@ test("auto-applies with a reload when the page is still running the outgoing con
   });
 
   harness.client.initialize();
-  await flushAsync();
+  await expect.poll(() => harness.client.getState().label).toBe("cache test");
   harness.triggerNeedRefresh();
   await flushAsync();
 

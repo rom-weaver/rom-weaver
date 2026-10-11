@@ -63,7 +63,6 @@ const ERRNO_NOENT = 44;
 const ERRNO_NOTDIR = 54;
 const ERRNO_ROFS = 69;
 
-const DOORBELL_SLICE_MS = 250;
 const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();
 
@@ -146,6 +145,11 @@ class OpfsProxyServer {
   // worker-selected file is served like an OPFS handle without staging a copy into OPFS first.
   private readonly blobSources = new Map<string, Blob>();
   private running = true;
+  private nativeDoorbellWaitPending = false;
+  private idleRescanDelayMs = 1;
+  private doorbellWaitFailed = false;
+  private doorbellWaitError: unknown;
+  private wakeIdleWait?: () => void;
 
   constructor(options: OpfsProxyServerOptions) {
     this.channel = options.channel;
@@ -160,6 +164,7 @@ class OpfsProxyServer {
     // Wake the loop so it observes the stop flag promptly.
     Atomics.add(this.channel.global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX, 1);
     Atomics.notify(this.channel.global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX);
+    this.wakeIdleWait?.();
   }
 
   registerBlobSource(path: string, blob: Blob): void {
@@ -177,6 +182,7 @@ class OpfsProxyServer {
     this.trace?.(`[browser-opfs] proxy server start slots=${slots.length} mounts=${this.mounts.length}`);
     try {
       while (this.running) {
+        if (this.doorbellWaitFailed) throw this.doorbellWaitError;
         const seen = Atomics.load(global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX);
         let servicedAny = false;
         for (const slot of slots) {
@@ -184,16 +190,19 @@ class OpfsProxyServer {
           await this.serviceSlot(slot);
           servicedAny = true;
         }
-        if (servicedAny) continue;
+        if (servicedAny) {
+          this.idleRescanDelayMs = 1;
+          continue;
+        }
         if (Atomics.load(global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX) !== seen) continue;
-        const wait = Atomics.waitAsync(global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX, seen, DOORBELL_SLICE_MS);
-        if (wait.async) await wait.value;
+        await this.waitForDoorbell(seen);
       }
     } catch (error) {
       // The loop itself failing is fatal: poison so every waiting consumer fails fast with EIO.
       this.poisonAndWakeConsumers();
       this.trace?.(`[browser-opfs] proxy server loop died ${String(error)}`);
     } finally {
+      this.wakeIdleWait?.();
       this.closeAllHandles();
       // The loop has exited, so nothing will ever service another request: poison + wake every parked
       // consumer (a clean stop, not just a crash) so they fail fast instead of waiting out their full
@@ -201,6 +210,42 @@ class OpfsProxyServer {
       this.poisonAndWakeConsumers();
       this.trace?.("[browser-opfs] proxy server stopped");
     }
+  }
+
+  private waitForDoorbell(seen: number): Promise<void> | undefined {
+    const { global } = this.channel;
+    // WebKit can leave even untimed native waits unresolved after notification. Retaining one
+    // settlement handler avoids accumulating native waits or promise reactions during recovery.
+    if (!this.nativeDoorbellWaitPending) {
+      const wait = Atomics.waitAsync(global, OPFS_PROXY_GLOBAL_DOORBELL_INDEX, seen);
+      if (!wait.async) return;
+      this.nativeDoorbellWaitPending = true;
+      void wait.value.then(
+        () => {
+          this.nativeDoorbellWaitPending = false;
+          this.wakeIdleWait?.();
+        },
+        (error: unknown) => {
+          this.nativeDoorbellWaitPending = false;
+          this.doorbellWaitFailed = true;
+          this.doorbellWaitError = error;
+          this.wakeIdleWait?.();
+        },
+      );
+    }
+    return new Promise((resolve) => {
+      const wake = () => {
+        if (this.wakeIdleWait !== wake) return;
+        this.wakeIdleWait = undefined;
+        clearTimeout(timer);
+        resolve();
+      };
+      this.wakeIdleWait = wake;
+      const timer = setTimeout(() => {
+        this.idleRescanDelayMs = Math.min(this.idleRescanDelayMs * 2, 250);
+        wake();
+      }, this.idleRescanDelayMs);
+    });
   }
 
   /** Take a slot that has a pending request, flipping it to servicing so no other pass takes it. */

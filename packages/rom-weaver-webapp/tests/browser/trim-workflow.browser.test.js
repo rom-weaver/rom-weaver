@@ -210,3 +210,31 @@ test("trim applies edited ZIP Store settings to an already staged input", async 
     await workflow.dispose();
   }
 });
+
+test("trim rejects unsupported input and allows a successful retry", async () => {
+  const workflow = new TrimWorkflow({
+    settings: { output: { compression: "none" }, workers: { threads: 1 } },
+  });
+  try {
+    await workflow.setInput(new File(["abc"], "unsupported.bin"));
+    await expect(workflow.run()).rejects.toThrow("This input does not support trimming");
+    await workflow.setInput(new File([buildTestNdsRom()], "game.nds"));
+    const result = await workflow.run();
+    try {
+      expect(result.output.size).toBe(0x3000);
+      const blob = await result.output.getBlob();
+      expect(new Uint8Array(await blob.arrayBuffer())).toEqual(buildTestNdsRom().subarray(0, 0x3000));
+    } finally {
+      await result.output.dispose();
+    }
+    await workflow.setInput(new File([buildTestNdsRom().subarray(0, 0x3000)], "already-trimmed.nds"));
+    const unchanged = await workflow.run();
+    try {
+      expect(unchanged.output.size).toBe(0x3000);
+    } finally {
+      await unchanged.output.dispose();
+    }
+  } finally {
+    await workflow.dispose();
+  }
+});
