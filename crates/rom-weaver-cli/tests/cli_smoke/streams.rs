@@ -215,6 +215,154 @@ fn extract_stdin_detects_archive_magic() {
 }
 
 #[test]
+fn corrupt_archive_stdout_is_empty_and_staging_is_clean_before_retry() {
+    let temp = setup_temp_dir();
+    let payload = pseudo_random_bytes(32_768, 0xface);
+    let staging = temp.child("staging");
+    fs::create_dir(staging.path()).unwrap();
+    let mut encoder = GzEncoder::new(Vec::new(), DeflateCompression::default());
+    encoder.write_all(&payload).unwrap();
+    let gzip = encoder.finish().unwrap();
+    for format in ["gz", "zip", "7z"] {
+        let valid = if format == "gz" {
+            gzip.clone()
+        } else {
+            fs::read(compress_stdin_to_file(
+                &temp,
+                format,
+                "payload.bin",
+                &payload,
+            ))
+            .unwrap()
+        };
+        let mut corrupt = valid.clone();
+        if format == "gz" {
+            let crc_offset = corrupt.len() - 8;
+            corrupt[crc_offset] ^= 1;
+        } else {
+            corrupt.truncate(10);
+        }
+        let source = temp.child(format!("damaged.{format}"));
+        fs::write(source.path(), &corrupt).unwrap();
+        let output = binary()
+            .args(["extract", source.to_str().unwrap(), "--output", "-"])
+            .env("TMPDIR", staging.path())
+            .output()
+            .unwrap();
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "{format}: stdout bytes={}, stderr={}",
+            output.stdout.len(),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output.stdout.is_empty(), "{format}: partial binary output");
+        assert_eq!(fs::read(source.path()).unwrap(), corrupt);
+        assert_eq!(fs::read_dir(staging.path()).unwrap().count(), 0);
+        fs::write(source.path(), &valid).unwrap();
+        let retried = binary()
+            .args(["extract", source.to_str().unwrap(), "--output", "-"])
+            .env("TMPDIR", staging.path())
+            .output()
+            .unwrap();
+        assert!(
+            retried.status.success(),
+            "{format}: {}",
+            String::from_utf8_lossy(&retried.stderr)
+        );
+        assert_eq!(retried.stdout, payload, "{format}: retry byte integrity");
+        assert_eq!(fs::read(source.path()).unwrap(), valid);
+        assert_eq!(fs::read_dir(staging.path()).unwrap().count(), 0);
+    }
+}
+
+#[test]
+fn gzip_concatenated_members_validate_each_crc_and_size() {
+    let temp = setup_temp_dir();
+    let first = pseudo_random_bytes(131_073, 0x1234);
+    let second = pseudo_random_bytes(65_537, 0x5678);
+    let encode = |bytes: &[u8]| {
+        let mut encoder = GzEncoder::new(Vec::new(), DeflateCompression::default());
+        encoder.write_all(bytes).unwrap();
+        encoder.finish().unwrap()
+    };
+    let first_member = encode(&first);
+    let mut valid = first_member.clone();
+    valid.extend(encode(&[]));
+    valid.extend(encode(&second));
+    let source = temp.child("members.bin.gz");
+    let expected = [first, second].concat();
+    fs::write(source.path(), &valid).unwrap();
+    let output = command_stdout(&["extract", source.to_str().unwrap(), "--output", "-"], 0);
+    assert_eq!(output, expected);
+    for (offset, label) in [
+        (first_member.len() - 8, "gzip CRC32 mismatch"),
+        (first_member.len() - 4, "gzip uncompressed size mismatch"),
+        (valid.len() - 8, "gzip CRC32 mismatch"),
+        (valid.len() - 4, "gzip uncompressed size mismatch"),
+    ] {
+        let mut damaged = valid.clone();
+        damaged[offset] ^= 1;
+        fs::write(source.path(), &damaged).unwrap();
+        let result = command_output_with_env(
+            &["extract", source.to_str().unwrap(), "--output", "-"],
+            &[],
+            1,
+        );
+        assert!(result.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&result.stderr).contains(label));
+        assert_eq!(fs::read(source.path()).unwrap(), damaged);
+    }
+    fs::write(source.path(), &valid).unwrap();
+    assert_eq!(
+        command_stdout(&["extract", source.to_str().unwrap(), "--output", "-"], 0),
+        expected
+    );
+    assert_eq!(fs::read(source.path()).unwrap(), valid);
+}
+
+#[test]
+fn gzip_filtered_tar_rejects_corrupt_trailers_without_binary_output() {
+    let temp = setup_temp_dir();
+    let payload = pseudo_random_bytes(131_073, 0xabc);
+    let mut tar = tar::Builder::new(Vec::new());
+    let mut header = tar::Header::new_gnu();
+    header.set_size(payload.len() as u64);
+    header.set_mode(0o644);
+    header.set_cksum();
+    tar.append_data(&mut header, "payload.bin", payload.as_slice())
+        .unwrap();
+    let tar_bytes = tar.into_inner().unwrap();
+    let mut encoder = GzEncoder::new(Vec::new(), DeflateCompression::default());
+    encoder.write_all(&tar_bytes).unwrap();
+    let valid = encoder.finish().unwrap();
+    let archive = temp.child("filtered.tar.gz");
+    for offset in [valid.len() - 8, valid.len() - 4] {
+        let mut corrupt = valid.clone();
+        corrupt[offset] ^= 1;
+        fs::write(archive.path(), &corrupt).unwrap();
+        let output = command_output_with_env(
+            &["extract", archive.to_str().unwrap(), "--output", "-"],
+            &[],
+            1,
+        );
+        assert!(output.stdout.is_empty());
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("tar.gz list failed"),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(fs::read(archive.path()).unwrap(), corrupt);
+    }
+    fs::write(archive.path(), &valid).unwrap();
+    assert_eq!(
+        command_stdout(&["extract", archive.to_str().unwrap(), "--output", "-"], 0),
+        payload
+    );
+    assert_eq!(fs::read(archive.path()).unwrap(), valid);
+}
+
+#[test]
 fn extract_stdout_requires_one_leaf_and_select_can_narrow_it() {
     let temp = setup_temp_dir();
     let first = temp.child("first.bin");

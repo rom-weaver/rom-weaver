@@ -1,0 +1,100 @@
+static int
+consume_trailer(struct archive_read_filter *self)
+{
+	struct private_data *state;
+	const unsigned char *p;
+	ssize_t avail;
+	uint32_t member_size;
+
+	state = (struct private_data *)self->data;
+
+	state->in_stream = 0;
+	member_size = (uint32_t)state->stream.total_out;
+	switch (inflateEnd(&(state->stream))) {
+	case Z_OK:
+		break;
+	default:
+		archive_set_error(&self->archive->archive,
+		    ARCHIVE_ERRNO_MISC,
+		    "Failed to clean up gzip decompressor");
+		return (ARCHIVE_FATAL);
+	}
+
+	/* GZip trailer is a fixed 8 byte structure. */
+	p = __archive_read_filter_ahead(self->upstream, 8, &avail);
+	if (p == NULL || avail < 8) {
+		archive_set_error(&self->archive->archive,
+		    ARCHIVE_ERRNO_MISC, "truncated gzip trailer");
+		return (ARCHIVE_FATAL);
+	}
+
+	if (archive_le32dec(p) != (uint32_t)state->crc) {
+		archive_set_error(&self->archive->archive,
+		    ARCHIVE_ERRNO_MISC, "gzip CRC32 mismatch");
+		return (ARCHIVE_FATAL);
+	}
+	if (archive_le32dec(p + 4) != member_size) {
+		archive_set_error(&self->archive->archive,
+		    ARCHIVE_ERRNO_MISC, "gzip uncompressed size mismatch");
+		return (ARCHIVE_FATAL);
+	}
+
+	/* We've verified the trailer, so consume it now. */
+	__archive_read_filter_consume(self->upstream, 8);
+
+	return (ARCHIVE_OK);
+}
+
+static ssize_t
+gzip_filter_read(struct archive_read_filter *self, const void **p)
+{
+	struct private_data *state;
+	size_t decompressed;
+	ssize_t avail_in, max_in;
+	unsigned char *output_start;
+	int ret;
+
+	state = (struct private_data *)self->data;
+
+	/* Empty our output buffer. */
+	state->stream.next_out = state->out_block;
+	state->stream.avail_out = (uInt)state->out_block_size;
+
+	/* Try to fill the output buffer. */
+	while (state->stream.avail_out > 0 && !state->eof) {
+		/* If we're not in a stream, read a header
+		 * and initialize the decompression library. */
+		if (!state->in_stream) {
+			ret = consume_header(self);
+			if (ret == ARCHIVE_EOF) {
+				state->eof = 1;
+				break;
+			}
+			if (ret < ARCHIVE_OK)
+				return (ret);
+		}
+
+		/* Peek at the next available data. */
+		/* ZLib treats stream.next_in as const but doesn't declare
+		 * it so, hence this ugly cast. */
+		state->stream.next_in = (unsigned char *)(uintptr_t)
+		    __archive_read_filter_ahead(self->upstream, 1, &avail_in);
+		if (state->stream.next_in == NULL) {
+			archive_set_error(&self->archive->archive,
+			    ARCHIVE_ERRNO_MISC,
+			    "truncated gzip input");
+			return (ARCHIVE_FATAL);
+		}
+		if (UINT_MAX >= SSIZE_MAX)
+			max_in = SSIZE_MAX;
+		else
+			max_in = UINT_MAX;
+		if (avail_in > max_in)
+			avail_in = max_in;
+		state->stream.avail_in = (uInt)avail_in;
+
+		/* Decompress and consume some of that data. */
+		output_start = state->stream.next_out;
+		ret = inflate(&(state->stream), 0);
+		state->crc = crc32(state->crc, output_start,
+		    (uInt)(state->stream.next_out - output_start));
