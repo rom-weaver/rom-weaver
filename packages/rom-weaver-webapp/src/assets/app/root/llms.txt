@@ -74,13 +74,15 @@ The homepage and published tool pages have Markdown alternatives at `/index.md` 
 - [Cheat database](https://rom-weaver.com/docs/cheat-database): Supported systems, matching, delivery classes, offline behavior, and licensing.
 - [Save Editor support](https://rom-weaver.com/docs/game-save-support): Supported games, editable fields, recognition rules, and integrity checks.
 - [Self-hosting](https://rom-weaver.com/docs/self-hosting): Deploy and configure the static webapp.
+- [Add an Apply button](https://rom-weaver.com/docs/webapp-integration#add-an-apply-button): Patch-only release links, expected source checks, ordered patches, optional add-ons, and CORS hosting checks.
+- [Environment variables](https://rom-weaver.com/docs/environment-variables): Runtime variables for the CLI and WASM engine, and browser diagnostic handles.
+- [Webapp status](https://rom-weaver.com/docs/webapp-status): What the masthead's version, commit, thread, PWA, and service-worker labels mean.
+- [Privacy](https://rom-weaver.com/docs/privacy): Browser storage, logs, analytics, and every network request the site makes.
 - [Architecture](https://rom-weaver.com/docs/architecture): Understand the Rust command core, browser workers, and TypeScript boundary.
 - [Edit a game save in the browser](https://rom-weaver.com/docs/edit-gen3-saves): Inspect a supported game save, preview changes, download a copy, and test it with a matching ROM.
-- [Create game saves in the browser](https://rom-weaver.com/docs/create-game-saves-browser): Generate fresh Zelda saves and edit their properties before download.
+- [Create game saves in the browser](https://rom-weaver.com/docs/create-game-saves-browser): Generate fresh Super Mario World or Zelda saves and edit their properties before download.
 - [Create game saves with the CLI](https://rom-weaver.com/docs/create-game-saves-cli): Generate fresh saves or validated copies from existing save templates.
 - [Save Editor development](https://rom-weaver.com/docs/game-save-development): Shared save handler architecture, integrity boundary, and contributor flow.
-
-- [Add an Apply button](https://rom-weaver.com/docs/webapp-integration#add-an-apply-button): Patch-only release links, expected source checks, ordered patches, optional add-ons, and CORS hosting checks.
 
 ## Documentation
 
