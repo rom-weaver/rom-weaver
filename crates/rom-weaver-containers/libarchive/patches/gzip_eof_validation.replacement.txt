@@ -2,27 +2,34 @@
 	if (r2 == ARCHIVE_EOF) {
 		struct archive_read_filter *filter;
 
-		/* Each gzip filter MUST be drained directly: downstream decoders
-		 * can finish before upstream members and trailers are validated. */
 		for (filter = a->filter; filter != NULL; filter = filter->upstream) {
-			if (filter->code != ARCHIVE_FILTER_GZIP)
-				continue;
-			for (;;) {
-				ssize_t available;
-
-				if (__archive_read_filter_ahead(filter, 1,
-				    &available) == NULL) {
-					if (available < 0)
-						r2 = ARCHIVE_FATAL;
-					break;
-				}
-				if (__archive_read_filter_consume(filter,
-				    available) < 0) {
-					r2 = ARCHIVE_FATAL;
-					break;
-				}
-			}
-			if (r2 == ARCHIVE_FATAL)
+			if (filter->code == ARCHIVE_FILTER_GZIP)
 				break;
+		}
+		/* Gzip chains MUST drain every decoder: one can finish before
+		 * upstream trailers, and other codecs have their own checks. */
+		if (filter != NULL) {
+			for (filter = a->filter; filter != NULL;
+			    filter = filter->upstream) {
+				if (filter->code == ARCHIVE_FILTER_NONE)
+					continue;
+				for (;;) {
+					ssize_t available;
+
+					if (__archive_read_filter_ahead(filter, 1,
+					    &available) == NULL) {
+						if (available < 0)
+							r2 = ARCHIVE_FATAL;
+						break;
+					}
+					if (__archive_read_filter_consume(filter,
+					    available) < 0) {
+						r2 = ARCHIVE_FATAL;
+						break;
+					}
+				}
+				if (r2 == ARCHIVE_FATAL)
+					break;
+			}
 		}
 	}

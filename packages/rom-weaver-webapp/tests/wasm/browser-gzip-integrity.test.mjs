@@ -63,7 +63,7 @@ it.each(["plain", "nested", "uuencoded", "triple"])(
       new Uint8Array(
         await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer(),
       );
-    const wrap = async (bytes) => {
+    const wrap = async (bytes, uuTerminator = "end") => {
       if (filter === "plain") return compress(bytes);
       let inner;
       if (filter === "uuencoded") {
@@ -84,7 +84,7 @@ it.each(["plain", "nested", "uuencoded", "triple"])(
           }
           encoded += "\n";
         }
-        inner = new TextEncoder().encode(`${encoded}\u0060\nend\n`);
+        inner = new TextEncoder().encode(`${encoded}\u0060\n${uuTerminator}\n`);
       } else {
         inner = await compress(bytes);
       }
@@ -97,6 +97,7 @@ it.each(["plain", "nested", "uuencoded", "triple"])(
       return compress(pad(inner));
     };
     const valid = await wrap(tar);
+    const invalidInner = filter === "uuencoded" ? [{ label: "inner-uu", bytes: await wrap(tar, "bad") }] : [];
     tar[514] ^= 1;
     const corrupted = await wrap(tar);
     corrupted.set(valid.subarray(-8), corrupted.length - 8);
@@ -109,6 +110,7 @@ it.each(["plain", "nested", "uuencoded", "triple"])(
         { label: "payload", bytes: corrupted },
         { label: "size", bytes: wrongSize },
         { label: "truncated", bytes: valid.subarray(0, -1) },
+        ...invalidInner,
       ]) {
         const input = joinGuestPath(dir, `${label}.tar.gz`);
         await writeGuestFile(opfsHandle, input, bytes);

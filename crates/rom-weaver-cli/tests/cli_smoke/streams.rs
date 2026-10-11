@@ -487,6 +487,46 @@ fn layered_gzip_validates_every_filter_before_emitting_output() {
 }
 
 #[test]
+fn gzip_preserves_inner_xz_validation_before_emitting_output() {
+    let temp = setup_temp_dir();
+    let mut tar = tar::Builder::new(Vec::new());
+    let mut header = tar::Header::new_gnu();
+    header.set_size(3);
+    header.set_mode(0o644);
+    header.set_cksum();
+    tar.append_data(&mut header, "payload.bin", &b"abc"[..])
+        .unwrap();
+    let mut tar_bytes = tar.into_inner().unwrap();
+    tar_bytes.resize(131_072, 0);
+    let valid = rom_weaver_core::codecs::encode_xz_preset(&tar_bytes, 6).unwrap();
+    let mut wrong_crc = valid.clone();
+    wrong_crc[valid.len() - 12] ^= 1;
+    let archive = temp.child("inner-xz.tar.gz");
+    for inner in [wrong_crc, valid[..valid.len() - 1].to_vec(), valid.clone()] {
+        let mut encoder = GzEncoder::new(Vec::new(), DeflateCompression::default());
+        encoder.write_all(&inner).unwrap();
+        let compressed = encoder.finish().unwrap();
+        fs::write(archive.path(), &compressed).unwrap();
+        let output = binary()
+            .args(["extract", archive.to_str().unwrap(), "--output", "-"])
+            .output()
+            .unwrap();
+        if inner == valid {
+            assert!(output.status.success());
+            assert_eq!(output.stdout, b"abc");
+        } else {
+            assert_eq!(
+                output.status.code(),
+                Some(1),
+                "valid outer gzip bypassed inner XZ integrity validation"
+            );
+            assert!(output.stdout.is_empty(), "partial binary output");
+        }
+        assert_eq!(fs::read(archive.path()).unwrap(), compressed);
+    }
+}
+
+#[test]
 fn extract_stdout_requires_one_leaf_and_select_can_narrow_it() {
     let temp = setup_temp_dir();
     let first = temp.child("first.bin");
