@@ -2,26 +2,27 @@
 	if (r2 == ARCHIVE_EOF) {
 		struct archive_read_filter *filter;
 
-		/* TAR can finish before the gzip trailer. The filter MUST
-		 * validate unread members before archive completion succeeds. */
+		/* Each gzip filter MUST be drained directly: downstream decoders
+		 * can finish before upstream members and trailers are validated. */
 		for (filter = a->filter; filter != NULL; filter = filter->upstream) {
 			if (filter->code != ARCHIVE_FILTER_GZIP)
 				continue;
 			for (;;) {
 				ssize_t available;
 
-				if (__archive_read_filter_ahead(a->filter, 1,
+				if (__archive_read_filter_ahead(filter, 1,
 				    &available) == NULL) {
 					if (available < 0)
 						r2 = ARCHIVE_FATAL;
 					break;
 				}
-				if (__archive_read_filter_consume(a->filter,
+				if (__archive_read_filter_consume(filter,
 				    available) < 0) {
 					r2 = ARCHIVE_FATAL;
 					break;
 				}
 			}
-			break;
+			if (r2 == ARCHIVE_FATAL)
+				break;
 		}
 	}

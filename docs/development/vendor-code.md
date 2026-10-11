@@ -72,7 +72,7 @@ Every transformation - the test-subdirectory strip, the wasm patches in `libarch
 
 The all-target `gzip_validation` patch checks every member's CRC32 and uncompressed size. The snapshot initializes a CRC accumulator but never updates or verifies it. The patch validates trailers for gzip streams and gzip-filtered archives, including concatenated members. `build.rs` requires the original source fragment, so incompatible snapshot updates fail during staging.
 
-The companion `gzip_eof_validation` patch drains gzip filters when archive parsing reaches its end marker. This validates unread members and trailers beyond TAR record padding before extraction reports success.
+The companion `gzip_eof_validation` patch drains each gzip filter directly when archive parsing ends. Downstream decoders can finish before upstream gzip trailers, including nested gzip and UU-encoded TAR. Draining every gzip layer validates unread members and trailers before extraction reports success.
 
 ### Going back to upstream
 
