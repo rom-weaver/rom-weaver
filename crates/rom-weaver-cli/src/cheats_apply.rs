@@ -161,12 +161,22 @@ impl CliApp {
         flag: &str,
     ) -> Result<CheatSystem> {
         if let Some(id) = override_id.map(str::trim).filter(|id| !id.is_empty()) {
-            return CheatSystem::parse(id).ok_or_else(|| {
-                RomWeaverError::Validation(format!(
-                    "unknown {flag} `{id}`; expected nes, snes, genesis, 32x, sms, gamegear, \
-                     sg1000, gameboy, gameboy-color, gba, or psx"
-                ))
-            });
+            return CheatSystem::parse(id)
+                .filter(|system| {
+                    flag != "--cheat-system" || crate::cheat_database::shard_slug(*system).is_some()
+                })
+                .ok_or_else(|| {
+                    // sg1000 and psx decode codes but have no cheat database shard.
+                    let expected = if flag == "--cheat-system" {
+                        "nes, snes, genesis, 32x, sms, gamegear, gameboy, gameboy-color, or gba"
+                    } else {
+                        "nes, snes, genesis, 32x, sms, gamegear, sg1000, gameboy, gameboy-color, \
+                         gba, or psx"
+                    };
+                    RomWeaverError::Validation(format!(
+                        "unknown {flag} `{id}`; expected {expected}"
+                    ))
+                });
         }
         if is_playstation_executable(source)? {
             return Ok(CheatSystem::PlayStation);

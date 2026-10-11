@@ -894,29 +894,34 @@ fn conflicting_rom_cheats_fail_until_allowed() {
     assert_eq!(patched[0x3D96], 0x4A);
 }
 
+/// `--cheat-system` is validated by clap, so a value without a cheat database
+/// shard fails as a usage error (exit 2) before any work and lists what is valid.
 #[test]
-fn an_unknown_cheat_system_names_the_flag_that_set_it() {
+fn cheat_system_rejects_unknown_and_shardless_systems_as_usage_errors() {
     let temp = setup_temp_dir();
     let input = temp.child("game.nes");
     fs::write(input.path(), nes_rom()).expect("fixture");
     let input_s = input.path().to_str().expect("path").to_owned();
 
-    let report = parse_single_json_line(&command_stdout(
-        &[
-            "cheat",
-            "list",
-            "--input",
-            &input_s,
-            "--cheat-system",
-            "bogus",
-            "--jsonl",
-        ],
-        1,
-    ));
-    let label = report["label"].as_str().expect("label");
-    assert!(label.contains("--cheat-system"), "{label}");
-    assert!(!label.contains("--code-system"), "{label}");
-    assert!(label.contains("gameboy-color"), "{label}");
+    for value in ["bogus", "sg1000", "psx"] {
+        let output = command_output_with_env(
+            &[
+                "cheat",
+                "list",
+                "--input",
+                &input_s,
+                "--cheat-system",
+                value,
+            ],
+            &[],
+            2,
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("--cheat-system"), "{value}: {stderr}");
+        assert!(stderr.contains("gameboy-color"), "{value}: {stderr}");
+        assert!(!stderr.contains("psx, "), "{value}: {stderr}");
+        assert!(output.stdout.is_empty(), "{value}: {:?}", output.stdout);
+    }
 }
 
 /// `weave create --cheat` for [`nes_rom`], recording one bakeable cheat and

@@ -72,7 +72,9 @@ pub(super) fn render_success(
     match event.command.as_str() {
         "probe" => render_container_or_patch(surface, event),
         "trim" if !has_emitted_files(event) => render_no_write(surface, event),
-        "extract" | "compress" | "patch-apply" | "trim" | "bundle-create" | "tools-ppf-undo" => {
+        // A successful trim stays quiet; `-v` lists the written files through `render_verbose`.
+        "trim" => {}
+        "extract" | "compress" | "patch-apply" | "bundle-create" | "tools-ppf-undo" => {
             render_emitted_files(surface, event, selection);
         }
         "patch-create" => {

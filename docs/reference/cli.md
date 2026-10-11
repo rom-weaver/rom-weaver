@@ -110,7 +110,7 @@ Every command accepts these global flags, listed under `Global options` in its h
 - `--jsonl` keeps the JSON event stream: it writes one event per line to stdout and includes progress by default. Use `--no-progress` or `--quiet` to suppress running events.
 - `--progress` writes progress to stderr. Human output enables progress automatically when stderr is a capable terminal; redirected stderr and `--json` output keep it off by default. With `--json`, progress events and diagnostics are JSON lines on stderr. `--no-progress` hides progress.
 - `--log-level off|error|warn|info|debug|trace` sets how much rom-weaver logs to stderr. The default level is `warn`. Logging is separate from the normal output.
-- `-v`/`--verbose` writes concise command summaries to stderr. It is independent of `--progress`. `-vv` enables debug logging, and `-vvv` enables trace logging.
+- `-v`/`--verbose` writes concise command summaries to stderr. It is independent of `--progress`. A successful `trim` prints nothing on stdout; `-v` lists each file it wrote. `-vv` enables debug logging, and `-vvv` enables trace logging.
 - `--debug` logs developer diagnostics, including command configuration and internal trace events. It is equivalent to `--log-level trace`. It conflicts with `--verbose`, `--quiet`, and `--log-level`.
 - `-q`/`--quiet` hides optional diagnostics and progress, including forced `--progress`. It overrides `--verbose`. It retains requested results, format candidate plans, dry-run previews, warnings, and errors. In JSONL mode it suppresses running events and retains terminal events.
 - `--dep-trace` adds trace output from the bundled libraries, useful in a bug report. On its own it also raises rom-weaver's own logs to warning level.
@@ -320,7 +320,7 @@ These flags also appear under `Cheats` in `patch apply` and `patch create` help.
 | --- | --- |
 | `--cheat ID_OR_DESCRIPTION` | Select by record ID or exact description. Repeatable. Multiple description matches fail with `cheat_selector_ambiguous`. |
 | `--cheat-database DIR` | Shard directory. Defaults to `$ROM_WEAVER_CHEAT_DATABASE`, then the discovery order above. |
-| `--cheat-system SYS` | `nes`, `snes`, `genesis`, `32x`, `sms`, `gamegear`, `gameboy`, `gameboy-color`, or `gba`, when the ROM header does not say. |
+| `--cheat-system SYS` | `nes`, `snes`, `genesis`, `32x`, `sms`, `gamegear`, `gameboy`, `gameboy-color`, or `gba`, when the ROM header does not say. Any other value, including `sg1000` and `psx` (which have no cheat database shard), is a usage error with exit code 2. |
 | `--game ID` | Use this database game ID instead of matching by checksum or title. |
 | `--allow-cheat-conflicts` | Later cheats win at conflicting offsets. Otherwise, different `rom` cheat values for one byte fail with `cheat_write_conflict`. |
 
