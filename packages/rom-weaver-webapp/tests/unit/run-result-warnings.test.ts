@@ -30,6 +30,23 @@ describe("getRunResultWarnings", () => {
     ]);
   });
 
+  it("ignores the label when details.warnings is present", () => {
+    expect(
+      getRunResultWarnings(
+        resultWith({
+          details: { warnings: ["IPS patch did not change output"] },
+          label: "applied IPS patch; warning=IPS patch did not change output; input header stripped (512 bytes, snes)",
+        }),
+      ),
+    ).toEqual(["IPS patch did not change output"]);
+  });
+
+  it("cuts known CLI suffixes off label-only warnings", () => {
+    const label =
+      "applied IPS patch; warning=did not change output; input header stripped (512 bytes, snes); patch apply input source resolved via 1 container extract step(s)";
+    expect(getRunResultWarnings(resultWith({ details: {}, label }))).toEqual(["did not change output"]);
+  });
+
   it("does not repeat a warning present in both details and the label", () => {
     expect(
       getRunResultWarnings(resultWith({ details: { warnings: ["a warning"] }, label: "done; warning=a warning" })),

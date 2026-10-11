@@ -72,24 +72,31 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === "object" ? (value as Record<string, unknown>) : null;
 
 const WARNING_LABEL_MARKER = "; warning=";
+// Label segments the CLI appends after handler warnings: `; key=value` pairs and the
+// header/extension/container-extract notes from patch apply.
+const LABEL_SUFFIX_BOUNDARY = /; (?=\w+=|input header |patch apply input source |output extension )/;
 
 /**
  * Handler warnings of a finished run (for example "IPS patch did not change output").
- * Current Rust copies them into `details.warnings`; older builds only append
- * `; warning=<text>` to the terminal label, so read both and de-duplicate.
+ * Current Rust copies them into `details.warnings`, which is authoritative. Older builds
+ * only append `; warning=<text>` to the terminal label, so the label is parsed solely when
+ * `details.warnings` is absent or empty; a warning there ends at the first known CLI suffix
+ * (a limitation: unknown free-text suffixes would be kept).
  */
 const getRunResultWarnings = (result: RomWeaverRunJsonResult): string[] => {
   const terminal = getTerminalEvent(result);
   if (!terminal) return [];
-  const warnings: string[] = [];
   const details = asRecord(getRomWeaverRunEventDetails(terminal));
-  if (Array.isArray(details?.warnings)) {
-    for (const entry of details.warnings) if (typeof entry === "string") warnings.push(entry);
-  }
-  const label = getRomWeaverRunEventLabel(terminal);
-  if (typeof label === "string" && label.includes(WARNING_LABEL_MARKER)) {
-    // A warning ends where the next `; key=value` label segment starts.
-    for (const tail of label.split(WARNING_LABEL_MARKER).slice(1)) warnings.push(tail.split(/; (?=\w+=)/)[0] ?? "");
+  const fromDetails = Array.isArray(details?.warnings)
+    ? details.warnings.filter((entry): entry is string => typeof entry === "string")
+    : [];
+  const warnings = [...fromDetails];
+  if (!fromDetails.some((entry) => entry.trim())) {
+    const label = getRomWeaverRunEventLabel(terminal);
+    if (typeof label === "string" && label.includes(WARNING_LABEL_MARKER)) {
+      for (const tail of label.split(WARNING_LABEL_MARKER).slice(1))
+        warnings.push(tail.split(LABEL_SUFFIX_BOUNDARY)[0] ?? "");
+    }
   }
   const unique = new Set<string>();
   for (const warning of warnings) {
