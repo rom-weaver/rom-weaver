@@ -772,7 +772,6 @@ function WebappRoot({
                 ? pageUpdate.ready && !updateDismissed
                 : previewRuntimeState === "update" && !previewUpdateDismissed
             }
-            title={pageUpdate.title}
           />
           <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
           <ActivityWakeLock pageHasPendingChanges={pageHasPendingChanges} />

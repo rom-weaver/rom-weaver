@@ -100,7 +100,9 @@ const rowsOf = (nav: Element | null) =>
 describe("Masthead", () => {
   it("names every destination in the sidebar, under the group that supplies its noun", () => {
     const onSelectTab = vi.fn();
-    const { container, getByRole } = render(withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />));
+    const { container, getAllByRole, getByRole } = render(
+      withSettings(<Masthead {...mastheadProps} onSelectTab={onSelectTab} />),
+    );
     const nav = container.querySelector(".side-nav") as HTMLElement;
     expect(nav.getAttribute("aria-label")).toBe("Workflow");
     // Every navigation group MUST have a name, and every workflow appears once.
@@ -140,10 +142,16 @@ describe("Masthead", () => {
     ]);
 
     // The brand and Home row both reach the app's base route.
+    // Exactly one labelled, focusable home link; the mark link is a hidden duplicate.
     const logoHome = getByRole("link", { name: "rom-weaver home" });
     expect(logoHome.getAttribute("href")).toBe("/");
-    expect(logoHome.querySelector(".brand-mark")).toBeTruthy();
-    expect(container.querySelector(".brand-word-link")?.getAttribute("href")).toBe("/");
+    expect(logoHome.classList.contains("brand-word-link")).toBe(true);
+    expect(getAllByRole("link", { name: "rom-weaver home" })).toHaveLength(1);
+    const markLink = container.querySelector(".brand-mark-link") as HTMLAnchorElement;
+    expect(markLink.getAttribute("href")).toBe("/");
+    expect(markLink.closest("[aria-hidden='true']")).not.toBeNull();
+    expect(markLink.getAttribute("tabindex")).toBe("-1");
+    expect(markLink.querySelector(".brand-mark")).toBeTruthy();
     const home = nav.querySelector("#tab-home") as HTMLAnchorElement;
     expect(home.getAttribute("href")).toBe("/");
     fireEvent.click(home);
@@ -659,19 +667,11 @@ describe("UpdateBanner", () => {
     const onOpenWhatsNew = vi.fn();
     const onReload = vi.fn();
     const { container } = render(
-      withSettings(
-        <UpdateBanner
-          onDismiss={onDismiss}
-          onOpenWhatsNew={onOpenWhatsNew}
-          onReload={onReload}
-          open
-          title="A newer app version is ready."
-        />,
-      ),
+      withSettings(<UpdateBanner onDismiss={onDismiss} onOpenWhatsNew={onOpenWhatsNew} onReload={onReload} open />),
     );
     const whatsNewButton = container.querySelector(".updates .updates-ver") as HTMLButtonElement;
     expect(whatsNewButton.textContent).toBe("What’s new");
-    expect(whatsNewButton.getAttribute("aria-label")).toContain("A newer app version is ready.");
+    expect(whatsNewButton.getAttribute("aria-label")).toBe("What’s new: Update available");
     fireEvent.click(whatsNewButton);
     expect(onOpenWhatsNew).toHaveBeenCalledTimes(1);
     fireEvent.click(container.querySelector(".updates .btn.primary") as HTMLButtonElement);
