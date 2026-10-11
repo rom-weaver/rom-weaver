@@ -25,7 +25,8 @@ import { RelatedStrip } from "./related-strip.tsx";
 import { WorkflowRomInputStep } from "../../public/react/components/ds/workflow-rom-input-step.tsx";
 import { ARCHIVE_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "../../public/react/file-classification.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
-import { useUiLocalizer } from "../../public/react/settings-context.tsx";
+import { resolveAssetUrl } from "../../public/react/asset-url.ts";
+import { useRomWeaverAssetBaseUrl, useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { useRomLookup, type RomLookupResult, type RomLookupSelection } from "../../public/react/use-rom-lookup.ts";
 import { identifyRecordChecks } from "../../lib/identify/identify-record-checks.ts";
 import type { ParsedIdentifyCandidate, ParsedIdentifyResult } from "../../types/identify.ts";
@@ -116,9 +117,6 @@ const CandidateResult = ({
           listed in the Identify drawer below.
         </p>
       ) : null}
-      {candidate.status === "unknown" && showMemberPath ? (
-        <p className="pdesc identify-unknown-lead">No matching checksum for this ROM in the identification data.</p>
-      ) : null}
       <RomInputPanels
         identification={identification}
         identifyDefaultOpen
@@ -145,6 +143,7 @@ const IdentifyForm = ({
   pageDrop,
 }: IdentifyFormProps) => {
   const localizer = useUiLocalizer();
+  const assetBaseUrl = useRomWeaverAssetBaseUrl();
   const [file, setFile] = useState<File | null>(null);
   const romLookup = useRomLookup(ROM_LOOKUP_MESSAGES(localizer));
   const applyLookupRef = useRef(romLookup.select);
@@ -333,7 +332,7 @@ const IdentifyForm = ({
       : undefined;
   const identifyTone = result && !unavailable ? IDENTIFY_STATUS_MARK[result.status].tone : undefined;
   const cardState = expectationVerdict ?? identifyTone;
-  const romStepFault = !!error || (expectationVerdict ? expectationVerdict === "bad" : result?.status === "unknown");
+  const romStepFault = !!error || expectationVerdict === "bad";
   const romStepWoven = expectationVerdict
     ? expectationVerdict === "ok"
     : !!result && !unavailable && result.status !== "unknown";
@@ -436,10 +435,11 @@ const IdentifyForm = ({
         <WorkflowRomInputStep
           beforeItems={
             result && !unavailable && result.status === "unknown" ? (
-              <Notice level="error">
-                No matching checksum found in the identification data. The ROM may be modified, an unlisted revision, or
-                from a system that is not in the local data. Its checksums are on the card below so you can look them up
-                elsewhere.
+              <Notice level="info">
+                <b>{localizer.message("ui.identify.noMatchTitle")}</b> {localizer.message("ui.identify.noMatchBody")}{" "}
+                <a href={resolveAssetUrl(assetBaseUrl, "docs/identify-roms-browser")} rel="noreferrer" target="_blank">
+                  {localizer.message("ui.identify.noMatchLink")}
+                </a>
               </Notice>
             ) : null
           }
@@ -486,7 +486,7 @@ const IdentifyForm = ({
                     meta: (
                       <>
                         <span className="fsize mono">{formatByteSize(file.size)}</span>
-                        {result && !unavailable && candidates.length ? (
+                        {result && !unavailable && result.status !== "unknown" && candidates.length ? (
                           <CandidateStatusChip status={result.status} />
                         ) : null}
                       </>

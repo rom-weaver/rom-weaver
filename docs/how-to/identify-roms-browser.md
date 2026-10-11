@@ -25,7 +25,7 @@ Choose [Checksum](checksum-roms-browser.md) to calculate a file's hash and compa
 
 An archive can produce several results. Each result names its member so you can tell which ROM it describes.
 
-An unknown result means no matching checksum was found in the available data. It does not prove that your file is corrupt. Homebrew, modified ROMs, and unlisted releases can be unknown.
+An unknown ROM shows one neutral **No match** notice above its card, with its checksums still listed. It means no matching checksum was found in the available data. It does not prove that your file is corrupt. Homebrew, modified ROMs, and unlisted releases can be unknown.
 
 If several records share the checksums, read every candidate. If identification data could not load, check your connection and select **Retry identification**.
 
