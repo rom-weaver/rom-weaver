@@ -88,6 +88,23 @@ type CompletedCreateOutput = {
   saveAs: (destination?: BrowserSaveDestination) => Promise<void>;
   size?: number;
 };
+/** True when both staged ROMs are ready and every checksum they share (and their size) agree. */
+const areCreateSourcesIdentical = (
+  original: CreateDisplaySourceState | null | undefined,
+  modified: CreateDisplaySourceState | null | undefined,
+): boolean => {
+  if (original?.status !== "ready" || modified?.status !== "ready") return false;
+  if (typeof original.size !== "number" || original.size !== modified.size) return false;
+  const originalChecksums = original.checksums || {};
+  const modifiedChecksums = modified.checksums || {};
+  const shared = Object.keys(originalChecksums).filter((algorithm) => algorithm in modifiedChecksums);
+  return (
+    shared.length > 0 &&
+    shared.every(
+      (algorithm) => originalChecksums[algorithm]?.toLowerCase() === modifiedChecksums[algorithm]?.toLowerCase(),
+    )
+  );
+};
 type CreateMessagePlacement = "modified" | "original" | "output";
 
 const getDisplaySourceInfo = (source: CreateDisplaySourceState | null | undefined, fallback: string) =>
@@ -114,6 +131,7 @@ const isChecksumProgress = (progress: WorkflowFormProgressState | null) =>
   !!progress && /checksum/i.test(`${progress.label} ${progress.message}`);
 
 export {
+  areCreateSourcesIdentical,
   type CompletedCreateOutput,
   CREATE_SUPPORTED_FILES,
   type CreateDisplaySourceState,

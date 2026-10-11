@@ -1235,6 +1235,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Combined result",
   }),
   "ui.patchChecks.unknown": msg({ id: "ui.patchChecks.unknown", message: "Not checked yet: {input}" }),
+  "ui.patchChecks.failed": msg({ id: "ui.patchChecks.failed", message: "Check failed: {input}" }),
   "ui.patchChecks.patchOutput": msg({ id: "ui.patchChecks.patchOutput", message: "Output of {patch}" }),
   "ui.patchChecks.unknownPatchOutput": msg({
     id: "ui.patchChecks.unknownPatchOutput",
@@ -1296,6 +1297,11 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "The selected inputs appear to be the same ROM. Use them as Original and Modified?",
   }),
   "ui.drop.duplicateConfirm": msg({ id: "ui.drop.duplicateConfirm", message: "Use duplicate ROMs" }),
+  "ui.create.identicalInputs": msg({
+    id: "ui.create.identicalInputs",
+    message:
+      "Original and Modified have identical contents, so the patch would change nothing. Check that you chose the right files.",
+  }),
   "ui.drop.duplicateTitle": msg({ id: "ui.drop.duplicateTitle", message: "Use duplicate ROMs?" }),
   "ui.drop.patchesIgnored": msg({
     id: "ui.drop.patchesIgnored",

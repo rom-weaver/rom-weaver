@@ -173,6 +173,20 @@ describe("ApplyPatchListStep", () => {
     expect(container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toBe("Verified");
   });
 
+  it("labels a failed preflight as a failed check instead of not checked yet", () => {
+    const failedWithoutVerdict = item(0, { validationState: "invalid" });
+    const { container } = renderList({ patches: [failedWithoutVerdict] });
+
+    expect(container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toContain("Check failed: Game A");
+
+    const failedWithDefaultVerdict = item(0, {
+      chainVerdict: { basis: "base", basisSource: "default", matched: { kind: "none" } },
+      validationState: "invalid",
+    });
+    const rendered = renderList({ patches: [failedWithDefaultVerdict] });
+    expect(rendered.container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toContain("Check failed");
+  });
+
   it("takes the strip header option away while cheats are on", () => {
     const offered = renderList().container.querySelector(
       "#rom-weaver-patch-header-mode-0 option[value='strip']",

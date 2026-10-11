@@ -28,6 +28,9 @@ export const chainChipText = (
     if (item.validationState === "valid") {
       return { text: localizer.message("ui.patchChecks.verified") };
     }
+    if (item.validationState === "invalid") {
+      return { text: localizer.message("ui.patchChecks.failed", { input: checkedTarget }), warn: true };
+    }
     return { text: localizer.message("ui.patchChecks.unknown", { input: checkedTarget }) };
   }
   const displayNumber = (enabledPosition: number) => (enabledIndexes[enabledPosition] ?? enabledPosition) + 1;
@@ -60,6 +63,9 @@ export const chainChipText = (
   }
   if (item.validationState === "valid") {
     return { text: localizer.message("ui.patchChecks.verified") };
+  }
+  if (item.validationState === "invalid") {
+    return { text: localizer.message("ui.patchChecks.failed", { input: checkedTarget }), warn: true };
   }
   return { text: localizer.message("ui.patchChecks.unknown", { input: checkedTarget }) };
 };
