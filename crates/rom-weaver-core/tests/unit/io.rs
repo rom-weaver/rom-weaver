@@ -66,6 +66,30 @@ fn temp_allocator_drop_removes_namespace_directory() {
     let _ = fs::remove_dir_all(&root);
 }
 
+#[cfg(not(target_family = "wasm"))]
+#[test]
+fn temp_allocator_drop_removes_an_empty_root_but_keeps_a_busy_one() {
+    let root = io_temp_path("empty-root");
+    {
+        let allocator = TempPathAllocator::new(root.clone());
+        let temp_path = allocator.next_path("scratch", Some("tmp"));
+        fs::create_dir_all(temp_path.parent().expect("namespace parent")).expect("namespace");
+        fs::write(&temp_path, b"scratch").expect("write");
+    }
+    assert!(!root.exists(), "an empty temp root must not be left behind");
+
+    let busy_root = io_temp_path("busy-root");
+    let other_run = busy_root.join("rw-other-run");
+    {
+        let allocator = TempPathAllocator::new(busy_root.clone());
+        let temp_path = allocator.next_path("scratch", Some("tmp"));
+        fs::create_dir_all(temp_path.parent().expect("namespace parent")).expect("namespace");
+        fs::create_dir_all(&other_run).expect("other run");
+    }
+    assert!(other_run.exists(), "another run's directory is untouched");
+    let _ = fs::remove_dir_all(&busy_root);
+}
+
 #[test]
 fn bounded_items_scale_with_threads() {
     assert_eq!(bounded_items_for_threads(0), 2);

@@ -788,6 +788,11 @@ fn browser_opfs_run_id() -> Option<String> {
 impl Drop for TempPathAllocator {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(self.root.join(&self.namespace));
+        // The default root (`./rom-weaver-out`) is created on demand; do not
+        // leave it behind once the last run is gone. `remove_dir` refuses a
+        // non-empty directory, so a concurrent run's files are never touched.
+        #[cfg(not(target_family = "wasm"))]
+        let _ = fs::remove_dir(&self.root);
     }
 }
 
