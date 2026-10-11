@@ -71,6 +71,34 @@ const getRunResultTiming = (result: RomWeaverRunJsonResult) => {
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === "object" ? (value as Record<string, unknown>) : null;
 
+const WARNING_LABEL_MARKER = "; warning=";
+
+/**
+ * Handler warnings of a finished run (for example "IPS patch did not change output").
+ * Current Rust copies them into `details.warnings`; older builds only append
+ * `; warning=<text>` to the terminal label, so read both and de-duplicate.
+ */
+const getRunResultWarnings = (result: RomWeaverRunJsonResult): string[] => {
+  const terminal = getTerminalEvent(result);
+  if (!terminal) return [];
+  const warnings: string[] = [];
+  const details = asRecord(getRomWeaverRunEventDetails(terminal));
+  if (Array.isArray(details?.warnings)) {
+    for (const entry of details.warnings) if (typeof entry === "string") warnings.push(entry);
+  }
+  const label = getRomWeaverRunEventLabel(terminal);
+  if (typeof label === "string" && label.includes(WARNING_LABEL_MARKER)) {
+    // A warning ends where the next `; key=value` label segment starts.
+    for (const tail of label.split(WARNING_LABEL_MARKER).slice(1)) warnings.push(tail.split(/; (?=\w+=)/)[0] ?? "");
+  }
+  const unique = new Set<string>();
+  for (const warning of warnings) {
+    const text = warning.trim();
+    if (text) unique.add(text);
+  }
+  return [...unique];
+};
+
 const getEmittedFileDetails = (
   result: RomWeaverRunJsonResult,
 ): { fileName?: string; path?: string; sizeBytes?: number } | null => {
@@ -332,6 +360,7 @@ export {
   getEmittedFiles,
   getLastEvent,
   getRunResultTiming,
+  getRunResultWarnings,
   getTerminalEvent,
   parseChecksumVariants,
   normalizeEmittedFileChecksums,

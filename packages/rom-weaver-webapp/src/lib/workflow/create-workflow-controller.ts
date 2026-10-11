@@ -253,6 +253,7 @@ class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowContro
         output,
         sizeSummary: { ...result.sizeSummary, outputSize: output.size, rawSize },
         type: result.format as PatchFormat,
+        ...(result.warnings?.length ? { warnings: result.warnings } : {}),
       };
     });
   }

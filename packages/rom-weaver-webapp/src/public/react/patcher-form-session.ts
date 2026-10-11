@@ -123,6 +123,7 @@ const useLocalApplyPatchFormSession = ({
     setCompletedApplyTimeMs,
     setCompletedCompressionTimeMs,
     setCompletedSizeSummary,
+    setCompletedWarnings,
     setErrorMessage,
     setInputStaging,
     setOutputErrorMessage,
@@ -291,6 +292,7 @@ const useLocalApplyPatchFormSession = ({
     setCompletedApplyTimeMs(null);
     setCompletedCompressionTimeMs(null);
     setCompletedSizeSummary(createOutputSizeSummary());
+    setCompletedWarnings([]);
     setProgress(null);
     clearPendingDownload();
   }, [
@@ -298,6 +300,7 @@ const useLocalApplyPatchFormSession = ({
     setCompletedApplyTimeMs,
     setCompletedCompressionTimeMs,
     setCompletedSizeSummary,
+    setCompletedWarnings,
     setProgress,
   ]);
   const { getKey: getInputKey } = useStableSourceKeys(effectiveInputs, "input");
@@ -393,6 +396,7 @@ const useLocalApplyPatchFormSession = ({
   const patchNoticeMessage = failurePlacement === "patch" ? failureMessage : "";
   const outputRuntimeNoticeMessage = outputErrorMessage || (failurePlacement === "output" ? failureMessage : "");
   const effectiveOutputNoticeMessage = outputRuntimeNoticeMessage;
+  const outputWarningMessage = localState.completedWarnings.join(" ");
   // Deferred patch validation has no staging progress, but its verdict still controls whether the
   // next run is safe. Keep a queued Apply behind that silent pass.
   const applyPreparationPending =
@@ -504,6 +508,7 @@ const useLocalApplyPatchFormSession = ({
         inputNoticeMessage,
         inputStaging,
         outputRuntimeNoticeMessage,
+        outputWarningMessage,
         patchNoticeMessage,
         patchProgress,
         patchProgressByKey,
@@ -519,6 +524,7 @@ const useLocalApplyPatchFormSession = ({
       effectiveOutputNoticeMessage,
       inputNoticeMessage,
       outputRuntimeNoticeMessage,
+      outputWarningMessage,
       patchProgress,
       patchProgressByKey,
       patchStaging,
