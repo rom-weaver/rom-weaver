@@ -186,6 +186,9 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   },
 ];
 
+/** Tab hrefs are bare slugs except Docs (`/docs`); a doubled slash would be a protocol-relative URL to a host named `docs`. */
+const rootRelativeHref = (href: string): string => (href.startsWith("/") ? href : `/${href}`);
+
 // Keep the trace inspector out of the initial weave, but share its loader so
 // the masthead and idle post-boot preload can fetch the same promise.
 const LogDialog = lazy(loadLogDialog);
@@ -515,7 +518,7 @@ function WebappRoot({
   }, [actions]);
   // One identity per shell, so Find's index is not rebuilt on every render of the 404 page.
   const mastheadTabs = useMemo(
-    () => (notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS),
+    () => (notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: rootRelativeHref(tab.href) })) : WORKFLOW_TABS),
     [notFound],
   );
 
@@ -535,7 +538,7 @@ function WebappRoot({
         // The nav can also reach a view with no WorkflowTab entry (What's
         // new), so it falls back to the id itself as the slug.
         const href = WORKFLOW_TABS.find((tab) => tab.id === id)?.href ?? id;
-        if (href) window.location.assign(`/${href}`);
+        if (href) window.location.assign(rootRelativeHref(href));
         return;
       }
       const view = id as WebappRootProps["state"]["currentView"];

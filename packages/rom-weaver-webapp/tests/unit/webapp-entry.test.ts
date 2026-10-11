@@ -661,6 +661,23 @@ describe("session actions", () => {
     expect(latest().state.trimSession).toMatchObject({ outputFormat: "iso", sourceFilePresent: true });
   });
 
+  it("applies form session flags after the calling effect returns", async () => {
+    await loadWebapp();
+
+    latest().actions.onSaveEditorSessionChange(true);
+    latest().actions.onCompressSessionChange(true);
+    latest().actions.onPpfUndoSessionChange(true);
+
+    // Forms report from passive effects, where a synchronous re-render is a React error.
+    expect(latest().state.saveEditorSession.active).toBe(false);
+    expect(latest().state.compressSession.active).toBe(false);
+    expect(latest().state.ppfUndoSession.active).toBe(false);
+    await flush();
+    expect(latest().state.saveEditorSession.active).toBe(true);
+    expect(latest().state.compressSession.active).toBe(true);
+    expect(latest().state.ppfUndoSession.active).toBe(true);
+  });
+
   it("warns before unload only once work is staged", async () => {
     await loadWebapp();
     const guarded = new Event("beforeunload", { cancelable: true });

@@ -195,6 +195,19 @@ describe("the workbench shell", () => {
 
     expect(assign).toHaveBeenCalledWith("/create-patch");
   });
+
+  it("keeps the not-found Docs link on the site root instead of a protocol-relative URL", async () => {
+    const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
+    const { container } = await renderRoot({ notFound: true });
+
+    const hrefs = [...container.querySelectorAll("a[href]")].map((link) => link.getAttribute("href"));
+    expect(hrefs.filter((href) => href?.startsWith("//"))).toEqual([]);
+    expect(hrefs).toContain("/docs");
+
+    fireEvent.click(navRow(container, "Docs"));
+
+    expect(assign).toHaveBeenCalledWith("/docs");
+  });
 });
 
 describe("tab selection", () => {

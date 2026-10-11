@@ -944,7 +944,9 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
                 slot {document.active_slot} · index {document.counter}
               </span>
             ) : (
-              <span className="mono">{document.sections.length} checked copies</span>
+              <span className="mono">
+                {document.sections.length} checked {document.sections.length === 1 ? "copy" : "copies"}
+              </span>
             )}
           </p>
         ) : null}
@@ -1173,7 +1175,8 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
             )}
             {preview ? (
               <div aria-live="polite" className="save-editor-preview mono">
-                {preview.changes?.length || 0} field changes · integrity {preview.output_valid ? "valid" : "invalid"}
+                {preview.changes?.length || 0} field {preview.changes?.length === 1 ? "change" : "changes"} · integrity{" "}
+                {preview.output_valid ? "valid" : "invalid"}
                 {preview.touched_sections?.length ? ` · sections ${preview.touched_sections.join(", ")}` : ""}
               </div>
             ) : null}
