@@ -876,7 +876,7 @@ msgstr "ROM base"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.cliItem3"
-msgstr "Procesa una carpeta entera por lotes: convierte, verifica y aplica parches en una sola ejecución."
+msgstr "Procesa una carpeta entera por lotes: comprime, verifica y aplica parches en una sola ejecución."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1086,7 +1086,7 @@ msgstr "chd, rvz y z3ds se descomprimen a formatos sin procesar antes de aplicar
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.routeDiscBody"
-msgstr "Convierte entre formatos comprimidos o extrae un CHD a ISO o BIN/CUE."
+msgstr "Comprime entre formatos de disco o extrae un CHD a ISO o BIN/CUE."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1331,7 +1331,7 @@ msgstr "Comprimir"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.goCompress"
-msgstr "Convertir / comprimir"
+msgstr "Comprimir"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

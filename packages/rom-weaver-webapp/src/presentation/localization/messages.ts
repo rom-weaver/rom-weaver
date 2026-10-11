@@ -753,7 +753,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.home.cliItem3": msg({
     id: "ui.home.cliItem3",
-    message: "Batch a whole folder: convert, verify, and patch in one run.",
+    message: "Batch a whole folder: compress, verify, and patch in one run.",
   }),
   "ui.home.cliWalkthrough": msg({ id: "ui.home.cliWalkthrough", message: "CLI walkthrough" }),
   "ui.home.codecCompressionSettings": msg({
@@ -944,7 +944,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.apply.validation.fixChecksum",
     message: "Compare the expected ROM before bypassing checks (opens in a new tab)",
   }),
-  "ui.home.goCompress": msg({ id: "ui.home.goCompress", message: "Convert / compress" }),
+  "ui.home.goCompress": msg({ id: "ui.home.goCompress", message: "Compress" }),
   "ui.home.goCreate": msg({ id: "ui.home.goCreate", message: "Create" }),
   "ui.home.goIdentify": msg({ id: "ui.home.goIdentify", message: "Identify" }),
   "ui.home.goTest": msg({ id: "ui.home.goTest", message: "Test" }),
@@ -968,7 +968,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.home.routeDisc": msg({ id: "ui.home.routeDisc", message: "A compressed disc image" }),
   "ui.home.routeDiscBody": msg({
     id: "ui.home.routeDiscBody",
-    message: "Convert between compressed formats, or extract a CHD to ISO or BIN/CUE.",
+    message: "Compress between disc formats, or extract a CHD to ISO or BIN/CUE.",
   }),
   "ui.home.routeEdited": msg({ id: "ui.home.routeEdited", message: "Your own edited ROM" }),
   "ui.home.routeEditedBody": msg({

@@ -202,3 +202,11 @@ describe("loadIdentifyFindEntries", () => {
     expect(identifyMocks.searchExpectedRomTitles).not.toHaveBeenCalled();
   });
 });
+
+describe("Compress tool search", () => {
+  it('is named Compress but still found by the "convert" keyword', () => {
+    const compress = { href: "compress", icon: null, id: "compress", label: "Compress" };
+    const index = createFindIndex({ ...sources, tabs: [...TABS, compress] });
+    expect(searchFind(index, "convert")[0]?.entry).toMatchObject({ id: "tool:compress", label: "Compress" });
+  });
+});

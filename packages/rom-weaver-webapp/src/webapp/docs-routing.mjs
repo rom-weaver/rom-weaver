@@ -91,13 +91,13 @@ const DOC_SOURCES = Object.freeze([
   Object.freeze({
     audience: "browser",
     file: "how-to/convert-roms-browser.md",
-    label: "Convert ROMs (browser)",
+    label: "Compress ROMs (browser)",
     slug: "docs/convert-roms-browser",
   }),
   Object.freeze({
     audience: "browser",
     file: "how-to/convert-rvz-to-iso-browser.md",
-    label: "Convert RVZ to ISO (browser)",
+    label: "Decompress RVZ to ISO (browser)",
     slug: "docs/convert-rvz-to-iso",
   }),
   Object.freeze({
@@ -109,7 +109,7 @@ const DOC_SOURCES = Object.freeze([
   Object.freeze({
     audience: "browser",
     file: "how-to/convert-to-chd-browser.md",
-    label: "Convert ISO or BIN/CUE to CHD (browser)",
+    label: "Compress ISO or BIN/CUE to CHD (browser)",
     slug: "docs/convert-to-chd",
   }),
   Object.freeze({

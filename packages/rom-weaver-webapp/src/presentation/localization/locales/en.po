@@ -876,7 +876,7 @@ msgstr "base ROM"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.cliItem3"
-msgstr "Batch a whole folder: convert, verify, and patch in one run."
+msgstr "Batch a whole folder: compress, verify, and patch in one run."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1086,7 +1086,7 @@ msgstr "chd, rvz, and z3ds are decompressed to raw formats before patching."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.routeDiscBody"
-msgstr "Convert between compressed formats, or extract a CHD to ISO or BIN/CUE."
+msgstr "Compress between disc formats, or extract a CHD to ISO or BIN/CUE."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1331,7 +1331,7 @@ msgstr "Compress"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.goCompress"
-msgstr "Convert / compress"
+msgstr "Compress"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
