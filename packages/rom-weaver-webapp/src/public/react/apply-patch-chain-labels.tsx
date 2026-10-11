@@ -47,6 +47,9 @@ export const chainChipText = (
       warn: true,
     };
   }
+  if (item.validationState === "invalid") {
+    return { text: localizer.message("ui.patchChecks.failed", { input: checkedTarget }), warn: true };
+  }
   if (verdict.matched.kind === "patch_output") {
     const predecessor = displayPatch(verdict.matched.index);
     return item.validationState === "deferred"
