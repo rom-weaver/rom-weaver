@@ -51,7 +51,7 @@ const TrimPatchFormView = ({
       <UnifiedDropZone
         {...dropZone}
         guide={WORKFLOW_GUIDES.trim}
-        lead={{ line1: "ui.hero.trimThesis", line2: "ui.hero.trimThesis2", description: "ui.hero.trimDescription" }}
+        lead={{ line1: "ui.hero.trimThesis", description: "ui.hero.trimDescription" }}
       />
       {sourceEmpty ? (
         <GhostSteps

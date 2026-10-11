@@ -1220,11 +1220,6 @@ msgstr "Wählen Sie das benötigte Spiel"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.compressThesis2"
-msgstr "Wähle das Ausgabeformat."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.patch.validationMismatchOverride"
 msgstr "Wähle die ROM, für die dieser Patch erstellt wurde, oder nutze die Überschreibung in 0x04."
 
@@ -1292,11 +1287,6 @@ msgstr "Befehlszeile"
 #: src/presentation/localization/messages.ts
 msgid "ui.status.commit"
 msgstr "Commit"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.checksumThesis2"
-msgstr "Vergleiche sie mit dem erwarteten Wert."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1945,11 +1935,6 @@ msgstr "Spiele (nach Name/Prüfsumme), Werkzeuge, Anleitungen oder Einstellungen
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.identifyThesis2"
-msgstr "Finde ihre genaue Entsprechung."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.home.routeChecksumBody"
 msgstr "Berechne für jede Datei einen Fingerabdruck, um zu sehen, ob sie übereinstimmen, auch bei anderen Namen."
 
@@ -2250,11 +2235,6 @@ msgstr "Header behalten: Die gepatchte Ausgabe enthält den ROM-Header."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.extractThesis2"
-msgstr "Nur die Dateien behalten, die du brauchst."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.compress.keepPacked"
 msgstr "Gepackt lassen"
 
@@ -2402,11 +2382,6 @@ msgstr "Protokoll"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.pending"
 msgstr "Dieses ROM wird in der Titeldatenbank gesucht. Die Zeilen werden gefüllt, sobald die Prüfsummen vorliegen."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.trimThesis2"
-msgstr "Entferne die Füllbytes."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2797,11 +2772,6 @@ msgstr "Ein Durchlauf, kein Entpacken von Hand"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.loomCaption"
 msgstr "Ein Durchlauf, kein manuelles Entpacken, keine Zwischendateien. Speichere es als Weave, dann bleibt die Reihenfolge für die nächste Person erhalten."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis2"
-msgstr "Ein Werkzeugkasten."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3445,11 +3415,6 @@ msgstr "Bereit"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.toolsThesis2"
-msgstr "Stell das Original wieder her."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.region"
 msgstr "Region"
 
@@ -3740,11 +3705,6 @@ msgstr "Unterstützte Formate ansehen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.testThesis2"
-msgstr "Sieh deine Änderungen im Spiel."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.select.filesHint"
 msgstr "Wähle die Dateien, die du hinzufügen willst, und drücke dann Dateien hinzufügen."
 
@@ -3790,11 +3750,6 @@ msgstr "Einstellungen"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.weaveThesis2"
-msgstr "Ein wiederverwendbares Rezept teilen."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.weaveExport.share"
 msgstr "Weave teilen"
 
@@ -3802,11 +3757,6 @@ msgstr "Weave teilen"
 #: src/presentation/localization/messages.ts
 msgid "ui.weaveExport.shareTitle"
 msgstr "Dieses Patch-Rezept teilen (für Patch-Ersteller)"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.createThesis2"
-msgstr "in einen komprimierten, teilbaren Patch, den andere anwenden können."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4661,11 +4611,6 @@ msgstr "mit codec-bewussten Komprimierungseinstellungen"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.copierHeader"
 msgstr "mit Erkennung und Reparatur von Kopier-Headern"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.saveThesis2"
-msgstr "mit jeder Prüfsumme neu berechnet vor dem Download."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

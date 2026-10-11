@@ -1220,11 +1220,6 @@ msgstr "Choose the game you need"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.compressThesis2"
-msgstr "Create CHD, RVZ, or archives."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.patch.validationMismatchOverride"
 msgstr "Choose the ROM that this patch was made for, or use the override in 0x04."
 
@@ -1292,11 +1287,6 @@ msgstr "Command line"
 #: src/presentation/localization/messages.ts
 msgid "ui.status.commit"
 msgstr "Commit"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.checksumThesis2"
-msgstr "Compare it with the expected value."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1945,11 +1935,6 @@ msgstr "Find games (by name/checksum), tools, docs, or settings..."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.identifyThesis2"
-msgstr "Look up its checksum."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.home.routeChecksumBody"
 msgstr "Fingerprint each file to see if they match, even when names differ."
 
@@ -2250,11 +2235,6 @@ msgstr "Keep header: the patched output carries the ROM header."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.extractThesis2"
-msgstr "Extract disc images and archives."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.compress.keepPacked"
 msgstr "Keep packed"
 
@@ -2402,11 +2382,6 @@ msgstr "Logs"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.pending"
 msgstr "Looking this ROM up in the title database. The rows below fill in once its checksums land."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.trimThesis2"
-msgstr "Lose the padding."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2797,11 +2772,6 @@ msgstr "One pass, no unpacking by hand"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.loomCaption"
 msgstr "One pass, no unpacking by hand, no intermediate files. Save it as a weave and the order is kept for the next person."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis2"
-msgstr "One toolkit."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3445,11 +3415,6 @@ msgstr "Ready"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.toolsThesis2"
-msgstr "Recover the original."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.region"
 msgstr "Region"
 
@@ -3740,11 +3705,6 @@ msgstr "See what’s supported"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.testThesis2"
-msgstr "Play your patched game."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.select.filesHint"
 msgstr "Select the files you want to add, then choose Add files."
 
@@ -3790,11 +3750,6 @@ msgstr "Settings"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.weaveThesis2"
-msgstr "Share a reusable recipe."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.weaveExport.share"
 msgstr "Share weave"
 
@@ -3802,11 +3757,6 @@ msgstr "Share weave"
 #: src/presentation/localization/messages.ts
 msgid "ui.weaveExport.shareTitle"
 msgstr "Share this patch recipe (for patch creators)"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.createThesis2"
-msgstr "Share your changes."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4661,11 +4611,6 @@ msgstr "with codec-aware compression settings"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.copierHeader"
 msgstr "with copier-header detection and repair"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.saveThesis2"
-msgstr "with every checksum recalculated before you download."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -318,7 +318,6 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
         inputId="extract-input-picker"
         lead={{
           line1: "ui.hero.extractThesis",
-          line2: "ui.hero.extractThesis2",
           description: "ui.hero.extractDescription",
         }}
         multiple={false}
