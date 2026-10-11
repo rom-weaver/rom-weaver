@@ -225,10 +225,12 @@ test("apply shows handler warnings from a finished run as a warning notice", asy
   mount(createElement(Harness));
 
   await waitForApplyButtonEnabled();
-  expect(document.getElementById("rom-weaver-output-notice-message")).toBeNull();
+  expect(document.getElementById("rom-weaver-output-warning-message")).toBeNull();
   await clickApplyButton();
   await expect.poll(() => applyPatches.mock.calls.length).toBe(1);
   await expect
-    .poll(() => document.getElementById("rom-weaver-output-notice-message")?.textContent || "")
+    .poll(() => document.getElementById("rom-weaver-output-warning-message")?.textContent || "")
     .toContain("IPS patch did not change output");
+  // A warning is not an error: the error notice stays empty and the download stays available.
+  expect(document.getElementById("rom-weaver-output-notice-message")).toBeNull();
 });

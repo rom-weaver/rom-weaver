@@ -862,7 +862,11 @@ function ApplyWorkflowFormView({
   };
   const outputNotice = (
     <SectionNotice
-      id="rom-weaver-output-notice-message"
+      id={
+        uiState.outputNotice.level === "warning"
+          ? "rom-weaver-output-warning-message"
+          : "rom-weaver-output-notice-message"
+      }
       onDismiss={dismissSectionNotice("outputNotice")}
       state={uiState.outputNotice}
     />
