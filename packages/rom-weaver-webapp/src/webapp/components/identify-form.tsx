@@ -287,6 +287,9 @@ const IdentifyForm = ({
   const unavailable = result?.status === "unavailable";
   const archiveName = result?.archiveName;
   const candidates = result?.candidates || [];
+  const conditioned = result?.condition ? result : candidates.find((candidate) => candidate.condition);
+  const noMatchCondition = conditioned?.condition;
+  const noMatchHint = conditioned?.hint;
   const showMemberPaths = !!archiveName;
 
   /* A pasted checksum that the local data recognized is an expectation: it says
@@ -435,12 +438,24 @@ const IdentifyForm = ({
         <WorkflowRomInputStep
           beforeItems={
             result && !unavailable && result.status === "unknown" ? (
-              <Notice level="info">
-                <b>{localizer.message("ui.identify.noMatchTitle")}</b> {localizer.message("ui.identify.noMatchBody")}{" "}
-                <a href={resolveAssetUrl(assetBaseUrl, "docs/identify-roms-browser")} rel="noreferrer" target="_blank">
-                  {localizer.message("ui.identify.noMatchLink")}
-                </a>
-              </Notice>
+              noMatchCondition ? (
+                /* A structured condition says why the lookup could not answer, so "no match" would be false. */
+                <Notice level="info">
+                  <b>{localizer.message(`ui.identifyDrawer.condition.${noMatchCondition}`)}.</b>{" "}
+                  {noMatchHint || localizer.message("ui.identifyDrawer.unsupported")}
+                </Notice>
+              ) : (
+                <Notice level="info">
+                  <b>{localizer.message("ui.identify.noMatchTitle")}</b> {localizer.message("ui.identify.noMatchBody")}{" "}
+                  <a
+                    href={resolveAssetUrl(assetBaseUrl, "docs/identify-roms-browser")}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    {localizer.message("ui.identify.noMatchLink")}
+                  </a>
+                </Notice>
+              )
             ) : null
           }
           afterItems={
