@@ -222,7 +222,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.patch.basisHelp": msg({
     id: "ui.patch.basisHelp",
-    message: "Choose whether this patch's input checks describe the base ROM or the previous patch output.",
+    message: "Choose whether this patch's input checks describe the original ROM or the previous patch output.",
   }),
   "ui.patch.basisLabel": msg({ id: "ui.patch.basisLabel", message: "ROM described by input checks" }),
   "ui.patch.bulkEdit": msg({ id: "ui.patch.bulkEdit", message: "Bulk edit" }),
@@ -389,7 +389,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.apply.weaveTutorial.rom.title": msg({
     id: "ui.apply.weaveTutorial.rom.title",
-    message: "Check the starting ROM",
+    message: "Check the original ROM",
   }),
   "ui.apply.weaveTutorial.safeWeave.body": msg({
     id: "ui.apply.weaveTutorial.safeWeave.body",
@@ -572,7 +572,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.tutorial.replacePatch": msg({ id: "ui.apply.tutorial.replacePatch", message: "Replace patch" }),
   "ui.apply.tutorial.identify.title": msg({
     id: "ui.apply.tutorial.identify.title",
-    message: "Identify your starting ROM",
+    message: "Identify your original ROM",
   }),
   "ui.apply.tutorial.identify.body": msg({
     id: "ui.apply.tutorial.identify.body",
@@ -588,7 +588,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message:
       "A patch only works on the exact ROM it was made for, so this card lists the ROM's checksums. The practice ROM, hello-world.nes, is a tiny homebrew game made for this guide.",
   }),
-  "ui.apply.tutorial.rom.title": msg({ id: "ui.apply.tutorial.rom.title", message: "Check your starting ROM" }),
+  "ui.apply.tutorial.rom.title": msg({ id: "ui.apply.tutorial.rom.title", message: "Check your original ROM" }),
   "ui.apply.tutorial.sampleLoadFailed": msg({
     id: "ui.apply.tutorial.sampleLoadFailed",
     message: "Could not load the sample. Try again.",
@@ -1210,7 +1210,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.basis.auto": msg({ id: "ui.basis.auto", message: "auto" }),
   "ui.basis.autoBase": msg({ id: "ui.basis.autoBase", message: "auto (Original ROM)" }),
   "ui.basis.autoPrevious": msg({ id: "ui.basis.autoPrevious", message: "auto (Previous patch output)" }),
-  "ui.basis.base": msg({ id: "ui.basis.base", message: "base ROM" }),
+  "ui.basis.base": msg({ id: "ui.basis.base", message: "original ROM" }),
   "ui.basis.previous": msg({ id: "ui.basis.previous", message: "previous output" }),
   "ui.patchInputs.auto": msg({ id: "ui.patchInputs.auto", message: "Automatic" }),
   "ui.patchInputs.original": msg({ id: "ui.patchInputs.original", message: "Original ROM" }),

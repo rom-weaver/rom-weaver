@@ -54,7 +54,7 @@ An unsupported row shows its reason and cannot be selected. Reasons include: the
 | Match | Meaning |
 | --- | --- |
 | Exact | A known checksum matched a canonical release record and its cheat set. |
-| Title | A normalized title matched, but the ROM checksum did not match. |
+| Title | The normalized file name matched, but the ROM checksum did not match. |
 | Manual | The user selected a game record. |
 | None | rom-weaver found no automatic game match. |
 

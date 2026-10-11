@@ -23,7 +23,7 @@ A guided run is a card that walks one browser workflow step by step on homebrew 
 | [Create cheats](https://rom-weaver.com/create-patch?guide=create-cheats) | 4 | Loads `hello-world.nes` |
 | [Test](https://rom-weaver.com/test-rom?guide=test) | 2 | Loads `hello-world.nes` |
 
-Guided Apply's steps are add your files, check your starting ROM (with the Simple and Detailed views), identify the starting ROM, patches and cheats, and apply. On its first step, **Continue** with no files in loads `first-weave.zip`; with files in, it moves on. [Your first patch in the browser](../tutorials/first-patch.md) follows it to a verified checksum.
+Guided Apply's steps are add your files, check your original ROM (with the Simple and Detailed views), identify the original ROM, patches and cheats, and apply. On its first step, **Continue** with no files in loads `first-weave.zip`; with files in, it moves on. [Your first patch in the browser](../tutorials/first-patch.md) follows it to a verified checksum.
 
 Apply, Create, and Weave include a Simple/Detailed comparison. Its buttons change the live view without advancing the guide. Apply and Weave explain the Identify search and the Detailed view’s Identify drawer.
 

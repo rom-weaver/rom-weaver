@@ -871,7 +871,7 @@ msgstr "Bake supported codes into the ROM so they work in any emulator."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.basis.base"
-msgstr "base ROM"
+msgstr "original ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1116,12 +1116,12 @@ msgstr "Check it"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.weaveTutorial.rom.title"
-msgstr "Check the starting ROM"
+msgstr "Check the original ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.rom.title"
-msgstr "Check your starting ROM"
+msgstr "Check your original ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1236,7 +1236,7 @@ msgstr "Choose the version of {title} for {platform}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.basisHelp"
-msgstr "Choose whether this patch's input checks describe the base ROM or the previous patch output."
+msgstr "Choose whether this patch's input checks describe the original ROM or the previous patch output."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2111,7 +2111,7 @@ msgstr "Identify tool"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.identify.title"
-msgstr "Identify your starting ROM"
+msgstr "Identify your original ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
