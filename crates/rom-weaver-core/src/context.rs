@@ -201,6 +201,20 @@ impl OperationContext {
         }
     }
 
+    /// Like [`Self::new`], but the temp root is a fresh directory under `temp_parent` that only
+    /// this context uses and that is removed when the context drops.
+    pub fn new_with_private_temp_root(
+        thread_budget: ThreadBudget,
+        temp_parent: &Path,
+        prefix: &str,
+        progress: Arc<dyn ProgressSink>,
+        cancel: CancellationToken,
+    ) -> Self {
+        let mut context = Self::new(thread_budget, temp_parent.to_path_buf(), progress, cancel);
+        context.temp_paths = Arc::new(TempPathAllocator::new_private(temp_parent, prefix));
+        context
+    }
+
     /// Record already-known checksums for `path` (merging into any existing entry) so later
     /// per-path checksum lookups (e.g. patch source-checksum verification) reuse them. A no-op when
     /// `checksums` is empty.

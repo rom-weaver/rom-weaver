@@ -87,12 +87,30 @@ impl CliApp {
         };
         // The process token, so a Ctrl-C reaches work already running. On wasm
         // and in tests nothing ever trips it, so it behaves like a fresh one.
-        OperationContext::new(
-            thread_budget,
-            temp_root,
-            reporter,
-            process_cancellation_token(),
-        )
+        //
+        // Natively every run spools into its own `rom-weaver-out-<unique>` directory that is
+        // removed when the context drops, so no empty shared folder is left in the working
+        // directory and concurrent runs never touch each other's directories. The browser keeps
+        // the shared `rom-weaver-out` OPFS root, which its own cleanup sweeps by run id.
+        #[cfg(not(target_family = "wasm"))]
+        {
+            OperationContext::new_with_private_temp_root(
+                thread_budget,
+                temp_root.parent().unwrap_or_else(|| Path::new("")),
+                "rom-weaver-out",
+                reporter,
+                process_cancellation_token(),
+            )
+        }
+        #[cfg(target_family = "wasm")]
+        {
+            OperationContext::new(
+                thread_budget,
+                temp_root,
+                reporter,
+                process_cancellation_token(),
+            )
+        }
     }
 
     pub(super) fn default_temp_root() -> PathBuf {
