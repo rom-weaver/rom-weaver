@@ -855,8 +855,8 @@ fn weave_create_patch_entries(
         // Equal checksums do not prove the same byte state. Keep every
         // authored entry value until scope-aware reference canonicalization
         // proves it is the ROM, a selected producer, or the final output.
-        let entry_input_checks = weave_entry_checks(&spec.input_checks, "--patch-expect-in")?;
-        let entry_output_checks = weave_entry_checks(&spec.output_checks, "--patch-expect-out")?;
+        let entry_input_checks = weave_entry_checks(&spec.input_checks, "--patch-input-check")?;
+        let entry_output_checks = weave_entry_checks(&spec.output_checks, "--patch-output-check")?;
         patches.push(WeavePatchEntry {
             id: spec.id.clone(),
             version: spec.version.clone(),
@@ -950,8 +950,8 @@ fn weave_create_patch_specs(args: &WeaveCreateCommand) -> Result<Vec<WeaveCreate
     let bases = aligned_metadata(&args.patch_basis, count, "--patch-basis")?;
     let inputs = aligned_metadata(&args.patch_input, count, "patch_input")?;
     let targets = aligned_metadata(&args.patch_target, count, "patch_target")?;
-    let input_checks = aligned_metadata(&args.patch_input_check, count, "--patch-expect-in")?;
-    let output_checks = aligned_metadata(&args.patch_output_check, count, "--patch-expect-out")?;
+    let input_checks = aligned_metadata(&args.patch_input_check, count, "--patch-input-check")?;
+    let output_checks = aligned_metadata(&args.patch_output_check, count, "--patch-output-check")?;
     Ok(args
         .patch
         .iter()

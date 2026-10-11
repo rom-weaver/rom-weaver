@@ -2560,6 +2560,47 @@ fn weave_ignore_mode_does_not_use_stale_output_checks_to_select_rup_direction() 
     assert_eq!(fs::read(output.path()).expect("output"), target_bytes);
 }
 
+/// `--patch-input-check`/`--patch-output-check` are the canonical spellings on
+/// `weave create`; the old `--patch-expect-in`/`--patch-expect-out` keep working
+/// as hidden aliases and produce the same weave.
+#[test]
+fn weave_create_legacy_patch_expect_spellings_match_the_canonical_flags() {
+    let temp = setup_temp_dir();
+    write_weave_rom(&temp, "game.bin");
+    let main = write_offset_ips(&temp, "main.ips", 0, 0xAA);
+    let mut weaves = Vec::new();
+    for (name, input_flag, output_flag) in [
+        ("canonical", "--patch-input-check", "--patch-output-check"),
+        ("legacy", "--patch-expect-in", "--patch-expect-out"),
+    ] {
+        let weave_out = temp.child(format!("{name}.json"));
+        run_json_events(
+            &[
+                "weave",
+                "create",
+                "--patch",
+                main.to_str().expect("path"),
+                input_flag,
+                "crc32=00000000",
+                output_flag,
+                "crc32=11111111",
+                "--output",
+                weave_out.path().to_str().expect("path"),
+                "--jsonl",
+            ],
+            0,
+        );
+        weaves.push(fs::read_to_string(weave_out.path()).expect("weave"));
+    }
+    assert_eq!(weaves[0], weaves[1]);
+    assert!(weaves[0].contains("11111111"), "{}", weaves[0]);
+
+    let help = String::from_utf8(command_stdout(&["weave", "create", "--help"], 0)).expect("utf8");
+    assert!(help.contains("--patch-input-check"), "{help}");
+    assert!(help.contains("--patch-output-check"), "{help}");
+    assert!(!help.contains("patch-expect"), "{help}");
+}
+
 #[test]
 fn weave_create_dedups_endpoint_checks_and_apply_validates_output() {
     let temp = setup_temp_dir();
@@ -2579,15 +2620,15 @@ fn weave_create_dedups_endpoint_checks_and_apply_validates_output() {
             rom.to_str().expect("path"),
             "--patch",
             main.to_str().expect("path"),
-            "--patch-expect-in",
+            "--patch-input-check",
             &format!("crc32={rom_crc}"),
-            "--patch-expect-out",
+            "--patch-output-check",
             &format!("crc32={mid_crc}"),
             "--patch",
             extra.to_str().expect("path"),
-            "--patch-expect-in",
+            "--patch-input-check",
             &format!("crc32={mid_crc}"),
-            "--patch-expect-out",
+            "--patch-output-check",
             &format!("crc32={final_crc}"),
             "--default-patch-basis",
             "previous",

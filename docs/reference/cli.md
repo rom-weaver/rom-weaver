@@ -455,7 +455,7 @@ SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for it
 | `--patch-optional` | Marks the preceding patch optional. |
 | `--patch-source-url`, `--patch-header`, `--patch-basis` | Source URL, header policy, and input basis for the preceding patch. |
 | `--expect-out` | Expected final result checks. |
-| `--patch-expect-in`, `--patch-expect-out` | Expected checks around the preceding patch. |
+| `--patch-input-check`, `--patch-output-check` | Expected checks around the preceding patch. The earlier spellings `--patch-expect-in` and `--patch-expect-out` still work but are hidden from `--help`. |
 | `--assume-in` | Supplied ROM checksums used without reading the file to verify them. |
 | `--weave ARCHIVE`, `--no-weave-rom` | Archive packaging and exclusion of ROM bytes. |
 | `--schema-ref URL` | Adds a `$schema` URL; omitted by default. |
