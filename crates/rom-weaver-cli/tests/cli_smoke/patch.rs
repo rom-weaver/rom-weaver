@@ -5643,6 +5643,81 @@ fn patch_validate_chain_honors_patches_authored_against_the_original_rom() {
 }
 
 #[test]
+fn patch_validate_base_chain_honors_ignored_checksums() {
+    let temp = setup_temp_dir();
+    let original = temp.child("original.bin");
+    let first = temp.child("first.bin");
+    let other = temp.child("other.bin");
+    let modified = temp.child("modified.bin");
+    let first_patch = temp.child("first.bps");
+    let other_patch = temp.child("other.bps");
+    original.write_str("0123456789abcdefghij").unwrap();
+    first.write_str("01X3456789abcdefghij").unwrap();
+    other.write_str("Z123456789abcdefghij").unwrap();
+    modified.write_str("Z1234567W9abcdefghij").unwrap();
+    create_bps_patch(original.path(), first.path(), first_patch.path());
+    create_bps_patch(other.path(), modified.path(), other_patch.path());
+    let args = [
+        "patch",
+        "validate",
+        "--input",
+        original.path().to_str().unwrap(),
+        "--patch",
+        first_patch.path().to_str().unwrap(),
+        "--patch",
+        other_patch.path().to_str().unwrap(),
+        "--default-patch-basis",
+        "base",
+        "--ignore-checksum-validation",
+        "--json",
+    ];
+    let json = parse_single_json_line(&command_stdout(&args, 0));
+    assert_eq!(json["status"], "succeeded");
+}
+
+#[test]
+fn patch_validate_base_chain_preserves_reverse_endpoint() {
+    let temp = setup_temp_dir();
+    let original = temp.child("original.bin");
+    let first = temp.child("first.bin");
+    let short = temp.child("short.bin");
+    let combined = temp.child("combined.bin");
+    let final_rom = temp.child("final.bin");
+    let first_patch = temp.child("first.bps");
+    let reverse_patch = temp.child("reverse.rup");
+    let final_patch = temp.child("final.bps");
+    original.write_str("0123456789abcdefghij").unwrap();
+    first.write_str("01X3456789abcdefghij").unwrap();
+    short.write_str("01234567Y9ab").unwrap();
+    combined.write_str("01X34567Y9ab").unwrap();
+    final_rom.write_str("Q1X34567Y9ab").unwrap();
+    create_bps_patch(original.path(), first.path(), first_patch.path());
+    create_rup_patch(short.path(), original.path(), reverse_patch.path());
+    create_bps_patch(combined.path(), final_rom.path(), final_patch.path());
+    let args = [
+        "patch",
+        "validate",
+        "--input",
+        original.path().to_str().unwrap(),
+        "--patch",
+        first_patch.path().to_str().unwrap(),
+        "--patch-basis",
+        "previous",
+        "--patch",
+        reverse_patch.path().to_str().unwrap(),
+        "--patch-basis",
+        "base",
+        "--patch",
+        final_patch.path().to_str().unwrap(),
+        "--patch-basis",
+        "previous",
+        "--json",
+    ];
+    let json = parse_single_json_line(&command_stdout(&args, 0));
+    assert_eq!(json["status"], "succeeded");
+}
+
+#[test]
 fn patch_validate_accepts_a_patch_select_per_patch() {
     let temp = setup_temp_dir();
     let original = temp.child("game.bin");
