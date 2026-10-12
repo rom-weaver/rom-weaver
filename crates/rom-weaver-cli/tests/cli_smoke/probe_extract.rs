@@ -2065,3 +2065,63 @@ fn probe_unidentified_file_error_omits_compress_recommendation() {
     assert!(!stderr.contains("recommended_compress_format"), "{stderr}");
     assert!(!stderr.contains("reason="), "{stderr}");
 }
+
+fn failed_extract(input: &Path, out: &Path) {
+    command_stdout(
+        &[
+            "extract",
+            input.to_str().expect("path"),
+            "-o",
+            out.to_str().expect("path"),
+            "--json",
+        ],
+        1,
+    );
+}
+
+#[test]
+fn extract_truncated_gzip_leaves_no_output_dir() {
+    let temp = setup_temp_dir();
+    let raw = temp.child("r.bin");
+    fs::write(raw.path(), pseudo_random_bytes(50_000, 7)).expect("raw fixture");
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    std::io::Write::write_all(&mut encoder, &fs::read(raw.path()).expect("raw bytes"))
+        .expect("gzip write");
+    let bytes = encoder.finish().expect("gzip finish");
+    let truncated = temp.child("tr.bin.gz");
+    fs::write(truncated.path(), &bytes[..bytes.len() / 2]).expect("truncated fixture");
+    let out = temp.child("nested/out");
+
+    failed_extract(truncated.path(), out.path());
+
+    assert!(!out.path().exists(), "failed extract left the output dir");
+    assert!(
+        !temp.child("nested").path().exists(),
+        "failed extract left a created parent dir"
+    );
+}
+
+#[test]
+fn extract_unsupported_input_leaves_no_output_dir() {
+    let temp = setup_temp_dir();
+    let input = temp.child("foo.xyz");
+    fs::write(input.path(), b"not a known container").expect("input fixture");
+    let out = temp.child("ux");
+
+    failed_extract(input.path(), out.path());
+
+    assert!(!out.path().exists(), "failed extract left the output dir");
+}
+
+#[test]
+fn extract_failure_preserves_preexisting_output_dir() {
+    let temp = setup_temp_dir();
+    let input = temp.child("foo.xyz");
+    fs::write(input.path(), b"not a known container").expect("input fixture");
+    let out = temp.child("existing");
+    fs::create_dir(out.path()).expect("existing dir");
+
+    failed_extract(input.path(), out.path());
+
+    assert!(out.path().is_dir(), "pre-existing output dir was removed");
+}

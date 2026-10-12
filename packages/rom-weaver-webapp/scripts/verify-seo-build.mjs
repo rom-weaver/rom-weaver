@@ -578,6 +578,15 @@ for (const script of bundledScripts) {
     throw new Error(`${script} bundles the Markdown parser; guides must be rendered at build time`);
 }
 
+for (const [slug, title] of [
+  ["save-editor", "Save Editor | rom-weaver"],
+  ["trim-rom", "Trim ROM | rom-weaver"],
+]) {
+  const html = read(`${slug}/index.html`);
+  assertIncludes(html, `<title>${title}`, `${slug} title`);
+  assertIncludes(html, `property="og:title" content="${title}`, `${slug} og:title`);
+  assertIncludes(html, `name="twitter:title" content="${title}`, `${slug} twitter:title`);
+}
 for (const beta of ["trim-rom", "whats-new", "save-editor"]) {
   assertIncludes(read(`${beta}/index.html`), 'name="robots" content="noindex, nofollow"', `${beta} noindex`);
   assertIncludes(

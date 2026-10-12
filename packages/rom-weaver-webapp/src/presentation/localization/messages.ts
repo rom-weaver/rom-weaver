@@ -1036,6 +1036,10 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.patch.validationMismatch",
     message: "The patch checks did not match this ROM.",
   }),
+  "ui.patch.validationUnreadableHint": msg({
+    id: "ui.patch.validationUnreadableHint",
+    message: "Remove this patch and choose a valid patch file.",
+  }),
   "ui.patch.validationMismatchHint": msg({
     id: "ui.patch.validationMismatchHint",
     message: "Choose the ROM that this patch was made for.",
@@ -1233,6 +1237,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message: "Combined result",
   }),
   "ui.patchChecks.unknown": msg({ id: "ui.patchChecks.unknown", message: "Not checked yet: {input}" }),
+  "ui.patchChecks.unreadable": msg({ id: "ui.patchChecks.unreadable", message: "Patch file is not valid" }),
   "ui.patchChecks.failed": msg({ id: "ui.patchChecks.failed", message: "Check failed: {input}" }),
   "ui.patchChecks.patchOutput": msg({ id: "ui.patchChecks.patchOutput", message: "Output of {patch}" }),
   "ui.patchChecks.unknownPatchOutput": msg({

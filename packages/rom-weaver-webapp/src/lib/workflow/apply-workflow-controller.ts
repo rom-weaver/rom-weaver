@@ -1318,8 +1318,18 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
       return;
     }
     const parsed = await parsePatchForApply(patchFile, this.runtime);
-    if (!parsed)
-      throw new RomWeaverError("INVALID_INPUT", `Invalid patch file: ${patchFile.fileName || stage.state.fileName}`);
+    if (!parsed) {
+      // An unreadable patch is a per-card failure (like a checksum mismatch), not a workflow error:
+      // keep the card and mark it invalid so it shows a plain-language fault and blocks Apply.
+      stage.state.requirements = undefined;
+      stage.state.checksumPreflight = undefined;
+      stage.state.patchValidation = {
+        message: `Validation failed: Invalid patch file: ${patchFile.fileName || stage.state.fileName}`,
+        status: "invalid",
+        unreadable: true,
+      };
+      return;
+    }
     stage.parsedPatch = parsed;
     stage.state.requirements = clonePatchRequirements(getPatchProbeRequirements(parsed));
     stage.state.checksumPreflight = undefined;

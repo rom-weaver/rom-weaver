@@ -93,6 +93,7 @@ type PatchStackItemState = {
   validationLabel: string;
   validationValues: string[];
   validationMessage: string;
+  validationUnreadable: boolean;
   validationActualValue: string;
   targetDisabled?: boolean;
   targetOptions?: PatchTargetOption[];

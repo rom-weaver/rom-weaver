@@ -1,3 +1,4 @@
+import { createLogger } from "../../lib/logging.ts";
 import { requestBrowserOpfsStorage, type BrowserOpfsEntry } from "../../workers/protocol/browser-opfs-worker-client.ts";
 
 // These are application scratch buckets. Host-ingested files live under rom-weaver-imports and are
@@ -13,22 +14,37 @@ const TRANSIENT_OPFS_PATHS = [
   "/work/temp",
 ] as const;
 const EMULATOR_RETENTION_OPFS_PATH = "/work/runtime-output/emulator";
+const logger = createLogger("browser-opfs-cleanup");
+// A reload while work runs leaves the previous page's workers holding sync access handles for a moment, so
+// removeEntry fails with NoModificationAllowedError. The proxy worker already retries; what is still locked
+// then belongs to a dying page and the next boot sweeps it. Match the DOMException name (every engine);
+// the text pattern is a fallback for stacks that carry only the Chromium-style "Name: message" prefix.
+const BUSY_REMOVE_PATTERN = /NoModificationAllowedError|modifications are not allowed/i;
 let bootCleanupPromise: Promise<void> | null = null;
 
-const resetBrowserTransientOpfs = async (options: { includeEmulator?: boolean } = {}): Promise<void> => {
+const resetBrowserTransientOpfs = async (
+  options: { includeEmulator?: boolean; skipBusy?: boolean } = {},
+): Promise<void> => {
   const paths = options.includeEmulator
     ? [...TRANSIENT_OPFS_PATHS, EMULATOR_RETENTION_OPFS_PATH]
     : TRANSIENT_OPFS_PATHS;
   await Promise.all(
     paths.map(async (filePath) => {
       const response = await requestBrowserOpfsStorage({ action: "remove", filePath });
-      if (!response.success) throw new Error(response.error?.message || `Unable to remove OPFS path: ${filePath}`);
+      if (response.success) return;
+      const message = response.error?.message || `Unable to remove OPFS path: ${filePath}`;
+      const busy = response.error?.name === "NoModificationAllowedError" || BUSY_REMOVE_PATTERN.test(message);
+      if (options.skipBusy && busy) {
+        logger.debug("Skipped locked OPFS path during cleanup", { filePath });
+        return;
+      }
+      throw new Error(message);
     }),
   );
 };
 
 const startBrowserOpfsBootCleanup = (): Promise<void> => {
-  if (!bootCleanupPromise) bootCleanupPromise = resetBrowserTransientOpfs({ includeEmulator: true });
+  if (!bootCleanupPromise) bootCleanupPromise = resetBrowserTransientOpfs({ includeEmulator: true, skipBusy: true });
   return bootCleanupPromise;
 };
 

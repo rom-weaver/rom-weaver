@@ -82,6 +82,24 @@ impl CliApp {
 
         // Take each job out of `pending` exactly once as its wave is scheduled; results land in
         // input order via the index carried alongside each command.
+        // Concurrent jobs may share a missing parent directory. Create those parents once here so
+        // a failing job's cleanup only ever removes its own output directory, then drop any that
+        // are still empty once every job has finished.
+        let mut shared_parents: Vec<PathBuf> = Vec::new();
+        if job_count > 1 {
+            for job in &jobs {
+                let Some(parent) = job.output.parent() else {
+                    continue;
+                };
+                // Record before creating, so a partially failed create is still cleaned up.
+                shared_parents.extend(crate::extract_command::missing_dirs_to_create(parent));
+                if let Err(error) = std::fs::create_dir_all(parent) {
+                    debug!(path = %parent.display(), %error, "could not pre-create shared extract parent");
+                }
+            }
+            // A job's own output directory is that job's to keep or clean up.
+            shared_parents.retain(|dir| jobs.iter().all(|job| job.output != *dir));
+        }
         let mut pending: Vec<Option<ExtractCommand>> = jobs.into_iter().map(Some).collect();
         let mut outcomes: Vec<Option<AppRunOutcome>> = (0..job_count).map(|_| None).collect();
 
@@ -127,6 +145,12 @@ impl CliApp {
                 outcomes[index] = Some(outcome);
             }
         }
+
+        // Deepest first, so a nested parent goes before its own parent.
+        shared_parents.sort();
+        shared_parents.dedup();
+        shared_parents.sort_by_key(|dir| std::cmp::Reverse(dir.components().count()));
+        crate::extract_command::remove_created_empty_dirs(&shared_parents);
 
         ExtractBatchReport {
             outcomes: outcomes
@@ -232,6 +256,54 @@ mod tests {
                 threads: ThreadBudget::Auto,
             })
             .collect()
+    }
+
+    #[test]
+    fn failed_concurrent_jobs_leave_no_shared_parent_and_successes_keep_it() {
+        let work = unique_work_dir();
+        let broken: Vec<PathBuf> = ["one", "two", "three"]
+            .iter()
+            .map(|stem| {
+                let path = work.join(format!("{stem}.xyz"));
+                fs::write(&path, b"not an archive").expect("fixture");
+                path
+            })
+            .collect();
+        let run = |archives: &[PathBuf], out: &Path| {
+            let (reporter, prompter) = silent();
+            run_extract_batch(
+                extract_jobs(archives, &["one", "two", "three"], out),
+                ExtractBatchOptions {
+                    emit_progress_events: false,
+                    interactive_selection_enabled: false,
+                    threads: ThreadBudget::Fixed(4),
+                    sequential: false,
+                },
+                reporter,
+                prompter,
+            )
+        };
+
+        let all_failed = work.join("missing-parent").join("out");
+        let report = run(&broken, &all_failed);
+        assert!(
+            report
+                .outcomes
+                .iter()
+                .all(|outcome| outcome.status != OperationStatus::Succeeded)
+        );
+        assert!(
+            !work.join("missing-parent").exists(),
+            "failed batch must not leave shared parents"
+        );
+
+        let mixed_parent = work.join("mixed-parent").join("out");
+        let good = make_zip(&work, "good", b"good payload");
+        let mixed = vec![good, broken[1].clone(), broken[2].clone()];
+        let report = run(&mixed, &mixed_parent);
+        assert_eq!(report.outcomes[0].status, OperationStatus::Succeeded);
+        assert!(mixed_parent.join("one").exists(), "successful output stays");
+        assert!(!mixed_parent.join("two").exists() && !mixed_parent.join("three").exists());
     }
 
     #[test]

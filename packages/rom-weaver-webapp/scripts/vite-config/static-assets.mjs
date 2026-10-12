@@ -156,7 +156,7 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         WORKFLOW_SEO_ROUTES.test,
       );
       const trimHtml = withRoutePreloadLinks(
-        makeBetaRouteNoindex(withShell("trim"), "trim-rom"),
+        makeBetaRouteNoindex(withShell("trim"), "trim-rom", channel, channelLabel),
         routePreloadLinks.get("trim"),
       );
       const ppfUndoHtml = injectLdJson(
@@ -169,7 +169,7 @@ export const writeWebappStaticAssets = (channel, channelLabel, prerenderedShells
         WORKFLOW_SEO_ROUTES["ppf-undo"],
       );
       const saveEditorHtml = withRoutePreloadLinks(
-        makeBetaRouteNoindex(withShell("save-editor"), "save-editor"),
+        makeBetaRouteNoindex(withShell("save-editor"), "save-editor", channel, channelLabel),
         routePreloadLinks.get("save-editor"),
       );
       const whatsNewHtml = withRoutePreloadLinks(withShell("whats-new"), routePreloadLinks.get("whats-new"));

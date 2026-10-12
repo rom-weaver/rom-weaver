@@ -84,7 +84,15 @@ const toFaultDetail = (message: string, localizer: Localizer): string => {
 
 /** Failed dry-run verdict: an inset fault well with the verdict, the detail,
  * and what to do next (naming the 0x04 override toggle when it is offered). */
-export const PatchFaultWell = ({ message, overrideAvailable }: { message: string; overrideAvailable?: boolean }) => {
+export const PatchFaultWell = ({
+  message,
+  overrideAvailable,
+  unreadable,
+}: {
+  message: string;
+  overrideAvailable?: boolean;
+  unreadable?: boolean;
+}) => {
   const localizer = useUiLocalizer();
   return (
     <div className="pverdict pfault">
@@ -94,9 +102,11 @@ export const PatchFaultWell = ({ message, overrideAvailable }: { message: string
       </div>
       <p className="pfault-detail">{toFaultDetail(message, localizer)}</p>
       <p className="pfault-hint">
-        {overrideAvailable
-          ? localizer.message("ui.patch.validationMismatchOverride")
-          : localizer.message("ui.patch.validationMismatchHint")}
+        {unreadable
+          ? localizer.message("ui.patch.validationUnreadableHint")
+          : overrideAvailable
+            ? localizer.message("ui.patch.validationMismatchOverride")
+            : localizer.message("ui.patch.validationMismatchHint")}
       </p>
     </div>
   );

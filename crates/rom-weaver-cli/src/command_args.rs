@@ -426,7 +426,7 @@ pub struct ExtractCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Write a CD-format CHD as a CUE plus one BIN per track (*.trackNN.bin), rather than one merged BIN"
+            help = "Write a CD-format CHD as a CUE plus one Redump-style `<name> (Track N).bin` per track, rather than one merged BIN"
         )
     )]
     #[serde(default)]
