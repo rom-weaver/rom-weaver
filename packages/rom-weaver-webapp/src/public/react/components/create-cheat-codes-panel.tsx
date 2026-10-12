@@ -19,6 +19,7 @@ import {
   splitCheatCodes,
   type CreateCheatCodeEntry,
 } from "../create-cheat-codes-model.ts";
+import { useUiLocalizer } from "../settings-context.tsx";
 import { AddCheatsDialog } from "./cheat-database-section.tsx";
 import { CheatGameSearch, getCheatGameSearchStep } from "./cheat-game-search.tsx";
 import { FileCard } from "./ds/file-card.tsx";
@@ -93,6 +94,7 @@ const CreateCheatCodesPanel = ({
   onClassifyingChange,
   onSystemChange,
 }: CreateCheatCodesPanelProps) => {
+  const localizer = useUiLocalizer();
   const [entries, setEntries] = useState<CreateCheatCodeEntry[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [kindConflict, setKindConflict] = useState("");
@@ -131,7 +133,7 @@ const CreateCheatCodesPanel = ({
       const pending = codes.map((code, index) => ({
         code,
         description: "",
-        error: "Select an original ROM whose system supports cheat codes.",
+        error: localizer.message("ui.cheats.needRom"),
         id: `${index}:${code}`,
       }));
       setEntries(pending);
@@ -159,7 +161,7 @@ const CreateCheatCodesPanel = ({
           return {
             code,
             description,
-            error: reason instanceof Error ? reason.message : "The code could not be classified.",
+            error: reason instanceof Error ? reason.message : localizer.message("ui.cheats.classifyFailed"),
             id,
           };
         }
@@ -170,9 +172,9 @@ const CreateCheatCodesPanel = ({
       reportEntries.current(nextEntries);
       reportClassifying.current(false);
     });
-  }, [classifyManualCode, kind, manualSystem, records, value]);
+  }, [classifyManualCode, kind, localizer, manualSystem, records, value]);
 
-  const detected = describeCheatCodes(entries);
+  const detected = describeCheatCodes(entries, localizer);
   // The picker keys "added" by record id, so map the codes in the textarea back
   // onto the database rows that carry them.
   // A row counts as added only once every code it carries is in the textarea.
@@ -203,7 +205,7 @@ const CreateCheatCodesPanel = ({
     const autoEntriesMatch =
       kind === "auto" && entries.length > 0 && entries.every((entry) => entry.record?.detectedKind === recordKind);
     if (recordKind && value.trim() && kind !== recordKind && !autoEntriesMatch) {
-      setKindConflict("Create a separate patch for codes with a different code type.");
+      setKindConflict(localizer.message("ui.cheats.kindConflict"));
       return;
     }
     setKindConflict("");
@@ -238,7 +240,11 @@ const CreateCheatCodesPanel = ({
               <FileCard
                 className="cheat-card create-cheat-code"
                 description={
-                  writes.length ? null : <span className="create-cheat-code-blocked">{blocked || "Checking…"}</span>
+                  writes.length ? null : (
+                    <span className="create-cheat-code-blocked">
+                      {blocked || localizer.message("ui.cheats.checking")}
+                    </span>
+                  )
                 }
                 key={entry.id}
                 meta={
@@ -246,7 +252,7 @@ const CreateCheatCodesPanel = ({
                     {entry.description ? <span className="rb mono">{entry.code}</span> : null}
                     {writes.flatMap((write) => {
                       const key = `${write.offset}:${write.value}`;
-                      const compareLabel = getCheatCompareLabel(write);
+                      const compareLabel = getCheatCompareLabel(write, localizer);
                       return [
                         <span className="rb mono" key={key}>
                           {formatCheatWrite(write)}
@@ -264,7 +270,7 @@ const CreateCheatCodesPanel = ({
                 }
                 name={<span className={entry.description ? "nm" : "nm mono"}>{entry.description || entry.code}</span>}
                 onRemove={disabled ? undefined : () => removeCode(position)}
-                removeLabel={`Remove code ${entry.code}`}
+                removeLabel={localizer.message("ui.cheats.removeCode", { code: entry.code })}
                 {...(writes.length ? { state: "ok" as const } : blocked ? { state: "warn" as const } : {})}
               />
             );
@@ -276,14 +282,14 @@ const CreateCheatCodesPanel = ({
         <span className="cheat-add-copy">
           <span className="cheat-add-label">
             <WandSparkles aria-hidden="true" />
-            Pick from the cheat database
+            {localizer.message("ui.create.tutorial.pickCheats")}
           </span>
-          <small>Choose codes for this game, or type your own below.</small>
+          <small>{localizer.message("ui.cheats.pickHint")}</small>
         </span>
       </button>
 
       <label className="create-cheat-codes-input" htmlFor="rom-weaver-create-cheat-kind">
-        <span>Code type</span>
+        <span>{localizer.message("ui.cheats.codeType")}</span>
         <DropdownSelect
           className="select"
           disabled={disabled}
@@ -294,7 +300,7 @@ const CreateCheatCodesPanel = ({
           }}
           value={kind}
         >
-          <option value="auto">Detect automatically</option>
+          <option value="auto">{localizer.message("ui.cheats.detectAuto")}</option>
           {CHEAT_KIND_OPTIONS.map(({ value, label }) => (
             <option key={value} value={value}>
               {label}
@@ -303,7 +309,7 @@ const CreateCheatCodesPanel = ({
         </DropdownSelect>
       </label>
       <label className="create-cheat-codes-input">
-        <span>Type codes</span>
+        <span>{localizer.message("ui.cheats.typeCodes")}</span>
         <textarea
           autoCapitalize="characters"
           className="input mono"
@@ -313,7 +319,7 @@ const CreateCheatCodesPanel = ({
             setKindConflict("");
             onValueChange(event.target.value);
           }}
-          placeholder="One per line or joined with +"
+          placeholder={localizer.message("ui.cheats.codesPlaceholder")}
           rows={3}
           spellCheck={false}
           value={value}
@@ -325,7 +331,7 @@ const CreateCheatCodesPanel = ({
 
       <AddCheatsDialog
         addedIds={addedIds}
-        emptyPrompt={searchStep ? `Choose a ${searchStep} above.` : undefined}
+        emptyPrompt={searchStep ? localizer.message(`ui.cheats.choose.${searchStep}`) : undefined}
         gamePicker={<CheatGameSearch alwaysBrowseGames database={database} rom={rom} />}
         manualEntry={
           manualSystem
@@ -350,7 +356,11 @@ const CreateCheatCodesPanel = ({
         open={dialogOpen}
         records={records}
         stackCount={entries.length}
-        title={gameTitle ? `Add cheats · ${gameTitle}` : "Add cheats"}
+        title={
+          gameTitle
+            ? localizer.message("ui.cheats.addTitleGame", { title: gameTitle })
+            : localizer.message("ui.home.goCheats")
+        }
       />
     </div>
   );

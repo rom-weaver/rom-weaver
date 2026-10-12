@@ -5,6 +5,8 @@ import {
   CheatDatabaseSection,
   DIALOG_PAGE_SIZE,
 } from "../../../src/public/react/components/cheat-database-section.tsx";
+import { preloadCatalog } from "../../../src/presentation/localization/index.ts";
+import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import type {
   CheatDatabaseIndex,
   CheatRecord,
@@ -898,5 +900,22 @@ describe("CheatDatabaseSection save as patch", () => {
     fireEvent.click(view.getByLabelText("Download Infinite lives"));
     fireEvent.click(view.getByRole("button", { name: /Save as patch/u }));
     await waitFor(() => expect(view.getByRole("alert").textContent).toBe("patch create failed"));
+  });
+});
+
+describe("CheatDatabaseSection in Spanish", () => {
+  it("translates the add control, the picker, and the plural footer", async () => {
+    await preloadCatalog("es");
+    const view = render(
+      <RomWeaverSettingsProvider settings={{ language: "es" }}>
+        <CheatDatabaseSection {...props} outputSummary={{ rom: 2 }} />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(view.getByText(/contiene parches y 2 trucos de ROM integrados/iu)).toBeTruthy();
+    fireEvent.click(view.getByRole("button", { name: /Añadir trucos al orden de parches/u }));
+    await view.findByText("Infinite lives");
+    expect(view.getByPlaceholderText("Buscar por nombre o código…")).toBeTruthy();
+    expect(view.getByRole("button", { name: "Añadir Infinite lives" })).toBeTruthy();
+    expect(view.getByText(/de \d+ trucos/u)).toBeTruthy();
   });
 });
