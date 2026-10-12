@@ -73,12 +73,14 @@ const baseState = () => {
 
 const renderRoot = async ({
   currentView = "patcher" as WebappRootProps["state"]["currentView"],
+  assetBaseUrl,
   notFound = false,
   serviceWorkerStatus = null as WebappRootProps["serviceWorkerCache"]["serviceWorkerStatus"],
   settingsDialogOpen = false,
   updateReady = false,
 }: {
   currentView?: WebappRootProps["state"]["currentView"];
+  assetBaseUrl?: string;
   notFound?: boolean;
   serviceWorkerStatus?: WebappRootProps["serviceWorkerCache"]["serviceWorkerStatus"];
   settingsDialogOpen?: boolean;
@@ -89,6 +91,7 @@ const renderRoot = async ({
   const view = render(
     <WebappRoot
       actions={actions}
+      assetBaseUrl={assetBaseUrl}
       confirmationDialog={createEmptyConfirmationDialogState()}
       notFound={notFound}
       pageUpdate={getPageUpdateState({
@@ -187,6 +190,22 @@ describe("the workbench shell", () => {
     expect(container.querySelector(".workbench")?.className).toContain("is-not-found");
   });
 
+  it("keeps not-found links and tab loads inside a subdirectory deployment", async () => {
+    const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
+    const { container } = await renderRoot({ assetBaseUrl: "https://example.test/rom-weaver/", notFound: true });
+
+    expect(container.querySelector(".not-found-home")?.getAttribute("href")).toBe("/rom-weaver/apply-patches");
+    expect(container.querySelector(".not-found-docs")?.getAttribute("href")).toBe("/rom-weaver/docs");
+    const tabHrefs = [...container.querySelectorAll(".side-nav a[href^='/']")].map((link) => link.getAttribute("href"));
+    expect(tabHrefs).toContain("/rom-weaver/docs");
+    expect(tabHrefs.filter((href) => !href?.startsWith("/rom-weaver/"))).toEqual([]);
+
+    fireEvent.click(container.querySelector('.dock-tab[data-mode="creator"]') as HTMLAnchorElement);
+    expect(assign).toHaveBeenCalledWith("/rom-weaver/create-patch");
+    fireEvent.click(navRow(container, "Docs"));
+    expect(assign).toHaveBeenCalledWith("/rom-weaver/docs");
+  });
+
   it("routes a not-found tab click to a full page load", async () => {
     const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
     const { container } = await renderRoot({ notFound: true });
@@ -194,6 +213,19 @@ describe("the workbench shell", () => {
     fireEvent.click(container.querySelector('.dock-tab[data-mode="creator"]') as HTMLAnchorElement);
 
     expect(assign).toHaveBeenCalledWith("/create-patch");
+  });
+
+  it("keeps the not-found Docs link on the site root instead of a protocol-relative URL", async () => {
+    const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
+    const { container } = await renderRoot({ notFound: true });
+
+    const hrefs = [...container.querySelectorAll("a[href]")].map((link) => link.getAttribute("href"));
+    expect(hrefs.filter((href) => href?.startsWith("//"))).toEqual([]);
+    expect(hrefs).toContain("/docs");
+
+    fireEvent.click(navRow(container, "Docs"));
+
+    expect(assign).toHaveBeenCalledWith("/docs");
   });
 });
 

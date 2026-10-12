@@ -360,7 +360,7 @@ describe("SaveEditor", () => {
     expect(screen.getByText("ASH → MAY")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Preview changes" }) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
-    await waitFor(() => expect(screen.getByText(/field changes/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/1 field change ·/)).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Reset Name" }));
     expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("ASH");
     fireEvent.change(screen.getByLabelText("Money"), { target: { value: "7000" } });

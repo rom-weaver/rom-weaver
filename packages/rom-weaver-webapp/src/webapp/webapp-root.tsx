@@ -186,6 +186,16 @@ const WORKFLOW_TABS: WorkflowTab[] = [
   },
 ];
 
+/**
+ * Tab hrefs are bare slugs except Docs (`/docs`), and the 404 page is served at
+ * whatever path missed, so each resolves against the app base: a doubled slash
+ * would be a protocol-relative URL, and a bare `/slug` would escape a
+ * subdirectory deployment.
+ */
+const appPathHref = (href: string, appBaseUrl: string): string =>
+  // The server render has no window, so its base is the bare "/"; the throwaway origin only lets that parse.
+  new URL(href.replace(/^\/+/, ""), new URL(appBaseUrl, "https://app.invalid")).pathname;
+
 // Keep the trace inspector out of the initial weave, but share its loader so
 // the masthead and idle post-boot preload can fetch the same promise.
 const LogDialog = lazy(loadLogDialog);
@@ -515,8 +525,11 @@ function WebappRoot({
   }, [actions]);
   // One identity per shell, so Find's index is not rebuilt on every render of the 404 page.
   const mastheadTabs = useMemo(
-    () => (notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS),
-    [notFound],
+    () =>
+      notFound
+        ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: appPathHref(tab.href, resolvedAssetBaseUrl) }))
+        : WORKFLOW_TABS,
+    [notFound, resolvedAssetBaseUrl],
   );
 
   // The settings console draws its own copy of the phone dock: a modal makes the real one inert.
@@ -535,7 +548,7 @@ function WebappRoot({
         // The nav can also reach a view with no WorkflowTab entry (What's
         // new), so it falls back to the id itself as the slug.
         const href = WORKFLOW_TABS.find((tab) => tab.id === id)?.href ?? id;
-        if (href) window.location.assign(`/${href}`);
+        if (href) window.location.assign(appPathHref(href, resolvedAssetBaseUrl));
         return;
       }
       const view = id as WebappRootProps["state"]["currentView"];
@@ -790,11 +803,11 @@ function WebappRoot({
                   </h1>
                   <p className="not-found-copy">Check the address, or choose where you want to go next.</p>
                   <div className="not-found-actions">
-                    <a className="btn primary not-found-home" href="/apply-patches">
+                    <a className="btn primary not-found-home" href={appPathHref("apply-patches", resolvedAssetBaseUrl)}>
                       <House aria-hidden="true" />
                       Apply Patches
                     </a>
-                    <a className="btn ghost not-found-docs" href="/docs">
+                    <a className="btn ghost not-found-docs" href={appPathHref("docs", resolvedAssetBaseUrl)}>
                       <BookOpen aria-hidden="true" />
                       Browse docs
                     </a>
