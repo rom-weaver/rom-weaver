@@ -598,6 +598,9 @@
   border: 1px solid currentcolor;
   border-radius: 999px;
 }
+.rw-app .nav-beta::before {
+  content: attr(data-label);
+}
 .rw-app .nav-row[aria-current="page"] .nav-beta {
   color: inherit;
 }

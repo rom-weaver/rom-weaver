@@ -309,7 +309,7 @@ describe("Masthead", () => {
   it("wears a BETA chip beside the name it qualifies", () => {
     const { container } = render(withSettings(<Masthead {...mastheadProps} />));
     const trim = container.querySelector('.side-nav .nav-row[href="trim"]') as HTMLElement;
-    expect(trim.querySelector(".nav-beta")?.textContent).toBe("Beta");
+    expect(trim.querySelector(".nav-beta")?.getAttribute("data-label")).toBe("Beta");
     // The chip follows the label rather than being pushed to the row's edge.
     expect(trim.querySelector(".nav-row-label")?.nextElementSibling?.classList.contains("nav-beta")).toBe(true);
   });
