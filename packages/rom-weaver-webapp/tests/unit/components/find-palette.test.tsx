@@ -162,6 +162,23 @@ describe("Find", () => {
     expect(container.querySelector(".find-palette")).toBeNull();
   });
 
+  it("moves focus to the main landmark after activating a result", async () => {
+    const main = document.createElement("main");
+    main.id = "main-content";
+    main.tabIndex = -1;
+    document.body.append(main);
+    try {
+      const { container } = render(withSettings(<Masthead {...props} />));
+      fireEvent.click(container.querySelector(".topbar-find") as HTMLButtonElement);
+      fireEvent.change(findInput(container), { target: { value: "crea" } });
+      fireEvent.keyDown(findInput(container), { key: "Enter" });
+
+      await vi.waitFor(() => expect(document.activeElement).toBe(main));
+    } finally {
+      main.remove();
+    }
+  });
+
   it("shows a title result and sends it to Identify", async () => {
     vi.useFakeTimers();
     identifyMocks.searchExpectedRomTitles.mockResolvedValueOnce({

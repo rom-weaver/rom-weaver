@@ -222,7 +222,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.patch.basisHelp": msg({
     id: "ui.patch.basisHelp",
-    message: "Choose whether this patch's input checks describe the base ROM or the previous patch output.",
+    message: "Choose whether this patch's input checks describe the original ROM or the previous patch output.",
   }),
   "ui.patch.basisLabel": msg({ id: "ui.patch.basisLabel", message: "ROM described by input checks" }),
   "ui.patch.bulkEdit": msg({ id: "ui.patch.bulkEdit", message: "Bulk edit" }),
@@ -389,7 +389,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.apply.weaveTutorial.rom.title": msg({
     id: "ui.apply.weaveTutorial.rom.title",
-    message: "Check the starting ROM",
+    message: "Check the original ROM",
   }),
   "ui.apply.weaveTutorial.safeWeave.body": msg({
     id: "ui.apply.weaveTutorial.safeWeave.body",
@@ -572,7 +572,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.apply.tutorial.replacePatch": msg({ id: "ui.apply.tutorial.replacePatch", message: "Replace patch" }),
   "ui.apply.tutorial.identify.title": msg({
     id: "ui.apply.tutorial.identify.title",
-    message: "Identify your starting ROM",
+    message: "Identify your original ROM",
   }),
   "ui.apply.tutorial.identify.body": msg({
     id: "ui.apply.tutorial.identify.body",
@@ -588,7 +588,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     message:
       "A patch only works on the exact ROM it was made for, so this card lists the ROM's checksums. The practice ROM, hello-world.nes, is a tiny homebrew game made for this guide.",
   }),
-  "ui.apply.tutorial.rom.title": msg({ id: "ui.apply.tutorial.rom.title", message: "Check your starting ROM" }),
+  "ui.apply.tutorial.rom.title": msg({ id: "ui.apply.tutorial.rom.title", message: "Check your original ROM" }),
   "ui.apply.tutorial.sampleLoadFailed": msg({
     id: "ui.apply.tutorial.sampleLoadFailed",
     message: "Could not load the sample. Try again.",
@@ -1210,7 +1210,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.basis.auto": msg({ id: "ui.basis.auto", message: "auto" }),
   "ui.basis.autoBase": msg({ id: "ui.basis.autoBase", message: "auto (Original ROM)" }),
   "ui.basis.autoPrevious": msg({ id: "ui.basis.autoPrevious", message: "auto (Previous patch output)" }),
-  "ui.basis.base": msg({ id: "ui.basis.base", message: "base ROM" }),
+  "ui.basis.base": msg({ id: "ui.basis.base", message: "original ROM" }),
   "ui.basis.previous": msg({ id: "ui.basis.previous", message: "previous output" }),
   "ui.patchInputs.auto": msg({ id: "ui.patchInputs.auto", message: "Automatic" }),
   "ui.patchInputs.original": msg({ id: "ui.patchInputs.original", message: "Original ROM" }),
@@ -1495,7 +1495,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.identify.noMatchBody": msg({
     id: "ui.identify.noMatchBody",
     message:
-      "These checksums are not in the identification data. Unknown does not mean corrupt: the ROM may be homebrew, modified, an unlisted revision, or from a system the data does not cover. Its checksums are on the card below so you can look them up elsewhere.",
+      "Not in the identification data. Unknown does not mean corrupt: it may be homebrew, modified, or an unlisted revision. Its checksums are below.",
   }),
   "ui.identify.noMatchLink": msg({ id: "ui.identify.noMatchLink", message: "About unknown results" }),
   "ui.identify.noMatchTitle": msg({ id: "ui.identify.noMatchTitle", message: "No match." }),
@@ -1785,6 +1785,133 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.urlSession.error": msg({ id: "ui.urlSession.error", message: "Shared session download failed" }),
   "ui.urlSession.loading": msg({ id: "ui.urlSession.loading", message: "Loading shared session…" }),
+  "ui.settings.section.webapp": msg({ id: "ui.settings.section.webapp", message: "Webapp" }),
+  "ui.settings.section.behavior": msg({ id: "ui.settings.section.behavior", message: "Behavior" }),
+  "ui.settings.section.compression": msg({ id: "ui.settings.section.compression", message: "Compression" }),
+  "ui.settings.section.codecs": msg({ id: "ui.settings.section.codecs", message: "Codecs" }),
+  "ui.settings.defaultOption": msg({ id: "ui.settings.defaultOption", message: "{label} (Default)" }),
+  "ui.settings.option.byteUnits.decimal": msg({
+    id: "ui.settings.option.byteUnits.decimal",
+    message: "Decimal (KB, MB, GB)",
+  }),
+  "ui.settings.option.byteUnits.binary": msg({
+    id: "ui.settings.option.byteUnits.binary",
+    message: "Binary (KiB, MiB, GiB)",
+  }),
+  "ui.settings.option.weavePackage.patches": msg({
+    id: "ui.settings.option.weavePackage.patches",
+    message: "Weave + patches",
+  }),
+  "ui.settings.option.weavePackage.rom": msg({
+    id: "ui.settings.option.weavePackage.rom",
+    message: "Weave + ROM + patches",
+  }),
+  "ui.settings.option.defaultCompression.sevenZipSpecial": msg({
+    id: "ui.settings.option.defaultCompression.sevenZipSpecial",
+    message: ".7z or ROM specific",
+  }),
+  "ui.settings.option.defaultCompression.zipSpecial": msg({
+    id: "ui.settings.option.defaultCompression.zipSpecial",
+    message: "Default: ROM specific, else bare file or .zip",
+  }),
+  "ui.settings.option.defaultCompression.specialOnly": msg({
+    id: "ui.settings.option.defaultCompression.specialOnly",
+    message: "ROM specific only",
+  }),
+  "ui.settings.option.defaultCompression.sevenZipOnly": msg({
+    id: "ui.settings.option.defaultCompression.sevenZipOnly",
+    message: ".7z only",
+  }),
+  "ui.settings.option.defaultCompression.zipOnly": msg({
+    id: "ui.settings.option.defaultCompression.zipOnly",
+    message: ".zip only",
+  }),
+  "ui.settings.option.defaultCompression.none": msg({
+    id: "ui.settings.option.defaultCompression.none",
+    message: "None",
+  }),
+  "ui.settings.option.logLevel.error": msg({ id: "ui.settings.option.logLevel.error", message: "Errors" }),
+  "ui.settings.option.logLevel.warn": msg({ id: "ui.settings.option.logLevel.warn", message: "Warnings" }),
+  "ui.settings.option.postApply.autoShow": msg({
+    id: "ui.settings.option.postApply.autoShow",
+    message: "Auto + button",
+  }),
+  "ui.settings.option.postApply.show": msg({ id: "ui.settings.option.postApply.show", message: "Button only" }),
+  "ui.settings.option.postApply.hide": msg({ id: "ui.settings.option.postApply.hide", message: "Hide Button" }),
+  "ui.settings.suggestion.byteUnits": msg({
+    id: "ui.settings.suggestion.byteUnits",
+    message: "Choose decimal or binary units for file sizes.",
+  }),
+  "ui.settings.suggestion.weavePackage": msg({
+    id: "ui.settings.suggestion.weavePackage",
+    message: "Choose whether to include the ROM in a shared weave. The Compression type controls its archive format.",
+  }),
+  "ui.settings.suggestion.emulatorSaveStorage": msg({
+    id: "ui.settings.suggestion.emulatorSaveStorage",
+    message:
+      "Warning: If you turn this off, new save states and SRAM are not stored. Existing saves remain until you delete them in Storage.",
+  }),
+  "ui.settings.suggestion.postApplyDownload": msg({
+    id: "ui.settings.suggestion.postApplyDownload",
+    message: "Choose whether Download runs automatically and whether its button stays visible.",
+  }),
+  "ui.settings.suggestion.postApplyTest": msg({
+    id: "ui.settings.suggestion.postApplyTest",
+    message: "Choose whether Test opens automatically and whether its button stays visible.",
+  }),
+  "ui.settings.suggestion.codecValuesLevels": msg({
+    id: "ui.settings.suggestion.codecValuesLevels",
+    message: "Valid values: {values}. Optional levels: {levels}",
+  }),
+  "ui.settings.suggestion.compressionProfile": msg({
+    id: "ui.settings.suggestion.compressionProfile",
+    message: "Default: Max. zstd levels: {zstd}. Other codec levels: {other}.",
+  }),
+  "ui.settings.suggestion.defaultCompression": msg({
+    id: "ui.settings.suggestion.defaultCompression",
+    message:
+      'Default: ROM-specific compression such as Z3DS, CHD, RVZ, etc. when available. Otherwise Apply and Create download the bare ROM or patch (choose .zip or .7z in their Options), while Compress, Trim and PPF undo use ZIP. Pick ".zip only" or ".7z only" to archive every download.',
+  }),
+  "ui.settings.suggestion.detailedView": msg({
+    id: "ui.settings.suggestion.detailedView",
+    message:
+      "Adds Files, Identify, and disc-sheet drawers to every file card, plus timings. Same as the Detailed switch.",
+  }),
+  "ui.settings.suggestion.identifiedOutputName": msg({
+    id: "ui.settings.suggestion.identifiedOutputName",
+    message: "When off, output names derive from the input file name instead.",
+  }),
+  "ui.settings.suggestion.logLevel": msg({
+    id: "ui.settings.suggestion.logLevel",
+    message: "Default: Trace in development; Warnings otherwise. Debug and Trace include detailed workflow progress.",
+  }),
+  "ui.settings.suggestion.rvzBlockSize": msg({
+    id: "ui.settings.suggestion.rvzBlockSize",
+    message: "Default: {value}",
+  }),
+  "ui.settings.suggestion.codecLevel": msg({
+    id: "ui.settings.suggestion.codecLevel",
+    message: "Default: {codec}. Optional level: {codec}[:{range}].",
+  }),
+  "ui.settings.suggestion.threadsThreaded": msg({
+    id: "ui.settings.suggestion.threadsThreaded",
+    message: "Valid values: auto, 0-64. Use 0 to disable threaded bundles.",
+  }),
+  "ui.settings.suggestion.threadsSingle": msg({
+    id: "ui.settings.suggestion.threadsSingle",
+    message: "Valid values: auto or 1.",
+  }),
+  "ui.settings.suggestion.zipCodec": msg({
+    id: "ui.settings.suggestion.zipCodec",
+    message: "Default: {codec}. Valid values: {values}. Optional levels: {levels}. Store does not use a level.",
+  }),
+  "ui.notFound.heading": msg({ id: "ui.notFound.heading", message: "404: Page not found" }),
+  "ui.notFound.label": msg({ id: "ui.notFound.label", message: "That page is not here." }),
+  "ui.notFound.copy": msg({
+    id: "ui.notFound.copy",
+    message: "Check the address, or choose where you want to go next.",
+  }),
+  "ui.notFound.browseDocs": msg({ id: "ui.notFound.browseDocs", message: "Browse docs" }),
   "ui.cheats.badge.rom": msg({ id: "ui.cheats.badge.rom", message: "ROM cheat" }),
   "ui.cheats.short.unsupported": msg({ id: "ui.cheats.short.unsupported", message: "N/A" }),
   "ui.cheats.delivery.rom": msg({ id: "ui.cheats.delivery.rom", message: "Baked into output" }),

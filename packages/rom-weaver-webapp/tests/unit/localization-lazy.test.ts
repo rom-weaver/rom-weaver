@@ -25,7 +25,7 @@ describe("lazy catalogs", () => {
   });
 
   it("falls back to English until the locale's chunk lands, then translates in place", async () => {
-    const listener = vi.fn();
+    const listener = vi.fn(() => createLocalizer("de").message("ui.step.apply"));
     const unsubscribe = subscribeCatalogs(listener);
     const versionBefore = getCatalogVersion();
     const de = createLocalizer("de");
@@ -36,6 +36,7 @@ describe("lazy catalogs", () => {
     expect(isCatalogLoaded("de")).toBe(true);
     expect(getCatalogVersion()).toBe(versionBefore + 1);
     expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveReturnedWith("Anwenden");
     expect(de.message("ui.step.apply")).toBe("Anwenden");
     expect(createLocalizer("de-AT").message("ui.step.apply")).toBe("Anwenden");
     unsubscribe();

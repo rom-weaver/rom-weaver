@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { isCompressionCodecFieldKey } from "../lib/compression/codec-fields.ts";
+import type { MessageId } from "../presentation/localization/catalog.ts";
 import type { Localizer } from "../presentation/localization/index.ts";
 import { CodecCombobox } from "../public/react/components/ds/codec-combobox.tsx";
 import { CompressInfoContent } from "../public/react/components/ds/compress-panel.tsx";
@@ -13,17 +14,22 @@ import { THEME_CHOICES } from "./components/menu-tools.tsx";
 import { useUiLocalizer } from "../public/react/settings-context.tsx";
 import type { IdentifyPackGroupState } from "../platform/browser/identify-packs.ts";
 import { useTheme, type ThemePreference } from "./theme.ts";
-import type { SettingsDraftState, SettingsFieldKey, SettingsUiState } from "./settings/settings-state.ts";
+import type {
+  SettingsChoiceOption,
+  SettingsDraftState,
+  SettingsFieldKey,
+  SettingsUiState,
+} from "./settings/settings-state.ts";
 import {
   ADVANCED_SETTINGS_FIELDS,
   getDefaultThreads,
   getSettingsFieldDefaultValue,
   getSettingsFieldMax,
   getSettingsFieldMin,
+  getSettingsChoiceLabel,
   getSettingsFieldLabel,
   getSettingsFieldPlaceholder,
   getSettingsFieldSuggestion,
-  getSettingsFieldSuggestionDataLocalize,
   getSettingsUiState,
   isSettingsFieldDisabled,
   SETTINGS_FIELD_ID_TO_KEY,
@@ -74,26 +80,34 @@ const shouldRenderDefaultAsPlaceholder = (fieldKey: SettingsFieldKey): boolean =
   DEFAULT_PLACEHOLDER_KINDS.has(SETTINGS_FIELD_METADATA[fieldKey].kind) && getDefaultValueString(fieldKey) !== "";
 
 const cleanDefaultOptionLabel = (label: string): string => label.replace(/\s*\([^)]*default[^)]*\)\s*/i, "").trim();
-const formatDefaultLabel = (label: string): string => `${cleanDefaultOptionLabel(label) || label} (Default)`;
+const formatDefaultLabel = (label: string, localizer: Localizer): string =>
+  localizer.message("ui.settings.defaultOption", { label: cleanDefaultOptionLabel(label) || label });
 
-const getDefaultPlaceholderValue = (fieldKey: SettingsFieldKey): string => {
+const getDefaultPlaceholderValue = (fieldKey: SettingsFieldKey, localizer: Localizer): string => {
   if (fieldKey === "threads") return `auto (${getDefaultThreads()})`;
   const field = SETTINGS_FIELD_METADATA[fieldKey];
   const defaultValue = getDefaultValueString(fieldKey);
-  const optionLabel = field.options?.find((option) => option.value === defaultValue)?.label;
-  return formatDefaultLabel(optionLabel || defaultValue);
+  const option = field.options?.find((candidate) => candidate.value === defaultValue);
+  return formatDefaultLabel(option ? getSettingsChoiceLabel(option, localizer) : defaultValue, localizer);
 };
 
-const getSelectOptionLabel = (fieldKey: SettingsFieldKey, option: { label: string; value: string }): string =>
-  option.value === getDefaultValueString(fieldKey) ? formatDefaultLabel(option.label) : option.label;
+const getSelectOptionLabel = (
+  fieldKey: SettingsFieldKey,
+  option: SettingsChoiceOption,
+  localizer: Localizer,
+): string => {
+  const label = getSettingsChoiceLabel(option, localizer);
+  return option.value === getDefaultValueString(fieldKey) ? formatDefaultLabel(label, localizer) : label;
+};
 
 const getFieldPlaceholder = (
   fieldKey: SettingsFieldKey,
   draftSettings: SettingsDraftState,
   uiState: SettingsUiState,
+  localizer: Localizer,
 ): string | undefined =>
   shouldRenderDefaultAsPlaceholder(fieldKey)
-    ? getDefaultPlaceholderValue(fieldKey)
+    ? getDefaultPlaceholderValue(fieldKey, localizer)
     : getSettingsFieldPlaceholder(fieldKey, draftSettings, uiState);
 
 const handleSettingsEvent = (
@@ -148,23 +162,18 @@ const renderFieldInfo = (
   uiState: SettingsUiState,
   localizer: Localizer,
 ) => {
-  const suggestion = getSettingsFieldSuggestion(fieldKey, draftSettings, uiState);
+  const suggestion = getSettingsFieldSuggestion(fieldKey, draftSettings, uiState, localizer);
   if (!suggestion) return null;
-  const suggestionDataLocalize = getSettingsFieldSuggestionDataLocalize(fieldKey, draftSettings, uiState);
   const label = getSettingsFieldLabel(fieldKey, localizer);
   const content =
     fieldKey === "compressionProfile" ? <CompressInfoContent info={COMPRESSION_PROFILE_FIELD_INFO} /> : suggestion;
   return (
-    <InfoToggle ariaLabel={`Show ${label} details`} portalPanel title={`Show ${label} details`}>
-      <div
-        data-localize={
-          fieldKey !== "compressionProfile" && typeof suggestionDataLocalize === "string"
-            ? suggestionDataLocalize
-            : undefined
-        }
-      >
-        {content}
-      </div>
+    <InfoToggle
+      ariaLabel={localizer.message("ui.output.showDetails", { label })}
+      portalPanel
+      title={localizer.message("ui.output.showDetails", { label })}
+    >
+      {content}
     </InfoToggle>
   );
 };
@@ -196,7 +205,7 @@ const AccentPicker = ({ fieldKey, draftSettings, uiState, onDraftChange }: Field
           <span aria-hidden="true" className="accent-chip-dot" style={{ background: accent.swatch }} />
         </label>
       ))}
-      <span className="accent-name">{selected ? getSelectOptionLabel(fieldKey, selected) : value}</span>
+      <span className="accent-name">{selected ? getSelectOptionLabel(fieldKey, selected, localizer) : value}</span>
     </span>
   );
 };
@@ -260,7 +269,7 @@ const FieldControl = ({ fieldKey, draftSettings, uiState, validation, onDraftCha
     );
   }
   if (field.kind === "select") {
-    const placeholder = getFieldPlaceholder(fieldKey, draftSettings, uiState);
+    const placeholder = getFieldPlaceholder(fieldKey, draftSettings, uiState, localizer);
     const value = getFieldValue(fieldKey, draftSettings);
     return (
       <DropdownSelect
@@ -274,14 +283,14 @@ const FieldControl = ({ fieldKey, draftSettings, uiState, validation, onDraftCha
         {placeholder ? <option value="">{placeholder}</option> : null}
         {(field.options || []).map((option) => (
           <option key={`${field.id}-${option.value}`} value={option.value}>
-            {getSelectOptionLabel(fieldKey, option)}
+            {getSelectOptionLabel(fieldKey, option, localizer)}
           </option>
         ))}
       </DropdownSelect>
     );
   }
   const inputType = field.kind === "number" && fieldKey !== "threads" ? "number" : "text";
-  const placeholder = getFieldPlaceholder(fieldKey, draftSettings, uiState);
+  const placeholder = getFieldPlaceholder(fieldKey, draftSettings, uiState, localizer);
   const value = getFieldValue(fieldKey, draftSettings);
   if (field.kind === "text" && isCompressionCodecFieldKey(fieldKey)) {
     return (
@@ -399,7 +408,11 @@ const SettingsGroup = ({
   uiState,
   validation,
   onDraftChange,
-}: { advanced: boolean; section: { fields: SettingsFieldKey[]; title: string } } & SettingsFieldShared) => {
+}: {
+  advanced: boolean;
+  section: { fields: SettingsFieldKey[]; title: string; titleId?: MessageId };
+} & SettingsFieldShared) => {
+  const localizer = useUiLocalizer();
   const shared = { draftSettings, onDraftChange, uiState, validation };
   const fields = section.fields.filter(
     (fieldKey) =>
@@ -412,7 +425,7 @@ const SettingsGroup = ({
   const rows = fields.filter((fieldKey) => !TOGGLE_KINDS.has(SETTINGS_FIELD_METADATA[fieldKey].kind));
   return (
     <div className="setgroup" id={settingsGroupId(section.title)}>
-      <div className="gtitle">{section.title}</div>
+      <div className="gtitle">{section.titleId ? localizer.message(section.titleId) : section.title}</div>
       {section.title === "Webapp" ? <ThemeSetting /> : null}
       {rows.map((fieldKey) =>
         SETTINGS_FIELD_METADATA[fieldKey].kind === "range" ? (

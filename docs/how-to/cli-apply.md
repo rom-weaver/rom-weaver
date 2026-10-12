@@ -41,7 +41,7 @@ An output extension matching the selected ROM leaf writes a plain ROM, so `trans
 
 For an ordinary file apply, omit `--output` to write a sibling such as `original-patched.sfc`. Existing names are preserved by adding a numeric suffix. Weave applies keep their weave-provided output name; a weave without one still requires `--output`.
 
-Formats that carry their own checksums are verified strictly, so a wrong starting ROM stops the run - see [Fix a checksum error](fix-checksum-errors.md) when that happens.
+Formats that carry their own checksums are verified strictly, so a wrong original ROM stops the run - see [Fix a checksum error](fix-checksum-errors.md) when that happens.
 
 ## Apply a Dreamcast DCP patch
 

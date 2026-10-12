@@ -15,358 +15,23 @@ msgstr ""
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-#~ msgid "ui.weaveExport.action"
-#~ msgstr "Download weave"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.output.weavePartial"
-#~ msgstr "Output won't be verified - the weave's expected result only covers its full patch chain."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.output.verified"
-#~ msgstr "The applied result will be verified against the expected output."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "settings.applyPlayButtonEnabled"
-#~ msgstr "Show the test button after applying"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.status.romDatabase"
-#~ msgstr "ROM database"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.status.cachedFilesSize"
-#~ msgstr "Transferred / stored"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.hashHint"
-#~ msgstr "No file needed - paste a CRC32, MD5, or SHA-1 checksum in hex."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.hero.accent"
-#~ msgstr "at native speed"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.home.openWebapp"
-#~ msgstr "Open the webapp"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.namePlatformChange"
-#~ msgstr "Change"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.hashInvalidChars"
-#~ msgstr "Checksums use only the hex characters 0-9 and a-f."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.namePlatformFirst"
-#~ msgstr "Choose a platform first"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.nameResults"
-#~ msgstr "Choose the ROM you need"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.hashPlaceholder"
-#~ msgstr "CRC32, MD5, or SHA-1"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.namePlaceholder"
-#~ msgstr "Game name"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.hashDisclosure"
-#~ msgstr "Identify by checksum"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.nameDisclosure"
-#~ msgstr "Identify by game name"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.hashLabel"
-#~ msgstr "Looking for a specific ROM?"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.namePlatformEmpty"
-#~ msgstr "No platform matches"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.hashRefine"
-#~ msgstr "Not the ROM you meant?"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.namePlatformLabel"
-#~ msgstr "Platform"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.hashSearch"
-#~ msgstr "Search"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.nameSearch"
-#~ msgstr "Search"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.hashSearchAgain"
-#~ msgstr "Search again"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.hashSearching"
-#~ msgstr "Searching…"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.nameSearching"
-#~ msgstr "Searching…"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.nameFailed"
-#~ msgstr "The name search failed."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.namePlatformsFailed"
-#~ msgstr "The platform list could not be loaded."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.namePlatformPlaceholder"
-#~ msgstr "Type to filter platforms"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.identify.nameLabel"
-#~ msgstr "Which game do you need?"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.patchChecks.explanation"
-#~ msgstr "Authored input checks describe a patch source. Every patch runs on the current stack input."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.patchChecks.currentStackInput"
-#~ msgstr "Current stack input"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.patchChecks.execution"
-#~ msgstr "Apply to"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.patchChecks.executionMember"
-#~ msgstr "Member path"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.patchChecks.originalRom"
-#~ msgstr "Original ROM{member}"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.patch.selectTarget"
-#~ msgstr "Select target"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.patchChecks.targetRom"
-#~ msgstr "Target ROM: {target}"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.patchChecks.executionMemberTitle"
-#~ msgstr "Use the exact member path from the selected ROM or patch output."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.patch.target"
-#~ msgstr "Target"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.nav.groupDevice"
-#~ msgstr "This device"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.docs.browse"
-#~ msgstr "Browse docs"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.docs.closeNavigation"
-#~ msgstr "Close navigation"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.docs.title"
-#~ msgstr "Documentation"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.docs.navigation"
-#~ msgstr "Documentation navigation"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.apply.tutorial.options"
-#~ msgstr "Options"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.apply.tutorial.cheats.body"
-#~ msgstr "Cheats join the patch list and apply like any other patch. Leave them off if you want the expected ROM WEAVER result."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.apply.tutorial.cheats.tryIt"
-#~ msgstr "Open the cheat menu to look at the practice catalog."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.apply.tutorial.cheats.title"
-#~ msgstr "Optional: add a practice cheat"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.apply.tutorial.downloadPractice"
-#~ msgstr "Download first-weave.zip"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.apply.tutorial.noFiles"
-#~ msgstr "No files handy?"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.apply.tutorial.usePractice"
-#~ msgstr "Use the practice files"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.apply.compressionType"
-#~ msgstr "Compression type"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.output.file"
-#~ msgstr "File"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.output.identified"
-#~ msgstr "Ident"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.output.name"
-#~ msgstr "Name"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.home.tryAfter"
-#~ msgstr ": a tiny homebrew NES ROM and two patches, already in order."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.home.flowWeave"
-#~ msgstr "Weave Patches"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.home.checksums"
-#~ msgstr "Checksums"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.home.flowCreate"
-#~ msgstr "Create Patch"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.home.workflowsDescription"
-#~ msgstr "Create patches, share reusable weaves, and test ROMs in your browser."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.home.tryBefore"
-#~ msgstr "New here?"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.home.workflowsTitle"
-#~ msgstr "Other capabilities"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.home.flowTest"
-#~ msgstr "Test ROM"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.home.cliItem1"
-#~ msgstr "Install with npm, Homebrew, Cargo, or Docker for scripts and batch jobs."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.tutorial.new"
-#~ msgstr "New here?"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.hero.compressThesis2"
-#~ msgstr "Create CHD, RVZ, or archives."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.hero.checksumThesis2"
-#~ msgstr "Compare it with the expected value."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.hero.thesis2"
-#~ msgstr "One toolkit."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.hero.toolsThesis2"
-#~ msgstr "Recover the original."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-#~ msgid "ui.hero.testThesis2"
-#~ msgstr "Play your patched game."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.output.doubledExtension.after"
 msgstr ", an output extension. The format selector adds the extension; remove it to avoid a doubled name."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.option.defaultCompression.sevenZipOnly"
+msgstr ".7z only"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.option.defaultCompression.sevenZipSpecial"
+msgstr ".7z or ROM specific"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.option.defaultCompression.zipOnly"
+msgstr ".zip only"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -495,6 +160,11 @@ msgstr "{file} is read in place."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.defaultOption"
+msgstr "{label} (Default)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.identified"
 msgstr "{title}: {platform}"
 
@@ -502,6 +172,11 @@ msgstr "{title}: {platform}"
 #: src/presentation/localization/messages.ts
 msgid "ui.cheats.visibleOfTotal"
 msgstr "{visible} of {count, plural, one {# cheat} other {# cheats}}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.notFound.heading"
+msgstr "404: Page not found"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -755,6 +430,11 @@ msgstr "Adds Files, Identify and disc-sheet drawers, plus timings."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.detailedView"
+msgstr "Adds Files, Identify, and disc-sheet drawers to every file card, plus timings. Same as the Detailed switch."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.console.advanced"
 msgstr "Advanced"
 
@@ -782,6 +462,11 @@ msgstr "App"
 #: src/presentation/localization/messages.ts
 msgid "ui.tools.appearance"
 msgstr "Appearance"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.applied"
+msgstr "Applied"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -935,6 +620,11 @@ msgstr "auto (strip)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.option.postApply.autoShow"
+msgstr "Auto + button"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.header.autoStrip"
 msgstr "Auto drops this ROM's junk copier header."
 
@@ -990,13 +680,13 @@ msgstr "Baked into output"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.basis.base"
-msgstr "base ROM"
+msgid "ui.apply.tutorial.identify.body"
+msgstr "Before adding a ROM, Identify can search by game name or checksum. Choose a title, then its release, to set the expected ROM checks. This search hides once a ROM is added or the patches already supply checks. In Detailed view, the ROM’s Identify drawer shows database matches, region and revision when available. The homebrew practice ROM has no public database entry."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.identify.body"
-msgstr "Before adding a ROM, Identify can search by game name or checksum. Choose a title, then its release, to set the expected ROM checks. This search hides once a ROM is added or the patches already supply checks. In Detailed view, the ROM’s Identify drawer shows database matches, region and revision when available. The homebrew practice ROM has no public database entry."
+msgid "ui.settings.section.behavior"
+msgstr "Behavior"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1012,6 +702,11 @@ msgstr "Beta build"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.n64Order.big-endian"
 msgstr "big endian (.z64)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.option.byteUnits.binary"
+msgstr "Binary (KiB, MiB, GiB)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1032,6 +727,11 @@ msgstr "Bring"
 #: src/presentation/localization/messages.ts
 msgid "ui.tutorial.reenable"
 msgstr "Bring it back in Settings"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.notFound.browseDocs"
+msgstr "Browse docs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1057,6 +757,11 @@ msgstr "Build patch weaves and optionally apply them."
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkEdit"
 msgstr "Bulk edit"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.option.postApply.show"
+msgstr "Button only"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1255,13 +960,18 @@ msgstr "Check it"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.notFound.copy"
+msgstr "Check the address, or choose where you want to go next."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.weaveTutorial.rom.title"
-msgstr "Check the starting ROM"
+msgstr "Check the original ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.rom.title"
-msgstr "Check your starting ROM"
+msgstr "Check your original ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1395,6 +1105,11 @@ msgstr "Choose codes to bake into the ROM at their place in the list."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.byteUnits"
+msgstr "Choose decimal or binary units for file sizes."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.identify.tryIt"
 msgstr "Choose Detailed, then open Identify to inspect the ROM information. Open Checks to compare checksums."
 
@@ -1450,8 +1165,23 @@ msgstr "Choose the version of {title} for {platform}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.postApplyDownload"
+msgstr "Choose whether Download runs automatically and whether its button stays visible."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.postApplyTest"
+msgstr "Choose whether Test opens automatically and whether its button stays visible."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.basisHelp"
-msgstr "Choose whether this patch's input checks describe the base ROM or the previous patch output."
+msgstr "Choose whether this patch's input checks describe the original ROM or the previous patch output."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.weavePackage"
+msgstr "Choose whether to include the ROM in a shared weave. The Compression type controls its archive format."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1502,6 +1232,11 @@ msgstr "Code type"
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.codec"
 msgstr "Codec"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.section.codecs"
+msgstr "Codecs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1587,6 +1322,11 @@ msgstr "Compress the result"
 #: src/presentation/localization/messages.ts
 msgid "ui.compress.running"
 msgstr "Compressing files…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.section.compression"
+msgstr "Compression"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1760,6 +1500,11 @@ msgstr "Database required"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.option.byteUnits.decimal"
+msgstr "Decimal (KB, MB, GB)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.decode"
 msgstr "DECODE"
 
@@ -1777,6 +1522,41 @@ msgstr "Decompress GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, B
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkSelection"
 msgstr "Default selection"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.codecLevel"
+msgstr "Default: {codec}. Optional level: {codec}[:{range}]."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.zipCodec"
+msgstr "Default: {codec}. Valid values: {values}. Optional levels: {levels}. Store does not use a level."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.rvzBlockSize"
+msgstr "Default: {value}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.compressionProfile"
+msgstr "Default: Max. zstd levels: {zstd}. Other codec levels: {other}."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.option.defaultCompression.zipSpecial"
+msgstr "Default: ROM specific, else bare file or .zip"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.defaultCompression"
+msgstr "Default: ROM-specific compression such as Z3DS, CHD, RVZ, etc. when available. Otherwise Apply and Create download the bare ROM or patch (choose .zip or .7z in their Options), while Compress, Trim and PPF undo use ZIP. Pick \".zip only\" or \".7z only\" to archive every download."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.logLevel"
+msgstr "Default: Trace in development; Warnings otherwise. Debug and Trace include detailed workflow progress."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2107,6 +1887,11 @@ msgstr "Environment"
 #: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.group.equipment"
 msgstr "Equipment"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.option.logLevel.error"
+msgstr "Errors"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2445,6 +2230,11 @@ msgstr "Hide {count} more {count, plural, one {variant} other {variants}}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.option.postApply.hide"
+msgstr "Hide Button"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identify.hideChecksums"
 msgstr "Hide checksums"
 
@@ -2505,13 +2295,13 @@ msgstr "Identify tool"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.identifyThesis"
-msgstr "Identify your ROM."
+msgid "ui.apply.tutorial.identify.title"
+msgstr "Identify your original ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.identify.title"
-msgstr "Identify your starting ROM"
+msgid "ui.hero.identifyThesis"
+msgstr "Identify your ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3215,6 +3005,11 @@ msgstr "none"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.option.defaultCompression.none"
+msgstr "None"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.unknown"
 msgstr "Not checked yet: {input}"
 
@@ -3222,6 +3017,11 @@ msgstr "Not checked yet: {input}"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.faqOriginalAnswer"
 msgstr "Not in the browser. Each result downloads as a new file."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.noMatchBody"
+msgstr "Not in the identification data. Unknown does not mean corrupt: it may be homebrew, modified, or an unlisted revision. Its checksums are below."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3447,6 +3247,11 @@ msgstr "Original"
 #: src/presentation/localization/messages.ts
 msgid "ui.create.identicalInputs"
 msgstr "Original and Modified have identical contents, so the patch would change nothing. Check that you chose the right files."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.basis.base"
+msgstr "original ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4325,6 +4130,11 @@ msgstr "ROM SHA-1"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.option.defaultCompression.specialOnly"
+msgstr "ROM specific only"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.saves.emulator.kindCombined"
 msgstr "rom-weaver exported save"
 
@@ -4850,6 +4660,11 @@ msgstr "Tests with {file}. Make sure it is the game that made this save."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.notFound.label"
+msgstr "That page is not here."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.archive.info.contents"
 msgstr "The archive holds that index and the patch files. Including the original ROM is optional; a patch-only weave asks the player for a matching file."
 
@@ -5155,11 +4970,6 @@ msgstr "There is no server to send your files to"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.identify.noMatchBody"
-msgstr "These checksums are not in the identification data. Unknown does not mean corrupt: the ROM may be homebrew, modified, an unlisted revision, or from a system the data does not cover. Its checksums are on the card below so you can look them up elsewhere."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.output.notSaved"
 msgstr "These choices are not saved. Change your defaults in Settings."
 
@@ -5333,15 +5143,6 @@ msgstr "Type"
 msgid "ui.cheats.typeCodes"
 msgstr "Type codes"
 
-#~ msgid "ui.apply.validation.overrideChecksum"
-#~ msgstr "Apply anyway despite patch and ROM check mismatch"
-
-#~ msgid "ui.identifyDrawer.disc"
-#~ msgstr "Disc"
-
-#~ msgid "ui.log.tabChangelog"
-#~ msgstr "Changelog"
-
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.unchanged"
@@ -5444,6 +5245,21 @@ msgstr "valid"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.codecValuesLevels"
+msgstr "Valid values: {values}. Optional levels: {levels}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.threadsSingle"
+msgstr "Valid values: auto or 1."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.threadsThreaded"
+msgstr "Valid values: auto, 0-64. Use 0 to disable threaded bundles."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.saves.editor.integrity.warnings"
 msgstr "Valid with warnings"
 
@@ -5471,11 +5287,6 @@ msgstr "Variant class"
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.verified"
 msgstr "Verified"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.patchChecks.applied"
-msgstr "Applied"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5514,6 +5325,16 @@ msgstr "Want your own copy? Host it yourself from static files or a Docker image
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.emulatorSaveStorage"
+msgstr "Warning: If you turn this off, new save states and SRAM are not stored. Existing saves remain until you delete them in Storage."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.option.logLevel.warn"
+msgstr "Warnings"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.goWeave"
 msgstr "Weave"
 
@@ -5531,6 +5352,16 @@ msgstr "Weave"
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.weaveTutorial.weavePatches"
 msgstr "Weave + patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.option.weavePackage.patches"
+msgstr "Weave + patches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.option.weavePackage.rom"
+msgstr "Weave + ROM + patches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -5559,6 +5390,11 @@ msgstr "Webapp"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.section.webapp"
+msgstr "Webapp"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.routesTitle"
 msgstr "What file do you have?"
 
@@ -5581,6 +5417,11 @@ msgstr "What this patch changes"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.whatsNew"
 msgstr "What’s new"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.identifiedOutputName"
+msgstr "When off, output names derive from the input file name instead."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
