@@ -428,16 +428,16 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     labelId: "settings.defaultCompression",
     options: [
       { label: ".7z or ROM specific", value: "7z/special" },
-      { label: ".zip or ROM specific", value: "zip/special" },
+      { label: "Default: ROM specific, else bare file or .zip", value: "zip/special" },
       { label: "ROM specific only", value: "special only" },
       { label: ".7z only", value: "7z only" },
       { label: ".zip only", value: "zip only" },
       { label: "None", value: "none" },
     ],
     suggestion:
-      ".zip or ROM specific is the default: ZIP for archive output, or ROM-specific compression such as Z3DS, CHD, RVZ, etc. when available.",
+      'Default: ROM-specific compression such as Z3DS, CHD, RVZ, etc. when available. Otherwise Apply and Create download the bare ROM or patch (choose .zip or .7z in their Options), while Compress, Trim and PPF undo use ZIP. Pick ".zip only" or ".7z only" to archive every download.',
     suggestionDataLocalize:
-      ".zip or ROM specific is the default: ZIP for archive output, or ROM-specific compression such as Z3DS, CHD, RVZ, etc. when available.",
+      'Default: ROM-specific compression such as Z3DS, CHD, RVZ, etc. when available. Otherwise Apply and Create download the bare ROM or patch (choose .zip or .7z in their Options), while Compress, Trim and PPF undo use ZIP. Pick ".zip only" or ".7z only" to archive every download.',
     validationLabel: "Type",
     validValues: ["7z/special", "zip/special", "special only", "7z only", "zip only", "none"],
   },
