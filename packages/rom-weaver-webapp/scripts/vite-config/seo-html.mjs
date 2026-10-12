@@ -1,7 +1,12 @@
 import { readDocLastmod } from "../docs-discovery.mjs";
 import { docSourcePath } from "../../src/webapp/docs-pages.mjs";
 import { DOC_SOURCES } from "../../src/webapp/docs-routing.mjs";
-import { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES } from "../../src/webapp/workflow-seo.mjs";
+import {
+  BETA_ROUTE_TITLES,
+  SITE_ALTERNATE_NAMES,
+  SITE_NAME,
+  WORKFLOW_SEO_ROUTES,
+} from "../../src/webapp/workflow-seo.mjs";
 import { repoRoot } from "./paths.mjs";
 
 export const createRobotsSource = (channel) =>
@@ -68,10 +73,21 @@ export const injectLdJson = (html, route, includeWebsite = false) =>
 // The Trim and Save Editor tabs are still beta - they navigate in
 // production but must not be indexed, so strip the shared index directive to
 // noindex and point their canonical at themselves.
-export const makeBetaRouteNoindex = (html, slug) =>
-  html
+export const makeBetaRouteNoindex = (html, slug, channel = "prod", channelLabel = "") => {
+  let betaHtml = html
     .replace('<meta name="robots" content="index, follow" />', '<meta name="robots" content="noindex, nofollow" />')
     .replace(/(<link\s+rel="canonical"\s+href=")[^"]*(")/, `$1https://rom-weaver.com/${slug}$2`);
+  const baseTitle = BETA_ROUTE_TITLES[slug];
+  if (!baseTitle) return betaHtml;
+  const title = channel === "prod" ? baseTitle : baseTitle.replace(SITE_NAME, `${SITE_NAME} ${channelLabel}`);
+  betaHtml = betaHtml.replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`);
+  for (const [attribute, name] of [
+    ["property", "og:title"],
+    ["name", "twitter:title"],
+  ])
+    betaHtml = replaceMetaContent(betaHtml, attribute, name, title);
+  return betaHtml;
+};
 
 export const createNotFoundHtml = (html, channel, channelLabel) => {
   const title = `Page not found | ${SITE_NAME}${channel === "prod" ? "" : ` ${channelLabel}`}`;
