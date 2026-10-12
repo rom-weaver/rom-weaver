@@ -1852,6 +1852,11 @@ fn checksum_argument_errors_show_the_subcommand_usage() {
         stderr.contains("--digest requires exactly one algorithm"),
         "{stderr}"
     );
-    assert!(stderr.contains("Usage: rom-weaver checksum"), "{stderr}");
+    // Windows prints the binary as `rom-weaver.exe`.
+    assert!(
+        stderr.contains("Usage: rom-weaver checksum")
+            || stderr.contains("Usage: rom-weaver.exe checksum"),
+        "{stderr}"
+    );
     assert!(!stderr.contains("<COMMAND>"), "{stderr}");
 }
