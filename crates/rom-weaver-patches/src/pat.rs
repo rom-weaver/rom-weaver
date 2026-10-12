@@ -521,8 +521,8 @@ fn create_pat_patch_streaming(
     let mut offset = 0u64;
 
     loop {
-        let read = original.read(&mut original_buffer)?;
-        let modified_read = modified.read(&mut modified_buffer)?;
+        let read = rom_weaver_core::read_full(&mut original, &mut original_buffer)?;
+        let modified_read = rom_weaver_core::read_full(&mut modified, &mut modified_buffer)?;
 
         if read != modified_read {
             return Err(RomWeaverError::Validation(

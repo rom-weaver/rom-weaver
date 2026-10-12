@@ -1,15 +1,15 @@
 use std::{
     collections::HashSet,
     fs,
-    io::Write,
+    io::{self, ErrorKind, Read, Write},
     sync::{Arc, Mutex},
 };
 
 use super::{
     BlockCacheReader, ChunkPlanner, OrderedChunkWriter, OrderedStreamingMessages,
     SharedBlockCacheReader, TempPathAllocator, bounded_items_for_threads,
-    create_extract_output_file, ensure_output_available, file_starts_with,
-    ordered_streaming_compress,
+    copy_retrying_interrupted, create_extract_output_file, ensure_output_available,
+    file_starts_with, ordered_streaming_compress, read_full, read_up_to,
 };
 use crate::RomWeaverError;
 
@@ -782,4 +782,94 @@ fn temp_allocator_exposes_its_root_and_namespace_and_handles_extension_shapes() 
         allocator.next_path("a b/c.d", Some("tmp")),
         namespace_dir.join("a-b-c-d-00000003.tmp")
     );
+}
+
+/// Reader that fails its first call with `Interrupted`, then hands out at most `step` bytes
+/// per call - the two ways a single `read` can fall short of a full buffer.
+struct InterruptedShortReader {
+    data: Vec<u8>,
+    position: usize,
+    step: usize,
+    interrupted: bool,
+}
+
+impl InterruptedShortReader {
+    fn new(data: &[u8], step: usize) -> Self {
+        Self {
+            data: data.to_vec(),
+            position: 0,
+            step,
+            interrupted: false,
+        }
+    }
+}
+
+impl Read for InterruptedShortReader {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if !self.interrupted {
+            self.interrupted = true;
+            return Err(ErrorKind::Interrupted.into());
+        }
+        let len = buf
+            .len()
+            .min(self.step)
+            .min(self.data.len() - self.position);
+        buf[..len].copy_from_slice(&self.data[self.position..self.position + len]);
+        self.position += len;
+        Ok(len)
+    }
+}
+
+#[test]
+fn read_full_retries_interrupted_and_short_reads_until_full() {
+    let data: Vec<u8> = (0..=99).collect();
+    let mut reader = InterruptedShortReader::new(&data, 7);
+    let mut buffer = [0u8; 64];
+    assert_eq!(read_full(&mut reader, &mut buffer).expect("first fill"), 64);
+    assert_eq!(buffer, data[..64]);
+    assert_eq!(read_full(&mut reader, &mut buffer).expect("tail"), 36);
+    assert_eq!(buffer[..36], data[64..]);
+    assert_eq!(read_full(&mut reader, &mut buffer).expect("eof"), 0);
+}
+
+#[test]
+fn read_up_to_retries_interrupted_and_short_reads_until_full() {
+    let data: Vec<u8> = (0..=99).collect();
+    let bytes = read_up_to(InterruptedShortReader::new(&data, 7), 64).expect("read");
+    assert_eq!(bytes, data[..64]);
+}
+
+#[test]
+fn read_up_to_stops_at_end_of_input() {
+    let data: Vec<u8> = (0..20).collect();
+    let bytes = read_up_to(InterruptedShortReader::new(&data, 7), 64).expect("read");
+    assert_eq!(bytes, data);
+}
+
+#[test]
+fn block_cache_reader_returns_partial_last_block() {
+    let temp_dir = std::env::temp_dir().join(format!(
+        "rom-weaver-io-partial-block-{}",
+        std::process::id()
+    ));
+    fs::create_dir_all(&temp_dir).expect("temp dir");
+    let temp_file = temp_dir.join("input.bin");
+    let data: Vec<u8> = (0..40).collect();
+    fs::write(&temp_file, &data).expect("write");
+    let mut reader = BlockCacheReader::open(&temp_file, 16, 2).expect("reader");
+    assert_eq!(reader.read_vec_at(30, 10).expect("tail read"), data[30..]);
+    assert!(reader.read_vec_at(36, 8).is_err());
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+/// The interrupting reader hits `io::copy`'s generic path, which retries reader `Interrupted`
+/// itself; only the Linux kernel-copy path surfaces it. This checks the wrapper passes every
+/// byte through unchanged.
+#[test]
+fn copy_retrying_interrupted_copies_all_bytes() {
+    let data: Vec<u8> = (0..=255).cycle().take(10_000).collect();
+    let mut output = Vec::new();
+    copy_retrying_interrupted(&mut InterruptedShortReader::new(&data, 333), &mut output)
+        .expect("copy");
+    assert_eq!(output, data);
 }

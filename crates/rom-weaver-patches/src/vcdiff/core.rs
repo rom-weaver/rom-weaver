@@ -325,7 +325,7 @@ impl PatchHandler for VcdiffPatchHandler {
             }
 
             let mut temp = BufReader::new(File::open(&window.temp_path)?);
-            std::io::copy(&mut temp, &mut output)?;
+            rom_weaver_core::copy_retrying_interrupted(&mut temp, &mut output)?;
             expected_offset = checked_add(expected_offset, window.len, "assembled output size")?;
             let _ = fs::remove_file(&window.temp_path);
         }
@@ -1643,14 +1643,7 @@ pub(super) fn move_or_copy_file(from: &Path, to: &Path) -> Result<()> {
 pub(super) fn read_next_chunk(reader: &mut BufReader<File>, buffer: &mut Vec<u8>) -> Result<usize> {
     let capacity = buffer.capacity().max(buffer.len()).max(64);
     buffer.resize(capacity, 0);
-    let mut total = 0_usize;
-    while total < capacity {
-        let read = reader.read(&mut buffer[total..capacity])?;
-        if read == 0 {
-            break;
-        }
-        total += read;
-    }
+    let total = rom_weaver_core::read_full(reader, &mut buffer[..capacity])?;
     buffer.truncate(total);
     Ok(total)
 }

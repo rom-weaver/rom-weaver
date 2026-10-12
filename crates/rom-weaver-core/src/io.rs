@@ -143,6 +143,57 @@ pub fn file_starts_with(source: &Path, signature: &[u8]) -> bool {
     false
 }
 
+/// Fill `buffer` from `reader`, returning less than its length only when the input ends first.
+///
+/// A single `read` may return a short count or fail with `Interrupted` when a signal lands
+/// mid-call; this retries both, so the result depends only on the input's bytes.
+pub fn read_full<R: Read + ?Sized>(reader: &mut R, buffer: &mut [u8]) -> std::io::Result<usize> {
+    let mut filled = 0;
+    while filled < buffer.len() {
+        match reader.read(&mut buffer[filled..]) {
+            Ok(0) => break,
+            Ok(read) => filled += read,
+            Err(error) if error.kind() == ErrorKind::Interrupted => {
+                tracing::trace!(filled, "read interrupted by a signal; retrying");
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(filled)
+}
+
+/// Read up to `limit` bytes, returning fewer only when the input ends first. See [`read_full`].
+pub fn read_up_to<R: Read>(mut reader: R, limit: usize) -> std::io::Result<Vec<u8>> {
+    let mut bytes = vec![0u8; limit];
+    let filled = read_full(&mut reader, &mut bytes)?;
+    bytes.truncate(filled);
+    Ok(bytes)
+}
+
+/// `std::io::copy` that resumes after `Interrupted`.
+///
+/// On Linux, `io::copy` between files runs `copy_file_range`, `sendfile`, or `splice`, and
+/// std returns their `EINTR` instead of retrying it. A signal handler installed without
+/// `SA_RESTART` (libFuzzer's timers, or a host process's) can land mid-call. Bytes already
+/// moved have advanced both file offsets, so calling again continues where it stopped.
+pub fn copy_retrying_interrupted<R: Read + ?Sized, W: Write + ?Sized>(
+    reader: &mut R,
+    writer: &mut W,
+) -> std::io::Result<()> {
+    loop {
+        match std::io::copy(reader, writer) {
+            Ok(copied) => {
+                tracing::trace!(copied, "io copy finished");
+                return Ok(());
+            }
+            Err(error) if error.kind() == ErrorKind::Interrupted => {
+                tracing::debug!("io copy interrupted by a signal; resuming");
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
 pub fn ordered_streaming_compress<
     Tasks,
     TTask,
@@ -621,9 +672,7 @@ impl BlockCacheReader {
 
         let start = block_index.saturating_mul(self.block_size as u64);
         self.file.seek(SeekFrom::Start(start))?;
-        let mut block = vec![0u8; self.block_size];
-        let bytes_read = self.file.read(&mut block)?;
-        block.truncate(bytes_read);
+        let block = read_up_to(&mut self.file, self.block_size)?;
         if block.is_empty() {
             return Err(RomWeaverError::Validation(format!(
                 "block cache attempted to read beyond file length at block index {block_index}"
