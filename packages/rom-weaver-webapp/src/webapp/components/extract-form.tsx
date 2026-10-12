@@ -17,7 +17,7 @@ type ProgressState = { label: string; percent: number | null };
 
 // Extract opens one archive per run, so extra files are named instead of silently dropped.
 const skippedNotice = (used: File, skipped: string[]): string =>
-  `Extract opens one archive per run: ${used.name} was extracted, ${skipped.join(", ")} not.`;
+  `Extract opens one archive per run: only ${used.name} was used; ${skipped.join(", ")} ${skipped.length === 1 ? "was" : "were"} skipped.`;
 const outputPath = (output: PublicOutput): string => output.relativePath || output.fileName;
 const isChd = (file: File): boolean => /\.chd$/i.test(file.name);
 const binCount = (entries: { filename: string }[]): number =>
@@ -275,6 +275,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
       progress,
       downloadProgress: zipProgress,
       error: error || null,
+      skippedFiles: skipped,
       splitChoiceRequired: !!splitPrompt,
       outputs: outputs.map((output) => ({
         id: output.path,

@@ -222,6 +222,25 @@ test("several unknown ROMs each show one calm no-match notice and no error", asy
   }
 });
 
+test("a cancelled identification can be retried", async () => {
+  identifyRom.mockImplementationOnce(() => new Promise(() => undefined));
+  await mountIdentifyForm();
+  await selectRom("later.gba");
+  const cancel = () => host.querySelector('[aria-label="Cancel identification"]');
+  await waitFor(cancel);
+  cancel().click();
+  await waitFor(() => buttonMatching(/Retry identification/));
+
+  identifyRom.mockResolvedValue({
+    candidates: [candidate("later.gba", "matched", [gbaMatch("Later Game (USA)")])],
+    input: "later.gba",
+    status: "matched",
+  });
+  buttonMatching(/Retry identification/).click();
+  await waitForText("Later Game (USA)");
+  expect(identifyRom).toHaveBeenCalledTimes(2);
+});
+
 test("an ambiguous ROM names the count and lists every candidate", async () => {
   identifyRom.mockResolvedValue({
     candidates: [candidate("twin.gba", "ambiguous", [gbaMatch("Twin Game (USA)"), gbaMatch("Twin Game (Europe)")])],

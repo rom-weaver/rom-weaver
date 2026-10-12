@@ -61,7 +61,9 @@ const DEFAULT_ALGORITHMS = ["crc32", "md5", "sha1"];
 
 type ChecksumFormProps = { pageDrop?: PageFileDrop | null };
 type ChecksumSet = { checksums: Record<string, string>; id: string; label: string };
-type CompareResult = { match?: { algorithm: string; setId: string }; uncomputed: string[] } | null;
+type ChecksumMatch = { algorithm: string; setId: string };
+/** `match` is the first matching set; `matches` lists every set (file or variant) that equals the pasted value. */
+type CompareResult = { match?: ChecksumMatch; matches?: ChecksumMatch[]; uncomputed: string[] } | null;
 
 const normalizeChecksumInput = (raw: string) => raw.trim().toLowerCase().replace(/^0x/, "");
 
@@ -84,10 +86,12 @@ const getChecksumSets = (file: ChecksumWorkflowFile, fileLabel: string): Checksu
 const compareChecksum = (expected: string, sets: ChecksumSet[], algorithms: string[]): CompareResult => {
   if (!expected) return null;
   const candidates = CHECKSUM_ALGORITHMS.filter((algorithm) => algorithm.hexLength === expected.length);
-  for (const set of sets) {
+  const matches = sets.flatMap((set) => {
     const algorithm = candidates.find((entry) => algorithms.includes(entry.id) && set.checksums[entry.id] === expected);
-    if (algorithm) return { match: { algorithm: algorithm.id, setId: set.id }, uncomputed: [] };
-  }
+    return algorithm ? [{ algorithm: algorithm.id, setId: set.id }] : [];
+  });
+  const [match] = matches;
+  if (match) return { match, matches, uncomputed: [] };
   const uncomputed = candidates
     .filter((entry) => !algorithms.includes(entry.id) || sets.some((set) => !set.checksums[entry.id]))
     .map((entry) => entry.label);
@@ -116,7 +120,7 @@ const ChecksumSetRows = ({
     {CHECKSUM_ALGORITHMS.filter((algorithm) => algorithms.includes(algorithm.id)).map((algorithm) => {
       const value = set.checksums[algorithm.id] || "";
       const sameLength = expected.length === algorithm.hexLength;
-      const matched = compare?.match?.setId === set.id && compare.match.algorithm === algorithm.id;
+      const matched = !!compare?.matches?.some((entry) => entry.setId === set.id && entry.algorithm === algorithm.id);
       const mark = matched ? "ok" : sameLength && !compare?.match ? "bad" : undefined;
       const row = value ? (
         <ChecksumRow
@@ -166,7 +170,8 @@ const ChecksumSourceEntry = ({
   compare,
   expected,
   onSnapshot,
-  selectFile,
+  onRequest,
+  selectFile: selectAny,
   source,
 }: {
   algorithms: string[];
@@ -174,6 +179,8 @@ const ChecksumSourceEntry = ({
   compare: CompareResult;
   expected: string;
   onSnapshot: (id: number, snapshot: ChecksumEntrySnapshot) => void;
+  /** Reports which source asked for a selection, so skipping that prompt drops only that source. */
+  onRequest: (request: CandidateSelectionPrompt, sourceId: number) => void;
   selectFile: (request: CandidateSelectionPrompt) => Promise<CandidateSelectionChoice>;
   source: ChecksumSource;
 }) => {
@@ -192,6 +199,13 @@ const ChecksumSourceEntry = ({
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const { file: sourceFile, id: sourceId } = source;
+  const selectFile = useCallback(
+    (request: CandidateSelectionPrompt) => {
+      onRequest(request, sourceId);
+      return selectAny(request);
+    },
+    [onRequest, selectAny, sourceId],
+  );
 
   // A language or byte-unit change makes a new localizer; reading it through a
   // ref keeps showError stable so the staging effect does not restage the ROM.
@@ -382,6 +396,11 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
   const workflowIdRef = useRef(createReactWorkflowId("react-checksum"));
   const handledPageDropIdRef = useRef<number | null>(null);
   const nextSourceIdRef = useRef(0);
+  const requestSourcesRef = useRef(new WeakMap<CandidateSelectionPrompt, number>());
+  const recordRequest = useCallback(
+    (request: CandidateSelectionPrompt, sourceId: number) => requestSourcesRef.current.set(request, sourceId),
+    [],
+  );
 
   const reportSnapshot = useCallback(
     (id: number, snapshot: ChecksumEntrySnapshot) => setSnapshots((previous) => ({ ...previous, [id]: snapshot })),
@@ -409,8 +428,8 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
   // A skipped selection drops only the archive it was asked about.
   cancelSelectionRef.current = (request) => {
     if (request.sourceIndex === -1) return;
-    const named = sources.filter((entry) => entry.file.name !== request.sourceName);
-    if (named.length !== sources.length) setSources(named);
+    const id = requestSourcesRef.current.get(request);
+    if (id !== undefined) setSources((previous) => previous.filter((entry) => entry.id !== id));
     else if (sources.length === 1) clearSources();
   };
 
@@ -451,8 +470,13 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
   const multiFile = files.length > 1;
   const sets = files.flatMap((file) => getChecksumSets(file, multiFile ? file.fileName : ""));
   const compare = expectedInvalid ? null : compareChecksum(expected, sets, algorithms);
-  const matchedSet = sets.find((set) => set.id === compare?.match?.setId);
+  const matchedSets = sets.filter((set) => compare?.matches?.some((entry) => entry.setId === set.id));
   const matchedLabel = CHECKSUM_ALGORITHMS.find((entry) => entry.id === compare?.match?.algorithm)?.label;
+  const matchedNames = matchedSets.map((set) => set.label);
+  const matchedText =
+    matchedNames.length > 3
+      ? `${matchedNames.slice(0, 2).join(", ")} and ${matchedNames.length - 2} other files`
+      : matchedNames.join(", ");
   const activeProgress = entries.find((entry) => entry.calculating)?.progress ?? null;
   const notices = entries.flatMap((entry, index) => {
     const message = getSourceNoticeMessage(entry.input);
@@ -627,6 +651,7 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
                 compare={compare}
                 expected={expected}
                 key={entry.id}
+                onRequest={recordRequest}
                 onSnapshot={reportSnapshot}
                 selectFile={selectFile}
                 source={entry}
@@ -655,9 +680,11 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
           {expectedInvalid ? (
             <Notice level="error">A checksum contains only the digits 0-9 and the letters a-f.</Notice>
           ) : null}
-          {compare?.match && matchedSet ? (
+          {compare?.match && matchedSets.length ? (
             <p className="pdesc checksum-verdict" id="checksum-compare-verdict">
-              Match: the {matchedLabel} of this file{matchedSet.label ? ` (${matchedSet.label})` : ""}.
+              {matchedSets.length === 1
+                ? `Match: the ${matchedLabel} of this file${matchedText ? ` (${matchedText})` : ""}.`
+                : `Match: the ${matchedLabel} of ${matchedText}.`}
             </p>
           ) : null}
           {compare && !compare.match && files.length ? (
