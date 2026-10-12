@@ -160,7 +160,7 @@ test("an unknown ROM reports one calm no-match notice, never an error or failure
   await runIdentify();
   await waitForText("Unknown does not mean corrupt");
 
-  expect(host.textContent).toContain("homebrew, modified, an unlisted revision");
+  expect(host.textContent).toContain("homebrew, modified, or an unlisted revision");
   expect(host.textContent).not.toContain("Identification data could not be loaded");
   expect(host.textContent).not.toContain("Identification unavailable");
   // One neutral info notice: no error notice, no extra chip or card line.
