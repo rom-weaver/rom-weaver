@@ -113,6 +113,7 @@ fn create_and_apply_round_trip_with_growth() {
             create_threads: 4,
             apply_threads: 1,
             apply_checksum_validation: Some(PatchChecksumValidation::Ignore),
+            create_checksum_validation: Some(PatchChecksumValidation::Ignore),
             ..RoundTripCase::new(b"\x01\x02", b"\x01\x02\x00\x00", "MOD")
         },
     );
@@ -142,7 +143,8 @@ fn create_uses_parallel_threads_for_large_input() {
                 output: patch_path.clone(),
                 format: "MOD".into(),
             },
-            &test_context_with_threads(&temp, 8),
+            &test_context_with_threads(&temp, 8)
+                .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
         )
         .expect("create");
     let execution = report.thread_execution.expect("thread execution");
@@ -194,7 +196,8 @@ fn apply_uses_parallel_threads_for_non_overlapping_records() {
                 output: patch_path.clone(),
                 format: "MOD".into(),
             },
-            &test_context_with_threads(&temp, 4),
+            &test_context_with_threads(&temp, 4)
+                .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
         )
         .expect("create");
 
@@ -280,7 +283,8 @@ fn create_is_deterministic_across_thread_budgets() {
                 output: single_patch.clone(),
                 format: "MOD".into(),
             },
-            &test_context_with_threads(&temp, 1),
+            &test_context_with_threads(&temp, 1)
+                .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
         )
         .expect("single create");
     let parallel_report = handler
@@ -291,7 +295,8 @@ fn create_is_deterministic_across_thread_budgets() {
                 output: parallel_patch.clone(),
                 format: "MOD".into(),
             },
-            &test_context_with_threads(&temp, 8),
+            &test_context_with_threads(&temp, 8)
+                .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
         )
         .expect("parallel create");
 
@@ -351,6 +356,40 @@ fn apply_strict_rejects_non_paper_mario_source() {
         )
         .expect_err("strict validation should fail");
     assert!(error.to_string().contains("Source ROM checksum mismatch"));
+}
+
+#[test]
+fn create_strict_rejects_non_paper_mario_original() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let target_path = temp.child("target.bin");
+    let patch_path = temp.child("update.mod");
+
+    fs::write(&source_path, b"ORIGINAL").expect("fixture");
+    fs::write(&target_path, b"MODIFIED").expect("fixture");
+
+    let error = PmsrPatchHandler::new(&MOD)
+        .create(
+            &PatchCreateRequest {
+                original: source_path,
+                modified: target_path,
+                output: patch_path.clone(),
+                format: "MOD".into(),
+            },
+            &test_context_with_threads(&temp, 1)
+                .with_patch_checksum_validation(PatchChecksumValidation::Strict),
+        )
+        .expect_err("a patch for another source could never apply strictly");
+    assert!(
+        error
+            .to_string()
+            .contains("MOD create requires the Paper Mario (USA) v1.0 ROM"),
+        "{error}"
+    );
+    assert!(
+        !patch_path.exists(),
+        "rejected create must not write a patch"
+    );
 }
 
 /// A well-formed MOD patch carrying `records` as `(offset, data)` pairs.
