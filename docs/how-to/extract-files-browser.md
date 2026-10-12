@@ -2,9 +2,9 @@
 
 Extract ROM archives, CHD and RVZ disc images, or Z3DS, ZCCI, ZCXI, ZCIA, and Z3DSX files in your browser. Download files without uploads.
 
-To change a ROM's container instead, follow [Convert a ROM](convert-roms-browser.md). For terminal procedures, see the [CLI archive guide](work-with-archives.md).
+To change a ROM's container instead, follow [Extract or compress files in the browser](convert-roms-browser.md). For terminal procedures, see the [CLI archive guide](work-with-archives.md).
 
-To decompress a GameCube or Wii disc, follow [Convert RVZ to ISO](convert-rvz-to-iso-browser.md).
+To decompress a GameCube or Wii disc, follow [Decompress RVZ to ISO](convert-rvz-to-iso-browser.md).
 
 To decompress Nintendo 3DS files, follow [Extract Z3DS, ZCCI, ZCXI, ZCIA, and Z3DSX](extract-z3ds-browser.md).
 

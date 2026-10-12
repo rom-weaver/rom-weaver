@@ -105,19 +105,9 @@ const CandidateResult = ({
   expected?: { checksums?: Record<string, string>; size?: number };
   showMemberPath: boolean;
 }) => {
-  const identification = {
-    matches: candidate.matches,
-    status: candidate.status,
-    ...(candidate.condition ? { condition: candidate.condition } : {}),
-    ...(candidate.hint ? { hint: candidate.hint } : {}),
-    ...(candidate.quality ? { quality: candidate.quality } : {}),
-    ...(candidate.platformCandidates ? { platformCandidates: candidate.platformCandidates } : {}),
-    ...(candidate.evidence ? { evidence: candidate.evidence } : {}),
-    ...(candidate.database ? { database: candidate.database } : {}),
-  };
   // A matched record completes the drawer: a pasted checksum computes one
   // digest and the record knows the other two plus the exact size.
-  const database = identifyRecordChecks(identification);
+  const database = identifyRecordChecks(candidate);
   return (
     <>
       {showMemberPath ? <p className="pdesc mono identify-member">ROM: {candidate.path}</p> : null}
@@ -128,15 +118,15 @@ const CandidateResult = ({
         </p>
       ) : null}
       <RomInputPanels
-        identification={identification}
+        identification={candidate}
         identifyDefaultOpen
         info={{
-          ...(typeof candidate.sizeBytes === "number" ? { bytes: candidate.sizeBytes } : {}),
+          bytes: candidate.sizeBytes,
           checksums: candidate.checksums,
           checksumVariants: candidate.checksumVariants,
-          ...(database ? { database } : {}),
+          database,
           defaultOpen: true,
-          ...(expected ? { expected } : {}),
+          expected,
         }}
       />
       <IdentifyCheatInspection identity={candidateCheatIdentity(candidate)} label={candidate.path} />
@@ -163,13 +153,12 @@ const IdentifyForm = ({
   useEffect(() => onLookupResultChange?.(romLookup.result), [onLookupResultChange, romLookup.result]);
   const [entries, setEntries] = useState<IdentifyEntry[]>([]);
   const handledDropRef = useRef(0);
-  /* Every state write is gated on the entry's run token. A run that was
+  /* Every state write is gated on the entry's abort controller. A run that was
      replaced, removed, or unmounted MUST NOT repopulate the form when it
      finally resolves. Files run side by side: the runner's scheduler decides
      how many are admitted at once and queues the rest, as for every workflow. */
-  const runsRef = useRef(new Map<number, { abort: AbortController; token: number }>());
+  const runsRef = useRef(new Map<number, AbortController>());
   const nextEntryIdRef = useRef(0);
-  const runTokenRef = useRef(0);
 
   const updateEntry = useCallback((id: number, patch: Partial<IdentifyEntry>) => {
     setEntries((previous) => previous.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)));
@@ -177,7 +166,7 @@ const IdentifyForm = ({
 
   const cancelEntry = useCallback(
     (id: number) => {
-      runsRef.current.get(id)?.abort.abort();
+      runsRef.current.get(id)?.abort();
       runsRef.current.delete(id);
       updateEntry(id, { busy: false, percent: null, stage: "" });
     },
@@ -190,12 +179,10 @@ const IdentifyForm = ({
 
   const runEntry = useCallback(
     async (id: number, next: File) => {
-      runsRef.current.get(id)?.abort.abort();
-      runTokenRef.current += 1;
-      const token = runTokenRef.current;
+      runsRef.current.get(id)?.abort();
       const abort = new AbortController();
-      runsRef.current.set(id, { abort, token });
-      const live = () => runsRef.current.get(id)?.token === token;
+      runsRef.current.set(id, abort);
+      const live = () => runsRef.current.get(id) === abort;
       updateEntry(id, { busy: true, error: "", percent: null, result: null, stage: "" });
       try {
         const { identifyRom } = await import("../../platform/browser/browser-api.ts");
@@ -398,13 +385,10 @@ const IdentifyForm = ({
 
   /* An unknown ROM is a result, not a fault: one neutral notice per file. A single file shows it above the
      card; with several files each card carries its own. */
-  const noMatchNotice = (verdict: ParsedIdentifyResult | ParsedIdentifyCandidate) => {
-    const conditioned =
-      "condition" in verdict && verdict.condition
-        ? verdict
-        : "candidates" in verdict
-          ? (verdict.candidates.find((candidate) => candidate.condition) ?? verdict)
-          : verdict;
+  const noMatchNotice = (verdict: ParsedIdentifyResult) => {
+    const conditioned = verdict.condition
+      ? verdict
+      : (verdict.candidates.find((candidate) => candidate.condition) ?? verdict);
     const condition = conditioned.condition;
     // A structured condition says why the lookup could not answer, so "no match" would be false.
     return condition ? (
@@ -467,7 +451,6 @@ const IdentifyForm = ({
         inputId={inputId}
         lead={{
           line1: "ui.hero.identifyThesis",
-          line2: "ui.hero.identifyThesis2",
           description: "ui.hero.identifyDescription",
         }}
         onFiles={selectFiles}

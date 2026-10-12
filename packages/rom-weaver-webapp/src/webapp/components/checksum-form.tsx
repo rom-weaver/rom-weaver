@@ -170,7 +170,6 @@ const ChecksumSourceEntry = ({
   compare,
   expected,
   onSnapshot,
-  onRequest,
   onSelectionSkipped,
   selectFile: selectAny,
   source,
@@ -180,8 +179,6 @@ const ChecksumSourceEntry = ({
   compare: CompareResult;
   expected: string;
   onSnapshot: (id: number, snapshot: ChecksumEntrySnapshot) => void;
-  /** Reports which source asked for a selection, so skipping that prompt drops only that source. */
-  onRequest: (request: CandidateSelectionPrompt, sourceId: number) => void;
   onSelectionSkipped: (sourceId: number) => void;
   selectFile: (request: CandidateSelectionPrompt) => Promise<CandidateSelectionChoice>;
   source: ChecksumSource;
@@ -193,28 +190,27 @@ const ChecksumSourceEntry = ({
   const [staging, setStaging] = useState(false);
   const [calculating, setCalculating] = useState(false);
   const [error, setError] = useState("");
-  const algorithmsRef = useRef(algorithms);
-  algorithmsRef.current = algorithms;
+  const latest = useRef({ algorithms, localizer, settings });
+  latest.current = { algorithms, localizer, settings };
   const { clearProgressForStage, createProgressHandler, progress, setProgress } = useWorkflowProgressState({});
   const workflowRef = useRef<InstanceType<typeof BrowserChecksumWorkflow> | null>(null);
   const workflowIdRef = useRef(createReactWorkflowId("react-checksum"));
-  const settingsRef = useRef(settings);
-  settingsRef.current = settings;
   const { file: sourceFile, id: sourceId } = source;
   const selectFile = useCallback(
     (request: CandidateSelectionPrompt) => {
-      onRequest(request, sourceId);
-      return selectAny(request);
+      return selectAny(request).catch((error: unknown) => {
+        if (request.sourceIndex !== -1 && getErrorCode(error) === "WORKFLOW_SELECTION_SKIPPED")
+          onSelectionSkipped(sourceId);
+        throw error;
+      });
     },
-    [onRequest, selectAny, sourceId],
+    [onSelectionSkipped, selectAny, sourceId],
   );
 
   // A language or byte-unit change makes a new localizer; reading it through a
   // ref keeps showError stable so the staging effect does not restage the ROM.
-  const localizerRef = useRef(localizer);
-  localizerRef.current = localizer;
   const showError = useCallback(
-    (cause: unknown) => setError(formatCodedErrorForDisplay(cause, localizerRef.current)),
+    (cause: unknown) => setError(formatCodedErrorForDisplay(cause, latest.current.localizer)),
     [],
   );
 
@@ -227,7 +223,7 @@ const ChecksumSourceEntry = ({
     void (async () => {
       const { ChecksumWorkflow } = await loadBrowserApi();
       if (!current) return;
-      const { input: inputSettings, logging, workers } = settingsRef.current;
+      const { input: inputSettings, logging, workers } = latest.current.settings;
       workflow = new ChecksumWorkflow({
         ...(assetBaseUrl ? { assetBaseUrl } : {}),
         id: workflowIdRef.current,
@@ -239,7 +235,7 @@ const ChecksumSourceEntry = ({
       setStaging(true);
       logger.debug("staging ROM", { fileName: sourceFile.name, size: sourceFile.size });
       try {
-        await workflow.setInput(sourceFile, { algorithms: algorithmsRef.current, autoExtract });
+        await workflow.setInput(sourceFile, { algorithms: latest.current.algorithms, autoExtract });
         if (current) setInput(workflow.getInput());
       } catch (cause) {
         if (!current) return;
@@ -396,10 +392,8 @@ const ChecksumSourceEntry = ({
 
 const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
   const localizer = useUiLocalizer();
-  const cancelSelectionRef = useRef<(request: CandidateSelectionPrompt) => void>(() => undefined);
   const { candidateSelectionDialog, selectFile } = useCandidateSelection({
     fileInput: true,
-    onCancelSelection: (request) => cancelSelectionRef.current(request),
   });
   // Matches webapp-root's `currentView` so root routing targets this tab's dialog.
   useInputSelectionHandler("checksum", selectFile);
@@ -411,12 +405,6 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
   const workflowIdRef = useRef(createReactWorkflowId("react-checksum"));
   const handledPageDropIdRef = useRef<number | null>(null);
   const nextSourceIdRef = useRef(0);
-  const requestSourcesRef = useRef(new WeakMap<CandidateSelectionPrompt, number>());
-  const recordRequest = useCallback(
-    (request: CandidateSelectionPrompt, sourceId: number) => requestSourcesRef.current.set(request, sourceId),
-    [],
-  );
-
   const removeSkippedSource = useCallback(
     (id: number) => setSources((previous) => previous.filter((entry) => entry.id !== id)),
     [],
@@ -443,14 +431,6 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
   const clearSources = () => {
     setSnapshots({});
     setSources([]);
-  };
-
-  // A skipped selection drops only the archive it was asked about.
-  cancelSelectionRef.current = (request) => {
-    if (request.sourceIndex === -1) return;
-    const id = requestSourcesRef.current.get(request);
-    if (id !== undefined) setSources((previous) => previous.filter((entry) => entry.id !== id));
-    else if (sources.length === 1) clearSources();
   };
 
   const entries = sources.flatMap((entry) => {
@@ -560,7 +540,6 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
           inputId="checksum-input-picker"
           lead={{
             line1: "ui.hero.checksumThesis",
-            line2: "ui.hero.checksumThesis2",
             description: "ui.hero.checksumDescription",
           }}
           onFiles={handleDrop}
@@ -672,7 +651,6 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
                 compare={compare}
                 expected={expected}
                 key={entry.id}
-                onRequest={recordRequest}
                 onSelectionSkipped={removeSkippedSource}
                 onSnapshot={reportSnapshot}
                 selectFile={selectFile}

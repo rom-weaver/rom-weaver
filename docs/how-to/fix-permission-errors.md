@@ -1,5 +1,3 @@
-<!-- START doctoc --> <!-- END doctoc -->
-
 # Fix a permission error
 
 Get past a `Permission denied` error from the CLI. The message itself carries what you need: what was refused, who owns it, and who asked - [File permissions](../reference/cli.md#file-permissions) explains the format and when the checks run.

@@ -876,7 +876,7 @@ msgstr "ROM base"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.cliItem3"
-msgstr "Procesa una carpeta entera por lotes: convierte, verifica y aplica parches en una sola ejecución."
+msgstr "Automatiza lotes: comprime, verifica y aplica parches desde la línea de comandos."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1071,7 +1071,7 @@ msgstr "Códecs CD"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.console.settingsDescription"
-msgstr "El tema se aplica al instante. Los demás ajustes se aplican al guardar."
+msgstr "El tema y el color de acento se aplican al instante. Los demás ajustes se aplican al guardar."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1086,7 +1086,7 @@ msgstr "chd, rvz y z3ds se descomprimen a formatos sin procesar antes de aplicar
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.routeDiscBody"
-msgstr "Convierte entre formatos comprimidos o extrae un CHD a ISO o BIN/CUE."
+msgstr "Vuelve a comprimir una imagen de disco en otro formato o extrae un CHD a ISO o BIN/CUE."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1220,11 +1220,6 @@ msgstr "Elija el juego que necesita"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.compressThesis2"
-msgstr "Elige el formato de salida."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.patch.validationMismatchOverride"
 msgstr "Elige la ROM para la que se creó este parche o usa la anulación en 0x04."
 
@@ -1295,11 +1290,6 @@ msgstr "Commit"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.checksumThesis2"
-msgstr "Compáralo con el valor esperado."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.home.routeEditedBody"
 msgstr "Compárala con la original para crear un parche que puedas compartir."
 
@@ -1331,7 +1321,7 @@ msgstr "Comprimir"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.goCompress"
-msgstr "Convertir / comprimir"
+msgstr "Comprimir"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1676,7 +1666,7 @@ msgstr "Suelta aquí una ROM y sus parches: archivos sueltos, una carpeta entera
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identify.noMatchBody"
-msgstr "No está en los datos de identificación. Desconocido no significa dañado: puede ser homebrew, estar modificada o ser una revisión no listada. Sus sumas de comprobación están abajo."
+msgstr "Estas sumas de comprobación no están en los datos de identificación. Desconocido no significa dañado: la ROM puede ser homebrew, estar modificada, ser una revisión no listada o ser de un sistema que los datos no cubren. Sus sumas de comprobación están en la tarjeta de abajo para que puedas buscarlas en otro sitio."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1751,7 +1741,7 @@ msgstr "Editar posición del parche, actualmente {position} de {total}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.saveThesis"
-msgstr "Edita nombres de entrenador, dinero, medallas, corazones y equipo en una partida guardada,"
+msgstr "Edita nombres de entrenador, dinero, medallas, corazones y equipo en una partida guardada."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1771,7 +1761,7 @@ msgstr "EmulatorJS: {name}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "settings.betaToolsEnabled"
-msgstr "Activar herramientas beta (Recortar y Editor de partidas)"
+msgstr "Activar herramientas beta (Recortar y Save Editor)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1957,11 +1947,6 @@ msgstr "Buscar"
 #: src/presentation/localization/messages.ts
 msgid "ui.find.placeholder"
 msgstr "Buscar juegos (por nombre/suma de verificación), herramientas, guías o ajustes..."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.identifyThesis2"
-msgstr "Encuentra su coincidencia exacta."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2265,11 +2250,6 @@ msgstr "Conservar encabezado: la salida parcheada conserva el encabezado de la R
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.extractThesis2"
-msgstr "Quédate solo con los archivos que necesitas."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.compress.keepPacked"
 msgstr "Mantener comprimido"
 
@@ -2417,11 +2397,6 @@ msgstr "Registros"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.pending"
 msgstr "Buscando esta ROM en la base de datos de títulos. Las filas se completan cuando se calculan las sumas de comprobación."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.trimThesis2"
-msgstr "Quita el relleno."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2812,11 +2787,6 @@ msgstr "Una pasada, sin descomprimir a mano"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.loomCaption"
 msgstr "Una sola pasada, sin descomprimir a mano ni archivos intermedios. Guárdalo como paquete y el orden se conservará para la siguiente persona."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis2"
-msgstr "Un solo kit de herramientas."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3460,11 +3430,6 @@ msgstr "Lista"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.toolsThesis2"
-msgstr "Recupera el original."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.region"
 msgstr "Región"
 
@@ -3755,11 +3720,6 @@ msgstr "Ver formatos compatibles"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.testThesis2"
-msgstr "Mira tus cambios en acción."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.select.filesHint"
 msgstr "Elige los archivos que quieres agregar y luego pulsa Agregar archivos."
 
@@ -3805,11 +3765,6 @@ msgstr "Ajustes"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.weaveThesis2"
-msgstr "Comparte una receta reutilizable."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.weaveExport.share"
 msgstr "Compartir weave"
 
@@ -3817,11 +3772,6 @@ msgstr "Compartir weave"
 #: src/presentation/localization/messages.ts
 msgid "ui.weaveExport.shareTitle"
 msgstr "Comparte esta receta de parches (para creadores de parches)"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.createThesis2"
-msgstr "en un parche comprimido y compartible que otros puedan aplicar."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4679,11 +4629,6 @@ msgstr "con detección y reparación de encabezados de copiadora"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.saveThesis2"
-msgstr "con cada suma de verificación recalculada antes de descargar."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "error.WORKER_FAILED"
 msgstr "La ejecución del worker falló."
 
@@ -4816,3 +4761,13 @@ msgstr "Primeros pasos con la CLI (se abre en una pestaña nueva)"
 #: src/presentation/localization/messages.ts
 msgid "ui.errorRecovery.selection"
 msgstr "Quita la entrada afectada y vuelve a añadir el archivo necesario. Si es un archivo comprimido, comprueba su contenido primero; mantén juntos los descriptores de disco y sus pistas."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.failed"
+msgstr "Comprobación fallida: {input}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.create.identicalInputs"
+msgstr "Original y Modificado tienen contenido idéntico, así que el parche no cambiaría nada. Comprueba que elegiste los archivos correctos."

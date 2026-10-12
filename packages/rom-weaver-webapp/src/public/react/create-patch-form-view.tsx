@@ -54,7 +54,6 @@ const CreatePatchFormView = ({
         {...dropZone}
         lead={{
           line1: "ui.hero.createThesis",
-          line2: "ui.hero.createThesis2",
           description: "ui.hero.createDescription",
         }}
       />

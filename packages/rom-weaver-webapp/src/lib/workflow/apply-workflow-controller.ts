@@ -908,6 +908,7 @@ class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowControl
         outputs,
         patches: result.patches,
         sizeSummary: result.sizeSummary,
+        ...(result.warnings?.length ? { warnings: result.warnings } : {}),
       };
       return publicResult;
     });

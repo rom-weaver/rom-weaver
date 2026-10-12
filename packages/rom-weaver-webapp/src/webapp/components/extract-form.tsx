@@ -23,7 +23,14 @@ const isChd = (file: File): boolean => /\.chd$/i.test(file.name);
 const binCount = (entries: { filename: string }[]): number =>
   entries.filter((entry) => /\.bin$/i.test(entry.filename)).length;
 const zipName = (file: File): string => `${file.name.replace(/\.[^.]+$/, "") || "extracted"}.zip`;
-const errorMessage = (cause: unknown): string => (cause instanceof Error ? cause.message : String(cause));
+// The runtime names the file by its internal storage path, so a file that is not an archive gets a plain message.
+const NOT_A_CONTAINER_PATTERN = /no registered container matched/i;
+const errorMessage = (cause: unknown, file?: File): string => {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  return file && NOT_A_CONTAINER_PATTERN.test(message)
+    ? `${file.name} is not an archive or disc image that Extract can open.`
+    : message;
+};
 
 // Runtime labels are log text, so the form shows its own label and takes only the percent. An event
 // without a percent keeps the last one for the same label, so the bar does not flicker to indeterminate.
@@ -121,7 +128,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
         outputRef.current = result.outputs;
         setOutputs(result.outputs);
       } catch (cause) {
-        if (!abort.signal.aborted && runId === runIdRef.current) setError(errorMessage(cause));
+        if (!abort.signal.aborted && runId === runIdRef.current) setError(errorMessage(cause, file));
       } finally {
         if (runId === runIdRef.current) {
           abortRef.current = null;
@@ -156,7 +163,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
         if (runId !== runIdRef.current) return;
         askSplit = binCount(split.entries) > 1 && binCount(split.entries) > binCount(normal.entries);
       } catch (cause) {
-        if (!abort.signal.aborted && runId === runIdRef.current) setError(errorMessage(cause));
+        if (!abort.signal.aborted && runId === runIdRef.current) setError(errorMessage(cause, file));
         return;
       } finally {
         if (runId === runIdRef.current) {
@@ -319,7 +326,6 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
         inputId="extract-input-picker"
         lead={{
           line1: "ui.hero.extractThesis",
-          line2: "ui.hero.extractThesis2",
           description: "ui.hero.extractDescription",
         }}
         multiple={false}

@@ -37,7 +37,6 @@ const mocks = vi.hoisted(() => ({
     title: "Loaded service worker cache version",
     updateLabel: "Reload to update",
     updateReady: false,
-    updateTitle: "A newer app version is ready.",
   } as ServiceWorkerCacheState,
   serviceWorkerClient: {
     forceCacheAndReload: vi.fn(() => Promise.resolve(true)),
@@ -206,7 +205,6 @@ beforeEach(() => {
     title: "Loaded service worker cache version",
     updateLabel: "Reload to update",
     updateReady: false,
-    updateTitle: "A newer app version is ready.",
   };
   consoleSpies = (["debug", "error", "info", "log", "warn"] as const).map((method) =>
     vi.spyOn(console, method).mockImplementation(() => undefined),
@@ -659,6 +657,23 @@ describe("session actions", () => {
     expect(latest().state.patcherSession.patchCount).toBe(2);
     expect(latest().state.ppfUndoSession.active).toBe(true);
     expect(latest().state.trimSession).toMatchObject({ outputFormat: "iso", sourceFilePresent: true });
+  });
+
+  it("applies form session flags after the calling effect returns", async () => {
+    await loadWebapp();
+
+    latest().actions.onSaveEditorSessionChange(true);
+    latest().actions.onCompressSessionChange(true);
+    latest().actions.onPpfUndoSessionChange(true);
+
+    // Forms report from passive effects, where a synchronous re-render is a React error.
+    expect(latest().state.saveEditorSession.active).toBe(false);
+    expect(latest().state.compressSession.active).toBe(false);
+    expect(latest().state.ppfUndoSession.active).toBe(false);
+    await flush();
+    expect(latest().state.saveEditorSession.active).toBe(true);
+    expect(latest().state.compressSession.active).toBe(true);
+    expect(latest().state.ppfUndoSession.active).toBe(true);
   });
 
   it("warns before unload only once work is staged", async () => {

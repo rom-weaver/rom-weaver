@@ -179,3 +179,58 @@ test("ApplyPatchForm runs a complete patch flow and downloads output", async () 
     .toContain("Download");
   expect(document.getElementById("rom-weaver-error-message")?.textContent || "").toBe("");
 });
+
+test("apply shows handler warnings from a finished run as a warning notice", async () => {
+  const inputFile = new File([new Uint8Array([0, 1, 2, 3])], "game.bin", { type: "application/octet-stream" });
+  const stagedInputInfo = { fileName: "game.bin", id: "input-1", order: 0, size: 4, sourceSize: 4 };
+  const output = {
+    fileName: "game [patched].bin",
+    id: "output-1",
+    prepareDownload: async () => undefined,
+    saveAs: async () => undefined,
+    size: 4,
+  };
+  const applyPatches = vi.fn(async () => ({
+    inputs: [],
+    output,
+    outputs: [output],
+    patches: [],
+    rom: { fileName: "game.bin", size: 4 },
+    sizeSummary: { inputSize: 4, outputSize: 4, rawSize: 4 },
+    warnings: ["IPS patch did not change output; input may already be patched"],
+  }));
+  const Harness = () => {
+    const { localNoticeController, localOutputController, localStackController, localUiController } =
+      useLocalApplyPatchFormSession({
+        applyPatches,
+        applyReady: true,
+        downloadOutput: () => undefined,
+        inputs: [inputFile],
+        patches: [],
+        stageInput: async (_snapshot, handlers) => {
+          handlers.onState(stagedInputInfo);
+          return [stagedInputInfo];
+        },
+      });
+    return createElement(ApplyWorkflowFormView, {
+      controllers: {
+        notice: localNoticeController,
+        output: localOutputController,
+        patchStack: localStackController,
+        ui: localUiController,
+      },
+    });
+  };
+
+  mount(createElement(Harness));
+
+  await waitForApplyButtonEnabled();
+  expect(document.getElementById("rom-weaver-output-warning-message")).toBeNull();
+  await clickApplyButton();
+  await expect.poll(() => applyPatches.mock.calls.length).toBe(1);
+  await expect
+    .poll(() => document.getElementById("rom-weaver-output-warning-message")?.textContent || "")
+    .toContain("IPS patch did not change output");
+  // A warning is not an error: the error notice stays empty and the download stays available.
+  expect(document.getElementById("rom-weaver-output-notice-message")).toBeNull();
+});

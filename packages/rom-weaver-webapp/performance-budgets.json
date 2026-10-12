@@ -12,19 +12,20 @@
         "maxBrotliBytes": 11600
       },
       {
-        "_comment": "Raised for the Extract workflow route and its browser archive selection UI. Raised again for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, whose rendered pages ship as docs route chunks. Raised again for the ISO to RVZ, Nintendo 3DS to Z3DS, and Extract Z3DS guides, whose route chunks add about 11 KiB raw and 3 KiB Brotli. Raised again for the Pro Action Rocky, Gold Finger, and GBA GameShark/Action Replay code types and the create form's code type picker. Raised for the WebMCP tools and eleven browser workflow adapters. Raised for the published native benchmarks and expanded format guides. The CI bundle measures 2,496,524 raw bytes and 639,096 Brotli bytes; the approved limits retain 70,000 raw and 9,000 Brotli bytes above the baseline. Raised again for guided Apply's add-files step and the Guided practice runs reference page: main measured 632.7 KiB Brotli, 1.1 KiB under the old 649,000-byte limit, and the change adds 3.2 KiB (the new page's route chunk is 1.5 KiB of it, the rest is the guide, its de/es copy, and the linking doc edits), bringing the bundle to 635.9 KiB. The Brotli limit rises by 5,000 bytes to keep about 2.8 KiB of headroom; the raw limit is unchanged. Raised by 2,000 Brotli bytes for PPF Undo archive ingestion, candidate selection, disc companions, and output compression after shared-helper reuse and route simplification. The measured production bundle was 2,559,908 raw and 655,107 Brotli bytes; no source modules were duplicated across chunks. The raw ceiling is unchanged. Approved 512-byte increase for browser recovery fixes after deduplication: the baseline measured 655,975 Brotli bytes, and the committed candidate measured 656,483 bytes. No chunks were added or duplicated. The approved ceiling includes another 1,024 bytes for generated-hash compression variance: bundles with the same 2,470,171 raw bytes measured 656,161 to 656,714 Brotli bytes across committed builds.",
+        "_comment": "Raised for the Extract workflow route and its browser archive selection UI. Raised again for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, whose rendered pages ship as docs route chunks. Raised again for the ISO to RVZ, Nintendo 3DS to Z3DS, and Extract Z3DS guides, whose route chunks add about 11 KiB raw and 3 KiB Brotli. Raised again for the Pro Action Rocky, Gold Finger, and GBA GameShark/Action Replay code types and the create form's code type picker. Raised for the WebMCP tools and eleven browser workflow adapters. Raised for the published native benchmarks and expanded format guides. The CI bundle measures 2,496,524 raw bytes and 639,096 Brotli bytes; the approved limits retain 70,000 raw and 9,000 Brotli bytes above the baseline. Raised again for guided Apply's add-files step and the Guided practice runs reference page: main measured 632.7 KiB Brotli, 1.1 KiB under the old 649,000-byte limit, and the change adds 3.2 KiB (the new page's route chunk is 1.5 KiB of it, the rest is the guide, its de/es copy, and the linking doc edits), bringing the bundle to 635.9 KiB. The Brotli limit rises by 5,000 bytes to keep about 2.8 KiB of headroom; the raw limit is unchanged. Raised by 2,000 Brotli bytes for PPF Undo archive ingestion, candidate selection, disc companions, and output compression after shared-helper reuse and route simplification. The measured production bundle was 2,559,908 raw and 655,107 Brotli bytes; no source modules were duplicated across chunks. The raw ceiling is unchanged. Approved 512-byte increase for browser recovery fixes after deduplication: the baseline measured 655,975 Brotli bytes, and the committed candidate measured 656,483 bytes. No chunks were added or duplicated. The approved ceiling includes another 1,024 bytes for generated-hash compression variance: bundles with the same 2,470,171 raw bytes measured 656,161 to 656,714 Brotli bytes across committed builds. The de and es locale catalogs are lazy chunks that no first-paint path loads, so they moved to their own budget; every JavaScript limit here dropped by exactly their measured size (82,648 raw and 23,260 Brotli bytes), leaving the same headroom as before.",
         "name": "JavaScript",
         "directory": "assets",
         "extension": ".js",
         "excludePatterns": [
           "assets/_virtual_rom-weaver-docs-search-[^/]+\\.js$",
-          "assets/(?:browser-save-api|edit-gen3-saves|save-editor)-[^/]+\\.js$"
+          "assets/(?:browser-save-api|edit-gen3-saves|save-editor)-[^/]+\\.js$",
+          "assets/(?:de|es)-[^/]+\\.js$"
         ],
         "requireBrotliMinBytes": 1024,
-        "expectedRawBytes": 2500000,
-        "maxRawBytes": 2570000,
-        "expectedBrotliBytes": 640000,
-        "maxBrotliBytes": 658560
+        "expectedRawBytes": 2417352,
+        "maxRawBytes": 2487352,
+        "expectedBrotliBytes": 616740,
+        "maxBrotliBytes": 635300
       },
       {
         "_comment": "Raised for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, which the search index includes. Raised again for the ISO to RVZ, Nintendo 3DS to Z3DS, and Extract Z3DS guides. Raised for the MCP client and browser agent setup guide. The published native benchmarks and expanded format guides measure 382,150 raw bytes and 100,419 Brotli bytes. The approved limits retain the existing 11,000-byte raw and 3,000-byte Brotli margins.",
@@ -37,6 +38,18 @@
         "maxRawBytes": 394000,
         "expectedBrotliBytes": 100500,
         "maxBrotliBytes": 103500
+      },
+      {
+        "_comment": "The de and es message catalogs ship as separate lazy chunks (catalog.ts CATALOG_LOADERS), fetched only when the visitor's locale resolves to one of them, so they count against their own budget instead of the main JavaScript budget. The measured build is 82,648 raw and 23,260 Brotli bytes (de 41,163 and 11,955, es 41,485 and 11,305), and the main JavaScript limits dropped by exactly those amounts. The maximums leave about 14 KiB of Brotli (about 50 KiB raw at the catalogs' 3.55:1 ratio) for the planned translation batches: roughly 8 KiB for the settings, cheat and save-tool strings and roughly 6 KiB for the forms.",
+        "name": "Locale catalogs (de, es)",
+        "directory": "assets",
+        "extension": ".js",
+        "includePatterns": ["assets/(?:de|es)-[^/]+\\.js$"],
+        "requireBrotliMinBytes": 1024,
+        "expectedRawBytes": 82648,
+        "maxRawBytes": 134000,
+        "expectedBrotliBytes": 23260,
+        "maxBrotliBytes": 37596
       },
       {
         "name": "Save Editor JavaScript",

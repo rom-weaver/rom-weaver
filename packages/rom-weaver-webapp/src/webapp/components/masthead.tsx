@@ -549,11 +549,15 @@ const Masthead = ({
           <div className="shell-head">
             <div className="shell-head-top">
               <span className="brand">
-                <a aria-label={localizer.message("ui.nav.home")} className="brand-mark-link" href={homeHref}>
-                  <BrandMark />
-                </a>
+                {/* The wordmark link below is the one labelled home link; the mark is a
+                    pointer-only duplicate, hidden from assistive tech and the tab order. */}
+                <span aria-hidden="true" className="brand-mark-wrap">
+                  <a className="brand-mark-link" href={homeHref} tabIndex={-1}>
+                    <BrandMark />
+                  </a>
+                </span>
                 <span className="brand-copy">
-                  <a className="brand-word-link" href={homeHref}>
+                  <a aria-label={localizer.message("ui.nav.home")} className="brand-word-link" href={homeHref}>
                     <span className="brand-word">
                       rom<span className="brand-hy">-</span>
                       <b>weaver</b>

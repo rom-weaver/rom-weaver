@@ -768,6 +768,50 @@ describe("invokeRomWeaverPatchValidateWorker", () => {
   });
 });
 
+describe("handler warnings", () => {
+  it("returns create warnings from details.warnings", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue(
+      succeededResult({
+        emitted_files: [{ path: "/out/p.ips", size_bytes: 7 }],
+        warnings: ["IPS create input is larger than modified output; double check file order"],
+      }),
+    );
+
+    const output = await invokeRomWeaverCreatePatchWorker({
+      format: "ips",
+      modifiedFilePath: "/new.sfc",
+      originalFilePath: "/old.sfc",
+      outputName: "p.ips",
+    });
+
+    expect(output.warnings).toEqual(["IPS create input is larger than modified output; double check file order"]);
+  });
+
+  it("returns apply warnings in the apply summary", async () => {
+    mocks.runRomWeaverJson.mockResolvedValue({
+      events: [
+        {
+          details: { emitted_files: [{ path: "/out/rom.bin", size_bytes: 4 }] },
+          label: "applied IPS patch; warning=IPS patch did not change output; input may already be patched",
+          status: "succeeded",
+        },
+      ],
+      exitCode: 0,
+      ok: true,
+      stderr: "",
+    });
+
+    const result = await invokeRomWeaverPatchApplyWorker({
+      outputName: "rom.bin",
+      patchFiles: [{ patchFileName: "a.ips", patchFilePath: "/a.ips" }],
+      romFileName: "rom.sfc",
+      romFilePath: "/rom.sfc",
+    } as Parameters<typeof invokeRomWeaverPatchApplyWorker>[0]);
+
+    expect(result.applySummary.warnings).toEqual(["IPS patch did not change output; input may already be patched"]);
+  });
+});
+
 describe("invokeRomWeaverCreatePatchCandidatesWorker", () => {
   const candidateInput = () => ({
     modifiedFileName: "new.sfc",
