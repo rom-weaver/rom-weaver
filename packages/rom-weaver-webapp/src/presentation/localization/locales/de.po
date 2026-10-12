@@ -3456,7 +3456,7 @@ msgstr "Patch-Einträge können erforderlich oder optional sein und erfassen Nam
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.unreadable"
-msgstr"Der Patch ist keine gültige Patch-Datei"
+msgstr "Der Patch ist keine gültige Patch-Datei"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

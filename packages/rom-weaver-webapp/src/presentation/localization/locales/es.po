@@ -3456,7 +3456,7 @@ msgstr "Las entradas de parches pueden ser obligatorias u opcionales, y registra
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.unreadable"
-msgstr"El archivo de parche no es válido"
+msgstr "El archivo de parche no es válido"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

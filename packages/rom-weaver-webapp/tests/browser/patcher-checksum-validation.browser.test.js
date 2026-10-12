@@ -442,14 +442,17 @@ test("an unreadable patch fails its own card in plain language and blocks apply"
     .not.toBeNull();
   const fault = document.querySelector("#rom-weaver-list-patch-stack .file.bad .pfault");
   expect(fault.textContent).toContain("Invalid patch file: garbage.bps");
-  const chip = document.querySelector("#rom-weaver-list-patch-stack .file.bad .cks-match.bad");
-  expect(chip?.textContent).not.toContain("ROM");
+  const chip = document.querySelector('#rom-weaver-list-patch-stack .file.bad [id^="rom-weaver-patch-chain-chip-"]');
+  expect(chip?.textContent?.trim()).toBe("⚠ Patch file is not valid");
   const pageText = document.body.textContent || "";
   expect(pageText).not.toContain("INVALID_INPUT");
   expect(pageText).not.toContain("Not checked yet");
   // Like other invalid-patch states, Apply stays clickable but is a no-op while the card is failed.
-  document.getElementById("rom-weaver-button-apply")?.click();
-  await new Promise((resolve) => globalThis.setTimeout(resolve, 500));
+  const applyButton = document.getElementById("rom-weaver-button-apply");
+  applyButton?.click();
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 2000));
+  // A completed apply would turn the button into a download.
+  expect(applyButton?.textContent || "").not.toContain("Download");
   expect(document.body.textContent || "").not.toContain("INVALID_INPUT");
   expect(document.querySelector("#rom-weaver-list-patch-stack .file.bad .pfault")).not.toBeNull();
 });
