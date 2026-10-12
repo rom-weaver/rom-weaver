@@ -30,7 +30,7 @@ describe("DropRouteDialog", () => {
     expect(delivered).toEqual([{ files: ["game.sfc"], view: "test" }]);
   });
 
-  it("names the destination page, not the row, on the file step after staying", () => {
+  it("names the destination page, not the row, after choosing to stay", () => {
     const delivered = renderDialog("creator", files("game.sfc", "hack.ips"));
     fireEvent.click(screen.getByRole("button", { name: /Stay on Create Patch/ }));
     const submit = screen.getByRole("button", { name: "Open 1 file in Create Patch" });
@@ -39,9 +39,18 @@ describe("DropRouteDialog", () => {
     expect(delivered).toEqual([{ files: ["game.sfc"], view: "creator" }]);
   });
 
+  it("re-checks the files a page uses when the visitor switches page", () => {
+    const delivered = renderDialog("home", files("original.sfc", "my-hack.sfc", "fix.ips"));
+    fireEvent.click(screen.getByRole("button", { name: "Apply Patches" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open 3 files in Apply Patches" }));
+    expect(delivered).toEqual([{ files: ["original.sfc", "my-hack.sfc", "fix.ips"], view: "patcher" }]);
+  });
+
   it("lets the visitor bring files the page would not use", () => {
     const delivered = renderDialog("home", files("original.sfc", "my-hack.sfc", "fix.ips"));
-    fireEvent.click(screen.getByRole("button", { name: /Create Patch/ }));
+    // Page and files are one choice: Create is picked first and only its ROMs start checked.
+    expect(screen.getByRole("button", { name: "Create Patch", pressed: true })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open 2 files in Create Patch" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Select all" }));
     fireEvent.click(screen.getByRole("button", { name: "Open 3 files in Create Patch" }));
     expect(delivered).toEqual([{ files: ["original.sfc", "my-hack.sfc", "fix.ips"], view: "creator" }]);

@@ -13,10 +13,10 @@ import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import type { WebappView } from "../webapp-state-types.ts";
 
 /**
- * Asks where a drop goes, then which of its files to bring. Built from the
- * candidate picker's own pieces: the destination step is a SelectionTree, and
- * the file step is the SelectionCheckList with the files the destination can
- * use pre-checked, so the visitor can narrow the drop or bring all of it.
+ * Asks where a drop goes and, when that page cannot use every file, which files
+ * to bring, in one dialog built from the candidate picker's own pieces: a
+ * SelectionTree when only the page is in question, otherwise the page as a
+ * segmented choice above a SelectionCheckList that pre-checks what it uses.
  */
 
 const logger = createLogger("drop-route-dialog");
@@ -86,7 +86,7 @@ const DropRouteDialog = ({ labelFor, onCancel, onDeliver, request }: DropRouteDi
       const [only = "patcher"] = plan.destinations;
       return {
         options: [{ label: page(only), note: "", page: page(only), view: only }],
-        subtitle: "",
+        subtitle: localizer.message("ui.drop.chooseFilesHint", { page: page(only) }),
         title: page(only),
       };
     }
@@ -111,19 +111,11 @@ const DropRouteDialog = ({ labelFor, onCancel, onDeliver, request }: DropRouteDi
     );
   })();
 
-  const [picked, setPicked] = useState<RouteOption | null>(() =>
-    question.options.length === 1 ? (question.options[0] ?? null) : null,
-  );
-  const choose = (choice: RouteOption) => {
-    if (request.files.every((file) => isUsableDropFile(choice.view, file.name))) {
-      logger.debug("drop routed with every file", { count: request.files.length, view: choice.view });
-      onDeliver(choice.view, request.files);
-      return;
-    }
-    setPicked(choice);
-  };
+  const [picked, setPicked] = useState<RouteOption | undefined>(question.options[0]);
+  const fitsEvery = (choice: RouteOption) => request.files.every((file) => isUsableDropFile(choice.view, file.name));
 
-  if (!picked) {
+  // When every page can use every file, the only question is where to go.
+  if (question.options.every(fitsEvery)) {
     return (
       <Modal onClose={onCancel} open subtitle={question.subtitle} title={question.title} variant="select-modal">
         <SelectionTree
@@ -134,21 +126,35 @@ const DropRouteDialog = ({ labelFor, onCancel, onDeliver, request }: DropRouteDi
             selectable: true,
           }))}
           onSelect={(id) => {
-            const choice = question.options.find((candidate) => candidate.view === id);
-            if (choice) choose(choice);
+            logger.debug("drop routed with every file", { count: request.files.length, view: id });
+            onDeliver(id as WebappView, request.files);
           }}
         />
       </Modal>
     );
   }
+  if (!picked) return null;
+  // Otherwise the page and its files are one choice: switching page re-checks the files it uses
+  // (the checklist re-seeds when its defaults change), and any file can still be brought along.
   return (
-    <Modal
-      onClose={onCancel}
-      open
-      subtitle={localizer.message("ui.drop.chooseFilesHint", { page: picked.page })}
-      title={picked.page}
-      variant="select-modal"
-    >
+    <Modal onClose={onCancel} open subtitle={question.subtitle} title={question.title} variant="select-modal">
+      {question.options.length > 1 ? (
+        <fieldset className="seg seg-fit">
+          <legend className="sr-only">{question.title}</legend>
+          {question.options.map((choice) => (
+            <button
+              aria-pressed={choice.view === picked.view}
+              className="seg-btn"
+              key={choice.view}
+              onClick={() => setPicked(choice)}
+              type="button"
+            >
+              {choice.label}
+            </button>
+          ))}
+        </fieldset>
+      ) : null}
+      {picked.note ? <p className="pdesc">{picked.note}</p> : null}
       <SelectionCheckList
         items={request.files.map((file, index) => {
           const usable = isUsableDropFile(picked.view, file.name);
