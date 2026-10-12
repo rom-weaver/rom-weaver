@@ -1140,8 +1140,8 @@ impl CliApp {
     /// base-basis patches - mid-chain previous-basis patches are
     /// `chain_deferred`, never falsely "failed" against the wrong bytes),
     /// and emit the typed `PatchValidationPlan` under
-    /// `details.patch_validation`. Exit contract matches `--independent`:
-    /// mixed results still exit 0; only cancellation is a hard failure.
+    /// `details.patch_validation`. Mixed plan results still exit 0 (unlike
+    /// native `--independent`, which exits 1); only cancellation is a hard failure.
     fn run_patch_validate_plan(&self, inputs: PatchValidatePlanInputs<'_>) -> OperationReport {
         let PatchValidatePlanInputs {
             resolved_patches,
