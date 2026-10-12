@@ -166,6 +166,7 @@ const runCreateWorkflow = async (input: CreatePatchInput, runtime: WorkflowRunti
     return {
       format,
       output,
+      ...(result.warnings?.length ? { warnings: result.warnings } : {}),
       sizeSummary: {
         ...result.sizeSummary,
         ...(compressionTimeMs === undefined ? {} : { compressionTimeMs }),

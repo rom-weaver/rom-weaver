@@ -812,8 +812,13 @@ const runApplyWorkflow = async (input: PatchInput, runtime: WorkflowRuntime): Pr
     romCheatCount,
   });
 
+  const warnings = [
+    ...new Set([...workerOutputsById.values()].flatMap((workerOutput) => workerOutput._applySummary?.warnings ?? [])),
+  ];
+
   return {
     ...(romCheatCount ? { cheats: { rom: romCheatCount } } : {}),
+    ...(warnings.length ? { warnings } : {}),
     inputs: inputAssets.map((asset) => ({
       fileName: asset.fileName,
       id: asset.id,

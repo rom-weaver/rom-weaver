@@ -321,6 +321,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
         format,
         output: await adapter.workerIo.createWorkerOutput(result, outputName, adapter.workerOutputFailureMessage),
         sizeSummary: createTimeMs === undefined ? {} : { createTimeMs },
+        ...(result.warnings?.length ? { warnings: result.warnings } : {}),
       };
     } finally {
       await cleanupWorkerSources(workerSources);

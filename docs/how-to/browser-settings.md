@@ -16,7 +16,7 @@ Set preferences, enable beta tools, and prepare offline assets in **Settings**.
 
 Open **Settings** from navigation, or **Menu** → **Settings** at the bottom-right on a phone. Change preferences, then select **Save**.
 
-Settings covers language, byte units, output defaults, compression, and guided help. Guided help adds sample links such as **Patch a sample ROM** below empty drop zones for [practice runs](../reference/guided-runs.md). **Advanced** exposes worker threads, codecs, and RVZ block size. Keep automatic thread selection unless limiting resources.
+Settings covers language, byte units, output defaults, compression, and the sample quick-start links. **Show the sample quick-start links** adds sample links such as **Patch a sample ROM** below empty drop zones for [practice runs](../reference/guided-runs.md). **Advanced** exposes worker threads, codecs, and RVZ block size. Keep automatic thread selection unless limiting resources.
 
 On phones, leave Settings with bottom-right **Close**, a right swipe from the left edge, or the browser's back gesture.
 

@@ -157,6 +157,8 @@ Upload everything under `packages/rom-weaver-webapp/dist/` to your HTTPS host. P
 
 The build includes directory-index pages for its workflow and documentation routes, so ordinary static servers can resolve direct visits and refreshes without rewrite configuration. A server that disables directory indexes must instead fall back to `index.html` for those navigation requests. Redirect `/rom-weaver` to `/rom-weaver/` when using a subpath so relative assets, History API routes, and the service-worker scope resolve consistently. Explicit directory-document URLs such as `/apply-patches/index.html` are normalized in the browser to the clean `/apply-patches` route without another request. The Docker image and Cloudflare Pages permanently redirect old `/weave`, `/bundle`, and `/bundle-patches` forms to `/weave-patches`, preserving query strings. Configure equivalent redirects on other static hosts.
 
+The Docker image and a plain static host do not run the Cloudflare Pages Functions in `packages/rom-weaver-webapp/functions`. Without them there is no `/mcp` endpoint for [MCP clients](../how-to/use-mcp.md), and HTML routes ignore `Accept: text/markdown` requests; the `.md` URLs remain static files.
+
 Cloudflare-compatible hosts read the generated `_headers` file. On other hosts, the equivalent cache policy is:
 
 ```text

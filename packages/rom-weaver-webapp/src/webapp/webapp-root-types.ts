@@ -60,7 +60,6 @@ type WebappRootProps = {
     title: string;
     updateLabel: string;
     updateReady: boolean;
-    updateTitle: string;
   };
   pageUpdate: PageUpdateState;
   confirmationDialog: ConfirmationDialogState;

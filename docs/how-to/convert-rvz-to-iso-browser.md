@@ -31,4 +31,4 @@ For example, `my-disc.rvz` yields `my-disc.iso`. If you retained the original IS
 
 For other inputs, use [Extract files](extract-files-browser.md). [Choosing a compression format](../explanation/compression-formats.md) compares RVZ with other containers.
 
-To compress the ISO again, follow [Convert ISO to RVZ](convert-to-rvz-browser.md).
+To compress the ISO again, follow [Compress ISO to RVZ](convert-to-rvz-browser.md).

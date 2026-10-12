@@ -376,8 +376,9 @@ fn load_manifest(directory: &Path) -> Option<CheatDatabaseManifest> {
 pub(crate) fn load_shard(directory: &Path, system: CheatSystem) -> Result<CheatShard> {
     let Some(slug) = shard_slug(system) else {
         return Err(RomWeaverError::Validation(format!(
-            "the cheat database has no shard for {}; supported systems are nes, snes, genesis, \
-             32x, sms, gamegear, gameboy, gameboy-color, and gba",
+            "no cheat database exists for {} ({}); pass cheat codes directly or use a weave with \
+             code snapshots",
+            system.display_name(),
             system.id()
         )));
     };

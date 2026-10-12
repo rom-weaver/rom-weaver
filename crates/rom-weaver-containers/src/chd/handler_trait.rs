@@ -303,7 +303,7 @@ impl ChdContainerHandler {
     ) -> Result<OperationReport> {
         if request.inputs.len() != 1 {
             return Err(RomWeaverError::Validation(
-                "chd create currently requires exactly one input file".into(),
+                "chd create currently requires exactly one input file; pass one .cue or .gdi sheet, or a single disc image or data file".into(),
             ));
         }
 

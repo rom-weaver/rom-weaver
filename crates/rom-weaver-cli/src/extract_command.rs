@@ -455,6 +455,7 @@ impl CliApp {
             }
         };
         let mut resolved_identity = false;
+        let mut unresolved_names = Vec::new();
         for entry in &mut emitted {
             let Some(map) = entry.as_object_mut() else {
                 continue;
@@ -475,6 +476,8 @@ impl CliApp {
             if !identity.is_empty() {
                 identity.write_into(map);
                 resolved_identity = true;
+            } else if let Some(name) = std::path::Path::new(&path).file_name() {
+                unresolved_names.push(format!("`{}`", name.to_string_lossy()));
             }
         }
         details.insert(
@@ -489,7 +492,14 @@ impl CliApp {
             report.family,
             report.format.clone(),
             "probe",
-            "probe: source did not resolve to a known platform",
+            if unresolved_names.is_empty() {
+                "probe: source did not resolve to a known platform".to_string()
+            } else {
+                format!(
+                    "probe: {} did not resolve to a known platform",
+                    unresolved_names.join(", ")
+                )
+            },
             report.thread_execution.clone(),
         )
     }

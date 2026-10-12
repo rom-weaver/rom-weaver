@@ -623,8 +623,7 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.rw-app .identify-ambiguous-lead,
-.rw-app .identify-unknown-lead {
+.rw-app .identify-ambiguous-lead {
   padding: 0 var(--sp-m) var(--sp-s);
   margin: 0;
   overflow-wrap: anywhere;

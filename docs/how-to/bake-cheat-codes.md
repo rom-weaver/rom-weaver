@@ -56,7 +56,7 @@ rom-weaver patch apply \
   --no-compress --output game-coded.bin
 ```
 
-`--code-system` accepts `nes`, `snes`, `genesis`, `32x`, `sms`, `gamegear`, `sg1000`, `gameboy`, `gba`, and `psx`. `--code-kind` accepts `auto` (the default), `game-genie`, `gameshark`/`par`, `xploder`, `pro-action-rocky`, `gold-finger`, `game-shark-v1`, `game-shark-v1-raw`, `action-replay-v3`, and `action-replay-v3-raw`.
+`--code-system` accepts `nes`, `snes`, `genesis`, `32x`, `sms`, `gamegear`, `sg1000`, `gameboy`, `gba`, and `psx`. `psx` and `sg1000` have no cheat database, so pass their codes directly or in a weave with code snapshots. `--code-kind` accepts `auto` (the default), `game-genie`, `gameshark`/`par`, `xploder`, `pro-action-rocky`, `gold-finger`, `game-shark-v1`, `game-shark-v1-raw`, `action-replay-v3`, and `action-replay-v3-raw`.
 
 A Master System Game Genie code works the same way:
 
