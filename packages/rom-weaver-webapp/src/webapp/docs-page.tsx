@@ -11,6 +11,7 @@ import { createDocsSeoMetadata, groupDocRoutes, readDocsSlugFromPathname } from 
 import { findSearchToken } from "./docs-search.mjs";
 import { AUTHORED_SAMPLE_BASE, retargetSampleUrls } from "./docs-sample-origin.ts";
 import { DocsBar } from "./docs-bar.tsx";
+import { focusMainLanding } from "./focus-main.ts";
 import { docShelfFor, docsLabelFor, useDocsAudience, type DocsAudience } from "./docs-navigation.tsx";
 import { GITHUB_URL } from "./project-links.ts";
 import { useReadingProgress } from "./use-reading-progress.ts";
@@ -315,6 +316,11 @@ const OnwardLink = ({
     className="docs-step"
     data-direction={direction}
     href={`/${route.slug}`}
+    onClick={(event) => {
+      // Soft navigation replaces the page under this footer link; land on the new page.
+      if (!(event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey))
+        focusMainLanding();
+    }}
     onFocus={() => warmDocsHtml(route.slug)}
     onPointerEnter={() => warmDocsHtml(route.slug)}
   >
