@@ -28,7 +28,7 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
   extract: Object.freeze({
     description:
-      "Convert GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, BIN/CUE for CDs, or GDI with tracks for GD-ROMs locally in your browser. Extract archives and Z3DS.",
+      "Decompress GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, BIN/CUE for CDs, or GDI with tracks for GD-ROMs locally in your browser. Extract archives and Z3DS.",
     slug: "extract",
     title: `RVZ to ISO & CHD decompression online | ${SITE_NAME}`,
   }),

@@ -876,7 +876,7 @@ msgstr "base ROM"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.cliItem3"
-msgstr "Batch a whole folder: convert, verify, and patch in one run."
+msgstr "Script batch jobs: compress, verify, and patch from the command line."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1086,7 +1086,7 @@ msgstr "chd, rvz, and z3ds are decompressed to raw formats before patching."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.routeDiscBody"
-msgstr "Convert between compressed formats, or extract a CHD to ISO or BIN/CUE."
+msgstr "Recompress a disc image into another format, or extract a CHD to ISO or BIN/CUE."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1321,7 +1321,7 @@ msgstr "Compress"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.goCompress"
-msgstr "Convert / compress"
+msgstr "Compress"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1866,7 +1866,7 @@ msgstr "extract"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.extractDescription"
-msgstr "Convert GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, BIN/CUE for CDs, or GDI with tracks for GD-ROMs. Extract ZIP, 7z, Z3DS, and other supported formats locally in your browser."
+msgstr "Decompress GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, BIN/CUE for CDs, or GDI with tracks for GD-ROMs. Extract ZIP, 7z, Z3DS, and other supported formats locally in your browser."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

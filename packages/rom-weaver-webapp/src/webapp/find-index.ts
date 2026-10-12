@@ -115,7 +115,7 @@ const TOOL_FIND_DETAILS: Record<string, { hint: MessageId; keywords: string }> =
   },
   compress: {
     hint: "ui.hero.compressDescription",
-    keywords: "compress pack archive disc image CHD RVZ Z3DS ZIP 7z",
+    keywords: "compress convert pack archive disc image CHD RVZ Z3DS ZIP 7z",
   },
   creator: {
     hint: "ui.hero.createDescription",
@@ -156,7 +156,7 @@ const CLI_GUIDES: readonly CliGuide[] = [
     command: "compress",
     hint: "ui.find.cliArchiveHint",
     href: "/docs/work-with-archives",
-    keywords: "CLI compress pack archive CHD RVZ ZIP 7z",
+    keywords: "CLI compress convert pack archive CHD RVZ ZIP 7z",
   },
   { command: "setup", hint: "ui.find.cliSetupHint", href: "/docs/install", keywords: "CLI setup install database" },
   {

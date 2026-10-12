@@ -751,7 +751,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.home.cliItem3": msg({
     id: "ui.home.cliItem3",
-    message: "Batch a whole folder: convert, verify, and patch in one run.",
+    message: "Script batch jobs: compress, verify, and patch from the command line.",
   }),
   "ui.home.cliWalkthrough": msg({ id: "ui.home.cliWalkthrough", message: "CLI walkthrough" }),
   "ui.home.codecCompressionSettings": msg({
@@ -942,7 +942,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.apply.validation.fixChecksum",
     message: "Compare the expected ROM before bypassing checks (opens in a new tab)",
   }),
-  "ui.home.goCompress": msg({ id: "ui.home.goCompress", message: "Convert / compress" }),
+  "ui.home.goCompress": msg({ id: "ui.home.goCompress", message: "Compress" }),
   "ui.home.goCreate": msg({ id: "ui.home.goCreate", message: "Create" }),
   "ui.home.goIdentify": msg({ id: "ui.home.goIdentify", message: "Identify" }),
   "ui.home.goTest": msg({ id: "ui.home.goTest", message: "Test" }),
@@ -966,7 +966,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.home.routeDisc": msg({ id: "ui.home.routeDisc", message: "A compressed disc image" }),
   "ui.home.routeDiscBody": msg({
     id: "ui.home.routeDiscBody",
-    message: "Convert between compressed formats, or extract a CHD to ISO or BIN/CUE.",
+    message: "Recompress a disc image into another format, or extract a CHD to ISO or BIN/CUE.",
   }),
   "ui.home.routeEdited": msg({ id: "ui.home.routeEdited", message: "Your own edited ROM" }),
   "ui.home.routeEditedBody": msg({
@@ -1432,7 +1432,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.hero.extractDescription": msg({
     id: "ui.hero.extractDescription",
     message:
-      "Convert GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, BIN/CUE for CDs, or GDI with tracks for GD-ROMs. Extract ZIP, 7z, Z3DS, and other supported formats locally in your browser.",
+      "Decompress GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, BIN/CUE for CDs, or GDI with tracks for GD-ROMs. Extract ZIP, 7z, Z3DS, and other supported formats locally in your browser.",
   }),
   "ui.hero.extractThesis": msg({ id: "ui.hero.extractThesis", message: "Decompress CHD and RVZ." }),
   "ui.hero.identifyDescription": msg({

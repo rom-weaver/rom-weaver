@@ -48,10 +48,10 @@ Guided runs in the app: [Apply](https://rom-weaver.com/apply-patches?guide=apply
 | Take files out of an archive | [Extract files](how-to/extract-files-browser.md) |
 | Package files or compress a disc image | [Compress files](how-to/convert-roms-browser.md) |
 | Make a game's file smaller | [Compress files](how-to/convert-roms-browser.md), or [trim padding](how-to/trim-roms-browser.md) |
-| Convert RVZ to ISO | [Extract an ISO from RVZ](how-to/convert-rvz-to-iso-browser.md) |
-| Convert ISO or BIN/CUE to CHD | [Create a CHD](how-to/convert-to-chd-browser.md) |
+| Decompress RVZ to ISO | [Extract an ISO from RVZ](how-to/convert-rvz-to-iso-browser.md) |
+| Compress ISO or BIN/CUE to CHD | [Create a CHD](how-to/convert-to-chd-browser.md) |
 | Decompress CHD to ISO, BIN/CUE, or GDI | [Extract a disc from CHD](how-to/extract-chd-browser.md) |
-| Compress a GameCube or Wii ISO | [Convert ISO to RVZ](how-to/convert-to-rvz-browser.md) |
+| Compress a GameCube or Wii ISO | [Compress ISO to RVZ](how-to/convert-to-rvz-browser.md) |
 | Compress a Nintendo 3DS ROM | [Create a Z3DS file](how-to/convert-to-z3ds-browser.md) |
 | Decompress Z3DS, ZCCI, ZCXI, ZCIA, or Z3DSX | [Extract a Nintendo 3DS file](how-to/extract-z3ds-browser.md) |
 | Use cheat codes | [Add cheats](how-to/use-browser-cheats.md) |
@@ -86,10 +86,10 @@ Procedures for specific tasks.
 - [Checksum a file](how-to/checksum-roms-browser.md)
 - [Extract files from an archive or disc image](how-to/extract-files-browser.md)
 - [Compress files or disc images](how-to/convert-roms-browser.md)
-- [Convert RVZ to ISO](how-to/convert-rvz-to-iso-browser.md)
+- [Decompress RVZ to ISO](how-to/convert-rvz-to-iso-browser.md)
 - [Decompress CHD to ISO, BIN/CUE, or GDI](how-to/extract-chd-browser.md)
-- [Convert ISO or BIN/CUE to CHD](how-to/convert-to-chd-browser.md)
-- [Convert GameCube or Wii ISO to RVZ](how-to/convert-to-rvz-browser.md)
+- [Compress ISO or BIN/CUE to CHD](how-to/convert-to-chd-browser.md)
+- [Compress GameCube or Wii ISO to RVZ](how-to/convert-to-rvz-browser.md)
 - [Compress Nintendo 3DS ROMs to Z3DS](how-to/convert-to-z3ds-browser.md)
 - [Extract Z3DS, ZCCI, ZCXI, ZCIA, and Z3DSX files](how-to/extract-z3ds-browser.md)
 - [Trim a ROM](how-to/trim-roms-browser.md)

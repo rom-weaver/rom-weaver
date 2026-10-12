@@ -174,7 +174,7 @@ test("disc conversion and extraction have independent hit targets on mobile", as
   await expect.poll(() => document.querySelector(".home-route-actions")).toBeTruthy();
   const actions = document.querySelector(".home-route-actions");
   const links = Array.from(actions.querySelectorAll("a"));
-  expect(links.map((link) => link.textContent)).toEqual(["Convert / compress", "Extract files"]);
+  expect(links.map((link) => link.textContent)).toEqual(["Compress", "Extract files"]);
   expect(links.map((link) => new URL(link.href).pathname)).toEqual(["/compress", "/extract"]);
   for (const link of links) {
     link.scrollIntoView({ block: "center" });
