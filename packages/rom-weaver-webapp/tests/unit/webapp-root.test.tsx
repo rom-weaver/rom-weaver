@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { CHANNEL_BADGE } from "../../src/webapp/build-channel.ts";
+import { withChannelBadge } from "../../src/webapp/workflow-seo.mjs";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEmptyVitePageUpdateState, getPageUpdateState } from "../../src/webapp/page-update-state.ts";
@@ -73,12 +75,14 @@ const baseState = () => {
 
 const renderRoot = async ({
   currentView = "patcher" as WebappRootProps["state"]["currentView"],
+  assetBaseUrl,
   notFound = false,
   serviceWorkerStatus = null as WebappRootProps["serviceWorkerCache"]["serviceWorkerStatus"],
   settingsDialogOpen = false,
   updateReady = false,
 }: {
   currentView?: WebappRootProps["state"]["currentView"];
+  assetBaseUrl?: string;
   notFound?: boolean;
   serviceWorkerStatus?: WebappRootProps["serviceWorkerCache"]["serviceWorkerStatus"];
   settingsDialogOpen?: boolean;
@@ -89,6 +93,7 @@ const renderRoot = async ({
   const view = render(
     <WebappRoot
       actions={actions}
+      assetBaseUrl={assetBaseUrl}
       confirmationDialog={createEmptyConfirmationDialogState()}
       notFound={notFound}
       pageUpdate={getPageUpdateState({
@@ -177,6 +182,14 @@ describe("the workbench shell", () => {
     expect(document.documentElement.dataset.betaToolsEnabled).toBeDefined();
   });
 
+  it("names the Save Editor row and page title in full, not Saves", async () => {
+    const { container } = await renderRoot({ currentView: "save-editor" });
+
+    expect(navRow(container, "Save Editor")).toBeTruthy();
+    expect(navRow(container, "Saves")).toBeUndefined();
+    expect(document.title).toContain("Save Editor");
+  });
+
   it("renders the not-found workbench with links out and no workflow panels", async () => {
     const { container } = await renderRoot({ notFound: true });
 
@@ -187,6 +200,22 @@ describe("the workbench shell", () => {
     expect(container.querySelector(".workbench")?.className).toContain("is-not-found");
   });
 
+  it("keeps not-found links and tab loads inside a subdirectory deployment", async () => {
+    const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
+    const { container } = await renderRoot({ assetBaseUrl: "https://example.test/rom-weaver/", notFound: true });
+
+    expect(container.querySelector(".not-found-home")?.getAttribute("href")).toBe("/rom-weaver/apply-patches");
+    expect(container.querySelector(".not-found-docs")?.getAttribute("href")).toBe("/rom-weaver/docs");
+    const tabHrefs = [...container.querySelectorAll(".side-nav a[href^='/']")].map((link) => link.getAttribute("href"));
+    expect(tabHrefs).toContain("/rom-weaver/docs");
+    expect(tabHrefs.filter((href) => !href?.startsWith("/rom-weaver/"))).toEqual([]);
+
+    fireEvent.click(container.querySelector('.dock-tab[data-mode="creator"]') as HTMLAnchorElement);
+    expect(assign).toHaveBeenCalledWith("/rom-weaver/create-patch");
+    fireEvent.click(navRow(container, "Docs"));
+    expect(assign).toHaveBeenCalledWith("/rom-weaver/docs");
+  });
+
   it("routes a not-found tab click to a full page load", async () => {
     const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
     const { container } = await renderRoot({ notFound: true });
@@ -194,6 +223,19 @@ describe("the workbench shell", () => {
     fireEvent.click(container.querySelector('.dock-tab[data-mode="creator"]') as HTMLAnchorElement);
 
     expect(assign).toHaveBeenCalledWith("/create-patch");
+  });
+
+  it("keeps the not-found Docs link on the site root instead of a protocol-relative URL", async () => {
+    const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
+    const { container } = await renderRoot({ notFound: true });
+
+    const hrefs = [...container.querySelectorAll("a[href]")].map((link) => link.getAttribute("href"));
+    expect(hrefs.filter((href) => href?.startsWith("//"))).toEqual([]);
+    expect(hrefs).toContain("/docs");
+
+    fireEvent.click(navRow(container, "Docs"));
+
+    expect(assign).toHaveBeenCalledWith("/docs");
   });
 });
 
@@ -348,7 +390,7 @@ describe("the What's new route", () => {
     expect(panel).not.toBeNull();
     expect(panel?.hasAttribute("hidden")).toBe(false);
     expect(panel?.querySelector(".workflow-panel-head")).toBeNull();
-    expect(document.title).toBe("rom-weaver - What's new");
+    expect(document.title).toBe(withChannelBadge("What's new | rom-weaver", CHANNEL_BADGE));
   });
 
   it("reaches the route from the version chip", async () => {
@@ -444,13 +486,13 @@ describe("page metadata per view", () => {
   it("names the page for a view that has no SEO route of its own", async () => {
     await renderRoot({ currentView: "trim" });
 
-    expect(document.title).toBe("rom-weaver - Trim ROM");
+    expect(document.title).toBe(withChannelBadge("Trim ROM | rom-weaver", CHANNEL_BADGE));
   });
 
   it("uses the marketing title for a view that has one", async () => {
     await renderRoot({ currentView: "test" });
 
-    expect(document.title).not.toBe("rom-weaver - Test");
+    expect(document.title).not.toBe("Test | rom-weaver");
     expect(document.title).toContain("rom-weaver");
   });
 });

@@ -74,6 +74,16 @@ describe("PPF Undo input replacement", () => {
     },
   );
 
+  it("lists the .ppf patch extension and archives as supported inputs", () => {
+    const view = render(<PpfUndoForm onSessionChange={vi.fn()} />);
+    const groups = [...view.container.querySelectorAll(".info-support p")];
+    const extensionsOf = (label: string) =>
+      groups.find((group) => group.querySelector("b")?.textContent === label)?.querySelector("span")?.textContent;
+    expect(extensionsOf("PPF3 patches")).toBe("ppf");
+    expect(extensionsOf("Archives & containers")).toContain("zip");
+    view.unmount();
+  });
+
   it("uses a bin extension for an extensionless ROM", async () => {
     mocks.ingest.mockImplementation(async ({ fileName }) => ({
       outputs: [],

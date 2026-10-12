@@ -18,7 +18,13 @@ import {
 } from "./patch-run-resolution.ts";
 import { emitRuntimeTrace, isTraceEnabled, toRomWeaverOptions } from "./run-options.ts";
 import { runWithRomWeaverOutputScope } from "./run-output-paths.ts";
-import { asRecord, getEmittedFileDetails, getLastEvent, getRunResultTiming } from "./run-result-parsing.ts";
+import {
+  asRecord,
+  getEmittedFileDetails,
+  getLastEvent,
+  getRunResultTiming,
+  getRunResultWarnings,
+} from "./run-result-parsing.ts";
 import {
   runRomWeaverJson,
   relaySimpleProgress,
@@ -302,6 +308,7 @@ const createPatchApplyResult = (
         fileName: input.romFileName || getPathBaseName(input.romFilePath, "input.bin"),
       },
       timing: getRunResultTiming(result),
+      warnings: getRunResultWarnings(result),
     },
     fileName: emitted?.path ? getPathBaseName(emitted.path, outputFileName) : outputFileName,
     filePath: emitted?.path || outputPath,

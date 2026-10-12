@@ -6,13 +6,13 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
     description:
       "Weave ordered ROM patch workflows locally in your browser, then optionally apply the weave with checksum validation. No uploads or account required.",
     slug: "weave-patches",
-    title: `${SITE_NAME}: Weave ROM patches online`,
+    title: `Weave ROM patches online | ${SITE_NAME}`,
   }),
   creator: Object.freeze({
     description:
       "Create BPS, IPS, IPS32, UPS, xdelta, VCDIFF, PPF, and other ROM patches online from modified ROMs or supported cheat codes. No uploads.",
     slug: "create-patch",
-    title: `${SITE_NAME}: Create ROM patches online`,
+    title: `Create ROM patches online | ${SITE_NAME}`,
   }),
   checksum: Object.freeze({
     description:
@@ -28,7 +28,7 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
   extract: Object.freeze({
     description:
-      "Convert GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, BIN/CUE for CDs, or GDI with tracks for GD-ROMs locally in your browser. Extract archives and Z3DS.",
+      "Decompress GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, BIN/CUE for CDs, or GDI with tracks for GD-ROMs locally in your browser. Extract archives and Z3DS.",
     slug: "extract",
     title: `RVZ to ISO & CHD decompression online | ${SITE_NAME}`,
   }),
@@ -55,7 +55,7 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
     description:
       "Undo a PPF3 patch using its stored original bytes and download a restored ROM locally in your browser. Requires the exact patch with undo data. No uploads.",
     slug: "ppf-undo",
-    title: `${SITE_NAME}: Undo PPF patches online`,
+    title: `Undo PPF patches online | ${SITE_NAME}`,
   }),
   test: Object.freeze({
     description:
@@ -65,4 +65,12 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
 });
 
-export { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES };
+/**
+ * Mark a page title with the build channel (beta, nightly, dev); production has no badge.
+ * @param {string} title
+ * @param {string} badge
+ * @returns {string}
+ */
+const withChannelBadge = (title, badge) => (badge ? title.replace(SITE_NAME, `${SITE_NAME} ${badge}`) : title);
+
+export { withChannelBadge, SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES };

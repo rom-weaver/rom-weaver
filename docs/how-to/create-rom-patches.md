@@ -56,7 +56,7 @@ Each card shows the selected file, size, detected system, and checksums. Open **
   <figcaption>Original is the clean starting file. Modified is the result your patch must rebuild.</figcaption>
 </figure>
 
-If rom-weaver asks you to choose a file from an archive, stop and make sure you are comparing the ROM entries, not readmes, save files, or different disc tracks.
+If both files have identical contents, Create warns that the patch would change nothing; check that you chose the right pair. If rom-weaver asks you to choose a file from an archive, stop and make sure you are comparing the ROM entries, not readmes, save files, or different disc tracks.
 
 ## Use cheat codes instead of a Modified ROM
 

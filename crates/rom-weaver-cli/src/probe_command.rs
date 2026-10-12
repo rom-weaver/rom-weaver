@@ -8,6 +8,7 @@ struct ProbeContainerOptions {
 
 impl CliApp {
     pub(super) fn run_probe(&self, mut args: ProbeCommand) -> AppRunOutcome {
+        let from_stdin = args.input == Path::new("-");
         let _stdin_guard = match crate::stdin_input::spool_stdin_if_dash(&mut args.input) {
             Ok(guard) => guard,
             Err(error) => {
@@ -92,7 +93,7 @@ impl CliApp {
             None,
         );
 
-        let report = self.probe_resolved_source(
+        let mut report = self.probe_resolved_source(
             &probe_source,
             &context,
             kind_filter,
@@ -100,6 +101,17 @@ impl CliApp {
             split_bin,
             probe_recommendation.as_ref(),
         );
+        if report.status == OperationStatus::Failed && (from_stdin || probe_source != source) {
+            // Name what the user passed, not the private staging path it was resolved to.
+            let shown = if from_stdin {
+                "<stdin>".to_string()
+            } else {
+                source.display().to_string()
+            };
+            report.label = report
+                .label
+                .replace(&probe_source.display().to_string(), &shown);
+        }
         self.finish_probe(
             report,
             extracted_archives,

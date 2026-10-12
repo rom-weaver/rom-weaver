@@ -36,7 +36,7 @@ The picker includes **Make the greeting start with M** (`80970D`) and **Change t
 4. Search the list and add the cheats you want.
 5. Close the dialog and check the selected cheats in the patch order.
 6. Move each cheat before or after the patches that it must use.
-7. Start **Apply** and save the output ROM.
+7. Choose **APPLY & DOWNLOAD** and save the output ROM.
 
 Check the game and revision yourself when the database only matches a title. A title match is not an exact ROM match.
 
@@ -91,7 +91,7 @@ The [guided Create cheats tour](https://rom-weaver.com/create-patch?guide=create
 5. Check the detected system, code type, and write count.
 6. Check each code's write list and its `compare` badge.
 7. Select the patch format and file name on **Patch**.
-8. Select **Create & download patch**.
+8. Select **CREATE & DOWNLOAD PATCH**.
 
 **Pick from the cheat database** offers the same database as Apply. A code that cannot become ROM writes blocks creation and states its reason.
 

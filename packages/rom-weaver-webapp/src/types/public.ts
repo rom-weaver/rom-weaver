@@ -39,6 +39,8 @@ type ApplyResult<TDestination> = {
   outputs: PublicOutput<TDestination>[];
   patches: AppliedPatchInfo[];
   sizeSummary?: WorkflowSizeSummary;
+  /** Handler warnings reported while applying; the output was still produced. */
+  warnings?: string[];
 };
 
 type CreateResult<TDestination> = {
@@ -48,6 +50,8 @@ type CreateResult<TDestination> = {
   output: PublicOutput<TDestination>;
   sizeSummary?: WorkflowSizeSummary;
   type: PatchFormat;
+  /** Handler warnings reported while creating (for example swapped inputs); the patch was still produced. */
+  warnings?: string[];
 };
 
 type TrimResult<TDestination> = {

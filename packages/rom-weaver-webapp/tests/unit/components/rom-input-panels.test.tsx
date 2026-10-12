@@ -56,7 +56,7 @@ describe("RomInputPanels view detail", () => {
     expect(container.querySelectorAll(".cks.is-integrated")).toHaveLength(3);
   });
 
-  it("does not report an unavailable lookup as unidentified", () => {
+  it("does not report an unavailable lookup as no match", () => {
     const { container } = render(
       <RomWeaverSettingsProvider settings={{ detailedViewEnabled: false }}>
         <RomInputPanels
@@ -66,7 +66,7 @@ describe("RomInputPanels view detail", () => {
       </RomWeaverSettingsProvider>,
     );
     expect(container.querySelector(".cks-head")?.textContent).toContain("Title lookup unavailable");
-    expect(container.querySelector(".cks-head")?.textContent).not.toContain("Unidentified");
+    expect(container.querySelector(".cks-head")?.textContent).not.toContain("No match");
   });
 
   it("shows a structured identification condition and its hint in simple view", () => {
@@ -81,7 +81,7 @@ describe("RomInputPanels view detail", () => {
     );
     const checks = container.querySelector(".cks-head")?.textContent || "";
     expect(checks).toContain("Database required");
-    expect(checks).not.toContain("Unidentified");
+    expect(checks).not.toContain("No match");
     expect(container.querySelector(".identify-drawer-condition")?.textContent).toContain(
       "needs the Sony PlayStation database",
     );

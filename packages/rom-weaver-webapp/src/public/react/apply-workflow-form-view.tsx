@@ -862,7 +862,11 @@ function ApplyWorkflowFormView({
   };
   const outputNotice = (
     <SectionNotice
-      id="rom-weaver-output-notice-message"
+      id={
+        uiState.outputNotice.level === "warning"
+          ? "rom-weaver-output-warning-message"
+          : "rom-weaver-output-notice-message"
+      }
       onDismiss={dismissSectionNotice("outputNotice")}
       state={uiState.outputNotice}
     />
@@ -917,12 +921,10 @@ function ApplyWorkflowFormView({
           weavePage
             ? {
                 line1: "ui.hero.weaveThesis",
-                line2: "ui.hero.weaveThesis2",
                 description: "ui.hero.weaveDescription",
               }
             : {
                 line1: "ui.hero.thesis",
-                line2: "ui.hero.thesis2",
                 description: "ui.hero.applyDescription",
               }
         }

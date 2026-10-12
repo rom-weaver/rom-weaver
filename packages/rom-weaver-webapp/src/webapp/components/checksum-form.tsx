@@ -357,7 +357,6 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
           inputId="checksum-input-picker"
           lead={{
             line1: "ui.hero.checksumThesis",
-            line2: "ui.hero.checksumThesis2",
             description: "ui.hero.checksumDescription",
           }}
           multiple={false}

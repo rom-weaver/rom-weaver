@@ -107,6 +107,8 @@ The CLI reads the same shards the webapp serves, from a directory on disk.
 | `nintendo-game-boy-advance.json.br` | Game Boy Advance shard. |
 | `manifest.json` | Source name, source revision, source URL, and license. Optional. |
 
+There is no shard for PlayStation (`psx`) or SG-1000 (`sg1000`). Those systems decode codes but have no database, so `cheat list` and database lookups for them fail with exit code 1.
+
 Each shard may also be a plain `<slug>.json`, or carry the `cheats-<slug>` prefix the repository's own data directory uses. When several forms are present the CLI reads the `.json.br` copy.
 
 The [CLI reference](cli.md#cheats) lists directory overrides and discovery order. `ROM_WEAVER_DATA_DIR` moves the user data base.

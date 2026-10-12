@@ -29,6 +29,8 @@ type PatchApplySummary = {
     elapsedMs?: number;
     elapsedSeconds?: number;
   } | null;
+  /** Handler warnings the run reported (for example "IPS patch did not change output"). */
+  warnings?: string[];
 };
 
 export type { PatchApplySummary, PatchFileInstance, SharedProgressEventLike };

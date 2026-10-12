@@ -308,7 +308,7 @@ fn weave_entry_checks_is_none_without_tokens() {
 
 #[test]
 fn weave_entry_checks_rejects_a_token_without_an_algorithm() {
-    let error = weave_entry_checks(&["deadbeef".to_string()], "--patch-expect-in")
+    let error = weave_entry_checks(&["deadbeef".to_string()], "--patch-input-check")
         .expect_err("missing ALGO=");
     assert!(error.to_string().contains("expected ALGO=HEX"), "{error}");
 }

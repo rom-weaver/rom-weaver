@@ -1,6 +1,6 @@
 # Extract, convert, and compress archives
 
-Extract files, convert an archive, or create a ZIP or 7z from the terminal. To patch a ROM inside an archive, pass the archive directly to [patch apply](cli-apply.md).
+Extract files, convert an archive, or create a ZIP or 7z from the terminal. To patch a ROM inside an archive, pass the archive directly to [patch apply](cli-apply.md). For the browser, use [Extract files](extract-files-browser.md) or [Compress](convert-roms-browser.md).
 
 <!-- START doctoc -->
 ## Table of contents

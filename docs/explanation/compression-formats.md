@@ -49,7 +49,7 @@ Browser extraction: [Decompress CHD to ISO, BIN/CUE, or GDI](../how-to/extract-c
 
 **RVZ** is Dolphin's format for GameCube and Wii discs. It understands disc padding, and [Dolphin](https://dolphin-emu.org/docs/faq/) plays it directly.
 
-Browser procedures: [Convert ISO to RVZ](../how-to/convert-to-rvz-browser.md) and [convert RVZ to ISO](../how-to/convert-rvz-to-iso-browser.md).
+Browser procedures: [Compress ISO to RVZ](../how-to/convert-to-rvz-browser.md) and [decompress RVZ to ISO](../how-to/convert-rvz-to-iso-browser.md).
 
 rom-weaver's parity suite checks that chdman and dolphin-tool can extract its CHD and RVZ outputs byte for byte, and that rom-weaver can extract the reference tools' outputs. The compressed container bytes and sizes may differ.
 

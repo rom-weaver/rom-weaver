@@ -332,6 +332,48 @@ pub(crate) fn print_error(
     ExitCode::from(status)
 }
 
+/// Names that only ever appear as hidden subcommands. clap lists every
+/// subcommand in a missing-subcommand error, hidden ones included.
+fn hidden_only_subcommand_names() -> std::collections::HashSet<String> {
+    fn walk(
+        command: &clap::Command,
+        hidden: &mut std::collections::HashSet<String>,
+        visible: &mut std::collections::HashSet<String>,
+    ) {
+        for subcommand in command.get_subcommands() {
+            let names = if subcommand.is_hide_set() {
+                &mut *hidden
+            } else {
+                &mut *visible
+            };
+            names.insert(subcommand.get_name().to_string());
+            walk(subcommand, hidden, visible);
+        }
+    }
+    let (mut hidden, mut visible) = Default::default();
+    walk(&crate::cli::cli_command(), &mut hidden, &mut visible);
+    hidden.retain(|name| !visible.contains(name));
+    hidden
+}
+
+fn without_hidden_subcommands(mut error: clap::Error) -> clap::Error {
+    use clap::error::{ContextKind, ContextValue};
+    if error.kind() != clap::error::ErrorKind::MissingSubcommand {
+        return error;
+    }
+    let Some(ContextValue::Strings(names)) = error.get(ContextKind::ValidSubcommand).cloned()
+    else {
+        return error;
+    };
+    let hidden = hidden_only_subcommand_names();
+    let visible = names
+        .into_iter()
+        .filter(|name| !hidden.contains(name))
+        .collect();
+    error.insert(ContextKind::ValidSubcommand, ContextValue::Strings(visible));
+    error
+}
+
 pub(crate) fn print_argument_result(error: clap::Error, mode: OutputMode) -> ExitCode {
     let code = error.exit_code() as u8;
     if !mode.is_json() {
@@ -342,7 +384,8 @@ pub(crate) fn print_argument_result(error: clap::Error, mode: OutputMode) -> Exi
         }
         return ExitCode::from(code);
     }
-    let message = error.render().to_string();
+    let kind = error.kind();
+    let message = without_hidden_subcommands(error).render().to_string();
     if code != 0 {
         return print_error(
             mode,
@@ -353,7 +396,7 @@ pub(crate) fn print_argument_result(error: clap::Error, mode: OutputMode) -> Exi
             code,
         );
     }
-    if error.kind() == clap::error::ErrorKind::DisplayVersion {
+    if kind == clap::error::ErrorKind::DisplayVersion {
         return print_event(
             mode,
             result_event(
