@@ -2856,7 +2856,8 @@ Record one input ROM rule for every patch. An individual --patch-basis overrides
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
-            long = "patch-expect-in",
+            long = "patch-input-check",
+            alias = "patch-expect-in",
             value_name = "ALGO=HEX",
             help = "Checksum the ROM should have before the preceding --patch runs. Recorded only when it differs from the weave's ROM checksums (repeatable, comma-separable)",
             long_help = patch_adjacency_long_help!("Checksum the ROM should have before the preceding --patch runs. Recorded only when it differs from the weave's ROM checksums (repeatable, comma-separable)")
@@ -2868,7 +2869,8 @@ Record one input ROM rule for every patch. An individual --patch-basis overrides
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
-            long = "patch-expect-out",
+            long = "patch-output-check",
+            alias = "patch-expect-out",
             value_name = "ALGO=HEX",
             help = "Checksum the ROM should have after the preceding --patch runs. Recorded only when it differs from the final output checksums (repeatable, comma-separable)",
             long_help = patch_adjacency_long_help!("Checksum the ROM should have after the preceding --patch runs. Recorded only when it differs from the final output checksums (repeatable, comma-separable)")
