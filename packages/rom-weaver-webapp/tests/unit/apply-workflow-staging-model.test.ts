@@ -93,6 +93,28 @@ describe("apply workflow staging model", () => {
     expect(info?.validationState).toBe("unknown");
   });
 
+  it("does not count a pasted SHA-1 as a compared checksum before apply", () => {
+    const patch = {
+      candidates: [],
+      checksumPreflight: { status: "unknown" as const },
+      id: "patch",
+      parentCompressions: [],
+      patchValidation: { status: "valid" as const },
+      status: "ready" as const,
+      validateInputChecksum: "0123456789abcdef0123456789abcdef01234567",
+      warnings: [],
+    };
+    expect(toPatchStageInfo(patch, "t.ips", 0, "Input 1")?.checksumCompared).toBe(false);
+    expect(
+      toPatchStageInfo(
+        { ...patch, checksumPreflight: { requiredCrc32: "4048840b", status: "valid" as const } },
+        "t.ips",
+        0,
+        "Input 1",
+      )?.checksumCompared,
+    ).toBe(true);
+  });
+
   it("keeps patch target labels and source names consistent across refreshes", () => {
     const buildInfo = createPatchStageInfoMapper([
       { id: "rom-1", fileName: "first.sfc" },

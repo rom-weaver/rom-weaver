@@ -1241,6 +1241,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.patchChecks.patchNumber": msg({ id: "ui.patchChecks.patchNumber", message: "Patch {n}" }),
   "ui.patchChecks.verified": msg({ id: "ui.patchChecks.verified", message: "Verified" }),
+  "ui.patchChecks.applied": msg({ id: "ui.patchChecks.applied", message: "Applied" }),
   "ui.patchChecks.automatic": msg({ id: "ui.patchChecks.automatic", message: "Automatic detection" }),
   "ui.patchChecks.autoBase": msg({ id: "ui.patchChecks.autoBase", message: "Original ROM (automatic)" }),
   "ui.patchChecks.autoPrevious": msg({
