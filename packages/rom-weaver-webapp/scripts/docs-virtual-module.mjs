@@ -80,6 +80,9 @@ const sharedHtmlFragments = (routes) => {
     '<div class="docs-code-block" data-docs-copy-container data-docs-copy-lines="single">',
     '<div class="docs-code-block" data-docs-copy-container>',
     icon,
+    '<a class="docs-section-link" href="/',
+    "</span></a></h2>",
+    '<a href="/docs/',
   ];
 };
 
