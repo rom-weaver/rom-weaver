@@ -3,6 +3,7 @@
 //! the checksum registry. Native-only, like `completions`; it never enters the
 //! shared `Commands` enum.
 
+use crate::compression_planning::CHD_CREATE_CODECS;
 use rom_weaver_app::compression_metadata;
 use rom_weaver_checksum::supported_algorithms;
 use rom_weaver_containers::container_format_metadata;
@@ -12,7 +13,6 @@ use serde_json::{Value, json};
 /// Which codec-field a container format's codecs live under. The metadata keys
 /// are webapp form-field names, so the mapping back to a format name is here.
 const FORMAT_CODEC_FIELDS: &[(&str, &[&str])] = &[
-    ("chd", &["chdCreateCdCodecs", "chdCreateDvdCodecs"]),
     ("rvz", &["rvzCodec"]),
     ("7z", &["sevenZipCodec"]),
     ("zip", &["zipCodec"]),
@@ -23,6 +23,10 @@ fn codecs_for_format(format: &str) -> Vec<&'static str> {
     // Z3DS has one fixed codec and so carries no codec field of its own.
     if format.eq_ignore_ascii_case("z3ds") {
         return vec![metadata.defaults.z3ds_codec];
+    }
+    // The webapp's CHD fields omit codecs the CLI also accepts (`store`, `avhuff`).
+    if format.eq_ignore_ascii_case("chd") {
+        return CHD_CREATE_CODECS.to_vec();
     }
     let mut codecs = Vec::new();
     for (name, fields) in FORMAT_CODEC_FIELDS {

@@ -20,13 +20,18 @@ use crate::{
 };
 
 pub(crate) fn decorate(command: clap::Command) -> clap::Command {
-    let command = ["extract", "compress"].into_iter().fold(command, |command, name| {
+    let command = [
+        ("extract", "Output directory; - writes the one extracted file to stdout"),
+        ("compress", "Output path; - writes the result to stdout (requires --format)"),
+    ]
+    .into_iter()
+    .fold(command, |command, (name, output_help)| {
         command.mut_subcommand(name, |command| {
             command
                 .arg(clap::Arg::new("stdin_name").long("stdin-name").value_name("NAME")
                     .help("Filename for input - (default: stdin.bin); one filename, no directories"))
                 .mut_arg("input", |arg| arg.help("Input path; - reads stdin using a temporary file"))
-                .mut_arg("output", |arg| arg.help("Output path; - writes one binary result to stdout (compress requires --format)"))
+                .mut_arg("output", |arg| arg.help(output_help))
         })
     });
     command

@@ -33,6 +33,12 @@ fn formats_json_reports_capabilities_from_the_registries() {
         .expect("chd is registered");
     assert_eq!(chd["create"], true);
     assert_eq!(chd["extract"], true);
+    // Every codec `compress --codec` accepts for CHD is listed, including the
+    // ones the webapp's codec pickers omit.
+    let codecs = chd["codecs"].as_array().expect("chd codecs");
+    for codec in ["store", "cdzs", "avhuff"] {
+        assert!(codecs.contains(&Value::from(codec)), "{codecs:?}");
+    }
     let rar = containers
         .iter()
         .find(|format| format["name"] == "rar")
