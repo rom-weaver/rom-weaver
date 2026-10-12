@@ -81,7 +81,7 @@ import {
   TrimPatchRoute,
   WhatsNewPageRoute,
 } from "./workflow-routes.tsx";
-import { SITE_NAME, WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
+import { WORKFLOW_SEO_ROUTES, withChannelBadge } from "./workflow-seo.mjs";
 
 const WORKFLOW_TABS: WorkflowTab[] = [
   {
@@ -209,7 +209,7 @@ const logger = createLogger("webapp-root");
 const syncWorkflowSeoMetadata = (view: WebappView) => {
   if (view === "docs") return;
   if (view === "whats-new") {
-    document.title = "rom-weaver - What's new";
+    document.title = withChannelBadge("What's new | rom-weaver", CHANNEL_BADGE);
     return;
   }
   let route = null;
@@ -225,10 +225,10 @@ const syncWorkflowSeoMetadata = (view: WebappView) => {
   else if (view === "test") route = WORKFLOW_SEO_ROUTES.test;
   if (!route) {
     const tab = WORKFLOW_TABS.find((entry) => entry.id === view);
-    document.title = tab ? `rom-weaver - ${tab.label}` : "rom-weaver";
+    document.title = withChannelBadge(tab ? `${tab.label} | rom-weaver` : "rom-weaver", CHANNEL_BADGE);
     return;
   }
-  const title = CHANNEL_BADGE ? route.title.replace(SITE_NAME, `${SITE_NAME} ${CHANNEL_BADGE}`) : route.title;
+  const title = withChannelBadge(route.title, CHANNEL_BADGE);
   const canonicalUrl = `https://rom-weaver.com/${route.slug}`;
   document.title = title;
   document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute("content", route.description);

@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+import { CHANNEL_BADGE } from "../../src/webapp/build-channel.ts";
+import { withChannelBadge } from "../../src/webapp/workflow-seo.mjs";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createEmptyVitePageUpdateState, getPageUpdateState } from "../../src/webapp/page-update-state.ts";
@@ -380,7 +382,7 @@ describe("the What's new route", () => {
     expect(panel).not.toBeNull();
     expect(panel?.hasAttribute("hidden")).toBe(false);
     expect(panel?.querySelector(".workflow-panel-head")).toBeNull();
-    expect(document.title).toBe("rom-weaver - What's new");
+    expect(document.title).toBe(withChannelBadge("What's new | rom-weaver", CHANNEL_BADGE));
   });
 
   it("reaches the route from the version chip", async () => {
@@ -476,13 +478,13 @@ describe("page metadata per view", () => {
   it("names the page for a view that has no SEO route of its own", async () => {
     await renderRoot({ currentView: "trim" });
 
-    expect(document.title).toBe("rom-weaver - Trim ROM");
+    expect(document.title).toBe(withChannelBadge("Trim ROM | rom-weaver", CHANNEL_BADGE));
   });
 
   it("uses the marketing title for a view that has one", async () => {
     await renderRoot({ currentView: "test" });
 
-    expect(document.title).not.toBe("rom-weaver - Test");
+    expect(document.title).not.toBe("Test | rom-weaver");
     expect(document.title).toContain("rom-weaver");
   });
 });
