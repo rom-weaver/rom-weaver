@@ -29,7 +29,7 @@ struct ExtractRun<'a> {
 
 /// Lists the output directory and any missing ancestors (deepest first) that the preflight
 /// will create, so a failed run can undo exactly what it made and nothing pre-existing.
-fn missing_dirs_to_create(out_dir: &Path) -> Vec<PathBuf> {
+pub(crate) fn missing_dirs_to_create(out_dir: &Path) -> Vec<PathBuf> {
     if out_dir.as_os_str().is_empty() {
         return Vec::new();
     }
@@ -42,7 +42,7 @@ fn missing_dirs_to_create(out_dir: &Path) -> Vec<PathBuf> {
 
 /// Removes directories this run created if they are still empty. `remove_dir` refuses
 /// non-empty directories, so partial output is never deleted.
-fn remove_created_empty_dirs(dirs: &[PathBuf]) {
+pub(crate) fn remove_created_empty_dirs(dirs: &[PathBuf]) {
     for dir in dirs {
         match std::fs::remove_dir(dir) {
             Ok(()) => {
