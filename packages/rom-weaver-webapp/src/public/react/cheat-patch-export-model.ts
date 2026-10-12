@@ -1,3 +1,4 @@
+import type { Localizer } from "../../presentation/localization/index.ts";
 import { getCreatePatchFormatsForSizes } from "../../lib/create/patch-format-limits.ts";
 import type { CreateSettings } from "../../platform/browser/browser-api.ts";
 import { cheatDelivery, type ClassifiedCheatRecord, type ManualCheatKindOverride } from "../../lib/cheats/index.ts";
@@ -69,8 +70,8 @@ const getCheatPatchFileName = (romTitle: string, records: readonly ClassifiedChe
 };
 
 /** The line shown in the cheat section after a successful export. */
-const getCheatPatchStatus = (fileName: string, romCount: number): string =>
-  `Created ${fileName} from ${romCount} ROM cheat${romCount === 1 ? "" : "s"}.`;
+const getCheatPatchStatus = (fileName: string, romCount: number, localizer: Localizer): string =>
+  localizer.messageCount("ui.cheats.patchCreated", romCount, { fileName });
 
 export {
   getCheatPatchCodes,

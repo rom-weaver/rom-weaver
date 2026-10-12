@@ -2,6 +2,7 @@ import { Search } from "lucide-react";
 import { useEffect, useId, useMemo, useState } from "react";
 import { isSelectableCheat, type CheatRomIdentity, type CheatSystemShard } from "../../../lib/cheats/index.ts";
 import { useRomLookup } from "../use-rom-lookup.ts";
+import type { Localizer } from "../../../presentation/localization/index.ts";
 import { useUiLocalizer } from "../settings-context.tsx";
 import { ROM_LOOKUP_MESSAGES, RomSearch } from "./ds/rom-expectation-card.tsx";
 import type { CheatDatabaseRecordsState } from "./use-cheat-database-records.ts";
@@ -14,8 +15,6 @@ type CheatGame = CheatSystemShard["games"][number];
 const gameLabel = (game: CheatGame): string =>
   [game.title, game.regions.join(" / "), game.revisions.join(" / ")].filter(Boolean).join(" · ");
 
-export const countLabel = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
-
 type CheatGamePickerProps = {
   platform: string;
   games: CheatGame[];
@@ -27,26 +26,23 @@ type CheatGamePickerProps = {
 
 /** Browse cheat records that the identification data might not contain. */
 const CheatGamePicker = ({ platform, games, value, onChange, unverified }: CheatGamePickerProps) => {
+  const localizer = useUiLocalizer();
   return (
     <div className="cheat-game-picker">
       <DropdownSelect
-        aria-label={`Browse games for ${platform}`}
+        aria-label={localizer.message("ui.cheats.browseGames", { platform })}
         className="select"
         onChange={(event) => onChange(event.target.value)}
         value={value}
       >
-        <option value="">Use automatic match</option>
+        <option value="">{localizer.message("ui.cheats.useAutomatic")}</option>
         {games.map((candidate) => (
           <option key={candidate.id} value={candidate.id}>
             {gameLabel(candidate)}
           </option>
         ))}
       </DropdownSelect>
-      {unverified ? (
-        <p className="cheat-pick-empty">
-          This ROM revision is unverified. These cheats may target different addresses.
-        </p>
-      ) : null}
+      {unverified ? <p className="cheat-pick-empty">{localizer.message("ui.cheats.unverified")}</p> : null}
     </div>
   );
 };
@@ -85,6 +81,7 @@ export const getCheatGameSearchStep = ({
 };
 
 const SystemSearch = ({ database }: { database: CheatDatabaseRecordsState }) => {
+  const localizer = useUiLocalizer();
   const [query, setQuery] = useState("");
   const options = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("en-US");
@@ -100,11 +97,11 @@ const SystemSearch = ({ database }: { database: CheatDatabaseRecordsState }) => 
     <div className="cheat-database-picker">
       <label className="cheat-search">
         <Search aria-hidden="true" />
-        <span className="sr-only">Search cheat databases</span>
+        <span className="sr-only">{localizer.message("ui.cheats.searchDatabases")}</span>
         <input
           className="input"
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search cheat databases by system…"
+          placeholder={localizer.message("ui.cheats.searchDatabasesPlaceholder")}
           type="search"
           value={query}
         />
@@ -120,31 +117,33 @@ const SystemSearch = ({ database }: { database: CheatDatabaseRecordsState }) => 
             >
               <span>{candidate.platform}</span>
               <span className="rb mono">
-                {countLabel(candidate.games, "game")} · {countLabel(candidate.cheats, "cheat")}
+                {localizer.messageCount("ui.cheats.gameCount", candidate.games)} ·{" "}
+                {localizer.messageCount("ui.cheats.cheatCount", candidate.cheats)}
               </span>
             </button>
           ))}
         </div>
       ) : (
         <p className="cheat-pick-empty" role="status">
-          No cheat database matches this search.
+          {localizer.message("ui.cheats.noDatabaseMatch")}
         </p>
       )}
     </div>
   );
 };
 
-const gameWarning = (database: CheatDatabaseRecordsState, inspection = false): string => {
+const gameWarning = (database: CheatDatabaseRecordsState, localizer: Localizer, inspection = false): string => {
   const { entry, game, match, records, referenceRom } = database;
   if (referenceRom && entry && !game && database.shard) {
-    return `The cheat database has no game record for ${referenceRom.title}. Search for another release or browse this system's cheat records below.`;
+    return localizer.message("ui.cheats.warn.noGameRecord", { title: referenceRom.title });
   }
   if (match.kind === "none" && entry) {
-    return `No game in the ${entry.platform} cheat database matches this ROM. Identify the game above. A game you choose by hand may not match this ROM's revision.`;
+    return localizer.message("ui.cheats.warn.noMatch", { platform: entry.platform });
   }
   if (game && !inspection && hasNoRomCheats(database)) {
-    const found = records.length ? "no cheats that can be baked into the ROM" : "no cheats";
-    return `The cheat database has ${found} for ${game.title}. If this ROM was matched wrongly, identify a different game above.`;
+    return localizer.message(records.length ? "ui.cheats.warn.noBakeable" : "ui.cheats.warn.noCheats", {
+      title: game.title,
+    });
   }
   return "";
 };
@@ -170,7 +169,7 @@ const IdentifyCheatGame = ({ database }: { database: CheatDatabaseRecordsState }
     <>
       {referenceRom ? (
         <p className="cheat-pick-empty">
-          Selected game: {referenceRom.title}.{" "}
+          {localizer.message("ui.cheats.selectedGame", { title: referenceRom.title })}{" "}
           <button
             className="btn ghost slim"
             onClick={() => {
@@ -179,7 +178,7 @@ const IdentifyCheatGame = ({ database }: { database: CheatDatabaseRecordsState }
             }}
             type="button"
           >
-            Use automatic match
+            {localizer.message("ui.cheats.useAutomatic")}
           </button>
         </p>
       ) : null}
@@ -190,6 +189,7 @@ const IdentifyCheatGame = ({ database }: { database: CheatDatabaseRecordsState }
 
 /** Reference selections MUST remain separate from the staged ROM's identity. */
 export const CheatGameSearch = (input: CheatGameSearchInput) => {
+  const localizer = useUiLocalizer();
   const { rom, database } = input;
   const step = getCheatGameSearchStep(input);
   if (!rom) return null;
@@ -200,8 +200,8 @@ export const CheatGameSearch = (input: CheatGameSearchInput) => {
         {identify}
         <Notice id="rom-weaver-cheat-system-warning" level="warn">
           {(database.referenceRom ?? rom).platform
-            ? `No cheat database covers ${(database.referenceRom ?? rom).platform}. If this ROM was identified wrongly, identify its game or choose a system below.`
-            : "The system of this ROM was not identified. Identify its game or choose a system below."}
+            ? localizer.message("ui.cheats.warn.noDatabase", { platform: (database.referenceRom ?? rom).platform })
+            : localizer.message("ui.cheats.warn.unidentifiedSystem")}
         </Notice>
         <SystemSearch database={database} />
       </>
@@ -212,9 +212,9 @@ export const CheatGameSearch = (input: CheatGameSearchInput) => {
   const changeSystem =
     manualEntrySlug && entry ? (
       <p className="cheat-pick-empty">
-        You chose {entry.platform} by hand.{" "}
+        {localizer.message("ui.cheats.choseByHand", { platform: entry.platform })}{" "}
         <button className="btn ghost slim" onClick={() => setManualEntrySlug("")} type="button">
-          Change system
+          {localizer.message("ui.cheats.changeSystem")}
         </button>
       </p>
     ) : null;
@@ -225,7 +225,7 @@ export const CheatGameSearch = (input: CheatGameSearchInput) => {
         {changeSystem}
       </>
     );
-  const warning = gameWarning(database, input.inspection);
+  const warning = gameWarning(database, localizer, input.inspection);
   return (
     <>
       {identify}

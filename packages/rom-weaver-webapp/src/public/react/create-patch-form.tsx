@@ -64,8 +64,8 @@ import type { BinarySource } from "./patcher-form.ts";
 import type { CandidateSelectionPrompt, CreatePatchFormProps, CreatePatchFormSettings } from "./public-types.ts";
 import {
   getCreateSettingsOutputName,
+  getBareDefaultCompressionMode,
   getDefaultCompressionArchive,
-  getDefaultCompressionMode,
   toCreateWorkflowSettings,
   useCreateSettings,
   useRomWeaverAssetBaseUrl,
@@ -547,7 +547,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     [cheatCodeKind, cheatCodesText, cheatSystem, codesMode],
   );
   const cheatCodesValidationMessage = codesMode
-    ? getCheatCodesValidationMessage(cheatCodeEntries, cheatCodesClassifying)
+    ? getCheatCodesValidationMessage(cheatCodeEntries, cheatCodesClassifying, localizer)
     : "";
   const identicalSources = !codesMode && areCreateSourcesIdentical(originalState, modifiedState);
   const createInputsSelected = codesMode ? !!original : !!(original && modified);
@@ -597,7 +597,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const executionOutputName = resolveCreateExecutionOutputName(resolvedOutputName, patchType);
   const createCompression = (() => {
     const normalized = String(
-      settings.output?.compression || getDefaultCompressionArchive(getDefaultCompressionMode(settings)),
+      settings.output?.compression || getDefaultCompressionArchive(getBareDefaultCompressionMode(settings)),
     )
       .trim()
       .toLowerCase();
@@ -1463,7 +1463,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         ? {
             afterItems: (
               <p className="create-cheat-codes-unsupported" id="patch-builder-cheat-codes-unsupported">
-                {getUnsupportedCheatSystemMessage(cheatRom?.platform)}
+                {getUnsupportedCheatSystemMessage(cheatRom?.platform, localizer)}
               </p>
             ),
           }

@@ -1,4 +1,5 @@
 import type { CheatCodeKind, CheatManualSystem, ClassifiedCheatRecord } from "../../lib/cheats/index.ts";
+import type { Localizer } from "../../presentation/localization/index.ts";
 import { getFileNameWithoutExtension } from "../../lib/input/path-utils.ts";
 import { sanitizeCheatPatchNamePart, toCheatPatchNameSuffix } from "./cheat-patch-name.ts";
 
@@ -135,8 +136,10 @@ const formatCheatWrite = (write: CheatCodeWrite): string =>
   `${toHex(write.offset, 6)} ← ${toHex(write.value, Math.max(2, (write.width || 1) * 2))}`;
 
 /** The compare badge, present only when the classifier matched a compare byte. */
-const getCheatCompareLabel = (write: CheatCodeWrite): string =>
-  typeof write.compare === "number" ? `compare ${toHex(write.compare, 2)} found` : "";
+const getCheatCompareLabel = (write: CheatCodeWrite, localizer: Localizer): string =>
+  typeof write.compare === "number"
+    ? localizer.message("ui.cheats.compareFound", { value: toHex(write.compare, 2) })
+    : "";
 
 /** Every ROM write a classified record resolved to, in the order Rust returned. */
 const getCheatCodeWrites = (record: ClassifiedCheatRecord | undefined): CheatCodeWrite[] => {
@@ -153,7 +156,7 @@ const isBakeableCheatCode = (entry: CreateCheatCodeEntry): boolean => entry.reco
  * total number of ROM writes - "NES · Game Genie · 2 writes". Blank until at
  * least one code has been classified.
  */
-const describeCheatCodes = (entries: readonly CreateCheatCodeEntry[]): string => {
+const describeCheatCodes = (entries: readonly CreateCheatCodeEntry[], localizer: Localizer): string => {
   const classified = entries.filter((entry) => !!entry.record);
   if (!classified.length) return "";
   const systems = [...new Set(classified.map((entry) => entry.record?.record.system).filter((value) => !!value))];
@@ -161,10 +164,10 @@ const describeCheatCodes = (entries: readonly CreateCheatCodeEntry[]): string =>
   const writeCount = classified.reduce((total, entry) => total + getCheatCodeWrites(entry.record).length, 0);
   const parts: string[] = [];
   if (systems.length === 1) parts.push(SYSTEM_LABELS[systems[0] as CheatManualSystem] || String(systems[0]));
-  else if (systems.length > 1) parts.push("Mixed systems");
+  else if (systems.length > 1) parts.push(localizer.message("ui.cheats.mixedSystems"));
   if (kinds.length === 1) parts.push(KIND_LABELS[String(kinds[0])] || String(kinds[0]));
-  else if (kinds.length > 1) parts.push("Mixed code types");
-  parts.push(`${writeCount} ${writeCount === 1 ? "write" : "writes"}`);
+  else if (kinds.length > 1) parts.push(localizer.message("ui.cheats.mixedKinds"));
+  parts.push(localizer.messageCount("ui.cheats.writeCount", writeCount));
   return parts.join(" · ");
 };
 
@@ -191,15 +194,19 @@ const getCheatCodesPatchName = (
  * Why the run cannot start, or "" when it can. Every code MUST resolve to ROM
  * writes: a patch carries nothing else.
  */
-const getCheatCodesValidationMessage = (entries: readonly CreateCheatCodeEntry[], classifying: boolean): string => {
-  if (!entries.length) return "Add at least one cheat code to create a patch.";
-  if (classifying) return "Checking the cheat codes…";
+const getCheatCodesValidationMessage = (
+  entries: readonly CreateCheatCodeEntry[],
+  classifying: boolean,
+  localizer: Localizer,
+): string => {
+  if (!entries.length) return localizer.message("ui.cheats.validation.empty");
+  if (classifying) return localizer.message("ui.cheats.validation.checking");
   const unresolved = entries.filter((entry) => !isBakeableCheatCode(entry));
   if (!unresolved.length) return "";
   const first = unresolved[0] as CreateCheatCodeEntry;
   if (first.error) return `${first.code}: ${first.error}`;
   if (first.record?.resolution.type === "unsupported") return `${first.code}: ${first.record.resolution.reason}`;
-  return `${first.code} has not been checked yet.`;
+  return localizer.message("ui.cheats.validation.unchecked", { code: first.code });
 };
 
 export {
