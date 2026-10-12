@@ -3,6 +3,7 @@ import { CHANNEL_BADGE } from "../../src/webapp/build-channel.ts";
 import { withChannelBadge } from "../../src/webapp/workflow-seo.mjs";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { preloadCatalog } from "../../src/presentation/localization/index.ts";
 import { createEmptyVitePageUpdateState, getPageUpdateState } from "../../src/webapp/page-update-state.ts";
 import { createServiceWorkerCacheState } from "../../src/webapp/pwa/service-worker-cache-state.ts";
 import { createWebappRootController } from "../../src/webapp/webapp-controller.ts";
@@ -79,6 +80,7 @@ const renderRoot = async ({
   notFound = false,
   serviceWorkerStatus = null as WebappRootProps["serviceWorkerCache"]["serviceWorkerStatus"],
   settingsDialogOpen = false,
+  language,
   updateReady = false,
 }: {
   currentView?: WebappRootProps["state"]["currentView"];
@@ -86,10 +88,13 @@ const renderRoot = async ({
   notFound?: boolean;
   serviceWorkerStatus?: WebappRootProps["serviceWorkerCache"]["serviceWorkerStatus"];
   settingsDialogOpen?: boolean;
+  language?: string;
   updateReady?: boolean;
 } = {}) => {
   if (!notFound) await preloadWorkflowRoute(currentView);
   const { actions, called } = createActions();
+  const state = baseState();
+  if (language) state.settings.language = language;
   const view = render(
     <WebappRoot
       actions={actions}
@@ -101,7 +106,7 @@ const renderRoot = async ({
         vite: createEmptyVitePageUpdateState(),
       })}
       serviceWorkerCache={{ ...createServiceWorkerCacheState(), serviceWorkerStatus, updateReady }}
-      state={{ ...baseState(), currentView, settingsDialogOpen }}
+      state={{ ...state, currentView, settingsDialogOpen }}
       urlSession={null}
     />,
   );
@@ -200,6 +205,32 @@ describe("the workbench shell", () => {
     expect(container.querySelector(".workbench")?.className).toContain("is-not-found");
   });
 
+  it("renders the not-found page in the browser locale", async () => {
+    const languages = vi.spyOn(window.navigator, "languages", "get").mockReturnValue(["de"]);
+    await preloadCatalog("de");
+    try {
+      const { container } = await renderRoot({ notFound: true });
+
+      expect(container.querySelector("#not-found-title")?.getAttribute("aria-label")).toBe("404: Seite nicht gefunden");
+      expect(container.querySelector(".not-found-docs")?.textContent).toBe("Dokumentation durchsuchen");
+    } finally {
+      languages.mockRestore();
+    }
+  });
+
+  it("renders the not-found page in the saved language instead of the browser locale", async () => {
+    vi.spyOn(window.navigator, "languages", "get").mockReturnValue(["en"]);
+    await preloadCatalog("de");
+    const { container } = await renderRoot({ notFound: true, language: "de" });
+
+    expect(container.querySelector("#not-found-title")?.getAttribute("aria-label")).toBe("404: Seite nicht gefunden");
+    expect(container.querySelector(".not-found-label")?.textContent).toBe("Diese Seite gibt es hier nicht.");
+    expect(container.querySelector(".not-found-copy")?.textContent).toBe(
+      "Prüfe die Adresse oder wähle, wohin du als Nächstes möchtest.",
+    );
+    expect(container.querySelector(".not-found-docs")?.textContent).toBe("Dokumentation durchsuchen");
+  });
+
   it("keeps not-found links and tab loads inside a subdirectory deployment", async () => {
     const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
     const { container } = await renderRoot({ assetBaseUrl: "https://example.test/rom-weaver/", notFound: true });
@@ -214,6 +245,19 @@ describe("the workbench shell", () => {
     expect(assign).toHaveBeenCalledWith("/rom-weaver/create-patch");
     fireEvent.click(navRow(container, "Docs"));
     expect(assign).toHaveBeenCalledWith("/rom-weaver/docs");
+  });
+
+  it("renders the not-found page in the browser locale", async () => {
+    const languages = vi.spyOn(window.navigator, "languages", "get").mockReturnValue(["de"]);
+    await preloadCatalog("de");
+    try {
+      const { container } = await renderRoot({ notFound: true });
+
+      expect(container.querySelector("#not-found-title")?.getAttribute("aria-label")).toBe("404: Seite nicht gefunden");
+      expect(container.querySelector(".not-found-docs")?.textContent).toBe("Dokumentation durchsuchen");
+    } finally {
+      languages.mockRestore();
+    }
   });
 
   it("routes a not-found tab click to a full page load", async () => {

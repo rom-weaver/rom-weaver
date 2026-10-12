@@ -397,6 +397,36 @@ const ActivityFinishMarker = () => {
   return null;
 };
 
+const NotFoundPage = ({ assetBaseUrl, onSelectTab }: { assetBaseUrl: string; onSelectTab: (id: string) => void }) => {
+  const localizer = useUiLocalizer();
+  return (
+    <section aria-labelledby="not-found-title" className="not-found-page">
+      <div className="not-found-content">
+        <h1 aria-label={localizer.message("ui.notFound.heading")} className="not-found-title" id="not-found-title">
+          <span aria-hidden="true" className="not-found-code">
+            404
+          </span>
+          <span aria-hidden="true" className="not-found-label">
+            {localizer.message("ui.notFound.label")}
+          </span>
+        </h1>
+        <p className="not-found-copy">{localizer.message("ui.notFound.copy")}</p>
+        <div className="not-found-actions">
+          <a className="btn primary not-found-home" href={appPathHref("apply-patches", assetBaseUrl)}>
+            <House aria-hidden="true" />
+            {localizer.message("ui.home.applyPatchCta")}
+          </a>
+          <a className="btn ghost not-found-docs" href={appPathHref("docs", assetBaseUrl)}>
+            <BookOpen aria-hidden="true" />
+            {localizer.message("ui.notFound.browseDocs")}
+          </a>
+        </div>
+        <RelatedStrip entryKey="not-found" onSelectTab={onSelectTab} />
+      </div>
+    </section>
+  );
+};
+
 function WebappRoot({
   state,
   pageUpdate,
@@ -789,30 +819,7 @@ function WebappRoot({
           <ActivityWakeLock pageHasPendingChanges={pageHasPendingChanges} />
           <main className={notFound ? "workbench is-not-found" : "workbench"} id="main-content" tabIndex={-1}>
             {notFound ? (
-              <section aria-labelledby="not-found-title" className="not-found-page">
-                <div className="not-found-content">
-                  <h1 aria-label="404: Page not found" className="not-found-title" id="not-found-title">
-                    <span aria-hidden="true" className="not-found-code">
-                      404
-                    </span>
-                    <span aria-hidden="true" className="not-found-label">
-                      That page is not here.
-                    </span>
-                  </h1>
-                  <p className="not-found-copy">Check the address, or choose where you want to go next.</p>
-                  <div className="not-found-actions">
-                    <a className="btn primary not-found-home" href={appPathHref("apply-patches", resolvedAssetBaseUrl)}>
-                      <House aria-hidden="true" />
-                      Apply Patches
-                    </a>
-                    <a className="btn ghost not-found-docs" href={appPathHref("docs", resolvedAssetBaseUrl)}>
-                      <BookOpen aria-hidden="true" />
-                      Browse docs
-                    </a>
-                  </div>
-                  <RelatedStrip entryKey="not-found" onSelectTab={handleSelectTab} />
-                </div>
-              </section>
+              <NotFoundPage assetBaseUrl={resolvedAssetBaseUrl} onSelectTab={handleSelectTab} />
             ) : (
               <>
                 {isViewMounted("home") ? (

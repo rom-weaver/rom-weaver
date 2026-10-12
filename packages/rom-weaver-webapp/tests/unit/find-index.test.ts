@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createLocalizer } from "../../src/presentation/localization/index.ts";
+import { createLocalizer, preloadCatalog } from "../../src/presentation/localization/index.ts";
 import { createFindIndex, loadIdentifyFindEntries, searchFind } from "../../src/webapp/find-index.ts";
 
 const identifyMocks = vi.hoisted(() => ({
@@ -74,6 +74,17 @@ describe("createFindIndex", () => {
     expect(index.browse.some((entry) => entry.kind === "setting")).toBe(false);
     expect(index.entries.find((entry) => entry.id === "setting:threads")?.hint).toBe("Settings · Compression");
     expect(index.entries.find((entry) => entry.id === "app:github")?.href).toBe("https://example.com/repo");
+  });
+});
+
+describe("createFindIndex in German", () => {
+  it("shows localized settings group titles yet still finds them by the English name", async () => {
+    await preloadCatalog("de");
+    const index = createFindIndex({ ...sources, localizer: createLocalizer("de") });
+    const threads = index.entries.find((entry) => entry.id === "setting:threads");
+    expect(threads?.hint).toBe("Einstellungen · Komprimierung");
+    expect(threads?.keywords).toContain("Compression");
+    expect(threads?.keywords).toContain("Komprimierung");
   });
 });
 
