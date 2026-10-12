@@ -3455,6 +3455,11 @@ msgstr "Patch-Einträge können erforderlich oder optional sein und erfassen Nam
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.unreadable"
+msgstr "Der Patch ist keine gültige Patch-Datei"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.PATCH_PARSE_FAILED"
 msgstr "Das Parsen des Patches ist fehlgeschlagen."
 
@@ -3957,6 +3962,11 @@ msgstr "Spielstand entfernen"
 #: src/presentation/localization/messages.ts
 msgid "ui.errorRecovery.selection"
 msgstr "Entferne die betroffene Eingabe und füge die benötigte Datei erneut hinzu. Prüfe bei Archiven zuerst den Inhalt; behalte Disc-Beschreibungen und zugehörige Tracks zusammen."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.validationUnreadableHint"
+msgstr "Entferne diesen Patch und wähle eine gültige Patch-Datei."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

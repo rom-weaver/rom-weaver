@@ -204,7 +204,8 @@ const getPatchValidationDetails = (patch: ApplyWorkflowPatchState) => {
       ? "Expected ROM title identified"
       : getPatchValidationMessage(status, deep);
   return {
-    checksumMismatch: status === "invalid",
+    // An unreadable patch is not a checksum mismatch: the override cannot help, so it must block Apply.
+    checksumMismatch: status === "invalid" && !deep?.unreadable,
     checksumTiming: formatChecksumTiming(patch.checksumTimeMs),
     validationActualValue: actualValue,
     validationLabel: requirementValues.length ? "Expected" : "Validation",
@@ -281,6 +282,7 @@ const toPatchStageInfo = (
     validationLabel: validation.validationLabel,
     validationMessage: validation.validationMessage,
     validationState: validation.validationState,
+    validationUnreadable: !!patch.patchValidation?.unreadable,
     validationValues: validation.validationValues,
     wasDecompressed: patch.wasDecompressed,
   };
