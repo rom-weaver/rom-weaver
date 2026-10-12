@@ -231,18 +231,6 @@ impl PatchHandler for PmsrPatchHandler {
             )));
         }
 
-        // MOD patches always declare the Paper Mario (USA) v1.0 source, so a
-        // patch made from any other original could never pass strict apply.
-        if context.validate_source_checks()
-            && validate_paper_mario_source(&request.original).is_err()
-        {
-            return Err(RomWeaverError::Validation(format!(
-                "MOD create requires the Paper Mario (USA) v1.0 ROM as the original \
-                 (CRC32 {PAPER_MARIO_USA10_CRC32:08x}, {PAPER_MARIO_USA10_FILE_SIZE} bytes); \
-                 pass --ignore-checksum-validation to create one for another source"
-            )));
-        }
-
         let thread_capability = pmsr_create_thread_capability(modified_len)?;
         let (execution, patch) = run_with_optional_pool(
             context,
@@ -257,11 +245,30 @@ impl PatchHandler for PmsrPatchHandler {
         }
         fs::write(&request.output, patch.bytes)?;
 
-        Ok(crate::shared::labels::patch_create_report(
+        let mut report = crate::shared::labels::patch_create_report(
             self.descriptor,
             patch.record_count,
             execution,
-        ))
+        );
+        // MOD patches always declare the Paper Mario (USA) v1.0 source, so a
+        // patch made from any other original fails a strict apply.
+        if context.validate_source_checks()
+            && validate_paper_mario_source(&request.original).is_err()
+        {
+            debug!(
+                format = self.descriptor.name,
+                "pmsr create original is not Paper Mario (USA) v1.0"
+            );
+            report.label = crate::shared::labels::append_warning_labels(
+                report.label,
+                &[format!(
+                    "MOD patches declare the Paper Mario (USA) v1.0 ROM as their source \
+                     (CRC32 {PAPER_MARIO_USA10_CRC32:08x}, {PAPER_MARIO_USA10_FILE_SIZE} bytes), \
+                     but this original differs, so applying needs --ignore-checksum-validation"
+                )],
+            );
+        }
+        Ok(report)
     }
 
     fn capabilities(&self) -> PatchCapabilities {

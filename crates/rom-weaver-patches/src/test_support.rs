@@ -124,9 +124,6 @@ pub(crate) struct RoundTripCase<'a> {
     /// Optional patch-checksum-validation override applied to the `apply`
     /// (and reverse-apply) contexts only. `None` keeps the context default.
     pub apply_checksum_validation: Option<PatchChecksumValidation>,
-    /// Optional patch-checksum-validation override applied to the `create`
-    /// context only. `None` keeps the context default.
-    pub create_checksum_validation: Option<PatchChecksumValidation>,
 }
 
 impl<'a> RoundTripCase<'a> {
@@ -144,7 +141,6 @@ impl<'a> RoundTripCase<'a> {
             patch_assert: None,
             in_root: false,
             apply_checksum_validation: None,
-            create_checksum_validation: None,
         }
     }
 }
@@ -189,12 +185,7 @@ pub(crate) fn assert_round_trip(
                 output: patch_path.clone(),
                 format: case.format.to_string(),
             },
-            &match case.create_checksum_validation {
-                Some(validation) => {
-                    make_context(case.create_threads).with_patch_checksum_validation(validation)
-                }
-                None => make_context(case.create_threads),
-            },
+            &make_context(case.create_threads),
         )
         .expect("create");
 

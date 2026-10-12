@@ -113,7 +113,6 @@ fn create_and_apply_round_trip_with_growth() {
             create_threads: 4,
             apply_threads: 1,
             apply_checksum_validation: Some(PatchChecksumValidation::Ignore),
-            create_checksum_validation: Some(PatchChecksumValidation::Ignore),
             ..RoundTripCase::new(b"\x01\x02", b"\x01\x02\x00\x00", "MOD")
         },
     );
@@ -143,8 +142,7 @@ fn create_uses_parallel_threads_for_large_input() {
                 output: patch_path.clone(),
                 format: "MOD".into(),
             },
-            &test_context_with_threads(&temp, 8)
-                .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+            &test_context_with_threads(&temp, 8),
         )
         .expect("create");
     let execution = report.thread_execution.expect("thread execution");
@@ -196,8 +194,7 @@ fn apply_uses_parallel_threads_for_non_overlapping_records() {
                 output: patch_path.clone(),
                 format: "MOD".into(),
             },
-            &test_context_with_threads(&temp, 4)
-                .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+            &test_context_with_threads(&temp, 4),
         )
         .expect("create");
 
@@ -283,8 +280,7 @@ fn create_is_deterministic_across_thread_budgets() {
                 output: single_patch.clone(),
                 format: "MOD".into(),
             },
-            &test_context_with_threads(&temp, 1)
-                .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+            &test_context_with_threads(&temp, 1),
         )
         .expect("single create");
     let parallel_report = handler
@@ -295,8 +291,7 @@ fn create_is_deterministic_across_thread_budgets() {
                 output: parallel_patch.clone(),
                 format: "MOD".into(),
             },
-            &test_context_with_threads(&temp, 8)
-                .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+            &test_context_with_threads(&temp, 8),
         )
         .expect("parallel create");
 
@@ -359,7 +354,7 @@ fn apply_strict_rejects_non_paper_mario_source() {
 }
 
 #[test]
-fn create_strict_rejects_non_paper_mario_original() {
+fn create_warns_when_original_is_not_paper_mario() {
     let temp = TestDir::new();
     let source_path = temp.child("source.bin");
     let target_path = temp.child("target.bin");
@@ -368,28 +363,37 @@ fn create_strict_rejects_non_paper_mario_original() {
     fs::write(&source_path, b"ORIGINAL").expect("fixture");
     fs::write(&target_path, b"MODIFIED").expect("fixture");
 
-    let error = PmsrPatchHandler::new(&MOD)
+    let handler = PmsrPatchHandler::new(&MOD);
+    let request = PatchCreateRequest {
+        original: source_path,
+        modified: target_path,
+        output: patch_path.clone(),
+        format: "MOD".into(),
+    };
+    let report = handler
         .create(
-            &PatchCreateRequest {
-                original: source_path,
-                modified: target_path,
-                output: patch_path.clone(),
-                format: "MOD".into(),
-            },
+            &request,
             &test_context_with_threads(&temp, 1)
                 .with_patch_checksum_validation(PatchChecksumValidation::Strict),
         )
-        .expect_err("a patch for another source could never apply strictly");
+        .expect("create still writes the patch");
+    assert!(patch_path.exists());
     assert!(
-        error
-            .to_string()
-            .contains("MOD create requires the Paper Mario (USA) v1.0 ROM"),
-        "{error}"
+        report
+            .label
+            .contains("; warning=MOD patches declare the Paper Mario (USA) v1.0 ROM"),
+        "{}",
+        report.label
     );
-    assert!(
-        !patch_path.exists(),
-        "rejected create must not write a patch"
-    );
+
+    let ignored = handler
+        .create(
+            &request,
+            &test_context_with_threads(&temp, 1)
+                .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+        )
+        .expect("create with checks ignored");
+    assert!(!ignored.label.contains("warning="), "{}", ignored.label);
 }
 
 /// A well-formed MOD patch carrying `records` as `(offset, data)` pairs.

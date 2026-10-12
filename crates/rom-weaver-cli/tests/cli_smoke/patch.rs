@@ -353,8 +353,6 @@ struct RoundTrip {
     patch_ext: &'static str,
     original: &'static [u8],
     modified: &'static [u8],
-    /// Extra flags appended to the `patch create` command (before `--jsonl`).
-    create_extra: &'static [&'static str],
     /// Extra flags appended to the `patch apply` command (before `--json`).
     apply_extra: &'static [&'static str],
     /// Optional assertion over the created patch bytes.
@@ -375,23 +373,24 @@ fn run_round_trip(rt: &RoundTrip) {
     let modified_s = modified.path().to_str().expect("path").to_owned();
     let output_s = output.path().to_str().expect("path").to_owned();
 
-    let mut create_args = vec![
-        "patch",
-        "create",
-        "--original",
-        &original_s,
-        "--modified",
-        &modified_s,
-        "--format",
-        rt.format,
-        "--output",
-        &patch_s,
-        "--threads",
-        "8",
-    ];
-    create_args.extend_from_slice(rt.create_extra);
-    create_args.push("--jsonl");
-    let create = run_single_json_event(&create_args, 0);
+    let create = run_single_json_event(
+        &[
+            "patch",
+            "create",
+            "--original",
+            &original_s,
+            "--modified",
+            &modified_s,
+            "--format",
+            rt.format,
+            "--output",
+            &patch_s,
+            "--threads",
+            "8",
+            "--jsonl",
+        ],
+        0,
+    );
     assert_eq!(create["command"], "patch-create");
     assert_eq!(create["family"], "patch");
     assert_eq!(create["format"], rt.expect_format);
@@ -442,7 +441,6 @@ round_trip_test!(
         patch_ext: "ips",
         original: b"abcdefgh",
         modified: b"a1XYZf!!!",
-        create_extra: &[],
         apply_extra: &["--ignore-checksum-validation"],
         patch_assert: None,
     }
@@ -455,7 +453,6 @@ round_trip_test!(
         patch_ext: "ebp",
         original: b"abcdefgh",
         modified: b"a1XYZf!!",
-        create_extra: &[],
         apply_extra: &[],
         patch_assert: Some(|bytes| {
             assert!(bytes.ends_with(
@@ -472,7 +469,6 @@ round_trip_test!(
         patch_ext: "solid",
         original: b"1234567890abcdef",
         modified: b"1234XY7890abc!",
-        create_extra: &[],
         apply_extra: &[],
         patch_assert: None,
     }
@@ -598,7 +594,6 @@ round_trip_test!(
         patch_ext: "xdelta",
         original: b"hello old world",
         modified: b"hello new world",
-        create_extra: &[],
         apply_extra: &[],
         patch_assert: None,
     }
@@ -611,7 +606,6 @@ round_trip_test!(
         patch_ext: "bps",
         original: b"hello old world",
         modified: b"hello new world",
-        create_extra: &[],
         apply_extra: &[],
         patch_assert: None,
     }
@@ -624,7 +618,6 @@ round_trip_test!(
         patch_ext: "bdf",
         original: b"The quick brown fox jumps over the lazy dog.",
         modified: b"The quick brown cat jumps over two lazy dogs!",
-        create_extra: &[],
         apply_extra: &[],
         patch_assert: Some(|bytes| {
             assert_eq!(&bytes[..8], b"BSDIFF40");
@@ -639,7 +632,6 @@ round_trip_test!(
         patch_ext: "ups",
         original: b"hello old world",
         modified: b"hello new world",
-        create_extra: &[],
         apply_extra: &[],
         patch_assert: None,
     }
@@ -652,7 +644,6 @@ round_trip_test!(
         patch_ext: "ppf",
         original: b"hello old world",
         modified: b"hello new world\0\0",
-        create_extra: &[],
         apply_extra: &[],
         patch_assert: None,
     }
@@ -665,7 +656,6 @@ round_trip_test!(
         patch_ext: "mod",
         original: &[0x01, 0x02],
         modified: &[0x01, 0x02, 0x00, 0x00],
-        create_extra: &["--ignore-checksum-validation"],
         apply_extra: &["--ignore-checksum-validation"],
         patch_assert: None,
     }
@@ -678,7 +668,6 @@ round_trip_test!(
         patch_ext: "dps",
         original: b"hello old world",
         modified: b"hello new world + dps",
-        create_extra: &[],
         apply_extra: &[],
         patch_assert: Some(|bytes| {
             assert!(bytes.len() >= 198);
@@ -699,7 +688,6 @@ round_trip_test!(
         patch_ext: "pat",
         original: b"hello old world",
         modified: b"HELlo old worlD",
-        create_extra: &[],
         apply_extra: &[],
         patch_assert: Some(|bytes| {
             assert!(String::from_utf8_lossy(bytes).contains("00000000 68 48"));
