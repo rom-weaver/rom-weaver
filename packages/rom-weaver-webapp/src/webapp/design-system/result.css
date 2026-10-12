@@ -70,12 +70,7 @@
   letter-spacing: 0.01em;
   opacity: 1;
 }
-.rw-app .download-btn .dl-size::before {
-  margin-inline-end: 9px;
-  content: "·";
-  opacity: 0.55;
-}
-.rw-app .download-btn .dl-delta::before {
+.rw-app .download-btn :is(.dl-size, .dl-delta)::before {
   margin-inline-end: 9px;
   content: "·";
   opacity: 0.55;
@@ -458,10 +453,9 @@
    attribute the boot script sets, so the prerendered document and a client
    with either setting hydrate the same tree. A strip whose only rows are
    hidden takes the whole nav with it. */
-:root[data-beta-tools-enabled="false"] .rw-app .related-strip li[data-beta="true"] {
-  display: none;
-}
-:root[data-beta-tools-enabled="false"] .rw-app .related-strip:not(:has(li:not([data-beta="true"]))) {
+:root[data-beta-tools-enabled="false"]
+  .rw-app
+  :is(.related-strip li[data-beta="true"], .related-strip:not(:has(li:not([data-beta="true"])))) {
   display: none;
 }
 .rw-app .related-row {
