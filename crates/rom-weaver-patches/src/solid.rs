@@ -98,7 +98,13 @@ impl PatchHandler for SolidPatchHandler {
             .descriptions
             .iter()
             .filter(|value| !value.is_empty())
-            .map(String::as_str)
+            // Patch-supplied text: keep terminal controls out of the label.
+            .map(|value| {
+                value
+                    .chars()
+                    .filter(|c| !c.is_control())
+                    .collect::<String>()
+            })
             .collect::<Vec<_>>();
         if !shown.is_empty() {
             label.push_str(&format!("; info {}", shown.join(" | ")));

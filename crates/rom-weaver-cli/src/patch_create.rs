@@ -421,6 +421,15 @@ impl CliApp {
                 probe_threads,
             );
         }
+        if args.ppf_undo {
+            return OperationReport::failed(
+                OperationFamily::Patch,
+                args.format.clone(),
+                "validate",
+                "--ppf-undo cannot be combined with --plan".to_string(),
+                probe_threads,
+            );
+        }
         let modified = match args.modified.as_ref() {
             Some(path) => path,
             None => {
@@ -563,6 +572,13 @@ impl CliApp {
                 Some(requested_format),
                 "validate",
                 "SOLID metadata options require --format solid or a .solid output".to_string(),
+            ));
+        }
+        if args.ppf_undo && !requested_format.eq_ignore_ascii_case("ppf") {
+            return Err(fail(
+                Some(requested_format),
+                "validate",
+                "--ppf-undo requires --format ppf or a .ppf output".to_string(),
             ));
         }
         if let Some(warning) = format_warning.as_deref() {

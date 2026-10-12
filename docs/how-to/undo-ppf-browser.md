@@ -1,6 +1,6 @@
 # Undo a PPF patch in the browser
 
-Use PPF Undo with the patched ROM and the exact PPF3 patch that changed it. The patch must contain undo data; the CLI writes it with `patch create --ppf-undo`.
+Use PPF Undo with the patched ROM and the exact PPF3 patch that changed it. The patch must contain undo data.
 
 This tool cannot undo arbitrary patches or reconstruct bytes absent from the patch.
 

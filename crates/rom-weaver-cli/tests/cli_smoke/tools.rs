@@ -1224,6 +1224,51 @@ fn tools_ppf_undo_disc_with_parent_reference_checks_real_source_paths() {
 }
 
 #[test]
+fn ppf_undo_flag_is_rejected_outside_ppf_create() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    fs::write(original.path(), b"1234567890").expect("original");
+    fs::write(modified.path(), b"1234XY7890").expect("modified");
+    let base = [
+        "patch",
+        "create",
+        "--original",
+        original.path().to_str().expect("path"),
+        "--modified",
+        modified.path().to_str().expect("path"),
+        "--ppf-undo",
+        "--jsonl",
+    ];
+    let solid_out = temp.child("x.solid");
+    let mut solid = base.to_vec();
+    solid.extend([
+        "--output",
+        solid_out.path().to_str().expect("path"),
+        "--solid-game",
+        "g",
+    ]);
+    let failed = run_single_json_event(&solid, 1);
+    assert!(
+        failed["label"]
+            .as_str()
+            .expect("label")
+            .contains("--ppf-undo requires")
+    );
+    assert!(!solid_out.path().exists());
+
+    let mut plan = base.to_vec();
+    plan.push("--plan");
+    let failed = run_single_json_event(&plan, 1);
+    assert!(
+        failed["label"]
+            .as_str()
+            .expect("label")
+            .contains("cannot be combined with --plan")
+    );
+}
+
+#[test]
 fn ppf_undo_restores_a_cli_created_patch_made_with_ppf_undo() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
