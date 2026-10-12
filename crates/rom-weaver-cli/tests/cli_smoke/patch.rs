@@ -1513,6 +1513,16 @@ fn patch_apply_warns_when_ips_does_not_change_output() {
             .expect("label")
             .contains("warning=IPS patch did not change output")
     );
+    assert!(
+        json["details"]["warnings"]
+            .as_array()
+            .expect("warnings")
+            .iter()
+            .any(|warning| warning
+                .as_str()
+                .is_some_and(|text| text.starts_with("IPS patch did not change output"))),
+        "handler warnings must reach the terminal-visible warnings list"
+    );
     assert_eq!(
         fs::read(temp.child("output.bin").path()).expect("output"),
         b"abcdefgh"
@@ -2704,6 +2714,16 @@ fn patch_create_warns_for_identical_ips_inputs() {
             .as_str()
             .expect("label")
             .contains("warning=IPS patch will not change output")
+    );
+    assert!(
+        json["details"]["warnings"]
+            .as_array()
+            .expect("warnings")
+            .iter()
+            .any(|warning| warning
+                .as_str()
+                .is_some_and(|text| text.starts_with("IPS patch will not change output"))),
+        "handler warnings must reach the terminal-visible warnings list"
     );
     assert_eq!(fs::read(patch.path()).expect("patch"), b"PATCHEOF");
 }
@@ -11382,5 +11402,32 @@ mod termination_signals {
         assert!(status.success(), "{status:?} signal {:?}", status.signal());
         assert!(temp.path().join("out.7z").exists());
         assert_no_temp_folder_left(temp.path());
+    }
+}
+
+#[test]
+fn patch_apply_explains_that_stdin_input_is_unsupported() {
+    let temp = setup_temp_dir();
+    let patch = temp.child("fix.ips");
+    fs::write(patch.path(), b"PATCHEOF").expect("patch fixture");
+    let output = temp.child("out.bin");
+    for extra in [&[][..], &["--dry-run"][..]] {
+        let mut args = vec![
+            "patch",
+            "apply",
+            "-i",
+            "-",
+            "--patch",
+            patch.path().to_str().expect("patch path"),
+            "-o",
+            output.path().to_str().expect("output path"),
+            "--json",
+        ];
+        args.extend_from_slice(extra);
+        let json = run_single_json_event(&args, 1);
+        assert_eq!(
+            json["label"],
+            "patch apply does not read from stdin; pass a file path"
+        );
     }
 }

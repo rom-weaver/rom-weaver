@@ -125,7 +125,7 @@ const auditDirtySettings = async (page, trigger, dialog) => {
   }
 
   await openSettings();
-  await expect(dialog).toContainText("Theme applies immediately. Other settings apply when you save.");
+  await expect(dialog).toContainText("Theme and accent apply immediately. Other settings apply when you save.");
   await dialog.getByRole("button", { name: "Dark", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await dialog.getByRole("button", { name: "Close", exact: true }).click();

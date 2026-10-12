@@ -31,6 +31,8 @@ The [trim support reference](../reference/formats.md#trim-support) lists support
 
 GameCube and Wii disc inputs convert losslessly to RVZ by default. The downloaded extension reflects the actual format, and savings come from compression rather than removal of unused sectors.
 
+The format list offers the ROM's own extension, ZIP, and 7z. CHD, RVZ, and Z3DS appear only when the input is a matching disc image or 3DS ROM.
+
 A file without removable padding may have no useful size reduction. A format that is not supported cannot be made trimmable by renaming it.
 
 ## Restore padding

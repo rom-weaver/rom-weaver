@@ -314,7 +314,6 @@ const CompressForm = ({ pageDrop, onSessionChange }: CompressFormProps) => {
         inputId="compress-input-picker"
         lead={{
           line1: "ui.hero.compressThesis",
-          line2: "ui.hero.compressThesis2",
           description: "ui.hero.compressDescription",
         }}
         onFiles={stageFiles}

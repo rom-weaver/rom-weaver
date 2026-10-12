@@ -37,4 +37,4 @@ The [synthetic disc tutorial](../tutorials/patch-compressed-disc.md) supplies a 
 
 For your disc, confirm all tracks are present and test the emulator before removing the CHD. A CD yielding BIN/CUE rather than ISO is expected.
 
-To compress the disc again, follow [Convert ISO or BIN/CUE to CHD](convert-to-chd-browser.md). For other inputs, follow [Extract files](extract-files-browser.md).
+To compress the disc again, follow [Compress ISO or BIN/CUE to CHD](convert-to-chd-browser.md). For other inputs, follow [Extract files](extract-files-browser.md).

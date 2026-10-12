@@ -327,6 +327,16 @@ impl CliApp {
             );
         }
 
+        if let Some(report) = self.require_readable_path(
+            "ingest",
+            OperationFamily::Command,
+            Some("ingest".to_string()),
+            &source,
+            thread_execution.clone(),
+        ) {
+            return self.finish("ingest", report);
+        }
+
         let report = match self.run_ingest_inner(IngestRequest {
             source: &source,
             out_dir: &out_dir,

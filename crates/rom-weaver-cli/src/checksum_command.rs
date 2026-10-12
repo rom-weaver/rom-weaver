@@ -169,6 +169,18 @@ impl CliApp {
         ) {
             return Some(report);
         }
+        if source.is_dir() {
+            return Some(OperationReport::failed(
+                OperationFamily::Checksum,
+                Some(self.checksum.name().to_string()),
+                "validate",
+                format!(
+                    "input is a directory, not a file: `{}`; checksum hashes one file at a time",
+                    source.display()
+                ),
+                thread_execution.clone(),
+            ));
+        }
 
         let invalid = algo.iter().find(|algo| {
             !supported_algorithms()

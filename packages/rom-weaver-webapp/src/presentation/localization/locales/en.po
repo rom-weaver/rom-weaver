@@ -876,7 +876,7 @@ msgstr "base ROM"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.cliItem3"
-msgstr "Batch a whole folder: convert, verify, and patch in one run."
+msgstr "Script batch jobs: compress, verify, and patch from the command line."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1071,7 +1071,7 @@ msgstr "CD Codecs"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.console.settingsDescription"
-msgstr "Theme applies immediately. Other settings apply when you save."
+msgstr "Theme and accent apply immediately. Other settings apply when you save."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1086,7 +1086,7 @@ msgstr "chd, rvz, and z3ds are decompressed to raw formats before patching."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.routeDiscBody"
-msgstr "Convert between compressed formats, or extract a CHD to ISO or BIN/CUE."
+msgstr "Recompress a disc image into another format, or extract a CHD to ISO or BIN/CUE."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1220,11 +1220,6 @@ msgstr "Choose the game you need"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.compressThesis2"
-msgstr "Create CHD, RVZ, or archives."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.patch.validationMismatchOverride"
 msgstr "Choose the ROM that this patch was made for, or use the override in 0x04."
 
@@ -1295,11 +1290,6 @@ msgstr "Commit"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.checksumThesis2"
-msgstr "Compare it with the expected value."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.home.routeEditedBody"
 msgstr "Compare it with the original to make a patch you can share."
 
@@ -1331,7 +1321,7 @@ msgstr "Compress"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.goCompress"
-msgstr "Convert / compress"
+msgstr "Compress"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1675,6 +1665,21 @@ msgstr "Drop a ROM and its patches here: single files, a whole folder, a ZIP or 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.noMatchBody"
+msgstr "These checksums are not in the identification data. Unknown does not mean corrupt: the ROM may be homebrew, modified, an unlisted revision, or from a system the data does not cover. Its checksums are on the card below so you can look them up elsewhere."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.noMatchLink"
+msgstr "About unknown results"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.noMatchTitle"
+msgstr "No match."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identify.drop"
 msgstr "Drop a ROM to identify it"
 
@@ -1736,7 +1741,7 @@ msgstr "Edit patch position, currently {position} of {total}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.saveThesis"
-msgstr "Edit trainer names, money, badges, hearts, and gear in a game save,"
+msgstr "Edit trainer names, money, badges, hearts, and gear in a game save."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1861,7 +1866,7 @@ msgstr "extract"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.extractDescription"
-msgstr "Convert GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, BIN/CUE for CDs, or GDI with tracks for GD-ROMs. Extract ZIP, 7z, Z3DS, and other supported formats locally in your browser."
+msgstr "Decompress GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, BIN/CUE for CDs, or GDI with tracks for GD-ROMs. Extract ZIP, 7z, Z3DS, and other supported formats locally in your browser."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1942,11 +1947,6 @@ msgstr "Find"
 #: src/presentation/localization/messages.ts
 msgid "ui.find.placeholder"
 msgstr "Find games (by name/checksum), tools, docs, or settings..."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.identifyThesis2"
-msgstr "Look up its checksum."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2250,11 +2250,6 @@ msgstr "Keep header: the patched output carries the ROM header."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.extractThesis2"
-msgstr "Extract disc images and archives."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.compress.keepPacked"
 msgstr "Keep packed"
 
@@ -2402,11 +2397,6 @@ msgstr "Logs"
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.pending"
 msgstr "Looking this ROM up in the title database. The rows below fill in once its checksums land."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.trimThesis2"
-msgstr "Lose the padding."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2797,11 +2787,6 @@ msgstr "One pass, no unpacking by hand"
 #: src/presentation/localization/messages.ts
 msgid "ui.home.loomCaption"
 msgstr "One pass, no unpacking by hand, no intermediate files. Save it as a weave and the order is kept for the next person."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.thesis2"
-msgstr "One toolkit."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3445,11 +3430,6 @@ msgstr "Ready"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.toolsThesis2"
-msgstr "Recover the original."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.region"
 msgstr "Region"
 
@@ -3740,11 +3720,6 @@ msgstr "See what’s supported"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.testThesis2"
-msgstr "Play your patched game."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.select.filesHint"
 msgstr "Select the files you want to add, then choose Add files."
 
@@ -3790,11 +3765,6 @@ msgstr "Settings"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.weaveThesis2"
-msgstr "Share a reusable recipe."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.weaveExport.share"
 msgstr "Share weave"
 
@@ -3802,11 +3772,6 @@ msgstr "Share weave"
 #: src/presentation/localization/messages.ts
 msgid "ui.weaveExport.shareTitle"
 msgstr "Share this patch recipe (for patch creators)"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.hero.createThesis2"
-msgstr "Share your changes."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4485,7 +4450,7 @@ msgstr "Unheadered ROM"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.unidentified"
-msgstr "Unidentified"
+msgstr "No match"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -4664,11 +4629,6 @@ msgstr "with copier-header detection and repair"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.saveThesis2"
-msgstr "with every checksum recalculated before you download."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "error.WORKER_FAILED"
 msgstr "Worker execution failed."
 
@@ -4801,3 +4761,13 @@ msgstr "Get started with the CLI (opens in a new tab)"
 #: src/presentation/localization/messages.ts
 msgid "ui.errorRecovery.selection"
 msgstr "Remove the affected input and add the required file again. For an archive, check its contents first; keep disc sheets and companion tracks together."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.failed"
+msgstr "Check failed: {input}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.create.identicalInputs"
+msgstr "Original and Modified have identical contents, so the patch would change nothing. Check that you chose the right files."

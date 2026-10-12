@@ -17,6 +17,11 @@ pub(super) struct OperationLabel<'a> {
     pub(super) format: Option<&'a str>,
 }
 
+/// Every codec name `--codec` accepts for CHD output; `formats` lists the same set.
+pub(crate) const CHD_CREATE_CODECS: &[&str] = &[
+    "store", "zstd", "lzma", "zlib", "huff", "flac", "cdzs", "cdlz", "cdzl", "cdfl", "avhuff",
+];
+
 impl CliApp {
     pub(super) fn emit_running(
         &self,
@@ -445,8 +450,10 @@ impl CliApp {
                     if matches {
                         None
                     } else {
+                        // Name the canonical format when the flag was an alias (`3ds` -> `z3ds`).
+                        let written = flag_canonical_name.unwrap_or(&normalized);
                         Some(format!(
-                            "output extension `{extension}` does not match {flag_label} `{flag}`; writing `{normalized}`"
+                            "output extension `{extension}` does not match {flag_label} `{flag}`; writing `{written}`"
                         ))
                     }
                 }
@@ -602,11 +609,7 @@ impl CliApp {
             "zip" | "zipx" => ["deflate", "store", "zstd"].as_slice(),
             "7z" => ["lzma2"].as_slice(),
             "rvz" | "z3ds" => ["zstd"].as_slice(),
-            "chd" => [
-                "store", "zstd", "lzma", "zlib", "huff", "flac", "cdzs", "cdlz", "cdzl", "cdfl",
-                "avhuff",
-            ]
-            .as_slice(),
+            "chd" => CHD_CREATE_CODECS,
             _ => {
                 return Err(RomWeaverError::Validation(format!(
                     "{format} does not accept --compress-codec"

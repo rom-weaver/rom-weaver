@@ -110,7 +110,7 @@ Every command accepts these global flags, listed under `Global options` in its h
 - `--jsonl` keeps the JSON event stream: it writes one event per line to stdout and includes progress by default. Use `--no-progress` or `--quiet` to suppress running events.
 - `--progress` writes progress to stderr. Human output enables progress automatically when stderr is a capable terminal; redirected stderr and `--json` output keep it off by default. With `--json`, progress events and diagnostics are JSON lines on stderr. `--no-progress` hides progress.
 - `--log-level off|error|warn|info|debug|trace` sets how much rom-weaver logs to stderr. The default level is `warn`. Logging is separate from the normal output.
-- `-v`/`--verbose` writes concise command summaries to stderr. It is independent of `--progress`. `-vv` enables debug logging, and `-vvv` enables trace logging.
+- `-v`/`--verbose` writes concise command summaries to stderr. It is independent of `--progress`. A successful `trim` prints nothing on stdout; `-v` lists each file it wrote. `-vv` enables debug logging, and `-vvv` enables trace logging.
 - `--debug` logs developer diagnostics, including command configuration and internal trace events. It is equivalent to `--log-level trace`. It conflicts with `--verbose`, `--quiet`, and `--log-level`.
 - `-q`/`--quiet` hides optional diagnostics and progress, including forced `--progress`. It overrides `--verbose`. It retains requested results, format candidate plans, dry-run previews, warnings, and errors. In JSONL mode it suppresses running events and retains terminal events.
 - `--dep-trace` adds trace output from the bundled libraries, useful in a bug report. On its own it also raises rom-weaver's own logs to warning level.
@@ -179,6 +179,8 @@ Examples are in [Use an archive pipeline](../how-to/work-with-archives.md#use-an
 Not every command takes all five. `extract` has no `--no-extract`, since unpacking is the whole job. `trim` spells its filter `--no-filter`, because it filters to ROMs by default. `rom-weaver <command> --help` is authoritative.
 
 `extract` also unpacks archives found inside the input, up to eight levels deep; `--no-nested-extract` stops after the first layer. If any output file already exists, extraction stops before writing anything, unless `--force` is given. While extracting it can hash what it writes (`--checksum ALGO`, or `--checksum-rom ALGO` for the ROMs only) and report each file's format and platform (`--probe`).
+
+`extract --split-bin` writes a CD-format CHD as a CUE plus one `*.trackNN.bin` per track instead of one merged BIN; it is ignored, with a warning, for non-CHD input. `probe --split-bin` lists the per-track BIN files of a CD-format CHD.
 
 XISO extraction rejects an output that refers to its source file, including symbolic links and native hard links, even with `--force`.
 
@@ -250,7 +252,7 @@ Native builds only; the browser build reports them as unsupported. Every subcomm
 The terminal report has the `matched`, `ambiguous`, or `unknown` status. JSON reports put the typed result in `details.identify`. Optional result fields, present when known:
 
 - `quality`: `exact`, `partial`, or `metadata_only`.
-- `condition`: `database_required` (the detected platform's pack is not installed) or `unsupported_media_profile` (the pack expects per-track hashes but the input was hashed as one payload). Both come with a `hint` naming the cause; identify never downloads a pack itself, so a missing database is installed with `rom-weaver setup`. `status` stays `unknown`.
+- `condition`: `database_required` (the detected platform's pack is not installed) or `unsupported_media_profile` (the detected or `--system` platform's pack expects per-track hashes but the input was hashed as one payload). When no platform is detected or requested, identify reports neither condition. Both come with a `hint` naming the cause; identify never downloads a pack itself, so a missing database is installed with `rom-weaver setup`. `status` stays `unknown`.
 - `platform_candidates`: detected platforms with `confidence` and `evidence`.
 - `media`, `components`: the input's media kind and hashed components.
 - `database`: the pack that answered - `source`, `pack_format` (`RWFP1`), and `canonicalization_profile`.
@@ -274,6 +276,8 @@ The internal `ingest` command also identifies each ROM asset. It identifies a pa
 Human checksum output includes the primary digests and each applicable variant digest. `--probe` also reports the detected platform or disc format and ROM header details.
 
 Native `checksum --digest --algo ALGO` prints only the primary checksum in lowercase, followed by one newline. It requires exactly one algorithm. It prints no filename, label, variant checksums, color, or elapsed time. `--quiet` retains the digest; progress and errors use stderr. A failed operation prints no digest. `--digest` conflicts with `--json`, `--jsonl`, and `--dry-run`.
+
+`--start BYTE` and `--length BYTES` hash a byte range. `--no-trim-fix` skips the extra checksums that show how a trimmable ROM hashes trimmed or untrimmed; `identify` accepts it too.
 
 `--digest` retains the normal input semantics: archives open automatically, `--no-extract` hashes the archive bytes, and `--start`/`--length` select a byte range. It is not a checksum-file verification mode.
 
@@ -320,7 +324,7 @@ These flags also appear under `Cheats` in `patch apply` and `patch create` help.
 | --- | --- |
 | `--cheat ID_OR_DESCRIPTION` | Select by record ID or exact description. Repeatable. Multiple description matches fail with `cheat_selector_ambiguous`. |
 | `--cheat-database DIR` | Shard directory. Defaults to `$ROM_WEAVER_CHEAT_DATABASE`, then the discovery order above. |
-| `--cheat-system SYS` | `nes`, `snes`, `genesis`, `32x`, `sms`, `gamegear`, `gameboy`, `gameboy-color`, or `gba`, when the ROM header does not say. |
+| `--cheat-system SYS` | `nes`, `snes`, `genesis`, `32x`, `sms`, `gamegear`, `sg1000`, `gameboy`, `gameboy-color`, `gba`, or `psx`, when the ROM header does not say. `sg1000` and `psx` decode codes but have no cheat database, so a command that needs the database (such as `cheat list`) fails with exit code 1; a weave with code snapshots still applies. An unknown value is a usage error with exit code 2. |
 | `--game ID` | Use this database game ID instead of matching by checksum or title. |
 | `--allow-cheat-conflicts` | Later cheats win at conflicting offsets. Otherwise, different `rom` cheat values for one byte fail with `cheat_write_conflict`. |
 
@@ -359,6 +363,8 @@ DCP patches need a Dreamcast `.cue` or `.gdi` input. They rebuild the GD-ROM dat
 When `patch apply` detects a weave from its positional input, the canonical `rom-weaver-weave.json` name is the fast path. It also content-probes valid plain `.json` files and root-level `.json` members inside archives. A stream-compressed positional weave needs a canonical name such as `rom-weaver-weave.json.gz`; pass a differently named one explicitly with `--weave`.
 
 The legacy `rom-weaver-bundle.json` name and its compressed forms remain readable. Both recipe names use the same version 1 and version 2 fields. Created archives contain identical `rom-weaver-weave.json` and `rom-weaver-bundle.json` members.
+
+`patch apply --with GLOB` and `--without GLOB` match a weave patch's `name` or file name, and both are repeatable. A pattern that matches no patch fails the apply. `--with`, `--without`, and `--without-cheats` fail when the input is not a weave, and `--with` and `--without` also fail alongside explicit `--patch` flags, which replace the weave's patch list.
 
 Weave version 2 requires `patchBasis`. Weave version 1 remains readable and uses automatic inference. Per-entry `basis` values override the shared weave rule.
 
@@ -455,7 +461,7 @@ SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for it
 | `--patch-optional` | Marks the preceding patch optional. |
 | `--patch-source-url`, `--patch-header`, `--patch-basis` | Source URL, header policy, and input basis for the preceding patch. |
 | `--expect-out` | Expected final result checks. |
-| `--patch-expect-in`, `--patch-expect-out` | Expected checks around the preceding patch. |
+| `--patch-input-check`, `--patch-output-check` | Expected checks around the preceding patch. The earlier spellings `--patch-expect-in` and `--patch-expect-out` still work but are hidden from `--help`. |
 | `--assume-in` | Supplied ROM checksums used without reading the file to verify them. |
 | `--weave ARCHIVE`, `--no-weave-rom` | Archive packaging and exclusion of ROM bytes. |
 | `--schema-ref URL` | Adds a `$schema` URL; omitted by default. |

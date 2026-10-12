@@ -1,6 +1,8 @@
 import { Download, Scissors } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
 import {
+  CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS,
   getCompressionOutputExtension,
   isCompressionFormat,
   resolveAutomaticCompressionFormat,
@@ -612,7 +614,22 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const losslessDiscConversion = sourceState?.romType?.recommendedFormat === "rvz";
   const defaultCompressionMode = getDefaultCompressionMode(settings);
   const defaultArchiveFormat = getDefaultCompressionArchive(defaultCompressionMode);
-  const configuredOutputFormat = props.outputFormat ?? (outputFormatEdited ? internalOutputFormat : "");
+  // CHD, RVZ, and Z3DS only apply to matching inputs, so a cartridge ROM never offers them (as in Compress).
+  const formatSource = {
+    fileName: resolvedSourceFileName,
+    metadata: {
+      ...(sourceState?.chdMode ? { mode: sourceState.chdMode } : {}),
+      ...(sourceState?.romType?.discFormat ? { format: sourceState.romType.discFormat } : {}),
+      ...(sourceState?.romType?.recommendedFormat ? { recommendedFormat: sourceState.romType.recommendedFormat } : {}),
+    },
+    ...(typeof sourceState?.size === "number" ? { size: sourceState.size } : {}),
+  };
+  const isOfferedOutputFormat = (format: string) =>
+    !(CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS as readonly string[]).includes(format) ||
+    (losslessDiscConversion && format === "rvz") ||
+    OutputCompressionManager.supportsOutputCompression(formatSource, format);
+  const requestedConfiguredFormat = props.outputFormat ?? (outputFormatEdited ? internalOutputFormat : "");
+  const configuredOutputFormat = isOfferedOutputFormat(requestedConfiguredFormat) ? requestedConfiguredFormat : "";
   const automaticCompressionFormat = resolveAutomaticCompressionFormat({
     fallback: defaultArchiveFormat,
     parentCompressions: sourceState?.parentCompressions,
@@ -1052,17 +1069,15 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     : null;
 
   const rawExtensionOption = losslessDiscConversion ? "" : rawOutputFormat;
-  const formatOptions = useMemo(
+  const allFormatOptions = useMemo(
     () =>
       createTrimOutputOptions(losslessDiscConversion ? "rvz" : rawExtensionOption, {
         rawLabel: source ? undefined : "None",
       }),
     [losslessDiscConversion, rawExtensionOption, source],
   );
-  const compressFormatOptions = useMemo(
-    () => createCompressionTypeOptions(formatOptions, rawExtensionOption),
-    [formatOptions, rawExtensionOption],
-  );
+  const formatOptions = allFormatOptions.filter((option) => isOfferedOutputFormat(option.value));
+  const compressFormatOptions = createCompressionTypeOptions(formatOptions, rawExtensionOption);
   const trimTimingText = formatOptionalElapsedMs(completedTrimTimeMs ?? undefined);
   const compressTimingText = formatOptionalElapsedMs(completedCompressionTimeMs ?? undefined);
   const checksumProgress = progress?.stage === "checksum" ? progress : null;
@@ -1308,7 +1323,8 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         <InfoPopover title="ROM input">
           <strong>ROM</strong>
           <ul>
-            <li>Drop an over-dumped ROM (NDS/N64 and similar) to remove trailing padding.</li>
+            <li>Drop an NDS, GBA, 3DS, or XISO image to remove trailing padding.</li>
+            <li>GameCube and Wii discs convert losslessly to RVZ instead; the savings come from compression.</li>
             <li>Archives are extracted; pick the ROM if several candidates are found.</li>
           </ul>
         </InfoPopover>

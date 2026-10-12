@@ -42,7 +42,7 @@ type UnifiedDropZoneProps = {
   /** Full per-bucket extension support for the format disclosure and input help. */
   supported?: readonly SupportedFileGroup[];
   /** Per-workflow thesis lines for the empty-state lead (defaults to the apply copy). */
-  lead?: { line1: MessageId; line2: MessageId; description: MessageId };
+  lead?: { line1: MessageId; description: MessageId };
   /** The workflow's how-to page, linked from the empty-state help row. `path` is relative to the app base. */
   guide?: WorkflowGuide;
   /** Onboarding control (the per-page sample link) that leads the empty-state help row. */
@@ -89,7 +89,7 @@ const UnifiedDropZone = ({
   heroLabel,
   heroLabelCoarse,
   info,
-  lead = { line1: "ui.hero.thesis", line2: "ui.hero.thesis2", description: "ui.hero.applyDescription" },
+  lead = { line1: "ui.hero.thesis", description: "ui.hero.applyDescription" },
   multiple = true,
   num = "0x01",
   onBrowseStart,

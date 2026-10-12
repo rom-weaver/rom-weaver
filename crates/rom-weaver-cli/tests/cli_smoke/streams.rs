@@ -1354,3 +1354,28 @@ fn termination_cancels_open_stdin_and_removes_spools() {
         }
     }
 }
+
+#[test]
+fn probe_stdin_failure_names_stdin_not_the_staging_file() {
+    let mut child = binary()
+        .args(["probe", "--input", "-", "--json"])
+        .stdin(Stdio::piped())
+        .spawn()
+        .expect("spawn probe");
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(b"opaque bytes no handler claims")
+        .expect("write stdin");
+    let output = child.wait_with_output().expect("probe output");
+    assert_eq!(output.status.code(), Some(1));
+    let report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("JSON failure report");
+    let label = report["label"].as_str().expect("label");
+    assert!(
+        label.contains("no registered handler matched `<stdin>`"),
+        "{label}"
+    );
+    assert!(!label.contains("rom-weaver-stdin"), "{label}");
+}

@@ -705,7 +705,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
         id="emulator-test-input"
         info={<p>Choosing another ROM stops and replaces the current game.</p>}
         inputId="emulator-test-file-input"
-        lead={{ line1: "ui.hero.testThesis", line2: "ui.hero.testThesis2", description: "ui.hero.testDescription" }}
+        lead={{ line1: "ui.hero.testThesis", description: "ui.hero.testDescription" }}
         multiple={false}
         onBrowseStart={() => prepareEmulatorAudioContext()}
         onDropStart={() => prepareEmulatorAudioContext()}

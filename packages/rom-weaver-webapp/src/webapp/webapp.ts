@@ -563,9 +563,11 @@ const renderWebappRoot = (): undefined => {
         window.history.replaceState(window.history.state, "", url);
         requestGuidedSampleStart(guide);
       },
-      onPpfUndoSessionChange: (active) => webappController.setPpfUndoSessionState(active),
-      onCompressSessionChange: (active) => webappController.setCompressSessionState(active),
-      onSaveEditorSessionChange: (active) => webappController.setSaveEditorSessionState(active),
+      // The forms report these from passive effects, where the controller's synchronous
+      // re-render (flushSync) is not allowed, so each is applied one microtask later.
+      onPpfUndoSessionChange: (active) => queueMicrotask(() => webappController.setPpfUndoSessionState(active)),
+      onCompressSessionChange: (active) => queueMicrotask(() => webappController.setCompressSessionState(active)),
+      onSaveEditorSessionChange: (active) => queueMicrotask(() => webappController.setSaveEditorSessionState(active)),
       onTrimOutputFormatChange: (format) => webappController.setTrimOutputFormat(format),
       onTrimSettingsChange: (settings) => webappController.setTrimSettingsState(settings),
       onTrimSourceChange: (file) => webappController.setTrimSourceState(file),
