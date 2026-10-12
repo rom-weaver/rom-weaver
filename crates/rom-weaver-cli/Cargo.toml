@@ -73,6 +73,10 @@ ureq = { version = "3", default-features = false, features = ["rustls"] }
 quick-xml = { version = "0.42", features = ["serialize"] }
 tar.workspace = true
 
+[target.'cfg(unix)'.dependencies]
+# Restore an inherited SIG_IGN (nohup) after ctrlc's termination handler overwrites it.
+libc.workspace = true
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tracing-subscriber = { version = "0.3.20", default-features = false, features = ["fmt", "std"] }
 

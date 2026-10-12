@@ -11344,3 +11344,90 @@ fn concurrent_xdelta_runs_in_one_directory_all_succeed_and_clean_up() {
     }
     assert_no_temp_folder_left(&cwd);
 }
+
+#[cfg(unix)]
+mod termination_signals {
+    use super::*;
+    use std::os::unix::process::{CommandExt, ExitStatusExt};
+    use std::process::Stdio;
+    use std::time::{Duration, Instant};
+
+    /// A long compressing apply in `cwd`, returned once it has created its private temp folder.
+    fn spawn_long_apply(cwd: &Path, ignore_hup: bool) -> std::process::Child {
+        let original = cwd.join("original.bin");
+        let modified = cwd.join("modified.bin");
+        let patch = cwd.join("update.xdelta");
+        fs::write(&original, pseudo_random_bytes(48 * 1024 * 1024, 7)).expect("original");
+        let mut changed = pseudo_random_bytes(48 * 1024 * 1024, 7);
+        changed[1000] ^= 0xff;
+        fs::write(&modified, changed).expect("modified");
+        let bin = assert_cmd::cargo::cargo_bin("rom-weaver");
+        let status = std::process::Command::new(&bin)
+            .current_dir(cwd)
+            .env("PWD", cwd)
+            .args(["patch", "create", "--original"])
+            .arg(&original)
+            .arg("--modified")
+            .arg(&modified)
+            .args(["--format", "xdelta", "--output"])
+            .arg(&patch)
+            .output()
+            .expect("create")
+            .status;
+        assert!(status.success());
+        let mut command = std::process::Command::new(&bin);
+        command
+            .current_dir(cwd)
+            .env("PWD", cwd)
+            .args(["patch", "apply", "--input"])
+            .arg(&original)
+            .arg("--patch")
+            .arg(&patch)
+            .args(["--output"])
+            .arg(cwd.join("out.7z"))
+            .args(["--compress-level", "max"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        if ignore_hup {
+            // SAFETY: only async-signal-safe signal() runs between fork and exec.
+            unsafe {
+                command.pre_exec(|| {
+                    libc::signal(libc::SIGHUP, libc::SIG_IGN);
+                    Ok(())
+                });
+            }
+        }
+        let child = command.spawn().expect("spawn apply");
+        let deadline = Instant::now() + Duration::from_secs(60);
+        while !fs::read_dir(cwd).expect("read cwd").flatten().any(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .starts_with("rom-weaver-out")
+        }) {
+            assert!(Instant::now() < deadline, "temp folder never appeared");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        child
+    }
+
+    #[test]
+    fn sigterm_cancels_cleanly_and_leaves_no_temp_folder() {
+        let temp = setup_temp_dir();
+        let mut child = spawn_long_apply(temp.path(), false);
+        unsafe { libc::kill(child.id() as i32, libc::SIGTERM) };
+        let status = child.wait().expect("wait");
+        assert_eq!(status.code(), Some(130), "{status:?}");
+        assert_no_temp_folder_left(temp.path());
+    }
+
+    #[test]
+    fn inherited_ignored_sighup_still_lets_the_run_finish() {
+        let temp = setup_temp_dir();
+        let mut child = spawn_long_apply(temp.path(), true);
+        unsafe { libc::kill(child.id() as i32, libc::SIGHUP) };
+        let status = child.wait().expect("wait");
+        assert!(status.success(), "{status:?} signal {:?}", status.signal());
+        assert!(temp.path().join("out.7z").exists());
+        assert_no_temp_folder_left(temp.path());
+    }
+}
