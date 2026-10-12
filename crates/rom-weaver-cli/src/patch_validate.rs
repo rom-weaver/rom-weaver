@@ -958,6 +958,24 @@ impl CliApp {
         } else {
             format!("; {}", validation_labels.join("; "))
         };
+        // Labels render as one terminal line, so verdicts join with "; ".
+        let mut verdict_lines = String::new();
+        for verdict in &verdicts {
+            let outcome = if verdict.passed { "pass" } else { "FAIL" };
+            let name = Path::new(&verdict.patch).file_name().map_or_else(
+                || verdict.patch.clone(),
+                |name| name.to_string_lossy().into_owned(),
+            );
+            verdict_lines.push_str(&format!("; {outcome} {name}"));
+            if !verdict.passed && !verdict.message.is_empty() {
+                let message = verdict
+                    .message
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                verdict_lines.push_str(&format!(": {message}"));
+            }
+        }
         let mut per_patch = Vec::with_capacity(verdicts.len());
         for verdict in &verdicts {
             per_patch.push(json!({
@@ -974,7 +992,7 @@ impl CliApp {
             formats.first().cloned(),
             "validate",
             format!(
-                "independent patch validation {status}: {passed_count}/{patch_count} passed ({format_label}){suffix}"
+                "independent patch validation {status}: {passed_count}/{patch_count} passed ({format_label}){suffix}{verdict_lines}"
             ),
             Some(100.0),
             Some(planned),

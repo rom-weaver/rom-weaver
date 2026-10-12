@@ -230,6 +230,7 @@ fn a_dry_run_resolves_the_compression_plan_before_reporting() {
         &requested,
         &compression_options(Some("zip")),
         None,
+        None,
     );
 
     assert_eq!(report.status, OperationStatus::Succeeded);
@@ -254,6 +255,7 @@ fn a_dry_run_fails_when_the_requested_container_format_is_unknown() {
         &[PathBuf::from("a.ips")],
         &temp.path().join("out.bin"),
         &compression_options(Some("definitely-not-a-format")),
+        None,
         None,
     );
 

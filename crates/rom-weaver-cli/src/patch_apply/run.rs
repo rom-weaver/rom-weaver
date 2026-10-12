@@ -360,6 +360,7 @@ impl CliApp {
                 &run.args.patches,
                 run.args.output.as_deref(),
                 &run.compression_options,
+                run.args.output_header,
                 run.probe_threads.clone(),
             );
             return Err(Box::new(report));
@@ -502,7 +503,11 @@ impl CliApp {
                 run.args.compress_codec.clone(),
                 run.args.compress_level,
                 &run.output,
-                &run.resolved_input,
+                &Self::output_extension_source(
+                    &run.resolved_input,
+                    &run.output,
+                    run.args.output_header,
+                ),
             )
             .map_err(|error| run.fail_error("validate", error))?;
         // Compressing can append an extension; the compression step re-checks
