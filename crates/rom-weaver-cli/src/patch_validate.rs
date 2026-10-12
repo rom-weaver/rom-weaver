@@ -569,6 +569,7 @@ impl CliApp {
     }
 
     /// Preserves the planner's basis and reversible endpoint for each chain step.
+    #[inline(never)]
     fn validation_steps(
         per_patch: Vec<PatchPlanVerdict>,
         context: &OperationContext,
