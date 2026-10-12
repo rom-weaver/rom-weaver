@@ -82,20 +82,30 @@ const getBrowserLocaleCandidates = (): string[] => {
  * `<Trans>`/`useLingui` - so no `<I18nProvider>` is needed; `useUiLocalizer`
  * subscribes to catalog arrivals and re-renders.
  */
-const i18nCache = new Map<LocaleCode, I18n>();
+const i18nCache = new Map<LocaleCode, { i18n: I18n; messages: Messages | undefined }>();
 
 const getI18n = (catalogLocale: LocaleCode): I18n => {
-  const cached = i18nCache.get(catalogLocale);
-  if (cached) return cached;
   const localeMessages = MESSAGE_CATALOGS[catalogLocale];
+  const cached = i18nCache.get(catalogLocale);
+  if (cached) {
+    if (localeMessages && cached.messages !== localeMessages) {
+      cached.i18n.load(catalogLocale, localeMessages);
+      cached.messages = localeMessages;
+    }
+    return cached.i18n;
+  }
   const i18n = setupI18n({
     locale: catalogLocale,
     messages: { [catalogLocale]: { ...FALLBACK_MESSAGES, ...localeMessages } },
   });
-  i18nCache.set(catalogLocale, i18n);
+  const entry = { i18n, messages: localeMessages };
+  i18nCache.set(catalogLocale, entry);
   if (!localeMessages) {
     loadCatalog(catalogLocale).then(
-      (messages) => i18n.load(catalogLocale, messages),
+      (messages) => {
+        i18n.load(catalogLocale, messages);
+        entry.messages = messages;
+      },
       () => undefined,
     );
   }
