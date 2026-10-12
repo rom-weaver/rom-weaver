@@ -5059,7 +5059,7 @@ mod tests {
             )
             .expect_err("multiple inputs should fail");
         assert!(
-            matches!(error, RomWeaverError::Validation(ref message) if message.contains("requires exactly one input file")),
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("requires exactly one input file; pass one")),
             "unexpected error: {error:?}"
         );
 
@@ -5266,7 +5266,7 @@ mod tests {
             .ensure_single_create_input(&request)
             .expect_err("multiple inputs should fail");
         assert!(
-            matches!(error, RomWeaverError::Validation(ref message) if message.contains("gcz create currently requires exactly one input file")),
+            matches!(error, RomWeaverError::Validation(ref message) if message.contains("gcz create currently requires exactly one input file; pass one disc image")),
             "unexpected error: {error:?}"
         );
     }

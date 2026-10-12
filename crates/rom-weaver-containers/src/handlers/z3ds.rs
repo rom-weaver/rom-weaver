@@ -954,7 +954,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
     ) -> Result<OperationReport> {
         if request.inputs.len() != 1 {
             return Err(RomWeaverError::Validation(
-                "z3ds create currently requires exactly one input file".into(),
+                "z3ds create currently requires exactly one input file; pass one 3DS file (.3ds, .cia, .cci, .cxi, or .3dsx)".into(),
             ));
         }
 

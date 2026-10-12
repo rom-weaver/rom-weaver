@@ -11246,3 +11246,30 @@ fn patch_apply_auto_n64_order_leaves_a_checksummed_patch_alone() {
         byte_swap_pairs(&modified_z64)
     );
 }
+
+#[test]
+fn patch_apply_explains_that_stdin_input_is_unsupported() {
+    let temp = setup_temp_dir();
+    let patch = temp.child("fix.ips");
+    fs::write(patch.path(), b"PATCHEOF").expect("patch fixture");
+    let output = temp.child("out.bin");
+    for extra in [&[][..], &["--dry-run"][..]] {
+        let mut args = vec![
+            "patch",
+            "apply",
+            "-i",
+            "-",
+            "--patch",
+            patch.path().to_str().expect("patch path"),
+            "-o",
+            output.path().to_str().expect("output path"),
+            "--json",
+        ];
+        args.extend_from_slice(extra);
+        let json = run_single_json_event(&args, 1);
+        assert_eq!(
+            json["label"],
+            "patch apply does not read from stdin; pass a file path"
+        );
+    }
+}

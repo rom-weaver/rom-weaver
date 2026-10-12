@@ -1486,7 +1486,7 @@ copier size rules."
 Which ROM the preceding --patch was built against, and so which one its
 checksums describe.
 
-  auto      Clear the shared rule and work it out from the checksums.
+  auto      Ignore the shared rule and infer the basis from checksums.
   base      The original ROM. It is verified once up front, and the patch's own
             checks are skipped when it runs later in the chain.
   previous  The output of the patch before it.
@@ -2855,7 +2855,8 @@ Record one input ROM rule for every patch. An individual --patch-basis overrides
         arg(
             long = "patch-expect-out",
             value_name = "ALGO=HEX",
-            help = "Checksum the ROM should have after the preceding --patch runs. Recorded only when it differs from the final output checksums (repeatable, comma-separable)"
+            help = "Checksum the ROM should have after the preceding --patch runs. Recorded only when it differs from the final output checksums (repeatable, comma-separable)",
+            long_help = patch_adjacency_long_help!("Checksum the ROM should have after the preceding --patch runs. Recorded only when it differs from the final output checksums (repeatable, comma-separable)")
         )
     )]
     #[serde(default)]

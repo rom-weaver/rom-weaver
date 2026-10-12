@@ -35,7 +35,11 @@ pub(crate) fn decorate(command: clap::Command) -> clap::Command {
         })
     });
     command
-        .mut_subcommand("trim", decorate_output)
+        .mut_subcommand("trim", |command| {
+            command.mut_arg("output", |arg| {
+                arg.help("Output path; - writes one completed binary file to stdout. Only valid with a single trimmable input")
+            })
+        })
         .mut_subcommand("legacy-weave-apply", decorate_output)
         .mut_subcommand("patch", |command| {
             command
