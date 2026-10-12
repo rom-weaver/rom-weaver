@@ -1,5 +1,6 @@
 import { Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import type { SaveGameDefinition } from "../../wasm/generated/rom-weaver-rust-types.d.ts";
 
 /** The game list comes from the wasm worker, so it loads on request rather than when the page opens. */
@@ -12,6 +13,7 @@ export const SaveGenerator = ({
   onError: (message: string) => void;
   onGenerate: (game: string) => Promise<void>;
 }) => {
+  const localizer = useUiLocalizer();
   const [games, setGames] = useState<SaveGameDefinition[] | null>(null);
   const [game, setGame] = useState("");
   const [loading, setLoading] = useState(false);
@@ -41,13 +43,13 @@ export const SaveGenerator = ({
   return (
     <div className="drop-tray-row save-generator">
       <label className="drop-tray-label" htmlFor={games?.length ? "save-generator-game" : undefined}>
-        <Sparkles aria-hidden="true" /> New save
+        <Sparkles aria-hidden="true" /> {localizer.message("ui.saves.generator.newSave")}
       </label>
       <div className="drop-tray-control">
         {games?.length ? (
           <>
             <select
-              aria-label="Game for the new save"
+              aria-label={localizer.message("ui.saves.generator.gameLabel")}
               className="select"
               disabled={disabled}
               id="save-generator-game"
@@ -61,14 +63,14 @@ export const SaveGenerator = ({
               ))}
             </select>
             <button className="btn" disabled={disabled || !game} onClick={() => void onGenerate(game)} type="button">
-              Create save
+              {localizer.message("ui.saves.generator.create")}
             </button>
           </>
         ) : games ? (
-          <p className="drop-tray-note">No games can generate a fresh save yet.</p>
+          <p className="drop-tray-note">{localizer.message("ui.saves.generator.none")}</p>
         ) : (
           <button className="btn ghost" disabled={disabled || loading} onClick={() => void loadGames()} type="button">
-            {loading ? "Loading games…" : "Choose a game"}
+            {loading ? localizer.message("ui.saves.generator.loading") : localizer.message("ui.saves.generator.choose")}
           </button>
         )}
       </div>

@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { preloadCatalog } from "../../../src/presentation/localization/index.ts";
+import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { SaveEditor } from "../../../src/webapp/components/save-editor.tsx";
 
 const {
@@ -360,7 +362,7 @@ describe("SaveEditor", () => {
     expect(screen.getByText("ASH → MAY")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Preview changes" }) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Preview changes" }));
-    await waitFor(() => expect(screen.getByText(/field changes/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/field changes?/)).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Reset Name" }));
     expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("ASH");
     fireEvent.change(screen.getByLabelText("Money"), { target: { value: "7000" } });
@@ -533,5 +535,21 @@ describe("SaveEditor", () => {
         new Uint8Array([9, 8]),
       ),
     );
+  });
+});
+
+describe("SaveEditor in German", () => {
+  it("translates the editor chrome, the generator, and the field groups", async () => {
+    await preloadCatalog("de");
+    inspectSave.mockResolvedValueOnce(documentResult(genericFields));
+    const view = render(
+      <RomWeaverSettingsProvider settings={{ language: "de" }}>
+        <SaveEditor onSessionChange={vi.fn()} />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(screen.getByText("Neuer Spielstand")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Spiel wählen" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Choose a game" })).toBeNull();
+    view.unmount();
   });
 });
