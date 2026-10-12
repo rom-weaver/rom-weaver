@@ -180,7 +180,7 @@ Not every command takes all five. `extract` has no `--no-extract`, since unpacki
 
 `extract` also unpacks archives found inside the input, up to eight levels deep; `--no-nested-extract` stops after the first layer. If any output file already exists, extraction stops before writing anything, unless `--force` is given. While extracting it can hash what it writes (`--checksum ALGO`, or `--checksum-rom ALGO` for the ROMs only) and report each file's format and platform (`--probe`).
 
-`extract --split-bin` writes a CD-format CHD as a CUE plus one `*.trackNN.bin` per track instead of one merged BIN; it is ignored, with a warning, for non-CHD input. `probe --split-bin` lists the per-track BIN files of a CD-format CHD.
+`extract --split-bin` writes a CD-format CHD as a CUE plus one Redump-style `<name> (Track N).bin` per track instead of one merged BIN; it is ignored, with a warning, for non-CHD input. `probe --split-bin` lists the per-track BIN files of a CD-format CHD.
 
 XISO extraction rejects an output that refers to its source file, including symbolic links and native hard links, even with `--force`.
 
