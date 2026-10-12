@@ -195,9 +195,25 @@ pub fn copy_retrying_interrupted<R: Read + ?Sized, W: Write + ?Sized>(
 }
 
 /// `std::fs::copy` that retries after `Interrupted`; it uses the same kernel copy as
-/// [`copy_retrying_interrupted`]. Each attempt reopens `to` truncated and copies from the start.
+/// [`copy_retrying_interrupted`]. Each retry restarts the copy from the beginning.
 pub fn copy_file_retrying_interrupted(from: &Path, to: &Path) -> std::io::Result<u64> {
-    retry_interrupted(|| fs::copy(from, to))
+    copy_file_retrying_with(from, to, |from, to| fs::copy(from, to))
+}
+
+fn copy_file_retrying_with(
+    from: &Path,
+    to: &Path,
+    mut copy: impl FnMut(&Path, &Path) -> std::io::Result<u64>,
+) -> std::io::Result<u64> {
+    let mut attempted = false;
+    retry_interrupted(|| {
+        // The interrupted attempt already created `to` with the source's mode; a read-only
+        // source would make reopening it fail, so drop that partial copy first.
+        if std::mem::replace(&mut attempted, true) {
+            let _ = fs::remove_file(to);
+        }
+        copy(from, to)
+    })
 }
 
 pub fn ordered_streaming_compress<

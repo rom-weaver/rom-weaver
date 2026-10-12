@@ -8,9 +8,9 @@ use std::{
 use super::{
     BlockCacheReader, ChunkPlanner, OrderedChunkWriter, OrderedStreamingMessages,
     SharedBlockCacheReader, TempPathAllocator, bounded_items_for_threads,
-    copy_file_retrying_interrupted, copy_retrying_interrupted, create_extract_output_file,
-    ensure_output_available, file_starts_with, ordered_streaming_compress, read_full, read_up_to,
-    retry_interrupted,
+    copy_file_retrying_interrupted, copy_file_retrying_with, copy_retrying_interrupted,
+    create_extract_output_file, ensure_output_available, file_starts_with,
+    ordered_streaming_compress, read_full, read_up_to, retry_interrupted,
 };
 use crate::RomWeaverError;
 
@@ -914,5 +914,44 @@ fn copy_file_retrying_interrupted_copies_bytes_and_length() {
     let copied = copy_file_retrying_interrupted(&source, &destination).expect("copy");
     assert_eq!(copied, 70_000);
     assert_eq!(fs::read(&destination).expect("read destination"), data);
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn copy_file_retry_replaces_a_read_only_partial_destination() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp_dir = std::env::temp_dir().join(format!(
+        "rom-weaver-io-copy-retry-ro-{}",
+        std::process::id()
+    ));
+    fs::create_dir_all(&temp_dir).expect("temp dir");
+    let source = temp_dir.join("source.bin");
+    let destination = temp_dir.join("destination.bin");
+    fs::write(&source, b"read-only dump").expect("source");
+    fs::set_permissions(&source, fs::Permissions::from_mode(0o444)).expect("chmod source");
+    let _ = fs::remove_file(&destination);
+
+    let mut calls = 0;
+    let copied = copy_file_retrying_with(&source, &destination, |from, to| {
+        calls += 1;
+        if calls == 1 {
+            // Mimic an interrupted first attempt that left a read-only destination behind.
+            fs::write(to, b"partial").expect("partial destination");
+            fs::set_permissions(to, fs::Permissions::from_mode(0o444)).expect("chmod partial");
+            return Err(io::Error::from(ErrorKind::Interrupted));
+        }
+        fs::copy(from, to)
+    })
+    .expect("retry succeeds after removing the partial destination");
+
+    assert_eq!(calls, 2);
+    assert_eq!(copied, 14);
+    assert_eq!(
+        fs::read(&destination).expect("destination"),
+        b"read-only dump"
+    );
+    let _ = fs::set_permissions(&destination, fs::Permissions::from_mode(0o644));
+    let _ = fs::set_permissions(&source, fs::Permissions::from_mode(0o644));
     let _ = fs::remove_dir_all(&temp_dir);
 }
