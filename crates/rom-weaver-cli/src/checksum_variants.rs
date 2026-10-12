@@ -166,12 +166,14 @@ impl CliApp {
             .checked_div(total_bytes)
             .unwrap_or(100)
             .min(100);
-        while *next_percent <= percent {
+        // One event per read that crosses a percent boundary; a chunk that
+        // jumps several percent must not replay the same progress per percent.
+        if *next_percent <= percent {
             on_progress(ChecksumProgress {
                 processed_bytes,
                 total_bytes,
             });
-            *next_percent = (*next_percent).saturating_add(1);
+            *next_percent = percent.saturating_add(1);
         }
     }
 

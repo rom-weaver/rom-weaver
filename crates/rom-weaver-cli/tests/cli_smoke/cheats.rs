@@ -1672,3 +1672,23 @@ fn cheat_list_names_the_missing_rom_and_preserves_io_kind() {
         assert_eq!(report["error_kind"], "io");
     }
 }
+
+#[test]
+fn cheat_list_names_its_own_system_flag_when_the_rom_system_is_unknown() {
+    let temp = setup_temp_dir();
+    let rom = temp.child("unknown.bin");
+    fs::write(rom.path(), vec![0x22_u8; 48]).expect("rom fixture");
+    let json = run_single_json_event(
+        &[
+            "cheat",
+            "--input",
+            rom.path().to_str().expect("path"),
+            "list",
+            "--json",
+        ],
+        1,
+    );
+    let message = json["error"]["message"].as_str().expect("error message");
+    assert!(message.contains("--cheat-system"), "{message}");
+    assert!(!message.contains("--code-system"), "{message}");
+}
