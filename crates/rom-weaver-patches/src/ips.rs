@@ -1747,7 +1747,7 @@ fn assemble_output(
     for task in tasks {
         context.cancel().check()?;
         let mut reader = BufReader::new(File::open(&task.temp_path)?);
-        std::io::copy(&mut reader, &mut output)?;
+        rom_weaver_core::copy_retrying_interrupted(&mut reader, &mut output)?;
     }
     output.flush()?;
     Ok(())

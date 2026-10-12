@@ -214,7 +214,10 @@ impl PatchHandler for RupPatchHandler {
             ensure_parent_dir(&path)?;
             path
         };
-        fs::copy(&normalized_input.path, &normalized_output_path)?;
+        rom_weaver_core::copy_file_retrying_interrupted(
+            &normalized_input.path,
+            &normalized_output_path,
+        )?;
         let input_len = fs::metadata(&normalized_input.path)?.len();
         let mut output = OpenOptions::new()
             .read(true)
@@ -1105,13 +1108,13 @@ fn finalize_rup_output(
             let mut output = File::create(output_path)?;
             output.write_all(header)?;
             let mut normalized = File::open(normalized_output_path)?;
-            io::copy(&mut normalized, &mut output)?;
+            rom_weaver_core::copy_retrying_interrupted(&mut normalized, &mut output)?;
             output.flush()?;
             Ok(())
         }
         RupOutputReconstruction::Unif => {
             ensure_parent_dir(output_path)?;
-            fs::copy(input_path, output_path)?;
+            rom_weaver_core::copy_file_retrying_interrupted(input_path, output_path)?;
             let mut normalized = File::open(normalized_output_path)?;
             let mut output = OpenOptions::new()
                 .read(true)
@@ -1193,7 +1196,7 @@ fn rebuild_unif_payload(output: &mut File, normalized: &mut File) -> Result<()> 
     }
 
     let mut trailing = [0u8; 1];
-    if normalized.read(&mut trailing)? != 0 {
+    if rom_weaver_core::read_full(normalized, &mut trailing)? != 0 {
         return Err(RomWeaverError::Validation(
             "RUP UNIF normalized output exceeded template PRG/CHR capacity".into(),
         ));
@@ -1419,7 +1422,7 @@ fn copy_cancellable(
     let mut buffer = vec![0u8; RUP_IO_BUFFER_SIZE];
     loop {
         context.cancel().check()?;
-        let read = input.read(&mut buffer)?;
+        let read = rom_weaver_core::read_full(input, &mut buffer)?;
         if read == 0 {
             break;
         }
@@ -1430,8 +1433,9 @@ fn copy_cancellable(
 
 fn copy_exact_bytes(input: &mut File, output: &mut File, len: u64, label: &str) -> Result<()> {
     let mut limited = input.take(len);
-    let copied = io::copy(&mut limited, output)?;
-    if copied != len {
+    rom_weaver_core::copy_retrying_interrupted(&mut limited, output)?;
+    // `Take` counts down across retried attempts, so what remains is what was never copied.
+    if limited.limit() != 0 {
         return Err(RomWeaverError::Validation(format!(
             "{label} ended unexpectedly while copying bytes"
         )));

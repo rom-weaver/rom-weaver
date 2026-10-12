@@ -101,7 +101,7 @@ impl PatPatchHandler {
             execution.force_serial();
             (execution, writes)
         } else {
-            fs::copy(&request.input, &request.output)?;
+            rom_weaver_core::copy_file_retrying_interrupted(&request.input, &request.output)?;
             let input_bytes =
                 read_pat_group_input_bytes(&grouped_records, &request.input, context)?;
             let (execution, mut writes) = if planned_execution.used_parallelism {
@@ -521,8 +521,8 @@ fn create_pat_patch_streaming(
     let mut offset = 0u64;
 
     loop {
-        let read = original.read(&mut original_buffer)?;
-        let modified_read = modified.read(&mut modified_buffer)?;
+        let read = rom_weaver_core::read_full(&mut original, &mut original_buffer)?;
+        let modified_read = rom_weaver_core::read_full(&mut modified, &mut modified_buffer)?;
 
         if read != modified_read {
             return Err(RomWeaverError::Validation(

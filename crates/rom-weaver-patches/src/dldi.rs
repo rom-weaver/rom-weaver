@@ -1,6 +1,6 @@
 use std::{
     fs::{self, OpenOptions},
-    io::{Read, Seek, SeekFrom, Write},
+    io::{Seek, SeekFrom, Write},
     path::Path,
 };
 
@@ -356,7 +356,7 @@ fn apply_dldi_patch_to_file(
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::copy(input_path, output_path)?;
+    rom_weaver_core::copy_file_retrying_interrupted(input_path, output_path)?;
     let mut output = OpenOptions::new()
         .read(true)
         .write(true)
@@ -858,8 +858,8 @@ fn files_equal(left: &Path, right: &Path) -> Result<bool> {
     let mut left_buffer = [0u8; 64 * 1024];
     let mut right_buffer = [0u8; 64 * 1024];
     loop {
-        let left_read = left_file.read(&mut left_buffer)?;
-        let right_read = right_file.read(&mut right_buffer)?;
+        let left_read = rom_weaver_core::read_full(&mut left_file, &mut left_buffer)?;
+        let right_read = rom_weaver_core::read_full(&mut right_file, &mut right_buffer)?;
         if left_read != right_read {
             return Ok(false);
         }

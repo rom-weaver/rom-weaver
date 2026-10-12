@@ -274,7 +274,10 @@ impl CliApp {
                 }
                 weave_archive_target(entry, extract_dir)?;
                 let mut file = outputs.create(target)?;
-                io::copy(&mut File::open(staged_path)?, &mut file)?;
+                rom_weaver_core::copy_retrying_interrupted(
+                    &mut File::open(staged_path)?,
+                    &mut file,
+                )?;
                 file.flush()?;
             }
             for patch in &mut patch_sources {

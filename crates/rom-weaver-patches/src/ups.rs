@@ -97,7 +97,7 @@ impl PatchHandler for UpsPatchHandler {
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::copy(&request.input, &request.output)?;
+        rom_weaver_core::copy_file_retrying_interrupted(&request.input, &request.output)?;
         let thread_capability = parallel_per_record_capability(patch.changes.len());
         let execution = {
             let mut output = OpenOptions::new().write(true).open(&request.output)?;

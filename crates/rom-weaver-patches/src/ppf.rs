@@ -82,7 +82,7 @@ pub fn undo_ppf(input_path: &Path, patch_path: &Path, output_path: &Path) -> Res
     {
         fs::create_dir_all(parent)?;
     }
-    fs::copy(input_path, output_path)?;
+    rom_weaver_core::copy_file_retrying_interrupted(input_path, output_path)?;
     let mut output = OpenOptions::new().write(true).open(output_path)?;
     for record in parsed.records.iter().rev() {
         let undo = record.undo_data.as_ref().expect("validated above");
@@ -180,7 +180,7 @@ impl PatchHandler for PpfPatchHandler {
             execution.force_serial();
             execution
         } else {
-            fs::copy(&request.input, &request.output)?;
+            rom_weaver_core::copy_file_retrying_interrupted(&request.input, &request.output)?;
             let mut output = OpenOptions::new()
                 .read(true)
                 .write(true)

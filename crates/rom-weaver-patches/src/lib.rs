@@ -621,11 +621,8 @@ fn is_xdelta_extension(path: &Path) -> bool {
 }
 
 fn read_signature_prefix(path: &Path, max_len: usize) -> Option<Vec<u8>> {
-    let mut bytes = vec![0u8; max_len];
-    let mut file = fs::File::open(path).ok()?;
-    let read = file.read(&mut bytes).ok()?;
-    bytes.truncate(read);
-    Some(bytes)
+    let file = fs::File::open(path).ok()?;
+    rom_weaver_core::read_up_to(file, max_len).ok()
 }
 
 #[cfg(test)]

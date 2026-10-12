@@ -599,10 +599,10 @@ impl CliApp {
         let mut input = BufReader::new(File::open(source)?);
         let mut output = BufWriter::new(File::create(destination)?);
         let copy_len = original_size.min(target_size);
-        let copied = io::copy(
-            &mut std::io::Read::by_ref(&mut input).take(copy_len),
-            &mut output,
-        )?;
+        let mut limited = std::io::Read::by_ref(&mut input).take(copy_len);
+        rom_weaver_core::copy_retrying_interrupted(&mut limited, &mut output)?;
+        // `Take` counts down across retried attempts, so what remains is what was never copied.
+        let copied = copy_len - limited.limit();
         if copied != copy_len {
             return Err(RomWeaverError::Validation(format!(
                 "trim source ended after {copied} bytes; expected {copy_len} bytes"
