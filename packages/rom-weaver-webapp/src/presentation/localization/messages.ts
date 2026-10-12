@@ -84,7 +84,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.identifyDrawer.standard": msg({ id: "ui.identifyDrawer.standard", message: "Standard" }),
   "ui.identifyDrawer.system": msg({ id: "ui.identifyDrawer.system", message: "System" }),
   "ui.identifyDrawer.unexpected": msg({ id: "ui.identifyDrawer.unexpected", message: "Unexpected" }),
-  "ui.identifyDrawer.unidentified": msg({ id: "ui.identifyDrawer.unidentified", message: "Unidentified" }),
+  "ui.identifyDrawer.unidentified": msg({ id: "ui.identifyDrawer.unidentified", message: "No match" }),
   "ui.identifyDrawer.unsupported": msg({
     id: "ui.identifyDrawer.unsupported",
     message: "The identification data does not support this input.",
@@ -1491,6 +1491,13 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.identify.searchDisclosure",
     message: "Identify by checksum or game name",
   }),
+  "ui.identify.noMatchBody": msg({
+    id: "ui.identify.noMatchBody",
+    message:
+      "These checksums are not in the identification data. Unknown does not mean corrupt: the ROM may be homebrew, modified, an unlisted revision, or from a system the data does not cover. Its checksums are on the card below so you can look them up elsewhere.",
+  }),
+  "ui.identify.noMatchLink": msg({ id: "ui.identify.noMatchLink", message: "About unknown results" }),
+  "ui.identify.noMatchTitle": msg({ id: "ui.identify.noMatchTitle", message: "No match." }),
   "ui.identify.drop": msg({ id: "ui.identify.drop", message: "Drop a ROM to identify it" }),
   "ui.identify.tap": msg({ id: "ui.identify.tap", message: "Tap to add a ROM" }),
   "ui.identify.trySample": msg({

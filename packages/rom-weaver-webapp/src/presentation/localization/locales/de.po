@@ -1665,6 +1665,21 @@ msgstr "Lege hier ein ROM und seine Patches ab: einzelne Dateien, einen ganzen O
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.noMatchBody"
+msgstr "Diese Prüfsummen stehen nicht in den Identifikationsdaten. Unbekannt heißt nicht beschädigt: Das ROM kann Homebrew, verändert, eine nicht gelistete Revision oder von einem System sein, das die Daten nicht abdecken. Seine Prüfsummen stehen auf der Karte darunter, damit du sie anderswo nachschlagen kannst."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.noMatchLink"
+msgstr "Zu unbekannten Ergebnissen"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.noMatchTitle"
+msgstr "Kein Treffer."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identify.drop"
 msgstr "ROM zum Identifizieren hier ablegen"
 
@@ -4435,7 +4450,7 @@ msgstr "ROM ohne Header"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.unidentified"
-msgstr "Nicht identifiziert"
+msgstr "Kein Treffer"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

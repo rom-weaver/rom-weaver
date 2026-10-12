@@ -1665,6 +1665,21 @@ msgstr "Suelta aquí una ROM y sus parches: archivos sueltos, una carpeta entera
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.noMatchBody"
+msgstr "Estas sumas de comprobación no están en los datos de identificación. Desconocido no significa dañado: la ROM puede ser homebrew, estar modificada, ser una revisión no listada o ser de un sistema que los datos no cubren. Sus sumas de comprobación están en la tarjeta de abajo para que puedas buscarlas en otro sitio."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.noMatchLink"
+msgstr "Sobre los resultados desconocidos"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.noMatchTitle"
+msgstr "Sin coincidencia."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identify.drop"
 msgstr "Suelta una ROM para identificarla"
 
@@ -4435,7 +4450,7 @@ msgstr "ROM sin cabecera"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.unidentified"
-msgstr "Sin identificar"
+msgstr "Sin coincidencia"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

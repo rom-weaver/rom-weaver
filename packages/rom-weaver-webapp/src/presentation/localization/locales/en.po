@@ -1665,6 +1665,21 @@ msgstr "Drop a ROM and its patches here: single files, a whole folder, a ZIP or 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.noMatchBody"
+msgstr "These checksums are not in the identification data. Unknown does not mean corrupt: the ROM may be homebrew, modified, an unlisted revision, or from a system the data does not cover. Its checksums are on the card below so you can look them up elsewhere."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.noMatchLink"
+msgstr "About unknown results"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.identify.noMatchTitle"
+msgstr "No match."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.identify.drop"
 msgstr "Drop a ROM to identify it"
 
@@ -4435,7 +4450,7 @@ msgstr "Unheadered ROM"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.identifyDrawer.unidentified"
-msgstr "Unidentified"
+msgstr "No match"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
