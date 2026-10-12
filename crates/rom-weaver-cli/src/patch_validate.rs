@@ -907,7 +907,15 @@ impl CliApp {
 
         let mut verdicts = decided;
         verdicts.extend(computed);
-        verdicts.sort_by_key(|verdict| verdict.index);
+        // Every enumerated patch produces exactly one decided or computed verdict, so these
+        // private indices form a permutation of 0..patch_count. Place each verdict directly
+        // at its index to retain input order without allocating or sorting report records.
+        for index in 0..verdicts.len() {
+            while verdicts[index].index != index {
+                let target = verdicts[index].index;
+                verdicts.swap(index, target);
+            }
+        }
         let passed_count = verdicts.iter().filter(|verdict| verdict.passed).count();
         let failed_count = patch_count.saturating_sub(passed_count);
         let status = if failed_count == 0 { "passed" } else { "mixed" };
