@@ -91,16 +91,14 @@ impl CliApp {
                 let Some(parent) = job.output.parent() else {
                     continue;
                 };
-                let missing = crate::extract_command::missing_dirs_to_create(parent);
-                if missing.is_empty() {
-                    continue;
-                }
+                // Record before creating, so a partially failed create is still cleaned up.
+                shared_parents.extend(crate::extract_command::missing_dirs_to_create(parent));
                 if let Err(error) = std::fs::create_dir_all(parent) {
                     debug!(path = %parent.display(), %error, "could not pre-create shared extract parent");
-                    continue;
                 }
-                shared_parents.extend(missing);
             }
+            // A job's own output directory is that job's to keep or clean up.
+            shared_parents.retain(|dir| jobs.iter().all(|job| job.output != *dir));
         }
         let mut pending: Vec<Option<ExtractCommand>> = jobs.into_iter().map(Some).collect();
         let mut outcomes: Vec<Option<AppRunOutcome>> = (0..job_count).map(|_| None).collect();
