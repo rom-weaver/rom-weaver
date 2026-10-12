@@ -17,6 +17,12 @@ export const chainChipText = (
   patchLabels: readonly string[],
 ): { text: string; warn?: boolean } | null => {
   const verdict = item.chainVerdict;
+  // "Verified" claims a checksum matched; a patch that merely applied (IPS, or no checksum to
+  // compare) is only "Applied".
+  const passedText = (matchedKnownState: boolean) =>
+    localizer.message(
+      matchedKnownState || item.checksumCompared ? "ui.patchChecks.verified" : "ui.patchChecks.applied",
+    );
   const targetLabel = item.targetOptions?.find((option) => option.value === item.targetValue)?.label;
   const checkedTarget =
     targetLabel ||
@@ -26,7 +32,7 @@ export const chainChipText = (
       return { text: localizer.message("ui.patchChecks.deferred", { input: checkedTarget }) };
     }
     if (item.validationState === "valid") {
-      return { text: localizer.message("ui.patchChecks.verified") };
+      return { text: passedText(false) };
     }
     if (item.validationState === "invalid") {
       return { text: localizer.message("ui.patchChecks.failed", { input: checkedTarget }), warn: true };
@@ -54,18 +60,18 @@ export const chainChipText = (
     const predecessor = displayPatch(verdict.matched.index);
     return item.validationState === "deferred"
       ? { text: localizer.message("ui.patchChecks.deferred", { input: predecessor }) }
-      : { text: localizer.message("ui.patchChecks.verified") };
+      : { text: passedText(true) };
   }
   if (verdict.matched.kind === "base") {
     return item.validationState === "deferred"
       ? { text: localizer.message("ui.patchChecks.deferred", { input: checkedTarget }) }
-      : { text: localizer.message("ui.patchChecks.verified") };
+      : { text: passedText(true) };
   }
   if (item.validationState === "deferred") {
     return { text: localizer.message("ui.patchChecks.deferred", { input: checkedTarget }) };
   }
   if (item.validationState === "valid") {
-    return { text: localizer.message("ui.patchChecks.verified") };
+    return { text: passedText(false) };
   }
   if (item.validationState === "invalid") {
     return { text: localizer.message("ui.patchChecks.failed", { input: checkedTarget }), warn: true };

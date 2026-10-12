@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createLocalizer, preloadCatalog } from "../../src/presentation/localization/index.ts";
 
 import {
   describeCheatCodes,
@@ -93,9 +94,11 @@ describe("formatCheatWrite", () => {
 
 describe("getCheatCompareLabel", () => {
   it("names the compare byte only when the classifier reported one", () => {
-    expect(getCheatCompareLabel({ compare: 0xff, offset: 0, value: 1, width: 1 })).toBe("compare $FF found");
-    expect(getCheatCompareLabel({ offset: 0, value: 1, width: 1 })).toBe("");
-    expect(getCheatCompareLabel({ compare: null, offset: 0, value: 1, width: 1 })).toBe("");
+    expect(getCheatCompareLabel({ compare: 0xff, offset: 0, value: 1, width: 1 }, createLocalizer("en"))).toBe(
+      "compare $FF found",
+    );
+    expect(getCheatCompareLabel({ offset: 0, value: 1, width: 1 }, createLocalizer("en"))).toBe("");
+    expect(getCheatCompareLabel({ compare: null, offset: 0, value: 1, width: 1 }, createLocalizer("en"))).toBe("");
   });
 });
 
@@ -109,11 +112,13 @@ describe("getCheatCodeWrites", () => {
 
 describe("describeCheatCodes", () => {
   it("reads the system, code type and total write count off the classifier", () => {
-    expect(describeCheatCodes([entry(), entry({ id: "1:AEEPYZ" })])).toBe("NES · Game Genie · 2 writes");
+    expect(describeCheatCodes([entry(), entry({ id: "1:AEEPYZ" })], createLocalizer("en"))).toBe(
+      "NES · Game Genie · 2 writes",
+    );
   });
 
   it("says nothing until a code has been classified", () => {
-    expect(describeCheatCodes([entry({ record: undefined })])).toBe("");
+    expect(describeCheatCodes([entry({ record: undefined })], createLocalizer("en"))).toBe("");
   });
 
   it("does not claim one system or code type when the codes disagree", () => {
@@ -125,7 +130,7 @@ describe("describeCheatCodes", () => {
         resolution: { type: "romBakeable", writes: [] },
       }),
     } as never);
-    expect(describeCheatCodes([entry(), other])).toBe("NES · Mixed code types · 1 write");
+    expect(describeCheatCodes([entry(), other], createLocalizer("en"))).toBe("NES · Mixed code types · 1 write");
   });
 });
 
@@ -155,15 +160,15 @@ describe("getCheatCodesPatchName", () => {
 
 describe("getCheatCodesValidationMessage", () => {
   it("blocks the run when there are no codes", () => {
-    expect(getCheatCodesValidationMessage([], false)).toContain("at least one cheat code");
+    expect(getCheatCodesValidationMessage([], false, createLocalizer("en"))).toContain("at least one cheat code");
   });
 
   it("blocks the run while a classification is still in flight", () => {
-    expect(getCheatCodesValidationMessage([entry()], true)).toContain("Checking");
+    expect(getCheatCodesValidationMessage([entry()], true, createLocalizer("en"))).toContain("Checking");
   });
 
   it("allows the run once every code is ROM-bakeable", () => {
-    expect(getCheatCodesValidationMessage([entry()], false)).toBe("");
+    expect(getCheatCodesValidationMessage([entry()], false, createLocalizer("en"))).toBe("");
   });
 
   it("names the code the decoder could not resolve into ROM writes", () => {
@@ -171,12 +176,24 @@ describe("getCheatCodesValidationMessage", () => {
       id: "1:BLOCKED",
       record: record({ resolution: { reason: "the code targets runtime memory", type: "unsupported" } }),
     });
-    expect(getCheatCodesValidationMessage([entry(), blocked], false)).toBe("SXIOPO: the code targets runtime memory");
+    expect(getCheatCodesValidationMessage([entry(), blocked], false, createLocalizer("en"))).toBe(
+      "SXIOPO: the code targets runtime memory",
+    );
   });
 
   it("reports the classifier's own complaint verbatim", () => {
-    expect(getCheatCodesValidationMessage([entry({ error: "bad code", record: undefined })], false)).toBe(
-      "SXIOPO: bad code",
-    );
+    expect(
+      getCheatCodesValidationMessage([entry({ error: "bad code", record: undefined })], false, createLocalizer("en")),
+    ).toBe("SXIOPO: bad code");
+  });
+});
+
+describe("cheat code readouts in German", () => {
+  it("translates the detected line, compare badge, and validation messages", async () => {
+    await preloadCatalog("de");
+    const de = createLocalizer("de");
+    expect(describeCheatCodes([entry(), entry({ id: "1:AEEPYZ" })], de)).toBe("NES · Game Genie · 2 Schreibvorgänge");
+    expect(getCheatCompareLabel({ compare: 0xff, offset: 0, value: 1, width: 1 }, de)).toBe("Vergleich $FF gefunden");
+    expect(getCheatCodesValidationMessage([], false, de)).toContain("mindestens einen Cheat-Code");
   });
 });
