@@ -29,7 +29,8 @@ const FileTargetPill = ({ label, bad, onClick }: { label: ReactNode; bad?: boole
       <Crosshair aria-hidden="true" />
       {onClick ? (
         <button
-          aria-label={localizer.message("ui.file.patchTarget")}
+          // The name carries the shown file name too (axe label-content-name-mismatch).
+          aria-label={`${localizer.message("ui.file.patchTarget")}${typeof label === "string" ? `: ${label}` : ""}`}
           className="meta-target-select mono ptgt-sel"
           onClick={onClick}
           type="button"

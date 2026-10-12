@@ -33,12 +33,12 @@ describe("EditableCheckRow", () => {
   it("shows the value without mounting a field", () => {
     const { container } = renderRow();
     expect(container.querySelector("input")).toBeNull();
-    expect(screen.getByRole("button", { name: "Edit SHA-1 check" }).textContent).toBe(SHA1);
+    expect(screen.getByRole("button", { name: /^Edit SHA-1 check/ }).textContent).toBe(SHA1);
   });
 
   it("mounts the field only once the user opens it, and hands it focus", () => {
     const { container } = renderRow();
-    fireEvent.click(screen.getByRole("button", { name: "Edit SHA-1 check" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Edit SHA-1 check/ }));
     const input = container.querySelector("input");
     expect(input).not.toBeNull();
     expect(input?.value).toBe(SHA1);
@@ -49,13 +49,13 @@ describe("EditableCheckRow", () => {
 
   it("keeps the field out of the iOS floor's exemptions", () => {
     const { container } = renderRow();
-    fireEvent.click(screen.getByRole("button", { name: "Edit SHA-1 check" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Edit SHA-1 check/ }));
     expect(container.querySelector("input")?.className).not.toContain("meta-target-select");
   });
 
   it("commits and returns to text on blur", () => {
     const { container, onCommit } = renderRow();
-    fireEvent.click(screen.getByRole("button", { name: "Edit SHA-1 check" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Edit SHA-1 check/ }));
     const input = container.querySelector("input");
     if (!input) throw new Error("the field did not mount");
     fireEvent.change(input, { target: { value: "abc" } });

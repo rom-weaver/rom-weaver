@@ -1198,8 +1198,10 @@ const SampleTutorial = ({
               <p id={bodyId}>{live ? stepBody : loadingBody}</p>
               {live && step.view ? (
                 <div className="sample-tutorial-compare">
+                  {/* Named by their content: the summary is visible text, so a
+                      shorter aria-label could not contain it. The whitespace keeps
+                      the parts separate words; the grid and flex layouts drop it. */}
                   <button
-                    aria-label={localizer.message("ui.tutorial.view.simple")}
                     aria-pressed={!detailedViewEnabled}
                     data-current={detailedViewEnabled ? undefined : "true"}
                     onClick={() => selectView(false)}
@@ -1207,12 +1209,12 @@ const SampleTutorial = ({
                   >
                     <strong>
                       {localizer.message("ui.tutorial.view.simple")}
+                      {detailedViewEnabled ? null : " "}
                       {detailedViewEnabled ? null : <em className="mono">{currentLabel}</em>}
-                    </strong>
+                    </strong>{" "}
                     <span>{localizer.message("ui.tutorial.view.simpleSummary")}</span>
                   </button>
                   <button
-                    aria-label={localizer.message("ui.view.detailed")}
                     aria-pressed={detailedViewEnabled}
                     data-current={detailedViewEnabled ? "true" : undefined}
                     onClick={() => selectView(true)}
@@ -1220,8 +1222,9 @@ const SampleTutorial = ({
                   >
                     <strong>
                       {localizer.message("ui.view.detailed")}
+                      {detailedViewEnabled ? " " : null}
                       {detailedViewEnabled ? <em className="mono">{currentLabel}</em> : null}
-                    </strong>
+                    </strong>{" "}
                     <span>{localizer.message("ui.tutorial.view.detailedSummary")}</span>
                   </button>
                 </div>
