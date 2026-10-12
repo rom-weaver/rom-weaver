@@ -29,7 +29,8 @@ type DropRouteRequest = {
   id: number;
 };
 
-type RouteOption = { label: string; note: string; view: WebappView };
+/** `label` names the row; `page` names the destination on the file step that may follow. */
+type RouteOption = { label: string; note: string; page: string; view: WebappView };
 type RouteQuestion = { options: RouteOption[]; subtitle: string; title: string };
 
 type DropRouteDialogProps = {
@@ -55,6 +56,7 @@ const DropRouteDialog = ({ labelFor, onCancel, onDeliver, request }: DropRouteDi
   const option = (view: WebappView, note: MessageId, label = page(view)): RouteOption => ({
     label,
     note: localizer.message(note),
+    page: page(view),
     view,
   });
   const stay = (note: MessageId) =>
@@ -82,7 +84,11 @@ const DropRouteDialog = ({ labelFor, onCancel, onDeliver, request }: DropRouteDi
         ]);
       }
       const [only = "patcher"] = plan.destinations;
-      return { options: [{ label: page(only), note: "", view: only }], subtitle: "", title: page(only) };
+      return {
+        options: [{ label: page(only), note: "", page: page(only), view: only }],
+        subtitle: "",
+        title: page(only),
+      };
     }
     const redirect = planDropRedirect(request.from, counts);
     const keepsRoms = counts.roms + counts.unknown > 0;
@@ -139,8 +145,8 @@ const DropRouteDialog = ({ labelFor, onCancel, onDeliver, request }: DropRouteDi
     <Modal
       onClose={onCancel}
       open
-      subtitle={localizer.message("ui.drop.chooseFilesHint", { page: picked.label })}
-      title={picked.label}
+      subtitle={localizer.message("ui.drop.chooseFilesHint", { page: picked.page })}
+      title={picked.page}
       variant="select-modal"
     >
       <SelectionCheckList
@@ -150,7 +156,7 @@ const DropRouteDialog = ({ labelFor, onCancel, onDeliver, request }: DropRouteDi
             defaultSelected: usable || undefined,
             id: String(index),
             name: file.name,
-            note: usable ? undefined : localizer.message("ui.drop.notUsedHere", { page: picked.label }),
+            note: usable ? undefined : localizer.message("ui.drop.notUsedHere", { page: picked.page }),
             selectable: true,
           };
         })}
@@ -164,7 +170,7 @@ const DropRouteDialog = ({ labelFor, onCancel, onDeliver, request }: DropRouteDi
           });
           onDeliver(picked.view, files);
         }}
-        submitLabel={(count) => localizer.messageCount("ui.drop.openFiles", count, { page: picked.label })}
+        submitLabel={(count) => localizer.messageCount("ui.drop.openFiles", count, { page: picked.page })}
       />
     </Modal>
   );
