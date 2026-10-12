@@ -1,4 +1,10 @@
-export type { SettingsDraftState, SettingsFieldKey, SettingsState, SettingsUiState } from "./settings-metadata.ts";
+export type {
+  SettingsChoiceOption,
+  SettingsDraftState,
+  SettingsFieldKey,
+  SettingsState,
+  SettingsUiState,
+} from "./settings-metadata.ts";
 export {
   ADVANCED_SETTINGS_FIELDS,
   copySettings,
@@ -9,8 +15,8 @@ export {
   getSettingsFieldMin,
   getSettingsFieldLabel,
   getSettingsFieldPlaceholder,
+  getSettingsChoiceLabel,
   getSettingsFieldSuggestion,
-  getSettingsFieldSuggestionDataLocalize,
   getSettingsUiState,
   isSettingsDraftFieldNumeric,
   isSettingsFieldDisabled,

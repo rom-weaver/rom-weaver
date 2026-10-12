@@ -1791,6 +1791,133 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.urlSession.error": msg({ id: "ui.urlSession.error", message: "Shared session download failed" }),
   "ui.urlSession.loading": msg({ id: "ui.urlSession.loading", message: "Loading shared session…" }),
+  "ui.settings.section.webapp": msg({ id: "ui.settings.section.webapp", message: "Webapp" }),
+  "ui.settings.section.behavior": msg({ id: "ui.settings.section.behavior", message: "Behavior" }),
+  "ui.settings.section.compression": msg({ id: "ui.settings.section.compression", message: "Compression" }),
+  "ui.settings.section.codecs": msg({ id: "ui.settings.section.codecs", message: "Codecs" }),
+  "ui.settings.defaultOption": msg({ id: "ui.settings.defaultOption", message: "{label} (Default)" }),
+  "ui.settings.option.byteUnits.decimal": msg({
+    id: "ui.settings.option.byteUnits.decimal",
+    message: "Decimal (KB, MB, GB)",
+  }),
+  "ui.settings.option.byteUnits.binary": msg({
+    id: "ui.settings.option.byteUnits.binary",
+    message: "Binary (KiB, MiB, GiB)",
+  }),
+  "ui.settings.option.weavePackage.patches": msg({
+    id: "ui.settings.option.weavePackage.patches",
+    message: "Weave + patches",
+  }),
+  "ui.settings.option.weavePackage.rom": msg({
+    id: "ui.settings.option.weavePackage.rom",
+    message: "Weave + ROM + patches",
+  }),
+  "ui.settings.option.defaultCompression.sevenZipSpecial": msg({
+    id: "ui.settings.option.defaultCompression.sevenZipSpecial",
+    message: ".7z or ROM specific",
+  }),
+  "ui.settings.option.defaultCompression.zipSpecial": msg({
+    id: "ui.settings.option.defaultCompression.zipSpecial",
+    message: ".zip or ROM specific",
+  }),
+  "ui.settings.option.defaultCompression.specialOnly": msg({
+    id: "ui.settings.option.defaultCompression.specialOnly",
+    message: "ROM specific only",
+  }),
+  "ui.settings.option.defaultCompression.sevenZipOnly": msg({
+    id: "ui.settings.option.defaultCompression.sevenZipOnly",
+    message: ".7z only",
+  }),
+  "ui.settings.option.defaultCompression.zipOnly": msg({
+    id: "ui.settings.option.defaultCompression.zipOnly",
+    message: ".zip only",
+  }),
+  "ui.settings.option.defaultCompression.none": msg({
+    id: "ui.settings.option.defaultCompression.none",
+    message: "None",
+  }),
+  "ui.settings.option.logLevel.error": msg({ id: "ui.settings.option.logLevel.error", message: "Errors" }),
+  "ui.settings.option.logLevel.warn": msg({ id: "ui.settings.option.logLevel.warn", message: "Warnings" }),
+  "ui.settings.option.postApply.autoShow": msg({
+    id: "ui.settings.option.postApply.autoShow",
+    message: "Auto + button",
+  }),
+  "ui.settings.option.postApply.show": msg({ id: "ui.settings.option.postApply.show", message: "Button only" }),
+  "ui.settings.option.postApply.hide": msg({ id: "ui.settings.option.postApply.hide", message: "Hide Button" }),
+  "ui.settings.suggestion.byteUnits": msg({
+    id: "ui.settings.suggestion.byteUnits",
+    message: "Choose decimal or binary units for file sizes.",
+  }),
+  "ui.settings.suggestion.weavePackage": msg({
+    id: "ui.settings.suggestion.weavePackage",
+    message: "Choose whether to include the ROM in a shared weave. The Compression type controls its archive format.",
+  }),
+  "ui.settings.suggestion.emulatorSaveStorage": msg({
+    id: "ui.settings.suggestion.emulatorSaveStorage",
+    message:
+      "Warning: If you turn this off, new save states and SRAM are not stored. Existing saves remain until you delete them in Storage.",
+  }),
+  "ui.settings.suggestion.postApplyDownload": msg({
+    id: "ui.settings.suggestion.postApplyDownload",
+    message: "Choose whether Download runs automatically and whether its button stays visible.",
+  }),
+  "ui.settings.suggestion.postApplyTest": msg({
+    id: "ui.settings.suggestion.postApplyTest",
+    message: "Choose whether Test opens automatically and whether its button stays visible.",
+  }),
+  "ui.settings.suggestion.codecValuesLevels": msg({
+    id: "ui.settings.suggestion.codecValuesLevels",
+    message: "Valid values: {values}. Optional levels: {levels}",
+  }),
+  "ui.settings.suggestion.compressionProfile": msg({
+    id: "ui.settings.suggestion.compressionProfile",
+    message: "Default: Max. zstd levels: {zstd}. Other codec levels: {other}.",
+  }),
+  "ui.settings.suggestion.defaultCompression": msg({
+    id: "ui.settings.suggestion.defaultCompression",
+    message:
+      ".zip or ROM specific is the default: ZIP for archive output, or ROM-specific compression such as Z3DS, CHD, RVZ, etc. when available.",
+  }),
+  "ui.settings.suggestion.detailedView": msg({
+    id: "ui.settings.suggestion.detailedView",
+    message:
+      "Adds Files, Identify, and disc-sheet drawers to every file card, plus timings. Same as the Detailed switch.",
+  }),
+  "ui.settings.suggestion.identifiedOutputName": msg({
+    id: "ui.settings.suggestion.identifiedOutputName",
+    message: "When off, output names derive from the input file name instead.",
+  }),
+  "ui.settings.suggestion.logLevel": msg({
+    id: "ui.settings.suggestion.logLevel",
+    message: "Default: Trace in development; Warnings otherwise. Debug and Trace include detailed workflow progress.",
+  }),
+  "ui.settings.suggestion.rvzBlockSize": msg({
+    id: "ui.settings.suggestion.rvzBlockSize",
+    message: "Default: {value}",
+  }),
+  "ui.settings.suggestion.codecLevel": msg({
+    id: "ui.settings.suggestion.codecLevel",
+    message: "Default: {codec}. Optional level: {codec}[:{range}].",
+  }),
+  "ui.settings.suggestion.threadsThreaded": msg({
+    id: "ui.settings.suggestion.threadsThreaded",
+    message: "Valid values: auto, 0-64. Use 0 to disable threaded bundles.",
+  }),
+  "ui.settings.suggestion.threadsSingle": msg({
+    id: "ui.settings.suggestion.threadsSingle",
+    message: "Valid values: auto or 1.",
+  }),
+  "ui.settings.suggestion.zipCodec": msg({
+    id: "ui.settings.suggestion.zipCodec",
+    message: "Default: {codec}. Valid values: {values}. Optional levels: {levels}. Store does not use a level.",
+  }),
+  "ui.notFound.heading": msg({ id: "ui.notFound.heading", message: "404: Page not found" }),
+  "ui.notFound.label": msg({ id: "ui.notFound.label", message: "That page is not here." }),
+  "ui.notFound.copy": msg({
+    id: "ui.notFound.copy",
+    message: "Check the address, or choose where you want to go next.",
+  }),
+  "ui.notFound.browseDocs": msg({ id: "ui.notFound.browseDocs", message: "Browse docs" }),
 };
 
 export { MESSAGES };

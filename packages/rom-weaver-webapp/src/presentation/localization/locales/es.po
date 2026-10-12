@@ -13,6 +13,21 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
+msgid ""
+msgstr ""
+"POT-Creation-Date: 2026-06-16 18:56-0400\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: @lingui/cli\n"
+"Language: es\n"
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Plural-Forms: \n"
+
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 #~ msgid "ui.weaveExport.action"
@@ -345,6 +360,31 @@ msgstr ", una extensión de salida. El selector de formato agrega la extensión;
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.option.defaultCompression.sevenZipOnly"
+msgstr "Solo .7z"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.option.defaultCompression.sevenZipSpecial"
+msgstr ".7z o específico de la ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.option.defaultCompression.zipOnly"
+msgstr "Solo .zip"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.option.defaultCompression.zipSpecial"
+msgstr ".zip o específico de la ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.defaultCompression"
+msgstr ".zip o específico de la ROM es el valor predeterminado: ZIP para archivos comprimidos, o compresión específica de la ROM como Z3DS, CHD, RVZ, etc. cuando esté disponible."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.chain.orderNote"
 msgstr "“{patch}” espera que “{predecessor}” se aplique primero."
 
@@ -415,8 +455,18 @@ msgstr "{file} se lee sin extraerlo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.defaultOption"
+msgstr "{label} (predeterminado)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patchChecks.identified"
 msgstr "{title}: {platform}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.notFound.heading"
+msgstr "404: Página no encontrada"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -640,6 +690,11 @@ msgstr "Añade cajones de Archivos, Identificar y hojas de disco, además de tie
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.detailedView"
+msgstr "Añade los paneles Archivos, Identificar y hoja de disco a cada tarjeta de archivo, además de los tiempos. Igual que el interruptor Detallado."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.console.advanced"
 msgstr "Avanzado"
 
@@ -820,6 +875,11 @@ msgstr "automático (quitar)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.option.postApply.autoShow"
+msgstr "Automático + botón"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.header.autoStrip"
 msgstr "Automático elimina el encabezado basura de copiadora de esta ROM."
 
@@ -885,6 +945,11 @@ msgstr "Antes de añadir una ROM, Identificar permite buscar por nombre del jueg
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.section.behavior"
+msgstr "Comportamiento"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.tools.beta"
 msgstr "Beta"
 
@@ -897,6 +962,11 @@ msgstr "Compilación beta"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.n64Order.big-endian"
 msgstr "big endian (.z64)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.option.byteUnits.binary"
+msgstr "Binario (KiB, MiB, GiB)"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -920,6 +990,11 @@ msgstr "Vuelve a mostrarlo en Ajustes"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.notFound.browseDocs"
+msgstr "Explorar la documentación"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.status.envWeb"
 msgstr "Pestaña del navegador"
 
@@ -940,6 +1015,11 @@ msgstr "Edición en bloque"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.option.postApply.show"
+msgstr "Solo botón"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.goWeave"
 msgstr "Empaquetar"
 
@@ -955,8 +1035,18 @@ msgstr "Paquete"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.option.weavePackage.patches"
+msgstr "Weave + parches"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.weaveTutorial.weavePatches"
 msgstr "Paquete + parches (.zip)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.option.weavePackage.rom"
+msgstr "Weave + ROM + parches"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -977,6 +1067,11 @@ msgstr "Agrupar parches"
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.weaveThesis"
 msgstr "Agrupa tus parches."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.section.webapp"
+msgstr "Aplicación web"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1115,6 +1210,11 @@ msgstr "Compruébalo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.notFound.copy"
+msgstr "Revisa la dirección o elige adónde quieres ir a continuación."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.weaveTutorial.rom.title"
 msgstr "Comprueba la ROM inicial"
 
@@ -1200,6 +1300,11 @@ msgstr "Elegir otra ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.byteUnits"
+msgstr "Elige unidades decimales o binarias para los tamaños de archivo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.hero.checksumDescription"
 msgstr "Elige las sumas de comprobación de cualquier archivo. La extracción automática abre archivos comprimidos y contenedores. Todo se ejecuta localmente en tu navegador."
 
@@ -1240,8 +1345,23 @@ msgstr "Elija la versión de {title} para {platform}"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.postApplyDownload"
+msgstr "Elige si la descarga se ejecuta automáticamente y si su botón permanece visible."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.postApplyTest"
+msgstr "Elige si la prueba se abre automáticamente y si su botón permanece visible."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.basisHelp"
 msgstr "Elige si las comprobaciones de entrada de este parche describen la ROM base o la salida del parche anterior."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.weavePackage"
+msgstr "Elige si se incluye la ROM en un weave compartido. El tipo de compresión controla su formato de archivo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1272,6 +1392,11 @@ msgstr "Cerrar"
 #: src/presentation/localization/messages.ts
 msgid "ui.settings.codec"
 msgstr "Códec"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.section.codecs"
+msgstr "Códecs"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1347,6 +1472,11 @@ msgstr "Comprime tus archivos."
 #: src/presentation/localization/messages.ts
 msgid "ui.compress.running"
 msgstr "Comprimiendo archivos…"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.section.compression"
+msgstr "Compresión"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1495,6 +1625,11 @@ msgstr "Se necesita una base de datos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.option.byteUnits.decimal"
+msgstr "Decimal (KB, MB, GB)"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.decode"
 msgstr "DECODIFICAR"
 
@@ -1502,6 +1637,31 @@ msgstr "DECODIFICAR"
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkSelection"
 msgstr "Selección predeterminada"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.codecLevel"
+msgstr "Predeterminado: {codec}. Nivel opcional: {codec}[:{range}]."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.zipCodec"
+msgstr "Predeterminado: {codec}. Valores válidos: {values}. Niveles opcionales: {levels}. Store no usa nivel."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.rvzBlockSize"
+msgstr "Predeterminado: {value}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.compressionProfile"
+msgstr "Predeterminado: Máx. Niveles de zstd: {zstd}. Niveles de otros códecs: {other}."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.logLevel"
+msgstr "Predeterminado: Traza en desarrollo; Advertencias en caso contrario. Depuración y Traza incluyen el progreso detallado del flujo de trabajo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1772,6 +1932,11 @@ msgstr "Introduzca al menos 2 caracteres del nombre del juego."
 #: src/presentation/localization/messages.ts
 msgid "ui.status.environment"
 msgstr "Entorno"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.option.logLevel.error"
+msgstr "Errores"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2052,6 +2217,11 @@ msgstr "Sin encabezado: la salida parcheada no tiene encabezado de ROM."
 #: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.hideVariants"
 msgstr "Ocultar {count} {count, plural, one {variante más} other {variantes más}}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.option.postApply.hide"
+msgstr "Ocultar botón"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2667,6 +2837,11 @@ msgstr "No. Trae tus propios archivos. Los ejemplos guiados usan una pequeña RO
 #: src/presentation/localization/messages.ts
 msgid "ui.home.faqUploadAnswer"
 msgstr "No. Los archivos se leen y escriben en tu dispositivo. No hay ningún servidor que los reciba."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.option.defaultCompression.none"
+msgstr "Ninguna"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3640,6 +3815,11 @@ msgstr "La ROM no está incluida; proporciónala tú mismo"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.option.defaultCompression.specialOnly"
+msgstr "Solo específico de la ROM"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.apply.loadFailed"
 msgstr "No se pudo cargar rom-weaver."
 
@@ -4430,6 +4610,11 @@ msgstr "Prueba tu ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.notFound.label"
+msgstr "Esa página no está aquí."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.bulkSelectionAll"
 msgstr "Activar todos"
 
@@ -4549,6 +4734,21 @@ msgstr "Usar esta ROM en Aplicar"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.codecValuesLevels"
+msgstr "Valores válidos: {values}. Niveles opcionales: {levels}"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.threadsSingle"
+msgstr "Valores válidos: auto o 1."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.threadsThreaded"
+msgstr "Valores válidos: auto, 0-64. Usa 0 para desactivar los paquetes con hilos."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.patch.validationFailed"
 msgstr "La validación falló"
 
@@ -4609,6 +4809,16 @@ msgstr "¿Quieres tu propia copia? Hospédala tú mismo con archivos estáticos 
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.emulatorSaveStorage"
+msgstr "Advertencia: si lo desactivas, los nuevos estados guardados y la SRAM no se almacenan. Los guardados existentes permanecen hasta que los borres en Almacenamiento."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.option.logLevel.warn"
+msgstr "Advertencias"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.home.webapp"
 msgstr "Aplicación web"
 
@@ -4636,6 +4846,11 @@ msgstr "Qué cambia este parche"
 #: src/presentation/localization/messages.ts
 msgid "ui.update.whatsNew"
 msgstr "Novedades"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.settings.suggestion.identifiedOutputName"
+msgstr "Si se desactiva, los nombres de salida se derivan del nombre del archivo de entrada."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

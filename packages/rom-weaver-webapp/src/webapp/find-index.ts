@@ -278,9 +278,9 @@ const createStaticEntries = ({ baseHref, donateHref, githubHref, localizer, tabs
   const settings: FindEntry[] = SETTINGS_PANEL_SECTIONS.flatMap((section) =>
     section.fields.map((key) => ({
       action: { type: "settings" as const, fieldId: SETTINGS_FIELD_METADATA[key].id },
-      hint: `${message("ui.settings.title")} · ${section.title}`,
+      hint: `${message("ui.settings.title")} · ${section.titleId ? message(section.titleId) : section.title}`,
       id: `setting:${key}`,
-      keywords: `${getSettingsLabel(key, localizer)} ${key} ${section.title}`,
+      keywords: `${getSettingsLabel(key, localizer)} ${key} ${section.title} ${section.titleId ? message(section.titleId) : section.title}`,
       kind: "setting" as const,
       label: getSettingsLabel(key, localizer),
     })),

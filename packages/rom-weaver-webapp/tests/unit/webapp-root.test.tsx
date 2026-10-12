@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { preloadCatalog } from "../../src/presentation/localization/index.ts";
 import { createEmptyVitePageUpdateState, getPageUpdateState } from "../../src/webapp/page-update-state.ts";
 import { createServiceWorkerCacheState } from "../../src/webapp/pwa/service-worker-cache-state.ts";
 import { createWebappRootController } from "../../src/webapp/webapp-controller.ts";
@@ -185,6 +186,19 @@ describe("the workbench shell", () => {
     expect(container.querySelector(".not-found-home")?.getAttribute("href")).toBe("/apply-patches");
     expect(container.querySelector("#panel-patcher")).toBeNull();
     expect(container.querySelector(".workbench")?.className).toContain("is-not-found");
+  });
+
+  it("renders the not-found page in the browser locale", async () => {
+    const languages = vi.spyOn(window.navigator, "languages", "get").mockReturnValue(["de"]);
+    await preloadCatalog("de");
+    try {
+      const { container } = await renderRoot({ notFound: true });
+
+      expect(container.querySelector("#not-found-title")?.getAttribute("aria-label")).toBe("404: Seite nicht gefunden");
+      expect(container.querySelector(".not-found-docs")?.textContent).toBe("Dokumentation durchsuchen");
+    } finally {
+      languages.mockRestore();
+    }
   });
 
   it("routes a not-found tab click to a full page load", async () => {
