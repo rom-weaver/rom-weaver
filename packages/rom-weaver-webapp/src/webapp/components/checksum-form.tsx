@@ -1,5 +1,5 @@
 import { Hash } from "lucide-react";
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getBaseFileName } from "../../lib/input/path-utils.ts";
 import type {
   ChecksumWorkflowFile,
@@ -22,7 +22,11 @@ import {
 } from "../../public/react/components/ds/staging-meta.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
 import { useInputSelectionHandler } from "../../public/react/input-selection-handler.ts";
-import type { CandidateSelectionPrompt, PageFileDrop } from "../../public/react/public-types.ts";
+import type {
+  CandidateSelectionChoice,
+  CandidateSelectionPrompt,
+  PageFileDrop,
+} from "../../public/react/public-types.ts";
 import { useApplySettings, useRomWeaverAssetBaseUrl, useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { usePageDropForwarder, useWorkbenchActivity } from "../../public/react/workflow-form-effects.ts";
 import {
@@ -57,7 +61,9 @@ const DEFAULT_ALGORITHMS = ["crc32", "md5", "sha1"];
 
 type ChecksumFormProps = { pageDrop?: PageFileDrop | null };
 type ChecksumSet = { checksums: Record<string, string>; id: string; label: string };
-type CompareResult = { match?: { algorithm: string; setId: string }; uncomputed: string[] } | null;
+type ChecksumMatch = { algorithm: string; setId: string };
+/** `match` is the first matching set; `matches` lists every set (file or variant) that equals the pasted value. */
+type CompareResult = { match?: ChecksumMatch; matches?: ChecksumMatch[]; uncomputed: string[] } | null;
 
 const normalizeChecksumInput = (raw: string) => raw.trim().toLowerCase().replace(/^0x/, "");
 
@@ -80,10 +86,12 @@ const getChecksumSets = (file: ChecksumWorkflowFile, fileLabel: string): Checksu
 const compareChecksum = (expected: string, sets: ChecksumSet[], algorithms: string[]): CompareResult => {
   if (!expected) return null;
   const candidates = CHECKSUM_ALGORITHMS.filter((algorithm) => algorithm.hexLength === expected.length);
-  for (const set of sets) {
+  const matches = sets.flatMap((set) => {
     const algorithm = candidates.find((entry) => algorithms.includes(entry.id) && set.checksums[entry.id] === expected);
-    if (algorithm) return { match: { algorithm: algorithm.id, setId: set.id }, uncomputed: [] };
-  }
+    return algorithm ? [{ algorithm: algorithm.id, setId: set.id }] : [];
+  });
+  const [match] = matches;
+  if (match) return { match, matches, uncomputed: [] };
   const uncomputed = candidates
     .filter((entry) => !algorithms.includes(entry.id) || sets.some((set) => !set.checksums[entry.id]))
     .map((entry) => entry.label);
@@ -112,7 +120,7 @@ const ChecksumSetRows = ({
     {CHECKSUM_ALGORITHMS.filter((algorithm) => algorithms.includes(algorithm.id)).map((algorithm) => {
       const value = set.checksums[algorithm.id] || "";
       const sameLength = expected.length === algorithm.hexLength;
-      const matched = compare?.match?.setId === set.id && compare.match.algorithm === algorithm.id;
+      const matched = !!compare?.matches?.some((entry) => entry.setId === set.id && entry.algorithm === algorithm.id);
       const mark = matched ? "ok" : sameLength && !compare?.match ? "bad" : undefined;
       const row = value ? (
         <ChecksumRow
@@ -138,77 +146,84 @@ const ChecksumSetRows = ({
   </>
 );
 
-const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
+type ChecksumSource = { file: File; id: number };
+
+/* What one source reports upward. The parent owns the shared options and the
+   comparison; each source owns its workflow, so files stage and hash side by
+   side and the runner's scheduler decides how many are admitted at once. */
+type ChecksumEntrySnapshot = {
+  abort: () => void;
+  calculate: () => Promise<void>;
+  calculating: boolean;
+  dismissError: () => void;
+  error: string;
+  files: ChecksumWorkflowFile[];
+  id: number;
+  input: ChecksumWorkflowSourceState | null;
+  progress: ReturnType<typeof useWorkflowProgressState>["progress"];
+  staging: boolean;
+};
+
+const ChecksumSourceEntry = ({
+  algorithms,
+  autoExtract,
+  compare,
+  expected,
+  onSnapshot,
+  onSelectionSkipped,
+  selectFile: selectAny,
+  source,
+}: {
+  algorithms: string[];
+  autoExtract: boolean;
+  compare: CompareResult;
+  expected: string;
+  onSnapshot: (id: number, snapshot: ChecksumEntrySnapshot) => void;
+  onSelectionSkipped: (sourceId: number) => void;
+  selectFile: (request: CandidateSelectionPrompt) => Promise<CandidateSelectionChoice>;
+  source: ChecksumSource;
+}) => {
   const localizer = useUiLocalizer();
   const settings = useApplySettings();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
-  const cancelSelectionRef = useRef<(request: CandidateSelectionPrompt) => void>(() => undefined);
-  const { candidateSelectionDialog, selectFile } = useCandidateSelection({
-    fileInput: true,
-    onCancelSelection: (request) => cancelSelectionRef.current(request),
-  });
-  // Matches webapp-root's `currentView` so root routing targets this tab's dialog.
-  useInputSelectionHandler("checksum", selectFile);
-  const [source, setSource] = useState<File | null>(null);
   const [input, setInput] = useState<ChecksumWorkflowSourceState | null>(null);
   const [staging, setStaging] = useState(false);
   const [calculating, setCalculating] = useState(false);
-  const [algorithms, setAlgorithms] = useState<string[]>(DEFAULT_ALGORITHMS);
-  const [expectedText, setExpectedText] = useState("");
   const [error, setError] = useState("");
-  const [autoExtract, setAutoExtract] = useState(true);
-  const algorithmsRef = useRef(algorithms);
-  algorithmsRef.current = algorithms;
+  const latest = useRef({ algorithms, localizer, settings });
+  latest.current = { algorithms, localizer, settings };
   const { clearProgressForStage, createProgressHandler, progress, setProgress } = useWorkflowProgressState({});
   const workflowRef = useRef<InstanceType<typeof BrowserChecksumWorkflow> | null>(null);
   const workflowIdRef = useRef(createReactWorkflowId("react-checksum"));
-  const handledPageDropIdRef = useRef<number | null>(null);
-  const settingsRef = useRef(settings);
-  settingsRef.current = settings;
+  const { file: sourceFile, id: sourceId } = source;
+  const selectFile = useCallback(
+    (request: CandidateSelectionPrompt) => {
+      return selectAny(request).catch((error: unknown) => {
+        if (request.sourceIndex !== -1 && getErrorCode(error) === "WORKFLOW_SELECTION_SKIPPED")
+          onSelectionSkipped(sourceId);
+        throw error;
+      });
+    },
+    [onSelectionSkipped, selectAny, sourceId],
+  );
 
   // A language or byte-unit change makes a new localizer; reading it through a
   // ref keeps showError stable so the staging effect does not restage the ROM.
-  const localizerRef = useRef(localizer);
-  localizerRef.current = localizer;
   const showError = useCallback(
-    (cause: unknown) => setError(formatCodedErrorForDisplay(cause, localizerRef.current)),
+    (cause: unknown) => setError(formatCodedErrorForDisplay(cause, latest.current.localizer)),
     [],
   );
 
-  const updateSource = useCallback((file: File | null) => {
-    setError("");
-    setSource(file);
-  }, []);
-
-  cancelSelectionRef.current = (request) => {
-    if (request.sourceIndex === -1) return;
-    updateSource(null);
-  };
-
-  const handleDrop = (files: File[]) => {
-    const file = files[0];
-    if (file) updateSource(file);
-  };
-  usePageDropForwarder(pageDrop, handleDrop, handledPageDropIdRef);
-
-  // One workflow per staged ROM: a new source disposes the old workflow, which
-  // releases its extracted files.
+  // One workflow per staged file: leaving disposes it, which releases its extracted files.
   useEffect(() => {
     setInput(null);
-    // A calculation on the previous ROM ends with its workflow, and its own
-    // settle is gated on that workflow still being current.
-    setCalculating(false);
-    if (!source) {
-      setStaging(false);
-      return;
-    }
     let current = true;
     let workflow: InstanceType<typeof BrowserChecksumWorkflow> | null = null;
     const handleProgress = createProgressHandler("input");
     void (async () => {
       const { ChecksumWorkflow } = await loadBrowserApi();
       if (!current) return;
-      const { input: inputSettings, logging, workers } = settingsRef.current;
+      const { input: inputSettings, logging, workers } = latest.current.settings;
       workflow = new ChecksumWorkflow({
         ...(assetBaseUrl ? { assetBaseUrl } : {}),
         id: workflowIdRef.current,
@@ -218,16 +233,17 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
       workflowRef.current = workflow;
       workflow.on("progress", handleProgress);
       setStaging(true);
-      logger.debug("staging ROM", { fileName: source.name, size: source.size });
+      logger.debug("staging ROM", { fileName: sourceFile.name, size: sourceFile.size });
       try {
-        await workflow.setInput(source, { algorithms: algorithmsRef.current, autoExtract });
+        await workflow.setInput(sourceFile, { algorithms: latest.current.algorithms, autoExtract });
         if (current) setInput(workflow.getInput());
       } catch (cause) {
         if (!current) return;
         setInput(workflow.getInput());
         const code = getErrorCode(cause);
-        logger.debug("staging failed", { code, fileName: source.name });
-        if (code !== "WORKFLOW_SELECTION_SKIPPED" && code !== "CANCELLED") showError(cause);
+        logger.debug("staging failed", { code, fileName: sourceFile.name });
+        if (code === "WORKFLOW_SELECTION_SKIPPED") onSelectionSkipped(sourceId);
+        else if (code !== "CANCELLED") showError(cause);
       } finally {
         workflow.off("progress", handleProgress);
         if (current) {
@@ -242,9 +258,23 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
       if (workflowRef.current === workflow) workflowRef.current = null;
       void workflow?.dispose().catch(() => undefined);
     };
-  }, [assetBaseUrl, autoExtract, clearProgressForStage, createProgressHandler, selectFile, showError, source]);
+  }, [
+    assetBaseUrl,
+    autoExtract,
+    clearProgressForStage,
+    createProgressHandler,
+    selectFile,
+    showError,
+    sourceFile,
+    onSelectionSkipped,
+    sourceId,
+  ]);
 
-  const files = input?.status === "ready" ? input.files : [];
+  // Ids are scoped to the source so two files that both name their entry "input" never collide.
+  const files = useMemo(
+    () => (input?.status === "ready" ? input.files.map((file) => ({ ...file, id: `${sourceId}:${file.id}` })) : []),
+    [input, sourceId],
+  );
   const missing = algorithms.filter((algorithm) => !files.length || files.some((file) => !file.checksums[algorithm]));
 
   const calculate = async () => {
@@ -260,7 +290,9 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
     } catch (cause) {
       if (workflowRef.current === workflow) {
         setInput(workflow.getInput());
-        if (getErrorCode(cause) !== "CANCELLED") showError(cause);
+        const code = getErrorCode(cause);
+        if (code === "WORKFLOW_SELECTION_SKIPPED") onSelectionSkipped(sourceId);
+        else if (code !== "CANCELLED") showError(cause);
       }
     } finally {
       workflow.off("progress", handleProgress);
@@ -269,6 +301,160 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
         setProgress(null);
       }
     }
+  };
+  const calculateRef = useRef(calculate);
+  calculateRef.current = calculate;
+  const handle = useMemo(
+    () => ({
+      abort: () => workflowRef.current?.abort(),
+      calculate: () => calculateRef.current(),
+      dismissError: () => setError(""),
+    }),
+    [],
+  );
+
+  // Layout timing, so the parent's totals never lag the cards by a painted frame.
+  useLayoutEffect(() => {
+    onSnapshot(sourceId, { ...handle, calculating, error, files, id: sourceId, input, progress, staging });
+  }, [calculating, error, files, handle, input, onSnapshot, progress, sourceId, staging]);
+
+  const stagingChecksum = staging && progress?.stage === "checksum";
+  const stagingProgress = stagingChecksum
+    ? toWorkflowChecksumProgressProps(progress)
+    : toWorkflowFileProgressProps(staging ? progress : null);
+  const stagePct = stagePercent(stagingProgress);
+  const displayedFiles: ChecksumWorkflowFile[] = files.length
+    ? files
+    : [
+        {
+          checksums: {},
+          fileName: input?.fileName || sourceFile.name,
+          id: "input",
+          size: input?.size ?? sourceFile.size,
+        },
+      ];
+
+  return (
+    <>
+      {displayedFiles.map((file) => (
+        <FileCard
+          key={file.id}
+          meta={
+            <>
+              <span className="fsize mono">{formatByteSize(file.size)}</span>
+              {staging ? (
+                <StageStatus
+                  id="checksum-input-stage"
+                  label={stageStatusLabel("Checksumming", !stagingChecksum, localizer)}
+                  percent={stagePct}
+                />
+              ) : null}
+            </>
+          }
+          name={
+            <span className="nm" title={file.fileName}>
+              {getBaseFileName(file.fileName)}
+            </span>
+          }
+          stageBar={stageBarValue(staging, stagePct)}
+          state={hasSourceQueueWarning(input) ? "bad" : undefined}
+        >
+          {files.length ? (
+            <ChecksumList defaultOpen label={localizer.message("ui.checks.title")}>
+              {getChecksumSets(file, "").map((set) => {
+                const rows = (
+                  <ChecksumSetRows
+                    algorithms={algorithms}
+                    {...(set.label ? {} : { bytes: file.size })}
+                    compare={compare}
+                    expected={expected}
+                    key={set.id}
+                    pending={calculating}
+                    set={set}
+                  />
+                );
+                return set.label ? (
+                  <div className="ck-group" key={set.id}>
+                    <div className="ck-group-head">{set.label}</div>
+                    {rows}
+                  </div>
+                ) : (
+                  rows
+                );
+              })}
+            </ChecksumList>
+          ) : null}
+        </FileCard>
+      ))}
+    </>
+  );
+};
+
+const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
+  const localizer = useUiLocalizer();
+  const { candidateSelectionDialog, selectFile } = useCandidateSelection({
+    fileInput: true,
+  });
+  // Matches webapp-root's `currentView` so root routing targets this tab's dialog.
+  useInputSelectionHandler("checksum", selectFile);
+  const [sources, setSources] = useState<ChecksumSource[]>([]);
+  const [snapshots, setSnapshots] = useState<Record<number, ChecksumEntrySnapshot>>({});
+  const [algorithms, setAlgorithms] = useState<string[]>(DEFAULT_ALGORITHMS);
+  const [expectedText, setExpectedText] = useState("");
+  const [autoExtract, setAutoExtract] = useState(true);
+  const workflowIdRef = useRef(createReactWorkflowId("react-checksum"));
+  const handledPageDropIdRef = useRef<number | null>(null);
+  const nextSourceIdRef = useRef(0);
+  const removeSkippedSource = useCallback(
+    (id: number) => setSources((previous) => previous.filter((entry) => entry.id !== id)),
+    [],
+  );
+
+  const reportSnapshot = useCallback(
+    (id: number, snapshot: ChecksumEntrySnapshot) => setSnapshots((previous) => ({ ...previous, [id]: snapshot })),
+    [],
+  );
+
+  // Every dropped or picked file gets its own result, like `sha256sum a b c`; a new set replaces the old one.
+  const handleDrop = (dropped: File[]) => {
+    if (!dropped.length) return;
+    setSnapshots({});
+    setSources(
+      dropped.map((file) => {
+        nextSourceIdRef.current += 1;
+        return { file, id: nextSourceIdRef.current };
+      }),
+    );
+  };
+  usePageDropForwarder(pageDrop, handleDrop, handledPageDropIdRef);
+
+  const clearSources = () => {
+    setSnapshots({});
+    setSources([]);
+  };
+
+  const entries = sources.flatMap((entry) => {
+    const snapshot = snapshots[entry.id];
+    return snapshot ? [snapshot] : [];
+  });
+  const files = entries.flatMap((entry) => entry.files);
+  const staging = entries.some((entry) => entry.staging);
+  const calculating = entries.some((entry) => entry.calculating);
+  const errors = entries.filter((entry) => entry.error);
+  const missing = algorithms.filter(
+    (algorithm) =>
+      sources.length > 0 &&
+      (entries.length < sources.length ||
+        entries.some((entry) => !entry.files.length || entry.files.some((file) => !file.checksums[algorithm]))),
+  );
+  const sourceWarning = entries.some((entry) => hasSourceQueueWarning(entry.input));
+
+  const calculate = async () => {
+    if (calculating) return;
+    await Promise.all(entries.map((entry) => entry.calculate()));
+  };
+  const abortAll = () => {
+    for (const entry of entries) entry.abort();
   };
 
   const toggleAlgorithm = (algorithm: string, on: boolean) =>
@@ -285,33 +471,30 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
   const multiFile = files.length > 1;
   const sets = files.flatMap((file) => getChecksumSets(file, multiFile ? file.fileName : ""));
   const compare = expectedInvalid ? null : compareChecksum(expected, sets, algorithms);
-  const matchedSet = sets.find((set) => set.id === compare?.match?.setId);
+  const matchedSets = sets.filter((set) => compare?.matches?.some((entry) => entry.setId === set.id));
   const matchedLabel = CHECKSUM_ALGORITHMS.find((entry) => entry.id === compare?.match?.algorithm)?.label;
-  const stagingChecksum = staging && progress?.stage === "checksum";
-  const stagingProgress = stagingChecksum
-    ? toWorkflowChecksumProgressProps(progress)
-    : toWorkflowFileProgressProps(staging ? progress : null);
-  const stagePct = stagePercent(stagingProgress);
-  const displayedFiles: ChecksumWorkflowFile[] = files.length
-    ? files
-    : [
-        {
-          checksums: {},
-          fileName: input?.fileName || source?.name || "",
-          id: "input",
-          size: input?.size ?? source?.size ?? 0,
-        },
-      ];
-  const sourceNotice = getSourceNoticeMessage(input);
-  const sourceEmpty = !source;
+  const matchedNames = matchedSets.map((set) => set.label);
+  const matchedText =
+    matchedNames.length > 3
+      ? `${matchedNames.slice(0, 2).join(", ")} and ${matchedNames.length - 2} other files`
+      : matchedNames.join(", ");
+  const activeProgress = entries.find((entry) => entry.calculating)?.progress ?? null;
+  const notices = entries.flatMap((entry, index) => {
+    const message = getSourceNoticeMessage(entry.input);
+    return message
+      ? [{ index, level: getSourceNoticeLevel(entry.input) as ReturnType<typeof getSourceNoticeLevel>, message }]
+      : [];
+  });
+  const sourceEmpty = sources.length === 0;
+  const single = sources.length === 1 ? sources[0] : undefined;
 
   useAgentWorkflow("checksum", {
     getState: () => ({
-      source: describeAgentSource(source),
+      source: single ? describeAgentSource(single.file) : null,
       staging,
       calculating,
-      progress,
-      error: error || null,
+      progress: entries.find((entry) => entry.progress)?.progress ?? null,
+      error: errors[0]?.error || null,
       options: { algorithms, autoExtract, expectedChecksum: expectedText },
       missingAlgorithms: missing,
       results: files.map((file) => ({
@@ -326,19 +509,19 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
         })),
       })),
       comparison: compare,
-      sourceStatus: input?.status || null,
-      sourceNotice: sourceNotice || null,
+      sourceStatus: entries.length === 1 ? entries[0]?.input?.status || null : null,
+      sourceNotice: notices[0]?.message || null,
     }),
     actions: {
       run: {
         description: "Calculate the selected missing checksums.",
-        enabled: !!workflowRef.current && missing.length > 0 && !calculating && !staging,
+        enabled: entries.length > 0 && missing.length > 0 && !calculating && !staging,
         execute: calculate,
       },
       cancel: {
         description: "Cancel staging or checksum calculation.",
         enabled: staging || calculating,
-        execute: () => workflowRef.current?.abort(),
+        execute: abortAll,
       },
     },
   });
@@ -353,24 +536,23 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
           disabled={calculating}
           heroLabel="Drop a file to checksum it"
           heroLabelCoarse="Tap to add a file"
-          info={<p>Checksums are calculated locally. Your file never leaves this browser.</p>}
+          info={<p>Checksums are calculated locally. Your files never leave this browser.</p>}
           inputId="checksum-input-picker"
           lead={{
             line1: "ui.hero.checksumThesis",
             description: "ui.hero.checksumDescription",
           }}
-          multiple={false}
           onFiles={handleDrop}
           title="Input"
         />
       ) : (
         <StepSection
-          fault={hasSourceQueueWarning(input) || (!!error && !files.length)}
+          fault={sourceWarning || (errors.length > 0 && !files.length)}
           id="checksum-source"
           info={
             <InfoPopover title="File input">
               <ul>
-                <li>When Auto extract is on, choose a file if the archive contains several.</li>
+                <li>When Auto extract is on, choose a file if an archive contains several.</li>
                 <li>Turn Auto extract off to checksum an archive without opening it.</li>
               </ul>
             </InfoPopover>
@@ -383,7 +565,6 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
             disabled={calculating}
             inputId="checksum-input-picker"
             label="Replace the file"
-            multiple={false}
             onFiles={handleDrop}
           />
         </StepSection>
@@ -431,9 +612,7 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
         <StepSection
           className="checksum-results"
           fault={!!compare && !compare.match && !compare.uncomputed.length}
-          headerExtra={
-            <RemoveButton label={multiFile ? "Remove files" : "Remove file"} onClick={() => updateSource(null)} />
-          }
+          headerExtra={<RemoveButton label={multiFile ? "Remove files" : "Remove file"} onClick={clearSources} />}
           id="checksum-results"
           info={
             <InfoPopover title="Checksums">
@@ -448,13 +627,13 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
           title="Checksums"
           woven={!!compare?.match}
         >
-          {source && !staging && missing.length ? (
+          {!staging && missing.length ? (
             calculating ? (
               <FileProgress
-                {...(toWorkflowChecksumProgressProps(progress) || { indeterminate: true, label: "Checksum" })}
+                {...(toWorkflowChecksumProgressProps(activeProgress) || { indeterminate: true, label: "Checksum" })}
                 cancelLabel="Cancel checksum"
                 id="checksum-calculate-progress"
-                onCancel={() => workflowRef.current?.abort()}
+                onCancel={abortAll}
               />
             ) : (
               <RunButton icon={<Hash aria-hidden="true" />} id="checksum-calculate" onClick={() => void calculate()}>
@@ -465,65 +644,25 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
             )
           ) : null}
           <div className="cards workflow-file-list">
-            {displayedFiles.map((file) => (
-              <FileCard
-                key={file.id}
-                meta={
-                  <>
-                    <span className="fsize mono">{formatByteSize(file.size)}</span>
-                    {staging ? (
-                      <StageStatus
-                        id="checksum-input-stage"
-                        label={stageStatusLabel("Checksumming", !stagingChecksum, localizer)}
-                        percent={stagePct}
-                      />
-                    ) : null}
-                  </>
-                }
-                name={
-                  <span className="nm" title={file.fileName}>
-                    {getBaseFileName(file.fileName)}
-                  </span>
-                }
-                stageBar={stageBarValue(staging, stagePct)}
-                state={hasSourceQueueWarning(input) ? "bad" : undefined}
-              >
-                {files.length ? (
-                  <ChecksumList defaultOpen label={localizer.message("ui.checks.title")}>
-                    {getChecksumSets(file, "").map((set) =>
-                      set.label ? (
-                        <div className="ck-group" key={set.id}>
-                          <div className="ck-group-head">{set.label}</div>
-                          <ChecksumSetRows
-                            algorithms={algorithms}
-                            compare={compare}
-                            expected={expected}
-                            pending={calculating}
-                            set={set}
-                          />
-                        </div>
-                      ) : (
-                        <ChecksumSetRows
-                          algorithms={algorithms}
-                          bytes={file.size}
-                          compare={compare}
-                          expected={expected}
-                          key={set.id}
-                          pending={calculating}
-                          set={set}
-                        />
-                      ),
-                    )}
-                  </ChecksumList>
-                ) : null}
-              </FileCard>
+            {sources.map((entry) => (
+              <ChecksumSourceEntry
+                algorithms={algorithms}
+                autoExtract={autoExtract}
+                compare={compare}
+                expected={expected}
+                key={entry.id}
+                onSelectionSkipped={removeSkippedSource}
+                onSnapshot={reportSnapshot}
+                selectFile={selectFile}
+                source={entry}
+              />
             ))}
           </div>
-          {sourceNotice ? (
-            <Notice id="checksum-source-notice" level={getSourceNoticeLevel(input)}>
-              {sourceNotice}
+          {notices.map((notice) => (
+            <Notice id={notice.index ? undefined : "checksum-source-notice"} key={notice.index} level={notice.level}>
+              {notice.message}
             </Notice>
-          ) : null}
+          ))}
           <label className="checksum-compare" htmlFor="checksum-compare-input">
             <span>Compare with an expected checksum</span>
             <input
@@ -541,9 +680,11 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
           {expectedInvalid ? (
             <Notice level="error">A checksum contains only the digits 0-9 and the letters a-f.</Notice>
           ) : null}
-          {compare?.match && matchedSet ? (
+          {compare?.match && matchedSets.length ? (
             <p className="pdesc checksum-verdict" id="checksum-compare-verdict">
-              Match: the {matchedLabel} of this file{matchedSet.label ? ` (${matchedSet.label})` : ""}.
+              {matchedSets.length === 1
+                ? `Match: the ${matchedLabel} of this file${matchedText ? ` (${matchedText})` : ""}.`
+                : `Match: the ${matchedLabel} of ${matchedText}.`}
             </p>
           ) : null}
           {compare && !compare.match && files.length ? (
@@ -557,11 +698,11 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
           ) : null}
         </StepSection>
       )}
-      {error ? (
-        <Notice level="error" onDismiss={() => setError("")}>
-          {error}
+      {errors.map((entry) => (
+        <Notice key={entry.id} level="error" onDismiss={entry.dismissError}>
+          {entry.error}
         </Notice>
-      ) : null}
+      ))}
       {candidateSelectionDialog}
     </section>
   );

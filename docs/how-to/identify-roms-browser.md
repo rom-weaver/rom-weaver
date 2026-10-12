@@ -19,7 +19,7 @@ Choose [Checksum](checksum-roms-browser.md) to calculate a file's hash and compa
 ## Identify a file
 
 1. Open [Identify](https://rom-weaver.com/identify-rom).
-2. Add your ROM or a supported archive.
+2. Add one or more ROMs or supported archives. Each file gets its own result.
 3. Wait for identification to finish.
 4. Read the result on the ROM card. Its **Checks** drawer lists the checksums; turn on **Detailed** to add an **Identify** drawer with the database matches.
 

@@ -2875,6 +2875,11 @@ msgstr "En el navegador, no. Cada resultado se descarga como un archivo nuevo."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.noMatchBody"
+msgstr "No está en los datos de identificación. Desconocido no significa dañado: puede ser homebrew, estar modificada o ser una revisión no listada. Sus sumas de comprobación están abajo."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.expectedMismatch"
 msgstr "No es la ROM esperada"
 
@@ -4807,11 +4812,6 @@ msgstr "El tema y el color de acento se aplican al instante. Los demás ajustes 
 #: src/presentation/localization/messages.ts
 msgid "ui.home.trustTitle"
 msgstr "No hay ningún servidor al que enviar tus archivos"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.noMatchBody"
-msgstr "Estas sumas de comprobación no están en los datos de identificación. Desconocido no significa dañado: la ROM puede ser homebrew, estar modificada, ser una revisión no listada o ser de un sistema que los datos no cubren. Sus sumas de comprobación están en la tarjeta de abajo para que puedas buscarlas en otro sitio."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -2875,6 +2875,11 @@ msgstr "Nicht im Browser. Jedes Ergebnis wird als neue Datei heruntergeladen."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.identify.noMatchBody"
+msgstr "Nicht in den Identifikationsdaten. Unbekannt heißt nicht beschädigt: Es kann Homebrew, verändert oder eine nicht gelistete Revision sein. Die Prüfsummen stehen unten."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "ui.sourceInfo.expectedMismatch"
 msgstr "Nicht die erwartete ROM"
 
@@ -4807,11 +4812,6 @@ msgstr "Design und Akzentfarbe werden sofort angewendet. Andere Einstellungen we
 #: src/presentation/localization/messages.ts
 msgid "ui.home.trustTitle"
 msgstr "Es gibt keinen Server, an den deine Dateien gehen"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.identify.noMatchBody"
-msgstr "Diese Prüfsummen stehen nicht in den Identifikationsdaten. Unbekannt heißt nicht beschädigt: Das ROM kann Homebrew, verändert, eine nicht gelistete Revision oder von einem System sein, das die Daten nicht abdecken. Seine Prüfsummen stehen auf der Karte darunter, damit du sie anderswo nachschlagen kannst."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

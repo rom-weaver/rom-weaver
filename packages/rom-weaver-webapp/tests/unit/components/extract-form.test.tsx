@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { getAgentWorkflow } from "../../../src/webapp/agent/workflow-registry.ts";
 import { ExtractForm } from "../../../src/webapp/components/extract-form.tsx";
 
 const runtime = vi.hoisted(() => ({ create: vi.fn(), extract: vi.fn(), probe: vi.fn() }));
@@ -28,6 +29,23 @@ describe("ExtractForm", () => {
     vi.clearAllMocks();
   });
 
+  it("extracts the first of several dropped files and names the ones it did not use", async () => {
+    runtime.extract.mockResolvedValue({ outputs: [output("a.sfc")] });
+    render(
+      <ExtractForm
+        pageDrop={{ files: [new File(["1"], "a.zip"), new File(["2"], "b.zip"), new File(["3"], "c.zip")], id: 1 }}
+      />,
+    );
+
+    await waitFor(() => expect(runtime.extract).toHaveBeenCalledTimes(1));
+    expect((runtime.extract.mock.calls[0]?.[0] as { source: File } | undefined)?.source.name).toBe("a.zip");
+    expect(
+      await screen.findByText("Extract opens one archive per run: only a.zip was used; b.zip, c.zip were skipped."),
+    ).toBeTruthy();
+    expect(screen.queryByText("Add one file at a time.")).toBeNull();
+    expect(getAgentWorkflow("extract")?.getState().skippedFiles).toEqual(["b.zip", "c.zip"]);
+  });
+
   it("names a file that is not an archive instead of the internal storage path", async () => {
     runtime.extract.mockRejectedValue(new Error("no registered container matched `/work/notes.txt`"));
     const view = render(<ExtractForm />);
@@ -37,6 +55,23 @@ describe("ExtractForm", () => {
     expect(await screen.findByText("notes.txt is not an archive or disc image that Extract can open.")).toBeTruthy();
     expect(screen.queryByText(/\/work\//)).toBeNull();
     view.unmount();
+  });
+
+  it("extracts the first of several dropped files and names the ones it did not use", async () => {
+    runtime.extract.mockResolvedValue({ outputs: [output("a.sfc")] });
+    render(
+      <ExtractForm
+        pageDrop={{ files: [new File(["1"], "a.zip"), new File(["2"], "b.zip"), new File(["3"], "c.zip")], id: 1 }}
+      />,
+    );
+
+    await waitFor(() => expect(runtime.extract).toHaveBeenCalledTimes(1));
+    expect((runtime.extract.mock.calls[0]?.[0] as { source: File } | undefined)?.source.name).toBe("a.zip");
+    expect(
+      await screen.findByText("Extract opens one archive per run: only a.zip was used; b.zip, c.zip were skipped."),
+    ).toBeTruthy();
+    expect(screen.queryByText("Add one file at a time.")).toBeNull();
+    expect(getAgentWorkflow("extract")?.getState().skippedFiles).toEqual(["b.zip", "c.zip"]);
   });
 
   it("extracts on add, then downloads one file as itself and several as one ZIP", async () => {

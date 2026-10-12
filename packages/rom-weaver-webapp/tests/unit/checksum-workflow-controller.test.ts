@@ -106,6 +106,20 @@ describe("ChecksumWorkflowController", () => {
     });
   });
 
+  it("reports host selection cancellation as skipped during staging and calculation", async () => {
+    const { controller, run } = setup();
+    const cancellation = new Error("validation error: interactive selection was cancelled for `/work/game.zip`");
+    run.mockRejectedValueOnce(cancellation);
+    await expect(controller.setInput(source)).rejects.toMatchObject({
+      code: "WORKFLOW_SELECTION_SKIPPED",
+      cause: cancellation,
+    });
+    await controller.setInput(source);
+    run.mockRejectedValueOnce(cancellation);
+    await expect(controller.calculate(["sha256"])).rejects.toMatchObject({ code: "WORKFLOW_SELECTION_SKIPPED" });
+    expect(controller.getInput()?.files[0]?.checksums).toEqual(result.checksums);
+  });
+
   it("releases inputs when replacing and disposing them", async () => {
     const { controller, releaseSources } = setup();
     await controller.setInput(source);
