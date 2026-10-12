@@ -74,6 +74,13 @@ describe("Notice", () => {
     rerender(<Notice level="error">broken</Notice>);
     expect(container.querySelector(".notice.error")?.getAttribute("role")).toBe("alert");
   });
+
+  it("renders info as a neutral status that is never an alert", () => {
+    const { container } = render(<Notice level="info">no match</Notice>);
+    const info = container.querySelector(".notice.info");
+    expect(info?.getAttribute("role")).toBe("status");
+    expect(container.querySelector(".notice.error, .notice.warn")).toBeNull();
+  });
 });
 
 describe("RunButton", () => {

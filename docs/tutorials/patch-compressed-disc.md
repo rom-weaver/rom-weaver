@@ -64,4 +64,4 @@ The extracted BIN is 32,768 bytes. A matching SHA-1 confirms the supplied patche
 
 This verifies the patched BIN, not emulator compatibility or a byte-identical CHD encoding. Your original CHD remains the starting point for another run.
 
-For your own discs, follow [Apply ROM patches](../how-to/apply-rom-patches.md). For GameCube and Wii compression, see [Convert ISO to RVZ](../how-to/convert-to-rvz-browser.md).
+For your own discs, follow [Apply ROM patches](../how-to/apply-rom-patches.md). For GameCube and Wii compression, see [Compress ISO to RVZ](../how-to/convert-to-rvz-browser.md).

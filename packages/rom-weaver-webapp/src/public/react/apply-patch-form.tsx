@@ -1690,7 +1690,9 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           stackState.items.some((item) => !!item.progress),
         busy: outputState.applyButton.loading || weaveExport.busy,
         error:
-          [uiState.inputNotice, uiState.patchNotice, uiState.outputNotice].find((notice) => notice.visible)?.message ||
+          [uiState.inputNotice, uiState.patchNotice, uiState.outputNotice].find(
+            (notice) => notice.visible && notice.level !== "warning",
+          )?.message ||
           weaveExport.error ||
           null,
         progress: outputState.applyButton.progress || weaveExport.progress,

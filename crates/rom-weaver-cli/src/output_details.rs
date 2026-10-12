@@ -36,6 +36,37 @@ impl CliApp {
         report.details = Some(Value::Object(details));
     }
 
+    /// Patch handlers append their warnings to the report label as
+    /// `; warning=<text>`, which the terminal never shows. Copy them into the
+    /// report's `warnings` list so every output mode surfaces them. Call it on
+    /// a handler's own report, before the CLI appends other label segments.
+    pub(super) fn lift_handler_label_warnings(report: &mut OperationReport) {
+        let Some((_, tail)) = report.label.split_once("; warning=") else {
+            return;
+        };
+        let warnings = tail
+            .split("; warning=")
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        Self::append_report_warnings(report, warnings);
+    }
+
+    /// The strings in a report's `details.warnings`.
+    pub(super) fn report_warnings(report: &OperationReport) -> Vec<String> {
+        report
+            .details
+            .as_ref()
+            .and_then(|details| details.get("warnings"))
+            .and_then(Value::as_array)
+            .map(|entries| {
+                entries
+                    .iter()
+                    .filter_map(|entry| entry.as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     pub(super) fn attach_emitted_files_details(
         report: OperationReport,
         emitted_files: Vec<PathBuf>,

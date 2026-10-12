@@ -55,7 +55,7 @@ scoop bucket add rom-weaver https://github.com/rom-weaver/scoop-bucket
 scoop install rom-weaver
 ```
 
-Scoop stores the generated manpages under the app directory's `docs\\man` folder. Find that directory with `scoop prefix rom-weaver`; Windows has no standard manpath.
+Scoop stores the generated manpages under the app directory's `docs\man` folder. Find that directory with `scoop prefix rom-weaver`; Windows has no standard manpath.
 
 ## Install script (macOS, Linux)
 

@@ -228,7 +228,16 @@ impl NodHandlerCore {
                     format!("{path_error}; stream fallback open failed: {stream_open_error}")
                 })?;
                 NodDiscReader::new_from_non_cloneable_read(file, &fallback_options).map_err(
-                    |stream_error| format!("{path_error}; stream fallback failed: {stream_error}"),
+                    |stream_error| {
+                        let stream_error = stream_error.to_string();
+                        let path_error = path_error.to_string();
+                        // Both attempts usually fail identically; report that once.
+                        if stream_error == path_error {
+                            path_error
+                        } else {
+                            format!("{path_error}; stream fallback failed: {stream_error}")
+                        }
+                    },
                 )
             }
             Err(path_error) => Err(path_error.to_string()),
@@ -510,7 +519,7 @@ impl NodHandlerCore {
     ) -> Result<&'a Path> {
         if request.inputs.len() != 1 {
             return Err(RomWeaverError::Validation(format!(
-                "{} create currently requires exactly one input file",
+                "{} create currently requires exactly one input file; pass one disc image (such as .iso, .gcm, or .rvz)",
                 self.format_name()
             )));
         }
@@ -548,9 +557,10 @@ impl NodHandlerCore {
             .open_disc_from_path_or_stream(input, &read_options)
             .map_err(|error| {
                 RomWeaverError::Validation(format!(
-                    "failed to open input `{}` for {} create: {error}",
+                    "failed to open input `{}` for {} create: {error}{}",
                     input.display(),
-                    self.format_name()
+                    self.format_name(),
+                    unknown_disc_hint(&error)
                 ))
             })?;
 
@@ -612,9 +622,10 @@ impl NodHandlerCore {
             .open_disc_from_path_or_stream(input, &read_options)
             .map_err(|error| {
                 RomWeaverError::Validation(format!(
-                    "failed to open input `{}` for {} create: {error}",
+                    "failed to open input `{}` for {} create: {error}{}",
                     input.display(),
-                    self.format_name()
+                    self.format_name(),
+                    unknown_disc_hint(&error)
                 ))
             })?;
 
@@ -716,3 +727,12 @@ macro_rules! nod_extract_only_handler {
 }
 
 pub(crate) use nod_extract_only_handler;
+
+/// Hint appended when a create input is not a disc image the nod reader recognizes.
+fn unknown_disc_hint(error: &str) -> &'static str {
+    if error.contains("Unknown disc format") {
+        "; the input must be a GameCube or Wii disc image"
+    } else {
+        ""
+    }
+}

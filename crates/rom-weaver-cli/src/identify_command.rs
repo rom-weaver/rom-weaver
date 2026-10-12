@@ -1000,7 +1000,10 @@ impl CliApp {
             threads,
         });
         if checksum_report.status != OperationStatus::Succeeded {
+            // Report the failure as identify's own, not the hashing step's.
             checksum_report.stage = "identify".to_string();
+            checksum_report.family = OperationFamily::Command;
+            checksum_report.format = Some("identify".to_string());
             return checksum_report;
         }
 
@@ -1709,6 +1712,7 @@ struct IdentifyPackSelection {
 fn identify_unknown_condition(
     missing_platforms: &[String],
     selected: &[SelectedPack],
+    platform_routed: bool,
 ) -> (Option<String>, Option<String>) {
     if let Some(platform) = missing_platforms.first() {
         return (
@@ -1718,6 +1722,11 @@ fn identify_unknown_condition(
                  identify database, or pass `--database-dir` with an existing one"
             )),
         );
+    }
+    // Without a detected or requested platform every pack is searched, so a CD
+    // pack in the set says nothing about this input.
+    if !platform_routed {
+        return (None, None);
     }
     if let Some(selected) = selected.iter().find(|selected| {
         let IdentifyPackFile::V1(pack) = &selected.pack.file;
@@ -1772,7 +1781,11 @@ fn identify_input_report(
     };
 
     let (condition, hint) = if status == IdentifyStatus::Unknown {
-        identify_unknown_condition(&missing_platforms, &selected)
+        identify_unknown_condition(
+            &missing_platforms,
+            &selected,
+            !platform_candidates.is_empty(),
+        )
     } else {
         (None, None)
     };

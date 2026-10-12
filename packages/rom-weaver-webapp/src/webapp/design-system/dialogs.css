@@ -982,6 +982,8 @@
   display: inline-flex;
   gap: var(--sp-s);
   align-items: center;
+  font-size: 0.8rem;
+  color: var(--ink-2);
 }
 .rw-app .srange-head {
   display: flex;

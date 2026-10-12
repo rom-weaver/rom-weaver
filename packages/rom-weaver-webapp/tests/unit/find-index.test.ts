@@ -32,6 +32,7 @@ const TABS = [
     label: "Trim ROM",
     placement: "more" as const,
   },
+  { beta: true, group: "roms" as const, href: "save-editor", icon: null, id: "save-editor", label: "Save Editor" },
 ];
 
 const GUIDES = [
@@ -60,13 +61,14 @@ beforeEach(() => {
 describe("createFindIndex", () => {
   it("lists tools then app surfaces for browsing, and every setting for search", () => {
     const index = createFindIndex(sources);
-    expect(index.browse.map((entry) => entry.id).slice(0, 7)).toEqual([
+    expect(index.browse.map((entry) => entry.id).slice(0, 8)).toEqual([
       "tool:patcher",
       "tool:weave",
       "tool:creator",
       "tool:identify",
       "tool:test",
       "tool:trim",
+      "tool:save-editor",
       "app:settings",
     ]);
     expect(index.browse.some((entry) => entry.kind === "setting")).toBe(false);
@@ -104,6 +106,17 @@ describe("searchFind", () => {
       kind: "tool",
       hint: "Identify a ROM file or paste a CRC32, MD5, or SHA-1 checksum to search the local ROM database. Find known dump names, regions, and revisions. Find games also searches by name or checksum.",
     });
+  });
+
+  it("finds the Save Editor tool by its name and by the keyword saves", () => {
+    const index = createFindIndex(sources, GUIDES);
+    for (const query of ["save editor", "saves"]) {
+      expect(searchFind(index, query)[0]?.entry).toMatchObject({
+        id: "tool:save-editor",
+        label: "Save Editor",
+        kind: "tool",
+      });
+    }
   });
 
   it("maps browser and CLI command aliases to the matching tool or guide", () => {
@@ -211,5 +224,13 @@ describe("loadIdentifyFindEntries", () => {
     await expect(loadIdentifyFindEntries("3337ec460", "Identify ROM")).resolves.toEqual([]);
     expect(identifyMocks.lookupExpectedRom).not.toHaveBeenCalled();
     expect(identifyMocks.searchExpectedRomTitles).not.toHaveBeenCalled();
+  });
+});
+
+describe("Compress tool search", () => {
+  it('is named Compress but still found by the "convert" keyword', () => {
+    const compress = { href: "compress", icon: null, id: "compress", label: "Compress" };
+    const index = createFindIndex({ ...sources, tabs: [...TABS, compress] });
+    expect(searchFind(index, "convert")[0]?.entry).toMatchObject({ id: "tool:compress", label: "Compress" });
   });
 });

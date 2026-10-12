@@ -104,6 +104,8 @@ type RuntimeWorkerOutput = {
   timing?: PublicOutput["timing"];
   trackNumber?: number;
   trimSizeSummary?: TrimResult["sizeSummary"];
+  /** Handler warnings the worker run reported. */
+  warnings?: string[];
 };
 
 type RuntimeWorkerIo = {

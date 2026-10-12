@@ -109,6 +109,7 @@ type LocalPatcherSessionState = {
   completedApplyTimeMs: number | null;
   completedCompressionTimeMs: number | null;
   completedSizeSummary: ReturnType<typeof createOutputSizeSummary>;
+  completedWarnings: string[];
   failureMessage: string;
   inputStaging: boolean;
   outputErrorMessage: string;

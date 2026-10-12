@@ -23,6 +23,11 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.rw-app .notice.info {
+  color: var(--ink);
+  background: var(--plate-2);
+  border: 1px solid var(--seam);
+}
 .rw-app .notice.warn {
   color: var(--ink);
   background: color-mix(in oklab, var(--care) 12%, var(--plate-2));

@@ -56,7 +56,7 @@ Each card shows the selected file, size, detected system, and checksums. Open **
   <figcaption>Original is the clean starting file. Modified is the result your patch must rebuild.</figcaption>
 </figure>
 
-If rom-weaver asks you to choose a file from an archive, stop and make sure you are comparing the ROM entries, not readmes, save files, or different disc tracks.
+If both files have identical contents, Create warns that the patch would change nothing; check that you chose the right pair. If rom-weaver asks you to choose a file from an archive, stop and make sure you are comparing the ROM entries, not readmes, save files, or different disc tracks.
 
 ## Use cheat codes instead of a Modified ROM
 
@@ -83,7 +83,7 @@ The format list in Create only offers formats rom-weaver can make for the files 
 
 1. Enter a patch filename without an extension.
 2. Select the patch format.
-3. Open **Options** only when the chosen format has metadata or compression settings you need.
+3. Open **Options** when you need metadata or compression settings. The download is a ZIP archive by default; set **Type** to **None** to get the bare patch file.
 4. Choose **CREATE & DOWNLOAD PATCH**.
 5. Save the browser download somewhere separate from your working files.
 
