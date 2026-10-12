@@ -247,6 +247,19 @@ describe("the workbench shell", () => {
     expect(assign).toHaveBeenCalledWith("/rom-weaver/docs");
   });
 
+  it("renders the not-found page in the browser locale", async () => {
+    const languages = vi.spyOn(window.navigator, "languages", "get").mockReturnValue(["de"]);
+    await preloadCatalog("de");
+    try {
+      const { container } = await renderRoot({ notFound: true });
+
+      expect(container.querySelector("#not-found-title")?.getAttribute("aria-label")).toBe("404: Seite nicht gefunden");
+      expect(container.querySelector(".not-found-docs")?.textContent).toBe("Dokumentation durchsuchen");
+    } finally {
+      languages.mockRestore();
+    }
+  });
+
   it("routes a not-found tab click to a full page load", async () => {
     const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
     const { container } = await renderRoot({ notFound: true });
