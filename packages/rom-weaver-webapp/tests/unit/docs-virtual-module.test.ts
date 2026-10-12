@@ -178,6 +178,26 @@ describe("docs virtual payload round trips", () => {
     expect(loaded.html).toBe(html);
   });
 
+  it("preserves heading and document links with literal token-like title text", async () => {
+    const icon = '<svg class="docs-section-link-icon"><path d="test"/></svg>';
+    const title = "0 $& $' \\ \u2028 \u2029 日本語";
+    const html = `<h2 id="heading"><a class="docs-section-link" href="/docs/guide#heading">${icon}<span class="docs-section-title">${title}</span></a></h2><p><a href="/docs/other?q=1#part">1</a></p>`;
+    const plugin = docsVirtualModule([{ ...route("docs"), html }]);
+    const shared = plugin.load.handler.call(null, "\0virtual:rom-weaver-docs-html") as string;
+    const source = plugin.load.handler.call(null, `${PAGE_ID_PREFIX}docs`) as string;
+    expect(source).not.toContain("docs-section-link");
+    expect(source).not.toContain("/docs/");
+    const sharedModule = await load(shared);
+    expect(sharedModule.icon).toBe(icon);
+    const loaded = await load(
+      source.replace(
+        '"virtual:rom-weaver-docs-html"',
+        JSON.stringify(`data:text/javascript,${encodeURIComponent(shared)}`),
+      ),
+    );
+    expect(loaded.html).toBe(html);
+  });
+
   it("splits exact icon occurrences without interpreting surrounding literals", async () => {
     const icon = '<svg class="docs-section-link-icon"><path d="test"/></svg>';
     const html = `${icon}$& $' \\ \u2028 \u2029 \${placeholder}</script>${icon}<svg class="other">different</svg>${icon}`;
