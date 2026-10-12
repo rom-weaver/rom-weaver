@@ -876,7 +876,7 @@ msgstr "Basis-ROM"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.cliItem3"
-msgstr "Verarbeite einen ganzen Ordner im Stapel: komprimiere, prüfe und patche in einem Durchlauf."
+msgstr "Skripte für Stapelverarbeitung: komprimiere, prüfe und patche per Kommandozeile."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1086,7 +1086,7 @@ msgstr "chd, rvz und z3ds werden vor dem Patchen in Rohformate dekomprimiert."
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.home.routeDiscBody"
-msgstr "Komprimiere zwischen Disc-Formaten oder extrahiere eine CHD als ISO oder BIN/CUE."
+msgstr "Komprimiere ein Disc-Image in ein anderes Format neu oder extrahiere eine CHD als ISO oder BIN/CUE."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
