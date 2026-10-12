@@ -460,6 +460,7 @@
 }
 .rw-app .related-row {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--sp-m);
   align-items: center;
   width: 100%;
@@ -503,7 +504,7 @@
 }
 .rw-app .related-kind {
   flex: none;
-  width: 6ch;
+  min-width: 6ch;
   font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
