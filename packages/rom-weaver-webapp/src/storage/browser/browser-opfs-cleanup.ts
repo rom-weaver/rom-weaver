@@ -17,7 +17,8 @@ const EMULATOR_RETENTION_OPFS_PATH = "/work/runtime-output/emulator";
 const logger = createLogger("browser-opfs-cleanup");
 // A reload while work runs leaves the previous page's workers holding sync access handles for a moment, so
 // removeEntry fails with NoModificationAllowedError. The proxy worker already retries; what is still locked
-// then belongs to a dying page and the next boot sweeps it.
+// then belongs to a dying page and the next boot sweeps it. Match the DOMException name (every engine);
+// the text pattern is a fallback for stacks that carry only the Chromium-style "Name: message" prefix.
 const BUSY_REMOVE_PATTERN = /NoModificationAllowedError|modifications are not allowed/i;
 let bootCleanupPromise: Promise<void> | null = null;
 
@@ -32,7 +33,8 @@ const resetBrowserTransientOpfs = async (
       const response = await requestBrowserOpfsStorage({ action: "remove", filePath });
       if (response.success) return;
       const message = response.error?.message || `Unable to remove OPFS path: ${filePath}`;
-      if (options.skipBusy && BUSY_REMOVE_PATTERN.test(message)) {
+      const busy = response.error?.name === "NoModificationAllowedError" || BUSY_REMOVE_PATTERN.test(message);
+      if (options.skipBusy && busy) {
         logger.debug("Skipped locked OPFS path during cleanup", { filePath });
         return;
       }

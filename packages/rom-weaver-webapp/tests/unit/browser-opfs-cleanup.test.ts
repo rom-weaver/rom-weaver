@@ -50,6 +50,19 @@ describe("browser OPFS cleanup", () => {
     await expect(resetBrowserTransientOpfs()).rejects.toThrow(/Modifications are not allowed/);
   });
 
+  it("recognizes a locked entry by error name when the message has no Chromium prefix", async () => {
+    requestBrowserOpfsStorage.mockImplementation(async (request) =>
+      request?.filePath === "/work/temp"
+        ? {
+            error: { message: "The object can not be modified in this way.", name: "NoModificationAllowedError" },
+            success: false,
+          }
+        : { success: true },
+    );
+    await expect(resetBrowserTransientOpfs({ skipBusy: true })).resolves.toBeUndefined();
+    await expect(resetBrowserTransientOpfs()).rejects.toThrow("can not be modified");
+  });
+
   it("still rejects boot cleanup for non-lock failures", async () => {
     requestBrowserOpfsStorage.mockImplementation(async () => ({
       error: { message: "quota exceeded" },
