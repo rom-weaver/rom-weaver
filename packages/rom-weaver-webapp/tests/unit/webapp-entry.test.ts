@@ -37,7 +37,6 @@ const mocks = vi.hoisted(() => ({
     title: "Loaded service worker cache version",
     updateLabel: "Reload to update",
     updateReady: false,
-    updateTitle: "A newer app version is ready.",
   } as ServiceWorkerCacheState,
   serviceWorkerClient: {
     forceCacheAndReload: vi.fn(() => Promise.resolve(true)),
@@ -206,7 +205,6 @@ beforeEach(() => {
     title: "Loaded service worker cache version",
     updateLabel: "Reload to update",
     updateReady: false,
-    updateTitle: "A newer app version is ready.",
   };
   consoleSpies = (["debug", "error", "info", "log", "warn"] as const).map((method) =>
     vi.spyOn(console, method).mockImplementation(() => undefined),

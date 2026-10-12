@@ -99,7 +99,6 @@ const createServiceWorkerCacheState = () => ({
   title: "",
   updateLabel: "Reload to update",
   updateReady: false,
-  updateTitle: "",
 });
 
 const createWebappState = (settings = getDefaultSettings(), currentView = "patcher") => ({
