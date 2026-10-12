@@ -9,6 +9,7 @@ import { RomWeaverError } from "../errors.ts";
 import { BaseWorkflowController, type BaseWorkflowSnapshot, type SourceValidator } from "./base-workflow-controller.ts";
 import { cloneValue, getSourceFileName, getSourceSize } from "./controller-utils.ts";
 import type { SharedParentCompression } from "./staged-source-types.ts";
+import { createSelectionSkippedError, isInteractiveSelectionCancelledError } from "./staged-source-selection.ts";
 import { cloneChecksumVariants } from "./staged-source-checksums.ts";
 
 type ChecksumWorkflowSourceStatus = "empty" | "failed" | "loading" | "needsSelection" | "ready";
@@ -135,26 +136,31 @@ class ChecksumWorkflowController<TSource> extends BaseWorkflowController<
       autoExtract: this.autoExtract,
       fileName: input.fileName,
     });
-    const result = await this.runtime.checksum.run({
-      algorithms: [...new Set([...Object.keys(known?.checksums || {}), ...algorithms])],
-      autoExtract: this.autoExtract,
-      fileName: getSourceFileName(this.source, "input.bin"),
-      logLevel: this.settings.logging?.level,
-      onLog: this.settings.logging?.sink,
-      onProgress: (event) =>
-        this.emitProgress({
-          details: { fileName: input.fileName, sourceId: input.id, size: input.size },
-          id: `${this.id}:input:checksum`,
-          label: event.label || event.message || "Calculating checksums...",
-          percent: event.percent,
-          role: "input",
-          stage: "checksum",
-          workflow: "checksum",
-        }),
-      signal: this.abortController.signal,
-      source: this.source,
-      threads: this.settings.workers?.threads,
-    });
+    const result = await this.runtime.checksum
+      .run({
+        algorithms: [...new Set([...Object.keys(known?.checksums || {}), ...algorithms])],
+        autoExtract: this.autoExtract,
+        fileName: getSourceFileName(this.source, "input.bin"),
+        logLevel: this.settings.logging?.level,
+        onLog: this.settings.logging?.sink,
+        onProgress: (event) =>
+          this.emitProgress({
+            details: { fileName: input.fileName, sourceId: input.id, size: input.size },
+            id: `${this.id}:input:checksum`,
+            label: event.label || event.message || "Calculating checksums...",
+            percent: event.percent,
+            role: "input",
+            stage: "checksum",
+            workflow: "checksum",
+          }),
+        signal: this.abortController.signal,
+        source: this.source,
+        threads: this.settings.workers?.threads,
+      })
+      .catch((error: unknown) => {
+        if (isInteractiveSelectionCancelledError(error)) throw createSelectionSkippedError(error);
+        throw error;
+      });
     input.files = [
       {
         checksums: result.checksums,

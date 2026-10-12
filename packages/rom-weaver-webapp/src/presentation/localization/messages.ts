@@ -1495,7 +1495,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.identify.noMatchBody": msg({
     id: "ui.identify.noMatchBody",
     message:
-      "These checksums are not in the identification data. Unknown does not mean corrupt: the ROM may be homebrew, modified, an unlisted revision, or from a system the data does not cover. Its checksums are on the card below so you can look them up elsewhere.",
+      "Not in the identification data. Unknown does not mean corrupt: it may be homebrew, modified, or an unlisted revision. Its checksums are below.",
   }),
   "ui.identify.noMatchLink": msg({ id: "ui.identify.noMatchLink", message: "About unknown results" }),
   "ui.identify.noMatchTitle": msg({ id: "ui.identify.noMatchTitle", message: "No match." }),

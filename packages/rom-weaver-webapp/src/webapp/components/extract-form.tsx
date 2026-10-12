@@ -15,7 +15,9 @@ import { describeAgentSource, useAgentWorkflow } from "../agent/workflow-registr
 type ExtractFormProps = { pageDrop?: PageFileDrop | null };
 type ProgressState = { label: string; percent: number | null };
 
-const ONE_FILE_ERROR = "Add one file at a time.";
+// Extract opens one archive per run, so extra files are named instead of silently dropped.
+const skippedNotice = (used: File, skipped: string[]): string =>
+  `Extract opens one archive per run: only ${used.name} was used; ${skipped.join(", ")} ${skipped.length === 1 ? "was" : "were"} skipped.`;
 const outputPath = (output: PublicOutput): string => output.relativePath || output.fileName;
 const isChd = (file: File): boolean => /\.chd$/i.test(file.name);
 const binCount = (entries: { filename: string }[]): number =>
@@ -66,6 +68,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
   const [zipProgress, setZipProgress] = useState<ProgressState | null>(null);
   const [splitPrompt, setSplitPrompt] = useState<File | null>(null);
   const [error, setError] = useState("");
+  const [skipped, setSkipped] = useState<string[]>([]);
   const outputRef = useRef<PublicOutput[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const zipAbortRef = useRef<AbortController | null>(null);
@@ -189,10 +192,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
       setSplitPrompt(null);
       setProgress(null);
       setSource(file);
-      if (files.length > 1) {
-        setError(ONE_FILE_ERROR);
-        return;
-      }
+      setSkipped(files.slice(1).map((extra) => extra.name));
       void startExtract(file);
     },
     [clearOutputs, downloadBusy, startExtract],
@@ -272,7 +272,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
     }
   };
 
-  const canRetry = !(busy || outputs.length || splitPrompt) && error !== ONE_FILE_ERROR;
+  const canRetry = !(busy || outputs.length || splitPrompt);
   const totalBytes = outputs.reduce((sum, output) => sum + output.size, 0);
   useAgentWorkflow("extract", {
     getState: () => ({
@@ -282,6 +282,7 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
       progress,
       downloadProgress: zipProgress,
       error: error || null,
+      skippedFiles: skipped,
       splitChoiceRequired: !!splitPrompt,
       outputs: outputs.map((output) => ({
         id: output.path,
@@ -384,6 +385,11 @@ const ExtractForm = ({ pageDrop }: ExtractFormProps) => {
       ) : (
         <GhostSteps steps={[{ num: "0x02", title: "Files" }]} />
       )}
+      {source && skipped.length ? (
+        <Notice level="warn" onDismiss={() => setSkipped([])}>
+          {skippedNotice(source, skipped)}
+        </Notice>
+      ) : null}
       {error ? (
         <Notice level="error" onDismiss={() => setError("")}>
           {error}
