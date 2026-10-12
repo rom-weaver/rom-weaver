@@ -13,10 +13,14 @@ const logger = createLogger("drop-destination");
 /** The workflows a drop can be sent to. Ids match `WebappView`. */
 type DropDestination = "creator" | "patcher" | "test";
 
+type DropFileKind = "patch" | "rom" | "save" | "unknown";
+
 type DropCounts = {
   patches: number;
   /** Files with a known ROM or container name, cue/gdi tracks folded into their sheet. */
   roms: number;
+  /** Raw battery saves (`.sav`, `.srm`…), which Test loads alongside their ROM. */
+  saves: number;
   /** Files no extension matched; the workflows stage them as inputs. */
   unknown: number;
 };
@@ -45,6 +49,8 @@ type DropRedirect = {
   to: DropDestination;
 };
 
+/** Matches the raw saves the Save editor reads; wrapped formats need its conversion first. */
+const SAVE_NAME = /\.(?:sav|srm|sra|eep|fla|mpk|mcr|mcd)$/i;
 const SHEET_NAME = /\.(?:cue|gdi)$/i;
 const TRACK_NAME = /\.(?:bin|raw)$/i;
 
@@ -53,13 +59,16 @@ const baseName = (name: string) => name.split(/[\\/]/).pop() || name;
 /** `translation.bps.zip` → true: the archive's own name says what it carries. */
 const isPatchArchiveName = (name: string) => isPatchFileName(baseName(name).replace(/\.[^.]+$/, ""));
 
-const classifyDropEntry = (entry: DropEntry): "patch" | "rom" | "unknown" => {
+const isSaveFileName = (name: string) => SAVE_NAME.test(name);
+
+const classifyDropEntry = (entry: DropEntry): DropFileKind => {
   if (isWeaveFileName(entry.name) || isPatchFileName(entry.name)) return "patch";
   if (isArchiveFileName(entry.name)) {
     if (entry.archiveBucket) return entry.archiveBucket;
     return isPatchArchiveName(entry.name) ? "patch" : "rom";
   }
-  return isRomFileName(entry.name) ? "rom" : "unknown";
+  if (isRomFileName(entry.name)) return "rom";
+  return isSaveFileName(entry.name) ? "save" : "unknown";
 };
 
 /**
@@ -67,11 +76,12 @@ const classifyDropEntry = (entry: DropEntry): "patch" | "rom" | "unknown" => {
  * is one ROM, so `.bin`/`.raw` tracks stop counting once a sheet is present.
  */
 const countDropEntries = (entries: readonly DropEntry[]): DropCounts => {
-  const counts: DropCounts = { patches: 0, roms: 0, unknown: 0 };
+  const counts: DropCounts = { patches: 0, roms: 0, saves: 0, unknown: 0 };
   const hasSheet = entries.some((entry) => SHEET_NAME.test(entry.name));
   for (const entry of entries) {
     const kind = classifyDropEntry(entry);
     if (kind === "patch") counts.patches += 1;
+    else if (kind === "save") counts.saves += 1;
     else if (kind === "unknown") counts.unknown += 1;
     else if (!(hasSheet && TRACK_NAME.test(entry.name) && !isArchiveFileName(entry.name))) counts.roms += 1;
   }
@@ -84,18 +94,20 @@ const countDropEntries = (entries: readonly DropEntry[]): DropCounts => {
  * because every candidate workflow stages them as inputs.
  *
  * - patches only, or one ROM with patches → Apply
+ * - one ROM with a save → Test, which loads the save with it
  * - one ROM → Apply or Test
  * - two or more ROMs → Create
  * - two or more ROMs with patches → Create or Apply, flagged as mixed
  */
-const planDropDestinations = ({ patches, roms, unknown }: DropCounts): DropPlan => {
+const planDropDestinations = ({ patches, roms, saves, unknown }: DropCounts): DropPlan => {
   const inputs = roms + unknown;
   let plan: DropPlan;
   if (inputs === 0) plan = { destinations: patches ? ["patcher"] : [], mixed: false };
+  else if (inputs === 1 && patches === 0 && saves > 0) plan = { destinations: ["test"], mixed: false };
   else if (inputs === 1) plan = { destinations: patches ? ["patcher"] : ["patcher", "test"], mixed: false };
   else if (patches === 0) plan = { destinations: ["creator"], mixed: false };
   else plan = { destinations: ["creator", "patcher"], mixed: true };
-  logger.trace("planned drop destinations", { inputs, patches, ...plan });
+  logger.trace("planned drop destinations", { inputs, patches, saves, ...plan });
   return plan;
 };
 
@@ -114,20 +126,25 @@ const planDropRedirect = (view: string, { patches, roms }: DropCounts): DropRedi
   return redirect;
 };
 
-/** Files a workflow that takes no patches can still use when the visitor keeps the drop there. */
-const withoutPatchFiles = <TFile extends { name: string }>(files: readonly TFile[]): TFile[] =>
-  files.filter((file) => classifyDropEntry({ name: file.name }) !== "patch");
+const USABLE_KINDS: Record<string, readonly DropFileKind[]> = {
+  creator: ["rom", "unknown"],
+  patcher: ["patch", "rom", "unknown"],
+  test: ["rom", "save", "unknown"],
+  trim: ["rom", "unknown"],
+};
+
+/**
+ * Whether `view` can use a dropped file. A workflow that cannot is still handed
+ * the file when the visitor asks for it; this only decides what starts checked.
+ */
+const isUsableDropFile = (view: string, name: string) =>
+  (USABLE_KINDS[view] ?? USABLE_KINDS.patcher)?.includes(classifyDropEntry({ name })) ?? true;
 
 export {
+  classifyDropEntry,
   countDropEntries,
-  isPatchArchiveName,
+  isSaveFileName,
+  isUsableDropFile,
   planDropDestinations,
   planDropRedirect,
-  withoutPatchFiles,
-  type DropCounts,
-  type DropDestination,
-  type DropEntry,
-  type DropPlan,
-  type DropRedirect,
-  type DropRedirectReason,
 };

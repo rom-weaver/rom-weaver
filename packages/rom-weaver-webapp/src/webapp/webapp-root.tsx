@@ -44,10 +44,17 @@ import { RomWeaverSettingsProvider } from "../public/react/settings-context.tsx"
 import { setActiveSelectionForm } from "../public/react/input-selection-handler.ts";
 import type { RomLookupResult, RomLookupResultRequest, RomLookupSelection } from "../public/react/use-rom-lookup.ts";
 import { useUiLocalizer } from "../public/react/settings-context.tsx";
+import {
+  countDropEntries,
+  isUsableDropFile,
+  planDropDestinations,
+  planDropRedirect,
+} from "../public/react/drop-destination.ts";
 import { scheduleBrowserRuntimePreload } from "./browser-runtime-preload.ts";
 import { CHANNEL_BADGE } from "./build-channel.ts";
 import { readAppBaseUrl } from "./webapp-controller.ts";
 import { APP_BUILD_VERSION, APP_VERSION, COMMITS_SINCE_VERSION, DIRTY_HASH } from "./build-version.ts";
+import type { DropRouteRequest } from "./components/drop-route-dialog.tsx";
 import { RelatedStrip } from "./components/related-strip.tsx";
 import { Masthead, UpdateBanner } from "./components/shell.tsx";
 import type { WorkflowTab } from "./components/shell.tsx";
@@ -199,6 +206,10 @@ const appPathHref = (href: string, appBaseUrl: string): string =>
 // the masthead and idle post-boot preload can fetch the same promise.
 const LogDialog = lazy(loadLogDialog);
 const SettingsPanel = lazy(loadSettingsPanel);
+// Only a drop that could go to more than one place opens it, so it stays out of the entry chunk.
+const DropRouteDialog = lazy(() =>
+  import("./components/drop-route-dialog.tsx").then((module) => ({ default: module.DropRouteDialog })),
+);
 type BrowserApiModule = typeof import("../platform/browser/browser-api.ts");
 const preloadBrowserRuntime = (options: Parameters<BrowserApiModule["preloadBrowserRuntime"]>[0] = {}) =>
   import("../platform/browser/browser-api.ts").then(({ preloadBrowserRuntime: preload }) => preload(options));
@@ -481,6 +492,7 @@ function WebappRoot({
   currentViewRef.current = state.currentView;
   const [pageDrop, setPageDrop] = useState<WebappRootPageDrop | null>(null);
   const pageDropIdRef = useRef(0);
+  const [dropRoute, setDropRoute] = useState<DropRouteRequest | null>(null);
   const threads = state.settings.threads;
   const threadCount = resolveThreads(threads);
   useLayoutEffect(() => notifyGuidedSampleView(state.currentView), [state.currentView]);
@@ -617,6 +629,35 @@ function WebappRoot({
     },
     [actions, urlSession?.request?.kind],
   );
+  // Hands a routed drop to its workflow exactly like a page-level drop on that tab.
+  const deliverDrop = useCallback(
+    (view: WebappView, files: File[]) => {
+      setDropRoute(null);
+      if (!files.length) return;
+      logger.debug("delivering routed drop", { count: files.length, from: currentViewRef.current, view });
+      if (currentViewRef.current !== view) handleSelectTab(view);
+      pageDropIdRef.current += 1;
+      setPageDrop({ drop: { files, id: pageDropIdRef.current }, view });
+    },
+    [handleSelectTab],
+  );
+  // The landing page has no workflow of its own: a drop or a picked file goes
+  // straight to the one workflow that fits, or asks when several do or when the
+  // fit would leave files behind.
+  const routeHomeFiles = useCallback(
+    (files: File[]) => {
+      const plan = planDropDestinations(countDropEntries(files.map((file) => ({ name: file.name }))));
+      const [only] = plan.destinations;
+      if (!only) return;
+      if (plan.destinations.length === 1 && files.every((file) => isUsableDropFile(only, file.name))) {
+        deliverDrop(only, files);
+        return;
+      }
+      pageDropIdRef.current += 1;
+      setDropRoute({ files, from: "home", id: pageDropIdRef.current });
+    },
+    [deliverDrop],
+  );
   useEffect(
     () =>
       subscribeHostIngest((paths) => {
@@ -681,6 +722,10 @@ function WebappRoot({
           names: files.map((file) => file.name),
           source: "page",
         });
+        if (droppedView === "home") {
+          routeHomeFiles(files);
+          return;
+        }
         pageDropIdRef.current += 1;
         setPageDrop({
           drop: {
@@ -691,10 +736,29 @@ function WebappRoot({
         });
       });
     };
+    // A workflow that cannot use a drop offers the one that can. This runs in
+    // the capture phase, ahead of the tab's own drop zones, and only claims the
+    // drop when the file names alone already call for a redirect.
+    const handleRedirectDrop = (event: DragEvent) => {
+      if (!(event.dataTransfer && isFileDragTransfer(event.dataTransfer))) return;
+      if (logOpen || state.settingsDialogOpen || confirmationDialog.open || agentApprovalDialog?.state.open) return;
+      const names = Array.from(event.dataTransfer.files, (file) => ({ name: file.name }));
+      if (!planDropRedirect(state.currentView, countDropEntries(names))) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const fromView = state.currentView;
+      void readDataTransferFiles(event.dataTransfer).then((files) => {
+        if (!files.length) return;
+        pageDropIdRef.current += 1;
+        setDropRoute({ files, from: fromView, id: pageDropIdRef.current });
+      });
+    };
     document.addEventListener("dragover", handlePageDragOver);
+    document.addEventListener("drop", handleRedirectDrop, true);
     document.addEventListener("drop", handlePageDrop);
     return () => {
       document.removeEventListener("dragover", handlePageDragOver);
+      document.removeEventListener("drop", handleRedirectDrop, true);
       document.removeEventListener("drop", handlePageDrop);
     };
   }, [
@@ -702,6 +766,7 @@ function WebappRoot({
     confirmationDialog.open,
     logOpen,
     notFound,
+    routeHomeFiles,
     state.currentView,
     state.settingsDialogOpen,
   ]);
@@ -828,7 +893,7 @@ function WebappRoot({
                   // landing page starts a veil's height down the page.
                   <div className="panel" hidden={state.currentView !== "home"}>
                     <Suspense fallback={null}>
-                      <HomePageRoute baseUrl={resolvedAssetBaseUrl} />
+                      <HomePageRoute baseUrl={resolvedAssetBaseUrl} onFiles={routeHomeFiles} />
                     </Suspense>
                   </div>
                 ) : null}
@@ -903,7 +968,10 @@ function WebappRoot({
                   />,
                 )}
                 {workflowPanel("checksum", <ChecksumRouteForm pageDrop={pageDropFor("checksum")} />)}
-                {workflowPanel("test", <EmulatorTestRoute active={state.currentView === "test"} />)}
+                {workflowPanel(
+                  "test",
+                  <EmulatorTestRoute active={state.currentView === "test"} pageDrop={pageDropFor("test")} />,
+                )}
                 {workflowPanel(
                   "trim",
                   <TrimPatchRoute
@@ -982,6 +1050,17 @@ function WebappRoot({
                 </Suspense>
               }
               updateReady={pageUpdate.ready}
+            />
+          </Suspense>
+        ) : null}
+        {dropRoute ? (
+          <Suspense fallback={null}>
+            <DropRouteDialog
+              key={dropRoute.id}
+              labelFor={(view) => WORKFLOW_TABS.find((tab) => tab.id === view)?.label ?? view}
+              onCancel={() => setDropRoute(null)}
+              onDeliver={deliverDrop}
+              request={dropRoute}
             />
           </Suspense>
         ) : null}

@@ -190,7 +190,10 @@ describe("HomePage", () => {
     ]);
     expect(container.querySelector("#home-title")?.textContent).toContain("Online ROM patcher.");
     expect(container.textContent).toContain("Keep your files on your device.");
-    expect(container.querySelector(".home-main-actions .btn.ghost")?.textContent).toContain("Walk through a sample");
+    expect(container.querySelector(".home-main-actions .sample-tutorial-start-chip")?.textContent).toContain(
+      "Walk through a sample",
+    );
+    expect(container.querySelector(".home-drop .home-drop-btn")?.textContent).toContain("Choose files");
     expect(container.querySelector("a[href='/tools/docs/supported-formats']")?.textContent).toContain(
       "See the full tables",
     );
@@ -269,13 +272,27 @@ describe("HomePage", () => {
     expect(container.querySelector(".home-install-doc")?.getAttribute("href")).toBe("/tools/docs/install#npm");
   });
 
+  it("hands picked files to the shell's router", () => {
+    const picked: File[][] = [];
+    const { container } = render(
+      <RomWeaverSettingsProvider settings={{ language: "en" }}>
+        <HomePage baseUrl="https://example.com/" onFiles={(files) => picked.push(files)} />
+      </RomWeaverSettingsProvider>,
+    );
+    const input = container.querySelector<HTMLInputElement>("#home-file-input");
+    expect(input?.multiple).toBe(true);
+    const files = [new File(["rom"], "game.sfc"), new File(["patch"], "hack.ips")];
+    fireEvent.change(input as HTMLInputElement, { target: { files } });
+    expect(picked.map((batch) => batch.map((file) => file.name))).toEqual([["game.sfc", "hack.ips"]]);
+  });
+
   it("falls back to root-relative routes when the base URL is invalid", () => {
     const { container } = render(
       <RomWeaverSettingsProvider settings={{ language: "en" }}>
         <HomePage baseUrl="not a URL" />
       </RomWeaverSettingsProvider>,
     );
-    expect(container.querySelector("a.btn.primary")?.getAttribute("href")).toBe("/apply-patches");
+    expect(container.querySelector(".home-main-actions a.btn")?.getAttribute("href")).toBe("/apply-patches");
     expect(container.querySelector("a[href='/create-patch']")).toBeTruthy();
   });
 
@@ -286,7 +303,7 @@ describe("HomePage", () => {
       </RomWeaverSettingsProvider>,
     );
     expect(container.querySelector("#home-title")?.textContent).toContain("Patche ROMs in deinem Browser.");
-    expect(container.querySelector("a.btn.primary")?.textContent).toContain("Patches anwenden");
+    expect(container.querySelector(".home-main-actions a.btn")?.textContent).toContain("Patches anwenden");
     expect(container.textContent).toContain("Befehlszeile");
 
     rerender(
@@ -295,7 +312,7 @@ describe("HomePage", () => {
       </RomWeaverSettingsProvider>,
     );
     expect(container.querySelector("#home-title")?.textContent).toContain("Aplica parches a ROMs en tu navegador.");
-    expect(container.querySelector("a.btn.primary")?.textContent).toContain("Aplicar parches");
+    expect(container.querySelector(".home-main-actions a.btn")?.textContent).toContain("Aplicar parches");
     expect(container.textContent).toContain("Línea de comandos");
   });
 });

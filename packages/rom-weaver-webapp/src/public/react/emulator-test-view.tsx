@@ -40,6 +40,7 @@ import {
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { loadEmulatorRom } from "./components/emulator-load-rom.ts";
 import { getEmulatorJsAspectRatio, getEmulatorJsCore } from "./components/emulatorjs.ts";
+import { isSaveFileName } from "./drop-destination.ts";
 import { ROM_FILE_EXTENSIONS } from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept.ts";
 import {
@@ -49,6 +50,8 @@ import {
 } from "./emulator-audio-context.ts";
 import { resolveGuidedSampleHref } from "./guided-sample-start.ts";
 import { useRomWeaverAssetBaseUrl, useRomWeaverSettings, useUiLocalizer } from "./settings-context.tsx";
+import type { PageFileDrop } from "./public-types.ts";
+import { usePageDropForwarder } from "./workflow-form-effects.ts";
 import { WORKFLOW_GUIDES } from "./workflow-guides.ts";
 
 const WEBGL2_ERROR = "EmulatorJS testing requires a browser with WebGL 2.";
@@ -110,9 +113,11 @@ const hasActiveUserGesture = () => typeof navigator !== "undefined" && navigator
 type EmulatorTestViewProps = {
   /** False while another workflow tab is shown; the running game pauses until the view returns. */
   active?: boolean;
+  /** Files dropped on the page or routed here from another tab. */
+  pageDrop?: PageFileDrop | null;
 };
 
-const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
+const EmulatorTestView = ({ active = true, pageDrop }: EmulatorTestViewProps) => {
   const { currentGameId, entries } = useEmulatorSession();
   const assetBaseUrl = useRomWeaverAssetBaseUrl();
   const localizer = useUiLocalizer();
@@ -365,7 +370,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
   }, []);
 
   const handleFiles = useCallback(
-    async (files: File[], prepareAudio = true): Promise<boolean> => {
+    async (files: File[], prepareAudio = true, save?: File): Promise<boolean> => {
       const file = files[0];
       if (!file || busy) return false;
       if (!hasWebgl2()) {
@@ -434,6 +439,10 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
           setEmulatorSavePreview(loaded.checksum, staged.bytes);
           restartCurrentGameWithSave(entry.id);
           setPendingSave(undefined);
+        } else if (save) {
+          // A raw save dropped with its ROM loads the same way the Save editor hands one over.
+          setEmulatorSavePreview(loaded.checksum, new Uint8Array(await save.arrayBuffer()));
+          restartCurrentGameWithSave(entry.id);
         } else if (staged) {
           setError({
             detail: staged.romSha1
@@ -460,6 +469,20 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
     },
     [busy],
   );
+  // A drop can carry a ROM and its battery save together; the save rides along with the ROM.
+  const handleDroppedFiles = useCallback(
+    (files: File[]) => {
+      const save = files.find((file) => isSaveFileName(file.name));
+      void handleFiles(
+        files.filter((file) => file !== save && !isSaveFileName(file.name)),
+        true,
+        save,
+      );
+    },
+    [handleFiles],
+  );
+  const handledPageDropIdRef = useRef<number | null>(null);
+  usePageDropForwarder(pageDrop, handleDroppedFiles, handledPageDropIdRef);
 
   const cancelSampleLoad = useCallback(() => {
     const sampleAbortController = sampleAbortControllerRef.current;
@@ -709,7 +732,7 @@ const EmulatorTestView = ({ active = true }: EmulatorTestViewProps) => {
         multiple={false}
         onBrowseStart={() => prepareEmulatorAudioContext()}
         onDropStart={() => prepareEmulatorAudioContext()}
-        onFiles={(files) => void handleFiles(files)}
+        onFiles={handleDroppedFiles}
         onboarding={
           loadProgress ? null : (
             <SampleTutorialStart
