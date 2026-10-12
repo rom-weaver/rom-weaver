@@ -1276,6 +1276,85 @@ fn assert_invalid_stream_output(args: &[&str], output: &std::process::Output) {
     }
 }
 
+// quality-reason: Linux procfs verifies the handler and blocked stdin before signalling.
+#[cfg(target_os = "linux")]
+#[test]
+fn termination_cancels_open_stdin_and_removes_spools() {
+    for signal in [libc::SIGTERM, libc::SIGHUP] {
+        for command in ["compress", "checksum", "probe", "identify", "weave"] {
+            let temp = setup_temp_dir();
+            let output = temp.path().join("output.zip");
+            let mut process = binary();
+            process.env("TMPDIR", temp.path()).stdin(Stdio::piped());
+            match command {
+                "compress" => {
+                    process
+                        .args(["compress", "--input", "-", "--format", "zip", "--output"])
+                        .arg(&output);
+                }
+                "weave" => {
+                    process
+                        .args(["weave", "create", "--from", "-", "--output"])
+                        .arg(&output);
+                }
+                _ => {
+                    process.args([command, "--input", "-"]);
+                }
+            }
+            let mut child = process.spawn().expect("spawn stdin command");
+            child
+                .stdin
+                .as_mut()
+                .expect("open stdin")
+                .write_all(b"partial")
+                .expect("write partial input");
+            let deadline = Instant::now() + Duration::from_secs(10);
+            let proc = PathBuf::from(format!("/proc/{}", child.id()));
+            loop {
+                let status = fs::read_to_string(proc.join("status")).expect("child status");
+                let caught = status
+                    .lines()
+                    .find_map(|line| line.strip_prefix("SigCgt:"))
+                    .and_then(|mask| u64::from_str_radix(mask.trim(), 16).ok())
+                    .unwrap();
+                let wait = fs::read_to_string(proc.join("wchan")).expect("child wait state");
+                if caught & (1 << (signal - 1)) != 0
+                    && (wait.trim() == "pipe_read" || wait.contains("poll"))
+                {
+                    break;
+                }
+                if child.try_wait().expect("child status").is_some() || Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let result = child.wait_with_output().expect("reap stdin command");
+                    panic!("{command} never reached stdin: {result:?}");
+                }
+                thread::sleep(Duration::from_millis(5));
+            }
+            // SAFETY: the child is alive, and these are valid termination signals.
+            assert_eq!(unsafe { libc::kill(child.id() as i32, signal) }, 0);
+            let deadline = Instant::now() + Duration::from_secs(2);
+            let status = loop {
+                if let Some(status) = child.try_wait().expect("wait for cancellation") {
+                    break status;
+                }
+                if Instant::now() >= deadline {
+                    child.kill().expect("stop blocked stdin command");
+                    child.wait().expect("reap blocked stdin command");
+                    panic!("{command} ignored signal {signal} while stdin remained open");
+                }
+                thread::sleep(Duration::from_millis(5));
+            };
+            assert_eq!(status.code(), Some(130), "{command}: {status:?}");
+            assert!(!output.exists(), "cancelled command wrote output");
+            assert_eq!(
+                fs::read_dir(temp.path()).expect("read spool root").count(),
+                0,
+                "{command} left a stdin spool behind"
+            );
+        }
+    }
+}
+
 #[test]
 fn probe_stdin_failure_names_stdin_not_the_staging_file() {
     let mut child = binary()

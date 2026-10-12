@@ -268,7 +268,7 @@ fn run_staged(
         let path = input_dir.join(stdin_name);
         trace!(path = %path.display(), "spooling stream input");
         let mut output = File::create_new(&path)?;
-        copy_cancelable(&mut io::stdin().lock(), &mut output)?;
+        crate::stdin_input::copy_stdin(&mut output)?;
         drop(output);
         match &mut command {
             Commands::Extract(args) => args.input = path,
