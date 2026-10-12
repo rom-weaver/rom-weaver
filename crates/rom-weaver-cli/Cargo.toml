@@ -60,7 +60,7 @@ same-file.workspace = true
 clap_complete = "4.5"
 clap_mangen = "0.3.0"
 # Ctrl-C -> cancellation token. Tiny, one platform shim dependency each side.
-ctrlc = "3.5"
+ctrlc = { version = "3.5", features = ["termination"] }
 # Light interactive prompts for `apply --tui`; built on `console`, already in
 # the tree via indicatif. default-features off drops editor/password/fuzzy.
 dialoguer = { version = "0.12", default-features = false }
@@ -72,6 +72,10 @@ tracing-subscriber.workspace = true
 ureq = { version = "3", default-features = false, features = ["rustls"] }
 quick-xml = { version = "0.42", features = ["serialize"] }
 tar.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+# Restore an inherited SIG_IGN (nohup) after ctrlc's termination handler overwrites it.
+libc.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tracing-subscriber = { version = "0.3.20", default-features = false, features = ["fmt", "std"] }

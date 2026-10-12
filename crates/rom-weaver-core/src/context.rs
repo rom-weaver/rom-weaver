@@ -190,15 +190,46 @@ impl OperationContext {
             temp_root = %temp_root.display(),
             "creating operation context"
         );
+        Self::with_temp_paths(
+            thread_budget,
+            Arc::new(TempPathAllocator::new(temp_root)),
+            progress,
+            cancel,
+        )
+    }
+
+    fn with_temp_paths(
+        thread_budget: ThreadBudget,
+        temp_paths: Arc<TempPathAllocator>,
+        progress: Arc<dyn ProgressSink>,
+        cancel: CancellationToken,
+    ) -> Self {
         Self {
             thread_budget,
-            temp_paths: Arc::new(TempPathAllocator::new(temp_root)),
+            temp_paths,
             progress,
             cancel,
             patch_policy: PatchPolicy::default(),
             operation_pool: Arc::new(Mutex::new(None)),
             seeded_checksums: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    /// Like [`Self::new`], but the temp root is a fresh directory under `temp_parent` that only
+    /// this context uses and that is removed when the context drops.
+    pub fn new_with_private_temp_root(
+        thread_budget: ThreadBudget,
+        temp_parent: &Path,
+        prefix: &str,
+        progress: Arc<dyn ProgressSink>,
+        cancel: CancellationToken,
+    ) -> Self {
+        Self::with_temp_paths(
+            thread_budget,
+            Arc::new(TempPathAllocator::new_private(temp_parent, prefix)),
+            progress,
+            cancel,
+        )
     }
 
     /// Record already-known checksums for `path` (merging into any existing entry) so later
