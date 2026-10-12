@@ -171,6 +171,7 @@ const ChecksumSourceEntry = ({
   expected,
   onSnapshot,
   onRequest,
+  onSelectionSkipped,
   selectFile: selectAny,
   source,
 }: {
@@ -181,6 +182,7 @@ const ChecksumSourceEntry = ({
   onSnapshot: (id: number, snapshot: ChecksumEntrySnapshot) => void;
   /** Reports which source asked for a selection, so skipping that prompt drops only that source. */
   onRequest: (request: CandidateSelectionPrompt, sourceId: number) => void;
+  onSelectionSkipped: (sourceId: number) => void;
   selectFile: (request: CandidateSelectionPrompt) => Promise<CandidateSelectionChoice>;
   source: ChecksumSource;
 }) => {
@@ -244,7 +246,8 @@ const ChecksumSourceEntry = ({
         setInput(workflow.getInput());
         const code = getErrorCode(cause);
         logger.debug("staging failed", { code, fileName: sourceFile.name });
-        if (code !== "WORKFLOW_SELECTION_SKIPPED" && code !== "CANCELLED") showError(cause);
+        if (code === "WORKFLOW_SELECTION_SKIPPED") onSelectionSkipped(sourceId);
+        else if (code !== "CANCELLED") showError(cause);
       } finally {
         workflow.off("progress", handleProgress);
         if (current) {
@@ -259,7 +262,17 @@ const ChecksumSourceEntry = ({
       if (workflowRef.current === workflow) workflowRef.current = null;
       void workflow?.dispose().catch(() => undefined);
     };
-  }, [assetBaseUrl, autoExtract, clearProgressForStage, createProgressHandler, selectFile, showError, sourceFile]);
+  }, [
+    assetBaseUrl,
+    autoExtract,
+    clearProgressForStage,
+    createProgressHandler,
+    selectFile,
+    showError,
+    sourceFile,
+    onSelectionSkipped,
+    sourceId,
+  ]);
 
   // Ids are scoped to the source so two files that both name their entry "input" never collide.
   const files = useMemo(
@@ -281,7 +294,9 @@ const ChecksumSourceEntry = ({
     } catch (cause) {
       if (workflowRef.current === workflow) {
         setInput(workflow.getInput());
-        if (getErrorCode(cause) !== "CANCELLED") showError(cause);
+        const code = getErrorCode(cause);
+        if (code === "WORKFLOW_SELECTION_SKIPPED") onSelectionSkipped(sourceId);
+        else if (code !== "CANCELLED") showError(cause);
       }
     } finally {
       workflow.off("progress", handleProgress);
@@ -402,6 +417,11 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
     [],
   );
 
+  const removeSkippedSource = useCallback(
+    (id: number) => setSources((previous) => previous.filter((entry) => entry.id !== id)),
+    [],
+  );
+
   const reportSnapshot = useCallback(
     (id: number, snapshot: ChecksumEntrySnapshot) => setSnapshots((previous) => ({ ...previous, [id]: snapshot })),
     [],
@@ -444,7 +464,8 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
   const missing = algorithms.filter(
     (algorithm) =>
       sources.length > 0 &&
-      (entries.length < sources.length || !files.length || files.some((file) => !file.checksums[algorithm])),
+      (entries.length < sources.length ||
+        entries.some((entry) => !entry.files.length || entry.files.some((file) => !file.checksums[algorithm]))),
   );
   const sourceWarning = entries.some((entry) => hasSourceQueueWarning(entry.input));
 
@@ -652,6 +673,7 @@ const ChecksumForm = ({ pageDrop }: ChecksumFormProps) => {
                 expected={expected}
                 key={entry.id}
                 onRequest={recordRequest}
+                onSelectionSkipped={removeSkippedSource}
                 onSnapshot={reportSnapshot}
                 selectFile={selectFile}
                 source={entry}
