@@ -336,7 +336,7 @@ impl CliApp {
         // its checksums, or set with --patch-basis/--default-patch-basis) is
         // checked against that ROM and then run without its embedded
         // source/target checks, exactly as `patch apply` runs it.
-        let base_steps = if patch_count > 1 {
+        let validation_steps = if patch_count > 1 {
             match self.resolve_validate_plan(
                 &resolved_patches,
                 &validate_input,
@@ -344,7 +344,7 @@ impl CliApp {
                 probe_threads.clone(),
                 &plan_flags,
             ) {
-                Ok(plan) => match Self::base_step_flags(&plan.per_patch) {
+                Ok(plan) => match Self::validation_steps(&plan.per_patch, context) {
                     Ok(flags) => flags,
                     Err(report) => return *report,
                 },
@@ -359,14 +359,14 @@ impl CliApp {
                 }
             }
         } else {
-            vec![false; patch_count]
+            vec![PatchValidateStep::default(); patch_count]
         };
         let mut chain = PatchValidateChain {
             current_input: validate_input,
             n64_order,
             n64_byte_order,
             probe_threads,
-            base_steps,
+            validation_steps,
         };
         let mut formats = Vec::with_capacity(patch_count);
         for (index, patch) in resolved_patches.iter().enumerate() {
@@ -568,20 +568,20 @@ impl CliApp {
         Ok(validation_labels)
     }
 
-    /// Which chain positions run against the original ROM rather than the
-    /// previous output. Fails when such a patch's own input checks reject the
-    /// original ROM.
-    fn base_step_flags(
+    /// Preserves the planner's basis and reversible endpoint for each chain step.
+    fn validation_steps(
         per_patch: &[PatchPlanVerdict],
-    ) -> std::result::Result<Vec<bool>, Box<OperationReport>> {
+        context: &OperationContext,
+    ) -> std::result::Result<Vec<PatchValidateStep>, Box<OperationReport>> {
         per_patch
             .iter()
             .enumerate()
             .map(|(index, verdict)| {
-                if index == 0 || verdict.basis != PatchInputBasis::Base {
-                    return Ok(false);
-                }
-                if verdict.input_verdict == PatchInputVerdict::Failed {
+                let base = index > 0 && verdict.basis == PatchInputBasis::Base;
+                if base
+                    && context.strict_patch_checksums()
+                    && verdict.input_verdict == PatchInputVerdict::Failed
+                {
                     return Err(Box::new(
                         OperationReport::failed(
                             OperationFamily::Patch,
@@ -597,7 +597,10 @@ impl CliApp {
                         .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Validation),
                     ));
                 }
-                Ok(true)
+                Ok(PatchValidateStep {
+                    base,
+                    execution: verdict.execution,
+                })
             })
             .collect()
     }
@@ -701,12 +704,15 @@ impl CliApp {
                     "patch-validate",
                     "validate",
                 )));
-        if chain.base_steps[index] {
+        if chain.validation_steps[index].base {
             patch_context = patch_context.with_patch_check_scopes(PatchCheckScopes {
                 patch_integrity: context.strict_patch_checksums(),
                 source: false,
                 target: false,
             });
+        }
+        if let Some(selection) = chain.validation_steps[index].execution {
+            patch_context = patch_context.with_patch_endpoint_selection(selection);
         }
 
         let handler_failed = |error: RomWeaverError| {
@@ -1928,8 +1934,13 @@ struct PatchValidateChain {
     n64_order: Option<N64ByteOrderTransform>,
     n64_byte_order: PatchN64ByteOrderMode,
     probe_threads: Option<ThreadExecution>,
-    /// Chain positions that run against the original ROM; see `base_step_flags`.
-    base_steps: Vec<bool>,
+    validation_steps: Vec<PatchValidateStep>,
+}
+
+#[derive(Clone, Copy, Default)]
+struct PatchValidateStep {
+    base: bool,
+    execution: Option<PatchEndpointSelection>,
 }
 
 fn patch_validate_passed_report(
