@@ -852,6 +852,23 @@ Fixture description.
     expect(onward?.querySelector(".docs-to-top")).toBeTruthy();
   });
 
+  it("moves focus to the main landmark when a pager link is followed", async () => {
+    const main = document.createElement("main");
+    main.id = "main-content";
+    main.tabIndex = -1;
+    document.body.append(main);
+    try {
+      render(<DocsPage active slug="docs/apply-rom-patches" />);
+      const step = document.querySelector<HTMLAnchorElement>(".docs-onward .docs-step[data-direction='next']");
+      step?.focus();
+      fireEvent.click(step as HTMLAnchorElement);
+
+      await vi.waitFor(() => expect(document.activeElement).toBe(main));
+    } finally {
+      main.remove();
+    }
+  });
+
   it("links each guide footer to its editable GitHub source", () => {
     render(<DocsPage active slug="docs/apply-rom-patches" />);
 

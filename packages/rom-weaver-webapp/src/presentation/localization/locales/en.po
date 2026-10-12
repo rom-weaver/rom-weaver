@@ -645,11 +645,6 @@ msgstr "Baked into output"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.basis.base"
-msgstr "base ROM"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.identify.body"
 msgstr "Before adding a ROM, Identify can search by game name or checksum. Choose a title, then its release, to set the expected ROM checks. This search hides once a ROM is added or the patches already supply checks. In Detailed view, the ROM’s Identify drawer shows database matches, region and revision when available. The homebrew practice ROM has no public database entry."
 
@@ -911,12 +906,12 @@ msgstr "Check it"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.weaveTutorial.rom.title"
-msgstr "Check the starting ROM"
+msgstr "Check the original ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.rom.title"
-msgstr "Check your starting ROM"
+msgstr "Check your original ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1106,7 +1101,7 @@ msgstr "Choose the version of {title} for {platform}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.patch.basisHelp"
-msgstr "Choose whether this patch's input checks describe the base ROM or the previous patch output."
+msgstr "Choose whether this patch's input checks describe the original ROM or the previous patch output."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -2160,13 +2155,13 @@ msgstr "Identify tool"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.identifyThesis"
-msgstr "Identify your ROM."
+msgid "ui.apply.tutorial.identify.title"
+msgstr "Identify your original ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.identify.title"
-msgstr "Identify your starting ROM"
+msgid "ui.hero.identifyThesis"
+msgstr "Identify your ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3107,6 +3102,11 @@ msgstr "Original"
 #: src/presentation/localization/messages.ts
 msgid "ui.create.identicalInputs"
 msgstr "Original and Modified have identical contents, so the patch would change nothing. Check that you chose the right files."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.basis.base"
+msgstr "original ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

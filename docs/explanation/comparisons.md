@@ -54,7 +54,7 @@ RomPatcher.js documents IPS, UPS, APS, BPS, RUP, PPF, and VCDIFF support, among 
 
 rom-weaver is an alternative when the job includes ordered patch chains, optional patches, or weave checks. It combines these with supported archive and disc-container extraction, checksums, and output compression. The [format reference](../reference/formats.md) identifies which inputs and outputs it supports.
 
-For one supported patch, either tool may cover the job. RomPatcher.js explicitly documents embedding a custom patcher into another website. rom-weaver's [weaves](bundles.md) instead describe patch order, choices, and expected bytes across a workflow. Neither a format list nor checksum display alone proves that the starting ROM matches.
+For one supported patch, either tool may cover the job. RomPatcher.js explicitly documents embedding a custom patcher into another website. rom-weaver's [weaves](bundles.md) instead describe patch order, choices, and expected bytes across a workflow. Neither a format list nor checksum display alone proves that the original ROM matches.
 
 ## Creating a patch
 

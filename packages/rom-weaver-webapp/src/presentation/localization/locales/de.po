@@ -645,11 +645,6 @@ msgstr "In die Ausgabe eingebettet"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.basis.base"
-msgstr "Basis-ROM"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.apply.tutorial.identify.body"
 msgstr "Vor dem Hinzufügen eines ROMs kannst du unter Identifizieren nach Spielname oder Prüfsumme suchen. Wähle einen Titel und dann seine Version, um die erwarteten ROM-Prüfungen festzulegen. Die Suche verschwindet, sobald ein ROM hinzugefügt wurde oder die Patches bereits Prüfwerte liefern. In der Detailansicht zeigt Identifizieren Datenbanktreffer, Region und Revision, sofern verfügbar. Das Homebrew-Übungs-ROM ist nicht in der öffentlichen Datenbank."
 
@@ -2160,13 +2155,13 @@ msgstr "Identifizieren-Tool"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.hero.identifyThesis"
-msgstr "Kenne deine ROM."
+msgid "ui.apply.tutorial.identify.title"
+msgstr "Identifiziere dein Ausgangs-ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.apply.tutorial.identify.title"
-msgstr "Identifiziere dein Ausgangs-ROM"
+msgid "ui.hero.identifyThesis"
+msgstr "Kenne deine ROM."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -3107,6 +3102,11 @@ msgstr "Original"
 #: src/presentation/localization/messages.ts
 msgid "ui.create.identicalInputs"
 msgstr "Original und Modifiziert haben identischen Inhalt, der Patch würde also nichts ändern. Prüfe, ob du die richtigen Dateien gewählt hast."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.basis.base"
+msgstr "Basis-ROM"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
