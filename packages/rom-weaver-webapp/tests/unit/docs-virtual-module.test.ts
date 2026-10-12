@@ -160,6 +160,24 @@ describe("docs virtual payload round trips", () => {
     expect(search.SEARCH_ENTRIES[entry.slug]).toEqual(createDocsSearchIndex([entry])[0].searchEntries);
   });
 
+  it("preserves shared table and code markup among literal token-like text", async () => {
+    const table = '<div aria-label="Table" class="docs-table-scroll" role="group" tabindex="0">';
+    const code = '<div class="docs-code-block" data-docs-copy-container>';
+    const html = `0${table}$& $' 1</div>${code}2 \\ \u2028 \u2029</div>${table}3</div>`;
+    const plugin = docsVirtualModule([{ ...route("docs"), html }]);
+    const shared = plugin.load.handler.call(null, "\0virtual:rom-weaver-docs-html") as string;
+    const source = plugin.load.handler.call(null, `${PAGE_ID_PREFIX}docs`) as string;
+    expect(source).not.toContain("docs-table-scroll");
+    expect(source).not.toContain("docs-code-block");
+    const loaded = await load(
+      source.replace(
+        '"virtual:rom-weaver-docs-html"',
+        JSON.stringify(`data:text/javascript,${encodeURIComponent(shared)}`),
+      ),
+    );
+    expect(loaded.html).toBe(html);
+  });
+
   it("splits exact icon occurrences without interpreting surrounding literals", async () => {
     const icon = '<svg class="docs-section-link-icon"><path d="test"/></svg>';
     const html = `${icon}$& $' \\ \u2028 \u2029 \${placeholder}</script>${icon}<svg class="other">different</svg>${icon}`;
