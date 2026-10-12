@@ -41,7 +41,7 @@ Without the source file, use **Identify by checksum or game name** below the emp
 2. Drop the ROM and patch into **0x01 Inputs**, or choose **Add files**. A folder or [supported archive](../reference/formats.md#container-and-compression-formats) also works; nested archives, CHD, and RVZ are unpacked.
 3. Wait for **Reading** and **Checksumming**. If asked, choose the entry the author named.
 
-The resulting cards separate **ROM**, **Patches & Cheats**, and **Apply** controls. To change only the container, use [Convert](convert-roms-browser.md).
+The resulting cards separate **ROM**, **Patches & Cheats**, and **Apply** controls. To change only the container, use [Compress](convert-roms-browser.md).
 
 New here? [Your first patch](../tutorials/first-patch.md) supplies homebrew files. [Guided Apply](https://rom-weaver.com/apply-patches?guide=apply) waits for your files; **Continue** with none loads samples. The [cheats tour](https://rom-weaver.com/apply-patches?guide=apply-cheats) supplies a sample code. [Input routes](../reference/guided-runs.md#ways-files-get-into-apply) lists other ways to add files.
 
@@ -123,7 +123,7 @@ In **Patches & Cheats**, select **Add cheats to the patch order**, then choose d
 If **APPLY & DOWNLOAD** is disabled, wait for checksumming and resolve the nearby warning. In **Apply**:
 
 1. Enter a filename without an extension.
-2. Pick a plain file unless the author or emulator requires compression; the selector adds the extension.
+2. The format selector starts on **.zip** (or a ROM-specific format for discs). Pick the plain extension, such as **.gba**, for an uncompressed ROM unless the author or emulator requires compression; the selector adds the extension.
 3. Open **Options** for compression, output header, or weave controls when needed.
 4. Choose **APPLY & DOWNLOAD**, wait, and save the new file.
 

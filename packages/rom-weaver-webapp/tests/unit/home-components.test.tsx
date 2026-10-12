@@ -158,7 +158,7 @@ describe("HomePage", () => {
     const disc = Array.from(container.querySelectorAll(".home-route")).find((row) =>
       row.textContent?.includes("game.chd"),
     );
-    expect(disc?.querySelector("a[href='/tools/compress']")?.textContent).toBe("Convert / compress");
+    expect(disc?.querySelector("a[href='/tools/compress']")?.textContent).toBe("Compress");
     expect(disc?.querySelector("a[href='/tools/extract']")?.textContent).toBe("Extract files");
     expect(disc?.textContent).toContain("ISO or BIN/CUE");
     const offline = container.querySelector("a[href='/tools/docs/browser-settings#prepare-for-offline-use']");

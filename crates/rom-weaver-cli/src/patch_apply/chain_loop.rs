@@ -58,6 +58,7 @@ impl CliApp {
     ) -> std::result::Result<PatchApplyLoopOutcome, Box<OperationReport>> {
         let mut state = Self::start_chain_loop(&mut inputs)?;
         let steps = inputs.steps;
+        let mut handler_warnings: Vec<String> = Vec::new();
         for (index, apply_step) in steps.iter().enumerate() {
             self.apply_positioned_cheat_stage(&mut inputs, &mut state, index)?;
             let step = self.select_chain_step(&mut inputs, &mut state, index, apply_step)?;
@@ -86,10 +87,13 @@ impl CliApp {
                 None,
             );
             self.execute_chain_step(&mut inputs, &mut state, &step, &apply_output)?;
+            Self::lift_handler_label_warnings(&mut state.report);
+            handler_warnings.extend(Self::report_warnings(&state.report));
             self.record_chain_step_output(&mut inputs, &mut state, &step, is_last, apply_output)?;
             state.stage_index += 1;
         }
         self.apply_trailing_cheat_stage(&mut inputs, &mut state)?;
+        Self::append_report_warnings(&mut state.report, handler_warnings);
 
         Ok(PatchApplyLoopOutcome {
             report: state.report,

@@ -35,13 +35,11 @@ const prefersReducedMotion = () =>
 /** Update-ready banner inside a {@link Reveal}. */
 const UpdateBanner = ({
   open,
-  title,
   onReload,
   onDismiss,
   onOpenWhatsNew,
 }: {
   open: boolean;
-  title: string;
   onReload: () => void;
   onDismiss: () => void;
   onOpenWhatsNew: () => void;
@@ -54,7 +52,7 @@ const UpdateBanner = ({
         <span className="updates-text">
           <b>{localizer.message("ui.update.ready")}</b>{" "}
           <button
-            aria-label={`${localizer.message("ui.update.whatsNew")}: ${title}`}
+            aria-label={`${localizer.message("ui.update.whatsNew")}: ${localizer.message("ui.runtime.update")}`}
             className="updates-ver mono"
             onClick={onOpenWhatsNew}
             type="button"

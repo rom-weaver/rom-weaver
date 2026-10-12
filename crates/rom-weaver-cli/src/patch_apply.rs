@@ -657,6 +657,16 @@ impl<'a> PatchSelectors<'a> {
 
 impl CliApp {
     pub(super) fn run_patch_apply(&self, args: PatchApplyCommand) -> AppRunOutcome {
+        if args.input == Path::new("-") {
+            let report = OperationReport::failed(
+                OperationFamily::Patch,
+                None,
+                "validate",
+                "patch apply does not read from stdin; pass a file path".to_string(),
+                None,
+            );
+            return self.finish("patch-apply", report);
+        }
         if args.dry_run {
             let command = Commands::Patch(PatchCommands::Apply(Box::new(args.clone())));
             if let Some(outcome) = self.plan_dry_run(&command) {

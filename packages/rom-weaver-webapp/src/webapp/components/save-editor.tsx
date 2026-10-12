@@ -1113,7 +1113,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
         heroLabelCoarse={localizer.message("ui.saves.editor.heroLabelCoarse")}
         info={<p>{localizer.message("ui.saves.editor.info")}</p>}
         inputId="save-editor-input-picker"
-        lead={{ line1: "ui.hero.saveThesis", line2: "ui.hero.saveThesis2", description: "ui.hero.saveDescription" }}
+        lead={{ line1: "ui.hero.saveThesis", description: "ui.hero.saveDescription" }}
         multiple={false}
         num="0x01"
         onFiles={(files) => {

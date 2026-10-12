@@ -1,6 +1,5 @@
 import type { ServiceWorkerCacheState } from "./pwa/service-worker-cache-state.ts";
 
-const PAGE_UPDATE_TITLE = "A newer app version is ready.";
 const PAGE_UPDATE_LABEL = "Reload to update";
 
 type PageUpdateSource = "service-worker" | "vite";
@@ -8,7 +7,6 @@ type PageUpdateSource = "service-worker" | "vite";
 type PageUpdateState = {
   ready: boolean;
   label: string;
-  title: string;
   source: PageUpdateSource | null;
 };
 
@@ -26,7 +24,6 @@ const createEmptyPageUpdateState = (): PageUpdateState => ({
   label: PAGE_UPDATE_LABEL,
   ready: false,
   source: null,
-  title: PAGE_UPDATE_TITLE,
 });
 
 const createEmptyVitePageUpdateState = (): VitePageUpdateState => ({

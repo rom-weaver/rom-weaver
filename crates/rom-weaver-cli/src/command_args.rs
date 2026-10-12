@@ -246,6 +246,21 @@ fn checksum_algorithm_parser() -> clap::builder::PossibleValuesParser {
     clap::builder::PossibleValuesParser::new(supported_algorithms())
 }
 
+/// Systems `--cheat-system` names. `sg1000` and `psx` decode code snapshots but
+/// have no cheat database shard; a command that needs the database reports that
+/// at run time, so a weave with code snapshots still applies.
+#[cfg(not(target_arch = "wasm32"))]
+const CHEAT_SYSTEMS: &str =
+    "nes, snes, genesis, 32x, sms, gamegear, sg1000, gameboy, gameboy-color, gba, psx";
+
+#[cfg(not(target_arch = "wasm32"))]
+fn cheat_system_parser(value: &str) -> std::result::Result<String, String> {
+    match crate::cheats::CheatSystem::parse(value) {
+        Some(_) => Ok(value.to_string()),
+        None => Err(format!("unknown system; expected one of: {CHEAT_SYSTEMS}")),
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 pub const CHECKSUM_ALGO_HELP: &str = "Which checksum to compute (repeatable, comma-separable)";
 
@@ -1041,6 +1056,7 @@ pub struct TrimCommand {
         arg(
             short = 'e',
             long,
+            conflicts_with_all = ["output", "in_place"],
             help = "Save next to each original under this extension. {ext} stands for the original one, as in trim.{ext}"
         )
     )]
@@ -1130,6 +1146,7 @@ XISO trimming and lossless RVZ conversion do not support this operation."
         arg(
             long = "revert-marker",
             visible_alias = "reversible",
+            conflicts_with = "revert",
             help = "Add a footer with the original size and a fill byte for --revert (NDS-family, GBA, and 3DS only)"
         )
     )]
@@ -1484,7 +1501,7 @@ copier size rules."
 Which ROM the preceding --patch was built against, and so which one its
 checksums describe.
 
-  auto      Clear the shared rule and work it out from the checksums.
+  auto      Ignore the shared rule and infer the basis from checksums.
   base      The original ROM. It is verified once up front, and the patch's own
             checks are skipped when it runs later in the chain.
   previous  The output of the patch before it.
@@ -2839,7 +2856,8 @@ Record one input ROM rule for every patch. An individual --patch-basis overrides
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
-            long = "patch-expect-in",
+            long = "patch-input-check",
+            alias = "patch-expect-in",
             value_name = "ALGO=HEX",
             help = "Checksum the ROM should have before the preceding --patch runs. Recorded only when it differs from the weave's ROM checksums (repeatable, comma-separable)",
             long_help = patch_adjacency_long_help!("Checksum the ROM should have before the preceding --patch runs. Recorded only when it differs from the weave's ROM checksums (repeatable, comma-separable)")
@@ -2851,9 +2869,11 @@ Record one input ROM rule for every patch. An individual --patch-basis overrides
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
-            long = "patch-expect-out",
+            long = "patch-output-check",
+            alias = "patch-expect-out",
             value_name = "ALGO=HEX",
-            help = "Checksum the ROM should have after the preceding --patch runs. Recorded only when it differs from the final output checksums (repeatable, comma-separable)"
+            help = "Checksum the ROM should have after the preceding --patch runs. Recorded only when it differs from the final output checksums (repeatable, comma-separable)",
+            long_help = patch_adjacency_long_help!("Checksum the ROM should have after the preceding --patch runs. Recorded only when it differs from the final output checksums (repeatable, comma-separable)")
         )
     )]
     #[serde(default)]
@@ -3263,8 +3283,9 @@ pub struct CheatSelectionArgs {
         arg(
             long = "cheat-system",
             value_name = "SYS",
+            value_parser = cheat_system_parser,
             help_heading = "Cheats",
-            help = "Console the cheat shard is for (nes, snes, genesis, 32x, sms, gamegear, gameboy, gameboy-color, gba), when the ROM header does not say"
+            help = "Console the cheats are for (nes, snes, genesis, 32x, sms, gamegear, sg1000, gameboy, gameboy-color, gba, psx), when the ROM header does not say"
         )
     )]
     pub cheat_system: Option<String>,

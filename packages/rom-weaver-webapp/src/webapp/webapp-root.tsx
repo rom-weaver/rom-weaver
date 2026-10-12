@@ -81,7 +81,7 @@ import {
   TrimPatchRoute,
   WhatsNewPageRoute,
 } from "./workflow-routes.tsx";
-import { SITE_NAME, WORKFLOW_SEO_ROUTES } from "./workflow-seo.mjs";
+import { WORKFLOW_SEO_ROUTES, withChannelBadge } from "./workflow-seo.mjs";
 
 const WORKFLOW_TABS: WorkflowTab[] = [
   {
@@ -175,7 +175,6 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     icon: <SaveIcon aria-hidden="true" />,
     id: "save-editor",
     label: "Save Editor",
-    railLabel: "Saves",
   },
   {
     group: "project",
@@ -185,6 +184,16 @@ const WORKFLOW_TABS: WorkflowTab[] = [
     label: "Docs",
   },
 ];
+
+/**
+ * Tab hrefs are bare slugs except Docs (`/docs`), and the 404 page is served at
+ * whatever path missed, so each resolves against the app base: a doubled slash
+ * would be a protocol-relative URL, and a bare `/slug` would escape a
+ * subdirectory deployment.
+ */
+const appPathHref = (href: string, appBaseUrl: string): string =>
+  // The server render has no window, so its base is the bare "/"; the throwaway origin only lets that parse.
+  new URL(href.replace(/^\/+/, ""), new URL(appBaseUrl, "https://app.invalid")).pathname;
 
 // Keep the trace inspector out of the initial weave, but share its loader so
 // the masthead and idle post-boot preload can fetch the same promise.
@@ -199,7 +208,7 @@ const logger = createLogger("webapp-root");
 const syncWorkflowSeoMetadata = (view: WebappView) => {
   if (view === "docs") return;
   if (view === "whats-new") {
-    document.title = "rom-weaver - What's new";
+    document.title = withChannelBadge("What's new | rom-weaver", CHANNEL_BADGE);
     return;
   }
   let route = null;
@@ -215,10 +224,10 @@ const syncWorkflowSeoMetadata = (view: WebappView) => {
   else if (view === "test") route = WORKFLOW_SEO_ROUTES.test;
   if (!route) {
     const tab = WORKFLOW_TABS.find((entry) => entry.id === view);
-    document.title = tab ? `rom-weaver - ${tab.label}` : "rom-weaver";
+    document.title = withChannelBadge(tab ? `${tab.label} | rom-weaver` : "rom-weaver", CHANNEL_BADGE);
     return;
   }
-  const title = CHANNEL_BADGE ? route.title.replace(SITE_NAME, `${SITE_NAME} ${CHANNEL_BADGE}`) : route.title;
+  const title = withChannelBadge(route.title, CHANNEL_BADGE);
   const canonicalUrl = `https://rom-weaver.com/${route.slug}`;
   document.title = title;
   document.querySelector<HTMLMetaElement>('meta[name="description"]')?.setAttribute("content", route.description);
@@ -515,8 +524,11 @@ function WebappRoot({
   }, [actions]);
   // One identity per shell, so Find's index is not rebuilt on every render of the 404 page.
   const mastheadTabs = useMemo(
-    () => (notFound ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: `/${tab.href}` })) : WORKFLOW_TABS),
-    [notFound],
+    () =>
+      notFound
+        ? WORKFLOW_TABS.map((tab) => ({ ...tab, href: appPathHref(tab.href, resolvedAssetBaseUrl) }))
+        : WORKFLOW_TABS,
+    [notFound, resolvedAssetBaseUrl],
   );
 
   // The settings console draws its own copy of the phone dock: a modal makes the real one inert.
@@ -535,7 +547,7 @@ function WebappRoot({
         // The nav can also reach a view with no WorkflowTab entry (What's
         // new), so it falls back to the id itself as the slug.
         const href = WORKFLOW_TABS.find((tab) => tab.id === id)?.href ?? id;
-        if (href) window.location.assign(`/${href}`);
+        if (href) window.location.assign(appPathHref(href, resolvedAssetBaseUrl));
         return;
       }
       const view = id as WebappRootProps["state"]["currentView"];
@@ -772,7 +784,6 @@ function WebappRoot({
                 ? pageUpdate.ready && !updateDismissed
                 : previewRuntimeState === "update" && !previewUpdateDismissed
             }
-            title={pageUpdate.title}
           />
           <UrlSessionBanner onRetry={urlSessionBoot.retry} state={urlSessionBoot.state} />
           <ActivityWakeLock pageHasPendingChanges={pageHasPendingChanges} />
@@ -790,11 +801,11 @@ function WebappRoot({
                   </h1>
                   <p className="not-found-copy">Check the address, or choose where you want to go next.</p>
                   <div className="not-found-actions">
-                    <a className="btn primary not-found-home" href="/apply-patches">
+                    <a className="btn primary not-found-home" href={appPathHref("apply-patches", resolvedAssetBaseUrl)}>
                       <House aria-hidden="true" />
                       Apply Patches
                     </a>
-                    <a className="btn ghost not-found-docs" href="/docs">
+                    <a className="btn ghost not-found-docs" href={appPathHref("docs", resolvedAssetBaseUrl)}>
                       <BookOpen aria-hidden="true" />
                       Browse docs
                     </a>

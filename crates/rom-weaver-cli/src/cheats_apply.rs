@@ -184,7 +184,7 @@ impl CliApp {
                 )
             }
             None => Err(RomWeaverError::Validation(format!(
-                "could not detect the ROM system for `{}`; pass --code-system nes|snes|genesis|32x|sms|gamegear|sg1000|gameboy|gba|psx",
+                "could not detect the ROM system for `{}`; pass {flag} nes|snes|genesis|32x|sms|gamegear|sg1000|gameboy|gameboy-color|gba|psx",
                 source.display()
             ))),
         }
