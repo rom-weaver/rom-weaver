@@ -1222,3 +1222,51 @@ fn tools_ppf_undo_disc_with_parent_reference_checks_real_source_paths() {
         modified
     );
 }
+
+#[test]
+fn ppf_undo_restores_a_cli_created_patch_made_with_ppf_undo() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.ppf");
+    let restored = temp.child("restored.bin");
+    fs::write(original.path(), b"1234567890abcdef").expect("original");
+    fs::write(modified.path(), b"1234XY7890abc!ef").expect("modified");
+
+    let created = run_single_json_event(
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--ppf-undo",
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_eq!(created["status"], "succeeded");
+
+    run_single_json_event(
+        &[
+            "tools",
+            "ppf-undo",
+            "--no-compress",
+            "-i",
+            modified.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "-o",
+            restored.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(
+        fs::read(restored.path()).expect("restored"),
+        b"1234567890abcdef"
+    );
+}

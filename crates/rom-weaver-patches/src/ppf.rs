@@ -8,8 +8,8 @@ use tracing::{debug, trace};
 
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
-    Result, RomWeaverError, SharedThreadPool,
+    PatchCapabilities, PatchCreateFormatOptions, PatchCreateRequest, PatchHandler,
+    PatchValidateRequest, ProbeConfidence, Result, RomWeaverError, SharedThreadPool,
 };
 
 use crate::checksum_validation_suffix;
@@ -259,6 +259,24 @@ impl PatchHandler for PpfPatchHandler {
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
+        self.create_with_options(request, None, context)
+    }
+
+    fn create_with_options(
+        &self,
+        request: &PatchCreateRequest,
+        options: Option<&PatchCreateFormatOptions>,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let undo = match options {
+            Some(PatchCreateFormatOptions::PpfUndo) => true,
+            Some(PatchCreateFormatOptions::Solid(_)) => {
+                return Err(RomWeaverError::Validation(
+                    "SOLID metadata options require --format solid or a .solid output".into(),
+                ));
+            }
+            None => false,
+        };
         let original_len = fs::metadata(&request.original)?.len();
         let modified_len = fs::metadata(&request.modified)?.len();
         debug!(
@@ -283,7 +301,10 @@ impl PatchHandler for PpfPatchHandler {
             &request.modified,
             modified_len,
             &pool,
-            execution.used_parallelism,
+            PpfCreateMode {
+                parallel_scan: execution.used_parallelism,
+                undo,
+            },
             &mut output,
         )?;
         output.flush()?;
@@ -298,8 +319,10 @@ impl PatchHandler for PpfPatchHandler {
             self.descriptor,
             "create",
             format!(
-                "created {} patch (PPF3) with {} record(s), {blockcheck_label}",
-                self.descriptor.name, created.record_count
+                "created {} patch (PPF3) with {} record(s), {blockcheck_label}{}",
+                self.descriptor.name,
+                created.record_count,
+                if undo { ", with undo data" } else { "" }
             ),
             Some(execution),
         ))
@@ -361,22 +384,33 @@ struct CreatedPpfPatch {
     blockcheck_enabled: bool,
 }
 
+#[derive(Clone, Copy)]
+struct PpfCreateMode {
+    parallel_scan: bool,
+    undo: bool,
+}
+
 fn create_ppf3_patch(
     original_path: &Path,
     original_len: u64,
     modified_path: &Path,
     modified_len: u64,
     pool: &SharedThreadPool,
-    use_parallel_scan: bool,
+    mode: PpfCreateMode,
     output: &mut impl Write,
 ) -> Result<CreatedPpfPatch> {
-    if use_parallel_scan {
+    let PpfCreateMode {
+        parallel_scan,
+        undo,
+    } = mode;
+    if parallel_scan {
         create_ppf3_patch_parallel(
             original_path,
             original_len,
             modified_path,
             modified_len,
             pool,
+            undo,
             output,
         )
     } else {
@@ -385,6 +419,7 @@ fn create_ppf3_patch(
             original_len,
             modified_path,
             modified_len,
+            undo,
             output,
         )
     }
@@ -531,6 +566,7 @@ fn create_ppf3_patch_streaming(
     original_len: u64,
     modified_path: &Path,
     modified_len: u64,
+    undo: bool,
     output: &mut impl Write,
 ) -> Result<CreatedPpfPatch> {
     if modified_len < original_len {
@@ -540,7 +576,7 @@ fn create_ppf3_patch_streaming(
         )));
     }
 
-    let blockcheck_enabled = write_ppf3_header(output, original_path, original_len)?;
+    let blockcheck_enabled = write_ppf3_header(output, original_path, original_len, undo)?;
     let mut original = BufReader::new(File::open(original_path)?);
     let mut modified = BufReader::new(File::open(modified_path)?);
 
@@ -553,6 +589,8 @@ fn create_ppf3_patch_streaming(
     let mut record_count = 0usize;
     let mut pending_start: Option<u64> = None;
     let mut pending_data = Vec::with_capacity(u8::MAX as usize);
+    // Original bytes under `pending_data`; zero past the original's end, which PPF cannot shrink.
+    let mut pending_undo = Vec::with_capacity(u8::MAX as usize);
 
     while remaining_modified > 0 {
         let chunk_len = usize::try_from(remaining_modified.min(CREATE_COMPARE_BUFFER_SIZE as u64))
@@ -586,6 +624,13 @@ fn create_ppf3_patch_streaming(
                     pending_start = Some(offset);
                 }
                 pending_data.push(modified_byte);
+                if undo {
+                    pending_undo.push(if index < original_chunk_len {
+                        original_buffer[index]
+                    } else {
+                        0
+                    });
+                }
                 if pending_data.len() == u8::MAX as usize {
                     let start = pending_start.ok_or_else(|| {
                         RomWeaverError::Validation(
@@ -593,8 +638,9 @@ fn create_ppf3_patch_streaming(
                                 .into(),
                         )
                     })?;
-                    write_ppf3_record(output, start, &pending_data)?;
+                    write_ppf3_record(output, start, &pending_data, &pending_undo)?;
                     pending_data.clear();
+                    pending_undo.clear();
                     pending_start = None;
                     record_count = record_count.saturating_add(1);
                 }
@@ -604,8 +650,9 @@ fn create_ppf3_patch_streaming(
                         "internal PPF state error: pending diff data missing start offset".into(),
                     )
                 })?;
-                write_ppf3_record(output, start, &pending_data)?;
+                write_ppf3_record(output, start, &pending_data, &pending_undo)?;
                 pending_data.clear();
+                pending_undo.clear();
                 pending_start = None;
                 record_count = record_count.saturating_add(1);
             }
@@ -627,7 +674,7 @@ fn create_ppf3_patch_streaming(
                 "internal PPF state error: trailing pending diff data missing start offset".into(),
             )
         })?;
-        write_ppf3_record(output, start, &pending_data)?;
+        write_ppf3_record(output, start, &pending_data, &pending_undo)?;
         record_count = record_count.saturating_add(1);
     }
 
@@ -671,6 +718,7 @@ fn create_ppf3_patch_parallel(
     modified_path: &Path,
     modified_len: u64,
     pool: &SharedThreadPool,
+    undo: bool,
     output: &mut impl Write,
 ) -> Result<CreatedPpfPatch> {
     if modified_len < original_len {
@@ -680,7 +728,7 @@ fn create_ppf3_patch_parallel(
         )));
     }
 
-    let blockcheck_enabled = write_ppf3_header(output, original_path, original_len)?;
+    let blockcheck_enabled = write_ppf3_header(output, original_path, original_len, undo)?;
     let runs = collect_ppf_diff_runs_parallel(
         original_path,
         original_len,
@@ -689,7 +737,9 @@ fn create_ppf3_patch_parallel(
         pool,
     )?;
     let mut modified = BufReader::new(File::open(modified_path)?);
+    let mut original = BufReader::new(File::open(original_path)?);
     let mut data = vec![0u8; usize::from(u8::MAX)];
+    let mut undo_data = vec![0u8; usize::from(u8::MAX)];
     let mut record_count = 0usize;
 
     // Each run is a fully-merged contiguous diff region; split it into maximal
@@ -702,7 +752,19 @@ fn create_ppf3_patch_parallel(
         while remaining > 0 {
             let take = remaining.min(u64::from(u8::MAX)) as usize;
             modified.read_exact(&mut data[..take])?;
-            write_ppf3_record(output, record_offset, &data[..take])?;
+            let undo_slice = if undo {
+                // Original bytes under the record; zero past its end (PPF cannot shrink).
+                let present = take.min(original_len.saturating_sub(record_offset) as usize);
+                undo_data[..take].fill(0);
+                if present > 0 {
+                    original.seek(SeekFrom::Start(record_offset))?;
+                    original.read_exact(&mut undo_data[..present])?;
+                }
+                &undo_data[..take]
+            } else {
+                &[]
+            };
+            write_ppf3_record(output, record_offset, &data[..take], undo_slice)?;
             record_offset = record_offset
                 .checked_add(take as u64)
                 .ok_or_else(|| RomWeaverError::Validation("PPF create offset overflowed".into()))?;
@@ -897,6 +959,7 @@ fn write_ppf3_header(
     output: &mut impl Write,
     original_path: &Path,
     original_len: u64,
+    undo: bool,
 ) -> Result<bool> {
     let blockcheck_end = PPF3_BIN_BLOCKCHECK_OFFSET
         .checked_add(PPF_VALIDATION_BLOCK_SIZE as u64)
@@ -914,7 +977,7 @@ fn write_ppf3_header(
 
     output.write_all(&[0])?;
     output.write_all(&[u8::from(blockcheck_enabled)])?;
-    output.write_all(&[0])?;
+    output.write_all(&[u8::from(undo)])?;
     output.write_all(&[0])?;
 
     if blockcheck_enabled {
@@ -928,7 +991,8 @@ fn write_ppf3_header(
     Ok(blockcheck_enabled)
 }
 
-fn write_ppf3_record(output: &mut impl Write, offset: u64, data: &[u8]) -> Result<()> {
+/// `undo` is the original bytes under `data`, or empty when the patch carries no undo data.
+fn write_ppf3_record(output: &mut impl Write, offset: u64, data: &[u8], undo: &[u8]) -> Result<()> {
     if data.is_empty() {
         return Ok(());
     }
@@ -941,6 +1005,7 @@ fn write_ppf3_record(output: &mut impl Write, offset: u64, data: &[u8]) -> Resul
     output.write_all(&offset.to_le_bytes())?;
     output.write_all(&[data.len() as u8])?;
     output.write_all(data)?;
+    output.write_all(undo)?;
     Ok(())
 }
 

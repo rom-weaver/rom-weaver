@@ -443,6 +443,8 @@ The recipe is [Bake cheat codes into a ROM](../how-to/bake-cheat-codes.md).
 
 SOLID output accepts `--solid-system`, `--solid-game`, and `--solid-hack` for its three-string header. Any of `--solid-version`, `--solid-author`, `--solid-contact`, or `--solid-comment` selects the seven-string extended header. `--solid-extended` selects the extended header with empty extra fields. When `--code` supplies the changes and the extended header has no `--solid-comment`, the comment records the codes. These options require SOLID output and cannot be combined with `--plan`.
 
+`--ppf-undo` writes PPF3 undo data (the original bytes under every record) so `tools ppf-undo` can revert the patch. It requires PPF output. Bytes the modified file adds past the original's end are restored as zeros, because PPF cannot shrink a file.
+
 `--xdelta-secondary none|lzma|djw|fgk|auto` compresses an xdelta patch's own contents with one of xdelta3's secondary compressors. The default is `none`; `auto` keeps whichever of `djw`, `lzma`, and `fgk` is smallest.
 
 [Create patches from the CLI](../how-to/cli-create.md) provides a metadata example and reconstruction check.

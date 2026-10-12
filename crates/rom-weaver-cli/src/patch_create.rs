@@ -377,8 +377,12 @@ impl CliApp {
             output: create_output.clone(),
             format: handler.descriptor().name.to_string(),
         };
-        let mut report =
-            self.create_patch_with_handler(handler.as_ref(), &request, solid_options, &context);
+        let mut report = self.create_patch_with_handler(
+            handler.as_ref(),
+            &request,
+            solid_options.or(args.ppf_undo.then_some(PatchCreateFormatOptions::PpfUndo)),
+            &context,
+        );
         if report.status == OperationStatus::Succeeded
             && let Some(warning) = format_warning.as_deref()
         {
