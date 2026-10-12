@@ -76,6 +76,8 @@ type PatchStackItemState = {
   progress?: InputProgressState;
   checksumTiming?: string;
   validationState: string;
+  /** A checksum was available to compare for this patch; otherwise a passing check only means it applied. */
+  checksumCompared?: boolean;
   /** This patch's slice of the chain verification plan (drives the chain chip; indices are
    * 0-based positions in the ENABLED chain, mapped to display numbers by the view). */
   chainVerdict?: {

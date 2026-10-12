@@ -1045,20 +1045,21 @@ const runAccessibilityAudit = async (createContext, baseUrl) => {
       await scanVariants(`guided Create ${step}/6`);
       if (step === 6) {
         // The guide ends on the click, before the asynchronous create/compress
-        // run finishes. Keep its document alive until the ZIP has downloaded;
+        // run finishes. Keep its document alive until the patch has downloaded;
         // navigation would otherwise invalidate WebKit's in-flight OPFS reads.
         const [download] = await Promise.all([
           page.waitForEvent("download", { timeout: DOWNLOAD_TIMEOUT_MS }),
           page.locator("#patch-builder-button-create").click(),
         ]);
-        if (!download.suggestedFilename().endsWith(".zip")) {
-          throw new Error(`guided Create downloaded ${download.suggestedFilename()}; expected a ZIP`);
+        // Create downloads the bare patch by default; ZIP is an opt-in in Options.
+        if (!download.suggestedFilename().endsWith(".bps")) {
+          throw new Error(`guided Create downloaded ${download.suggestedFilename()}; expected a bare .bps`);
         }
         const downloadPath = await download.path();
         if (!downloadPath) throw new Error(`guided Create download failed: ${await download.failure()}`);
         const bytes = fs.readFileSync(downloadPath);
-        if (!bytes.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))) {
-          throw new Error("guided Create download is not a ZIP archive");
+        if (!bytes.subarray(0, 4).equals(Buffer.from("BPS1"))) {
+          throw new Error("guided Create download is not a bare BPS patch");
         }
       } else {
         await tutorial.locator(".sample-tutorial-next").click();
