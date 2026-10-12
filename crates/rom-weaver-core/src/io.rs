@@ -149,6 +149,10 @@ pub fn file_starts_with(source: &Path, signature: &[u8]) -> bool {
 /// makes an in-flight syscall fail with `EINTR`. Only use this for operations that are safe to
 /// repeat after failing that way.
 pub fn retry_interrupted<T>(mut op: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
+    // WASI does not deliver signals, so nothing interrupts I/O there; keep the module small.
+    #[cfg(target_arch = "wasm32")]
+    return op();
+    #[cfg(not(target_arch = "wasm32"))]
     loop {
         match op() {
             Err(error) if error.kind() == ErrorKind::Interrupted => {
