@@ -981,15 +981,13 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         let create_progress_bucket = Arc::new(AtomicU8::new(0));
 
         let mut underlying_magic = [0_u8; 4];
-        {
-            let mut input = BufReader::new(File::open(input_path)?);
-            let magic_read = input.read(&mut underlying_magic)?;
-            if magic_read < underlying_magic.len() {
-                for byte in &mut underlying_magic[magic_read..] {
-                    *byte = 0;
-                }
-            }
-        }
+        let mut head = Vec::with_capacity(NCSD_MAGIC_OFFSET + 4);
+        File::open(input_path)?
+            .take((NCSD_MAGIC_OFFSET + 4) as u64)
+            .read_to_end(&mut head)?;
+        let magic_read = head.len().min(underlying_magic.len());
+        underlying_magic[..magic_read].copy_from_slice(&head[..magic_read]);
+        let recognized_3ds = looks_like_3ds(&head);
 
         let metadata = Z3dsMetadata::encode_default(Z3DS_DEFAULT_FRAME_SIZE_BYTES);
         let metadata_aligned = Self::align_16(metadata.len());
@@ -1142,12 +1140,40 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
             Some(100.0),
             Some(execution.clone()),
         );
-        Ok(attach_compression_details(
+        let mut report = attach_compression_details(
             report,
             "zstd",
             Some(level),
             header.uncompressed_size,
             &execution,
-        ))
+        );
+        if !recognized_3ds {
+            report.label.push_str("; warning=");
+            report.label.push_str(NOT_3DS_WARNING);
+            let mut details = match report.details.take() {
+                Some(serde_json::Value::Object(map)) => map,
+                _ => serde_json::Map::new(),
+            };
+            details.insert("warnings".to_string(), serde_json::json!([NOT_3DS_WARNING]));
+            report.details = Some(serde_json::Value::Object(details));
+        }
+        Ok(report)
     }
+}
+
+/// Offset of the NCSD/NCCH magic inside real `.3ds`/`.cci`/`.cxi` images.
+const NCSD_MAGIC_OFFSET: usize = 0x100;
+const NOT_3DS_WARNING: &str = "input is not recognizable 3DS content";
+
+/// True when `head` (the first bytes of the input) starts like a 3DS image: a
+/// bare table magic, a CIA header size, or NCSD/NCCH at 0x100.
+pub(crate) fn looks_like_3ds(head: &[u8]) -> bool {
+    let at = |offset: usize| head.get(offset..offset + 4);
+    let table_magic = Z3DS_SUBTYPES
+        .iter()
+        .filter_map(|subtype| subtype.underlying_magic)
+        .any(|magic| at(0) == Some(magic.as_slice()));
+    table_magic
+        || at(0) == Some([0x20, 0x20, 0, 0].as_slice())
+        || matches!(at(NCSD_MAGIC_OFFSET), Some(b"NCSD" | b"NCCH"))
 }
