@@ -2306,6 +2306,38 @@ impl CliApp {
         Ok(())
     }
 
+    /// The ROM leaf path whose extension the output-extension check should
+    /// compare against. With an explicit output-header strip the written ROM is
+    /// headerless, so its conventional extension is the headerless counterpart
+    /// of the source's (SNES `.smc` becomes `.sfc`), matching what
+    /// `resolve_header_extension_swap` does for a requested `.smc` output.
+    /// Anything else keeps the source path unchanged.
+    pub(super) fn output_extension_source(
+        resolved_input: &Path,
+        output_header: Option<PatchApplyOutputHeaderMode>,
+    ) -> PathBuf {
+        if output_header != Some(PatchApplyOutputHeaderMode::Strip) {
+            return resolved_input.to_path_buf();
+        }
+        let Ok(header_match) = Self::detect_strippable_rom_header(resolved_input) else {
+            return resolved_input.to_path_buf();
+        };
+        let headered = header_match.header.headered_extension();
+        let headerless = header_match.header.headerless_extension();
+        let source_matches_headered = resolved_input
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| {
+                headered
+                    .strip_prefix('.')
+                    .is_some_and(|from| extension.eq_ignore_ascii_case(from))
+            });
+        if headered == headerless || !source_matches_headered {
+            return resolved_input.to_path_buf();
+        }
+        resolved_input.with_extension(headerless.trim_start_matches('.'))
+    }
+
     /// Adjust the requested output path when the final header state changes the
     /// ROM's conventional extension (SNES `.smc` vs headerless `.sfc`, LNX `.lnx`
     /// vs `.lyx`, ...). Fires only when the requested extension IS the known
@@ -3448,6 +3480,7 @@ impl CliApp {
         patches: &[PathBuf],
         output: Option<&Path>,
         compression_options: &PatchApplyCompressionOptions,
+        output_header: Option<PatchApplyOutputHeaderMode>,
         probe_threads: Option<ThreadExecution>,
     ) -> OperationReport {
         let Some(output) = output else {
@@ -3470,7 +3503,14 @@ impl CliApp {
                 return report;
             }
         }
-        self.patch_apply_dry_run(input, patches, output, compression_options, probe_threads)
+        self.patch_apply_dry_run(
+            input,
+            patches,
+            output,
+            compression_options,
+            output_header,
+            probe_threads,
+        )
     }
 
     fn patch_apply_dry_run(
@@ -3479,8 +3519,11 @@ impl CliApp {
         patches: &[PathBuf],
         output: &Path,
         compression_options: &PatchApplyCompressionOptions,
+        output_header: Option<PatchApplyOutputHeaderMode>,
         thread_execution: Option<ThreadExecution>,
     ) -> OperationReport {
+        // Validate the output extension the same way the real run does.
+        let extension_source = Self::output_extension_source(input, output_header);
         let explicit_compression = compression_options.requested_format.is_some()
             || compression_options.codec.is_some()
             || compression_options.level_explicit;
@@ -3514,7 +3557,7 @@ impl CliApp {
         let compression_options = match self.resolve_patch_apply_output_options(
             compression_options.clone(),
             output,
-            input,
+            &extension_source,
         ) {
             Ok(options) => options,
             Err(error) => {
@@ -3528,7 +3571,11 @@ impl CliApp {
             }
         };
         let planned_output = if compression_options.enabled {
-            match self.resolve_patch_apply_compression_plan(output, input, &compression_options) {
+            match self.resolve_patch_apply_compression_plan(
+                output,
+                &extension_source,
+                &compression_options,
+            ) {
                 Ok(plan) => Some(plan),
                 Err(error) => {
                     return OperationReport::failed_with_error(

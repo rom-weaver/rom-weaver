@@ -11579,3 +11579,46 @@ fn patch_apply_explains_that_stdin_input_is_unsupported() {
         );
     }
 }
+
+#[test]
+fn patch_apply_output_header_strip_accepts_headerless_extension() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.smc");
+    let patch = temp.child("hack.ips");
+    let output = temp.child("patched.sfc");
+    // 512-byte copier header + 256 KiB ROM body.
+    let rom = vec![0_u8; 512 + 256 * 1024];
+    fs::write(input.path(), &rom).expect("rom fixture");
+    // IPS: one byte at headerless offset 0x100.
+    let mut ips = b"PATCH".to_vec();
+    ips.extend_from_slice(&[0x00, 0x01, 0x00, 0x00, 0x01, 0xAA]);
+    ips.extend_from_slice(b"EOF");
+    fs::write(patch.path(), ips).expect("patch fixture");
+
+    let args = [
+        "patch",
+        "apply",
+        "--input",
+        input.path().to_str().expect("path"),
+        "--patch",
+        patch.path().to_str().expect("path"),
+        "--output",
+        output.path().to_str().expect("path"),
+        "--patch-header",
+        "strip",
+        "--output-header",
+        "strip",
+        "--jsonl",
+    ];
+    // A dry run must accept the same output name as the real run.
+    let mut dry_run = args.to_vec();
+    dry_run.push("--dry-run");
+    command_stdout(&dry_run, 0);
+    assert!(!output.path().exists(), "dry run must not write");
+
+    command_stdout(&args, 0);
+
+    let written = fs::read(output.path()).expect("headerless output");
+    assert_eq!(written.len(), 256 * 1024);
+    assert_eq!(written[0x100], 0xAA);
+}
