@@ -1220,6 +1220,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         rawSize: result.sizeSummary?.rawSize,
         saveAs: result.output.saveAs,
         size: result.sizeSummary?.outputSize ?? result.output.size,
+        warnings: result.warnings,
       });
       setProgress(null);
       if (typeof window !== "undefined") await result.output.saveAs();
@@ -1592,6 +1593,10 @@ function CreatePatchForm(props: CreatePatchFormProps) {
             onDismiss={messageDismissible ? clearWorkflowMessage : undefined}
           >
             <WorkflowErrorMessage message={message} />
+          </Notice>
+        ) : completedOutput?.warnings?.length ? (
+          <Notice id="patch-builder-output-warning" level="warn">
+            {completedOutput.warnings.join(" ")}
           </Notice>
         ) : null,
       num: "0x04",

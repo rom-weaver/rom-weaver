@@ -1119,3 +1119,22 @@ fn identify_title_index_rejects_misaligned_default_pack_metadata() {
             .contains("defaultPacks must align with packs")
     );
 }
+
+#[test]
+fn identify_reports_a_missing_input_as_its_own_command_failure() {
+    let temp = setup_temp_dir();
+    let missing = temp.child("missing.bin");
+    let json = run_single_json_event(
+        &[
+            "identify",
+            "--input",
+            missing.path().to_str().expect("path"),
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(json["command"], "identify");
+    assert_eq!(json["family"], "command");
+    assert_eq!(json["format"], "identify");
+    assert_eq!(json["status"], "failed");
+}

@@ -735,7 +735,10 @@ impl CliApp {
             None,
         );
         match handler.create_with_options(request, solid_options.as_ref(), context) {
-            Ok(report) => report,
+            Ok(mut report) => {
+                Self::lift_handler_label_warnings(&mut report);
+                report
+            }
             Err(RomWeaverError::Unsupported(op)) => OperationReport::unsupported(
                 OperationFamily::Patch,
                 Some(handler.descriptor().name.to_string()),

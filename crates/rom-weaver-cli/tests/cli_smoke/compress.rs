@@ -1583,3 +1583,58 @@ fn assert_running_event(events: &[Value], command: &str, format: &str) {
         "expected {command} ({format}) to emit running progress"
     );
 }
+
+#[test]
+fn compress_format_alias_mismatch_warning_names_canonical_format() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("source.bin").path(), b"payload").expect("fixture");
+    let output_path = temp.child("out.zip");
+
+    let output = command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("source.bin").path().to_str().expect("path"),
+            "--format",
+            "7zip",
+            "--output",
+            output_path.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+
+    let json = parse_single_json_line(&output);
+    let warnings = json["warnings"].to_string();
+    assert!(
+        warnings.contains("does not match --format `7zip`; writing `7z`"),
+        "{warnings}"
+    );
+}
+
+#[test]
+fn compress_rvz_rejects_non_disc_input_with_hint() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("source.bin").path(), vec![7_u8; 4096]).expect("fixture");
+    let output_path = temp.child("out.rvz");
+
+    let output = command_stdout(
+        &[
+            "compress",
+            "--input",
+            temp.child("source.bin").path().to_str().expect("path"),
+            "--output",
+            output_path.path().to_str().expect("path"),
+            "--json",
+        ],
+        1,
+    );
+
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        label.contains("the input must be a GameCube or Wii disc image"),
+        "{label}"
+    );
+    assert!(!label.contains("stream fallback failed"), "{label}");
+}

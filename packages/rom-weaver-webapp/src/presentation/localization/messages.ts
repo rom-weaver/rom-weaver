@@ -11,14 +11,12 @@ import type { MessageId } from "./catalog.ts";
  */
 const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.hero.checksumThesis": msg({ id: "ui.hero.checksumThesis", message: "Calculate file checksums." }),
-  "ui.hero.checksumThesis2": msg({ id: "ui.hero.checksumThesis2", message: "Compare it with the expected value." }),
   "ui.hero.checksumDescription": msg({
     id: "ui.hero.checksumDescription",
     message:
       "Calculate CRC32, MD5, SHA-1, SHA-256, and other file hashes. Compare them with expected checksums. Auto extract opens archives and containers. Everything runs locally in your browser.",
   }),
   "ui.hero.compressThesis": msg({ id: "ui.hero.compressThesis", message: "Compress ROMs and disc images." }),
-  "ui.hero.compressThesis2": msg({ id: "ui.hero.compressThesis2", message: "Create CHD, RVZ, or archives." }),
   "ui.hero.compressDescription": msg({
     id: "ui.hero.compressDescription",
     message:
@@ -86,7 +84,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.identifyDrawer.standard": msg({ id: "ui.identifyDrawer.standard", message: "Standard" }),
   "ui.identifyDrawer.system": msg({ id: "ui.identifyDrawer.system", message: "System" }),
   "ui.identifyDrawer.unexpected": msg({ id: "ui.identifyDrawer.unexpected", message: "Unexpected" }),
-  "ui.identifyDrawer.unidentified": msg({ id: "ui.identifyDrawer.unidentified", message: "Unidentified" }),
+  "ui.identifyDrawer.unidentified": msg({ id: "ui.identifyDrawer.unidentified", message: "No match" }),
   "ui.identifyDrawer.unsupported": msg({
     id: "ui.identifyDrawer.unsupported",
     message: "The identification data does not support this input.",
@@ -753,7 +751,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.home.cliItem3": msg({
     id: "ui.home.cliItem3",
-    message: "Batch a whole folder: convert, verify, and patch in one run.",
+    message: "Script batch jobs: compress, verify, and patch from the command line.",
   }),
   "ui.home.cliWalkthrough": msg({ id: "ui.home.cliWalkthrough", message: "CLI walkthrough" }),
   "ui.home.codecCompressionSettings": msg({
@@ -944,7 +942,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.apply.validation.fixChecksum",
     message: "Compare the expected ROM before bypassing checks (opens in a new tab)",
   }),
-  "ui.home.goCompress": msg({ id: "ui.home.goCompress", message: "Convert / compress" }),
+  "ui.home.goCompress": msg({ id: "ui.home.goCompress", message: "Compress" }),
   "ui.home.goCreate": msg({ id: "ui.home.goCreate", message: "Create" }),
   "ui.home.goIdentify": msg({ id: "ui.home.goIdentify", message: "Identify" }),
   "ui.home.goTest": msg({ id: "ui.home.goTest", message: "Test" }),
@@ -968,7 +966,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.home.routeDisc": msg({ id: "ui.home.routeDisc", message: "A compressed disc image" }),
   "ui.home.routeDiscBody": msg({
     id: "ui.home.routeDiscBody",
-    message: "Convert between compressed formats, or extract a CHD to ISO or BIN/CUE.",
+    message: "Recompress a disc image into another format, or extract a CHD to ISO or BIN/CUE.",
   }),
   "ui.home.routeEdited": msg({ id: "ui.home.routeEdited", message: "Your own edited ROM" }),
   "ui.home.routeEditedBody": msg({
@@ -1389,7 +1387,7 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.console.reportIssue": msg({ id: "ui.console.reportIssue", message: "Report an issue" }),
   "ui.console.settingsDescription": msg({
     id: "ui.console.settingsDescription",
-    message: "Theme applies immediately. Other settings apply when you save.",
+    message: "Theme and accent apply immediately. Other settings apply when you save.",
   }),
   "ui.console.showAdvanced": msg({ id: "ui.console.showAdvanced", message: "Show advanced" }),
   "ui.console.storage": msg({ id: "ui.console.storage", message: "Saves & storage" }),
@@ -1419,7 +1417,6 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.hero.weaveGuide": msg({ id: "ui.hero.weaveGuide", message: "Read the Weave guide" }),
   "ui.hero.weaveThesis": msg({ id: "ui.hero.weaveThesis", message: "Weave your patches." }),
-  "ui.hero.weaveThesis2": msg({ id: "ui.hero.weaveThesis2", message: "Share a reusable recipe." }),
   "ui.hero.createDescription": msg({
     id: "ui.hero.createDescription",
     message:
@@ -1436,10 +1433,9 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.hero.extractDescription": msg({
     id: "ui.hero.extractDescription",
     message:
-      "Convert GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, BIN/CUE for CDs, or GDI with tracks for GD-ROMs. Extract ZIP, 7z, Z3DS, and other supported formats locally in your browser.",
+      "Decompress GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, BIN/CUE for CDs, or GDI with tracks for GD-ROMs. Extract ZIP, 7z, Z3DS, and other supported formats locally in your browser.",
   }),
   "ui.hero.extractThesis": msg({ id: "ui.hero.extractThesis", message: "Decompress CHD and RVZ." }),
-  "ui.hero.extractThesis2": msg({ id: "ui.hero.extractThesis2", message: "Extract disc images and archives." }),
   "ui.hero.identifyDescription": msg({
     id: "ui.hero.identifyDescription",
     message:
@@ -1467,51 +1463,42 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.hero.createThesis",
     message: "Make a patch.",
   }),
-  "ui.hero.createThesis2": msg({
-    id: "ui.hero.createThesis2",
-    message: "Share your changes.",
-  }),
   "ui.footer.local": msg({
     id: "ui.footer.local",
     message: "On-device. Offline support. No telemetry.",
   }),
   "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Online ROM patcher." }),
-  "ui.hero.thesis2": msg({ id: "ui.hero.thesis2", message: "One toolkit." }),
   "ui.hero.testThesis": msg({
     id: "ui.hero.testThesis",
     message: "Test your ROM online.",
   }),
-  "ui.hero.testThesis2": msg({ id: "ui.hero.testThesis2", message: "Play your patched game." }),
   "ui.hero.identifyThesis": msg({
     id: "ui.hero.identifyThesis",
     message: "Identify your ROM.",
-  }),
-  "ui.hero.identifyThesis2": msg({
-    id: "ui.hero.identifyThesis2",
-    message: "Look up its checksum.",
   }),
   "ui.hero.toolsThesis": msg({
     id: "ui.hero.toolsThesis",
     message: "Undo the patch.",
   }),
-  "ui.hero.toolsThesis2": msg({ id: "ui.hero.toolsThesis2", message: "Recover the original." }),
   "ui.hero.saveThesis": msg({
     id: "ui.hero.saveThesis",
-    message: "Edit trainer names, money, badges, hearts, and gear in a game save,",
-  }),
-  "ui.hero.saveThesis2": msg({
-    id: "ui.hero.saveThesis2",
-    message: "with every checksum recalculated before you download.",
+    message: "Edit trainer names, money, badges, hearts, and gear in a game save.",
   }),
   "ui.hero.trimThesis": msg({
     id: "ui.hero.trimThesis",
     message: "Keep the game.",
   }),
-  "ui.hero.trimThesis2": msg({ id: "ui.hero.trimThesis2", message: "Lose the padding." }),
   "ui.identify.searchDisclosure": msg({
     id: "ui.identify.searchDisclosure",
     message: "Identify by checksum or game name",
   }),
+  "ui.identify.noMatchBody": msg({
+    id: "ui.identify.noMatchBody",
+    message:
+      "These checksums are not in the identification data. Unknown does not mean corrupt: the ROM may be homebrew, modified, an unlisted revision, or from a system the data does not cover. Its checksums are on the card below so you can look them up elsewhere.",
+  }),
+  "ui.identify.noMatchLink": msg({ id: "ui.identify.noMatchLink", message: "About unknown results" }),
+  "ui.identify.noMatchTitle": msg({ id: "ui.identify.noMatchTitle", message: "No match." }),
   "ui.identify.drop": msg({ id: "ui.identify.drop", message: "Drop a ROM to identify it" }),
   "ui.identify.tap": msg({ id: "ui.identify.tap", message: "Tap to add a ROM" }),
   "ui.identify.trySample": msg({

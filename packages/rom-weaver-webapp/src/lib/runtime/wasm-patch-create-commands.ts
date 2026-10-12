@@ -12,7 +12,12 @@ import { toThreadBudget } from "./compression-thread-budget.ts";
 import { readPatchCreateFormatCandidates } from "./patch-run-resolution.ts";
 import { emitRuntimeTrace, toRomWeaverOptions } from "./run-options.ts";
 import { runWithRomWeaverOutputScope } from "./run-output-paths.ts";
-import { ensureRomWeaverSuccess, getEmittedFileDetails, getRunResultTiming } from "./run-result-parsing.ts";
+import {
+  ensureRomWeaverSuccess,
+  getEmittedFileDetails,
+  getRunResultTiming,
+  getRunResultWarnings,
+} from "./run-result-parsing.ts";
 import { runRomWeaverJson, relaySimpleProgress } from "./wasm-command-shared.ts";
 
 const invokeRomWeaverCreatePatchCandidatesWorker = async (
@@ -109,6 +114,7 @@ const invokeRomWeaverCreatePatchWorker = async (
         filePath: emitted?.path || outputPath,
         size: emitted?.sizeBytes,
         timing: getRunResultTiming(result),
+        warnings: getRunResultWarnings(result),
       };
     },
   );

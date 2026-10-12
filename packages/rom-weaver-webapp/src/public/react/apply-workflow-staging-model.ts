@@ -350,6 +350,7 @@ const normalizeApplyResult = (result: BrowserApplyResult): ApplyWorkflowResult =
       size: result.inputs[0]?.size || 0,
     },
     sizeSummary: result.sizeSummary,
+    ...(result.warnings?.length ? { warnings: result.warnings } : {}),
   } as ApplyWorkflowResult;
 };
 

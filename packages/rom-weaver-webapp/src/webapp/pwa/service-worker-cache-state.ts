@@ -1,6 +1,5 @@
 const DEFAULT_CACHE_TITLE = "Loaded service worker cache version";
 const DEFAULT_UPDATE_LABEL = "Reload to update";
-const DEFAULT_UPDATE_TITLE = "A newer app version is ready. Reload when you are ready to switch to it.";
 
 type ServiceWorkerCacheState = {
   label: string;
@@ -8,7 +7,6 @@ type ServiceWorkerCacheState = {
   title: string;
   updateLabel: string;
   updateReady: boolean;
-  updateTitle: string;
 };
 
 type ServiceWorkerStatus = "active" | "ready" | "off";
@@ -19,7 +17,6 @@ const createServiceWorkerCacheState = (): ServiceWorkerCacheState => ({
   title: DEFAULT_CACHE_TITLE,
   updateLabel: DEFAULT_UPDATE_LABEL,
   updateReady: false,
-  updateTitle: DEFAULT_UPDATE_TITLE,
 });
 
 const setServiceWorkerCacheVersion = (
@@ -38,7 +35,6 @@ const withDeferredServiceWorkerUpdate = (state: ServiceWorkerCacheState): Servic
   ...state,
   updateLabel: DEFAULT_UPDATE_LABEL,
   updateReady: true,
-  updateTitle: DEFAULT_UPDATE_TITLE,
 });
 
 const withoutDeferredServiceWorkerUpdate = (state: ServiceWorkerCacheState): ServiceWorkerCacheState => ({

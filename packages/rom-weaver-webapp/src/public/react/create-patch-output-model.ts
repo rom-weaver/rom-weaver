@@ -87,6 +87,7 @@ type CompletedCreateOutput = {
   rawSize?: number;
   saveAs: (destination?: BrowserSaveDestination) => Promise<void>;
   size?: number;
+  warnings?: string[];
 };
 /** True when both staged ROMs are ready and every checksum they share (and their size) agree. */
 const areCreateSourcesIdentical = (

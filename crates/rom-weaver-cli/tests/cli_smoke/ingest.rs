@@ -1747,3 +1747,22 @@ fn ingest_disc_asset_carries_engine_disc_format() {
         "a GameCube disc image reports its optical medium as DVD"
     );
 }
+
+#[test]
+fn ingest_missing_input_uses_the_shared_wording() {
+    let temp = setup_temp_dir();
+    let missing = temp.child("missing.bin");
+    let json = run_single_json_event(
+        &[
+            "ingest",
+            "-i",
+            missing.path().to_str().expect("path"),
+            "-o",
+            temp.child("out").path().to_str().expect("path"),
+            "--json",
+        ],
+        1,
+    );
+    let label = json["label"].as_str().expect("label");
+    assert!(label.starts_with("input path does not exist: `"), "{label}");
+}

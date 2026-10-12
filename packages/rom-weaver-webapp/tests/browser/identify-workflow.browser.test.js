@@ -149,7 +149,7 @@ test("a matched ROM shows its title, its evidence, and a colour-free identified 
   expect(host.textContent).toContain("abcd1234");
 });
 
-test("an unknown ROM reports no checksum match, never that identification failed", async () => {
+test("an unknown ROM reports one calm no-match notice, never an error or failure", async () => {
   identifyRom.mockResolvedValue({
     candidates: [candidate("homebrew.gba", "unknown")],
     input: "homebrew.gba",
@@ -158,14 +158,19 @@ test("an unknown ROM reports no checksum match, never that identification failed
   await mountIdentifyForm();
   await selectRom("homebrew.gba");
   await runIdentify();
-  await waitForText("No matching checksum found in the identification data.");
+  await waitForText("Unknown does not mean corrupt");
 
-  expect(host.textContent).toContain("may be modified, an unlisted revision");
+  expect(host.textContent).toContain("homebrew, modified, an unlisted revision");
   expect(host.textContent).not.toContain("Identification data could not be loaded");
   expect(host.textContent).not.toContain("Identification unavailable");
-  // The verdict reads as an error notice above the ROM card.
-  expect(host.querySelector(".notice.error")).not.toBeNull();
-  expect(host.querySelector(".identify-state").textContent).toContain("No checksum match");
+  // One neutral info notice: no error notice, no extra chip or card line.
+  expect(host.querySelector(".notice.info")).not.toBeNull();
+  expect(host.querySelector(".notice.error")).toBeNull();
+  expect(host.querySelector(".identify-state")).toBeNull();
+  expect(host.querySelector(".identify-unknown-lead")).toBeNull();
+  expect(host.textContent).not.toContain("No checksum match");
+  expect(host.textContent).not.toContain("Unidentified");
+  expect(host.querySelector(".notice.info a").getAttribute("href")).toContain("docs/identify-roms-browser");
   // Checksums open on their own: they are all a no-match result can still offer.
   expect(host.textContent).toContain("abcd1234");
 });

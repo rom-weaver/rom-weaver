@@ -28,7 +28,7 @@ rom-weaver trim --input game.nds --dry-run
 rom-weaver trim --input game.nds --output game-trimmed.nds
 ```
 
-`--extension` names the copy from the input instead:
+`--extension` names the copy from the input instead. It cannot be combined with `--output` or `--in-place`:
 
 ```bash
 rom-weaver trim --input game.nds --extension trimmed.nds
@@ -38,6 +38,8 @@ For a GameCube or Wii disc, keep the default `.rvz` output name: this path conve
 
 `--in-place` rewrites the source file. Use it instead of pointing `--output` at a symlink or hard link to the input; output aliases are rejected even with `--force`. Keep a known-good copy first; a trimmed ROM is not always the file a patch expects.
 
+A successful trim prints nothing. Add `-v` to list each file it wrote; warnings and errors always print.
+
 ## Make the trim reversible
 
 For NDS-family, GBA, and 3DS ROMs, write a separate copy with `--revert-marker` to record the original length and padding byte. XISO and RVZ conversion reject this option because rebuilding the disc cannot be reversed from a padding footer:
@@ -46,7 +48,7 @@ For NDS-family, GBA, and 3DS ROMs, write a separate copy with `--revert-marker` 
 rom-weaver trim --input game.gba --output game-trimmed.gba --revert-marker
 ```
 
-The footer stores one repeated byte, not a copy of the removed data. Exact restoration requires uniform removed padding. Keep the source when trimming NDS files whose removed area may contain other bytes. The fill byte is recorded before trimming, including with `--in-place`.
+`--revert-marker` applies only when trimming; combining it with `--revert` is an error. The footer stores one repeated byte, not a copy of the removed data. Exact restoration requires uniform removed padding. Keep the source when trimming NDS files whose removed area may contain other bytes. The fill byte is recorded before trimming, including with `--in-place`.
 
 ## Put the padding back
 
