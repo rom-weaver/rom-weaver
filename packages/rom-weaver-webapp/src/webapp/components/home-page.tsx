@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from "react";
-import { Check, Copy, Download, Server, Stamp, Terminal, Upload } from "lucide-react";
+import { Check, Copy, Download, Server, Stamp, Terminal } from "lucide-react";
 import { useClipboardCopy } from "../../public/react/components/ds/use-clipboard-copy.ts";
 import { HomeLoom } from "./home-loom.tsx";
 import { HomeChain, HomeFaq, HomeFormats, HomeRoutes, HomeTrust } from "./home-sections.tsx";
@@ -173,32 +173,24 @@ const HomePage = ({ baseUrl, onFiles }: HomePageProps): React.ReactElement => {
           </div>
           <div className="home-hero-body">
             <p className="home-lede">{localizer.message("ui.home.lede")}</p>
-            {/* Drops anywhere on the page reach the shell's page-level handler, so this zone
-                only needs the picker; it is not a `.drop`, which the shell leaves to the zone. */}
-            <label className="home-drop" htmlFor="home-file-input">
-              <span className="btn primary lg home-drop-btn">
-                <Upload aria-hidden="true" />
-                {localizer.message("ui.drop.homeChoose")}
-              </span>
-              <span className="home-drop-title">
-                <span className="pointer-copy fine">{localizer.message("ui.drop.homeDrop")}</span>
-                <span className="pointer-copy coarse">{localizer.message("ui.drop.homeDropCoarse")}</span>
-              </span>
-              <span className="home-drop-hint">{localizer.message("ui.drop.homeHint")}</span>
-              <input
-                aria-label={localizer.message("ui.drop.homeChoose")}
-                className="sr-only"
-                id="home-file-input"
-                multiple
-                onChange={(event) => {
-                  const files = Array.from(event.currentTarget.files ?? []);
-                  event.currentTarget.value = "";
-                  if (files.length) onFiles?.(files);
-                }}
-                type="file"
-              />
-            </label>
             <div className="home-actions home-main-actions">
+              {/* Drops anywhere on the page reach the shell's page-level handler, so this zone
+                  only needs the picker; it is not a `.drop`, which the shell leaves to the zone. */}
+              <label className="needs-input" htmlFor="home-file-input">
+                <span className="btn primary lg">{localizer.message("ui.drop.homeChoose")}</span>
+                {localizer.message("ui.drop.homeDrop")}
+                <input
+                  className="sr-only"
+                  id="home-file-input"
+                  multiple
+                  onChange={(event) => {
+                    const files = Array.from(event.currentTarget.files ?? []);
+                    event.currentTarget.value = "";
+                    if (files.length) onFiles?.(files);
+                  }}
+                  type="file"
+                />
+              </label>
               <a className="btn ghost" href={route("apply-patches")}>
                 <Stamp aria-hidden="true" />
                 {localizer.message("ui.home.applyPatchCta")}

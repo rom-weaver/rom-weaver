@@ -4265,11 +4265,6 @@ msgstr "rom-weaver ist in diesem Browser für die Offline-Nutzung zwischengespei
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.drop.homeHint"
-msgstr "rom-weaver öffnet passend dazu Anwenden, Erstellen oder Testen."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.patch.preflightVerified"
 msgstr "rom-weaver hat diesen Patch gegen die aktuelle Eingabe geprüft."
 
@@ -4282,11 +4277,6 @@ msgstr "ROMs"
 #: src/presentation/localization/messages.ts
 msgid "ui.nav.groupRoms"
 msgstr "ROMs"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.drop.homeDropCoarse"
-msgstr "ROMs, Patches oder beides"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

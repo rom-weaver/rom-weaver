@@ -4265,11 +4265,6 @@ msgstr "rom-weaver is cached in this browser for offline use. When you are onlin
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.drop.homeHint"
-msgstr "rom-weaver opens Apply, Create, or Test to match."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.patch.preflightVerified"
 msgstr "rom-weaver verified this patch against the current input."
 
@@ -4282,11 +4277,6 @@ msgstr "ROMs"
 #: src/presentation/localization/messages.ts
 msgid "ui.nav.groupRoms"
 msgstr "ROMs"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.drop.homeDropCoarse"
-msgstr "ROMs, patches, or both"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

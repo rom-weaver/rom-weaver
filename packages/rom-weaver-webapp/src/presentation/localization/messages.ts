@@ -1312,8 +1312,6 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.drop.applyBeforeTestTitle": msg({ id: "ui.drop.applyBeforeTestTitle", message: "Apply the patch first?" }),
   "ui.drop.homeChoose": msg({ id: "ui.drop.homeChoose", message: "Choose files" }),
   "ui.drop.homeDrop": msg({ id: "ui.drop.homeDrop", message: "or drop ROMs and patches here" }),
-  "ui.drop.homeDropCoarse": msg({ id: "ui.drop.homeDropCoarse", message: "ROMs, patches, or both" }),
-  "ui.drop.homeHint": msg({ id: "ui.drop.homeHint", message: "rom-weaver opens Apply, Create, or Test to match." }),
   "ui.drop.noteApplyFiles": msg({ id: "ui.drop.noteApplyFiles", message: "Open these files in Apply." }),
   "ui.drop.noteApplyFirst": msg({
     id: "ui.drop.noteApplyFirst",

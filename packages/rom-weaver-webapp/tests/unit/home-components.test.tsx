@@ -193,7 +193,7 @@ describe("HomePage", () => {
     expect(container.querySelector(".home-main-actions .sample-tutorial-start-chip")?.textContent).toContain(
       "Walk through a sample",
     );
-    expect(container.querySelector(".home-drop .home-drop-btn")?.textContent).toContain("Choose files");
+    expect(container.querySelector(".home-main-actions .needs-input .btn")?.textContent).toContain("Choose files");
     expect(container.querySelector("a[href='/tools/docs/supported-formats']")?.textContent).toContain(
       "See the full tables",
     );

@@ -4265,11 +4265,6 @@ msgstr "rom-weaver está en la caché de este navegador para usarlo sin conexió
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
-msgid "ui.drop.homeHint"
-msgstr "rom-weaver abre Aplicar, Crear o Probar según lo que añadas."
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
 msgid "ui.patch.preflightVerified"
 msgstr "rom-weaver verificó este parche con la entrada actual."
 
@@ -4282,11 +4277,6 @@ msgstr "ROM"
 #: src/presentation/localization/messages.ts
 msgid "ui.nav.groupRoms"
 msgstr "ROMs"
-
-#. js-lingui-explicit-id
-#: src/presentation/localization/messages.ts
-msgid "ui.drop.homeDropCoarse"
-msgstr "ROMs, parches o ambos"
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

@@ -199,6 +199,9 @@
   .rw-app .home-hero-body {
     gap: 0;
   }
+  .rw-app .home-main-actions {
+    margin-top: 28px;
+  }
   .rw-app .home-hero h1 {
     max-width: 22ch;
     font-size: clamp(36px, 3.4vw, 46px);
@@ -375,72 +378,9 @@
     padding-block: 16px;
   }
   .rw-app .home-main-actions {
-    justify-content: center;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
   }
-  .rw-app .home-main-actions .btn {
-    flex: 1 1 100%;
-  }
-}
-
-/* Hero drop zone: choosing or dropping files routes them to the workflow that fits */
-.rw-app .home-drop {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: center;
-  padding: 26px 16px 22px;
-  margin-top: 20px;
-  text-align: center;
-  cursor: pointer;
-  background: var(--empty-fill);
-  border: 1px dashed var(--seam-strong);
-  border-radius: var(--r-l);
-  transition:
-    background 0.15s,
-    border-color 0.15s;
-}
-@media (hover: hover) {
-  .rw-app .home-drop:hover {
-    background: var(--empty-fill-hover);
-    border-color: var(--empty-border-hover);
-  }
-}
-.rw-app .home-drop:active,
-.rw-app.rw-page-dragging .home-drop {
-  background: var(--empty-fill-hover);
-  border-color: var(--empty-border-hover);
-}
-.rw-app .home-drop:focus-within {
-  outline: 2px solid var(--thread-text);
-  outline-offset: 2px;
-}
-.rw-app .home-drop .home-drop-btn {
-  pointer-events: none;
-}
-.rw-app .home-drop .home-drop-title {
-  margin-top: 4px;
-  font-size: 0.95rem;
-  color: var(--ink-2);
-}
-.rw-app .home-drop .home-drop-hint {
-  font-size: 0.8rem;
-  color: var(--ink-3);
-}
-.rw-app .home-drop .pointer-copy.coarse {
-  display: none;
-}
-@media (pointer: coarse) {
-  .rw-app .home-drop .pointer-copy.fine {
-    display: none;
-  }
-  .rw-app .home-drop .pointer-copy.coarse {
-    display: inline;
-  }
-}
-.rw-app .home-main-actions {
-  --hero-help-font: 0.9rem;
-  gap: 8px 20px;
-  margin-top: 14px;
 }
 
 /* Hero facts */
