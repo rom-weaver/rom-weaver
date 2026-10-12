@@ -1388,6 +1388,10 @@ fn patch_apply_validates_output_checksum() {
             .expect("label")
             .contains("output checksum mismatch for crc32")
     );
+    assert!(
+        !temp.child("bad-output.bin").path().exists(),
+        "a ROM that failed --expect-out must not be left at the output path"
+    );
 }
 
 #[test]
@@ -5589,6 +5593,150 @@ fn patch_apply_patch_select_binds_to_the_preceding_patch() {
 
 /// `patch validate` resolves patches through the same helper, so it takes the
 /// selector too.
+#[test]
+fn patch_validate_chain_honors_patches_authored_against_the_original_rom() {
+    let temp = setup_temp_dir();
+    let original: Vec<u8> = (0..4096u32).map(|index| (index * 7 % 251) as u8).collect();
+    let mut first = original.clone();
+    first[100..110].copy_from_slice(b"HELLOWORLD");
+    let mut second = original.clone();
+    second[2000..2004].copy_from_slice(b"ABCD");
+    fs::write(temp.child("original.bin").path(), &original).expect("fixture");
+    fs::write(temp.child("first.bin").path(), &first).expect("fixture");
+    fs::write(temp.child("second.bin").path(), &second).expect("fixture");
+    // Both patches were made from the ORIGINAL ROM, so the second one's
+    // embedded source checksum does not describe the first one's output.
+    create_bps_patch(
+        temp.child("original.bin").path(),
+        temp.child("first.bin").path(),
+        temp.child("first.bps").path(),
+    );
+    create_bps_patch(
+        temp.child("original.bin").path(),
+        temp.child("second.bin").path(),
+        temp.child("second.bps").path(),
+    );
+
+    let original_path = temp.child("original.bin");
+    let first_patch = temp.child("first.bps");
+    let second_patch = temp.child("second.bps");
+    for extra in [
+        &[][..],
+        &["--default-patch-basis", "base"][..],
+        &["--patch-basis", "auto", "--patch-basis", "base"][..],
+    ] {
+        let mut args = vec![
+            "patch",
+            "validate",
+            "--input",
+            original_path.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            second_patch.path().to_str().expect("path"),
+            "--jsonl",
+        ];
+        args.extend_from_slice(extra);
+        let json = parse_single_json_line(&command_stdout(&args, 0));
+        assert_eq!(json["status"], "succeeded", "{extra:?}");
+    }
+
+    // Declared `previous` keeps the strict chain, so the second patch's source
+    // checksum is rejected against the first patch's output.
+    let output = command_stdout(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            original_path.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            second_patch.path().to_str().expect("path"),
+            "--default-patch-basis",
+            "previous",
+            "--jsonl",
+        ],
+        1,
+    );
+    assert_eq!(parse_single_json_line(&output)["status"], "failed");
+}
+
+#[test]
+fn patch_validate_base_chain_honors_ignored_checksums() {
+    let temp = setup_temp_dir();
+    let original = temp.child("original.bin");
+    let first = temp.child("first.bin");
+    let other = temp.child("other.bin");
+    let modified = temp.child("modified.bin");
+    let first_patch = temp.child("first.bps");
+    let other_patch = temp.child("other.bps");
+    original.write_str("0123456789abcdefghij").unwrap();
+    first.write_str("01X3456789abcdefghij").unwrap();
+    other.write_str("Z123456789abcdefghij").unwrap();
+    modified.write_str("Z1234567W9abcdefghij").unwrap();
+    create_bps_patch(original.path(), first.path(), first_patch.path());
+    create_bps_patch(other.path(), modified.path(), other_patch.path());
+    let args = [
+        "patch",
+        "validate",
+        "--input",
+        original.path().to_str().unwrap(),
+        "--patch",
+        first_patch.path().to_str().unwrap(),
+        "--patch",
+        other_patch.path().to_str().unwrap(),
+        "--default-patch-basis",
+        "base",
+        "--ignore-checksum-validation",
+        "--json",
+    ];
+    let json = parse_single_json_line(&command_stdout(&args, 0));
+    assert_eq!(json["status"], "succeeded");
+}
+
+#[test]
+fn patch_validate_base_chain_preserves_reverse_endpoint() {
+    let temp = setup_temp_dir();
+    let original = temp.child("original.bin");
+    let first = temp.child("first.bin");
+    let short = temp.child("short.bin");
+    let combined = temp.child("combined.bin");
+    let final_rom = temp.child("final.bin");
+    let first_patch = temp.child("first.bps");
+    let reverse_patch = temp.child("reverse.rup");
+    let final_patch = temp.child("final.bps");
+    original.write_str("0123456789abcdefghij").unwrap();
+    first.write_str("01X3456789abcdefghij").unwrap();
+    short.write_str("01234567Y9ab").unwrap();
+    combined.write_str("01X34567Y9ab").unwrap();
+    final_rom.write_str("Q1X34567Y9ab").unwrap();
+    create_bps_patch(original.path(), first.path(), first_patch.path());
+    create_rup_patch(short.path(), original.path(), reverse_patch.path());
+    create_bps_patch(combined.path(), final_rom.path(), final_patch.path());
+    let args = [
+        "patch",
+        "validate",
+        "--input",
+        original.path().to_str().unwrap(),
+        "--patch",
+        first_patch.path().to_str().unwrap(),
+        "--patch-basis",
+        "previous",
+        "--patch",
+        reverse_patch.path().to_str().unwrap(),
+        "--patch-basis",
+        "base",
+        "--patch",
+        final_patch.path().to_str().unwrap(),
+        "--patch-basis",
+        "previous",
+        "--json",
+    ];
+    let json = parse_single_json_line(&command_stdout(&args, 0));
+    assert_eq!(json["status"], "succeeded");
+}
+
 #[test]
 fn patch_validate_accepts_a_patch_select_per_patch() {
     let temp = setup_temp_dir();
