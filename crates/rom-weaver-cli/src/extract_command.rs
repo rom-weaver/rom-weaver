@@ -27,6 +27,34 @@ struct ExtractRun<'a> {
     context: &'a OperationContext,
 }
 
+/// Lists the output directory and any missing ancestors (deepest first) that the preflight
+/// will create, so a failed run can undo exactly what it made and nothing pre-existing.
+fn missing_dirs_to_create(out_dir: &Path) -> Vec<PathBuf> {
+    if out_dir.as_os_str().is_empty() {
+        return Vec::new();
+    }
+    out_dir
+        .ancestors()
+        .take_while(|dir| !dir.as_os_str().is_empty() && !dir.exists())
+        .map(Path::to_path_buf)
+        .collect()
+}
+
+/// Removes directories this run created if they are still empty. `remove_dir` refuses
+/// non-empty directories, so partial output is never deleted.
+fn remove_created_empty_dirs(dirs: &[PathBuf]) {
+    for dir in dirs {
+        match std::fs::remove_dir(dir) {
+            Ok(()) => {
+                debug!(path = %dir.display(), "removed empty output directory after failed extract")
+            }
+            Err(error) => {
+                debug!(path = %dir.display(), %error, "kept output directory after failed extract");
+            }
+        }
+    }
+}
+
 impl CliApp {
     pub(super) fn run_extract(&self, args: ExtractCommand) -> AppRunOutcome {
         let rom_filter = args.rom_filter();
@@ -70,9 +98,13 @@ impl CliApp {
             .context(threads)
             .with_extract_checksum_algorithms(checksum_algorithms)
             .with_extract_checksum_rom_only(checksum_rom_only);
+        let created_dirs = missing_dirs_to_create(&out_dir);
         let handler = match self.probe_extract_source(&source, &out_dir, &context) {
             Ok(handler) => handler,
-            Err(report) => return self.finish("extract", *report),
+            Err(report) => {
+                remove_created_empty_dirs(&created_dirs);
+                return self.finish("extract", *report);
+            }
         };
 
         let (extract_split_bin, split_bin_warning) =
@@ -99,6 +131,9 @@ impl CliApp {
             context: &context,
         };
         let mut report = self.run_extract_stages(&run, selections, split_bin_warning);
+        if report.status != OperationStatus::Succeeded {
+            remove_created_empty_dirs(&created_dirs);
+        }
         if probe {
             // Fold the container/platform probe metadata into the extract result so the
             // caller does not need a separate probe roundtrip. `is_single_payload_codec_container`
