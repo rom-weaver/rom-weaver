@@ -578,6 +578,8 @@ for (const script of bundledScripts) {
     throw new Error(`${script} bundles the Markdown parser; guides must be rendered at build time`);
 }
 
+assertIncludes(read("save-editor/index.html"), "<title>Save Editor | rom-weaver", "save-editor title");
+assertIncludes(read("trim-rom/index.html"), "<title>Trim ROM | rom-weaver", "trim-rom title");
 for (const beta of ["trim-rom", "whats-new", "save-editor"]) {
   assertIncludes(read(`${beta}/index.html`), 'name="robots" content="noindex, nofollow"', `${beta} noindex`);
   assertIncludes(
