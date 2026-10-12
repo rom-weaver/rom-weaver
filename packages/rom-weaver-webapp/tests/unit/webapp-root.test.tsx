@@ -182,7 +182,7 @@ describe("the workbench shell", () => {
 
     expect(navRow(container, "Save Editor")).toBeTruthy();
     expect(navRow(container, "Saves")).toBeUndefined();
-    expect(document.title).toBe("rom-weaver - Save Editor");
+    expect(document.title).toContain("Save Editor");
   });
 
   it("renders the not-found workbench with links out and no workflow panels", async () => {

@@ -73,6 +73,14 @@ const TABS = [
     id: "save-editor",
     label: "Save Editor",
   },
+  {
+    group: "roms",
+    href: "short-name",
+    icon: <svg aria-hidden="true" />,
+    id: "short-name",
+    label: "Long workflow name",
+    railLabel: "Quick",
+  },
 ] satisfies WorkflowTab[];
 
 const mastheadProps = {
@@ -122,6 +130,7 @@ describe("Masthead", () => {
       "Test",
       "Trim",
       "Save Editor",
+      "Quick",
       "Settings",
       "Offline app",
       "Saves & storage",
@@ -473,10 +482,12 @@ describe("Masthead", () => {
     for (const row of container.querySelectorAll<HTMLElement>(".side-nav .nav-row")) {
       const visible = row.querySelector(".nav-row-label")?.textContent ?? "";
       // WCAG 2.5.3: a speech user says what they can read, so the accessible
-      // name has to contain it. "Saves" is not contained in "Save Editor" (the row now shows the full name).
+      // name has to contain it. A rail label that is not part of the full
+      // label ("Quick" in "Long workflow name") keeps its visible text.
       expect((row.getAttribute("aria-label") ?? visible).toLowerCase()).toContain(visible.toLowerCase());
     }
     expect(container.querySelector('.nav-row[href="save-editor"]')?.getAttribute("aria-label")).toBeNull();
+    expect(container.querySelector('.nav-row[href="short-name"]')?.getAttribute("aria-label")).toBeNull();
   });
 
   it("closes an open picker on Escape", () => {
