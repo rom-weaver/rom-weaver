@@ -180,6 +180,8 @@ Not every command takes all five. `extract` has no `--no-extract`, since unpacki
 
 `extract` also unpacks archives found inside the input, up to eight levels deep; `--no-nested-extract` stops after the first layer. If any output file already exists, extraction stops before writing anything, unless `--force` is given. While extracting it can hash what it writes (`--checksum ALGO`, or `--checksum-rom ALGO` for the ROMs only) and report each file's format and platform (`--probe`).
 
+`extract --split-bin` writes a CD-format CHD as a CUE plus one `*.trackNN.bin` per track instead of one merged BIN; it is ignored, with a warning, for non-CHD input. `probe --split-bin` lists the per-track BIN files of a CD-format CHD.
+
 XISO extraction rejects an output that refers to its source file, including symbolic links and native hard links, even with `--force`.
 
 ## Identify
@@ -274,6 +276,8 @@ The internal `ingest` command also identifies each ROM asset. It identifies a pa
 Human checksum output includes the primary digests and each applicable variant digest. `--probe` also reports the detected platform or disc format and ROM header details.
 
 Native `checksum --digest --algo ALGO` prints only the primary checksum in lowercase, followed by one newline. It requires exactly one algorithm. It prints no filename, label, variant checksums, color, or elapsed time. `--quiet` retains the digest; progress and errors use stderr. A failed operation prints no digest. `--digest` conflicts with `--json`, `--jsonl`, and `--dry-run`.
+
+`--start BYTE` and `--length BYTES` hash a byte range. `--no-trim-fix` skips the extra checksums that show how a trimmable ROM hashes trimmed or untrimmed; `identify` accepts it too.
 
 `--digest` retains the normal input semantics: archives open automatically, `--no-extract` hashes the archive bytes, and `--start`/`--length` select a byte range. It is not a checksum-file verification mode.
 
