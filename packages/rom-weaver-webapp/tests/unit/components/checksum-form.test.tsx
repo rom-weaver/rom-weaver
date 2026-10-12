@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { getAgentWorkflow } from "../../../src/webapp/agent/workflow-registry.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { ChecksumForm } from "../../../src/webapp/components/checksum-form.tsx";
@@ -22,13 +23,15 @@ const readyInput = (checksums: Record<string, string>) => ({
 const workflow = vi.hoisted(() => ({
   calculate: vi.fn(),
   instances: [] as unknown[],
+  options: [] as Array<{ selectFile: (request: unknown) => Promise<unknown> }>,
   setInput: vi.fn(),
 }));
 
 vi.mock("../../../src/public/react/workflow-loader.ts", () => {
   class ChecksumWorkflow {
     input: unknown = null;
-    constructor() {
+    constructor(options: { selectFile: (request: unknown) => Promise<unknown> }) {
+      workflow.options.push(options);
       workflow.instances.push(this);
     }
     abort = vi.fn();
@@ -53,6 +56,7 @@ describe("ChecksumForm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     workflow.instances.length = 0;
+    workflow.options.length = 0;
     workflow.setInput.mockResolvedValue(readyInput({ crc32: CRC32, md5: "m".repeat(32), sha1: "s".repeat(40) }));
   });
 
@@ -114,6 +118,59 @@ describe("ChecksumForm", () => {
     // A pasted checksum is compared with every file, and the match names its file.
     fireEvent.change(screen.getByLabelText("Compare with an expected checksum"), { target: { value: "b2c3d4e5" } });
     expect(screen.getByText(/Match: the CRC32 of this file \(b\.sfc\)/)).toBeTruthy();
+  });
+
+  it("marks and names every file that matches a pasted checksum", async () => {
+    workflow.setInput.mockImplementation(async (file: File) => ({
+      ...readyInput({ crc32: CRC32, md5: "m".repeat(32), sha1: "s".repeat(40) }),
+      fileName: file.name,
+      files: [
+        {
+          checksums: { crc32: CRC32, md5: "m".repeat(32), sha1: "s".repeat(40) },
+          fileName: file.name,
+          id: "input",
+          size: 16,
+        },
+      ],
+    }));
+    render(<ChecksumForm />);
+    fireEvent.change(screen.getByLabelText("Drop a file to checksum it"), {
+      target: { files: [new File(["1"], "a.sfc"), new File(["1"], "copy.sfc")] },
+    });
+    await screen.findAllByText(CRC32);
+    fireEvent.change(screen.getByLabelText("Compare with an expected checksum"), { target: { value: CRC32 } });
+
+    expect(screen.getByText("Match: the CRC32 of a.sfc, copy.sfc.")).toBeTruthy();
+    const comparison = getAgentWorkflow("checksum")?.getState().comparison as { matches: unknown[] };
+    expect(comparison.matches).toHaveLength(2);
+  });
+
+  it("drops only the source whose selection was skipped, even when file names repeat", async () => {
+    workflow.setInput.mockImplementation(async (file: File) => {
+      if (workflow.options.length === 2 && workflow.instances.length === 2 && file.size === 3)
+        return new Promise(() => undefined);
+      const input = readyInput({ crc32: CRC32, md5: "m".repeat(32), sha1: "s".repeat(40) });
+      return { ...input, fileName: file.name, files: [{ ...input.files[0], fileName: file.name }] };
+    });
+    render(<ChecksumForm />);
+    // Two files share a name; the second asks for a selection under a nested archive's name.
+    fireEvent.change(screen.getByLabelText("Drop a file to checksum it"), {
+      target: { files: [new File(["abcd"], "dup.zip"), new File(["abc"], "dup.zip")] },
+    });
+    await waitFor(() => expect(workflow.options).toHaveLength(2));
+    workflow.options[1]
+      ?.selectFile({
+        candidates: [{ fileName: "inner.rom", id: "a", kind: "rom", selectable: true, type: "file" }],
+        role: "input",
+        sourceIndex: 0,
+        sourceName: "inner.zip",
+        warnings: [],
+      })
+      .catch(() => undefined);
+    fireEvent.keyDown(await screen.findByRole("dialog"), { key: "Escape" });
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(screen.getAllByText("dup.zip")).toHaveLength(1));
   });
 
   it("accepts text files and passes the initial options", async () => {

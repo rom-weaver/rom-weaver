@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { getAgentWorkflow } from "../../../src/webapp/agent/workflow-registry.ts";
 import { ExtractForm } from "../../../src/webapp/components/extract-form.tsx";
 
 const runtime = vi.hoisted(() => ({ create: vi.fn(), extract: vi.fn(), probe: vi.fn() }));
@@ -50,9 +51,10 @@ describe("ExtractForm", () => {
     await waitFor(() => expect(runtime.extract).toHaveBeenCalledTimes(1));
     expect((runtime.extract.mock.calls[0]?.[0] as { source: File } | undefined)?.source.name).toBe("a.zip");
     expect(
-      await screen.findByText("Extract opens one archive per run: a.zip was extracted, b.zip, c.zip not."),
+      await screen.findByText("Extract opens one archive per run: only a.zip was used; b.zip, c.zip were skipped."),
     ).toBeTruthy();
     expect(screen.queryByText("Add one file at a time.")).toBeNull();
+    expect(getAgentWorkflow("extract")?.getState().skippedFiles).toEqual(["b.zip", "c.zip"]);
   });
 
   it("extracts on add, then downloads one file as itself and several as one ZIP", async () => {

@@ -284,7 +284,7 @@ const IdentifyForm = ({
   const retry = () => {
     if (busy) return;
     for (const entry of entries)
-      if (entry.error || entry.result?.status === "unavailable") void runEntry(entry.id, entry.file);
+      if (!entry.result || entry.result.status === "unavailable") void runEntry(entry.id, entry.file);
   };
 
   const removeEntry = (id: number) => {
@@ -484,6 +484,11 @@ const IdentifyForm = ({
             <>
               {errorBlock}
               {unavailableBlock}
+              {!(unavailable || busy) && entries.some((entry) => !(entry.result || entry.error)) ? (
+                <RunButton icon={<RotateCcw aria-hidden="true" />} onClick={retry}>
+                  Retry identification
+                </RunButton>
+              ) : null}
               {entries.map((entry) =>
                 entry.result && entry.result.status !== "unavailable" && !entry.result.candidates.length ? (
                   <Notice key={entry.id} level="warn">
