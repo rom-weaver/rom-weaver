@@ -894,17 +894,48 @@ fn conflicting_rom_cheats_fail_until_allowed() {
     assert_eq!(patched[0x3D96], 0x4A);
 }
 
-/// `--cheat-system` is validated by clap, so a value without a cheat database
-/// shard fails as a usage error (exit 2) before any work and lists what is valid.
+/// `--cheat-system` is validated by clap against every system the decoders know,
+/// so an unknown name fails as a usage error (exit 2) before any work.
 #[test]
-fn cheat_system_rejects_unknown_and_shardless_systems_as_usage_errors() {
+fn cheat_system_rejects_unknown_systems_as_usage_errors() {
     let temp = setup_temp_dir();
     let input = temp.child("game.nes");
     fs::write(input.path(), nes_rom()).expect("fixture");
     let input_s = input.path().to_str().expect("path").to_owned();
 
-    for value in ["bogus", "sg1000", "psx"] {
-        let output = command_output_with_env(
+    let output = command_output_with_env(
+        &[
+            "cheat",
+            "list",
+            "--input",
+            &input_s,
+            "--cheat-system",
+            "bogus",
+        ],
+        &[],
+        2,
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("--cheat-system"), "{stderr}");
+    assert!(stderr.contains("gameboy-color"), "{stderr}");
+    assert!(
+        stderr.contains("sg1000") && stderr.contains("psx"),
+        "{stderr}"
+    );
+    assert!(output.stdout.is_empty(), "{:?}", output.stdout);
+}
+
+/// `psx` and `sg1000` decode codes but have no database shard, so a command that
+/// needs the database fails at run time with exit 1 and a clear message.
+#[test]
+fn cheat_list_for_a_system_without_a_database_fails_at_run_time() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.bin");
+    fs::write(input.path(), vec![0u8; 0x8000]).expect("fixture");
+    let input_s = input.path().to_str().expect("path").to_owned();
+
+    for (value, name) in [("psx", "PlayStation"), ("sg1000", "SG-1000")] {
+        let report = parse_single_json_line(&command_stdout(
             &[
                 "cheat",
                 "list",
@@ -912,16 +943,54 @@ fn cheat_system_rejects_unknown_and_shardless_systems_as_usage_errors() {
                 &input_s,
                 "--cheat-system",
                 value,
+                "--jsonl",
             ],
-            &[],
-            2,
+            1,
+        ));
+        let label = report["label"].as_str().expect("label");
+        assert!(
+            label.contains(&format!("no cheat database exists for {name} ({value})")),
+            "{label}"
         );
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("--cheat-system"), "{value}: {stderr}");
-        assert!(stderr.contains("gameboy-color"), "{value}: {stderr}");
-        assert!(!stderr.contains("psx, "), "{value}: {stderr}");
-        assert!(output.stdout.is_empty(), "{value}: {:?}", output.stdout);
+        assert!(label.contains("weave with code snapshots"), "{label}");
     }
+}
+
+/// A weave whose cheats carry code snapshots applies on an SG-1000 ROM with
+/// `--cheat-system sg1000` and no database.
+#[test]
+fn weave_apply_with_code_snapshots_accepts_a_system_without_a_database() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.sg");
+    fs::write(input.path(), vec![0u8; 0x8000]).expect("fixture");
+    let weave = write_cheats_only_weave(
+        &temp,
+        "sg.json",
+        serde_json::json!([{"id": "genie", "code": "11A-C3B", "codeKind": "game-genie"}]),
+    );
+    let database = temp.child("no-database");
+    fs::create_dir_all(database.path()).expect("directory");
+    let output = temp.child("patched.sg");
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--weave",
+            &weave,
+            "--cheat-system",
+            "sg1000",
+            "--cheat-database",
+            database.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_ne!(fs::read(output.path()).expect("output")[0x4AC3], 0);
 }
 
 /// `weave create --cheat` for [`nes_rom`], recording one bakeable cheat and

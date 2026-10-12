@@ -320,7 +320,7 @@ These flags also appear under `Cheats` in `patch apply` and `patch create` help.
 | --- | --- |
 | `--cheat ID_OR_DESCRIPTION` | Select by record ID or exact description. Repeatable. Multiple description matches fail with `cheat_selector_ambiguous`. |
 | `--cheat-database DIR` | Shard directory. Defaults to `$ROM_WEAVER_CHEAT_DATABASE`, then the discovery order above. |
-| `--cheat-system SYS` | `nes`, `snes`, `genesis`, `32x`, `sms`, `gamegear`, `gameboy`, `gameboy-color`, or `gba`, when the ROM header does not say. Any other value, including `sg1000` and `psx` (which have no cheat database shard), is a usage error with exit code 2. |
+| `--cheat-system SYS` | `nes`, `snes`, `genesis`, `32x`, `sms`, `gamegear`, `sg1000`, `gameboy`, `gameboy-color`, `gba`, or `psx`, when the ROM header does not say. `sg1000` and `psx` decode codes but have no cheat database, so a command that needs the database (such as `cheat list`) fails with exit code 1; a weave with code snapshots still applies. An unknown value is a usage error with exit code 2. |
 | `--game ID` | Use this database game ID instead of matching by checksum or title. |
 | `--allow-cheat-conflicts` | Later cheats win at conflicting offsets. Otherwise, different `rom` cheat values for one byte fail with `cheat_write_conflict`. |
 

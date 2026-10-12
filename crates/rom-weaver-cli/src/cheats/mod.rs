@@ -61,10 +61,21 @@ impl CheatSystem {
         }
     }
 
-    /// Whether a cheat database shard exists for this system. libretro ships
-    /// none for PlayStation or SG-1000, though both still decode `--code` values.
-    pub const fn has_database_shard(self) -> bool {
-        !matches!(self, Self::PlayStation | Self::Sg1000)
+    /// Human-readable console name for messages.
+    pub const fn display_name(self) -> &'static str {
+        match self {
+            Self::Nes => "NES",
+            Self::Snes => "SNES",
+            Self::Genesis => "Genesis",
+            Self::GameBoy => "Game Boy",
+            Self::GameBoyColor => "Game Boy Color",
+            Self::GameBoyAdvance => "Game Boy Advance",
+            Self::PlayStation => "PlayStation",
+            Self::MasterSystem => "Master System",
+            Self::GameGear => "Game Gear",
+            Self::Sega32x => "Sega 32X",
+            Self::Sg1000 => "SG-1000",
+        }
     }
 
     /// Parse the CLI/UI identifier (accepts a few common aliases).

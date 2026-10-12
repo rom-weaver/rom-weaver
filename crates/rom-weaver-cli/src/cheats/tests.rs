@@ -849,31 +849,6 @@ fn sega32x_uses_the_genesis_decoders_and_layout() {
     assert_eq!(&rom[..2], &[0xAB, 0xCD]);
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-#[test]
-fn only_systems_with_a_shard_slug_report_a_database_shard() {
-    for system in [
-        CheatSystem::Nes,
-        CheatSystem::Snes,
-        CheatSystem::Genesis,
-        CheatSystem::GameBoy,
-        CheatSystem::GameBoyColor,
-        CheatSystem::GameBoyAdvance,
-        CheatSystem::PlayStation,
-        CheatSystem::MasterSystem,
-        CheatSystem::GameGear,
-        CheatSystem::Sega32x,
-        CheatSystem::Sg1000,
-    ] {
-        assert_eq!(
-            system.has_database_shard(),
-            crate::cheat_database::shard_slug(system).is_some(),
-            "{}",
-            system.id()
-        );
-    }
-}
-
 #[test]
 fn cheat_system_serde_names_match_the_database_shards() {
     let expected = [
