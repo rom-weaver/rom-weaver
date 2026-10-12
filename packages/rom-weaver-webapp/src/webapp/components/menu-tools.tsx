@@ -14,7 +14,7 @@ import { guardExternalClick } from "./runtime-status.tsx";
 const ThemeAutoIcon = ({ localizer, theme }: { localizer: Localizer; theme: "dark" | "light" }) => (
   <span aria-hidden="true" className="theme-auto-icon">
     {theme === "dark" ? <Moon /> : <SunMedium />}
-    <span className="theme-auto-badge">{localizer.message("ui.theme.autoBadge")}</span>
+    <span className="theme-auto-badge" data-badge={localizer.message("ui.theme.autoBadge")} />
   </span>
 );
 
@@ -117,7 +117,7 @@ const ThemeTile = ({
         <span aria-hidden="true" className="theme-auto-icon">
           <Moon className="ico-moon" />
           <SunMedium className="ico-sun" />
-          <span className="theme-auto-badge">{localizer.message("ui.theme.autoBadge")}</span>
+          <span className="theme-auto-badge" data-badge={localizer.message("ui.theme.autoBadge")} />
         </span>
         {navRow ? (
           <span className="nav-row-label">{label}</span>

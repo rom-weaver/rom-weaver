@@ -53,6 +53,9 @@ const ChecksumRow = ({
   const { copied, copy } = useClipboardCopy(text);
   const fit = typeof value === "string" && value.length >= FIT_VALUE_MIN_CHARS;
   const hasLabel = label !== undefined && label !== null;
+  // The name carries the visible value too: speech users target a control by
+  // what it shows (WCAG 2.5.3, axe label-content-name-mismatch).
+  const visibleValue = typeof value === "string" ? value : text;
 
   return (
     <button
@@ -60,6 +63,7 @@ const ChecksumRow = ({
         ariaLabel ??
         localizer.message("ui.checks.copy", {
           label: typeof label === "string" ? label : localizer.message("ui.checks.value"),
+          value: visibleValue,
         })
       }
       className={join(
@@ -73,6 +77,9 @@ const ChecksumRow = ({
       type="button"
     >
       {hasLabel ? <span className="ck-k">{label}</span> : null}
+      {/* Whitespace between the spans keeps label and value separate words for
+          text extraction (axe joins sibling text verbatim); the grid drops it. */}
+      {hasLabel ? " " : null}
       <span className={join("ck-v", fit && "ck-fit", copied && "copied")}>{value}</span>
       {mark ? (
         <span
