@@ -147,13 +147,9 @@ impl CliApp {
         let is_stdin = from.as_os_str() == "-";
         let bytes = if is_stdin {
             let mut buf = Vec::new();
-            std::io::Read::read_to_end(&mut std::io::stdin().lock(), &mut buf).map_err(
-                |error| {
-                    RomWeaverError::Validation(format!(
-                        "failed to read weave spec from stdin: {error}"
-                    ))
-                },
-            )?;
+            crate::stdin_input::copy_stdin(&mut buf).map_err(|error| {
+                RomWeaverError::Validation(format!("failed to read weave spec from stdin: {error}"))
+            })?;
             buf
         } else {
             fs::read(&from).map_err(|error| {

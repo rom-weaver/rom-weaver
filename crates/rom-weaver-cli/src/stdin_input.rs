@@ -13,7 +13,7 @@
 pub(crate) const STDIN_INPUT_SENTINEL: &str = "-";
 
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) use native::spool_stdin_if_dash;
+pub(crate) use native::{copy_stdin, spool_stdin_if_dash};
 
 #[cfg(target_arch = "wasm32")]
 pub(crate) use wasm::spool_stdin_if_dash;
@@ -52,7 +52,7 @@ mod native {
         }
         let (path, file) = create_temp_file()?;
         trace!(path = %path.display(), "spooling stdin to temp file");
-        spool_reader_to_file(input, &mut io::stdin().lock(), path, file)
+        spool_reader_to_file(input, &mut stdin_reader(), path, file)
     }
 
     pub(super) fn spool_reader_to_file<R: Read>(
@@ -62,8 +62,8 @@ mod native {
         mut file: File,
     ) -> crate::Result<Option<StdinSpool>> {
         let spool = StdinSpool { path: path.clone() };
-        let copied = (|| -> io::Result<u64> {
-            let bytes = io::copy(reader, &mut file)?;
+        let copied = (|| -> crate::Result<u64> {
+            let bytes = copy_cancelable(reader, &mut file)?;
             file.flush()?;
             Ok(bytes)
         })();
@@ -72,6 +72,73 @@ mod native {
         trace!(path = %path.display(), bytes, "spooled stdin to temp file");
         *input = path;
         Ok(Some(spool))
+    }
+
+    pub(crate) fn copy_stdin(output: &mut impl Write) -> crate::Result<u64> {
+        copy_cancelable(&mut stdin_reader(), output)
+    }
+
+    fn copy_cancelable(reader: &mut impl Read, output: &mut impl Write) -> crate::Result<u64> {
+        let token = rom_weaver_core::process_cancellation_token();
+        let mut buffer = [0; 64 * 1024];
+        let mut bytes = 0;
+        loop {
+            token.check()?;
+            let count = match reader.read(&mut buffer) {
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+                result => result?,
+            };
+            if count == 0 {
+                output.flush()?;
+                return Ok(bytes);
+            }
+            output.write_all(&buffer[..count])?;
+            bytes += count as u64;
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn stdin_reader() -> impl Read {
+        io::stdin().lock()
+    }
+
+    #[cfg(unix)]
+    fn stdin_reader() -> impl Read {
+        PollStdin
+    }
+
+    #[cfg(unix)]
+    struct PollStdin;
+
+    #[cfg(unix)]
+    impl Read for PollStdin {
+        fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+            if buffer.is_empty() {
+                return Ok(0);
+            }
+            let mut descriptor = libc::pollfd {
+                fd: libc::STDIN_FILENO,
+                events: libc::POLLIN,
+                revents: 0,
+            };
+            // A bounded wait MUST let the copier recheck cancellation, even with SA_RESTART.
+            // SAFETY: descriptor points to one initialized pollfd for the duration of poll.
+            let ready = unsafe { libc::poll(&mut descriptor, 1, 100) };
+            if ready < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            if ready == 0 {
+                return Err(io::ErrorKind::Interrupted.into());
+            }
+            // Stdin has one reader during spooling; readiness cannot be consumed elsewhere.
+            // SAFETY: buffer is writable for its length and stdin is a borrowed descriptor.
+            let count =
+                unsafe { libc::read(libc::STDIN_FILENO, buffer.as_mut_ptr().cast(), buffer.len()) };
+            if count < 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(count as usize)
+        }
     }
 
     /// Reserve a unique, freshly-created temp path (no `tempfile` dependency).
