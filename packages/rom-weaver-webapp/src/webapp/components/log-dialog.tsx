@@ -851,7 +851,7 @@ const ConsoleNav = ({
           {visibleSettingsGroups(advanced).map((section) => (
             <li key={section.title}>
               <button className="console-jump" onClick={() => onJump(section.title)} type="button">
-                {section.title}
+                {section.titleId ? localizer.message(section.titleId) : section.title}
               </button>
             </li>
           ))}
