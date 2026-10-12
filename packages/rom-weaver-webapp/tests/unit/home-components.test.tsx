@@ -272,6 +272,16 @@ describe("HomePage", () => {
     expect(container.querySelector(".home-install-doc")?.getAttribute("href")).toBe("/tools/docs/install#npm");
   });
 
+  it("prerenders the Apply action and drop zone that verify-seo-build.mjs checks", () => {
+    const html = renderToString(
+      <RomWeaverSettingsProvider settings={{ language: "en" }}>
+        <HomePage baseUrl="https://rom-weaver.com/" />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(html).toContain('class="btn ghost" href="/apply-patches"');
+    expect(html).toContain('id="home-file-input"');
+  });
+
   it("hands picked files to the shell's router", () => {
     const picked: File[][] = [];
     const { container } = render(
