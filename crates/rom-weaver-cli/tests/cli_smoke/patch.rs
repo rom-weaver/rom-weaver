@@ -1513,6 +1513,16 @@ fn patch_apply_warns_when_ips_does_not_change_output() {
             .expect("label")
             .contains("warning=IPS patch did not change output")
     );
+    assert!(
+        json["details"]["warnings"]
+            .as_array()
+            .expect("warnings")
+            .iter()
+            .any(|warning| warning
+                .as_str()
+                .is_some_and(|text| text.starts_with("IPS patch did not change output"))),
+        "handler warnings must reach the terminal-visible warnings list"
+    );
     assert_eq!(
         fs::read(temp.child("output.bin").path()).expect("output"),
         b"abcdefgh"
@@ -2704,6 +2714,16 @@ fn patch_create_warns_for_identical_ips_inputs() {
             .as_str()
             .expect("label")
             .contains("warning=IPS patch will not change output")
+    );
+    assert!(
+        json["details"]["warnings"]
+            .as_array()
+            .expect("warnings")
+            .iter()
+            .any(|warning| warning
+                .as_str()
+                .is_some_and(|text| text.starts_with("IPS patch will not change output"))),
+        "handler warnings must reach the terminal-visible warnings list"
     );
     assert_eq!(fs::read(patch.path()).expect("patch"), b"PATCHEOF");
 }
