@@ -981,13 +981,22 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         let create_progress_bucket = Arc::new(AtomicU8::new(0));
 
         let mut underlying_magic = [0_u8; 4];
-        let mut head = Vec::with_capacity(NCSD_MAGIC_OFFSET + 4);
-        File::open(input_path)?
-            .take((NCSD_MAGIC_OFFSET + 4) as u64)
-            .read_to_end(&mut head)?;
-        let magic_read = head.len().min(underlying_magic.len());
-        underlying_magic[..magic_read].copy_from_slice(&head[..magic_read]);
-        let recognized_3ds = looks_like_3ds(&head);
+        let mut head = [0_u8; NCSD_MAGIC_OFFSET + 4];
+        let mut head_len = 0;
+        let mut head_file = File::open(input_path)?;
+        while head_len < head.len() {
+            match head_file.read(&mut head[head_len..]) {
+                Ok(0) => break,
+                Ok(read) => head_len += read,
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+        let head = &head[..head_len];
+        for (slot, byte) in underlying_magic.iter_mut().zip(head) {
+            *slot = *byte;
+        }
+        let recognized_3ds = looks_like_3ds(head);
 
         let metadata = Z3dsMetadata::encode_default(Z3DS_DEFAULT_FRAME_SIZE_BYTES);
         let metadata_aligned = Self::align_16(metadata.len());
@@ -1150,12 +1159,12 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         if !recognized_3ds {
             report.label.push_str("; warning=");
             report.label.push_str(NOT_3DS_WARNING);
-            let mut details = match report.details.take() {
-                Some(serde_json::Value::Object(map)) => map,
-                _ => serde_json::Map::new(),
-            };
-            details.insert("warnings".to_string(), serde_json::json!([NOT_3DS_WARNING]));
-            report.details = Some(serde_json::Value::Object(details));
+            if let Some(serde_json::Value::Object(details)) = report.details.as_mut() {
+                details.insert(
+                    "warnings".to_string(),
+                    serde_json::Value::Array(vec![NOT_3DS_WARNING.into()]),
+                );
+            }
         }
         Ok(report)
     }

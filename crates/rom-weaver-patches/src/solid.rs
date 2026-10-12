@@ -94,20 +94,12 @@ impl PatchHandler for SolidPatchHandler {
                 label.push_str(&format!("; truncate output to {size} byte(s)"));
             }
         }
-        let shown = parsed
-            .descriptions
-            .iter()
-            .filter(|value| !value.is_empty())
+        let mut separator = "; info ";
+        for value in parsed.descriptions.iter().filter(|value| !value.is_empty()) {
+            label.push_str(separator);
+            separator = " | ";
             // Patch-supplied text: keep terminal controls out of the label.
-            .map(|value| {
-                value
-                    .chars()
-                    .filter(|c| !c.is_control())
-                    .collect::<String>()
-            })
-            .collect::<Vec<_>>();
-        if !shown.is_empty() {
-            label.push_str(&format!("; info {}", shown.join(" | ")));
+            label.extend(value.chars().filter(|c| !c.is_control()));
         }
         label.push_str(&format!(
             "; source md5 {}",
