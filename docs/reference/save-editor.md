@@ -118,10 +118,12 @@ The repository schema catalog also limits fresh generation to the File 1 profile
 
 Each of the two titles has two generation choices that write identical bytes. The browser shows one game entry and a **Files to edit** choice:
 
-| Browser choice | Game ID                                                                         | Editable properties                                                            |
-| -------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| All files      | `super-mario-world`, `zelda-a-link-to-the-past`                                 | Every file in the save. Zelda shows named equipment, inventory, and progress choices. |
-| File 1 only    | `super-mario-world-schema`, `zelda-a-link-to-the-past-file-1-schema`            | File 1 and its backup. Zelda shows raw numeric codes in place of named choices and raw name glyphs. Other files are preserved. |
+| Browser choice | Game ID                                                              | Editable properties                                                                                                      |
+| -------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| All files      | `super-mario-world`, `zelda-a-link-to-the-past`                      | Every file in the save. Zelda shows named equipment, inventory, and progress choices.                                    |
+| File 1 only    | `super-mario-world-schema`, `zelda-a-link-to-the-past-file-1-schema` | File 1 and its backup; other files are preserved. Zelda shows raw numeric codes and raw name glyphs instead of choices.  |
+
+For Super Mario World the two choices expose the same 233 properties in File 1. The properties differ only for Zelda: 122 against 127.
 
 Super Mario World starts with one file at Yoshi's House, the original initial movement flags, a matching backup, and two empty slots.
 

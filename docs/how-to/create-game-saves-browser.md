@@ -14,7 +14,7 @@ Create a Super Mario World or Zelda save, edit its properties, and download a co
 
 1. [Enable beta tools](browser-settings.md#enable-beta-tools), then open [Saves](https://rom-weaver.com/save-editor).
 2. Under **New save**, select **Choose a game**, then select the game.
-3. For Super Mario World or Zelda, leave **Files to edit** on **All files**. Select **File 1 only** to limit the editor to the first file.
+3. Leave **Files to edit** on **All files**. Select **File 1 only** only if you want raw numeric codes for Zelda.
 4. Select **Create save**. The editor opens the new file.
 5. Change the properties you need. **Find a property** filters the fields. Fields outside the filter keep their pending edits.
 6. Select **Preview changes**, then **Download edited copy**. Without edits, download the default save directly.
@@ -24,7 +24,7 @@ A new Zelda save has one file named `LINK`, three hearts, and two empty slots. C
 
 A new Super Mario World save has one file at Yoshi's House and two empty slots.
 
-Both choices write the same bytes. **File 1 only** changes which properties the editor offers. [The reference](../reference/save-editor.md#save-generation) lists the difference.
+Both choices write the same bytes. The choice matters for Zelda: **All files** offers named choices such as equipment, and **File 1 only** offers raw numeric codes instead. For Super Mario World both choices open the same properties. [The reference](../reference/save-editor.md#save-generation) has the details.
 
 ## Start from an existing save
 
