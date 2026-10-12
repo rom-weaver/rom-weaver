@@ -1071,7 +1071,7 @@ msgstr "Códecs CD"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.console.settingsDescription"
-msgstr "El tema se aplica al instante. Los demás ajustes se aplican al guardar."
+msgstr "El tema y el color de acento se aplican al instante. Los demás ajustes se aplican al guardar."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1736,7 +1736,7 @@ msgstr "Editar posición del parche, actualmente {position} de {total}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.saveThesis"
-msgstr "Edita nombres de entrenador, dinero, medallas, corazones y equipo en una partida guardada,"
+msgstr "Edita nombres de entrenador, dinero, medallas, corazones y equipo en una partida guardada."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

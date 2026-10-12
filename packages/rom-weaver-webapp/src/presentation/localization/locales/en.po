@@ -1071,7 +1071,7 @@ msgstr "CD Codecs"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.console.settingsDescription"
-msgstr "Theme applies immediately. Other settings apply when you save."
+msgstr "Theme and accent apply immediately. Other settings apply when you save."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
@@ -1736,7 +1736,7 @@ msgstr "Edit patch position, currently {position} of {total}"
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
 msgid "ui.hero.saveThesis"
-msgstr "Edit trainer names, money, badges, hearts, and gear in a game save,"
+msgstr "Edit trainer names, money, badges, hearts, and gear in a game save."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
