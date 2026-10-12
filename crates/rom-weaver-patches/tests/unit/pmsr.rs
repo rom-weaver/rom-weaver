@@ -381,7 +381,7 @@ fn create_warns_when_original_is_not_paper_mario() {
     assert!(
         report
             .label
-            .contains("; warning=MOD patches declare the Paper Mario (USA) v1.0 ROM"),
+            .contains("; warning=MOD patches target Paper Mario (USA) v1.0"),
         "{}",
         report.label
     );

@@ -261,11 +261,7 @@ impl PatchHandler for PmsrPatchHandler {
             );
             report.label = crate::shared::labels::append_warning_labels(
                 report.label,
-                &[format!(
-                    "MOD patches declare the Paper Mario (USA) v1.0 ROM as their source \
-                     (CRC32 {PAPER_MARIO_USA10_CRC32:08x}, {PAPER_MARIO_USA10_FILE_SIZE} bytes), \
-                     but this original differs, so applying needs --ignore-checksum-validation"
-                )],
+                &["MOD patches target Paper Mario (USA) v1.0, so applying this one needs --ignore-checksum-validation".to_string()],
             );
         }
         Ok(report)
