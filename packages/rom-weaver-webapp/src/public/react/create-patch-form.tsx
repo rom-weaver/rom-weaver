@@ -44,6 +44,7 @@ import {
 } from "./create-cheat-codes-model.ts";
 import { CreatePatchFormView, type CreatePatchFormViewModel } from "./create-patch-form-view.tsx";
 import {
+  areCreateSourcesIdentical,
   type CompletedCreateOutput,
   CREATE_SUPPORTED_FILES,
   type CreateDisplaySourceState,
@@ -548,6 +549,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const cheatCodesValidationMessage = codesMode
     ? getCheatCodesValidationMessage(cheatCodeEntries, cheatCodesClassifying)
     : "";
+  const identicalSources = !codesMode && areCreateSourcesIdentical(originalState, modifiedState);
   const createInputsSelected = codesMode ? !!original : !!(original && modified);
   const createSourcesReady = codesMode
     ? createInputsSelected && originalState?.status === "ready" && !cheatCodesValidationMessage
@@ -1358,11 +1360,21 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     dropZone: {
       accept: createFileInputAccept.unifiedRom,
       addLabel: localizer.message("ui.drop.addRom"),
-      afterDropZone: dropNotice ? (
-        <Notice id="patch-builder-input-notice" level={dropNoticeLevel}>
-          {dropNotice}
-        </Notice>
-      ) : null,
+      afterDropZone:
+        dropNotice || identicalSources ? (
+          <>
+            {dropNotice ? (
+              <Notice id="patch-builder-input-notice" level={dropNoticeLevel}>
+                {dropNotice}
+              </Notice>
+            ) : null}
+            {identicalSources ? (
+              <Notice id="patch-builder-identical-notice" level="warn">
+                {localizer.message("ui.create.identicalInputs")}
+              </Notice>
+            ) : null}
+          </>
+        ) : null,
       big: createSourcesEmpty,
       guide: WORKFLOW_GUIDES.create,
       disabled: uploadDisabled,
