@@ -245,11 +245,26 @@ impl PatchHandler for PmsrPatchHandler {
         }
         fs::write(&request.output, patch.bytes)?;
 
-        Ok(crate::shared::labels::patch_create_report(
+        let mut report = crate::shared::labels::patch_create_report(
             self.descriptor,
             patch.record_count,
             execution,
-        ))
+        );
+        // MOD patches always declare the Paper Mario (USA) v1.0 source, so a
+        // patch made from any other original fails a strict apply.
+        if context.validate_source_checks()
+            && validate_paper_mario_source(&request.original).is_err()
+        {
+            debug!(
+                format = self.descriptor.name,
+                "pmsr create original is not Paper Mario (USA) v1.0"
+            );
+            report.label = crate::shared::labels::append_warning_labels(
+                report.label,
+                &["MOD patches target Paper Mario (USA) v1.0, so applying this one needs --ignore-checksum-validation".to_string()],
+            );
+        }
+        Ok(report)
     }
 
     fn capabilities(&self) -> PatchCapabilities {
