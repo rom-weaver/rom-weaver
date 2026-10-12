@@ -160,17 +160,53 @@ describe("ApplyPatchListStep", () => {
     expect(container.textContent).toContain("Patch source loaded");
   });
 
-  it("labels a successful preflight as verified when its chain verdict has no source match", () => {
-    const verifiedWithoutIdentity = item(0, {
+  it("labels a successful preflight with no compared checksum as applied, not verified", () => {
+    const appliedWithoutChecksum = item(0, {
       chainVerdict: {
         basis: "base",
         basisSource: "default",
         matched: { kind: "none" },
       },
     });
-    const { container } = renderList({ patches: [verifiedWithoutIdentity] });
+    const { container } = renderList({ patches: [appliedWithoutChecksum] });
+
+    expect(container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toBe("Applied");
+  });
+
+  it("labels a successful preflight as verified when a checksum was compared or matched", () => {
+    const compared = item(0, { checksumCompared: true });
+    const matched = item(1, {
+      chainVerdict: { basis: "base", basisSource: "declared", matched: { kind: "base", variant: "raw" } },
+    });
+    const { container } = renderList({ patches: [compared, matched] });
 
     expect(container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toBe("Verified");
+    expect(container.querySelector("#rom-weaver-patch-chain-chip-1")?.textContent).toBe("Verified");
+  });
+
+  it("labels a failed preflight as a failed check instead of not checked yet", () => {
+    const failedWithoutVerdict = item(0, { validationState: "invalid" });
+    const { container } = renderList({ patches: [failedWithoutVerdict] });
+
+    expect(container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toContain("Check failed: Game A");
+
+    for (const matched of [{ kind: "base" }, { index: 0, kind: "patch_output" }] as const) {
+      const failedAfterMatch = item(0, {
+        chainVerdict: { basis: "base", basisSource: "chain", matched },
+        validationState: "invalid",
+      });
+      const matchedRender = renderList({ patches: [failedAfterMatch] });
+      expect(matchedRender.container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toContain(
+        "Check failed",
+      );
+    }
+
+    const failedWithDefaultVerdict = item(0, {
+      chainVerdict: { basis: "base", basisSource: "default", matched: { kind: "none" } },
+      validationState: "invalid",
+    });
+    const rendered = renderList({ patches: [failedWithDefaultVerdict] });
+    expect(rendered.container.querySelector("#rom-weaver-patch-chain-chip-0")?.textContent).toContain("Check failed");
   });
 
   it("labels a failed preflight as a failed check instead of not checked yet", () => {
