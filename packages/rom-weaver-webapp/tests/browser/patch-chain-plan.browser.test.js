@@ -118,7 +118,7 @@ test("same-base patches all match the ROM and feed the Expected group without co
   expect(document.getElementById("rom-weaver-rom-expected-conflict")).toBeNull();
 }, 120000);
 
-test("checksumless patches distinguish successful preflight from verified identity", async () => {
+test("checksumless patches distinguish a successful preflight from a verified identity", async () => {
   mount(createElement(ApplyPatchForm, {}));
   await dropFixtures([RAW_ROM, IPS_ALT_A, IPS_ALT_B]);
 
@@ -126,7 +126,8 @@ test("checksumless patches distinguish successful preflight from verified identi
   const passedChecks = () =>
     document.querySelectorAll('#rom-weaver-list-patch-stack button[title="Preflight passed"]').length;
   await expect.poll(passedChecks, { timeout: 60000 }).toBe(2);
-  await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Verified");
+  // No checksum was compared, so the chip claims only that the patch applied.
+  await expect.poll(() => chipText(1), { timeout: 60000 }).toBe("Applied");
   expect(document.querySelector("#rom-weaver-list-patch-stack .file.bad")).toBeNull();
 }, 120000);
 

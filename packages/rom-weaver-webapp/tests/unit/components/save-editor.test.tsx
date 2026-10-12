@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { preloadCatalog } from "../../../src/presentation/localization/index.ts";
+import { RomWeaverSettingsProvider } from "../../../src/public/react/settings-context.tsx";
 import { SaveEditor } from "../../../src/webapp/components/save-editor.tsx";
 
 const {
@@ -632,5 +634,21 @@ describe("SaveEditor", () => {
         new Uint8Array([9, 8]),
       ),
     );
+  });
+});
+
+describe("SaveEditor in German", () => {
+  it("translates the editor chrome, the generator, and the field groups", async () => {
+    await preloadCatalog("de");
+    inspectSave.mockResolvedValueOnce(documentResult(genericFields));
+    const view = render(
+      <RomWeaverSettingsProvider settings={{ language: "de" }}>
+        <SaveEditor onSessionChange={vi.fn()} />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(screen.getByText("Neuer Spielstand")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Spiel wählen" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Choose a game" })).toBeNull();
+    view.unmount();
   });
 });
