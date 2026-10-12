@@ -547,7 +547,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     [cheatCodeKind, cheatCodesText, cheatSystem, codesMode],
   );
   const cheatCodesValidationMessage = codesMode
-    ? getCheatCodesValidationMessage(cheatCodeEntries, cheatCodesClassifying)
+    ? getCheatCodesValidationMessage(cheatCodeEntries, cheatCodesClassifying, localizer)
     : "";
   const identicalSources = !codesMode && areCreateSourcesIdentical(originalState, modifiedState);
   const createInputsSelected = codesMode ? !!original : !!(original && modified);
@@ -1463,7 +1463,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         ? {
             afterItems: (
               <p className="create-cheat-codes-unsupported" id="patch-builder-cheat-codes-unsupported">
-                {getUnsupportedCheatSystemMessage(cheatRom?.platform)}
+                {getUnsupportedCheatSystemMessage(cheatRom?.platform, localizer)}
               </p>
             ),
           }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createLocalizer, preloadCatalog } from "../../src/presentation/localization/index.ts";
 
 import {
   getCheatPatchCodes,
@@ -147,7 +148,20 @@ describe("getCheatPatchFileName", () => {
 
 describe("getCheatPatchStatus", () => {
   it("counts the baked cheats", () => {
-    expect(getCheatPatchStatus("game - A.ips", 2)).toBe("Created game - A.ips from 2 ROM cheats.");
-    expect(getCheatPatchStatus("game - A.ips", 1)).toBe("Created game - A.ips from 1 ROM cheat.");
+    expect(getCheatPatchStatus("game - A.ips", 2, createLocalizer("en"))).toBe(
+      "Created game - A.ips from 2 ROM cheats.",
+    );
+    expect(getCheatPatchStatus("game - A.ips", 1, createLocalizer("en"))).toBe(
+      "Created game - A.ips from 1 ROM cheat.",
+    );
+  });
+});
+
+describe("getCheatPatchStatus in Spanish", () => {
+  it("pluralizes in the localizer's language", async () => {
+    await preloadCatalog("es");
+    const es = createLocalizer("es");
+    expect(getCheatPatchStatus("a.ips", 1, es)).toBe("Se creó a.ips a partir de 1 truco de ROM.");
+    expect(getCheatPatchStatus("a.ips", 3, es)).toBe("Se creó a.ips a partir de 3 trucos de ROM.");
   });
 });
