@@ -507,6 +507,111 @@ fn weave_apply_without_can_disable_default_patch() {
 }
 
 #[test]
+fn weave_apply_rejects_with_and_without_patterns_that_match_nothing() {
+    for flag in ["--with", "--without"] {
+        let temp = setup_temp_dir();
+        let weave = write_everything_archive(&temp, EVERYTHING_WEAVE);
+        let output = temp.child("patched.bin");
+
+        let events = run_json_events(
+            &[
+                "patch-apply",
+                "--input",
+                weave.to_str().expect("path"),
+                flag,
+                "NoSuchPatch",
+                "--output",
+                output.path().to_str().expect("path"),
+                "--no-compress",
+                "--jsonl",
+            ],
+            1,
+        );
+        let terminal = events.last().expect("terminal");
+        assert_eq!(terminal["status"], "failed");
+        let label = terminal["label"].as_str().expect("label");
+        assert!(
+            label.contains(flag) && label.contains("NoSuchPatch"),
+            "{flag} typo must be named in the error: {label}"
+        );
+        assert!(!output.path().exists(), "no ROM is written on a typo");
+    }
+}
+
+#[test]
+fn weave_apply_credits_name_and_file_name_patterns_for_the_same_entry() {
+    let temp = setup_temp_dir();
+    let weave = write_everything_archive(&temp, EVERYTHING_WEAVE);
+    let output = temp.child("patched.bin");
+
+    let events = run_json_events(
+        &[
+            "patch-apply",
+            "--input",
+            weave.to_str().expect("path"),
+            "--with",
+            "Extra",
+            "--with",
+            "extra.ips",
+            "--without",
+            "Main hack",
+            "--without",
+            "main.ips",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+        ],
+        0,
+    );
+    assert_eq!(events.last().expect("terminal")["status"], "succeeded");
+    assert_eq!(
+        fs::read(output.path()).expect("output exists"),
+        patched_rom_bytes(&[(1, 0xBB)])
+    );
+}
+
+#[test]
+fn patch_apply_rejects_weave_only_flags_without_a_weave() {
+    let temp = setup_temp_dir();
+    write_weave_rom(&temp, "game.bin");
+    write_offset_ips(&temp, "main.ips", 0, 0xAA);
+    let rom = temp.child("game.bin");
+    let patch = temp.child("main.ips");
+    for (flag, value) in [
+        ("--with", Some("main*")),
+        ("--without", Some("main*")),
+        ("--without-cheats", None),
+    ] {
+        let output = temp.child("patched.bin");
+        let mut args = vec![
+            "patch-apply",
+            "--input",
+            rom.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--jsonl",
+            flag,
+        ];
+        args.extend(value);
+        let events = run_json_events(&args, 1);
+        let terminal = events.last().expect("terminal");
+        assert_eq!(terminal["status"], "failed");
+        assert!(
+            terminal["label"]
+                .as_str()
+                .expect("label")
+                .contains(&format!("{flag} only applies to a weave")),
+            "{flag}: {terminal}"
+        );
+        assert!(!output.path().exists());
+    }
+}
+
+#[test]
 fn weave_apply_rom_checks_mismatch_fails() {
     let temp = setup_temp_dir();
     write_weave_rom(&temp, "game.bin");
