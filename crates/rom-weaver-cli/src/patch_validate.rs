@@ -573,16 +573,14 @@ impl CliApp {
         per_patch: &[PatchPlanVerdict],
         context: &OperationContext,
     ) -> std::result::Result<Vec<PatchValidateStep>, Box<OperationReport>> {
-        per_patch
-            .iter()
-            .enumerate()
-            .map(|(index, verdict)| {
-                let base = index > 0 && verdict.basis == PatchInputBasis::Base;
-                if base
-                    && context.strict_patch_checksums()
-                    && verdict.input_verdict == PatchInputVerdict::Failed
-                {
-                    return Err(Box::new(
+        let mut steps = Vec::with_capacity(per_patch.len());
+        for (index, verdict) in per_patch.iter().enumerate() {
+            let base = index > 0 && verdict.basis == PatchInputBasis::Base;
+            if base
+                && context.strict_patch_checksums()
+                && verdict.input_verdict == PatchInputVerdict::Failed
+            {
+                return Err(Box::new(
                         OperationReport::failed(
                             OperationFamily::Patch,
                             verdict.format.clone(),
@@ -596,13 +594,13 @@ impl CliApp {
                         )
                         .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Validation),
                     ));
-                }
-                Ok(PatchValidateStep {
-                    base,
-                    execution: verdict.execution,
-                })
-            })
-            .collect()
+            }
+            steps.push(PatchValidateStep {
+                base,
+                execution: verdict.execution,
+            });
+        }
+        Ok(steps)
     }
 
     /// Validates one patch of a sequential chain and advances the chain input. Returns the
