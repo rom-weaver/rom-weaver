@@ -11,14 +11,12 @@ import type { MessageId } from "./catalog.ts";
  */
 const MESSAGES: Record<MessageId, MessageDescriptor> = {
   "ui.hero.checksumThesis": msg({ id: "ui.hero.checksumThesis", message: "Calculate file checksums." }),
-  "ui.hero.checksumThesis2": msg({ id: "ui.hero.checksumThesis2", message: "Compare it with the expected value." }),
   "ui.hero.checksumDescription": msg({
     id: "ui.hero.checksumDescription",
     message:
       "Calculate CRC32, MD5, SHA-1, SHA-256, and other file hashes. Compare them with expected checksums. Auto extract opens archives and containers. Everything runs locally in your browser.",
   }),
   "ui.hero.compressThesis": msg({ id: "ui.hero.compressThesis", message: "Compress ROMs and disc images." }),
-  "ui.hero.compressThesis2": msg({ id: "ui.hero.compressThesis2", message: "Create CHD, RVZ, or archives." }),
   "ui.hero.compressDescription": msg({
     id: "ui.hero.compressDescription",
     message:
@@ -1418,7 +1416,6 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
   }),
   "ui.hero.weaveGuide": msg({ id: "ui.hero.weaveGuide", message: "Read the Weave guide" }),
   "ui.hero.weaveThesis": msg({ id: "ui.hero.weaveThesis", message: "Weave your patches." }),
-  "ui.hero.weaveThesis2": msg({ id: "ui.hero.weaveThesis2", message: "Share a reusable recipe." }),
   "ui.hero.createDescription": msg({
     id: "ui.hero.createDescription",
     message:
@@ -1438,7 +1435,6 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
       "Convert GameCube or Wii RVZ to ISO. Decompress CHD to ISO for DVDs, BIN/CUE for CDs, or GDI with tracks for GD-ROMs. Extract ZIP, 7z, Z3DS, and other supported formats locally in your browser.",
   }),
   "ui.hero.extractThesis": msg({ id: "ui.hero.extractThesis", message: "Decompress CHD and RVZ." }),
-  "ui.hero.extractThesis2": msg({ id: "ui.hero.extractThesis2", message: "Extract disc images and archives." }),
   "ui.hero.identifyDescription": msg({
     id: "ui.hero.identifyDescription",
     message:
@@ -1466,47 +1462,31 @@ const MESSAGES: Record<MessageId, MessageDescriptor> = {
     id: "ui.hero.createThesis",
     message: "Make a patch.",
   }),
-  "ui.hero.createThesis2": msg({
-    id: "ui.hero.createThesis2",
-    message: "Share your changes.",
-  }),
   "ui.footer.local": msg({
     id: "ui.footer.local",
     message: "On-device. Offline support. No telemetry.",
   }),
   "ui.hero.thesis": msg({ id: "ui.hero.thesis", message: "Online ROM patcher." }),
-  "ui.hero.thesis2": msg({ id: "ui.hero.thesis2", message: "One toolkit." }),
   "ui.hero.testThesis": msg({
     id: "ui.hero.testThesis",
     message: "Test your ROM online.",
   }),
-  "ui.hero.testThesis2": msg({ id: "ui.hero.testThesis2", message: "Play your patched game." }),
   "ui.hero.identifyThesis": msg({
     id: "ui.hero.identifyThesis",
     message: "Identify your ROM.",
-  }),
-  "ui.hero.identifyThesis2": msg({
-    id: "ui.hero.identifyThesis2",
-    message: "Look up its checksum.",
   }),
   "ui.hero.toolsThesis": msg({
     id: "ui.hero.toolsThesis",
     message: "Undo the patch.",
   }),
-  "ui.hero.toolsThesis2": msg({ id: "ui.hero.toolsThesis2", message: "Recover the original." }),
   "ui.hero.saveThesis": msg({
     id: "ui.hero.saveThesis",
     message: "Edit trainer names, money, badges, hearts, and gear in a game save.",
-  }),
-  "ui.hero.saveThesis2": msg({
-    id: "ui.hero.saveThesis2",
-    message: "with every checksum recalculated before you download.",
   }),
   "ui.hero.trimThesis": msg({
     id: "ui.hero.trimThesis",
     message: "Keep the game.",
   }),
-  "ui.hero.trimThesis2": msg({ id: "ui.hero.trimThesis2", message: "Lose the padding." }),
   "ui.identify.searchDisclosure": msg({
     id: "ui.identify.searchDisclosure",
     message: "Identify by checksum or game name",

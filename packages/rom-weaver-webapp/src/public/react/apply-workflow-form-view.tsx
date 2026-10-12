@@ -921,12 +921,10 @@ function ApplyWorkflowFormView({
           weavePage
             ? {
                 line1: "ui.hero.weaveThesis",
-                line2: "ui.hero.weaveThesis2",
                 description: "ui.hero.weaveDescription",
               }
             : {
                 line1: "ui.hero.thesis",
-                line2: "ui.hero.thesis2",
                 description: "ui.hero.applyDescription",
               }
         }

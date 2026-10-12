@@ -417,7 +417,6 @@ const IdentifyForm = ({
         inputId={inputId}
         lead={{
           line1: "ui.hero.identifyThesis",
-          line2: "ui.hero.identifyThesis2",
           description: "ui.hero.identifyDescription",
         }}
         multiple={false}
