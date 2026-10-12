@@ -55,6 +55,8 @@ type StagedInputInfo = {
   validationValues?: string[];
   sourceTitles?: string[];
   checksumPreflightMismatch?: boolean;
+  /** True when a checksum was available to compare for this patch (vs. only a dry-run apply). */
+  checksumCompared?: boolean;
   /** This patch's slice of the chain verification plan (drives the chain chip). */
   chainVerdict?: {
     basis: "base" | "previous";

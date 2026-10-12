@@ -11,8 +11,8 @@ import type { ApplyPatchFormSettings, BinarySource } from "./patcher-form.ts";
 import type { RomInputRowState } from "./patcher-ui-state.ts";
 import {
   allowsDefaultCompressionSpecial,
+  getBareDefaultCompressionMode,
   getDefaultCompressionArchive,
-  getDefaultCompressionMode,
 } from "./settings-context.tsx";
 
 const isSpecialOutputCompression = (compression: CompressionFormat | string | null | undefined) =>
@@ -38,7 +38,7 @@ const resolveCompressionState = ({
   romInputs,
   z3dsLabelSource,
 }: CompressionResolverInput) => {
-  const defaultCompressionMode = getDefaultCompressionMode(activeSettings);
+  const defaultCompressionMode = getBareDefaultCompressionMode(activeSettings);
   const defaultArchiveCompression = getDefaultCompressionArchive(defaultCompressionMode);
   const configuredOutputCompression = activeSettings.output?.compression;
   const hasConfiguredOutputCompression =

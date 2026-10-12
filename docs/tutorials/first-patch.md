@@ -45,7 +45,7 @@ The guide points at four more parts of the Apply page. Each tip has a **Try it**
 
 ## Step 3: apply the patches
 
-In **Apply**, select **.nes** in **Output format**, then choose **APPLY & DOWNLOAD**.
+In **Apply**, check that **Output format** shows **.nes**, then choose **APPLY & DOWNLOAD**.
 
 This downloads the ROM itself, not a ZIP archive. The checksum in the next step describes that ROM.
 

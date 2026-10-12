@@ -21,6 +21,9 @@ import {
   type SaveRecognition,
   type SaveValue,
 } from "../../lib/runtime/save-editor-result.ts";
+import type { MessageId } from "../../presentation/localization/catalog.ts";
+import type { Localizer } from "../../presentation/localization/index.ts";
+import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { join } from "../../public/react/components/ds/cx.ts";
 import { Notice, RunButton } from "../../public/react/components/ds/feedback.tsx";
@@ -45,14 +48,14 @@ type FieldGroup = { id: string; title: string; fields: SaveField[] };
 type FieldSlot = { id: string; title: string; groups: FieldGroup[] };
 
 const SAVE_SUPPORTED_FILES = [
-  { extensions: ["sav", "srm", "sra", "eep", "fla", "mpk", "mcr", "mcd"], label: "Raw game saves" },
-  { extensions: ["sps", "xps", "gsv"], label: "GameShark SP wrappers" },
-  { extensions: ["dsv", "gme", "mem", "vgs"], label: "Emulator and memory card wrappers" },
+  { extensions: ["sav", "srm", "sra", "eep", "fla", "mpk", "mcr", "mcd"], labelId: "ui.saves.editor.supported.raw" },
+  { extensions: ["sps", "xps", "gsv"], labelId: "ui.saves.editor.supported.gamesharkSp" },
+  { extensions: ["dsv", "gme", "mem", "vgs"], labelId: "ui.saves.editor.supported.wrappers" },
 ] as const;
 const SAVE_ACCEPT = `${SAVE_SUPPORTED_FILES.flatMap((group) => group.extensions.map((extension) => `.${extension}`)).join(",")},application/octet-stream`;
 const GHOST_STEPS = [
-  { num: "0x02", title: "Fields" },
-  { num: "0x03", title: "Write" },
+  { num: "0x02", titleId: "ui.saves.editor.step.fields" },
+  { num: "0x03", titleId: "ui.cheats.write" },
 ] as const;
 /* Titles for the id segments the Rust handlers emit; anything else is capitalized. */
 const GROUP_TITLES: Record<string, string> = {
@@ -64,12 +67,12 @@ const GROUP_TITLES: Record<string, string> = {
   resources: "Resources",
   trainer: "Trainer",
 };
-const INTEGRITY_STATE: Record<string, { state: "ok" | "warn" | "bad"; label: string }> = {
-  invalid: { label: "Integrity invalid", state: "bad" },
-  partially_recoverable: { label: "Partially recoverable", state: "bad" },
-  unsupported: { label: "Unsupported", state: "bad" },
-  valid: { label: "Integrity valid", state: "ok" },
-  valid_with_warnings: { label: "Valid with warnings", state: "warn" },
+const INTEGRITY_STATE: Record<string, { state: "ok" | "warn" | "bad"; labelId: MessageId }> = {
+  invalid: { labelId: "ui.saves.editor.integrity.invalid", state: "bad" },
+  partially_recoverable: { labelId: "ui.saves.editor.integrity.partial", state: "bad" },
+  unsupported: { labelId: "ui.runtime.headerUnsupported", state: "bad" },
+  valid: { labelId: "ui.saves.editor.integrity.valid", state: "ok" },
+  valid_with_warnings: { labelId: "ui.saves.editor.integrity.warnings", state: "warn" },
 };
 
 const outcomeKind = (recognition?: SaveRecognition): "recognized" | "ambiguous" | "unsupported" | "unknown" => {
@@ -102,14 +105,24 @@ const titleFor = (segment: string) =>
   GROUP_TITLES[segment] ?? segment.charAt(0).toUpperCase() + segment.slice(1).replaceAll("_", " ");
 const isReadOnly = (field: SaveField) => !field.editable || field.kind.startsWith("read_only");
 const isToggle = (field: SaveField) => field.kind === "boolean" || field.kind === "bitfield_boolean";
-const groupCount = (editable: number, total: number) =>
-  total > editable ? `${editable} editable · ${total - editable} read-only` : `${editable} editable`;
-const formatNumber = (value: number) => value.toLocaleString("en-US");
-const displayValue = (value: SaveValue) => {
+const groupCount = (editable: number, total: number, localizer: Localizer) =>
+  total > editable
+    ? localizer.message("ui.saves.editor.countMixed", { editable, readOnly: total - editable })
+    : localizer.message("ui.saves.editor.countEditable", { editable });
+const displayValue = (value: SaveValue, localizer: Localizer) => {
   const text = saveValueToText(value);
-  if (text === "true") return "on";
-  if (text === "false") return "off";
+  if (text === "true") return localizer.message("ui.patch.on").toLowerCase();
+  if (text === "false") return localizer.message("ui.patch.off").toLowerCase();
   return text;
+};
+/** Display title for a group; ids without a catalog entry keep the capitalized segment. */
+const groupTitle = (group: FieldGroup, localizer: Localizer) =>
+  Object.hasOwn(GROUP_TITLES, group.id)
+    ? localizer.message(`ui.saves.editor.group.${group.id}` as MessageId)
+    : group.title;
+const slotTitle = (slot: FieldSlot, localizer: Localizer) => {
+  const match = /^slot_(\d+)$/.exec(slot.id);
+  return match ? localizer.message("ui.saves.editor.file", { n: match[1] }) : slot.title;
 };
 
 /**
@@ -142,8 +155,10 @@ const SaveFieldControl = ({
   value,
   error,
   disabled,
+  localizer,
   onChange,
 }: {
+  localizer: Localizer;
   field: SaveField;
   value: SaveValue;
   error?: string;
@@ -218,13 +233,14 @@ const SaveFieldControl = ({
           onClick={() => onChange(String(max))}
           type="button"
         >
-          Max
+          {localizer.message("ui.saves.editor.max")}
         </button>
       )}
       {min !== null || max !== null ? (
         <span className="save-editor-range mono">
-          {min === null ? "…" : formatNumber(min)} – {max === null ? "…" : formatNumber(max)}
-          {field.step && field.step > 1 ? ` · step ${field.step}` : ""}
+          {min === null ? "…" : min.toLocaleString(localizer.locale)} –{" "}
+          {max === null ? "…" : max.toLocaleString(localizer.locale)}
+          {field.step && field.step > 1 ? ` · ${localizer.message("ui.saves.editor.step", { step: field.step })}` : ""}
         </span>
       ) : null}
     </span>
@@ -232,6 +248,7 @@ const SaveFieldControl = ({
 };
 
 const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps) => {
+  const localizer = useUiLocalizer();
   const { currentGameId, entries } = useEmulatorSession();
   const testGame = entries.find((entry) => entry.id === currentGameId);
   const [source, setSource] = useState<File | null>(null);
@@ -333,7 +350,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
       const { inspectSave } = await loadSaveApi();
       const result = await inspectSave({ fileName: file.name, game, romSha1, signal, source: file });
       if (request !== requestRef.current) return;
-      if (!result.document) throw new Error("Save inspection returned no document.");
+      if (!result.document) throw new Error(localizer.message("ui.saves.editor.noDocument"));
       setRecognition(result.recognition);
       setRawOffset(result.rawOffset ?? 0);
       const nextValues = Object.fromEntries(result.document.fields.map((field) => [field.id, field.value]));
@@ -451,7 +468,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
   const validateField = (field: SaveField, text: string): string => {
     const numericKind = field.kind === "unsigned_integer" || field.kind === "signed_integer";
     if (numericKind) {
-      if (!text.trim()) return "Enter a valid integer in the allowed range.";
+      if (!text.trim()) return localizer.message("ui.saves.editor.invalidInteger");
       const number = Number(text);
       const minimum = field.constraints.min ?? (field.kind === "signed_integer" ? -Number.MAX_SAFE_INTEGER : 0);
       if (
@@ -459,13 +476,13 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
         number < minimum ||
         number > (field.constraints.max ?? Number.MAX_SAFE_INTEGER)
       ) {
-        return "Enter a valid integer in the allowed range.";
+        return localizer.message("ui.saves.editor.invalidInteger");
       }
     }
     if (field.constraints.max_length !== null && text.length > field.constraints.max_length)
-      return "This value is too long.";
+      return localizer.message("ui.saves.editor.tooLong");
     if (field.constraints.choices?.length && !field.constraints.choices.includes(text))
-      return "Choose one of the listed values.";
+      return localizer.message("ui.saves.editor.chooseListed");
     return "";
   };
   const updateField = (field: SaveField, text: string) => {
@@ -555,7 +572,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
       const bytes = new Uint8Array(await saveBlob.arrayBuffer());
       const end = rawOffset + document.save_size;
       if (rawOffset < 0 || end > bytes.byteLength || !Number.isSafeInteger(end)) {
-        throw new Error("The edited save no longer contains the expected raw game data.");
+        throw new Error(localizer.message("ui.saves.editor.rawDataMissing"));
       }
       const rawSave = bytes.subarray(rawOffset, end);
       if (canTest && testGame?.checksum) {
@@ -619,7 +636,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
         bytes = new Uint8Array(await file.arrayBuffer());
       } else {
         const stat = await output.vfs.stat(output.path);
-        if (!stat) throw new Error("The edited save output is no longer available.");
+        if (!stat) throw new Error(localizer.message("ui.saves.editor.outputGone"));
         bytes = new Uint8Array(stat.size);
         await output.vfs.read(output.path, bytes);
       }
@@ -658,7 +675,9 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     .map((group) => ({
       ...group,
       fields: group.fields.filter((field) =>
-        `${group.title} ${field.label} ${field.id} ${field.description}`.toLowerCase().includes(query),
+        `${group.title} ${groupTitle(group, localizer)} ${field.label} ${field.id} ${field.description}`
+          .toLowerCase()
+          .includes(query),
       ),
     }))
     .filter((group) => group.fields.length > 0);
@@ -672,16 +691,16 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     getEmulatorJsCore(document.platform) === testCore &&
     (!sourceRomSha1 || sourceRomSha1 === testGame.checksum),
   );
-  let testStatus = "No ROM is loaded in Test. You choose one next.";
+  let testStatus = localizer.message("ui.saves.editor.testNone");
   if (testGame && canTest) {
-    testStatus = `Tests with ${testGame.fileName}. Make sure it is the game that made this save.`;
+    testStatus = localizer.message("ui.saves.editor.testReady", { file: testGame.fileName });
   } else if (testGame) {
-    testStatus = `${testGame.fileName} does not match this save. You choose another ROM next.`;
+    testStatus = localizer.message("ui.saves.editor.testMismatch", { file: testGame.fileName });
   }
-  const slotName = (slot: FieldSlot) => {
+  const slotName = (slot: FieldSlot, title = slot.title) => {
     const name = slot.groups.flatMap((group) => group.fields).find((field) => field.id.endsWith(".player.name"));
     const text = name ? saveValueToText(name.value).trim() : "";
-    return text ? `${slot.title} · ${text}` : slot.title;
+    return text ? `${title} · ${text}` : title;
   };
 
   useAgentWorkflow("save-editor", {
@@ -844,26 +863,27 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
             <output className="mono" id={controlId}>
               {saveValueToText(field.value)}
             </output>
-            <span className="save-editor-tag">read-only</span>
+            <span className="save-editor-tag">{localizer.message("ui.saves.editor.readOnly")}</span>
           </span>
         ) : (
           <SaveFieldControl
             disabled={busy}
             error={errorText}
             field={field}
+            localizer={localizer}
             onChange={(value) => updateField(field, value)}
             value={values[field.id] || field.value}
           />
         )}
         {changed ? (
           <button
-            aria-label={`Reset ${field.label}`}
+            aria-label={localizer.message("ui.saves.editor.resetField", { label: field.label })}
             className="btn slim ghost save-editor-reset"
             disabled={busy}
             onClick={() => resetField(field)}
             type="button"
           >
-            <RotateCcw aria-hidden="true" /> Reset
+            <RotateCcw aria-hidden="true" /> {localizer.message("ui.settings.reset")}
           </button>
         ) : (
           <span />
@@ -907,9 +927,11 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     return (
       <fieldset aria-label={group.id} className="save-editor-group" key={group.id}>
         <legend className="save-editor-group-head">
-          <span className="save-editor-group-title">{group.title}</span>
+          <span className="save-editor-group-title">{groupTitle(group, localizer)}</span>
           <span className="save-editor-group-count mono">
-            {toggles.length && !rows.length ? `${on} / ${toggles.length}` : groupCount(editable, group.fields.length)}
+            {toggles.length && !rows.length
+              ? `${on} / ${toggles.length}`
+              : groupCount(editable, group.fields.length, localizer)}
           </span>
         </legend>
         {rows.length ? <div className="save-editor-rows">{rows.map(renderField)}</div> : null}
@@ -926,13 +948,17 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
             <span className="fsize mono">{formatByteSize(source.size)}</span>
             {document ? <span className="meta-fmt mono">{document.save_format_name}</span> : null}
             {containerName ? <span className="meta-fmt mono">{containerName}</span> : null}
-            {integrity ? <span className={join("save-editor-pill", integrity.state)}>{integrity.label}</span> : null}
-            {selectedSaveId ? <span className="meta-fmt mono">emulator SRAM</span> : null}
+            {integrity ? (
+              <span className={join("save-editor-pill", integrity.state)}>{localizer.message(integrity.labelId)}</span>
+            ) : null}
+            {selectedSaveId ? (
+              <span className="meta-fmt mono">{localizer.message("ui.saves.editor.emulatorSram")}</span>
+            ) : null}
           </>
         }
         name={<span className="nm mono">{source.name}</span>}
         onRemove={resetEditor}
-        removeLabel="Remove save"
+        removeLabel={localizer.message("ui.saves.editor.removeSave")}
         state={integrity?.state}
       >
         {document ? (
@@ -941,11 +967,14 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
             <span>{document.platform.toUpperCase()}</span>
             {document.counter ? (
               <span className="mono">
-                slot {document.active_slot} · index {document.counter}
+                {localizer.message("ui.saves.editor.slotIndex", {
+                  index: document.counter,
+                  slot: document.active_slot,
+                })}
               </span>
             ) : (
               <span className="mono">
-                {document.sections.length} checked {document.sections.length === 1 ? "copy" : "copies"}
+                {localizer.messageCount("ui.saves.editor.checkedCopies", document.sections.length)}
               </span>
             )}
           </p>
@@ -958,8 +987,8 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
         {kind === "ambiguous" ? (
           <div aria-live="polite" className="save-editor-candidates">
             <p className="save-editor-candidates-lead">
-              <strong>Choose the game format</strong>
-              <span>Two games share this save layout, so the file alone cannot tell which one wrote it.</span>
+              <strong>{localizer.message("ui.saves.editor.chooseFormat")}</strong>
+              <span>{localizer.message("ui.saves.editor.chooseFormatHint")}</span>
             </p>
             <div className="save-editor-candidate-list">
               {(recognition?.candidates || []).map((candidate) => (
@@ -983,25 +1012,29 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
         ) : null}
         {kind === "unsupported" ? (
           <Notice level="warn">
-            The game could not be identified. {containerName ? "Raw save size" : "Save size"}:{" "}
+            {localizer.message("ui.saves.editor.unidentified")}{" "}
+            {localizer.message(containerName ? "ui.saves.editor.rawSaveSize" : "ui.saves.editor.saveSize")}:{" "}
             {formatByteSize(saveSize)}
-            {containerName ? ` · Container: ${containerName}` : ""}
-            {potentialFormat ? ` · Potential format: ${potentialFormat}` : ""}. Choose a game profile to open the save.
+            {containerName ? ` · ${localizer.message("ui.saves.editor.container", { name: containerName })}` : ""}
+            {potentialFormat
+              ? ` · ${localizer.message("ui.saves.editor.potentialFormat", { name: potentialFormat })}`
+              : ""}
+            . {localizer.message("ui.saves.editor.chooseProfileToOpen")}
           </Notice>
         ) : null}
         <div className="drop-tray-row">
-          <span className="drop-tray-label">Game profile</span>
+          <span className="drop-tray-label">{localizer.message("ui.saves.editor.gameProfile")}</span>
           <div className="drop-tray-control">
             {profiles?.length ? (
               <>
                 <select
-                  aria-label="Game profile"
+                  aria-label={localizer.message("ui.saves.editor.gameProfile")}
                   className="select"
                   disabled={busy}
                   onChange={(event) => setSelectedProfile(event.currentTarget.value)}
                   value={selectedProfile}
                 >
-                  <option value="">Choose a profile</option>
+                  <option value="">{localizer.message("ui.saves.editor.chooseProfile")}</option>
                   {profiles.map((profile) => (
                     <option key={profile.identity.id} value={profile.identity.id}>
                       {profile.identity.name}
@@ -1009,16 +1042,16 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
                   ))}
                 </select>
                 <button className="btn ghost" disabled={busy || !selectedProfile} onClick={openProfile} type="button">
-                  Open profile
+                  {localizer.message("ui.saves.editor.openProfile")}
                 </button>
               </>
             ) : null}
             {profiles?.length === 0 ? (
-              <span className="drop-tray-note">No supported profiles match this save size.</span>
+              <span className="drop-tray-note">{localizer.message("ui.saves.editor.noProfiles")}</span>
             ) : null}
             {profiles === null ? (
               <button className="btn ghost" disabled={busy} onClick={() => void loadProfiles()} type="button">
-                Choose game profile
+                {localizer.message("ui.saves.editor.chooseGameProfile")}
               </button>
             ) : null}
           </div>
@@ -1030,7 +1063,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
   const sramList = (
     <div className="drop-tray-row save-editor-stash">
       <span className="drop-tray-label" id="save-editor-emulator-title">
-        <Save aria-hidden="true" /> Emulator saves
+        <Save aria-hidden="true" /> {localizer.message("ui.saves.emulator.title")}
       </span>
       {sramSaves.length ? (
         <fieldset aria-labelledby="save-editor-emulator-title" className="drop-tray-control save-editor-records">
@@ -1049,7 +1082,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
         </fieldset>
       ) : (
         <div className="drop-tray-control">
-          <p className="drop-tray-note">No emulator saves yet. Save a game in Test to open its SRAM here.</p>
+          <p className="drop-tray-note">{localizer.message("ui.saves.editor.noEmulatorSaves")}</p>
         </div>
       )}
     </div>
@@ -1059,7 +1092,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
     <section className="panel save-editor" id="save-editor-container">
       <UnifiedDropZone
         accept={SAVE_ACCEPT}
-        addLabel="Replace the save"
+        addLabel={localizer.message("ui.saves.editor.replaceSave")}
         afterDropZone={
           source ? (
             fileCard
@@ -1076,14 +1109,9 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
         big={!source}
         disabled={busy}
         guide={WORKFLOW_GUIDES.save}
-        heroLabel="Drop a game save to edit it"
-        heroLabelCoarse="Tap to add a game save"
-        info={
-          <p>
-            Editing runs locally and never changes the file you add. Use a raw game save, not an emulator save state. A
-            new Pokémon save needs a save made by the game as its template.
-          </p>
-        }
+        heroLabel={localizer.message("ui.saves.editor.heroLabel")}
+        heroLabelCoarse={localizer.message("ui.saves.editor.heroLabelCoarse")}
+        info={<p>{localizer.message("ui.saves.editor.info")}</p>}
         inputId="save-editor-input-picker"
         lead={{ line1: "ui.hero.saveThesis", description: "ui.hero.saveDescription" }}
         multiple={false}
@@ -1092,23 +1120,34 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
           const selected = files.at(-1);
           if (selected) selectSource(selected);
         }}
-        supported={SAVE_SUPPORTED_FILES}
-        title="Save file"
+        supported={SAVE_SUPPORTED_FILES.map((group) => ({
+          extensions: group.extensions,
+          label: localizer.message(group.labelId),
+        }))}
+        title={localizer.message("ui.saves.editor.saveFile")}
       />
       {source ? (
         <>
           <StepSection
             fault={!!error}
-            meta={pendingChanges.length ? `${pendingChanges.length} pending` : undefined}
+            meta={
+              pendingChanges.length
+                ? localizer.message("ui.saves.editor.pending", { count: pendingChanges.length })
+                : undefined
+            }
             num="0x02"
-            title="Fields"
+            title={localizer.message("ui.saves.editor.step.fields")}
             woven={pendingChanges.length > 0}
           >
             {document && activeSlot ? (
               <div className="save-editor-fields">
                 <div className="save-editor-toolbar">
                   {hasSlotTabs ? (
-                    <div aria-label="Save files" className="save-editor-slots" role="tablist">
+                    <div
+                      aria-label={localizer.message("ui.saves.editor.saveFiles")}
+                      className="save-editor-slots"
+                      role="tablist"
+                    >
                       {slots.map((slot) => (
                         <button
                           aria-selected={slot.id === activeSlot.id}
@@ -1118,7 +1157,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
                           role="tab"
                           type="button"
                         >
-                          {slotName(slot)}
+                          {slotName(slot, slotTitle(slot, localizer))}
                         </button>
                       ))}
                     </div>
@@ -1126,10 +1165,10 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
                   <label className="save-editor-search">
                     <Search aria-hidden="true" />
                     <input
-                      aria-label="Find a property"
+                      aria-label={localizer.message("ui.saves.editor.findProperty")}
                       className="input"
                       onChange={(event) => setFieldQuery(event.currentTarget.value)}
-                      placeholder="Find a property"
+                      placeholder={localizer.message("ui.saves.editor.findProperty")}
                       type="search"
                       value={fieldQuery}
                     />
@@ -1139,13 +1178,15 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
                   visibleGroups.map(renderGroup)
                 ) : (
                   <p className="save-editor-empty" role="status">
-                    No properties match this search.
+                    {localizer.message("ui.saves.editor.noMatch")}
                   </p>
                 )}
               </div>
             ) : (
               <p className="save-editor-empty">
-                {busy ? "Reading the save…" : "Choose a supported save to inspect its fields."}
+                {busy
+                  ? localizer.message("ui.saves.editor.reading")
+                  : localizer.message("ui.saves.editor.chooseSupported")}
               </p>
             )}
             {error ? (
@@ -1154,14 +1195,14 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
               </Notice>
             ) : null}
           </StepSection>
-          <StepSection num="0x03" title="Write" woven={!!output}>
+          <StepSection num="0x03" title={localizer.message("ui.cheats.write")} woven={!!output}>
             {pendingChanges.length ? (
               <ul aria-live="polite" className="save-editor-ledger">
                 {pendingChanges.map(({ field, next, original }) => (
                   <li className="save-editor-chip" key={field.id}>
                     <span>{field.label}</span>
                     <span className="mono">
-                      {displayValue(original)} → {displayValue(next)}
+                      {displayValue(original, localizer)} → {displayValue(next, localizer)}
                     </span>
                   </li>
                 ))}
@@ -1169,15 +1210,20 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
             ) : (
               <p className="save-editor-empty">
                 {generated
-                  ? "The fresh save is ready. Edit its properties or download it."
-                  : "No changes yet. Edit a field above to build the edited copy."}
+                  ? localizer.message("ui.saves.editor.freshReady")
+                  : localizer.message("ui.saves.editor.noChanges")}
               </p>
             )}
             {preview ? (
               <div aria-live="polite" className="save-editor-preview mono">
-                {preview.changes?.length || 0} field {preview.changes?.length === 1 ? "change" : "changes"} · integrity{" "}
-                {preview.output_valid ? "valid" : "invalid"}
-                {preview.touched_sections?.length ? ` · sections ${preview.touched_sections.join(", ")}` : ""}
+                {localizer.messageCount("ui.saves.editor.previewChanges", preview.changes?.length || 0, {
+                  integrity: localizer.message(
+                    preview.output_valid ? "ui.saves.editor.integrityValid" : "ui.saves.editor.integrityInvalid",
+                  ),
+                })}
+                {preview.touched_sections?.length
+                  ? ` · ${localizer.message("ui.saves.editor.sections", { sections: preview.touched_sections.join(", ") })}`
+                  : ""}
               </div>
             ) : null}
             <div className="save-editor-run-row">
@@ -1187,7 +1233,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
                   icon={<Download aria-hidden="true" />}
                   onClick={() => void downloadEditedSave()}
                 >
-                  Download edited copy
+                  {localizer.message("ui.saves.editor.downloadEdited")}
                 </RunButton>
               ) : (
                 <RunButton
@@ -1195,7 +1241,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
                   icon={<Download aria-hidden="true" />}
                   onClick={() => void writeEditedSave()}
                 >
-                  Download edited copy
+                  {localizer.message("ui.saves.editor.downloadEdited")}
                 </RunButton>
               )}
               {onSelectTab ? (
@@ -1205,7 +1251,10 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
                   onClick={() => void testSave()}
                   type="button"
                 >
-                  <Gamepad aria-hidden="true" /> {canTest ? "Test save in ROM" : "Choose ROM and test"}
+                  <Gamepad aria-hidden="true" />{" "}
+                  {canTest
+                    ? localizer.message("ui.saves.editor.testInRom")
+                    : localizer.message("ui.saves.editor.chooseRomTest")}
                 </button>
               ) : null}
             </div>
@@ -1216,7 +1265,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
                 onClick={resetAll}
                 type="button"
               >
-                Reset all
+                {localizer.message("ui.saves.editor.resetAll")}
               </button>
               <button
                 className="btn slim ghost"
@@ -1224,7 +1273,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
                 onClick={() => void previewChanges()}
                 type="button"
               >
-                Preview changes
+                {localizer.message("ui.saves.editor.preview")}
               </button>
               {onSelectTab && document ? (
                 <p className={join("save-status", canTest ? "is-ready" : "is-waiting")}>{testStatus}</p>
@@ -1238,22 +1287,22 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
                   onClick={() => setPendingReplacement(true)}
                   type="button"
                 >
-                  Replace selected SRAM
+                  {localizer.message("ui.saves.editor.replaceSram")}
                 </button>
                 {pendingReplacement ? (
                   <span role="alert">
-                    This replaces the stored SRAM.{" "}
+                    {localizer.message("ui.saves.editor.replaceWarning")}{" "}
                     <button className="btn slim danger" onClick={() => void replaceSelectedSram()} type="button">
-                      Confirm
+                      {localizer.message("ui.saves.editor.confirm")}
                     </button>
                     <button className="btn slim ghost" onClick={() => setPendingReplacement(false)} type="button">
-                      Cancel
+                      {localizer.message("ui.common.cancel")}
                     </button>
                   </span>
                 ) : null}
                 {undoAvailable ? (
                   <button className="btn slim ghost" onClick={() => void undoReplacement()} type="button">
-                    <Undo2 aria-hidden="true" /> Undo replacement
+                    <Undo2 aria-hidden="true" /> {localizer.message("ui.saves.editor.undoReplacement")}
                   </button>
                 ) : null}
               </div>
@@ -1261,7 +1310,7 @@ const SaveEditor = ({ onSessionChange, onSelectTab, pageDrop }: SaveEditorProps)
           </StepSection>
         </>
       ) : (
-        <GhostSteps steps={GHOST_STEPS} />
+        <GhostSteps steps={GHOST_STEPS.map((step) => ({ num: step.num, title: localizer.message(step.titleId) }))} />
       )}
     </section>
   );

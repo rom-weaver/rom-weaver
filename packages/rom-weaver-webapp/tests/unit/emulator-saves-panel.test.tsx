@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { preloadCatalog } from "../../src/presentation/localization/index.ts";
+import { RomWeaverSettingsProvider } from "../../src/public/react/settings-context.tsx";
 import { EmulatorSavesPanel } from "../../src/webapp/components/emulator-saves-panel.tsx";
 import type { EmulatorSaveRecord } from "../../src/storage/browser/emulator-saves.ts";
 
@@ -267,5 +269,20 @@ describe("EmulatorSavesPanel import", () => {
     fireEvent.change(input);
 
     expect(screen.queryByLabelText("File type")).toBeNull();
+  });
+});
+
+describe("EmulatorSavesPanel in German", () => {
+  it("translates the heading, row details, and actions", async () => {
+    await preloadCatalog("de");
+    render(
+      <RomWeaverSettingsProvider settings={{ language: "de" }}>
+        <EmulatorSavesPanel />
+      </RomWeaverSettingsProvider>,
+    );
+    expect(await screen.findByText("Emulator-Spielstände")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Exportieren/u })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Löschen/u })).toBeTruthy();
+    expect(screen.getByText(/Savestate: .* · SRAM: /u)).toBeTruthy();
   });
 });

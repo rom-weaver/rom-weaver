@@ -1,5 +1,7 @@
 import { Download, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { Localizer } from "../../presentation/localization/index.ts";
+import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { triggerBrowserDownload } from "../../platform/browser/browser-download.ts";
 import { DropdownSelect } from "../../public/react/components/ds/dropdown-select.tsx";
@@ -13,7 +15,8 @@ import {
 } from "../../storage/browser/emulator-saves.ts";
 import { compressEmulatorSaveExport, extractEmulatorSaveExport } from "../../storage/browser/emulator-save-export.ts";
 
-const formatSaveSize = (value?: Uint8Array) => (value ? formatByteSize(value.byteLength) : "none");
+const formatSaveSize = (value: Uint8Array | undefined, localizer: Localizer) =>
+  value ? formatByteSize(value.byteLength) : localizer.message("ui.saves.emulator.none");
 
 type ReadyEmulatorSaveExport = {
   blob: Blob;
@@ -22,6 +25,7 @@ type ReadyEmulatorSaveExport = {
 };
 
 const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
+  const localizer = useUiLocalizer();
   const inputRef = useRef<HTMLInputElement>(null);
   const [saves, setSaves] = useState<EmulatorSaveRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -110,13 +114,13 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
       <div className="emulator-saves-heading">
         <div>
           <h3 className="dlg-section-title" id="emulator-saves-title">
-            Emulator saves
+            {localizer.message("ui.saves.emulator.title")}
           </h3>
-          <p>Each backup can hold both a save state and SRAM. Matching to the same ROM is automatic.</p>
+          <p>{localizer.message("ui.saves.emulator.description")}</p>
         </div>
         <div className="emulator-saves-actions">
           <button
-            aria-label="Refresh emulator saves"
+            aria-label={localizer.message("ui.saves.emulator.refresh")}
             className="btn slim ghost"
             onClick={() => void refresh()}
             type="button"
@@ -124,7 +128,7 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
             <RefreshCw aria-hidden="true" className={loading ? "spin" : undefined} />
           </button>
           <button className="btn slim ghost" onClick={beginImport} type="button">
-            <Upload aria-hidden="true" /> Import save
+            <Upload aria-hidden="true" /> {localizer.message("ui.saves.emulator.importSave")}
           </button>
           <input
             accept="application/json,application/zip,.json,.zip,*/*"
@@ -153,10 +157,10 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
           }}
         >
           <div>
-            <strong>Import {pendingImport.file.name}</strong>
-            <span>Choose the file type. Raw saves also need the ROM SHA-1.</span>
+            <strong>{localizer.message("ui.saves.emulator.importFile", { name: pendingImport.file.name })}</strong>
+            <span>{localizer.message("ui.saves.emulator.importHint")}</span>
           </div>
-          <label htmlFor="emulator-save-import-kind">File type</label>
+          <label htmlFor="emulator-save-import-kind">{localizer.message("ui.saves.emulator.fileType")}</label>
           <DropdownSelect
             className="select"
             id="emulator-save-import-kind"
@@ -167,13 +171,13 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
             }}
             value={pendingImport.kind}
           >
-            <option value="combined">rom-weaver exported save</option>
+            <option value="combined">{localizer.message("ui.saves.emulator.kindCombined")}</option>
             <option value="sram">SRAM</option>
-            <option value="state">Save state</option>
+            <option value="state">{localizer.message("ui.saves.emulator.kindState")}</option>
           </DropdownSelect>
           {pendingImport.kind === "combined" ? null : (
             <>
-              <label htmlFor="emulator-save-import-sha1">ROM SHA-1</label>
+              <label htmlFor="emulator-save-import-sha1">{localizer.message("ui.saves.emulator.romSha1")}</label>
               <input
                 autoComplete="off"
                 className="input mono"
@@ -190,7 +194,7 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
               disabled={pendingImport.kind !== "combined" && !importSha1.trim()}
               type="submit"
             >
-              Import
+              {localizer.message("ui.saves.emulator.import")}
             </button>
             <button
               className="btn slim ghost"
@@ -200,15 +204,15 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
               }}
               type="button"
             >
-              Cancel
+              {localizer.message("ui.common.cancel")}
             </button>
           </div>
         </form>
       ) : null}
       {loading || saves.length ? null : (
         <div className="emulator-saves-empty">
-          <strong>No emulator saves yet</strong>
-          <span>Play a ROM in Test, or import a rom-weaver save.</span>
+          <strong>{localizer.message("ui.saves.emulator.emptyTitle")}</strong>
+          <span>{localizer.message("ui.saves.emulator.emptyBody")}</span>
         </div>
       )}
       {saves.length ? (
@@ -217,9 +221,14 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
             <li className="emulator-save-row" key={save.gameId}>
               <div className="emulator-save-info">
                 <strong>{save.label}</strong>
-                <span className="emulator-save-sha">ROM fingerprint · SHA-1 {save.gameId}</span>
+                <span className="emulator-save-sha">
+                  {localizer.message("ui.saves.emulator.fingerprint", { sha1: save.gameId })}
+                </span>
                 <span className="emulator-save-sizes">
-                  State: {formatSaveSize(save.state)} · SRAM: {formatSaveSize(save.sram)}
+                  {localizer.message("ui.saves.emulator.sizes", {
+                    sram: formatSaveSize(save.sram, localizer),
+                    state: formatSaveSize(save.state, localizer),
+                  })}
                 </span>
               </div>
               <div className="emulator-save-actions">
@@ -230,14 +239,17 @@ const EmulatorSavesPanel = ({ active = true }: { active?: boolean }) => {
                   onClick={() => void exportSave(save)}
                   type="button"
                 >
-                  <Download aria-hidden="true" /> {readyExport?.gameId === save.gameId ? "Download" : "Export"}
+                  <Download aria-hidden="true" />{" "}
+                  {readyExport?.gameId === save.gameId
+                    ? localizer.message("ui.common.download")
+                    : localizer.message("ui.saves.emulator.export")}
                 </button>
                 <button
                   className="btn slim ghost"
                   onClick={() => void deleteEmulatorSave(save.gameId).then(refresh).catch(reportActionError)}
                   type="button"
                 >
-                  <Trash2 aria-hidden="true" /> Delete
+                  <Trash2 aria-hidden="true" /> {localizer.message("ui.saves.emulator.delete")}
                 </button>
               </div>
             </li>
