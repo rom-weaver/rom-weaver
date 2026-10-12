@@ -2424,6 +2424,16 @@ apply and verifies the input, as long as the file name survives."
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
+            long = "ppf-undo",
+            help = "PPF patches only: store the original bytes in each record so `tools ppf-undo` can revert the patch"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub ppf_undo: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
             long = "xdelta-secondary",
             default_value = "none",
             value_parser = ["auto", "lzma", "djw", "fgk", "none"],

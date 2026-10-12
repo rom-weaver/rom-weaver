@@ -319,6 +319,63 @@ fn create_can_emit_patch_info_flag_with_seven_strings() {
 }
 
 #[test]
+fn parse_reports_description_strings_in_label_and_details() {
+    let temp = TestDir::new();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.solid");
+    fs::write(&original, b"abcdefgh").expect("fixture");
+    fs::write(&modified, b"abcXefgh").expect("fixture");
+    let options = PatchCreateFormatOptions::Solid(SolidPatchMetadata {
+        system: Some("NDS".into()),
+        game: Some("Example Game".into()),
+        hack: Some("Example Hack".into()),
+        version: Some("v1.0".into()),
+        author: Some("rom-weaver".into()),
+        contact: None,
+        comment: None,
+        extended: true,
+    });
+    let handler = SolidPatchHandler::new(&SOLID);
+    handler
+        .create_with_options(
+            &PatchCreateRequest {
+                original,
+                modified,
+                output: patch.clone(),
+                format: "solid".into(),
+            },
+            Some(&options),
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("create");
+
+    let report = handler
+        .parse(&patch, &test_context_with_threads(&temp, 1))
+        .expect("parse");
+    assert!(
+        report
+            .label
+            .contains("; info NDS | Example Game | Example Hack | v1.0 | rom-weaver;"),
+        "label: {}",
+        report.label
+    );
+    let descriptions = &report.details.as_ref().expect("details")["patch"]["descriptions"];
+    assert_eq!(
+        descriptions,
+        &serde_json::json!([
+            "NDS",
+            "Example Game",
+            "Example Hack",
+            "v1.0",
+            "rom-weaver",
+            "",
+            ""
+        ])
+    );
+}
+
+#[test]
 fn create_can_override_basic_metadata_without_extended_header() {
     let temp = TestDir::new();
     let original = temp.child("old.bin");
@@ -886,6 +943,7 @@ fn empty_parsed_patch(resize: ResizeAction, expansion_data: Vec<u8>) -> ParsedSo
         version: SOLID_FORMAT_VERSION,
         source_md5: [0u8; SOLID_MD5_LEN],
         creation_date: None,
+        descriptions: Vec::new(),
         resize,
         primitives: Vec::new(),
         expansion_data,

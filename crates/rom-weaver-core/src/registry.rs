@@ -328,6 +328,8 @@ pub struct SolidPatchMetadata {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PatchCreateFormatOptions {
     Solid(SolidPatchMetadata),
+    /// PPF3: store the original bytes of each record so `tools ppf-undo` can revert it.
+    PpfUndo,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -703,6 +703,56 @@ mod tests {
         );
     }
 
+    fn z3ds_create_warnings(name: &str, payload: &[u8]) -> Vec<String> {
+        let temp_dir = temp_dir_path(&format!("z3ds-warn-{name}"));
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("payload.bin");
+        fs::write(&input_path, payload).expect("write fixture");
+        let report = Z3dsContainerHandler
+            .create(
+                &ContainerCreateRequest {
+                    archive_names: None,
+                    inputs: vec![input_path],
+                    output: temp_dir.join("out.z3ds"),
+                    format: "z3ds".to_string(),
+                    codec: None,
+                    level: None,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 1),
+            )
+            .expect("z3ds create succeeds");
+        report
+            .details
+            .as_ref()
+            .and_then(|details| details.get("warnings"))
+            .and_then(|warnings| warnings.as_array())
+            .map(|warnings| {
+                warnings
+                    .iter()
+                    .filter_map(|warning| warning.as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn z3ds_create_warns_when_input_is_not_3ds_content() {
+        let warnings = z3ds_create_warnings("random", &[0x5a; 4096]);
+        assert_eq!(warnings, vec!["input is not recognizable 3DS content"]);
+    }
+
+    #[test]
+    fn z3ds_create_does_not_warn_for_3ds_content() {
+        let mut ncsd = vec![0_u8; 4096];
+        ncsd[0x100..0x104].copy_from_slice(b"NCSD");
+        assert!(z3ds_create_warnings("ncsd", &ncsd).is_empty());
+        let mut cia = vec![0_u8; 4096];
+        cia[..4].copy_from_slice(&[0x20, 0x20, 0, 0]);
+        assert!(z3ds_create_warnings("cia", &cia).is_empty());
+        assert!(z3ds_create_warnings("3dsx", b"3DSX\0\0\0\0").is_empty());
+    }
+
     #[test]
     fn z3ds_capabilities_report_parallel_create_threads() {
         let registry = ContainerRegistry::new();
