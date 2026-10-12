@@ -344,8 +344,8 @@ impl CliApp {
                 probe_threads.clone(),
                 &plan_flags,
             ) {
-                Ok(plan) => match Self::validation_steps(&plan.per_patch, context) {
-                    Ok(flags) => flags,
+                Ok(plan) => match Self::validation_steps(plan.per_patch, context) {
+                    Ok(flags) => Some(flags),
                     Err(report) => return *report,
                 },
                 Err(error) => {
@@ -359,7 +359,7 @@ impl CliApp {
                 }
             }
         } else {
-            vec![PatchValidateStep::default(); patch_count]
+            None
         };
         let mut chain = PatchValidateChain {
             current_input: validate_input,
@@ -570,10 +570,9 @@ impl CliApp {
 
     /// Preserves the planner's basis and reversible endpoint for each chain step.
     fn validation_steps(
-        per_patch: &[PatchPlanVerdict],
+        per_patch: Vec<PatchPlanVerdict>,
         context: &OperationContext,
-    ) -> std::result::Result<Vec<PatchValidateStep>, Box<OperationReport>> {
-        let mut steps = Vec::with_capacity(per_patch.len());
+    ) -> std::result::Result<Vec<PatchPlanVerdict>, Box<OperationReport>> {
         for (index, verdict) in per_patch.iter().enumerate() {
             let base = index > 0 && verdict.basis == PatchInputBasis::Base;
             if base
@@ -595,12 +594,8 @@ impl CliApp {
                         .with_error_kind(rom_weaver_core::RomWeaverErrorKind::Validation),
                     ));
             }
-            steps.push(PatchValidateStep {
-                base,
-                execution: verdict.execution,
-            });
         }
-        Ok(steps)
+        Ok(per_patch)
     }
 
     /// Validates one patch of a sequential chain and advances the chain input. Returns the
@@ -702,15 +697,18 @@ impl CliApp {
                     "patch-validate",
                     "validate",
                 )));
-        if chain.validation_steps[index].base {
-            patch_context = patch_context.with_patch_check_scopes(PatchCheckScopes {
-                patch_integrity: context.strict_patch_checksums(),
-                source: false,
-                target: false,
-            });
-        }
-        if let Some(selection) = chain.validation_steps[index].execution {
-            patch_context = patch_context.with_patch_endpoint_selection(selection);
+        if let Some(verdicts) = &chain.validation_steps {
+            let verdict = &verdicts[index];
+            if index > 0 && verdict.basis == PatchInputBasis::Base {
+                patch_context = patch_context.with_patch_check_scopes(PatchCheckScopes {
+                    patch_integrity: context.strict_patch_checksums(),
+                    source: false,
+                    target: false,
+                });
+            }
+            if let Some(selection) = verdict.execution {
+                patch_context = patch_context.with_patch_endpoint_selection(selection);
+            }
         }
 
         let handler_failed = |error: RomWeaverError| {
@@ -951,18 +949,16 @@ impl CliApp {
         } else {
             format!("; {}", validation_labels.join("; "))
         };
-        let per_patch = verdicts
-            .iter()
-            .map(|verdict| {
-                json!({
-                    "index": verdict.index,
-                    "patch": verdict.patch,
-                    "format": verdict.format,
-                    "status": if verdict.passed { "passed" } else { "failed" },
-                    "message": verdict.message,
-                })
-            })
-            .collect::<Vec<_>>();
+        let mut per_patch = Vec::with_capacity(verdicts.len());
+        for verdict in &verdicts {
+            per_patch.push(json!({
+                "index": verdict.index,
+                "patch": verdict.patch,
+                "format": verdict.format,
+                "status": if verdict.passed { "passed" } else { "failed" },
+                "message": verdict.message,
+            }));
+        }
 
         let mut report = OperationReport::succeeded(
             OperationFamily::Patch,
@@ -1014,36 +1010,18 @@ impl CliApp {
                     input: job.input.clone(),
                     patches: vec![job.resolved.clone()],
                 };
-                let verdict = match job.handler.validate(&request, context) {
-                    Ok(report) if report.status == OperationStatus::Succeeded => PerPatchVerdict {
-                        index: job.index,
-                        patch: job.patch.clone(),
-                        format: Some(job.format.clone()),
-                        passed: true,
-                        message: report.label,
-                    },
-                    Ok(report) => PerPatchVerdict {
-                        index: job.index,
-                        patch: job.patch.clone(),
-                        format: Some(job.format.clone()),
-                        passed: false,
-                        message: report.label,
-                    },
+                let (passed, message) = match job.handler.validate(&request, context) {
+                    Ok(report) => (report.status == OperationStatus::Succeeded, report.label),
                     Err(RomWeaverError::Cancelled) => return Err(RomWeaverError::Cancelled),
-                    Err(RomWeaverError::Unsupported(op)) => PerPatchVerdict {
-                        index: job.index,
-                        patch: job.patch.clone(),
-                        format: Some(job.format.clone()),
-                        passed: false,
-                        message: op.to_string(),
-                    },
-                    Err(error) => PerPatchVerdict {
-                        index: job.index,
-                        patch: job.patch.clone(),
-                        format: Some(job.format.clone()),
-                        passed: false,
-                        message: error.to_string(),
-                    },
+                    Err(RomWeaverError::Unsupported(op)) => (false, op.to_string()),
+                    Err(error) => (false, error.to_string()),
+                };
+                let verdict = PerPatchVerdict {
+                    index: job.index,
+                    patch: job.patch.clone(),
+                    format: Some(job.format.clone()),
+                    passed,
+                    message,
                 };
                 trace!(
                     index = verdict.index,
@@ -1100,10 +1078,13 @@ impl CliApp {
                     jobs = ready_jobs.len(),
                     "patch preflight fan-out (serial)"
                 );
-                ready_jobs
-                    .iter()
-                    .map(run_one)
-                    .collect::<std::result::Result<Vec<_>, _>>()
+                (|| {
+                    let mut verdicts = Vec::with_capacity(ready_jobs.len());
+                    for job in ready_jobs {
+                        verdicts.push(run_one(job)?);
+                    }
+                    Ok(verdicts)
+                })()
             }
         } else {
             Ok(Vec::new())
@@ -1351,34 +1332,35 @@ impl CliApp {
             verdict.basis == PatchInputBasis::Previous
                 && verdict.basis_source == PatchBasisSource::Default
         };
-        let mut ready_jobs: Vec<IndependentReadyJob> = resolved_patches
-            .iter()
-            .enumerate()
-            .filter_map(|(index, patch)| {
-                let verdict = &per_patch[index];
-                let reverse_only_base_match = plan_inputs[index].has_only_reverse_base_executions();
-                // A reversible reverse match may be an ordinary forward revert
-                // of the intermediate; it does not prove a speculative base step.
-                if is_speculative_base(verdict) && reverse_only_base_match {
-                    return None;
-                }
-                let consumes_base = index == 0
-                    || verdict.basis == PatchInputBasis::Base
-                    || is_speculative_base(verdict);
-                if !consumes_base || verdict.input_verdict == PatchInputVerdict::Failed {
-                    return None;
-                }
-                let handler = handlers[index].clone()?;
-                handler.capabilities().apply.then(|| IndependentReadyJob {
+        let mut ready_jobs = Vec::with_capacity(resolved_patches.len());
+        for (index, patch) in resolved_patches.iter().enumerate() {
+            let verdict = &per_patch[index];
+            let reverse_only_base_match = plan_inputs[index].has_only_reverse_base_executions();
+            // A reversible reverse match may be an ordinary forward revert
+            // of the intermediate; it does not prove a speculative base step.
+            if is_speculative_base(verdict) && reverse_only_base_match {
+                continue;
+            }
+            let consumes_base = index == 0
+                || verdict.basis == PatchInputBasis::Base
+                || is_speculative_base(verdict);
+            if !consumes_base || verdict.input_verdict == PatchInputVerdict::Failed {
+                continue;
+            }
+            let Some(handler) = handlers[index].clone() else {
+                continue;
+            };
+            if handler.capabilities().apply {
+                ready_jobs.push(IndependentReadyJob {
                     index,
                     patch: patch.source.to_string_lossy().to_string(),
                     input: validate_input.to_path_buf(),
                     resolved: patch.resolved.clone(),
                     format: handler.descriptor().name.to_string(),
                     handler,
-                })
-            })
-            .collect();
+                });
+            }
+        }
         let raw_representation = base_variants
             .iter()
             .find(|variant| variant.name == "raw")
@@ -1932,13 +1914,7 @@ struct PatchValidateChain {
     n64_order: Option<N64ByteOrderTransform>,
     n64_byte_order: PatchN64ByteOrderMode,
     probe_threads: Option<ThreadExecution>,
-    validation_steps: Vec<PatchValidateStep>,
-}
-
-#[derive(Clone, Copy, Default)]
-struct PatchValidateStep {
-    base: bool,
-    execution: Option<PatchEndpointSelection>,
+    validation_steps: Option<Vec<PatchPlanVerdict>>,
 }
 
 fn patch_validate_passed_report(
