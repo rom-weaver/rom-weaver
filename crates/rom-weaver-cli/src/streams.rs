@@ -377,7 +377,7 @@ fn run_staged(
     }
     trace!(path = %path.display(), "copying completed binary output to stdout");
     let mut source = File::open(path)?;
-    match copy_cancelable(&mut source, &mut io::stdout().lock()) {
+    match copy_cancelable(&mut source, &mut stdout_writer()) {
         Ok(()) => Ok(ExitCode::SUCCESS),
         Err(RomWeaverError::Io(error)) if error.kind() == io::ErrorKind::BrokenPipe => {
             Ok(ExitCode::SUCCESS)
@@ -399,7 +399,85 @@ fn copy_cancelable(input: &mut impl Read, output: &mut impl Write) -> Result<()>
             output.flush()?;
             return Ok(());
         }
-        output.write_all(&buffer[..count])?;
+        let written = output.write_all(&buffer[..count]);
+        token.check()?;
+        written?;
+    }
+}
+
+#[cfg(not(unix))]
+fn stdout_writer() -> impl Write {
+    io::stdout().lock()
+}
+
+#[cfg(unix)]
+fn stdout_writer() -> impl Write {
+    // SAFETY: fpathconf only queries the borrowed stdout descriptor.
+    let atomic_limit = unsafe { libc::fpathconf(libc::STDOUT_FILENO, libc::_PC_PIPE_BUF) };
+    PollStdout {
+        _lock: io::stdout().lock(),
+        write_limit: usize::try_from(atomic_limit)
+            .ok()
+            .filter(|limit| *limit > 0)
+            .unwrap_or(512),
+    }
+}
+
+#[cfg(unix)]
+struct PollStdout {
+    _lock: io::StdoutLock<'static>,
+    write_limit: usize,
+}
+
+#[cfg(unix)]
+impl Write for PollStdout {
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        if buffer.is_empty() {
+            return Ok(0);
+        }
+        let token = process_cancellation_token();
+        loop {
+            if token.is_cancelled() {
+                // Interrupted would make write_all retry; the copier restores Cancelled instead.
+                return Err(io::Error::other(RomWeaverError::Cancelled));
+            }
+            let mut descriptor = libc::pollfd {
+                fd: libc::STDOUT_FILENO,
+                events: libc::POLLOUT,
+                revents: 0,
+            };
+            // SAFETY: descriptor points to one initialized pollfd for the duration of poll.
+            let ready = unsafe { libc::poll(&mut descriptor, 1, 100) };
+            if ready < 0 {
+                let error = io::Error::last_os_error();
+                if error.kind() == io::ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(error);
+            }
+            if ready == 0 {
+                continue;
+            }
+            // FIFO output MUST stay within its atomic write limit: a larger write can block
+            // after poll reports room. The stdout lock serializes this process's binary writer.
+            let count = buffer.len().min(self.write_limit);
+            // SAFETY: buffer is readable for count bytes and stdout is a borrowed descriptor.
+            let written =
+                unsafe { libc::write(libc::STDOUT_FILENO, buffer.as_ptr().cast(), count) };
+            if written < 0 {
+                let error = io::Error::last_os_error();
+                if error.kind() == io::ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(error);
+            }
+            return Ok(written as usize);
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        // Raw descriptor writes leave no Rust stdout buffer to flush.
+        Ok(())
     }
 }
 

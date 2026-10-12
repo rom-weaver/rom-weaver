@@ -1379,3 +1379,158 @@ fn probe_stdin_failure_names_stdin_not_the_staging_file() {
     );
     assert!(!label.contains("rom-weaver-stdin"), "{label}");
 }
+
+// quality-reason: Linux procfs verifies installed handlers and blocked I/O before signalling.
+#[cfg(target_os = "linux")]
+mod cancelled_output {
+    use super::*;
+    use std::io::Read;
+    use std::os::fd::{AsRawFd, FromRawFd};
+    use std::process::Child;
+
+    fn wait_for_io(child: &mut Child, signal: i32, blocked: &str) {
+        let proc = PathBuf::from(format!("/proc/{}", child.id()));
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let status = fs::read_to_string(proc.join("status")).expect("child status");
+            let caught = status
+                .lines()
+                .find_map(|line| line.strip_prefix("SigCgt:"))
+                .and_then(|mask| u64::from_str_radix(mask.trim(), 16).ok())
+                .unwrap();
+            let wait = fs::read_to_string(proc.join("wchan")).expect("child wait state");
+            if caught & (1 << (signal - 1)) != 0
+                && (wait.trim() == blocked || wait.contains("poll"))
+            {
+                return;
+            }
+            if child.try_wait().expect("child status").is_some() || Instant::now() >= deadline {
+                let _ = child.kill();
+                let output = child.wait().expect("reap child");
+                panic!("child did not reach {blocked}: {output:?}");
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    fn cancel(child: &mut Child, signal: i32) {
+        // SAFETY: the child is alive and signal is SIGTERM or SIGHUP.
+        assert_eq!(unsafe { libc::kill(child.id() as i32, signal) }, 0);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            if let Some(status) = child.try_wait().expect("wait for cancellation") {
+                assert_eq!(status.code(), Some(130), "{status:?}");
+                return;
+            }
+            if Instant::now() >= deadline {
+                child.kill().expect("stop blocked child");
+                child.wait().expect("reap blocked child");
+                panic!("termination must unwind while the output pipe remains unread");
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn weave_stdin_cancellation_keeps_json_and_jsonl_error_kinds() {
+        for mode in ["--jsonl", "--json"] {
+            for signal in [libc::SIGTERM, libc::SIGHUP] {
+                let temp = setup_temp_dir();
+                let mut child = binary()
+                    .args(["weave", "create", "--from", "-", mode, "--output"])
+                    .arg(temp.path().join("weave.zip"))
+                    .env("TMPDIR", temp.path())
+                    .stdin(Stdio::piped())
+                    .spawn()
+                    .expect("spawn weave");
+                child.stdin.as_mut().unwrap().write_all(b"partial").unwrap();
+                wait_for_io(&mut child, signal, "pipe_read");
+                cancel(&mut child, signal);
+                let output = child.wait_with_output().expect("collect weave output");
+                let events = parse_json_lines(&output.stdout);
+                assert!(!events.is_empty());
+                for event in &events {
+                    let reports = event["reports"]
+                        .as_array()
+                        .map(Vec::as_slice)
+                        .unwrap_or(std::slice::from_ref(event));
+                    for report in reports {
+                        assert_ne!(
+                            report["status"], "failed",
+                            "weave cancellation must not emit validation failure: {report}"
+                        );
+                        assert_ne!(report["error_kind"], "validation", "{report}");
+                    }
+                }
+                let last = events.last().unwrap();
+                assert_eq!(last["status"], "cancelled", "{last}");
+                assert_eq!(last["error_kind"], "cancelled", "{last}");
+                assert_eq!(
+                    last["details"]["error"]["code"], "operation.cancelled",
+                    "{last}"
+                );
+                assert_eq!(last["details"]["error"]["exit_code"], 130, "{last}");
+                assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 0);
+            }
+        }
+    }
+
+    #[test]
+    fn termination_unwinds_unread_stdout_without_changing_pipe_flags() {
+        for signal in [libc::SIGTERM, libc::SIGHUP] {
+            let temp = setup_temp_dir();
+            let input = temp.path().join("random.bin");
+            fs::write(&input, pseudo_random_bytes(1024 * 1024, 7)).unwrap();
+            let spools = temp.path().join("spools");
+            fs::create_dir(&spools).unwrap();
+            let mut descriptors = [0; 2];
+            // SAFETY: descriptors has room for both initialized pipe descriptors.
+            assert_eq!(
+                unsafe { libc::pipe2(descriptors.as_mut_ptr(), libc::O_CLOEXEC) },
+                0
+            );
+            // SAFETY: each successful pipe descriptor is transferred to exactly one File.
+            let reader = unsafe { File::from_raw_fd(descriptors[0]) };
+            // SAFETY: this is the other owned descriptor returned by pipe.
+            let writer = unsafe { File::from_raw_fd(descriptors[1]) };
+            // SAFETY: F_GETFL queries the valid writer descriptor without mutation.
+            let flags = unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_GETFL) };
+            assert!(flags >= 0);
+            let mut child = binary()
+                .args(["compress", "--input"])
+                .arg(&input)
+                .args(["--format", "zip", "--output", "-"])
+                .current_dir(temp.path())
+                .env("PWD", temp.path())
+                .env("TMPDIR", &spools)
+                .stdout(Stdio::from(writer.try_clone().unwrap()))
+                .spawn()
+                .expect("spawn stdout writer");
+            wait_for_io(&mut child, signal, "pipe_write");
+            // SAFETY: the retained writer shares the child's open file description.
+            assert_eq!(
+                unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_GETFL) },
+                flags
+            );
+            cancel(&mut child, signal);
+            // SAFETY: the writer is still valid after the child has exited.
+            assert_eq!(
+                unsafe { libc::fcntl(writer.as_raw_fd(), libc::F_GETFL) },
+                flags
+            );
+            drop(writer);
+            let mut bytes = Vec::new();
+            reader.take(1024 * 1024).read_to_end(&mut bytes).unwrap();
+            assert!(
+                !bytes.is_empty(),
+                "child must reach binary stdout before cancellation"
+            );
+            assert_eq!(fs::read_dir(&spools).unwrap().count(), 0);
+            assert_eq!(
+                fs::read_dir(temp.path()).unwrap().count(),
+                2,
+                "leftover staging directory"
+            );
+        }
+    }
+}
