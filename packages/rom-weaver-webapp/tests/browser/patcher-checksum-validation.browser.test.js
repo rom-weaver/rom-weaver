@@ -424,3 +424,32 @@ test("typed input checksum is format-validated and re-verifies the ROM", async (
     .not.toBeNull();
   expect(document.querySelector("#rom-weaver-list-input-stack .file.bad")).toBeNull();
 });
+
+test("an unreadable patch fails its own card in plain language and blocks apply", async () => {
+  mount(createElement(ApplyPatchForm));
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-unified")).not.toBeNull();
+
+  selectFileInput(document.getElementById("rom-weaver-input-file-unified"), await loadFixtureFile(RAW_ROM));
+  const garbage = new Uint8Array(3000);
+  for (let index = 0; index < garbage.length; index += 1) garbage[index] = (index * 131 + 17) % 251;
+  selectFileInput(
+    document.getElementById("rom-weaver-input-file-unified"),
+    new File([garbage], "garbage.bps", { type: "application/octet-stream" }),
+  );
+
+  await expect
+    .poll(() => document.querySelector("#rom-weaver-list-patch-stack .file.bad .pfault"), { timeout: 60000 })
+    .not.toBeNull();
+  const fault = document.querySelector("#rom-weaver-list-patch-stack .file.bad .pfault");
+  expect(fault.textContent).toContain("Invalid patch file: garbage.bps");
+  const chip = document.querySelector("#rom-weaver-list-patch-stack .file.bad .cks-match.bad");
+  expect(chip?.textContent).not.toContain("ROM");
+  const pageText = document.body.textContent || "";
+  expect(pageText).not.toContain("INVALID_INPUT");
+  expect(pageText).not.toContain("Not checked yet");
+  // Like other invalid-patch states, Apply stays clickable but is a no-op while the card is failed.
+  document.getElementById("rom-weaver-button-apply")?.click();
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 500));
+  expect(document.body.textContent || "").not.toContain("INVALID_INPUT");
+  expect(document.querySelector("#rom-weaver-list-patch-stack .file.bad .pfault")).not.toBeNull();
+});

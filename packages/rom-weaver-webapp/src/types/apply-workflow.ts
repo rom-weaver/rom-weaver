@@ -146,6 +146,8 @@ type ApplyWorkflowPatchState = {
      * failures). Terminal for caching, advisory in the UI. */
     status: "deferred" | "invalid" | "pending" | "unknown" | "valid";
     targetInputId?: string;
+    /** The patch file itself could not be read, so no ROM choice can fix it. */
+    unreadable?: boolean;
     validationKey?: string;
   };
   /** This patch's slice of the chain verification plan (advisory; drives the chain chip). */

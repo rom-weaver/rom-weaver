@@ -279,7 +279,11 @@ const PatchCard = ({
       <div className="patch-body">
         <div className="patch-body-inner">
           {verdict === "bad" ? (
-            <PatchFaultWell message={item.validationMessage} overrideAvailable={overrideAvailable} />
+            <PatchFaultWell
+              message={item.validationMessage}
+              overrideAvailable={overrideAvailable}
+              unreadable={item.validationUnreadable}
+            />
           ) : null}
           {!detailedViewEnabled ||
           isDisabled ||

@@ -3455,6 +3455,11 @@ msgstr "Patch entries can be required or optional, and record names, sources, he
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.unreadable"
+msgstr "Patch file is not valid"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.PATCH_PARSE_FAILED"
 msgstr "Patch parsing failed."
 
@@ -3957,6 +3962,11 @@ msgstr "Remove save"
 #: src/presentation/localization/messages.ts
 msgid "ui.errorRecovery.selection"
 msgstr "Remove the affected input and add the required file again. For an archive, check its contents first; keep disc sheets and companion tracks together."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.validationUnreadableHint"
+msgstr "Remove this patch and choose a valid patch file."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

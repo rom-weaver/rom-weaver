@@ -3455,6 +3455,11 @@ msgstr "Las entradas de parches pueden ser obligatorias u opcionales, y registra
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts
+msgid "ui.patchChecks.unreadable"
+msgstr"El archivo de parche no es válido"
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
 msgid "error.PATCH_PARSE_FAILED"
 msgstr "El análisis del parche falló."
 
@@ -3957,6 +3962,11 @@ msgstr "Quitar partida"
 #: src/presentation/localization/messages.ts
 msgid "ui.errorRecovery.selection"
 msgstr "Quita la entrada afectada y vuelve a añadir el archivo necesario. Si es un archivo comprimido, comprueba su contenido primero; mantén juntos los descriptores de disco y sus pistas."
+
+#. js-lingui-explicit-id
+#: src/presentation/localization/messages.ts
+msgid "ui.patch.validationUnreadableHint"
+msgstr "Quita este parche y elige un archivo de parche válido."
 
 #. js-lingui-explicit-id
 #: src/presentation/localization/messages.ts

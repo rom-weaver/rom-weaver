@@ -52,6 +52,7 @@ type StagedInputInfo = {
   validationLabel?: string;
   validationMessage?: string;
   validationState?: string;
+  validationUnreadable?: boolean;
   validationValues?: string[];
   sourceTitles?: string[];
   checksumPreflightMismatch?: boolean;
