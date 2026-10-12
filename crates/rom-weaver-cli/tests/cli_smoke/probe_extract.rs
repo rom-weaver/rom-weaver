@@ -2011,3 +2011,38 @@ fn probe_reads_stdin_for_dash_input() {
     assert_eq!(json["details"]["container"]["entry_count"], 1);
     assert_eq!(json["details"]["container"]["entries"][0], "sample.bin");
 }
+
+#[test]
+fn extract_probe_names_the_unrecognised_payload() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("blob.3ds").path(), vec![0x5A_u8; 4096]).expect("fixture");
+    command_stdout(
+        &[
+            "compress",
+            "-i",
+            temp.child("blob.3ds").path().to_str().expect("path"),
+            "-o",
+            temp.child("blob.z3ds").path().to_str().expect("path"),
+            "--format",
+            "z3ds",
+            "--json",
+        ],
+        0,
+    );
+    let json = run_single_json_event(
+        &[
+            "extract",
+            "-i",
+            temp.child("blob.z3ds").path().to_str().expect("path"),
+            "-o",
+            temp.child("out").path().to_str().expect("path"),
+            "--probe",
+            "--json",
+        ],
+        1,
+    );
+    assert_eq!(
+        json["label"],
+        "probe: `blob.3ds` did not resolve to a known platform"
+    );
+}

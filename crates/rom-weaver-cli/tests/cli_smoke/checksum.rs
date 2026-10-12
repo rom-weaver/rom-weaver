@@ -1786,3 +1786,54 @@ fn write_gzip_fixture(source_path: &Path, gzip_path: &Path) {
     encoder.write_all(&source).expect("write gzip fixture");
     encoder.finish().expect("finish gzip fixture");
 }
+
+#[test]
+fn checksum_jsonl_reports_each_progress_percent_once() {
+    let temp = setup_temp_dir();
+    // One read chunk covers the whole file, so a naive per-percent loop would
+    // replay the same 100% event a hundred times.
+    let payload = vec![0x5a_u8; 1024 * 1024];
+    fs::write(temp.child("big.bin").path(), &payload).expect("payload fixture");
+
+    let output = command_stdout(
+        &[
+            "checksum",
+            "--input",
+            temp.child("big.bin").path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    let output = String::from_utf8(output).expect("utf8 jsonl");
+
+    let percents: Vec<f64> = output
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).expect("jsonl event"))
+        .filter(|event| event["stage"] == "checksum" && event["status"] == "running")
+        .filter_map(|event| event["percent"].as_f64())
+        .collect();
+    assert!(!percents.is_empty(), "progress events in {output}");
+    assert!(
+        percents.iter().filter(|percent| **percent >= 100.0).count() <= 2,
+        "repeated 100% progress events: {percents:?}"
+    );
+}
+
+#[test]
+fn checksum_rejects_a_directory_input_with_a_clear_error() {
+    let temp = setup_temp_dir();
+    let json = run_single_json_event(
+        &[
+            "checksum",
+            "--input",
+            temp.path().to_str().expect("path"),
+            "--json",
+        ],
+        1,
+    );
+    let message = json["error"]["message"].as_str().expect("error message");
+    assert!(
+        message.contains("input is a directory"),
+        "unexpected directory error: {message}"
+    );
+}

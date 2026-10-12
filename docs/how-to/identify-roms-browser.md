@@ -21,11 +21,11 @@ Choose [Checksum](checksum-roms-browser.md) to calculate a file's hash and compa
 1. Open [Identify](https://rom-weaver.com/identify-rom).
 2. Add your ROM or a supported archive.
 3. Wait for identification to finish.
-4. Read the **Identify** and **Checks** drawers on the ROM card.
+4. Read the result on the ROM card. Its **Checks** drawer lists the checksums; turn on **Detailed** to add an **Identify** drawer with the database matches.
 
 An archive can produce several results. Each result names its member so you can tell which ROM it describes.
 
-An unknown result means no matching checksum was found in the available data. It does not prove that your file is corrupt. Homebrew, modified ROMs, and unlisted releases can be unknown.
+An unknown ROM shows one neutral **No match** notice above its card, with its checksums still listed. It means no matching checksum was found in the available data. It does not prove that your file is corrupt. Homebrew, modified ROMs, and unlisted releases can be unknown.
 
 If several records share the checksums, read every candidate. If identification data could not load, check your connection and select **Retry identification**.
 

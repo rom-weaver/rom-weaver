@@ -29,7 +29,7 @@ The editor also accepts the [supported save containers](../reference/save-editor
 
 ## Use the browser
 
-1. [Enable beta tools](browser-settings.md#enable-beta-tools), then open [Saves](https://rom-weaver.com/save-editor).
+1. [Enable beta tools](browser-settings.md#enable-beta-tools), then open [Save Editor](https://rom-weaver.com/save-editor).
 2. Add the game save file.
 3. Select the game if recognition asks for a choice. For another supported profile, select **Choose game profile**, then **Open profile**.
 4. Read the integrity results and warnings before you change any fields.

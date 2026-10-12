@@ -62,8 +62,8 @@ type NavSectionData = { entries: NavEntry[]; id: string; title: string; content?
  * The full name, when it is safe to use as the accessible name of a row that
  * shows the short one. WCAG 2.5.3 (Label in Name) requires the accessible name
  * to contain the visible text, so a speech user saying what they can read
- * actually activates the row: "Saves" is not contained in "Save Editor", and
- * that row keeps its visible label as its name instead.
+ * actually activates the row. A short label that is not contained in the full
+ * name keeps its visible label as the accessible name instead.
  */
 const fullNameFor = (tab: WorkflowTab) => {
   if (!tab.railLabel) return undefined;

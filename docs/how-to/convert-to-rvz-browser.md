@@ -1,6 +1,6 @@
 # Compress ISO to RVZ online
 
-Convert a GameCube or Wii ISO to RVZ with local browser compression. Use this RVZ converter without uploads or an account.
+Compress a GameCube or Wii ISO to RVZ with local browser compression. Use this RVZ converter without uploads or an account.
 
 <!-- START doctoc -->
 ## Table of contents
@@ -19,7 +19,7 @@ Convert a GameCube or Wii ISO to RVZ with local browser compression. Use this RV
 
 Use a valid GameCube or Wii disc image. Renaming another console's image to `.iso` does not make it compatible with RVZ.
 
-For a disc inside ZIP, 7z, or another supported container, add the container to Compress. Select the ISO, then select the **Add** button.
+For a disc inside ZIP, 7z, or another supported container, add the container to Compress. Select the ISO, then select **Add N files**.
 
 ## Create the RVZ
 
@@ -37,7 +37,7 @@ Keep the page open until compression and download finish. To stop compression, u
 
 Open the RVZ in an emulator that supports RVZ for your console. Keep the original ISO until you check the result.
 
-To compare the uncompressed bytes, [convert the RVZ back to ISO](convert-rvz-to-iso-browser.md). Compare that ISO's checksum with the original through [Identify](identify-roms-browser.md).
+To compare the uncompressed bytes, [decompress the RVZ back to ISO](convert-rvz-to-iso-browser.md). Compare that ISO's checksum with the original through [Identify](identify-roms-browser.md).
 
 Keep enough free storage for the ISO and compressed output. The resulting file size depends on the disc contents and compression settings.
 

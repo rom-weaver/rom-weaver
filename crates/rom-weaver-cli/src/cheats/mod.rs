@@ -61,6 +61,23 @@ impl CheatSystem {
         }
     }
 
+    /// Human-readable console name for messages.
+    pub const fn display_name(self) -> &'static str {
+        match self {
+            Self::Nes => "NES",
+            Self::Snes => "SNES",
+            Self::Genesis => "Genesis",
+            Self::GameBoy => "Game Boy",
+            Self::GameBoyColor => "Game Boy Color",
+            Self::GameBoyAdvance => "Game Boy Advance",
+            Self::PlayStation => "PlayStation",
+            Self::MasterSystem => "Master System",
+            Self::GameGear => "Game Gear",
+            Self::Sega32x => "Sega 32X",
+            Self::Sg1000 => "SG-1000",
+        }
+    }
+
     /// Parse the CLI/UI identifier (accepts a few common aliases).
     pub fn parse(value: &str) -> Option<Self> {
         match value.trim().to_ascii_lowercase().as_str() {

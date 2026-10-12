@@ -8,6 +8,7 @@ import { useFlatTransitionFlag } from "../../public/react/components/ds/flat-tra
 import { GhostSteps } from "../../public/react/components/ds/ghost-steps.tsx";
 import { NeedsInput, StepSection } from "../../public/react/components/ds/layout.tsx";
 import { UnifiedDropZone } from "../../public/react/components/ds/unified-drop-zone.tsx";
+import { ARCHIVE_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "../../public/react/file-classification.ts";
 import { WORKFLOW_GUIDES } from "../../public/react/workflow-guides.ts";
 import type { PageFileDrop } from "../../public/react/public-types.ts";
 import type { PublicOutput } from "../../types/workflow-runtime-types.ts";
@@ -277,11 +278,12 @@ const PpfUndoForm = ({ onSessionChange, pageDrop }: PpfUndoFormProps) => {
         heroLabelCoarse="Tap to add a patched ROM and PPF patch"
         info={<p>A PPF3 patch must include undo data to restore the original ROM.</p>}
         inputId="ppf-undo-input-picker"
-        lead={{ line1: "ui.hero.toolsThesis", line2: "ui.hero.toolsThesis2", description: "ui.hero.toolsDescription" }}
+        lead={{ line1: "ui.hero.toolsThesis", description: "ui.hero.toolsDescription" }}
         onFiles={stageFiles}
         supported={[
-          { extensions: ["rom"], label: "Patched ROMs" },
-          { extensions: ["ppf3"], label: "PPF3 patches" },
+          { extensions: ROM_FILE_EXTENSIONS, label: "Patched ROMs" },
+          { extensions: ["ppf"], label: "PPF3 patches" },
+          { extensions: ARCHIVE_FILE_EXTENSIONS, label: "Archives & containers" },
         ]}
       />
       {opening ? <p role="status">Opening ROM and patch inputs…</p> : null}
