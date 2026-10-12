@@ -940,7 +940,8 @@ fn print_native_dry_run_plan(command: &str, writes: Vec<String>, mode: OutputMod
     ExitCode::SUCCESS
 }
 
-/// Trip the process cancellation token on Ctrl-C so running work unwinds and
+/// Trip the process cancellation token on Ctrl-C (and SIGTERM/SIGHUP on unix, via ctrlc's
+/// `termination` feature) so running work unwinds and
 /// the partial output is cleaned up. A second Ctrl-C means the operation is not
 /// unwinding, so leave immediately after removing what was written.
 #[cfg(not(target_arch = "wasm32"))]
@@ -949,6 +950,8 @@ fn install_cancel_handler(mode: OutputMode) {
 
     static SIGNALLED: AtomicBool = AtomicBool::new(false);
     let token = process_cancellation_token();
+    #[cfg(unix)]
+    let ignored_signals = ignored_termination_signals();
     let result = ctrlc::set_handler(move || {
         if SIGNALLED.swap(true, Ordering::SeqCst) {
             remove_in_progress_outputs();
@@ -976,6 +979,15 @@ fn install_cancel_handler(mode: OutputMode) {
             "cancelling; press Ctrl-C again to stop immediately",
         );
     });
+    // ctrlc overwrites an inherited SIG_IGN (e.g. from `nohup`); put it back so a run started
+    // that way still survives SIGHUP/SIGTERM as it did before the handler covered them.
+    #[cfg(unix)]
+    for signal in ignored_signals {
+        // SAFETY: restoring SIG_IGN for a valid signal number.
+        unsafe {
+            libc::signal(signal, libc::SIG_IGN);
+        }
+    }
     if let Err(error) = result {
         // Not fatal: without a handler Ctrl-C keeps its default behaviour.
         native_output::diagnostic(
@@ -985,6 +997,20 @@ fn install_cancel_handler(mode: OutputMode) {
             &format!("could not install the Ctrl-C handler ({error})"),
         );
     }
+}
+
+/// SIGHUP/SIGTERM dispositions that were SIG_IGN when the process started.
+#[cfg(unix)]
+fn ignored_termination_signals() -> Vec<libc::c_int> {
+    [libc::SIGHUP, libc::SIGTERM]
+        .into_iter()
+        .filter(|&signal| {
+            // SAFETY: a null new action only queries the current disposition.
+            let mut current: libc::sigaction = unsafe { std::mem::zeroed() };
+            let rc = unsafe { libc::sigaction(signal, std::ptr::null(), &mut current) };
+            rc == 0 && current.sa_sigaction == libc::SIG_IGN
+        })
+        .collect()
 }
 
 /// Map the run's exit code, cleaning up partial output when it was cancelled.

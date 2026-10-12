@@ -705,9 +705,26 @@ pub struct TempPathAllocator {
     root: PathBuf,
     namespace: String,
     counter: AtomicU64,
+    /// True when `root` was minted for this allocator alone, so Drop may remove all of it.
+    owns_root: bool,
 }
 
 impl TempPathAllocator {
+    /// An allocator whose root is a fresh directory name under `parent`, unique to this run.
+    /// Nothing else uses it, so Drop removes the whole root and never has to touch a shared
+    /// parent that a concurrent run might be creating subdirectories in.
+    pub fn new_private(parent: &Path, prefix: &str) -> Self {
+        // The root is already unique, so the inner namespace can be short.
+        let entropy = namespace_entropy();
+        let sequence = NEXT_TEMP_NAMESPACE_ID.fetch_add(1, Ordering::Relaxed);
+        Self {
+            root: parent.join(format!("{prefix}-{entropy:016x}-{sequence}")),
+            namespace: "t".to_string(),
+            counter: AtomicU64::new(0),
+            owns_root: true,
+        }
+    }
+
     pub fn new(root: PathBuf) -> Self {
         #[cfg(target_family = "wasm")]
         if let Some(run_id) = browser_opfs_run_id() {
@@ -717,6 +734,7 @@ impl TempPathAllocator {
                 root,
                 namespace: format!("rw-{run_id}-{sequence}-{entropy:016x}"),
                 counter: AtomicU64::new(0),
+                owns_root: false,
             };
         }
 
@@ -739,6 +757,7 @@ impl TempPathAllocator {
             root,
             namespace,
             counter: AtomicU64::new(0),
+            owns_root: false,
         }
     }
 
@@ -788,6 +807,9 @@ fn browser_opfs_run_id() -> Option<String> {
 impl Drop for TempPathAllocator {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(self.root.join(&self.namespace));
+        if self.owns_root {
+            let _ = fs::remove_dir_all(&self.root);
+        }
     }
 }
 
