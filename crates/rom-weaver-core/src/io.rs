@@ -167,7 +167,7 @@ pub fn retry_interrupted<T>(mut op: impl FnMut() -> std::io::Result<T>) -> std::
 ///
 /// A single `read` may return a short count or fail with `Interrupted`; this retries both, so
 /// the result depends only on the input's bytes.
-pub fn read_full<R: Read + ?Sized>(reader: &mut R, buffer: &mut [u8]) -> std::io::Result<usize> {
+pub fn read_full(reader: &mut dyn Read, buffer: &mut [u8]) -> std::io::Result<usize> {
     let mut filled = 0;
     while filled < buffer.len() {
         match retry_interrupted(|| reader.read(&mut buffer[filled..]))? {
@@ -201,9 +201,13 @@ pub fn copy_retrying_interrupted<R: Read + ?Sized, W: Write + ?Sized>(
 /// `std::fs::copy` that retries after `Interrupted`; it uses the same kernel copy as
 /// [`copy_retrying_interrupted`]. Each retry restarts the copy from the beginning.
 pub fn copy_file_retrying_interrupted(from: &Path, to: &Path) -> std::io::Result<u64> {
+    #[cfg(target_arch = "wasm32")]
+    return fs::copy(from, to);
+    #[cfg(not(target_arch = "wasm32"))]
     copy_file_retrying_with(from, to, |from, to| fs::copy(from, to))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn copy_file_retrying_with(
     from: &Path,
     to: &Path,
