@@ -14,7 +14,7 @@ import { createDocsSearchIndex } from "../src/webapp/docs-search.mjs";
 //   plus one dynamic-import loader per page, so each guide's HTML becomes its
 //   own lazy chunk instead of every visit shipping all of them.
 // - `virtual:rom-weaver-docs-page/<slug>` - one guide's rendered HTML.
-// - `virtual:rom-weaver-docs-html` - the shared section-link icon, restored
+// - `virtual:rom-weaver-docs-html` - shared heading, table, and code markup, restored
 //   by page modules without changing their HTML.
 // - `virtual:rom-weaver-docs-search` - the prebuilt search entries (plain text,
 //   no HTML), loaded only when the reader interacts with search.
@@ -71,6 +71,30 @@ const sectionId = (label) =>
 const compactId = (id, label) => (id === sectionId(label) ? 0 : id);
 const sectionIcon = (routes) =>
   routes.flatMap(({ html }) => html.match(/<svg\b[^>]*class="docs-section-link-icon"[^>]*>[\s\S]*?<\/svg>/g) ?? [])[0];
+
+const sharedHtmlFragments = (routes) => {
+  const icon = sectionIcon(routes) ?? "";
+  return [
+    icon ? `${icon}<span class="docs-section-title">` : "",
+    '<div aria-label="Table" class="docs-table-scroll" role="group" tabindex="0">',
+    '<div class="docs-code-block" data-docs-copy-container data-docs-copy-lines="single">',
+    '<div class="docs-code-block" data-docs-copy-container>',
+    icon,
+  ];
+};
+
+// Restoration MUST preserve literal text, including digits and replacement-pattern characters.
+const splitHtmlFragments = (html, fragments) => {
+  let parts = [html];
+  for (const [index, fragment] of fragments.entries()) {
+    if (!fragment) continue;
+    parts = parts.flatMap((part) => {
+      if (typeof part !== "string") return [part];
+      return part.split(fragment).flatMap((text, position) => (position === 0 ? [text] : [index, text]));
+    });
+  }
+  return parts;
+};
 
 /** @param {readonly import("../src/webapp/docs-content.mjs").DocRoute[]} routes */
 const createMetadataModuleSource = (routes) => {
@@ -148,13 +172,13 @@ const docsVirtualModule = (initialRoutes = null) => {
         if (virtualId === VIRTUAL_ID) return createMetadataModuleSource(getRoutes());
         if (virtualId === SEARCH_VIRTUAL_ID) return createSearchModuleSource(getRoutes());
         if (virtualId === HTML_VIRTUAL_ID)
-          return `export const icon = ${serializeIntoCode(sectionIcon(getRoutes()) ?? "")};\n`;
+          return `const fragments = ${serializeIntoCode(sharedHtmlFragments(getRoutes()))};\nexport const icon = fragments[4];\nexport const restore = parts => parts.map(part => typeof part === "number" ? fragments[part] : part).join("");\n`;
         const slug = virtualId.slice(PAGE_VIRTUAL_PREFIX.length);
         const route = getRoutes().find((entry) => entry.slug === slug);
         if (!route) throw new Error(`docs virtual module: no docs route for slug '${slug}'`);
-        const icon = sectionIcon(getRoutes());
-        if (icon && route.html.includes(icon)) {
-          return `import { icon } from "${HTML_VIRTUAL_ID}";\nexport const html = ${serializeIntoCode(route.html.split(icon))}.join(icon);\n`;
+        const parts = splitHtmlFragments(route.html, sharedHtmlFragments(getRoutes()));
+        if (parts.length > 1) {
+          return `import { restore } from "${HTML_VIRTUAL_ID}";\nexport const html = restore(${serializeIntoCode(parts)});\n`;
         }
         return `export const html = ${serializeIntoCode(route.html)};\n`;
       },
