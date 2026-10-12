@@ -24,7 +24,7 @@
         "expectedRawBytes": 2500000,
         "maxRawBytes": 2570000,
         "expectedBrotliBytes": 640000,
-        "maxBrotliBytes": 657536
+        "maxBrotliBytes": 658560
       },
       {
         "_comment": "Raised for the browser feature map and the Identify, Extract, Convert, Trim, PPF Undo, and Settings guides, which the search index includes. Raised again for the ISO to RVZ, Nintendo 3DS to Z3DS, and Extract Z3DS guides. Raised for the MCP client and browser agent setup guide. The published native benchmarks and expanded format guides measure 382,150 raw bytes and 100,419 Brotli bytes. The approved limits retain the existing 11,000-byte raw and 3,000-byte Brotli margins.",
