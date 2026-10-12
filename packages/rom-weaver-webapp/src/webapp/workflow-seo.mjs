@@ -65,4 +65,12 @@ const WORKFLOW_SEO_ROUTES = Object.freeze({
   }),
 });
 
-export { SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES };
+/**
+ * Mark a page title with the build channel (beta, nightly, dev); production has no badge.
+ * @param {string} title
+ * @param {string} badge
+ * @returns {string}
+ */
+const withChannelBadge = (title, badge) => (badge ? title.replace(SITE_NAME, `${SITE_NAME} ${badge}`) : title);
+
+export { withChannelBadge, SITE_ALTERNATE_NAMES, SITE_NAME, WORKFLOW_SEO_ROUTES };
