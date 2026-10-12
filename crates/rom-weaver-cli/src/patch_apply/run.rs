@@ -503,7 +503,11 @@ impl CliApp {
                 run.args.compress_codec.clone(),
                 run.args.compress_level,
                 &run.output,
-                &Self::output_extension_source(&run.resolved_input, run.args.output_header),
+                &Self::output_extension_source(
+                    &run.resolved_input,
+                    &run.output,
+                    run.args.output_header,
+                ),
             )
             .map_err(|error| run.fail_error("validate", error))?;
         // Compressing can append an extension; the compression step re-checks

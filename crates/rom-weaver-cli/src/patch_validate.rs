@@ -968,7 +968,12 @@ impl CliApp {
             );
             verdict_lines.push_str(&format!("; {outcome} {name}"));
             if !verdict.passed && !verdict.message.is_empty() {
-                verdict_lines.push_str(&format!(": {}", verdict.message));
+                let message = verdict
+                    .message
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                verdict_lines.push_str(&format!(": {message}"));
             }
         }
         let mut per_patch = Vec::with_capacity(verdicts.len());

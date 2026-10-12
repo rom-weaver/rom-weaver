@@ -2311,9 +2311,12 @@ impl CliApp {
     /// headerless, so its conventional extension is the headerless counterpart
     /// of the source's (SNES `.smc` becomes `.sfc`), matching what
     /// `resolve_header_extension_swap` does for a requested `.smc` output.
+    /// Only a requested headerless extension switches the source; a requested
+    /// headered extension (`.smc`) keeps it so that swap still renames it.
     /// Anything else keeps the source path unchanged.
     pub(super) fn output_extension_source(
         resolved_input: &Path,
+        output: &Path,
         output_header: Option<PatchApplyOutputHeaderMode>,
     ) -> PathBuf {
         if output_header != Some(PatchApplyOutputHeaderMode::Strip) {
@@ -2332,7 +2335,15 @@ impl CliApp {
                     .strip_prefix('.')
                     .is_some_and(|from| extension.eq_ignore_ascii_case(from))
             });
-        if headered == headerless || !source_matches_headered {
+        let output_matches_headerless = output
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| {
+                headerless
+                    .strip_prefix('.')
+                    .is_some_and(|to| extension.eq_ignore_ascii_case(to))
+            });
+        if headered == headerless || !source_matches_headered || !output_matches_headerless {
             return resolved_input.to_path_buf();
         }
         resolved_input.with_extension(headerless.trim_start_matches('.'))
@@ -3523,7 +3534,7 @@ impl CliApp {
         thread_execution: Option<ThreadExecution>,
     ) -> OperationReport {
         // Validate the output extension the same way the real run does.
-        let extension_source = Self::output_extension_source(input, output_header);
+        let extension_source = Self::output_extension_source(input, output, output_header);
         let explicit_compression = compression_options.requested_format.is_some()
             || compression_options.codec.is_some()
             || compression_options.level_explicit;

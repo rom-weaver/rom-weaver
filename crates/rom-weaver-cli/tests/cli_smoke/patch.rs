@@ -11621,6 +11621,28 @@ fn patch_apply_output_header_strip_accepts_headerless_extension() {
     let written = fs::read(output.path()).expect("headerless output");
     assert_eq!(written.len(), 256 * 1024);
     assert_eq!(written[0x100], 0xAA);
+
+    // A requested headered `.smc` output is still renamed to `.sfc`.
+    let headered_request = temp.child("renamed.smc");
+    command_stdout(
+        &[
+            "patch",
+            "apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            headered_request.path().to_str().expect("path"),
+            "--output-header",
+            "strip",
+            "--jsonl",
+        ],
+        0,
+    );
+    assert!(!headered_request.path().exists());
+    let renamed = fs::read(temp.child("renamed.sfc").path()).expect("renamed headerless output");
+    assert_eq!(renamed.len(), 256 * 1024);
 }
 
 #[test]
