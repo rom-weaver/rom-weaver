@@ -246,6 +246,21 @@ fn checksum_algorithm_parser() -> clap::builder::PossibleValuesParser {
     clap::builder::PossibleValuesParser::new(supported_algorithms())
 }
 
+/// Systems `--cheat-system` names. `sg1000` and `psx` decode code snapshots but
+/// have no cheat database shard; a command that needs the database reports that
+/// at run time, so a weave with code snapshots still applies.
+#[cfg(not(target_arch = "wasm32"))]
+const CHEAT_SYSTEMS: &str =
+    "nes, snes, genesis, 32x, sms, gamegear, sg1000, gameboy, gameboy-color, gba, psx";
+
+#[cfg(not(target_arch = "wasm32"))]
+fn cheat_system_parser(value: &str) -> std::result::Result<String, String> {
+    match crate::cheats::CheatSystem::parse(value) {
+        Some(_) => Ok(value.to_string()),
+        None => Err(format!("unknown system; expected one of: {CHEAT_SYSTEMS}")),
+    }
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 pub const CHECKSUM_ALGO_HELP: &str = "Which checksum to compute (repeatable, comma-separable)";
 
@@ -3266,8 +3281,9 @@ pub struct CheatSelectionArgs {
         arg(
             long = "cheat-system",
             value_name = "SYS",
+            value_parser = cheat_system_parser,
             help_heading = "Cheats",
-            help = "Console the cheat shard is for (nes, snes, genesis, 32x, sms, gamegear, gameboy, gameboy-color, gba), when the ROM header does not say"
+            help = "Console the cheats are for (nes, snes, genesis, 32x, sms, gamegear, sg1000, gameboy, gameboy-color, gba, psx), when the ROM header does not say"
         )
     )]
     pub cheat_system: Option<String>,

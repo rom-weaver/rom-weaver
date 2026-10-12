@@ -38,6 +38,8 @@ For a GameCube or Wii disc, keep the default `.rvz` output name: this path conve
 
 `--in-place` rewrites the source file. Use it instead of pointing `--output` at a symlink or hard link to the input; output aliases are rejected even with `--force`. Keep a known-good copy first; a trimmed ROM is not always the file a patch expects.
 
+A successful trim prints nothing. Add `-v` to list each file it wrote; warnings and errors always print.
+
 ## Make the trim reversible
 
 For NDS-family, GBA, and 3DS ROMs, write a separate copy with `--revert-marker` to record the original length and padding byte. XISO and RVZ conversion reject this option because rebuilding the disc cannot be reversed from a padding footer:
