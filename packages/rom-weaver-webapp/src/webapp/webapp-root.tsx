@@ -388,6 +388,36 @@ const ActivityFinishMarker = () => {
   return null;
 };
 
+const NotFoundPage = ({ onSelectTab }: { onSelectTab: (id: string) => void }) => {
+  const localizer = useUiLocalizer();
+  return (
+    <section aria-labelledby="not-found-title" className="not-found-page">
+      <div className="not-found-content">
+        <h1 aria-label={localizer.message("ui.notFound.heading")} className="not-found-title" id="not-found-title">
+          <span aria-hidden="true" className="not-found-code">
+            404
+          </span>
+          <span aria-hidden="true" className="not-found-label">
+            {localizer.message("ui.notFound.label")}
+          </span>
+        </h1>
+        <p className="not-found-copy">{localizer.message("ui.notFound.copy")}</p>
+        <div className="not-found-actions">
+          <a className="btn primary not-found-home" href="/apply-patches">
+            <House aria-hidden="true" />
+            {localizer.message("ui.home.applyPatchCta")}
+          </a>
+          <a className="btn ghost not-found-docs" href="/docs">
+            <BookOpen aria-hidden="true" />
+            {localizer.message("ui.notFound.browseDocs")}
+          </a>
+        </div>
+        <RelatedStrip entryKey="not-found" onSelectTab={onSelectTab} />
+      </div>
+    </section>
+  );
+};
+
 function WebappRoot({
   state,
   pageUpdate,
@@ -400,7 +430,6 @@ function WebappRoot({
   notFound = false,
   assetBaseUrl,
 }: WebappRootProps) {
-  const localizer = useUiLocalizer();
   // The prerendered shell resolves asset links against "/" (no window to read
   // the origin from), so hydration passes the same value and only the render
   // after it adopts the real base - otherwise React sees every href mismatch.
@@ -779,34 +808,7 @@ function WebappRoot({
           <ActivityWakeLock pageHasPendingChanges={pageHasPendingChanges} />
           <main className={notFound ? "workbench is-not-found" : "workbench"} id="main-content" tabIndex={-1}>
             {notFound ? (
-              <section aria-labelledby="not-found-title" className="not-found-page">
-                <div className="not-found-content">
-                  <h1
-                    aria-label={localizer.message("ui.notFound.heading")}
-                    className="not-found-title"
-                    id="not-found-title"
-                  >
-                    <span aria-hidden="true" className="not-found-code">
-                      404
-                    </span>
-                    <span aria-hidden="true" className="not-found-label">
-                      {localizer.message("ui.notFound.label")}
-                    </span>
-                  </h1>
-                  <p className="not-found-copy">{localizer.message("ui.notFound.copy")}</p>
-                  <div className="not-found-actions">
-                    <a className="btn primary not-found-home" href="/apply-patches">
-                      <House aria-hidden="true" />
-                      {localizer.message("ui.home.applyPatchCta")}
-                    </a>
-                    <a className="btn ghost not-found-docs" href="/docs">
-                      <BookOpen aria-hidden="true" />
-                      {localizer.message("ui.notFound.browseDocs")}
-                    </a>
-                  </div>
-                  <RelatedStrip entryKey="not-found" onSelectTab={handleSelectTab} />
-                </div>
-              </section>
+              <NotFoundPage onSelectTab={handleSelectTab} />
             ) : (
               <>
                 {isViewMounted("home") ? (
