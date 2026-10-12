@@ -644,6 +644,29 @@ fn run_native_command(cli: &Cli, mode: OutputMode, command: &str) -> ExitCode {
     unreachable!("only native commands reach this dispatcher")
 }
 
+/// The deepest subcommand the user invoked, so argument errors print that
+/// command's usage rather than the root footer.
+#[cfg(not(target_arch = "wasm32"))]
+fn matched_subcommand_mut<'a>(
+    parser: &'a mut clap::Command,
+    matches: &clap::ArgMatches,
+) -> &'a mut clap::Command {
+    let mut command = parser;
+    let mut current = matches;
+    while let Some((name, sub_matches)) = current.subcommand() {
+        // `find_subcommand_mut` cannot be re-borrowed in a loop condition, so
+        // stop descending as soon as a name is not a registered subcommand.
+        if command.find_subcommand(name).is_none() {
+            break;
+        }
+        command = command
+            .find_subcommand_mut(name)
+            .expect("subcommand presence was just checked");
+        current = sub_matches;
+    }
+    command
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
     // Patch header options bind by argument index, so parsing MUST preserve
@@ -660,14 +683,17 @@ fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
     if let CliCommand::App(command) = &mut cli.command
         && let Err(error) = crate::cli_inputs::resolve(command, &matches)
     {
-        return print_argument_result(error.format(&mut parser), mode);
+        return print_argument_result(
+            error.format(matched_subcommand_mut(&mut parser, &matches)),
+            mode,
+        );
     }
     let digest = matches
         .subcommand_matches("checksum")
         .is_some_and(|matches| matches.get_flag("digest"));
     if digest && (mode.is_json() || cli.dry_run) {
         return print_argument_result(
-            parser.error(
+            matched_subcommand_mut(&mut parser, &matches).error(
                 clap::error::ErrorKind::ArgumentConflict,
                 "--digest cannot be used with --json, --jsonl, or --dry-run",
             ),
@@ -679,7 +705,7 @@ fn run_cli(args: Vec<std::ffi::OsString>, mode: OutputMode) -> ExitCode {
         && command.algo.len() != 1
     {
         return print_argument_result(
-            parser.error(
+            matched_subcommand_mut(&mut parser, &matches).error(
                 clap::error::ErrorKind::ArgumentConflict,
                 "--digest requires exactly one algorithm; use --algo ALGO",
             ),

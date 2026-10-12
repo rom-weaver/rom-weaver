@@ -1837,3 +1837,21 @@ fn checksum_rejects_a_directory_input_with_a_clear_error() {
         "unexpected directory error: {message}"
     );
 }
+
+#[test]
+fn checksum_argument_errors_show_the_subcommand_usage() {
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(["checksum", "--digest", "missing.bin"])
+        .assert()
+        .code(2)
+        .get_output()
+        .clone();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("--digest requires exactly one algorithm"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("Usage: rom-weaver checksum"), "{stderr}");
+    assert!(!stderr.contains("<COMMAND>"), "{stderr}");
+}
