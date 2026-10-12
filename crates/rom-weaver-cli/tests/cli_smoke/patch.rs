@@ -11622,3 +11622,73 @@ fn patch_apply_output_header_strip_accepts_headerless_extension() {
     assert_eq!(written.len(), 256 * 1024);
     assert_eq!(written[0x100], 0xAA);
 }
+
+#[test]
+fn patch_validate_independent_lists_every_patch_verdict_in_human_output() {
+    let temp = setup_temp_dir();
+    let input = temp.child("game.bin");
+    fs::write(input.path(), b"hello old world").expect("rom fixture");
+    let good = temp.child("good.bps");
+    let modified = temp.child("new.bin");
+    fs::write(modified.path(), b"hello new world").expect("modified fixture");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            input.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            good.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+    // A patch made for a different source fails its source check.
+    let other = temp.child("other.bin");
+    let bad = temp.child("bad.bps");
+    fs::write(other.path(), b"entirely different").expect("other fixture");
+    command_stdout(
+        &[
+            "patch",
+            "create",
+            "--original",
+            other.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            bad.path().to_str().expect("path"),
+            "--jsonl",
+        ],
+        0,
+    );
+
+    let stdout = String::from_utf8(command_stdout(
+        &[
+            "patch",
+            "validate",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--independent",
+            "--patch",
+            good.path().to_str().expect("path"),
+            "--patch",
+            bad.path().to_str().expect("path"),
+        ],
+        0,
+    ))
+    .expect("utf8 stdout");
+
+    assert!(stdout.contains("1/2 passed"), "{stdout}");
+    assert!(stdout.contains("; pass good.bps"), "{stdout}");
+    assert!(stdout.contains("; FAIL bad.bps: "), "{stdout}");
+    assert!(
+        !stdout.contains("\\n"),
+        "verdicts must not carry escaped newlines: {stdout}"
+    );
+}
