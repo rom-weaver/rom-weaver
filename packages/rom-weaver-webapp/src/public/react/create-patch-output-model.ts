@@ -87,6 +87,7 @@ type CompletedCreateOutput = {
   rawSize?: number;
   saveAs: (destination?: BrowserSaveDestination) => Promise<void>;
   size?: number;
+  warnings?: string[];
 };
 type CreateMessagePlacement = "modified" | "original" | "output";
 

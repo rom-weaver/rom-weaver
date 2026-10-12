@@ -48,6 +48,7 @@ interface UiViewStateInput {
   inputNoticeMessage: string;
   inputStaging: boolean;
   outputRuntimeNoticeMessage: string;
+  outputWarningMessage: string;
   patchNoticeMessage: string;
   patchProgress: InputProgress | null;
   patchProgressByKey: Record<string, InputProgress>;
@@ -65,6 +66,7 @@ const buildUiViewState = ({
   inputNoticeMessage,
   inputStaging,
   outputRuntimeNoticeMessage,
+  outputWarningMessage,
   patchNoticeMessage,
   patchProgress,
   patchProgressByKey,
@@ -86,12 +88,20 @@ const buildUiViewState = ({
       message: inputNoticeMessage,
       visible: !!inputNoticeMessage,
     },
-    outputNotice: {
-      dismissible: !!outputRuntimeNoticeMessage,
-      level: "error" as const,
-      message: effectiveOutputNoticeMessage,
-      visible: !!effectiveOutputNoticeMessage,
-    },
+    // A run error wins; otherwise the finished output's handler warnings show as a warning.
+    outputNotice: effectiveOutputNoticeMessage
+      ? {
+          dismissible: !!outputRuntimeNoticeMessage,
+          level: "error" as const,
+          message: effectiveOutputNoticeMessage,
+          visible: true,
+        }
+      : {
+          dismissible: false,
+          level: "warning" as const,
+          message: outputWarningMessage,
+          visible: !!outputWarningMessage,
+        },
     patchInput: {
       loading: patchStaging || !!patchProgress || Object.keys(patchProgressByKey).length > 0,
     },

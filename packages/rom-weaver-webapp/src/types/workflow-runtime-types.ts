@@ -339,6 +339,8 @@ type CompressionCreateResult = {
 };
 
 type ApplyWorkflowResult = {
+  /** Handler warnings reported while applying; the output was still produced. */
+  warnings?: string[];
   cheats?: {
     rom: number;
   };
@@ -375,6 +377,8 @@ type ApplyWorkflowResult = {
 
 type CreatePatchResult = {
   output: PublicOutput;
+  /** Handler warnings reported while creating; the patch was still produced. */
+  warnings?: string[];
   format: string;
   sizeSummary?: {
     compressionTimeMs?: number;
