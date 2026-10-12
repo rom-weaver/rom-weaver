@@ -1625,7 +1625,7 @@ pub(super) fn elapsed_ms(start: SystemTime) -> u64 {
 pub(super) fn move_or_copy_file(from: &Path, to: &Path) -> Result<()> {
     #[cfg(target_arch = "wasm32")]
     {
-        fs::copy(from, to)?;
+        rom_weaver_core::copy_file_retrying_interrupted(from, to)?;
         let _ = fs::remove_file(from);
         Ok(())
     }
@@ -1634,7 +1634,7 @@ pub(super) fn move_or_copy_file(from: &Path, to: &Path) -> Result<()> {
         if fs::rename(from, to).is_ok() {
             return Ok(());
         }
-        fs::copy(from, to)?;
+        rom_weaver_core::copy_file_retrying_interrupted(from, to)?;
         let _ = fs::remove_file(from);
         Ok(())
     }

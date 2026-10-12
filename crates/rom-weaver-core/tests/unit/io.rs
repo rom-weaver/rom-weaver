@@ -8,8 +8,9 @@ use std::{
 use super::{
     BlockCacheReader, ChunkPlanner, OrderedChunkWriter, OrderedStreamingMessages,
     SharedBlockCacheReader, TempPathAllocator, bounded_items_for_threads,
-    copy_retrying_interrupted, create_extract_output_file, ensure_output_available,
-    file_starts_with, ordered_streaming_compress, read_full, read_up_to,
+    copy_file_retrying_interrupted, copy_retrying_interrupted, create_extract_output_file,
+    ensure_output_available, file_starts_with, ordered_streaming_compress, read_full, read_up_to,
+    retry_interrupted,
 };
 use crate::RomWeaverError;
 
@@ -872,4 +873,46 @@ fn copy_retrying_interrupted_copies_all_bytes() {
     copy_retrying_interrupted(&mut InterruptedShortReader::new(&data, 333), &mut output)
         .expect("copy");
     assert_eq!(output, data);
+}
+
+#[test]
+fn retry_interrupted_reruns_an_interrupted_operation() {
+    let mut calls = 0;
+    let result = retry_interrupted(|| {
+        calls += 1;
+        if calls == 1 {
+            Err(ErrorKind::Interrupted.into())
+        } else {
+            Ok(calls)
+        }
+    });
+    assert_eq!(result.expect("retried"), 2);
+}
+
+#[test]
+fn retry_interrupted_returns_other_errors_without_retrying() {
+    let mut calls = 0;
+    let error = retry_interrupted(|| -> io::Result<()> {
+        calls += 1;
+        Err(ErrorKind::NotFound.into())
+    })
+    .expect_err("not retried");
+    assert_eq!(error.kind(), ErrorKind::NotFound);
+    assert_eq!(calls, 1);
+}
+
+#[test]
+fn copy_file_retrying_interrupted_copies_bytes_and_length() {
+    let temp_dir =
+        std::env::temp_dir().join(format!("rom-weaver-io-copy-file-{}", std::process::id()));
+    fs::create_dir_all(&temp_dir).expect("temp dir");
+    let source = temp_dir.join("source.bin");
+    let destination = temp_dir.join("destination.bin");
+    let data: Vec<u8> = (0..=255).cycle().take(70_000).collect();
+    fs::write(&source, &data).expect("write source");
+    fs::write(&destination, vec![0xff; 100_000]).expect("write stale destination");
+    let copied = copy_file_retrying_interrupted(&source, &destination).expect("copy");
+    assert_eq!(copied, 70_000);
+    assert_eq!(fs::read(&destination).expect("read destination"), data);
+    let _ = fs::remove_dir_all(&temp_dir);
 }

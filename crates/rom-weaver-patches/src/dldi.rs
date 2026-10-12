@@ -356,7 +356,7 @@ fn apply_dldi_patch_to_file(
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::copy(input_path, output_path)?;
+    rom_weaver_core::copy_file_retrying_interrupted(input_path, output_path)?;
     let mut output = OpenOptions::new()
         .read(true)
         .write(true)

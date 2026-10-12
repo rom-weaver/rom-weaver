@@ -143,20 +143,32 @@ pub fn file_starts_with(source: &Path, signature: &[u8]) -> bool {
     false
 }
 
+/// Run `op` until it finishes with anything other than `Interrupted`.
+///
+/// A signal handler installed without `SA_RESTART` (libFuzzer's timers, or a host process's)
+/// makes an in-flight syscall fail with `EINTR`. Only use this for operations that are safe to
+/// repeat after failing that way.
+pub fn retry_interrupted<T>(mut op: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
+    loop {
+        match op() {
+            Err(error) if error.kind() == ErrorKind::Interrupted => {
+                tracing::trace!("io interrupted by a signal; retrying");
+            }
+            result => return result,
+        }
+    }
+}
+
 /// Fill `buffer` from `reader`, returning less than its length only when the input ends first.
 ///
-/// A single `read` may return a short count or fail with `Interrupted` when a signal lands
-/// mid-call; this retries both, so the result depends only on the input's bytes.
+/// A single `read` may return a short count or fail with `Interrupted`; this retries both, so
+/// the result depends only on the input's bytes.
 pub fn read_full<R: Read + ?Sized>(reader: &mut R, buffer: &mut [u8]) -> std::io::Result<usize> {
     let mut filled = 0;
     while filled < buffer.len() {
-        match reader.read(&mut buffer[filled..]) {
-            Ok(0) => break,
-            Ok(read) => filled += read,
-            Err(error) if error.kind() == ErrorKind::Interrupted => {
-                tracing::trace!(filled, "read interrupted by a signal; retrying");
-            }
-            Err(error) => return Err(error),
+        match retry_interrupted(|| reader.read(&mut buffer[filled..]))? {
+            0 => break,
+            read => filled += read,
         }
     }
     Ok(filled)
@@ -172,26 +184,20 @@ pub fn read_up_to<R: Read>(mut reader: R, limit: usize) -> std::io::Result<Vec<u
 
 /// `std::io::copy` that resumes after `Interrupted`.
 ///
-/// On Linux, `io::copy` between files runs `copy_file_range`, `sendfile`, or `splice`, and
-/// std returns their `EINTR` instead of retrying it. A signal handler installed without
-/// `SA_RESTART` (libFuzzer's timers, or a host process's) can land mid-call. Bytes already
-/// moved have advanced both file offsets, so calling again continues where it stopped.
+/// On Linux, `io::copy` between files runs `copy_file_range`, `sendfile`, or `splice`, and std
+/// returns their `EINTR` instead of retrying it. Bytes already moved have advanced both file
+/// offsets (and any `Take` limit), so calling again continues where it stopped.
 pub fn copy_retrying_interrupted<R: Read + ?Sized, W: Write + ?Sized>(
     reader: &mut R,
     writer: &mut W,
 ) -> std::io::Result<()> {
-    loop {
-        match std::io::copy(reader, writer) {
-            Ok(copied) => {
-                tracing::trace!(copied, "io copy finished");
-                return Ok(());
-            }
-            Err(error) if error.kind() == ErrorKind::Interrupted => {
-                tracing::debug!("io copy interrupted by a signal; resuming");
-            }
-            Err(error) => return Err(error),
-        }
-    }
+    retry_interrupted(|| std::io::copy(reader, writer)).map(drop)
+}
+
+/// `std::fs::copy` that retries after `Interrupted`; it uses the same kernel copy as
+/// [`copy_retrying_interrupted`]. Each attempt reopens `to` truncated and copies from the start.
+pub fn copy_file_retrying_interrupted(from: &Path, to: &Path) -> std::io::Result<u64> {
+    retry_interrupted(|| fs::copy(from, to))
 }
 
 pub fn ordered_streaming_compress<

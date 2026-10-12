@@ -784,7 +784,7 @@ fn apply_solid_writes_and_resize_to_file(
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::copy(source_path, output_path)?;
+    rom_weaver_core::copy_file_retrying_interrupted(source_path, output_path)?;
     let mut output = OpenOptions::new()
         .read(true)
         .write(true)

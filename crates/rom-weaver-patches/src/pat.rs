@@ -101,7 +101,7 @@ impl PatPatchHandler {
             execution.force_serial();
             (execution, writes)
         } else {
-            fs::copy(&request.input, &request.output)?;
+            rom_weaver_core::copy_file_retrying_interrupted(&request.input, &request.output)?;
             let input_bytes =
                 read_pat_group_input_bytes(&grouped_records, &request.input, context)?;
             let (execution, mut writes) = if planned_execution.used_parallelism {

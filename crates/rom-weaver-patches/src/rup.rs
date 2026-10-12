@@ -214,7 +214,10 @@ impl PatchHandler for RupPatchHandler {
             ensure_parent_dir(&path)?;
             path
         };
-        fs::copy(&normalized_input.path, &normalized_output_path)?;
+        rom_weaver_core::copy_file_retrying_interrupted(
+            &normalized_input.path,
+            &normalized_output_path,
+        )?;
         let input_len = fs::metadata(&normalized_input.path)?.len();
         let mut output = OpenOptions::new()
             .read(true)
@@ -1111,7 +1114,7 @@ fn finalize_rup_output(
         }
         RupOutputReconstruction::Unif => {
             ensure_parent_dir(output_path)?;
-            fs::copy(input_path, output_path)?;
+            rom_weaver_core::copy_file_retrying_interrupted(input_path, output_path)?;
             let mut normalized = File::open(normalized_output_path)?;
             let mut output = OpenOptions::new()
                 .read(true)
