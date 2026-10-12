@@ -74,7 +74,7 @@
         "maxBrotliBytes": 42800
       },
       {
-        "_comment": "The WASM module MUST include the 70 compiled save profiles. After sharing field constructors, the measured build uses 9,002,546 raw bytes and 2,249,483 Brotli bytes.",
+        "_comment": "The WASM module MUST include the 70 compiled save profiles. After sharing field constructors, the measured build uses 9,002,546 raw bytes and 2,249,483 Brotli bytes. By 0.21.0 main measured about 2,318,950 Brotli bytes, about 1 KiB under the old 2,320,000 maximum; the maximum allows 10,000 more bytes for retry, validation, and format fixes.",
         "name": "WASM",
         "directory": "assets",
         "extension": ".wasm",
@@ -82,7 +82,7 @@
         "expectedRawBytes": 9010000,
         "maxRawBytes": 9300000,
         "expectedBrotliBytes": 2250000,
-        "maxBrotliBytes": 2320000
+        "maxBrotliBytes": 2330000
       }
     ]
   },
