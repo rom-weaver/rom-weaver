@@ -28,9 +28,9 @@ it("keeps the ROM name out of the Checks drawer", () => {
   );
 
   const expected = container.querySelector("#rom-weaver-rom-expected-checks");
-  expect(expected?.querySelector('[aria-label="Copy NAME"]')).toBeNull();
-  expect(expected?.querySelector('[aria-label="Copy CRC32"] .ck-mark')?.classList).toContain("ok");
-  expect(expected?.querySelector('[aria-label="Copy BYTES"] .ck-mark')?.classList).toContain("ok");
+  expect(expected?.querySelector('[aria-label^="Copy NAME "]')).toBeNull();
+  expect(expected?.querySelector('[aria-label^="Copy CRC32 "] .ck-mark')?.classList).toContain("ok");
+  expect(expected?.querySelector('[aria-label^="Copy BYTES "] .ck-mark')?.classList).toContain("ok");
 });
 
 it("localizes an expected-ROM mismatch without changing checksum row markers", () => {

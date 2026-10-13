@@ -402,11 +402,7 @@ const FilledCheckRow = ({
   if (!value) return <ChecksumRow label={label} value="" />;
   return (
     <ChecksumRow
-      ariaLabel={
-        fromDatabase
-          ? localizer.message("ui.sourceInfo.copyDatabase", { label })
-          : localizer.message("ui.checks.copy", { label })
-      }
+      ariaDescription={fromDatabase ? localizer.message("ui.sourceInfo.copyDatabase", { label }) : undefined}
       className={fromDatabase ? "ck-db" : undefined}
       copyValue={value}
       label={label}

@@ -287,8 +287,8 @@ describe("EmulatorTestView", () => {
 
     render(withSettings(<EmulatorTestView />));
 
-    fireEvent.click(screen.getByRole("button", { name: "Copy NAME" }));
-    fireEvent.click(screen.getByRole("button", { name: "Copy SHA-1" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Copy NAME / }));
+    fireEvent.click(screen.getByRole("button", { name: /^Copy SHA-1 / }));
 
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
     expect(writeText).toHaveBeenNthCalledWith(1, "hello-world.nes");

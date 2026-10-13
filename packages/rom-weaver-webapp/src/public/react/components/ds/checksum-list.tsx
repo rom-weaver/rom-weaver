@@ -32,6 +32,7 @@ const pairMarkerClass = (label: ReactNode): string | false => {
  * `label` is optional for value-only rows. `mark` renders a per-row
  * verified/mismatch verdict (expected-vs-computed rows). */
 const ChecksumRow = ({
+  ariaDescription,
   ariaLabel,
   className,
   label,
@@ -40,6 +41,7 @@ const ChecksumRow = ({
   bad,
   mark,
 }: {
+  ariaDescription?: string;
   ariaLabel?: string;
   className?: string;
   label?: ReactNode;
@@ -53,15 +55,29 @@ const ChecksumRow = ({
   const { copied, copy } = useClipboardCopy(text);
   const fit = typeof value === "string" && value.length >= FIT_VALUE_MIN_CHARS;
   const hasLabel = label !== undefined && label !== null;
+  const markText =
+    mark === "ok"
+      ? localizer.message("ui.checks.matches")
+      : mark === "bad"
+        ? localizer.message("ui.checks.mismatch")
+        : "";
+  // The accessible name must contain the row's visible text (WCAG 2.5.3,
+  // axe label-content-name-mismatch), so it carries the value and verdict
+  // after the "Copy <label>" verb.
+  const defaultLabel = [
+    localizer.message("ui.checks.copy", {
+      label: typeof label === "string" ? label : localizer.message("ui.checks.value"),
+    }),
+    typeof value === "string" ? value : "",
+    markText,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <button
-      aria-label={
-        ariaLabel ??
-        localizer.message("ui.checks.copy", {
-          label: typeof label === "string" ? label : localizer.message("ui.checks.value"),
-        })
-      }
+      aria-description={ariaDescription}
+      aria-label={ariaLabel ?? defaultLabel}
       className={join(
         "ck mono",
         className,
@@ -72,8 +88,10 @@ const ChecksumRow = ({
       onClick={copy}
       type="button"
     >
-      {hasLabel ? <span className="ck-k">{label}</span> : null}
-      <span className={join("ck-v", fit && "ck-fit", copied && "copied")}>{value}</span>
+      {/* The spaces keep the label, value and verdict apart in the text
+          content; grid layout drops whitespace-only text nodes. */}
+      {hasLabel ? <span className="ck-k">{label}</span> : null}{" "}
+      <span className={join("ck-v", fit && "ck-fit", copied && "copied")}>{value}</span>{" "}
       {mark ? (
         <span
           className={join("ck-mark", mark)}
@@ -82,9 +100,7 @@ const ChecksumRow = ({
           }
         >
           {mark === "ok" ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
-          <span className="sr-only">
-            {mark === "ok" ? localizer.message("ui.checks.matches") : localizer.message("ui.checks.mismatch")}
-          </span>
+          <span className="sr-only">{markText}</span>
         </span>
       ) : null}
       <span aria-hidden="true" className={join("copy", copied && "copied")}>
