@@ -514,9 +514,18 @@ impl CliApp {
         ) {
             return Err(run.fail("validate", message));
         }
+        // The implicit `<stem>-patched.<ext>` sibling keeps the ROM's own extension, so without
+        // compression flags it is the raw ROM even for an otherwise ambiguous `.bin`.
+        let implicit_raw_output = run.output_was_inferred
+            && run.args.compress_format.is_none()
+            && run.args.compress_codec.is_empty()
+            && run.args.compress_level.is_none();
+        if implicit_raw_output {
+            debug!(output = %run.output.display(), "inferred patch output keeps the raw ROM bytes");
+        }
         run.compression_options = self
             .resolve_patch_apply_compression_options(
-                run.args.no_compress,
+                run.args.no_compress || implicit_raw_output,
                 run.args.compress_format.clone(),
                 run.args.compress_codec.clone(),
                 run.args.compress_level,
