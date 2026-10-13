@@ -86,7 +86,7 @@ impl PatchHandler for VcdiffPatchHandler {
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
         let mut reader = BufReader::new(File::open(patch_path)?);
-        let patch = parse_patch(&mut reader)?;
+        let patch = parse_patch_file(&mut reader, patch_path)?;
         let minimum_source_size = patch.minimum_source_size()?;
         let target_size = patch.target_size()?;
         let checksum_windows = patch
@@ -164,7 +164,7 @@ impl PatchHandler for VcdiffPatchHandler {
     ) -> Result<OperationReport> {
         let patch_path = require_single_patch_file(&request.patches, self.descriptor.name)?.clone();
         let mut patch_reader = BufReader::new(File::open(&patch_path)?);
-        let patch = parse_patch(&mut patch_reader)?;
+        let patch = parse_patch_file(&mut patch_reader, &patch_path)?;
         if patch.custom_code_table.is_some() {
             return Err(RomWeaverError::Validation(
                 "native VCDIFF backend does not support custom code tables".into(),
@@ -769,6 +769,21 @@ pub(super) struct XdeltaRecodeWindowSections {
     pub(super) data: Vec<u8>,
     pub(super) inst: Vec<u8>,
     pub(super) addr: Vec<u8>,
+}
+
+/// Parse a patch read from `path`, naming the file when the stream ends before
+/// a complete header or window was read.
+pub(super) fn parse_patch_file<R: Read + Seek>(reader: &mut R, path: &Path) -> Result<ParsedPatch> {
+    parse_patch(reader).map_err(|error| match error {
+        RomWeaverError::Io(io_error) if io_error.kind() == std::io::ErrorKind::UnexpectedEof => {
+            debug!(path = %path.display(), "VCDIFF/xdelta patch ended before a complete record");
+            RomWeaverError::Validation(format!(
+                "VCDIFF/xdelta patch `{}` is truncated or corrupt: it ended unexpectedly",
+                path.display()
+            ))
+        }
+        other => other,
+    })
 }
 
 pub(super) fn parse_patch<R: Read + Seek>(reader: &mut R) -> Result<ParsedPatch> {
