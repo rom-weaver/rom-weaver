@@ -495,3 +495,20 @@ fn help_accepts_a_trailing_help_flag() {
     );
     assert_eq!(command_stdout(&["help", "help", "--help"], 0), root);
 }
+
+#[test]
+fn read_only_commands_skip_stdin_during_dry_run() {
+    for args in [
+        ["identify", "-", "-n"].as_slice(),
+        ["checksum", "-", "-n"].as_slice(),
+        ["probe", "-", "-n"].as_slice(),
+    ] {
+        command_stdout_with_stdin(args, b"x", 0);
+    }
+    for args in [
+        ["compress", "-", "-n"].as_slice(),
+        ["extract", "-", "-n"].as_slice(),
+    ] {
+        command_stdout_with_stdin(args, b"x", 2);
+    }
+}
