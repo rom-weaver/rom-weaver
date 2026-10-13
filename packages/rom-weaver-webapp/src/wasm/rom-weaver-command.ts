@@ -230,7 +230,7 @@ function readRomWeaverCommandBranch(inputCommand: RomWeaverCommand): RomWeaverCo
     case "weave":
     case "tools":
     case "save":
-      if (!NESTED_COMMAND_TYPES[command.type](command.args.type)) {
+      if (!NESTED_COMMAND_TYPES.get(command.type)?.(command.args.type)) {
         if (command.type === "tools") throw new TypeError(`unsupported tools command: ${String(command.args.type)}`);
         return unhandledCommandShape(command.args);
       }
@@ -378,7 +378,7 @@ export function romWeaverCommandSupportsThreads(inputCommand: RomWeaverCommand):
     case "patch":
     case "weave":
     case "bundle":
-      if (!NESTED_COMMAND_TYPES[command.type](command.args.type)) return unhandledCommandShape(command.args);
+      if (!NESTED_COMMAND_TYPES.get(command.type)?.(command.args.type)) return unhandledCommandShape(command.args);
       return true;
     case "tools":
       return command.args.type === "ppf-undo";
@@ -393,13 +393,13 @@ export function romWeaverCommandSupportsThreads(inputCommand: RomWeaverCommand):
   }
 }
 
-const NESTED_COMMAND_TYPES = {
-  patch: isKnownRomWeaverPatchCommandType,
-  weave: isKnownRomWeaverWeaveCommandType,
-  bundle: isKnownRomWeaverWeaveCommandType,
-  tools: isKnownRomWeaverToolsCommandType,
-  save: isKnownRomWeaverSaveCommandType,
-};
+const NESTED_COMMAND_TYPES = new Map<string, (value: unknown) => boolean>([
+  ["patch", isKnownRomWeaverPatchCommandType],
+  ["weave", isKnownRomWeaverWeaveCommandType],
+  ["bundle", isKnownRomWeaverWeaveCommandType],
+  ["tools", isKnownRomWeaverToolsCommandType],
+  ["save", isKnownRomWeaverSaveCommandType],
+]);
 
 const LEGACY_WEAVE_FIELDS = [
   ["bundle", "weave"],

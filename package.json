@@ -99,6 +99,14 @@
     "@rom-weaver/win32-ia32-msvc": "0.21.0",
     "@rom-weaver/win32-x64-msvc": "0.21.0"
   },
+  "overrides": {
+    "markdownlint-cli2": {
+      "smol-toml": "1.9.1"
+    },
+    "micromark-extension-math": {
+      "katex": "0.18.2"
+    }
+  },
   "scripts": {
     "docs:lint": "markdownlint-cli2",
     "docs:toc": "node scripts/update-markdown-toc.mjs",
