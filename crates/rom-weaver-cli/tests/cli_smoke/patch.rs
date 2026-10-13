@@ -2765,7 +2765,7 @@ fn patch_create_candidates_default_to_bps_for_small_inputs() {
             .map(|value| value.as_str().expect("format"))
             .collect::<Vec<_>>(),
         vec![
-            "bps", "xdelta", "aps", "bdf", "ebp", "ips", "pmsr", "ppf", "rup", "ups",
+            "bps", "xdelta", "aps", "bdf", "ebp", "ips", "ppf", "rup", "ups",
         ]
     );
     assert_eq!(candidates["source_values"]["original"]["size"], 15);
@@ -2883,7 +2883,7 @@ fn patch_create_candidates_default_to_xdelta_from_128_mib() {
             .iter()
             .map(|value| value.as_str().expect("format"))
             .collect::<Vec<_>>(),
-        vec!["xdelta", "bps", "aps", "bdf", "pmsr", "ppf", "rup", "ups"]
+        vec!["xdelta", "bps", "aps", "bdf", "ppf", "rup", "ups"]
     );
 }
 
@@ -12246,6 +12246,33 @@ fn patch_validate_independent_enforces_patch_input_and_output_checks() {
             .expect("label")
             .contains("pass update.bps")
     );
+}
+
+#[test]
+fn patch_create_mod_warns_when_original_is_not_paper_mario() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let output = temp.child("out.mod");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    let json = run_single_json_event(
+        &[
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let text = json.to_string();
+    assert!(text.contains("Paper Mario (USA) v1.0"), "{text}");
 }
 
 #[test]
