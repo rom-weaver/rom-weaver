@@ -62,13 +62,17 @@ node ../../.agents/skills/run-rom-weaver/webapp-driver.mjs load
 node ../../.agents/skills/run-rom-weaver/webapp-driver.mjs apply
 ```
 
-`load` checks that the app starts and saves a screenshot. `apply` uploads the committed source and xdelta fixtures, runs **Apply & download**, and checks that a file was downloaded. Output goes to `/tmp/rw-driver/` by default.
+Both commands open the Apply route (`apply-patches`) under the server URL. `load` checks that the app starts and saves a screenshot. `apply` uploads the committed source and xdelta fixtures, runs **Apply & download**, and checks that a file was downloaded. Output goes to `/tmp/rw-driver/` by default.
 
 Environment overrides:
 
-- `RW_URL`: server URL; default `https://localhost:5191/`
+- `RW_URL`: server base URL; default `https://localhost:5191/`
 - `RW_OUT`: screenshot and download directory
 - `RW_HEAD=1`: show the browser window
+
+## Run the full regression gate
+
+Run `mise run test-e2e-fast` from the repository root. It builds production WASM and the webapp once, checks asset sizes, then runs the CLI, Chromium, WASM, and E2E suites against that one build. See [Run release regressions](../../../docs/development/reproduce-ci-locally.md#run-release-regressions) for coverage and the larger nightly matrix.
 
 ## Troubleshooting
 
