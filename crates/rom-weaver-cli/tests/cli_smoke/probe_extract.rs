@@ -2047,6 +2047,25 @@ fn extract_probe_names_the_unrecognised_payload() {
     );
 }
 
+#[test]
+fn probe_unidentified_file_error_omits_compress_recommendation() {
+    let temp = setup_temp_dir();
+    let unknown = temp.child("unknown.bin");
+    unknown.write_str("payload").expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(["probe", "--input", unknown.path().to_str().expect("path")])
+        .assert()
+        .code(1)
+        .get_output()
+        .clone();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("no registered handler matched"), "{stderr}");
+    assert!(!stderr.contains("recommended_compress_format"), "{stderr}");
+    assert!(!stderr.contains("reason="), "{stderr}");
+}
+
 fn failed_extract(input: &Path, out: &Path) {
     command_stdout(
         &[
