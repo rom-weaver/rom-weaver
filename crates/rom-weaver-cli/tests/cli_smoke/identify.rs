@@ -1138,3 +1138,78 @@ fn identify_reports_a_missing_input_as_its_own_command_failure() {
     assert_eq!(json["format"], "identify");
     assert_eq!(json["status"], "failed");
 }
+
+#[test]
+fn identify_hash_rejects_an_unknown_system() {
+    let output = command_stdout(
+        &[
+            "identify", "--hash", "aaaaaaaa", "--system", "bogus", "--json",
+        ],
+        1,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "failed");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("unknown system `bogus`"),
+        "{json}"
+    );
+}
+
+#[test]
+fn identify_hash_with_size_matches_md5_and_sha1() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("test.pack").path(), identify_pack()).expect("identify pack");
+    let pack = temp
+        .child("test.pack")
+        .path()
+        .to_str()
+        .expect("path")
+        .to_owned();
+    for (hash, size, status) in [
+        ("5d41402abc4b2a76b9719d911017c592", "5", "matched"),
+        ("aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d", "5", "matched"),
+        ("aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d", "6", "unknown"),
+    ] {
+        let output = command_stdout(
+            &[
+                "identify",
+                "--hash",
+                hash,
+                "--size",
+                size,
+                "--database",
+                &pack,
+                "--json",
+            ],
+            0,
+        );
+        let json = parse_single_json_line(&output);
+        assert_eq!(
+            json["details"]["identify"]["status"], status,
+            "hash={hash} size={size}"
+        );
+    }
+}
+
+#[test]
+fn identify_title_index_error_names_the_path() {
+    let output = command_stdout(
+        &[
+            "identify",
+            "--title-index",
+            "missing-title-index.json",
+            "--name",
+            "foo",
+            "--json",
+        ],
+        1,
+    );
+    let json = parse_single_json_line(&output);
+    assert!(
+        json.to_string().contains("missing-title-index.json"),
+        "{json}"
+    );
+}

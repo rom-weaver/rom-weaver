@@ -355,7 +355,7 @@ impl CliApp {
             return Err(Box::new(report));
         }
         if run.args.dry_run {
-            let report = self.run_patch_apply_dry_run(
+            let mut report = self.run_patch_apply_dry_run(
                 &run.args.input,
                 &run.args.patches,
                 run.args.output.as_deref(),
@@ -363,6 +363,16 @@ impl CliApp {
                 run.args.output_header,
                 run.probe_threads.clone(),
             );
+            // Device codes apply as one extra step beside the listed patches.
+            let listed = run.args.patches.len();
+            let planned = listed + run.cheat_patch_count();
+            if planned != listed {
+                report.label = report.label.replacen(
+                    &format!("would apply {listed} patch(es)"),
+                    &format!("would apply {planned} patch(es)"),
+                    1,
+                );
+            }
             return Err(Box::new(report));
         }
         run.disc_context = self.resolve_patch_apply_disc(PatchApplyDiscInputs {

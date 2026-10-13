@@ -538,9 +538,20 @@ fn normalize_legacy_weave_args(args: Vec<std::ffi::OsString>) -> Vec<std::ffi::O
     args
 }
 
+/// `help --help` and `help patch --help` ask for help about help; print the
+/// target's help instead of failing the `help` subcommand's own parse.
+#[cfg(not(target_arch = "wasm32"))]
+fn normalize_help_args(mut args: Vec<std::ffi::OsString>) -> Vec<std::ffi::OsString> {
+    let asks_help = |arg: &std::ffi::OsString| arg == "--help" || arg == "-h";
+    if args.get(1).is_some_and(|arg| arg == "help") && args.iter().skip(2).any(asks_help) {
+        args.remove(1);
+    }
+    args
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 pub fn main_entry() -> ExitCode {
-    let args = normalize_legacy_weave_args(std::env::args_os().collect());
+    let args = normalize_legacy_weave_args(normalize_help_args(std::env::args_os().collect()));
     let mode = OutputMode::from_args(&args);
     crate::stdout_output::finish(run_cli(args, mode), mode.is_json())
 }
@@ -897,7 +908,10 @@ fn run_man_command(
     verbose: bool,
 ) -> ExitCode {
     let pages = rom_weaver_app::generated_man_pages();
-    let selected = rom_weaver_app::manpages::page_name(topics);
+    let mut selected = rom_weaver_app::manpages::page_name(topics);
+    if !pages.contains_key(&selected) {
+        selected = rom_weaver_app::manpages::page_name_with_aliases(topics);
+    }
     let Some(page) = pages.get(&selected) else {
         return native_output::print_error(
             mode,

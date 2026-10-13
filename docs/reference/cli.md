@@ -156,7 +156,7 @@ Native `extract` and `compress` accept `-` as an input path or as `--output`. Na
 | `save set --output -` | Writes the edited save, or the original bytes when the validated edits make no change. |
 | `tools ppf-undo --output -` | Requires `--no-compress` for raw bytes or `--compress-format` for compressed output. Requires one final regular file; a raw disc sheet with companion tracks cannot be streamed. |
 | Binary stdout | Refuses terminal output and conflicts with `--json`, `--jsonl`, and `--dry-run`, regardless of flag order. Success summaries are suppressed; progress and errors use stderr. Interactive selection is disabled. |
-| Stdin with `--dry-run` | Fails before reading stdin. Dry runs require an input file. |
+| Stdin with `--dry-run` | `compress` and `extract` fail before reading stdin; their dry runs require an input file. Read-only commands (`identify`, `checksum`, `probe`) do not read stdin during a dry run and report a read-only plan. |
 
 This is disk-backed pipeline support, not incremental streaming. Operations finish in private temporary storage before the CLI copies the result to stdout. It needs space for the input spool, intermediate files, and output.
 
