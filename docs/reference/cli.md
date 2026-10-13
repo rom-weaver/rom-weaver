@@ -201,7 +201,7 @@ Native identify performs no network access.
 - `--name QUERY` searches names instead of identifying a file or checksum; it requires `--system`, `--database`, or `--title-index` and cannot be combined with `--input` or `--hash`. Matching ignores case, punctuation, and accents (`asterix` matches `Astérix`), and every query word must match. Literal matches rank before spelling corrections. Pack searches cover each record's name, alternate names, and dump tags.
 - `--title-index JSON` selects a `rom-weaver-identify-title-index-v1` file for `--name`. It returns base titles, pack slugs, and scores under `details.identifyTitles.matches` in JSON output. It cannot be combined with `--database`, `--system`, or `--size`.
 - `--limit N` caps the number of matches `--name` returns. The default is 50. `N` must be at least 1, and `--limit` without `--name` is an error.
-- `--system NAME` searches only one system's pack. It takes a canonical platform name or a common alias (`snes`, `psx`). An unknown name is an error.
+- `--system NAME` searches only one system's pack. It takes a canonical platform name or a common alias (`snes`, `nes`). The names available depend on the installed identify index (for example `psx` resolves only once the index is installed). An unknown name is an error.
 - `--database-dir DIR` names the directory of installed packs (`*.pack` plus an optional `catalog.json`, or the `full-v1/` tree installed by `setup`).
 - `--exhaustive-database-search` searches every installed pack instead of only the packs the detected platform routes to.
 - `--offline` asserts that identify performs no network access. Natively it never does; the flag records the guarantee in the log.
