@@ -425,6 +425,33 @@ fn identify_matches_a_manual_hash() {
 }
 
 #[test]
+fn identify_hash_with_a_database_pack_needs_no_home_directory() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("test.pack").path(), identify_pack()).expect("identify pack");
+
+    // `env -i`: no HOME or XDG directories, so no installed-pack location.
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .env_clear()
+        .args([
+            "identify",
+            "--hash",
+            "3610a686",
+            "--database",
+            temp.child("test.pack").path().to_str().expect("pack path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(json["details"]["identify"]["status"], "matched");
+}
+
+#[test]
 fn identify_matches_a_whole_rom_check() {
     let temp = setup_temp_dir();
     fs::write(temp.child("test.pack").path(), identify_pack()).expect("identify pack");
@@ -1137,4 +1164,23 @@ fn identify_reports_a_missing_input_as_its_own_command_failure() {
     assert_eq!(json["family"], "command");
     assert_eq!(json["format"], "identify");
     assert_eq!(json["status"], "failed");
+}
+
+#[test]
+fn identify_hash_rejects_an_unknown_system() {
+    let output = command_stdout(
+        &[
+            "identify", "--hash", "aaaaaaaa", "--system", "bogus", "--json",
+        ],
+        1,
+    );
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "failed");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("unknown system `bogus`"),
+        "{json}"
+    );
 }
