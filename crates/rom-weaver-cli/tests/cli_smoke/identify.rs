@@ -1184,3 +1184,39 @@ fn identify_hash_rejects_an_unknown_system() {
         "{json}"
     );
 }
+
+#[test]
+fn identify_hash_with_size_matches_md5_and_sha1() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("test.pack").path(), identify_pack()).expect("identify pack");
+    let pack = temp
+        .child("test.pack")
+        .path()
+        .to_str()
+        .expect("path")
+        .to_owned();
+    for (hash, size, status) in [
+        ("5d41402abc4b2a76b9719d911017c592", "5", "matched"),
+        ("aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d", "5", "matched"),
+        ("aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d", "6", "unknown"),
+    ] {
+        let output = command_stdout(
+            &[
+                "identify",
+                "--hash",
+                hash,
+                "--size",
+                size,
+                "--database",
+                &pack,
+                "--json",
+            ],
+            0,
+        );
+        let json = parse_single_json_line(&output);
+        assert_eq!(
+            json["details"]["identify"]["status"], status,
+            "hash={hash} size={size}"
+        );
+    }
+}
