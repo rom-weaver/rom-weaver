@@ -117,6 +117,8 @@ test("trim workflow sends extracted archive payload to the trim worker", async (
     const input = workflow.getInput();
     expect(input?.fileName).toBe("game.nds");
     expect(input?.wasDecompressed).toBe(true);
+    // The staging probe dry-runs the extracted member, not the archive.
+    expect(input?.trimSupported).toBe(true);
 
     const result = await workflow.run();
     expect(result.output.fileName).toBe("game (trimmed).nds");
@@ -206,6 +208,22 @@ test("trim applies edited ZIP Store settings to an already staged input", async 
     } finally {
       await result.output.dispose();
     }
+  } finally {
+    await workflow.dispose();
+  }
+});
+
+test("trim flags unsupported input at staging and clears the flag when the source changes", async () => {
+  const workflow = new TrimWorkflow({ settings: { output: { compression: "none" }, workers: { threads: 1 } } });
+  try {
+    await workflow.setInput(new File([new Uint8Array(5000).fill(7)], "plain.bin"));
+    expect(workflow.getInput().trimSupported).toBe(false);
+    expect(workflow.getInput().warnings.map((warning) => warning.message)).toContain(
+      "This input does not support trimming",
+    );
+    await workflow.setInput(new File([buildTestNdsRom()], "game.nds"));
+    expect(workflow.getInput().trimSupported).toBe(true);
+    expect(workflow.getInput().warnings).toEqual([]);
   } finally {
     await workflow.dispose();
   }

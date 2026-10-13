@@ -443,6 +443,29 @@ test("trim queued run cancels when source preparation warns", async () => {
   expect(workflowMockState.runCalls).toBe(0);
 });
 
+test("trim is disabled with the reason when the staged input cannot be trimmed", async () => {
+  workflowMockState.inputStateOverrides = {
+    trimSupported: false,
+    warnings: [{ code: "TRIM_UNSUPPORTED", message: "This input does not support trimming" }],
+  };
+  workflowMockState.inputDeferred.resolve();
+  mount(
+    createElement(
+      TrimPatchForm,
+      withTrimWorkflowMock({ defaultSource: new File([new Uint8Array([0, 1, 2, 3])], "plain.bin") }),
+    ),
+  );
+  await expect
+    .poll(() => document.getElementById("trim-builder-source-error-message")?.textContent || "")
+    .toContain("This input does not support trimming");
+  const trimButton = document.getElementById("trim-builder-button-run");
+  expect(trimButton.disabled).toBe(true);
+  trimButton.click();
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 50));
+  expect(document.querySelector(".confirm-card")).toBeNull();
+  expect(workflowMockState.runCalls).toBe(0);
+});
+
 test("trim queued default format follows unambiguous special compression input", async () => {
   mount(
     createElement(
