@@ -2458,7 +2458,10 @@ fn chd_compress_accepts_advertised_level_range_and_min_profile_for_every_codec()
             command_stdout(&args, 0);
             assert!(out.path().exists(), "{codec_arg} {profile:?}");
         }
-        for outside in [min - 1, max + 1] {
+        // FLAC also accepts an extended level 9 above its advertised `max` profile (see
+        // chd_compress_and_extract_cdfl_with_level_round_trip), so only its lower bound is out of range.
+        let above = (!matches!(name, "flac" | "cdfl")).then_some(max + 1);
+        for outside in std::iter::once(min - 1).chain(above) {
             let codec_arg = format!("{name}:{outside}");
             let out = temp.child(format!("{name}-outside.chd"));
             command_stdout(

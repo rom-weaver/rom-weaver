@@ -568,7 +568,7 @@ export const ROM_WEAVER_COMPRESSION_METADATA = {
     "cdfl": {
       "aliases": [],
       "level": {
-        "max": 9,
+        "max": 8,
         "min": 0
       },
       "profileKind": "standard"
@@ -608,7 +608,7 @@ export const ROM_WEAVER_COMPRESSION_METADATA = {
     "flac": {
       "aliases": [],
       "level": {
-        "max": 9,
+        "max": 8,
         "min": 0
       },
       "profileKind": "standard"
